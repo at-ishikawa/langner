@@ -47,3 +47,6 @@ jobs:
 
       - name: Run langner validate
         run: go run ./cmd/langner validate --config config.example.yml
+
+      - name: Output markdown and PDF files
+        run: go run ./cmd/langner --config config.example.yml notebooks stories friends --pdf
