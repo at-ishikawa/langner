@@ -13,6 +13,7 @@
           quote: come on you're {{ going }} out with the guy there's got to be something wrong with {{ him }}
       definitions:
         - expression: nothing
+          dictionary_number: 1
         - expression: going
           definition: go
           meaning: To move or travel
