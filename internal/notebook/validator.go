@@ -886,7 +886,7 @@ func (v *Validator) createMissingLearningNotes(learningFiles []learningHistoryFi
 
 					if !hasNote {
 						// Find or create the learning history file and scene
-						created := v.addMissingLearningNote(&learningFiles, eventKey, sceneKey, learningExpr, result)
+						created := v.addMissingLearningNote(&learningFiles, &notebook, eventKey, sceneKey, learningExpr, result)
 						if created {
 							// Update the index
 							if existingNotes[eventKey] == nil {
@@ -906,7 +906,7 @@ func (v *Validator) createMissingLearningNotes(learningFiles []learningHistoryFi
 	return learningFiles
 }
 
-func (v *Validator) addMissingLearningNote(learningFiles *[]learningHistoryFile, eventKey, sceneKey, expression string, result *ValidationResult) bool {
+func (v *Validator) addMissingLearningNote(learningFiles *[]learningHistoryFile, notebook *StoryNotebook, eventKey, sceneKey, expression string, result *ValidationResult) bool {
 	// Find the appropriate learning history file based on event
 	var targetFile *learningHistoryFile
 	var targetHistory *LearningHistory
@@ -958,15 +958,37 @@ func (v *Validator) addMissingLearningNote(learningFiles *[]learningHistoryFile,
 			}
 		}
 
-		// If we still can't find a file, we can't create the note
+		// If we still can't find a file, create a new one
 		if targetFile == nil {
-			return false
+			// Derive notebook ID from the story metadata
+			notebookID := deriveNotebookID(notebook)
+			if notebookID == "" {
+				return false
+			}
+
+			// Create a new learning history file
+			newFilePath := filepath.Join(v.learningNotesDir, notebookID+".yml")
+			newFile := learningHistoryFile{
+				path:     newFilePath,
+				contents: []LearningHistory{},
+			}
+			*learningFiles = append(*learningFiles, newFile)
+			targetFile = &(*learningFiles)[len(*learningFiles)-1]
+
+			result.AddWarning(ValidationError{
+				File:    newFilePath,
+				Message: fmt.Sprintf("Created new learning history file for notebook ID %q", notebookID),
+			})
 		}
 
 		// Create the new event/episode structure
+		notebookID := deriveNotebookID(notebook)
+		if len(targetFile.contents) > 0 {
+			notebookID = targetFile.contents[0].Metadata.NotebookID
+		}
 		newHistory := LearningHistory{
 			Metadata: LearningHistoryMetadata{
-				NotebookID: targetFile.contents[0].Metadata.NotebookID, // Use same ID as other episodes in this file
+				NotebookID: notebookID,
 				Title:      eventKey,
 			},
 			Scenes: []LearningScene{},
@@ -1004,6 +1026,16 @@ func (v *Validator) addMissingLearningNote(learningFiles *[]learningHistoryFile,
 	})
 
 	return true
+}
+
+// deriveNotebookID converts the story notebook metadata into a notebook ID.
+// The series name is converted to lowercase with spaces replaced by hyphens.
+func deriveNotebookID(notebook *StoryNotebook) string {
+	if notebook.Metadata.Series != "" {
+		// Convert series name to lowercase and replace spaces with hyphens
+		return strings.ToLower(strings.ReplaceAll(notebook.Metadata.Series, " ", "-"))
+	}
+	return ""
 }
 
 // eventsRelated checks if two event titles are from the same series

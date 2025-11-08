@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -32,12 +33,26 @@ func newValidateCommand() *cobra.Command {
 			if fix {
 				// Run auto-fix
 				fmt.Println("Running auto-fix...")
-				result, err = validator.Fix()
+				fixResult, err := validator.Fix()
 				if err != nil {
 					return fmt.Errorf("validator.Fix() > %w", err)
 				}
-				fmt.Println("Auto-fix completed. Fixed files have been saved.")
+
+				// Display what was fixed
+				fixCount := len(fixResult.Warnings)
+				if fixCount > 0 {
+					fmt.Printf("Auto-fix completed. %d change(s) made.\n", fixCount)
+				} else {
+					fmt.Println("Auto-fix completed. No changes needed.")
+				}
 				fmt.Println()
+
+				// Re-validate to check for remaining issues
+				fmt.Println("Re-validating files...")
+				result, err = validator.Validate()
+				if err != nil {
+					return fmt.Errorf("validator.Validate() > %w", err)
+				}
 			} else {
 				// Run validation only
 				result, err = validator.Validate()
@@ -91,13 +106,13 @@ func displayValidationResults(result *notebook.ValidationResult) {
 		otherErrors := []notebook.ValidationError{}
 
 		for _, err := range result.ConsistencyErrors {
-			if containsString(err.Message, "orphaned learning note") {
+			if strings.Contains(err.Message, "orphaned learning note") {
 				orphanedErrors = append(orphanedErrors, err)
-			} else if containsString(err.Message, "duplicate expression") {
+			} else if strings.Contains(err.Message, "duplicate expression") {
 				duplicateErrors = append(duplicateErrors, err)
-			} else if containsString(err.Message, "scene") && containsString(err.Message, "not found") {
+			} else if strings.Contains(err.Message, "scene") && strings.Contains(err.Message, "not found") {
 				missingSceneErrors = append(missingSceneErrors, err)
-			} else if containsString(err.Message, "dictionary") {
+			} else if strings.Contains(err.Message, "dictionary") {
 				dictionaryErrors = append(dictionaryErrors, err)
 			} else {
 				otherErrors = append(otherErrors, err)
@@ -152,9 +167,9 @@ func displayValidationResults(result *notebook.ValidationResult) {
 		otherWarnings := []notebook.ValidationError{}
 
 		for _, warn := range result.Warnings {
-			if containsString(warn.Message, "missing learning note") {
+			if strings.Contains(warn.Message, "missing learning note") {
 				missingLearningNotes = append(missingLearningNotes, warn)
-			} else if containsString(warn.Message, "no learned_logs") {
+			} else if strings.Contains(warn.Message, "no learned_logs") {
 				noLogsWarnings = append(noLogsWarnings, warn)
 			} else {
 				otherWarnings = append(otherWarnings, warn)
@@ -208,18 +223,3 @@ func displayValidationResults(result *notebook.ValidationResult) {
 	fmt.Println()
 }
 
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr || len(s) > len(substr) &&
-			(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-				findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
