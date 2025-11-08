@@ -1,0 +1,15 @@
+- metadata:
+    id: friends
+    title: 'Example from a video ''The Opening Scene of Friends'': https://www.youtube.com/watch?v=sIZ91tq8Lr0'
+  scenes:
+    - metadata:
+        title: In the CENTRAL PERK
+      expressions:
+        - expression: nothing
+          learned_logs: []
+        - expression: go
+          learned_logs: []
+        - expression: him
+          learned_logs:
+            - status: usable
+              learned_at: "2025-01-01"

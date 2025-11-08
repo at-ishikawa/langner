@@ -3,6 +3,7 @@ package notebook
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -335,7 +336,7 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 			for _, contains := range tt.errorMessageContains {
 				found := false
 				for _, err := range result.LearningNotesErrors {
-					if containsString(err.Message, contains) {
+					if strings.Contains(err.Message, contains) {
 						found = true
 						break
 					}
@@ -346,7 +347,7 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 			for _, contains := range tt.warningMessageContains {
 				found := false
 				for _, warn := range result.Warnings {
-					if containsString(warn.Message, contains) {
+					if strings.Contains(warn.Message, contains) {
 						found = true
 						break
 					}
@@ -569,7 +570,7 @@ func TestValidator_validateConsistency(t *testing.T) {
 			for _, contains := range tt.errorMessageContains {
 				found := false
 				for _, err := range result.ConsistencyErrors {
-					if containsString(err.Message, contains) {
+					if strings.Contains(err.Message, contains) {
 						found = true
 						break
 					}
@@ -678,7 +679,7 @@ func TestValidator_validateDictionaryReferences(t *testing.T) {
 			for _, contains := range tt.errorMessageContains {
 				found := false
 				for _, err := range result.ConsistencyErrors {
-					if containsString(err.Message, contains) {
+					if strings.Contains(err.Message, contains) {
 						found = true
 						break
 					}
@@ -689,21 +690,6 @@ func TestValidator_validateDictionaryReferences(t *testing.T) {
 	}
 }
 
-func containsString(s, substr string) bool {
-	return len(s) >= len(substr) &&
-		(s == substr || len(s) > len(substr) &&
-			(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-				findSubstring(s, substr)))
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
 
 func TestValidator_validateDefinitionsInConversations(t *testing.T) {
 	tests := []struct {
@@ -903,12 +889,235 @@ func TestValidator_validateDefinitionsInConversations(t *testing.T) {
 			for _, contains := range tt.errorMessageContains {
 				found := false
 				for _, err := range result.ConsistencyErrors {
-					if containsString(err.Message, contains) {
+					if strings.Contains(err.Message, contains) {
 						found = true
 						break
 					}
 				}
 				assert.True(t, found, "expected error message to contain: %s", contains)
+			}
+		})
+	}
+}
+
+func TestDeriveNotebookID(t *testing.T) {
+	tests := []struct {
+		name     string
+		notebook StoryNotebook
+		want     string
+	}{
+		{
+			name: "series name with spaces",
+			notebook: StoryNotebook{
+				Metadata: Metadata{Series: "Friends"},
+			},
+			want: "friends",
+		},
+		{
+			name: "series name with multiple words",
+			notebook: StoryNotebook{
+				Metadata: Metadata{Series: "The Office"},
+			},
+			want: "the-office",
+		},
+		{
+			name: "series name already lowercase",
+			notebook: StoryNotebook{
+				Metadata: Metadata{Series: "breaking bad"},
+			},
+			want: "breaking-bad",
+		},
+		{
+			name: "empty series name",
+			notebook: StoryNotebook{
+				Metadata: Metadata{Series: ""},
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deriveNotebookID(&tt.notebook)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidator_Fix(t *testing.T) {
+	tests := []struct {
+		name                  string
+		existingLearningNotes []LearningHistory
+		storyNotebook         []StoryNotebook
+		wantWarningsCount     int
+		wantExpressionsLen    int
+		wantExpressions       []string
+	}{
+		{
+			name:                  "creates missing learning notes",
+			existingLearningNotes: nil,
+			storyNotebook: []StoryNotebook{
+				{
+					Event: "Friends S01E01",
+					Metadata: Metadata{
+						Series:  "Friends",
+						Season:  1,
+						Episode: 1,
+					},
+					Scenes: []StoryScene{
+						{
+							Title: "Central Perk",
+							Definitions: []Note{
+								{Expression: "nothing"},
+								{Expression: "going", Definition: "go"},
+							},
+						},
+					},
+				},
+			},
+			wantWarningsCount:  4, // new file + new episode + 2 expressions
+			wantExpressionsLen: 2,
+			wantExpressions:    []string{"nothing", "go"},
+		},
+		{
+			name: "adds to existing learning notes",
+			existingLearningNotes: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "friends",
+						Title:      "Friends S01E01",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Central Perk"},
+							Expressions: []LearningHistoryExpression{
+								{Expression: "existing", LearnedLogs: []LearningRecord{}},
+							},
+						},
+					},
+				},
+			},
+			storyNotebook: []StoryNotebook{
+				{
+					Event: "Friends S01E01",
+					Metadata: Metadata{
+						Series:  "Friends",
+						Season:  1,
+						Episode: 1,
+					},
+					Scenes: []StoryScene{
+						{
+							Title: "Central Perk",
+							Definitions: []Note{
+								{Expression: "existing"},
+								{Expression: "new expression"},
+							},
+						},
+					},
+				},
+			},
+			wantWarningsCount:  1, // only new expression
+			wantExpressionsLen: 2,
+			wantExpressions:    []string{"existing", "new expression"},
+		},
+		{
+			name: "no changes needed",
+			existingLearningNotes: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "friends",
+						Title:      "Friends S01E01",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Central Perk"},
+							Expressions: []LearningHistoryExpression{
+								{Expression: "test", LearnedLogs: []LearningRecord{}},
+							},
+						},
+					},
+				},
+			},
+			storyNotebook: []StoryNotebook{
+				{
+					Event: "Friends S01E01",
+					Metadata: Metadata{
+						Series:  "Friends",
+						Season:  1,
+						Episode: 1,
+					},
+					Scenes: []StoryScene{
+						{
+							Title: "Central Perk",
+							Definitions: []Note{
+								{Expression: "test"},
+							},
+						},
+					},
+				},
+			},
+			wantWarningsCount:  0,
+			wantExpressionsLen: 1,
+			wantExpressions:    []string{"test"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directories
+			tmpDir, err := os.MkdirTemp("", "validator-fix-test-*")
+			require.NoError(t, err)
+			defer os.RemoveAll(tmpDir)
+
+			learningNotesDir := filepath.Join(tmpDir, "learning_notes")
+			storiesDir := filepath.Join(tmpDir, "stories")
+			dictionaryDir := filepath.Join(tmpDir, "dictionaries")
+
+			require.NoError(t, os.MkdirAll(learningNotesDir, 0755))
+			require.NoError(t, os.MkdirAll(storiesDir, 0755))
+			require.NoError(t, os.MkdirAll(dictionaryDir, 0755))
+
+			// Create existing learning notes if provided
+			learningNotesPath := filepath.Join(learningNotesDir, "friends.yml")
+			if tt.existingLearningNotes != nil {
+				require.NoError(t, WriteYamlFile(learningNotesPath, tt.existingLearningNotes))
+			}
+
+			// Create story notebook file
+			storyPath := filepath.Join(storiesDir, "friends.yml")
+			require.NoError(t, WriteYamlFile(storyPath, tt.storyNotebook))
+
+			// Create validator
+			validator := NewValidator(learningNotesDir, storiesDir, dictionaryDir)
+
+			// Run Fix
+			result, err := validator.Fix()
+			require.NoError(t, err)
+
+			// Verify warnings count
+			assert.Len(t, result.Warnings, tt.wantWarningsCount)
+
+			// Check that learning notes file exists
+			assert.FileExists(t, learningNotesPath)
+
+			// Read the learning notes
+			learningHistories, err := readYamlFile[[]LearningHistory](learningNotesPath)
+			require.NoError(t, err)
+
+			// Verify structure
+			require.Len(t, learningHistories, 1)
+			assert.Equal(t, "friends", learningHistories[0].Metadata.NotebookID)
+			assert.Equal(t, "Friends S01E01", learningHistories[0].Metadata.Title)
+
+			require.Len(t, learningHistories[0].Scenes, 1)
+			assert.Equal(t, "Central Perk", learningHistories[0].Scenes[0].Metadata.Title)
+
+			// Verify expressions
+			require.Len(t, learningHistories[0].Scenes[0].Expressions, tt.wantExpressionsLen)
+
+			for i, wantExpr := range tt.wantExpressions {
+				assert.Equal(t, wantExpr, learningHistories[0].Scenes[0].Expressions[i].Expression)
+				assert.Empty(t, learningHistories[0].Scenes[0].Expressions[i].LearnedLogs)
 			}
 		})
 	}

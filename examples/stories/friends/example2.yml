@@ -1,0 +1,23 @@
+- event: 'Example from a video ''Joey and the Student - FULL EPISODE 2 | Joey'': https://www.youtube.com/watch?v=X5oCPvGe-4M'
+  metadata:
+    series: Friends
+    season: 1
+    episode: 2
+  date: 2025-11-08T00:00:00Z
+  scenes:
+    - scene: Scene 1
+      conversations:
+        - speaker: Joey
+          quote: o disgusting or wonderful
+        - speaker: ""
+          quote: '- hey - morning roomie'
+        - speaker: Joey
+          quote: so tell me about last night what about it
+    - scene: Scene 2
+      conversations:
+        - speaker: Joey
+          quote: |
+            hey Alex look at you all dress for work
+            you know I played a lawyer once
+            yeah I object no further questions
+            how can this be a jury of his peers when five of the jurors are Androids

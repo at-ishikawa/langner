@@ -2,15 +2,15 @@
 
 notebooks:
   # Directory containing story notebooks
-  stories_directory: notebooks/stories
+  stories_directory: examples/stories
 
   # Directory containing learning notes/history
-  learning_notes_directory: notebooks/learning_notes
+  learning_notes_directory: examples/learning_notes
 
 dictionaries:
   rapidapi:
     # Directory for RapidAPI dictionary cache
-    cache_directory: dictionaries/rapidapi
+    cache_directory: examples/dictionaries/rapidapi
 
 templates:
   # Directory for markdown templates
@@ -18,4 +18,4 @@ templates:
 
 outputs:
   # Directory for story notebook output files
-  story_directory: outputs/story
+  story_directory: examples/outputs

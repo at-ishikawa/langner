@@ -1,0 +1,20 @@
+- event: 'Example from a video ''The Opening Scene of Friends'': https://www.youtube.com/watch?v=sIZ91tq8Lr0'
+  metadata:
+    series: Friends
+    season: 1
+    episode: 1
+  date: 2025-11-08T00:00:00Z
+  scenes:
+    - scene: In the CENTRAL PERK
+      conversations:
+        - speaker: Monica
+          quote: There's {{ nothing }} to tell it's just some guy i work with
+        - speaker: Joey
+          quote: come on you're {{ going }} out with the guy there's got to be something wrong with {{ him }}
+      definitions:
+        - expression: nothing
+        - expression: going
+          definition: go
+          meaning: To move or travel
+        - expression: him
+          level: unusable
