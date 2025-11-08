@@ -256,8 +256,8 @@ func (r *FreeformQuizCLI) displayResult(answer AnswerResponse, occurrence *WordO
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
 		if _, err := green.Fprintf(r.stdoutWriter, `It's correct. The meaning of %s is "%s"`,
-			r.bold.Sprintf(answer.Expression),
-			r.italic.Sprintf(answer.Meaning),
+			r.bold.Sprintf("%s", answer.Expression),
+			r.italic.Sprintf("%s", answer.Meaning),
 		); err != nil {
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
@@ -273,8 +273,8 @@ func (r *FreeformQuizCLI) displayResult(answer AnswerResponse, occurrence *WordO
 			correctMeaning = occurrence.Definition.Meaning
 		}
 		if _, err := red.Fprintf(r.stdoutWriter, `It's wrong. The meaning of %s is "%s"`,
-			r.bold.Sprintf(answer.Expression),
-			r.italic.Sprintf(correctMeaning),
+			r.bold.Sprintf("%s", answer.Expression),
+			r.italic.Sprintf("%s", correctMeaning),
 		); err != nil {
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}

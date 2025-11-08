@@ -130,22 +130,22 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	}
 
 	fmt.Printf(`Answer for %s is "%s"`,
-		r.bold.Sprintf(currentCard.GetExpression()),
-		r.italic.Sprintf(currentCard.GetMeaning()),
+		r.bold.Sprintf("%s", currentCard.GetExpression()),
+		r.italic.Sprintf("%s", currentCard.GetMeaning()),
 	)
 	fmt.Println()
 
 	if answer.Correct {
 		fmt.Print("\u2705 ")
 		color.Green(`It's correct. The meaning of %s is "%s"`,
-			r.bold.Sprintf(answer.Expression),
-			r.italic.Sprintf(answer.Meaning),
+			r.bold.Sprintf("%s", answer.Expression),
+			r.italic.Sprintf("%s", answer.Meaning),
 		)
 	} else {
 		fmt.Print("\u274C ")
 		color.Red(`It's wrong. The meaning of %s is "%s"`,
-			r.bold.Sprintf(answer.Expression),
-			r.italic.Sprintf(answer.Meaning),
+			r.bold.Sprintf("%s", answer.Expression),
+			r.italic.Sprintf("%s", answer.Meaning),
 		)
 	}
 
