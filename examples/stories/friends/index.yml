@@ -1,0 +1,6 @@
+id: friends
+kind: TVShows
+name: Friends
+notebooks:
+  - ./example1.yml
+  - ./example2.yml
