@@ -1,0 +1,21 @@
+# Langner Configuration
+
+notebooks:
+  # Directory containing story notebooks
+  stories_directory: notebooks/stories
+
+  # Directory containing learning notes/history
+  learning_notes_directory: notebooks/learning_notes
+
+dictionaries:
+  rapidapi:
+    # Directory for RapidAPI dictionary cache
+    cache_directory: dictionaries/rapidapi
+
+templates:
+  # Directory for markdown templates
+  markdown_directory: assets/templates
+
+outputs:
+  # Directory for story notebook output files
+  story_directory: outputs/story

@@ -1,0 +1,51 @@
+{{ range $notebook := .Notebooks }}
+## {{ $notebook.Event }}
+
+{{ range $scene := $notebook.Scenes }}
+
+---
+
+{{ if $scene.Title -}}
+### {{ $scene.Title }}
+{{- end }}
+
+{{ range $conversation := $scene.Conversations }}
+- _{{ $conversation.Speaker }}_: {{ $conversation.Quote }}
+{{- end }}
+
+#### Words and phrases
+
+{{ range $definition := $scene.Definitions }}
+{{ $def := "" }}
+{{- if $definition.Definition -}}
+{{ $def = $definition.Definition }}
+{{- else -}}
+{{ $def = $definition.Expression }}
+{{- end -}}
+
+- **{{ $def }}** {{ printf "/%s/ [%s]" $definition.Pronunciation $definition.PartOfSpeech }}: {{ $definition.Meaning -}}
+{{ if $definition.Examples }}
+    - Examples:
+    {{- range $index, $example := $definition.Examples }}
+        - {{ $example }}
+    {{- end -}}
+{{ end }}
+{{ if $definition.Origin }}
+    - Origin: {{ $definition.Origin }}
+{{ end }}
+{{ if $definition.Synonyms }}
+    - Synonyms: {{ join $definition.Synonyms ", " }}
+{{ end }}
+{{ if $definition.Antonyms }}
+    - Antonyms: {{ join $definition.Antonyms ", " }}
+{{ end }}
+{{- if $definition.Images }}
+    - Images:
+    {{- range $image := $definition.Images }}
+        - ![height:400px]({{ $image }})
+    {{ end -}}
+{{- end }} {{/* if $definition.Images */}}
+
+{{ end }} {{/* definition */}}
+{{ end }} {{/* scene */}}
+{{ end }} {{/* notebook */}}
