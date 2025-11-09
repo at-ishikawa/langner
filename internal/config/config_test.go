@@ -28,7 +28,7 @@ dictionaries:
   rapidapi:
     cache_directory: custom/dictionaries
 templates:
-  markdown_directory: custom/templates
+  story_notebook_template: custom/templates/story-notebook.md.go.tmpl
 outputs:
   story_directory: custom/outputs
 `,
@@ -45,7 +45,7 @@ outputs:
 					},
 				},
 				Templates: TemplatesConfig{
-					MarkdownDirectory: "custom/templates",
+					StoryNotebookTemplate: "custom/templates/story-notebook.md.go.tmpl",
 				},
 				Outputs: OutputsConfig{
 					StoryDirectory: "custom/outputs",
@@ -87,7 +87,7 @@ outputs:
 					},
 				},
 				Templates: TemplatesConfig{
-					MarkdownDirectory: filepath.Join("assets", "templates"),
+					StoryNotebookTemplate: filepath.Join("assets", "templates", "story-notebook.md.go.tmpl"),
 				},
 				Outputs: OutputsConfig{
 					StoryDirectory: filepath.Join("outputs", "story"),
@@ -116,7 +116,7 @@ outputs:
 					},
 				},
 				Templates: TemplatesConfig{
-					MarkdownDirectory: filepath.Join("assets", "templates"),
+					StoryNotebookTemplate: filepath.Join("assets", "templates", "story-notebook.md.go.tmpl"),
 				},
 				Outputs: OutputsConfig{
 					StoryDirectory: filepath.Join("outputs", "story"),
@@ -136,7 +136,7 @@ dictionaries:
   rapidapi:
     cache_directory: explicit/cache
 templates:
-  markdown_directory: explicit/templates
+  story_notebook_template: explicit/templates/story-notebook.md.go.tmpl
 outputs:
   story_directory: explicit/outputs
 `,
@@ -153,7 +153,7 @@ outputs:
 					},
 				},
 				Templates: TemplatesConfig{
-					MarkdownDirectory: "explicit/templates",
+					StoryNotebookTemplate: "explicit/templates/story-notebook.md.go.tmpl",
 				},
 				Outputs: OutputsConfig{
 					StoryDirectory: "explicit/outputs",
@@ -173,7 +173,7 @@ dictionaries:
   rapidapi:
     cache_directory: yml/cache
 templates:
-  markdown_directory: yml/templates
+  story_notebook_template: yml/templates/story-notebook.md.go.tmpl
 outputs:
   story_directory: yml/outputs
 `,
@@ -190,7 +190,7 @@ outputs:
 					},
 				},
 				Templates: TemplatesConfig{
-					MarkdownDirectory: "yml/templates",
+					StoryNotebookTemplate: "yml/templates/story-notebook.md.go.tmpl",
 				},
 				Outputs: OutputsConfig{
 					StoryDirectory: "yml/outputs",

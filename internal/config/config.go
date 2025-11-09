@@ -21,7 +21,7 @@ type NotebooksConfig struct {
 }
 
 type TemplatesConfig struct {
-	MarkdownDirectory string `mapstructure:"markdown_directory"`
+	StoryNotebookTemplate string `mapstructure:"story_notebook_template"`
 }
 
 type OutputsConfig struct {
@@ -59,7 +59,7 @@ func Load(configFile string) (*Config, error) {
 	v.SetDefault("notebooks.stories_directory", filepath.Join("notebooks", "stories"))
 	v.SetDefault("notebooks.learning_notes_directory", filepath.Join("notebooks", "learning_notes"))
 	v.SetDefault("dictionaries.rapidapi.cache_directory", filepath.Join("dictionaries", "rapidapi"))
-	v.SetDefault("templates.markdown_directory", filepath.Join("assets", "templates"))
+	v.SetDefault("templates.story_notebook_template", filepath.Join("assets", "templates", "story-notebook.md.go.tmpl"))
 	v.SetDefault("outputs.story_directory", filepath.Join("outputs", "story"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
 

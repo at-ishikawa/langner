@@ -13,8 +13,8 @@ dictionaries:
     cache_directory: examples/dictionaries/rapidapi
 
 templates:
-  # Directory for markdown templates
-  markdown_directory: assets/templates
+  # Path to the story notebook template file
+  story_notebook_template: assets/templates/story-notebook.md.go.tmpl
 
 outputs:
   # Directory for story notebook output files

@@ -224,14 +224,14 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 }
 
 type StoryNotebookWriter struct {
-	reader            *Reader
-	templateDirectory string
+	reader       *Reader
+	templatePath string
 }
 
-func NewStoryNotebookWriter(reader *Reader, templateDirectory string) *StoryNotebookWriter {
+func NewStoryNotebookWriter(reader *Reader, templatePath string) *StoryNotebookWriter {
 	return &StoryNotebookWriter{
-		reader:            reader,
-		templateDirectory: templateDirectory,
+		reader:       reader,
+		templatePath: templatePath,
 	}
 }
 
@@ -266,7 +266,7 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 			"join": strings.Join,
 		}).
 		ParseFiles(
-			filepath.Join(writer.templateDirectory, fileName),
+			writer.templatePath,
 		)
 	if err != nil {
 		return fmt.Errorf("template.ParseFiles() > %w", err)

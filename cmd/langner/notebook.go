@@ -82,7 +82,7 @@ func newNotebookCommand() *cobra.Command {
 				return fmt.Errorf("textbook.NewFlashcardReader() > %w", err)
 			}
 
-			writer := notebook.NewStoryNotebookWriter(reader, cfg.Templates.MarkdownDirectory)
+			writer := notebook.NewStoryNotebookWriter(reader, cfg.Templates.StoryNotebookTemplate)
 			if err := writer.OutputStoryNotebooks(storyID, dictionaryMap, learningHistories, sortFlag == SortDescending, cfg.Outputs.StoryDirectory, generatePDF); err != nil {
 				return fmt.Errorf("notebooks.OutputStoryNotebooks > %w", err)
 			}
