@@ -87,7 +87,7 @@ outputs:
 					},
 				},
 				Templates: TemplatesConfig{
-					StoryNotebookTemplate: filepath.Join("assets", "templates", "story-notebook.md.go.tmpl"),
+					StoryNotebookTemplate: "", // Optional - uses fallback if not specified
 				},
 				Outputs: OutputsConfig{
 					StoryDirectory: filepath.Join("outputs", "story"),
@@ -116,7 +116,7 @@ outputs:
 					},
 				},
 				Templates: TemplatesConfig{
-					StoryNotebookTemplate: filepath.Join("assets", "templates", "story-notebook.md.go.tmpl"),
+					StoryNotebookTemplate: "", // Optional - uses fallback if not specified
 				},
 				Outputs: OutputsConfig{
 					StoryDirectory: filepath.Join("outputs", "story"),
@@ -201,33 +201,60 @@ outputs:
 				},
 			},
 		},
+		{
+			name: "error when template file does not exist",
+			configContent: `
+templates:
+  story_notebook_template: /non/existent/path.tmpl
+`,
+			useExplicitPath: false,
+			wantErr:         true,
+			wantErrorContains: []string{
+				"invalid configuration",
+				"Templates.StoryNotebookTemplate must be an existing and readable file",
+			},
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := t.TempDir()
-
 			var configPath string
-			if tt.useExplicitPath {
-				configPath = filepath.Join(tempDir, "config.yml")
+
+			// Change to tempDir for all tests to handle relative paths consistently
+			originalDir, err := os.Getwd()
+			require.NoError(t, err)
+			defer func() {
+				err := os.Chdir(originalDir)
+				require.NoError(t, err)
+			}()
+			err = os.Chdir(tempDir)
+			require.NoError(t, err)
+
+			if tt.configContent != "" {
+				configFileName := "config.yaml"
+				if tt.useExplicitPath {
+					configFileName = "config.yml"
+				}
+				configPath = filepath.Join(tempDir, configFileName)
 				err := os.WriteFile(configPath, []byte(tt.configContent), 0644)
 				require.NoError(t, err)
-			} else {
-				if tt.configContent != "" {
-					configPath = filepath.Join(tempDir, "config.yaml")
-					err := os.WriteFile(configPath, []byte(tt.configContent), 0644)
+
+				// If the test expects a valid template path, create a dummy file.
+				if !tt.wantErr && tt.want != nil && tt.want.Templates.StoryNotebookTemplate != "" {
+					dummyTemplatePath := filepath.Join(tempDir, tt.want.Templates.StoryNotebookTemplate)
+					err := os.MkdirAll(filepath.Dir(dummyTemplatePath), 0755)
+					require.NoError(t, err)
+					err = os.WriteFile(dummyTemplatePath, []byte("dummy template"), 0644)
 					require.NoError(t, err)
 				}
+			}
 
-				originalDir, err := os.Getwd()
-				require.NoError(t, err)
-				defer func() {
-					err := os.Chdir(originalDir)
-					require.NoError(t, err)
-				}()
-
-				err = os.Chdir(tempDir)
-				require.NoError(t, err)
+			if tt.useExplicitPath {
+				// We are already in tempDir, so just use the filename
+				configPath = "config.yml"
+			} else {
+				// When no explicit path is given, Load should find it in the current dir
 				configPath = ""
 			}
 

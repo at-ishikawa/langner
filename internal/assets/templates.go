@@ -3,7 +3,6 @@ package assets
 import (
 	_ "embed"
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,31 +21,30 @@ func parseTemplateWithFallback(templatePath string, fallbackTemplate string) (*t
 		"join": strings.Join,
 	}
 
-	// First, try to read from the filesystem
-	if _, err := os.Stat(templatePath); err == nil {
-		// File exists on filesystem, try to parse it
-		fileName := filepath.Base(templatePath)
+	// If template path is empty, use fallback directly
+	if templatePath == "" {
+		fileName := "story-notebook.md.go.tmpl"
 		tmpl, err := template.New(fileName).
 			Funcs(funcMap).
-			ParseFiles(templatePath)
-		if err == nil {
-			return tmpl, nil
+			Parse(string(fallbackTemplate))
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse embedded template: %w", err)
 		}
-		// TODO: replace a logger with an argument
-		slog.Default().Warn("failed to parse a templatePath",
-			slog.String("templatePath", templatePath),
-			slog.Any("error", err),
-		)
+		return tmpl, nil
 	}
 
-	// Fall back to embedded assets - use the embedded template's name
-	fileName := "story-notebook.md.go.tmpl"
+	// If template path is provided, it must be valid.
+	if _, err := os.Stat(templatePath); err != nil {
+		return nil, fmt.Errorf("template file not found or accessible: %w", err)
+	}
+
+	fileName := filepath.Base(templatePath)
 	tmpl, err := template.New(fileName).
 		Funcs(funcMap).
-		Parse(string(fallbackTemplate))
+		ParseFiles(templatePath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse embedded template: %w", err)
+		return nil, fmt.Errorf("failed to parse template file %s: %w", templatePath, err)
 	}
-
 	return tmpl, nil
 }
+

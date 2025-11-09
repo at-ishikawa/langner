@@ -13,8 +13,9 @@ dictionaries:
     cache_directory: examples/dictionaries/rapidapi
 
 templates:
-  # Path to the story notebook template file
-  story_notebook_template: assets/templates/story-notebook.md.go.tmpl
+  # Path to the story notebook template file (optional)
+  # If not specified or left empty, uses the embedded default template
+  # story_notebook_template: assets/templates/story-notebook.md.go.tmpl
 
 outputs:
   # Directory for story notebook output files

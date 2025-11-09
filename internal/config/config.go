@@ -3,7 +3,9 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
@@ -21,7 +23,7 @@ type NotebooksConfig struct {
 }
 
 type TemplatesConfig struct {
-	StoryNotebookTemplate string `mapstructure:"story_notebook_template"`
+	StoryNotebookTemplate string `mapstructure:"story_notebook_template" validate:"omitempty,file"`
 }
 
 type OutputsConfig struct {
@@ -59,7 +61,8 @@ func Load(configFile string) (*Config, error) {
 	v.SetDefault("notebooks.stories_directory", filepath.Join("notebooks", "stories"))
 	v.SetDefault("notebooks.learning_notes_directory", filepath.Join("notebooks", "learning_notes"))
 	v.SetDefault("dictionaries.rapidapi.cache_directory", filepath.Join("dictionaries", "rapidapi"))
-	v.SetDefault("templates.story_notebook_template", filepath.Join("assets", "templates", "story-notebook.md.go.tmpl"))
+	// Template is optional - if not specified, will use embedded fallback template
+	v.SetDefault("templates.story_notebook_template", "")
 	v.SetDefault("outputs.story_directory", filepath.Join("outputs", "story"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
 
@@ -88,6 +91,19 @@ func Load(configFile string) (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration format: %w", err)
+	}
+
+	validate, trans, err := newValidator()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new validator: %w", err)
+	}
+	if err := validate.Struct(cfg); err != nil {
+		validationErrors := err.(validator.ValidationErrors)
+		var errorMsgs []string
+		for _, e := range validationErrors {
+			errorMsgs = append(errorMsgs, e.Translate(trans))
+		}
+		return nil, fmt.Errorf("invalid configuration: %s", strings.Join(errorMsgs, ", "))
 	}
 
 	return &cfg, nil

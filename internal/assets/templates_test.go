@@ -22,6 +22,60 @@ func TestParseStoryTemplate(t *testing.T) {
 		wantTemplateContents string
 	}{
 		{
+			name:             "uses fallback template when path is empty",
+			templatePath:     "",
+			wantTemplateName: "story-notebook.md.go.tmpl",
+			templateData: struct {
+				Notebooks []struct {
+					Event  string
+					Scenes []struct {
+						Title         string
+						Conversations []struct {
+							Speaker string
+							Quote   string
+						}
+						Definitions []interface{}
+					}
+				}
+			}{
+				Notebooks: []struct {
+					Event  string
+					Scenes []struct {
+						Title         string
+						Conversations []struct {
+							Speaker string
+							Quote   string
+						}
+						Definitions []interface{}
+					}
+				}{
+					{
+						Event: "Empty Path Test",
+						Scenes: []struct {
+							Title         string
+							Conversations []struct {
+								Speaker string
+								Quote   string
+							}
+							Definitions []interface{}
+						}{
+							{
+								Title: "Test",
+								Conversations: []struct {
+									Speaker string
+									Quote   string
+								}{
+									{Speaker: "System", Quote: "Using embedded template"},
+								},
+								Definitions: []interface{}{},
+							},
+						},
+					},
+				},
+			},
+			wantTemplateContents: "\n## Empty Path Test\n\n\n\n---\n\n### Test\n\n\n- _System_: Using embedded template\n\n#### Words and phrases\n\n \n \n \n",
+		},
+		{
 			name: "uses filesystem template when available",
 			templatePath: func(t *testing.T) string {
 				tmpDir := t.TempDir()
@@ -48,114 +102,7 @@ func TestParseStoryTemplate(t *testing.T) {
 		{
 			name:             "uses embedded template when file doesn't exist",
 			templatePath:     "/non/existent/invalid.md.go.tmpl",
-			wantTemplateName: "story-notebook.md.go.tmpl",
-			templateData: struct {
-				Notebooks []struct {
-					Event  string
-					Scenes []struct {
-						Title         string
-						Conversations []struct {
-							Speaker string
-							Quote   string
-						}
-						Definitions []struct {
-							Expression    string
-							Definition    string
-							Pronunciation string
-							PartOfSpeech  string
-							Meaning       string
-							Examples      []string
-							Origin        string
-							Synonyms      []string
-							Antonyms      []string
-							Images        []string
-						}
-					}
-				}
-			}{
-				Notebooks: []struct {
-					Event  string
-					Scenes []struct {
-						Title         string
-						Conversations []struct {
-							Speaker string
-							Quote   string
-						}
-						Definitions []struct {
-							Expression    string
-							Definition    string
-							Pronunciation string
-							PartOfSpeech  string
-							Meaning       string
-							Examples      []string
-							Origin        string
-							Synonyms      []string
-							Antonyms      []string
-							Images        []string
-						}
-					}
-				}{
-					{
-						Event: "Fallback Event",
-						Scenes: []struct {
-							Title         string
-							Conversations []struct {
-								Speaker string
-								Quote   string
-							}
-							Definitions []struct {
-								Expression    string
-								Definition    string
-								Pronunciation string
-								PartOfSpeech  string
-								Meaning       string
-								Examples      []string
-								Origin        string
-								Synonyms      []string
-								Antonyms      []string
-								Images        []string
-							}
-						}{
-							{
-								Title: "Test Scene",
-								Conversations: []struct {
-									Speaker string
-									Quote   string
-								}{
-									{Speaker: "Alice", Quote: "Hello World"},
-								},
-								Definitions: []struct {
-									Expression    string
-									Definition    string
-									Pronunciation string
-									PartOfSpeech  string
-									Meaning       string
-									Examples      []string
-									Origin        string
-									Synonyms      []string
-									Antonyms      []string
-									Images        []string
-								}{
-									{
-										Expression:    "greeting",
-										Definition:    "a polite word or sign of welcome",
-										Pronunciation: "gree-ting",
-										PartOfSpeech:  "noun",
-										Meaning:       "a polite word",
-										Examples:      []string{"Good morning!"},
-										Origin:        "Old English",
-										Synonyms:      []string{"hello", "hi"},
-										Antonyms:      []string{"farewell"},
-										Images:        []string{},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			// Note: The template has trailing spaces on empty lines due to template formatting
-			wantTemplateContents: "\n## Fallback Event\n\n\n\n---\n\n### Test Scene\n\n\n- _Alice_: Hello World\n\n#### Words and phrases\n\n\n- **a polite word or sign of welcome** /gree-ting/ [noun]: a polite word\n    - Examples:\n        - Good morning!\n\n    - Origin: Old English\n\n\n    - Synonyms: hello, hi\n\n\n    - Antonyms: farewell\n \n\n \n \n \n",
+			wantErr:          true,
 		},
 		{
 			name: "uses embedded template when filesystem template is invalid",
@@ -167,57 +114,7 @@ func TestParseStoryTemplate(t *testing.T) {
 				require.NoError(t, err)
 				return templatePath
 			}(t),
-			wantTemplateName: "story-notebook.md.go.tmpl",
-			templateData: struct {
-				Notebooks []struct {
-					Event  string
-					Scenes []struct {
-						Title         string
-						Conversations []struct {
-							Speaker string
-							Quote   string
-						}
-						Definitions []interface{}
-					}
-				}
-			}{
-				Notebooks: []struct {
-					Event  string
-					Scenes []struct {
-						Title         string
-						Conversations []struct {
-							Speaker string
-							Quote   string
-						}
-						Definitions []interface{}
-					}
-				}{
-					{
-						Event: "Using Fallback",
-						Scenes: []struct {
-							Title         string
-							Conversations []struct {
-								Speaker string
-								Quote   string
-							}
-							Definitions []interface{}
-						}{
-							{
-								Title: "Scene",
-								Conversations: []struct {
-									Speaker string
-									Quote   string
-								}{
-									{Speaker: "Bob", Quote: "Fallback works"},
-								},
-								Definitions: []interface{}{},
-							},
-						},
-					},
-				},
-			},
-			// Note: The template has trailing spaces on empty lines due to template formatting
-			wantTemplateContents: "\n## Using Fallback\n\n\n\n---\n\n### Scene\n\n\n- _Bob_: Fallback works\n\n#### Words and phrases\n\n \n \n \n",
+			wantErr:          true,
 		},
 	}
 
@@ -225,6 +122,13 @@ func TestParseStoryTemplate(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Execute
 			got, gotErr := ParseStoryTemplate(tt.templatePath)
+
+			if tt.wantErr {
+				require.Error(t, gotErr)
+				assert.Nil(t, got)
+				return // Exit early for error cases
+			}
+
 			require.NoError(t, gotErr)
 			assert.NotNil(t, got)
 
