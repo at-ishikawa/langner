@@ -60,7 +60,11 @@ func newNotebookCommand() *cobra.Command {
 		Use:  "stories <notebook id>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configFile)
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}

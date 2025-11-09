@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
@@ -45,11 +46,20 @@ type OpenAIConfig struct {
 	Model  string `mapstructure:"model"`
 }
 
-func Load(configFile string) (*Config, error) {
+type ConfigLoader struct {
+	viper      *viper.Viper
+	validator  *validator.Validate
+	translator ut.Translator
+}
+
+func NewConfigLoader(configFile string) (*ConfigLoader, error) {
+	validate, trans, err := newValidator()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new validator: %w", err)
+	}
+
 	v := viper.New()
-
 	v.SetConfigType("yaml")
-
 	if configFile != "" {
 		v.SetConfigFile(configFile)
 	} else {
@@ -57,6 +67,16 @@ func Load(configFile string) (*Config, error) {
 		v.AddConfigPath(".")
 		v.AddConfigPath("$HOME/.config/langner")
 	}
+
+	return &ConfigLoader{
+		viper:      v,
+		validator:  validate,
+		translator: trans,
+	}, nil
+}
+
+func (loader *ConfigLoader) Load() (*Config, error) {
+	v := loader.viper
 
 	v.SetDefault("notebooks.stories_directory", filepath.Join("notebooks", "stories"))
 	v.SetDefault("notebooks.learning_notes_directory", filepath.Join("notebooks", "learning_notes"))
@@ -93,15 +113,11 @@ func Load(configFile string) (*Config, error) {
 		return nil, fmt.Errorf("invalid configuration format: %w", err)
 	}
 
-	validate, trans, err := newValidator()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create new validator: %w", err)
-	}
-	if err := validate.Struct(cfg); err != nil {
+	if err := loader.validator.Struct(cfg); err != nil {
 		validationErrors := err.(validator.ValidationErrors)
 		var errorMsgs []string
 		for _, e := range validationErrors {
-			errorMsgs = append(errorMsgs, e.Translate(trans))
+			errorMsgs = append(errorMsgs, e.Translate(loader.translator))
 		}
 		return nil, fmt.Errorf("invalid configuration: %s", strings.Join(errorMsgs, ", "))
 	}

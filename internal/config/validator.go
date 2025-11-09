@@ -3,6 +3,8 @@ package config
 import (
 	"fmt"
 	"os"
+	"reflect"
+	"strings"
 
 	"github.com/go-playground/locales/en"
 	ut "github.com/go-playground/universal-translator"
@@ -20,13 +22,20 @@ func newValidator() (*validator.Validate, ut.Translator, error) {
 		return nil, nil, fmt.Errorf("failed to register default translations: %w", err)
 	}
 
+	validate.RegisterTagNameFunc(func(fld reflect.StructField) string {
+		name := strings.SplitN(fld.Tag.Get("mapstructure"), ",", 2)[0]
+		if name == "-" {
+			return ""
+		}
+		return name
+	})
 	if err := validate.RegisterValidation("file", isFileReadable); err != nil {
 		return nil, nil, fmt.Errorf("failed to register file validation: %w", err)
 	}
 	if err := validate.RegisterTranslation("file", trans, func(ut ut.Translator) error {
 		return ut.Add("file", "{0} must be an existing and readable file", true)
 	}, func(ut ut.Translator, fe validator.FieldError) string {
-		t, _ := ut.T("file", fe.StructNamespace())
+		t, _ := ut.T("file", strings.TrimPrefix(fe.Namespace(), "Config."))
 		return t
 	}); err != nil {
 		return nil, nil, fmt.Errorf("failed to register file translation: %w", err)
