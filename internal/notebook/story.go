@@ -7,9 +7,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"text/template"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/assets"
 	"github.com/at-ishikawa/langner/internal/converter"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/fatih/color"
@@ -260,16 +260,9 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 	// Convert markers to markdown for textbook output
 	notebooks = ConvertStoryNotebookMarkers(notebooks, ConversionStyleMarkdown)
 
-	fileName := "story-marp.md.go.tmpl"
-	tmpl, err := template.New(fileName).
-		Funcs(template.FuncMap{
-			"join": strings.Join,
-		}).
-		ParseFiles(
-			writer.templatePath,
-		)
+	tmpl, err := assets.ParseStoryTemplate(writer.templatePath)
 	if err != nil {
-		return fmt.Errorf("template.ParseFiles() > %w", err)
+		return fmt.Errorf("assets.ParseStoryTemplate(%s) > %w", writer.templatePath, err)
 	}
 
 	// Create output directory if it doesn't exist
