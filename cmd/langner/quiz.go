@@ -28,7 +28,11 @@ func newQuizFreeformCommand() *cobra.Command {
 		Use:   "freeform",
 		Short: "Freeform quiz where you provide both word and meaning from memory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configFile)
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
@@ -70,7 +74,11 @@ func newQuizNotebookCommand() *cobra.Command {
 		Short: "Quiz from a specific notebook (shows word, you provide meaning)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configFile)
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}

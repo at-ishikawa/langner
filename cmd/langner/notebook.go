@@ -60,7 +60,11 @@ func newNotebookCommand() *cobra.Command {
 		Use:  "stories <notebook id>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configFile)
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
@@ -82,7 +86,7 @@ func newNotebookCommand() *cobra.Command {
 				return fmt.Errorf("textbook.NewFlashcardReader() > %w", err)
 			}
 
-			writer := notebook.NewStoryNotebookWriter(reader, cfg.Templates.MarkdownDirectory)
+			writer := notebook.NewStoryNotebookWriter(reader, cfg.Templates.StoryNotebookTemplate)
 			if err := writer.OutputStoryNotebooks(storyID, dictionaryMap, learningHistories, sortFlag == SortDescending, cfg.Outputs.StoryDirectory, generatePDF); err != nil {
 				return fmt.Errorf("notebooks.OutputStoryNotebooks > %w", err)
 			}

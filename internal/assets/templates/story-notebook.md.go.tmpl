@@ -23,7 +23,7 @@
 {{ $def = $definition.Expression }}
 {{- end -}}
 
-- **{{ $def }}** {{ printf "/%s/ [%s]" $definition.Pronunciation $definition.PartOfSpeech }}: {{ $definition.Meaning -}}
+- **{{ $def }}**{{ if $definition.Pronunciation }} /{{ $definition.Pronunciation }}/{{ end }}{{ if $definition.PartOfSpeech }} [{{ $definition.PartOfSpeech }}]{{ end }}: {{ $definition.Meaning -}}
 {{ if $definition.Examples }}
     - Examples:
     {{- range $index, $example := $definition.Examples }}

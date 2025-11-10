@@ -3,7 +3,10 @@ package config
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
+	ut "github.com/go-playground/universal-translator"
+	"github.com/go-playground/validator/v10"
 	"github.com/spf13/viper"
 )
 
@@ -21,7 +24,7 @@ type NotebooksConfig struct {
 }
 
 type TemplatesConfig struct {
-	MarkdownDirectory string `mapstructure:"markdown_directory"`
+	StoryNotebookTemplate string `mapstructure:"story_notebook_template" validate:"omitempty,file"`
 }
 
 type OutputsConfig struct {
@@ -43,11 +46,20 @@ type OpenAIConfig struct {
 	Model  string `mapstructure:"model"`
 }
 
-func Load(configFile string) (*Config, error) {
+type ConfigLoader struct {
+	viper      *viper.Viper
+	validator  *validator.Validate
+	translator ut.Translator
+}
+
+func NewConfigLoader(configFile string) (*ConfigLoader, error) {
+	validate, trans, err := newValidator()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create new validator: %w", err)
+	}
+
 	v := viper.New()
-
 	v.SetConfigType("yaml")
-
 	if configFile != "" {
 		v.SetConfigFile(configFile)
 	} else {
@@ -56,10 +68,21 @@ func Load(configFile string) (*Config, error) {
 		v.AddConfigPath("$HOME/.config/langner")
 	}
 
+	return &ConfigLoader{
+		viper:      v,
+		validator:  validate,
+		translator: trans,
+	}, nil
+}
+
+func (loader *ConfigLoader) Load() (*Config, error) {
+	v := loader.viper
+
 	v.SetDefault("notebooks.stories_directory", filepath.Join("notebooks", "stories"))
 	v.SetDefault("notebooks.learning_notes_directory", filepath.Join("notebooks", "learning_notes"))
 	v.SetDefault("dictionaries.rapidapi.cache_directory", filepath.Join("dictionaries", "rapidapi"))
-	v.SetDefault("templates.markdown_directory", filepath.Join("assets", "templates"))
+	// Template is optional - if not specified, will use embedded fallback template
+	v.SetDefault("templates.story_notebook_template", "")
 	v.SetDefault("outputs.story_directory", filepath.Join("outputs", "story"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
 
@@ -88,6 +111,15 @@ func Load(configFile string) (*Config, error) {
 	var cfg Config
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration format: %w", err)
+	}
+
+	if err := loader.validator.Struct(cfg); err != nil {
+		validationErrors := err.(validator.ValidationErrors)
+		var errorMsgs []string
+		for _, e := range validationErrors {
+			errorMsgs = append(errorMsgs, e.Translate(loader.translator))
+		}
+		return nil, fmt.Errorf("invalid configuration: %s", strings.Join(errorMsgs, ", "))
 	}
 
 	return &cfg, nil

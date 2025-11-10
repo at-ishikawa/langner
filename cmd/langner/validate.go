@@ -16,7 +16,11 @@ func newValidateCommand() *cobra.Command {
 		Use:   "validate",
 		Short: "Validate learning notes and story notebooks for consistency and correctness",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := config.Load(configFile)
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}

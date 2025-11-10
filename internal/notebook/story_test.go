@@ -2,7 +2,9 @@ package notebook
 
 import (
 	"testing"
+	"time"
 
+	"github.com/at-ishikawa/langner/internal/assets"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -71,10 +73,17 @@ func TestConvertMarkersInText(t *testing.T) {
 	}
 }
 
-func TestConvertStoryNotebookMarkers(t *testing.T) {
+func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
+	testDate := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
 	notebooks := []StoryNotebook{
 		{
 			Event: "Test Story",
+			Date:  testDate,
+			Metadata: Metadata{
+				Series:  "Test Series",
+				Season:  1,
+				Episode: 1,
+			},
 			Scenes: []StoryScene{
 				{
 					Title: "Scene 1",
@@ -82,7 +91,7 @@ func TestConvertStoryNotebookMarkers(t *testing.T) {
 						{Speaker: "A", Quote: "This is a {{ test phrase }} here."},
 					},
 					Definitions: []Note{
-						{Expression: "test phrase"},
+						{Expression: "test phrase", Meaning: "A phrase for testing"},
 					},
 				},
 			},
@@ -90,32 +99,47 @@ func TestConvertStoryNotebookMarkers(t *testing.T) {
 	}
 
 	tests := []struct {
-		name            string
-		conversionStyle ConversionStyle
-		expectedQuote   string
+		name string
+		want assets.StoryTemplate
 	}{
 		{
-			name:            "Markdown conversion",
-			conversionStyle: ConversionStyleMarkdown,
-			expectedQuote:   "This is a **test phrase** here.",
-		},
-		{
-			name:            "Terminal conversion",
-			conversionStyle: ConversionStyleTerminal,
-			expectedQuote:   "This is a \x1b[1mtest phrase\x1b[22m here.",
-		},
-		{
-			name:            "Plain conversion",
-			conversionStyle: ConversionStylePlain,
-			expectedQuote:   "This is a test phrase here.",
+			name: "Markdown conversion",
+			want: assets.StoryTemplate{
+				Notebooks: []assets.StoryNotebook{
+					{
+						Event: "Test Story",
+						Date:  testDate,
+						Metadata: assets.Metadata{
+							Series:  "Test Series",
+							Season:  1,
+							Episode: 1,
+						},
+						Scenes: []assets.StoryScene{
+							{
+								Title: "Scene 1",
+								Conversations: []assets.Conversation{
+									{Speaker: "A", Quote: "This is a **test phrase** here."},
+								},
+								Definitions: []assets.StoryNote{
+									{
+										Expression: "test phrase",
+										Meaning:    "A phrase for testing",
+										// Other fields will be empty strings/nil
+									},
+								},
+							},
+						},
+					},
+				},
+			},
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			result := ConvertStoryNotebookMarkers(notebooks, tc.conversionStyle)
-			assert.Equal(t, tc.expectedQuote, result[0].Scenes[0].Conversations[0].Quote)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			converter := newAssetsStoryConverter()
+			result := converter.convertToAssetsStoryTemplate(notebooks)
+			assert.Equal(t, tt.want, result)
 		})
 	}
 }
-

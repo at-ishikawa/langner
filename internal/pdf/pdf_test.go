@@ -1,10 +1,11 @@
-package converter
+package pdf_test
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/at-ishikawa/langner/internal/pdf"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -57,7 +58,7 @@ func TestConvertMarkdownToPDF(t *testing.T) {
 				mdPath = tt.markdownPath
 			}
 
-			pdfPath, err := ConvertMarkdownToPDF(mdPath)
+			pdfPath, err := pdf.ConvertMarkdownToPDF(mdPath)
 
 			if tt.wantErr {
 				require.Error(t, err)
