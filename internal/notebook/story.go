@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/assets"
-	"github.com/at-ishikawa/langner/internal/converter"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/pdf"
 	"github.com/fatih/color"
 )
 
@@ -61,18 +61,14 @@ func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error
 	return result, nil
 }
 
-type StoryTemplate struct {
-	Notebooks []StoryNotebook
-}
-
 // ConvertMarkersInText converts {{ }} markers in a text string based on conversion style
 // If targetExpression is provided, only that expression will be highlighted
 // definitions is a list of expressions that should be learned
 func ConvertMarkersInText(text string, definitions []Note, conversionStyle ConversionStyle, targetExpression string) string {
 	// Find all {{ ... }} patterns (with optional spaces)
 	markerPattern := regexp.MustCompile(`\{\{\s*([^}]+?)\s*\}\}`)
-	bold := color.New(color.Bold)
 	color.NoColor = false // Force color output even in non-TTY environments
+	bold := color.New(color.Bold)
 
 	// Replace {{ expression }} based on conversion style and whether it needs to be learned
 	return markerPattern.ReplaceAllStringFunc(text, func(match string) string {
@@ -127,28 +123,6 @@ const (
 	// ConversionStylePlain removes {{ }} markers without any formatting
 	ConversionStylePlain
 )
-
-// ConvertStoryNotebookMarkers converts {{ }} markers in story notebooks based on conversion style
-func ConvertStoryNotebookMarkers(storyNotebooks []StoryNotebook, conversionStyle ConversionStyle) []StoryNotebook {
-	result := make([]StoryNotebook, 0, len(storyNotebooks))
-
-	for _, notebook := range storyNotebooks {
-		scenes := make([]StoryScene, 0, len(notebook.Scenes))
-		for _, scene := range notebook.Scenes {
-			conversations := make([]Conversation, 0, len(scene.Conversations))
-			for _, conv := range scene.Conversations {
-				conv.Quote = ConvertMarkersInText(conv.Quote, scene.Definitions, conversionStyle, "")
-				conversations = append(conversations, conv)
-			}
-			scene.Conversations = conversations
-			scenes = append(scenes, scene)
-		}
-		notebook.Scenes = scenes
-		result = append(result, notebook)
-	}
-
-	return result
-}
 
 func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, isFlashcard bool) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
@@ -257,14 +231,6 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}
 
-	// Convert markers to markdown for textbook output
-	notebooks = ConvertStoryNotebookMarkers(notebooks, ConversionStyleMarkdown)
-
-	tmpl, err := assets.ParseStoryTemplate(writer.templatePath)
-	if err != nil {
-		return fmt.Errorf("assets.ParseStoryTemplate(%s) > %w", writer.templatePath, err)
-	}
-
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(outputDirectory, 0755); err != nil {
 		return fmt.Errorf("os.MkdirAll(%s) > %w", outputDirectory, err)
@@ -281,18 +247,19 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 		_ = output.Close()
 	}()
 
-	if err := tmpl.Execute(output, StoryTemplate{
-		Notebooks: notebooks,
-	}); err != nil {
-		return fmt.Errorf("tmpl.Execute() > %w", err)
+	// Convert notebooks to assets format with marker conversion for markdown output
+	converter := newAssetsStoryConverter()
+	templateData := converter.convertToAssetsStoryTemplate(notebooks)
+	if err := assets.WriteStoryNotebook(output, writer.templatePath, templateData); err != nil {
+		return fmt.Errorf("assets.WriteStoryNotebook(%s, %s, ) > %w", outputFilename, writer.templatePath, err)
 	}
 
 	fmt.Printf("Story notebook written to: %s\n", outputFilename)
 
 	if generatePDF {
-		pdfPath, err := converter.ConvertMarkdownToPDF(outputFilename)
+		pdfPath, err := pdf.ConvertMarkdownToPDF(outputFilename)
 		if err != nil {
-			return fmt.Errorf("converter.ConvertMarkdownToPDF(%s) > %w", outputFilename, err)
+			return fmt.Errorf("ConvertMarkdownToPDF(%s) > %w", outputFilename, err)
 		}
 		fmt.Printf("PDF generated at: %s\n", pdfPath)
 	}
@@ -376,4 +343,74 @@ func (notebook *StoryNotebook) Validate(location string) []ValidationError {
 	}
 
 	return errors
+}
+
+type assetsStoryConverter struct {
+}
+
+func newAssetsStoryConverter() *assetsStoryConverter {
+	return &assetsStoryConverter{}
+}
+
+// convertToAssetsStoryTemplate converts notebook types to assets.StoryTemplate for template rendering
+// and applies marker conversion to conversation quotes based on the conversion style
+func (converter assetsStoryConverter) convertToAssetsStoryTemplate(notebooks []StoryNotebook) assets.StoryTemplate {
+	assetsNotebooks := make([]assets.StoryNotebook, len(notebooks))
+	for i, nb := range notebooks {
+		assetsNotebooks[i] = converter.convertStoryNotebook(nb)
+	}
+	return assets.StoryTemplate{
+		Notebooks: assetsNotebooks,
+	}
+}
+
+func (converter assetsStoryConverter) convertStoryNotebook(nb StoryNotebook) assets.StoryNotebook {
+	assetsScenes := make([]assets.StoryScene, len(nb.Scenes))
+	for i, scene := range nb.Scenes {
+		assetsScenes[i] = converter.convertStoryScene(scene)
+	}
+	return assets.StoryNotebook{
+		Event: nb.Event,
+		Metadata: assets.Metadata{
+			Series:  nb.Metadata.Series,
+			Season:  nb.Metadata.Season,
+			Episode: nb.Metadata.Episode,
+		},
+		Date:   nb.Date,
+		Scenes: assetsScenes,
+	}
+}
+
+func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets.StoryScene {
+	assetsConversations := make([]assets.Conversation, len(scene.Conversations))
+	for i, conv := range scene.Conversations {
+		// Apply marker conversion to the quote text
+		convertedQuote := ConvertMarkersInText(conv.Quote, scene.Definitions, ConversionStyleMarkdown, "")
+		assetsConversations[i] = assets.Conversation{
+			Speaker: conv.Speaker,
+			Quote:   convertedQuote,
+		}
+	}
+
+	assetsNotes := make([]assets.StoryNote, len(scene.Definitions))
+	for i, note := range scene.Definitions {
+		assetsNotes[i] = assets.StoryNote{
+			Definition:    note.Definition,
+			Expression:    note.Expression,
+			Meaning:       note.Meaning,
+			Examples:      note.Examples,
+			Pronunciation: note.Pronunciation,
+			PartOfSpeech:  note.PartOfSpeech,
+			Origin:        note.Origin,
+			Synonyms:      note.Synonyms,
+			Antonyms:      note.Antonyms,
+			Images:        note.Images,
+		}
+	}
+
+	return assets.StoryScene{
+		Title:         scene.Title,
+		Conversations: assetsConversations,
+		Definitions:   assetsNotes,
+	}
 }

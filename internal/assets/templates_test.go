@@ -10,70 +10,38 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseStoryTemplate(t *testing.T) {
+func TestWriteStoryNotebook(t *testing.T) {
 	tests := []struct {
 		name         string
 		templatePath string
 
-		wantTemplateName string
-		wantErr          bool
-
-		templateData         interface{}
+		wantErr              bool
+		templateData         StoryTemplate
 		wantTemplateContents string
 	}{
 		{
-			name:             "uses fallback template when path is empty",
-			templatePath:     "",
-			wantTemplateName: "story-notebook.md.go.tmpl",
-			templateData: struct {
-				Notebooks []struct {
-					Event  string
-					Scenes []struct {
-						Title         string
-						Conversations []struct {
-							Speaker string
-							Quote   string
-						}
-						Definitions []interface{}
-					}
-				}
-			}{
-				Notebooks: []struct {
-					Event  string
-					Scenes []struct {
-						Title         string
-						Conversations []struct {
-							Speaker string
-							Quote   string
-						}
-						Definitions []interface{}
-					}
-				}{
+			name:         "uses fallback template when path is empty",
+			templatePath: "",
+			templateData: StoryTemplate{
+				Notebooks: []StoryNotebook{
 					{
 						Event: "Empty Path Test",
-						Scenes: []struct {
-							Title         string
-							Conversations []struct {
-								Speaker string
-								Quote   string
-							}
-							Definitions []interface{}
-						}{
+						Scenes: []StoryScene{
 							{
 								Title: "Test",
-								Conversations: []struct {
-									Speaker string
-									Quote   string
-								}{
-									{Speaker: "System", Quote: "Using embedded template"},
+								Conversations: []Conversation{
+									{Speaker: "System", Quote: "Using embedded template for testing here."},
 								},
-								Definitions: []interface{}{},
+								Definitions: []StoryNote{
+									{Expression: "test phrase", Meaning: "A phrase for testing", Pronunciation: "test-phrase", PartOfSpeech: "noun"},
+									{Expression: "test phrase 2", Meaning: "A phrase for testing 2"},
+								},
 							},
 						},
 					},
 				},
 			},
-			wantTemplateContents: "\n## Empty Path Test\n\n\n\n---\n\n### Test\n\n\n- _System_: Using embedded template\n\n#### Words and phrases\n\n \n \n \n",
+			wantTemplateContents: "\n## Empty Path Test\n\n\n\n---\n\n### Test\n\n\n- _System_: Using embedded template for testing here.\n\n#### Words and phrases\n\n\n- **test phrase** /test-phrase/ [noun]: A phrase for testing\n\n\n \n\n\n- **test phrase 2**: A phrase for testing 2\n\n\n \n\n \n \n \n",
 		},
 		{
 			name: "uses filesystem template when available",
@@ -85,27 +53,22 @@ func TestParseStoryTemplate(t *testing.T) {
 				require.NoError(t, err)
 				return templatePath
 			}(t),
-			wantTemplateName: "custom.md.go.tmpl",
-			templateData: struct {
-				Notebooks []struct {
-					Event string
-				}
-			}{
-				Notebooks: []struct {
-					Event string
-				}{
-					{Event: "Test Event"},
+			templateData: StoryTemplate{
+				Notebooks: []StoryNotebook{
+					{Event: "Test Event",
+						Scenes: []StoryScene{
+							{Title: "Test", Conversations: []Conversation{
+								{Speaker: "System", Quote: "Using filesystem template for testing here."},
+							},
+							},
+						},
+					},
 				},
 			},
 			wantTemplateContents: "Filesystem Template: Test Event",
 		},
 		{
-			name:             "uses embedded template when file doesn't exist",
-			templatePath:     "/non/existent/invalid.md.go.tmpl",
-			wantErr:          true,
-		},
-		{
-			name: "uses embedded template when filesystem template is invalid",
+			name: "returns error when filesystem template is invalid",
 			templatePath: func(t *testing.T) string {
 				tmpDir := t.TempDir()
 				templatePath := filepath.Join(tmpDir, "invalid.md.go.tmpl")
@@ -114,33 +77,32 @@ func TestParseStoryTemplate(t *testing.T) {
 				require.NoError(t, err)
 				return templatePath
 			}(t),
-			wantErr:          true,
+			templateData: StoryTemplate{
+				Notebooks: []StoryNotebook{
+					{Event: "Test Event",
+						Scenes: []StoryScene{
+							{Title: "Test", Conversations: []Conversation{
+								{Speaker: "System", Quote: "Using filesystem template for testing here."},
+							}},
+						},
+					},
+				},
+			},
+			wantErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Execute
-			got, gotErr := ParseStoryTemplate(tt.templatePath)
-
+			var buf bytes.Buffer
+			gotErr := WriteStoryNotebook(&buf, tt.templatePath, tt.templateData)
 			if tt.wantErr {
 				require.Error(t, gotErr)
-				assert.Nil(t, got)
-				return // Exit early for error cases
+				return
 			}
-
-			require.NoError(t, gotErr)
-			assert.NotNil(t, got)
-
-			// Check template name
-			assert.Equal(t, tt.wantTemplateName, got.Name())
-
-			var buf bytes.Buffer
-			gotErr = got.Execute(&buf, tt.templateData)
-			require.NoError(t, gotErr)
-
-			output := buf.String()
-			assert.Equal(t, tt.wantTemplateContents, output)
+			assert.NoError(t, gotErr)
+			assert.Equal(t, tt.wantTemplateContents, buf.String())
 		})
 	}
 }

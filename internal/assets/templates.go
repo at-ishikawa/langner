@@ -9,13 +9,6 @@ import (
 	"text/template"
 )
 
-//go:embed templates/story-notebook.md.go.tmpl
-var fallbackStoryNotebookTemplate string
-
-func ParseStoryTemplate(templatePath string) (*template.Template, error) {
-	return parseTemplateWithFallback(templatePath, fallbackStoryNotebookTemplate)
-}
-
 func parseTemplateWithFallback(templatePath string, fallbackTemplate string) (*template.Template, error) {
 	funcMap := template.FuncMap{
 		"join": strings.Join,
@@ -47,4 +40,3 @@ func parseTemplateWithFallback(templatePath string, fallbackTemplate string) (*t
 	}
 	return tmpl, nil
 }
-
