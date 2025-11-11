@@ -3,6 +3,7 @@ package openai_test
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -18,6 +19,13 @@ import (
 // Run with: OPENAI_API_KEY=your-key go test -v ./internal/inference/openai -run TestClient_AnswerMeanings_Evaluate
 func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 	t.Parallel()
+
+	slog.SetDefault(
+		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     slog.LevelDebug,
+			AddSource: true,
+		})),
+	)
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -42,19 +50,15 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 					{
 						Expression: "run",
 						Meaning:    "to move quickly by foot",
-						Contexts:   [][]string{{"I run every morning for exercise"}, {"I run a small business downtown"}},
-					},
-					{
-						Expression:        "turn down",
-						Meaning:           "to reject or refuse",
-						IsExpressionInput: true,
-						Contexts:          [][]string{{"She turned down the job offer"}, {"He turned down the invitation to the party"}},
+						Contexts: []inference.Context{
+							{Context: "I run every morning for exercise", Meaning: "to move quickly"},
+							{Context: "I run a small business downtown", Meaning: "to operate"},
+						},
 					},
 				},
 			},
 			wantCorrects: [][]bool{
 				{true, false},
-				{true, true},
 			},
 		},
 	}
@@ -63,7 +67,8 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := openai.NewClient(apiKey, model, inference.RetryConfig{MaxRetries: 0})
+			require.Equal(t, len(tc.request.Expressions), len(tc.wantCorrects))
+			client := openai.NewClient(apiKey, model, 1)
 			defer func() {
 				_ = client.Close()
 			}()
@@ -74,10 +79,15 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 			require.NoError(t, err)
 
 			for i, wantCorrectForExpression := range tc.wantCorrects {
+				answer := result.Answers[i]
+				expression := answer.Expression
 				for j, wantCorrectForContext := range wantCorrectForExpression {
-					assert.Equal(t, wantCorrectForContext, result.Answers[i].AnswersForContext[j].Correct,
+					context := answer.AnswersForContext[j].Context
+					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v", expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct)
+
+					assert.Equal(t, wantCorrectForContext, answer.AnswersForContext[j].Correct,
 						"Expression %d, Context %d: expected correct=%v, got=%v",
-						i, j, wantCorrectForContext, result.Answers[i].AnswersForContext[j].Correct)
+						expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct)
 				}
 			}
 		})

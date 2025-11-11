@@ -94,9 +94,14 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	}
 
 	// Collect contexts from each occurrence that needs learning
-	contextGroups := make([][]string, 0, len(needsLearning))
+	var contexts []inference.Context
 	for _, occurrence := range needsLearning {
-		contextGroups = append(contextGroups, occurrence.Contexts)
+		for _, contextStr := range occurrence.Contexts {
+			contexts = append(contexts, inference.Context{
+				Context: contextStr,
+				Meaning: occurrence.Definition.Meaning, // Include meaning from notebook as hint
+			})
+		}
 	}
 
 	// Validate meaning against all context groups in a single API call
@@ -105,7 +110,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 			{
 				Expression:        word,
 				Meaning:           meaning,
-				Contexts:          contextGroups,
+				Contexts:          contexts,
 				IsExpressionInput: true, // FreeformQuiz: user inputs the expression
 			},
 		},
