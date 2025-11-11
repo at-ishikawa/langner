@@ -68,7 +68,7 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 			t.Parallel()
 
 			require.Equal(t, len(tc.request.Expressions), len(tc.wantCorrects))
-			client := openai.NewClient(apiKey, model, 1)
+			client := openai.NewClient(apiKey, model, 0)
 			defer func() {
 				_ = client.Close()
 			}()

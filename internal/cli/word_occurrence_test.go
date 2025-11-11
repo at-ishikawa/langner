@@ -73,9 +73,17 @@ func TestExtractContextsFromConversations(t *testing.T) {
 			// Verify all contexts contain the expression or definition
 			for _, ctx := range contexts {
 				assert.True(t,
-					strings.Contains(strings.ToLower(ctx), strings.ToLower(tc.expression)) ||
-						(tc.definition != "" && strings.Contains(strings.ToLower(ctx), strings.ToLower(tc.definition))),
+					strings.Contains(strings.ToLower(ctx.Context), strings.ToLower(tc.expression)) ||
+						(tc.definition != "" && strings.Contains(strings.ToLower(ctx.Context), strings.ToLower(tc.definition))),
 					"Context should contain expression or definition")
+
+				// Verify usage is populated
+				assert.NotEmpty(t, ctx.Usage, "Usage should be populated")
+
+				// Verify usage is either the expression or definition
+				assert.True(t,
+					ctx.Usage == tc.expression || ctx.Usage == tc.definition,
+					"Usage should be either expression or definition")
 			}
 		})
 	}

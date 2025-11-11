@@ -117,8 +117,8 @@ func TestExtractWordOccurrences(t *testing.T) {
 				assert.Equal(t, "test1", card1.Definition.Expression)
 				assert.Equal(t, "meaning1", card1.GetMeaning())
 				assert.Equal(t, 2, len(card1.Contexts))
-				assert.Contains(t, card1.Contexts[0], "test1")
-				assert.Contains(t, card1.Contexts[1], "test1")
+				assert.Contains(t, card1.Contexts[0].Context, "test1")
+				assert.Contains(t, card1.Contexts[1].Context, "test1")
 				assert.Equal(t, "Story 1", card1.Story.Event)
 				assert.Equal(t, "Scene 1", card1.Scene.Title)
 
@@ -131,7 +131,7 @@ func TestExtractWordOccurrences(t *testing.T) {
 				assert.Equal(t, "test3", card3.Definition.Expression)
 				assert.Equal(t, "meaning3", card3.GetMeaning())
 				assert.Equal(t, 1, len(card3.Contexts))
-				assert.Contains(t, card3.Contexts[0], "test3")
+				assert.Contains(t, card3.Contexts[0].Context, "test3")
 				assert.Equal(t, 2, len(card3.GetImages()))
 			},
 		},
@@ -168,7 +168,7 @@ func TestExtractWordOccurrences(t *testing.T) {
 				assert.Equal(t, "remove", card.Definition.Expression)
 				assert.Equal(t, "take off", card.Definition.Definition)
 				assert.Equal(t, 1, len(card.Contexts))
-				assert.Contains(t, card.Contexts[0], "take off")
+				assert.Contains(t, card.Contexts[0].Context, "take off")
 			},
 		},
 	}
@@ -194,7 +194,7 @@ func TestFormatQuestion(t *testing.T) {
 			name: "No contexts",
 			card: WordOccurrence{
 				Definition: &notebook.Note{Expression: "test"},
-				Contexts:   []string{},
+				Contexts:   []WordOccurrenceContext{},
 			},
 			expected: "What does 'test' mean?\n",
 		},
@@ -202,7 +202,7 @@ func TestFormatQuestion(t *testing.T) {
 			name: "Single context",
 			card: WordOccurrence{
 				Definition: &notebook.Note{Expression: "test"},
-				Contexts:   []string{"This is a test example"},
+				Contexts:   []WordOccurrenceContext{{Context: "This is a test example", Usage: "test"}},
 			},
 			expected: "What does 'test' mean in the following context?\n  1. This is a test example\n",
 		},
@@ -210,7 +210,7 @@ func TestFormatQuestion(t *testing.T) {
 			name: "Multiple contexts",
 			card: WordOccurrence{
 				Definition: &notebook.Note{Expression: "test"},
-				Contexts:   []string{"First example", "Second example"},
+				Contexts:   []WordOccurrenceContext{{Context: "First example", Usage: "test"}, {Context: "Second example", Usage: "test"}},
 			},
 			expected: "What does 'test' mean in the following context?\n  1. First example\n  2. Second example\n",
 		},
@@ -640,7 +640,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test",
 						Meaning:    "test meaning",
 					},
-					Contexts: []string{"This is a test"},
+					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
@@ -673,7 +673,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test",
 						Meaning:    "test meaning",
 					},
-					Contexts: []string{"This is a test"},
+					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
@@ -706,7 +706,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test",
 						Meaning:    "test meaning",
 					},
-					Contexts: []string{"This is a test"},
+					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
@@ -739,7 +739,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test1",
 						Meaning:    "test meaning 1",
 					},
-					Contexts: []string{"This is test1"},
+					Contexts: []WordOccurrenceContext{{Context: "This is test1", Usage: "test1"}},
 				},
 				{
 					NotebookName: "test-notebook",
@@ -753,7 +753,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test2",
 						Meaning:    "test meaning 2",
 					},
-					Contexts: []string{"This is test2"},
+					Contexts: []WordOccurrenceContext{{Context: "This is test2", Usage: "test2"}},
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
@@ -787,7 +787,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Definition: "lookout",
 						Meaning:    "a person who has the responsibility of watching for something, especially danger, etc.",
 					},
-					Contexts: []string{"They're used as lookouts"},
+					Contexts: []WordOccurrenceContext{{Context: "They're used as lookouts", Usage: "lookout"}},
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},

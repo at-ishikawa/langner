@@ -136,7 +136,7 @@ func (client *Client) AnswerMeanings(
 			return nil
 		},
 		retry.Context(ctx),
-		retry.Attempts(client.maxRetryAttempts),
+		retry.Attempts(client.maxRetryAttempts+1),
 		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
 			return retry.BackOffDelay(n, err, config)
 		}),
@@ -159,10 +159,17 @@ Return ONLY a JSON array. For each input expression, include:
 
 STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase.
 
+UNDERSTANDING THE INPUT
+- Each context may include a "usage" field showing the actual inflected form of the expression as it appears in that specific context.
+- Example: For expression "run", the usage might be "ran", "running", or "runs" depending on how it appears in the context sentence.
+- The usage field helps you identify which word form to focus on, but you should still normalize inflections when comparing meanings.
+- If usage is provided, use it to locate the expression in the context; if not provided, search for any inflected form.
+
 EVALUATION RULES
 1) Determine TRUE meaning per context
    - Read the context carefully.
    - Treat the target expression as a UNIT (not word-by-word), accounting for idiom, phrasal verb, or fixed phrase.
+   - If a "usage" field is provided, it indicates the specific inflected form in that context (e.g., "ran" for "run").
    - Normalize inflection/tense/number (e.g., "broke" ↔ "break", "runs" ↔ "run") and ignore punctuation/markup (e.g., {{…}}).
    - Identify the sense and part-of-speech actually used (e.g., "run" = operate/manage vs move quickly).
    - If multiple senses are possible, choose the one most supported by the context; if still ambiguous, choose the most common idiomatic reading for that context.
@@ -215,14 +222,14 @@ OUTPUT FORMAT (example skeleton):
 	examples := []promptExample{
 		{
 			description: "MIXED - Same expression, different contexts with different meanings. " +
-				"Tests: evaluating multiple contexts separately, detecting when meaning only applies to some contexts",
+				"Tests: evaluating multiple contexts separately, detecting when meaning only applies to some contexts, using usage field",
 			userRequest: []inference.Expression{
 				{
 					Expression: "run",
 					Meaning:    "to move fast",
 					Contexts: []inference.Context{
-						{Context: "I need to run to the store before it closes.", Meaning: "to move quickly"},
-						{Context: "She runs a successful startup company.", Meaning: "to operate or manage"},
+						{Context: "I need to run to the store before it closes.", Meaning: "to move quickly", Usage: "run"},
+						{Context: "She runs a successful startup company.", Meaning: "to operate or manage", Usage: "runs"},
 					},
 					IsExpressionInput: false,
 				},
@@ -263,13 +270,13 @@ OUTPUT FORMAT (example skeleton):
 		},
 		{
 			description: "INCORRECT - User took literal meaning instead of idiomatic. " +
-				"Tests: rejecting literal interpretation of idiomatic expressions",
+				"Tests: rejecting literal interpretation of idiomatic expressions, usage field with phrasal expression",
 			userRequest: []inference.Expression{
 				{
 					Expression: "make a scene",
 					Meaning:    "to create something",
 					Contexts: []inference.Context{
-						{Context: "Please don't make a scene in front of everyone at the restaurant.", Meaning: "to cause a public disturbance"},
+						{Context: "Please don't make a scene in front of everyone at the restaurant.", Meaning: "to cause a public disturbance", Usage: "make a scene"},
 					},
 					IsExpressionInput: false,
 				},
