@@ -1,10 +1,12 @@
 package openai
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"github.com/at-ishikawa/langner/internal/inference"
 	"resty.dev/v3"
@@ -83,29 +85,7 @@ type Usage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
-// Types are now defined in the inference package
-
-func (client Client) createUserMessage(expression, meaning, context string) Message {
-	if context == "" {
-		return Message{
-			Role:    RoleUser,
-			Content: fmt.Sprintf(`{"expression": "%s", "meaning": "%s"}`, expression, meaning),
-		}
-	}
-	return Message{
-		Role:    RoleUser,
-		Content: fmt.Sprintf(`{"expression": "%s", "meaning": "%s", "context": "%s"}`, expression, meaning, context),
-	}
-}
-
-func (client Client) createAssistantMessage(expression string, isCorrect bool, meaning string) Message {
-	return Message{
-		Role:    RoleAssistant,
-		Content: fmt.Sprintf(`{"expression": "%s", "correct": %t, "meaning": "%s"}`, expression, isCorrect, meaning),
-	}
-}
-
-// getCommonEvaluationRules returns the shared evaluation rules for both single and multiple context validation
+// getCommonEvaluationRules returns the shared evaluation rules for context validation
 func getCommonEvaluationRules() string {
 	return `You are an expert in evaluating whether a user's understanding of an English expression is correct.
 
@@ -126,208 +106,57 @@ EVALUATION RULES:
    - The meaning describes a different sense of the word`
 }
 
-// getUserInputPrompt returns the prompt describing what fields are user input
-func getUserInputPrompt(isExpressionInput bool) string {
-	if isExpressionInput {
-		return `
-USER INPUT:
-- The expression is what the user typed (may contain typos or misspellings)
-- The meaning is what the user typed
-- Focus on: Does the meaning match what the user INTENDED to express?
-- IMPORTANT: If the expression has a typo (e.g., "set of" instead of "set off"), check if the meaning matches the INTENDED expression based on context
-- Ignore typos in the expression when evaluating correctness`
-	}
-	return `
-USER INPUT:
-- The expression is correct (from our database)
-- The meaning is what the user typed (may contain typos or paraphrases)
-- Evaluate if the user's meaning matches the expression's actual meaning`
-}
-
-func (client *Client) answerExpressionWithSingleContext(
+// answerMeanings validates multiple expressions, each with multiple contexts
+func (client *Client) answerMeanings(
 	ctx context.Context,
-	expression string,
-	meaning string,
-	statements string,
-	isExpressionInput bool,
-) (inference.AnswerQuestionResponse, error) {
-	var result inference.AnswerQuestionResponse
+	args inference.AnswerMeaningsRequest,
+) (inference.AnswerMeaningsResponse, error) {
+	if len(args.Expressions) == 0 {
+		return inference.AnswerMeaningsResponse{}, nil
+	}
 
 	// Use shared prompt components
 	commonRules := getCommonEvaluationRules()
-	userInputPrompt := getUserInputPrompt(isExpressionInput)
 
-	// Single-context specific output format
-	var outputFormat string
-	if isExpressionInput {
-		outputFormat = `
-OUTPUT FORMAT:
-You MUST respond with ONLY a valid JSON object containing exactly three fields:
-- "expression": the exact expression from user input (unchanged, even if it has typos)
-- "correct": boolean indicating if the user's meaning is correct
-- "meaning": the correct meaning based on context (if provided) or most common meaning (if no context)
+	// Multiple expressions output format with per-expression is_expression_input
+	systemPrompt := commonRules + `
 
-No explanations, no additional text before or after the JSON.`
-	} else {
-		outputFormat = `
-OUTPUT FORMAT:
-You MUST respond with ONLY a valid JSON object containing exactly three fields:
-- "expression": the exact expression provided (this is always correct)
-- "correct": boolean indicating if the user's meaning matches the contextual usage
-- "meaning": the correct meaning based on context (if provided) or most common meaning (if no context)
+MULTIPLE EXPRESSIONS:
+You will be given multiple expressions, each with multiple contexts.
+Each expression has an "is_expression_input" field that indicates the input mode:
+- If "is_expression_input" is true: The expression is from user input (may contain typos). The meaning is what the user typed. Focus on: Does the meaning match what the user INTENDED to express? Ignore typos in the expression.
+- If "is_expression_input" is false: The expression is correct (from our database). The meaning is what the user typed (may contain typos or paraphrases). Evaluate if the user's meaning matches the expression's actual meaning.
 
-No explanations, no additional text before or after the JSON.`
-	}
-
-	systemPrompt := commonRules + userInputPrompt + outputFormat
-
-	// Build example messages based on mode
-	var exampleMessages []Message
-	if isExpressionInput {
-		// FreeformQuiz examples: expression may have typos
-		exampleMessages = []Message{
-			// Example 1: Expression with typo, but meaning is correct
-			client.createUserMessage("set of", "to trigger or activate something", "you're going to set of my thorns"),
-			client.createAssistantMessage("set of", true, "to trigger or activate something (likely meant 'set off')"),
-
-			// Example 2: Semantic equivalence - different wording, same meaning
-			client.createUserMessage("run into", "to meet someone by chance", "I ran into an old friend at the store"),
-			client.createAssistantMessage("run into", true, "to encounter someone unexpectedly"),
-
-			// Example 3: Wrong meaning
-			client.createUserMessage("chat", "person to talk", "I'm going to chat with my friends"),
-			client.createAssistantMessage("chat", false, "to have an informal conversation"),
-		}
-	} else {
-		// NotebookQuiz examples: expression is always correct
-		exampleMessages = []Message{
-			// Example 1: Wrong meaning, context shows it's different
-			client.createUserMessage("chat", "person to talk", "I'm going to chat with my friends"),
-			client.createAssistantMessage("chat", false, "to have an informal conversation"),
-
-			// Example 2: Semantic equivalence - different wording, same meaning
-			client.createUserMessage("run into", "to meet someone by chance", "I ran into an old friend at the store"),
-			client.createAssistantMessage("run into", true, "to encounter someone unexpectedly"),
-
-			// Example 3: Context determines meaning (phrasal verb with multiple meanings)
-			client.createUserMessage("turn down", "to reject or refuse", "She turned down the job offer"),
-			client.createAssistantMessage("turn down", true, "to decline or refuse something"),
-		}
-	}
-
-	messages := []Message{
-		{
-			Role:    RoleSystem,
-			Content: systemPrompt,
-		},
-	}
-	messages = append(messages, exampleMessages...)
-	messages = append(messages, client.createUserMessage(expression, meaning, statements))
-
-	body := ChatCompletionRequest{
-		Model:       client.model,
-		Temperature: 0.3, // Lower temperature for more consistent responses
-		Messages:    messages,
-	}
-
-	response, err := client.httpClient.R().
-		SetContext(ctx).
-		SetBody(body).
-		SetResult(&ChatCompletionResponse{}).
-		Post("/chat/completions")
-	if err != nil {
-		return result, fmt.Errorf("httpClient.Post > %w", err)
-	}
-	if response.IsError() {
-		return result, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
-	}
-
-	responseBody := response.Result().(*ChatCompletionResponse)
-	if responseBody == nil || len(responseBody.Choices) == 0 {
-		return result, fmt.Errorf("empty response body or choices: %s", response.String())
-	}
-
-	content := responseBody.Choices[0].Message.Content
-	if content == "" {
-		return result, fmt.Errorf("empty response content: %s", response.String())
-	}
-	slog.Default().Debug("openai response content", "content", content)
-
-	var unmarshaled inference.AnswerQuestionResponse
-	if err := json.Unmarshal([]byte(content), &unmarshaled); err != nil {
-		// Try to parse with partial JSON fix
-		fixed, fixErr := tryParsePartialJSON(content)
-		if fixErr != nil {
-			slog.Default().Error("Failed to parse OpenAI response as JSON",
-				"content", content,
-				"expression", expression,
-				"error", err,
-				"fixError", fixErr)
-			return result, fmt.Errorf("json.Unmarshal(%s) > %w (also failed with fix: %v)", content, err, fixErr)
-		}
-		slog.Default().Warn("Successfully parsed after fixing JSON format",
-			"original", content,
-			"fixed", fixed,
-			"expression", expression)
-		return *fixed, nil
-	}
-
-	return unmarshaled, nil
-}
-
-// answerExpressionWithMultipleContexts validates a user's meaning against multiple context groups
-func (client *Client) answerExpressionWithMultipleContexts(
-	ctx context.Context,
-	expression string,
-	meaning string,
-	contexts [][]string,
-	isExpressionInput bool,
-) (inference.MultipleAnswerQuestionResponse, error) {
-	var result inference.MultipleAnswerQuestionResponse
-
-	// Use shared prompt components
-	commonRules := getCommonEvaluationRules()
-	userInputPrompt := getUserInputPrompt(isExpressionInput)
-
-	// Multiple-context specific output format
-	outputFormat := `
-MULTIPLE CONTEXTS:
-You will be given multiple contexts, each representing a different usage/occurrence of the expression.
-Evaluate the user's meaning against EACH context separately.
+Evaluate each expression's meaning against its contexts separately based on its input mode.
 
 OUTPUT FORMAT:
-You MUST respond with ONLY a valid JSON object with these fields:
-- "expression": the exact expression provided
-- "is_expression_input": boolean indicating if expression is from user input
-- "meaning": the correct meaning based on the contexts
-- "answers": array of objects, one per context, each with:
-  - "correct": boolean indicating if user's meaning matches this context
-  - "context": the context string
+You MUST respond with ONLY a valid JSON array containing one object per expression:
+[
+  {
+    "expression": "expression1",
+    "is_expression_input": boolean,
+    "meaning": "correct meaning",
+    "answers": [
+      {"correct": boolean, "context": "context string"}
+    ]
+  },
+  {
+    "expression": "expression2",
+    "is_expression_input": boolean,
+    "meaning": "correct meaning",
+    "answers": [
+      {"correct": boolean, "context": "context string"}
+    ]
+  }
+]
 
-Example:
-{"expression": "run", "is_expression_input": true, "meaning": "to move quickly", "answers": [{"correct": true, "context": "I run every morning"}, {"correct": false, "context": "I run a business"}]}
+No explanations, no additional text before or after the JSON array.`
 
-No explanations, no additional text before or after the JSON.`
-
-	systemPrompt := commonRules + userInputPrompt + outputFormat
-
-	// Build user message with all contexts flattened
-	userContent := fmt.Sprintf(`{"expression": "%s", "meaning": "%s"`, expression, meaning)
-	if len(contexts) > 0 {
-		userContent += `, "contexts": [`
-		first := true
-		for _, contextGroup := range contexts {
-			for _, ctx := range contextGroup {
-				if !first {
-					userContent += `, `
-				}
-				first = false
-				userContent += fmt.Sprintf(`"%s"`, ctx)
-			}
-		}
-		userContent += `]`
+	// Build user message with all expressions
+	userContent := bytes.NewBuffer(nil)
+	if err := json.NewEncoder(userContent).Encode(args.Expressions); err != nil {
+		return inference.AnswerMeaningsResponse{}, fmt.Errorf("failed to marshal expressions: %w", err)
 	}
-	userContent += `}`
 
 	body := ChatCompletionRequest{
 		Model:       client.model,
@@ -339,7 +168,7 @@ No explanations, no additional text before or after the JSON.`
 			},
 			{
 				Role:    RoleUser,
-				Content: userContent,
+				Content: userContent.String(),
 			},
 		},
 	}
@@ -350,105 +179,32 @@ No explanations, no additional text before or after the JSON.`
 		SetResult(&ChatCompletionResponse{}).
 		Post("/chat/completions")
 	if err != nil {
-		return result, fmt.Errorf("httpClient.Post > %w", err)
+		return inference.AnswerMeaningsResponse{}, fmt.Errorf("httpClient.Post > %w", err)
 	}
 	if response.IsError() {
-		return result, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+		return inference.AnswerMeaningsResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
 	}
 
 	responseBody := response.Result().(*ChatCompletionResponse)
 	if responseBody == nil || len(responseBody.Choices) == 0 {
-		return result, fmt.Errorf("empty response body or choices: %s", response.String())
+		return inference.AnswerMeaningsResponse{}, fmt.Errorf("empty response body or choices: %s", response.String())
 	}
 
 	content := responseBody.Choices[0].Message.Content
 	if content == "" {
-		return result, fmt.Errorf("empty response content: %s", response.String())
+		return inference.AnswerMeaningsResponse{}, fmt.Errorf("empty response content: %s", response.String())
 	}
 	slog.Default().Debug("openai response content", "content", content)
 
-	var unmarshaled inference.MultipleAnswerQuestionResponse
-	if err := json.Unmarshal([]byte(content), &unmarshaled); err != nil {
+	var decoded []inference.AnswerMeaning
+	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
 		slog.Default().Error("Failed to parse OpenAI response as JSON",
-			"content", content,
-			"expression", expression,
+			"request", body,
+			"prompt", content,
+			"userRequest", userContent.String(),
+			"expressionCount", len(args.Expressions),
 			"error", err)
-		return result, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
+		return inference.AnswerMeaningsResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
 	}
-
-	// Ensure IsExpressionInput is set correctly from the input parameter
-	// rather than relying on OpenAI to return it accurately
-	unmarshaled.IsExpressionInput = isExpressionInput
-
-	return unmarshaled, nil
-}
-
-// GetWordMeaning uses OpenAI to get the meaning of a word
-// This is an alternative to using RapidAPI dictionary
-func (client *Client) GetWordMeaning(ctx context.Context, word string) (string, error) {
-	body := ChatCompletionRequest{
-		Model:       client.model,
-		Temperature: 0.3,
-		Messages: []Message{
-			{
-				Role:    RoleSystem,
-				Content: "You are an expert English dictionary. Provide a clear, concise definition for the given word. Include the part of speech and primary meaning. Keep the response under 100 words.",
-			},
-			{
-				Role:    RoleUser,
-				Content: fmt.Sprintf("Define the word: %s", word),
-			},
-		},
-	}
-
-	response, err := client.httpClient.R().
-		SetContext(ctx).
-		SetBody(body).
-		SetResult(&ChatCompletionResponse{}).
-		Post("/chat/completions")
-	if err != nil {
-		return "", fmt.Errorf("httpClient.Post > %w", err)
-	}
-	if response.IsError() {
-		return "", fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
-	}
-
-	responseBody := response.Result().(*ChatCompletionResponse)
-	if responseBody == nil || len(responseBody.Choices) == 0 {
-		return "", fmt.Errorf("empty response body or choices")
-	}
-
-	content := responseBody.Choices[0].Message.Content
-	if content == "" {
-		return "", fmt.Errorf("empty response content")
-	}
-
-	return content, nil
-}
-
-// GetDictionaryEntry uses OpenAI to get structured dictionary information
-func (client *Client) GetDictionaryEntry(ctx context.Context, request ChatCompletionRequest) (string, error) {
-	response, err := client.httpClient.R().
-		SetContext(ctx).
-		SetBody(request).
-		SetResult(&ChatCompletionResponse{}).
-		Post("/chat/completions")
-	if err != nil {
-		return "", fmt.Errorf("httpClient.Post > %w", err)
-	}
-	if response.IsError() {
-		return "", fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
-	}
-
-	responseBody := response.Result().(*ChatCompletionResponse)
-	if responseBody == nil || len(responseBody.Choices) == 0 {
-		return "", fmt.Errorf("empty response body or choices")
-	}
-
-	content := responseBody.Choices[0].Message.Content
-	if content == "" {
-		return "", fmt.Errorf("empty response content")
-	}
-
-	return content, nil
+	return inference.AnswerMeaningsResponse{Answers: decoded}, nil
 }

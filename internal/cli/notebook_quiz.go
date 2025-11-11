@@ -109,18 +109,27 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		return fmt.Errorf("error reading input: %w", err)
 	}
 
-	result, err := r.openaiClient.AnswerExpressionWithSingleContext(ctx, inference.AnswerExpressionWithSingleContextParams{
-		Expression:        currentCard.GetExpression(),
-		Meaning:           userAnswer,
-		Statements:        currentCard.Contexts,
-		IsExpressionInput: false, // NotebookQuiz: user inputs the meaning
+	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{
+			{
+				Expression:        currentCard.GetExpression(),
+				Meaning:           userAnswer,
+				Contexts:          [][]string{currentCard.Contexts},
+				IsExpressionInput: false, // NotebookQuiz: user inputs the meaning
+			},
+		},
 	})
 	if err != nil {
-		return fmt.Errorf("openaiClient.AnswerExpressionWithSingleContext() > %w", err)
+		return fmt.Errorf("openaiClient.AnswerQuestions() > %w", err)
 	}
+	if len(results.Answers) == 0 {
+		return fmt.Errorf("no results returned from OpenAI")
+	}
+	result := results.Answers[0]
 
+	isCorrect := len(result.AnswersForContext) > 0 && result.AnswersForContext[0].Correct
 	answer := AnswerResponse{
-		Correct:    result.Correct,
+		Correct:    isCorrect,
 		Expression: result.Expression,
 		Meaning:    result.Meaning,
 	}

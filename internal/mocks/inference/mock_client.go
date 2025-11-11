@@ -41,32 +41,17 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 	return m.recorder
 }
 
-// AnswerExpressionWithMultipleContexts mocks base method.
-func (m *MockClient) AnswerExpressionWithMultipleContexts(ctx context.Context, params inference.AnswerExpressionWithMultipleContextsParams) (inference.MultipleAnswerQuestionResponse, error) {
+// AnswerMeanings mocks base method.
+func (m *MockClient) AnswerMeanings(ctx context.Context, params inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AnswerExpressionWithMultipleContexts", ctx, params)
-	ret0, _ := ret[0].(inference.MultipleAnswerQuestionResponse)
+	ret := m.ctrl.Call(m, "AnswerMeanings", ctx, params)
+	ret0, _ := ret[0].(inference.AnswerMeaningsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// AnswerExpressionWithMultipleContexts indicates an expected call of AnswerExpressionWithMultipleContexts.
-func (mr *MockClientMockRecorder) AnswerExpressionWithMultipleContexts(ctx, params any) *gomock.Call {
+// AnswerMeanings indicates an expected call of AnswerMeanings.
+func (mr *MockClientMockRecorder) AnswerMeanings(ctx, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnswerExpressionWithMultipleContexts", reflect.TypeOf((*MockClient)(nil).AnswerExpressionWithMultipleContexts), ctx, params)
-}
-
-// AnswerExpressionWithSingleContext mocks base method.
-func (m *MockClient) AnswerExpressionWithSingleContext(ctx context.Context, params inference.AnswerExpressionWithSingleContextParams) (inference.AnswerQuestionResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AnswerExpressionWithSingleContext", ctx, params)
-	ret0, _ := ret[0].(inference.AnswerQuestionResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// AnswerExpressionWithSingleContext indicates an expected call of AnswerExpressionWithSingleContext.
-func (mr *MockClientMockRecorder) AnswerExpressionWithSingleContext(ctx, params any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnswerExpressionWithSingleContext", reflect.TypeOf((*MockClient)(nil).AnswerExpressionWithSingleContext), ctx, params)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnswerMeanings", reflect.TypeOf((*MockClient)(nil).AnswerMeanings), ctx, params)
 }
