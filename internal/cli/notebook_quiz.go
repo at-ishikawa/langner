@@ -109,12 +109,21 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		return fmt.Errorf("error reading input: %w", err)
 	}
 
+	// Convert string contexts to Context structs with meanings
+	var contexts []inference.Context
+	for _, contextStr := range currentCard.Contexts {
+		contexts = append(contexts, inference.Context{
+			Context: contextStr,
+			Meaning: currentCard.Definition.Meaning, // Include meaning from notebook as hint
+		})
+	}
+
 	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
 		Expressions: []inference.Expression{
 			{
 				Expression:        currentCard.GetExpression(),
 				Meaning:           userAnswer,
-				Contexts:          [][]string{currentCard.Contexts},
+				Contexts:          contexts,
 				IsExpressionInput: false, // NotebookQuiz: user inputs the meaning
 			},
 		},

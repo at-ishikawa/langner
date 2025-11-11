@@ -2,7 +2,6 @@ package inference
 
 import (
 	"context"
-	"time"
 )
 
 //go:generate mockgen -source=interface.go -destination=../mocks/inference/mock_client.go -package=mock_inference
@@ -14,10 +13,16 @@ type Client interface {
 
 // Expression represents a single expression with its contexts
 type Expression struct {
-	Expression        string     `json:"expression"`
-	Meaning           string     `json:"meaning"`
-	Contexts          [][]string `json:"contexts,omitempty"`
-	IsExpressionInput bool       `json:"is_expression_input"`
+	Expression        string    `json:"expression"`
+	Meaning           string    `json:"meaning"`
+	Contexts          []Context `json:"contexts,omitempty"`
+	IsExpressionInput bool      `json:"is_expression_input"`
+}
+
+// Context represents a single example of an expression with its meaning from a registered notebook
+type Context struct {
+	Context string `json:"context"`
+	Meaning string `json:"meaning,omitempty"` // Optional: meaning from notebook, may not be correct
 }
 
 // AnswerMeaningsRequest holds parameters for answering multiple expressions
@@ -42,20 +47,6 @@ type AnswersForContext struct {
 	Context string `json:"context"`
 }
 
-// RetryConfig holds configuration for retry logic
-type RetryConfig struct {
-	MaxRetries     int
-	InitialBackoff time.Duration
-	MaxBackoff     time.Duration
-	BackoffFactor  float64
-}
-
-// DefaultRetryConfig returns default retry configuration
-func DefaultRetryConfig() RetryConfig {
-	return RetryConfig{
-		MaxRetries:     3,
-		InitialBackoff: 1 * time.Second,
-		MaxBackoff:     30 * time.Second,
-		BackoffFactor:  2.0,
-	}
-}
+const (
+	DefaultMaxRetryAttempts = 3
+)

@@ -42,7 +42,7 @@ func newQuizFreeformCommand() *cobra.Command {
 				return fmt.Errorf("OPENAI_API_KEY environment variable is required")
 			}
 			fmt.Printf("Using OpenAI provider (model: %s)\n", cfg.OpenAI.Model)
-			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultRetryConfig())
+			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
 			defer func() {
 				_ = openaiClient.Close()
 			}()
@@ -90,7 +90,7 @@ func newQuizNotebookCommand() *cobra.Command {
 				return fmt.Errorf("OPENAI_API_KEY environment variable is required")
 			}
 			fmt.Printf("Using OpenAI provider (model: %s)\n", cfg.OpenAI.Model)
-			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultRetryConfig())
+			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
 			defer func() {
 				_ = openaiClient.Close()
 			}()
