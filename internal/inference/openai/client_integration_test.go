@@ -14,18 +14,20 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type IntegrationTestTarget struct {
+	Expression   inference.Expression
+	WantCorrects []bool
+}
+
+// integrationTestTargets can be set in client_integration_data_test.go to override the default tests
+// This is used to test for each user's case
+var integrationTestTargets []IntegrationTestTarget
+
 // TestClient_AnswerMeanings tests the multiple contexts API integration
 // This test requires OPENAI_API_KEY environment variable to be set
 // Run with: OPENAI_API_KEY=your-key go test -v ./internal/inference/openai -run TestClient_AnswerMeanings_Evaluate
 func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 	t.Parallel()
-
-	slog.SetDefault(
-		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-			Level:     slog.LevelDebug,
-			AddSource: true,
-		})),
-	)
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -37,29 +39,37 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 		model = "gpt-4o-mini"
 	}
 
-	tests := []struct {
-		name         string
-		request      inference.AnswerMeaningsRequest
-		wantCorrects [][]bool
-		description  string
-	}{
-		{
-			name: "Check if the meaning of some word or phrases is correct",
-			request: inference.AnswerMeaningsRequest{
-				Expressions: []inference.Expression{
-					{
-						Expression: "run",
-						Meaning:    "to move quickly by foot",
-						Contexts: []inference.Context{
-							{Context: "I run every morning for exercise", Meaning: "to move quickly"},
-							{Context: "I run a small business downtown", Meaning: "to operate"},
-						},
+	slog.SetDefault(
+		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     slog.LevelDebug,
+			AddSource: true,
+		})),
+	)
+
+	if integrationTestTargets == nil {
+		integrationTestTargets = []IntegrationTestTarget{
+			{
+				Expression: inference.Expression{
+					Expression: "run",
+					Meaning:    "to move quickly by foot",
+					Contexts: []inference.Context{
+						{Context: "I run every morning for exercise", ReferenceDefinition: "to move quickly"},
+						{Context: "I run a small business downtown", ReferenceDefinition: "to operate"},
 					},
 				},
+				WantCorrects: []bool{true, false},
 			},
-			wantCorrects: [][]bool{
-				{true, false},
-			},
+		}
+	}
+
+	tests := []struct {
+		name string
+
+		testTarget []IntegrationTestTarget
+	}{
+		{
+			name:       "Check if the meaning of some word or phrases is correct",
+			testTarget: integrationTestTargets,
 		},
 	}
 
@@ -67,7 +77,18 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			require.Equal(t, len(tc.request.Expressions), len(tc.wantCorrects))
+			request := inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{},
+			}
+			for _, testTarget := range tc.testTarget {
+				request.Expressions = append(request.Expressions, testTarget.Expression)
+			}
+			wantCorrects := [][]bool{}
+			for _, testTarget := range tc.testTarget {
+				wantCorrects = append(wantCorrects, testTarget.WantCorrects)
+			}
+
+			require.Equal(t, len(request.Expressions), len(wantCorrects))
 			client := openai.NewClient(apiKey, model, 0)
 			defer func() {
 				_ = client.Close()
@@ -75,19 +96,19 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			defer cancel()
 
-			result, err := client.AnswerMeanings(ctx, tc.request)
+			result, err := client.AnswerMeanings(ctx, request)
 			require.NoError(t, err)
 
-			for i, wantCorrectForExpression := range tc.wantCorrects {
+			for i, wantCorrectForExpression := range wantCorrects {
 				answer := result.Answers[i]
 				expression := answer.Expression
 				for j, wantCorrectForContext := range wantCorrectForExpression {
 					context := answer.AnswersForContext[j].Context
-					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v", expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct)
+					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v, Got meaning: %s", expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct, answer.Meaning)
 
 					assert.Equal(t, wantCorrectForContext, answer.AnswersForContext[j].Correct,
-						"Expression %d, Context %d: expected correct=%v, got=%v",
-						expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct)
+						"Expression %s, Context %s: want correct=%v, got=%v, got meaning=%s",
+						expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct, answer.Meaning)
 				}
 			}
 		})

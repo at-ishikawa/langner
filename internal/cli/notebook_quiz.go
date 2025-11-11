@@ -113,9 +113,9 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	var contexts []inference.Context
 	for _, ctx := range currentCard.Contexts {
 		contexts = append(contexts, inference.Context{
-			Context: ctx.Context,
-			Meaning: currentCard.Definition.Meaning, // Include meaning from notebook as hint
-			Usage:   ctx.Usage,                      // Include the actual form used in context
+			Context:             ctx.Context,
+			ReferenceDefinition: currentCard.Definition.Meaning, // Include meaning from notebook as hint
+			Usage:               ctx.Usage,                      // Include the actual form used in context
 		})
 	}
 
