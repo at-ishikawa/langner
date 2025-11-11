@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
-	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -359,16 +359,16 @@ func TestFreeformQuizCLI_FindAllWordContexts(t *testing.T) {
 
 func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 	tests := []struct {
-		name           string
-		initialHistory []notebook.LearningHistory
-		notebookID     string
-		storyTitle     string
-		sceneTitle     string
-		expression     string
-		isCorrect      bool
-		isKnownWord    bool
-		wantCount      int
-		wantStatus     *notebook.LearnedStatus
+		name            string
+		initialHistory  []notebook.LearningHistory
+		notebookID      string
+		storyTitle      string
+		sceneTitle      string
+		expression      string
+		isCorrect       bool
+		isKnownWord     bool
+		wantCount       int
+		wantStatus      *notebook.LearnedStatus
 		wantRecordCount *int
 	}{
 		{
@@ -405,13 +405,13 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 					},
 				},
 			},
-			notebookID:    "test-notebook",
-			storyTitle:    "Story 1",
-			sceneTitle:    "Scene 1",
-			expression:    "test-word",
-			isCorrect:     true,
-			isKnownWord:   false,
-			wantCount:     1,
+			notebookID:  "test-notebook",
+			storyTitle:  "Story 1",
+			sceneTitle:  "Scene 1",
+			expression:  "test-word",
+			isCorrect:   true,
+			isKnownWord: false,
+			wantCount:   1,
 		},
 		{
 			name:           "Correct answer sets status to usable",
@@ -465,14 +465,14 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 					},
 				},
 			},
-			notebookID:     "test-notebook",
-			storyTitle:     "Test Story",
-			sceneTitle:     "Test Scene",
-			expression:     "test",
-			isCorrect:      true,
-			isKnownWord:    false,
-			wantCount:      1,
-			wantStatus:     func() *notebook.LearnedStatus { s := notebook.LearnedStatus("usable"); return &s }(),
+			notebookID:  "test-notebook",
+			storyTitle:  "Test Story",
+			sceneTitle:  "Test Scene",
+			expression:  "test",
+			isCorrect:   true,
+			isKnownWord: false,
+			wantCount:   1,
+			wantStatus:  func() *notebook.LearnedStatus { s := notebook.LearnedStatus("usable"); return &s }(),
 		},
 		{
 			name:           "Base form 'come along' should be recorded",
@@ -590,10 +590,10 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 
 func TestFreeformQuizCLI_Run(t *testing.T) {
 	tests := []struct {
-		name           string
-		answerCorrect  bool
-		wantFileSaved  bool
-		wantStatus     notebook.LearnedStatus
+		name          string
+		answerCorrect bool
+		wantFileSaved bool
+		wantStatus    notebook.LearnedStatus
 	}{
 		{
 			name:          "Always saves on correct answer",
@@ -734,21 +734,21 @@ func findExpressionStatus(histories []notebook.LearningHistory, storyTitle, scen
 
 func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 	tests := []struct {
-		name                    string
-		word                    string
-		numOccurrences          int
-		numToUpdate             int
-		wantRecordedScenes      []string
-		wantNotRecordedScenes   []string
+		name                      string
+		word                      string
+		numOccurrences            int
+		numToUpdate               int
+		wantRecordedScenes        []string
+		wantNotRecordedScenes     []string
 		wantRemainingNeedLearning int
 	}{
 		{
-			name:                    "Only first correct occurrence is updated",
-			word:                    "test",
-			numOccurrences:          3,
-			numToUpdate:             1,
-			wantRecordedScenes:      []string{"Scene 1"},
-			wantNotRecordedScenes:   []string{"Scene 2", "Scene 3"},
+			name:                      "Only first correct occurrence is updated",
+			word:                      "test",
+			numOccurrences:            3,
+			numToUpdate:               1,
+			wantRecordedScenes:        []string{"Scene 1"},
+			wantNotRecordedScenes:     []string{"Scene 2", "Scene 3"},
 			wantRemainingNeedLearning: 2,
 		},
 	}
@@ -981,12 +981,12 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 
 func TestFreeformQuizCLI_session(t *testing.T) {
 	tests := []struct {
-		name                     string
-		input                    string
-		allStories               map[string][]notebook.StoryNotebook
-		learningHistories        map[string][]notebook.LearningHistory
-		setupMock                func(*mock_inference.MockClient)
-		wantErr                  bool
+		name              string
+		input             string
+		allStories        map[string][]notebook.StoryNotebook
+		learningHistories map[string][]notebook.LearningHistory
+		setupMock         func(*mock_inference.MockClient)
+		wantErr           bool
 	}{
 		{
 			name:  "Quit command",
@@ -1101,14 +1101,15 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 			learningHistories: map[string][]notebook.LearningHistory{},
 			setupMock: func(mockClient *mock_inference.MockClient) {
 				mockClient.EXPECT().
-					AnswerExpressionWithMultipleContexts(gomock.Any(), gomock.Any()).
-					Return(inference.MultipleAnswerQuestionResponse{
-						Expression: "test",
-						Meaning:    "test meaning",
-						AnswersForContext: []inference.Answer{
+					AnswerMeanings(gomock.Any(), gomock.Any()).
+					Return(inference.AnswerMeaningsResponse{
+						Answers: []inference.AnswerMeaning{
 							{
-								Correct: true,
-								Context: "This is a test",
+								Expression: "test",
+								Meaning:    "test meaning",
+								AnswersForContext: []inference.AnswersForContext{
+									{Correct: true, Context: "This is a test"},
+								},
 							},
 						},
 					}, nil).
@@ -1139,14 +1140,15 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 			learningHistories: map[string][]notebook.LearningHistory{},
 			setupMock: func(mockClient *mock_inference.MockClient) {
 				mockClient.EXPECT().
-					AnswerExpressionWithMultipleContexts(gomock.Any(), gomock.Any()).
-					Return(inference.MultipleAnswerQuestionResponse{
-						Expression: "test",
-						Meaning:    "wrong meaning",
-						AnswersForContext: []inference.Answer{
+					AnswerMeanings(gomock.Any(), gomock.Any()).
+					Return(inference.AnswerMeaningsResponse{
+						Answers: []inference.AnswerMeaning{
 							{
-								Correct: false,
-								Context: "This is a test",
+								Expression: "test",
+								Meaning:    "wrong meaning",
+								AnswersForContext: []inference.AnswersForContext{
+									{Correct: false, Context: "This is a test"},
+								},
 							},
 						},
 					}, nil).

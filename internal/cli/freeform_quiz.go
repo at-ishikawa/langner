@@ -100,15 +100,24 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	}
 
 	// Validate meaning against all context groups in a single API call
-	result, err := r.openaiClient.AnswerExpressionWithMultipleContexts(ctx, inference.AnswerExpressionWithMultipleContextsParams{
-		Expression:        word,
-		Meaning:           meaning,
-		Contexts:          contextGroups,
-		IsExpressionInput: true, // FreeformQuiz: user inputs the expression
+	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{
+			{
+				Expression:        word,
+				Meaning:           meaning,
+				Contexts:          contextGroups,
+				IsExpressionInput: true, // FreeformQuiz: user inputs the expression
+			},
+		},
 	})
 	if err != nil {
-		return fmt.Errorf("openaiClient.AnswerExpressionWithMultipleContexts() > %w", err)
+		return fmt.Errorf("openaiClient.AnswerMeanings() > %w", err)
 	}
+
+	if len(results.Answers) == 0 {
+		return fmt.Errorf("no results returned from OpenAI")
+	}
+	result := results.Answers[0]
 
 	// Build a map from context string to occurrence index
 	contextToOccurrence := make(map[string]int)

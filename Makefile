@@ -1,7 +1,11 @@
 OPENAI_API_KEY ?=
 
 .PHONY: pre-commit
-pre-commit: fix test
+pre-commit: generate validate test
+
+.PHONY: generate
+generate:
+	go generate ./...
 
 .PHONY: fix
 fix:

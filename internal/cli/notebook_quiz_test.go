@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
-	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -611,7 +611,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 		input              string
 		cards              []*WordOccurrence
 		learningHistories  map[string][]notebook.LearningHistory
-		mockOpenAIResponse inference.AnswerQuestionResponse
+		mockOpenAIResponse inference.AnswerMeaningsResponse
 		mockOpenAIError    error
 		wantErr            bool
 		wantReturn         error
@@ -644,10 +644,16 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
-			mockOpenAIResponse: inference.AnswerQuestionResponse{
-				Correct:    true,
-				Expression: "test",
-				Meaning:    "test meaning",
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "test",
+						Meaning:    "test meaning",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: ""},
+						},
+					},
+				},
 			},
 			wantCardsAfter: 0,
 		},
@@ -671,10 +677,16 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
-			mockOpenAIResponse: inference.AnswerQuestionResponse{
-				Correct:    false,
-				Expression: "test",
-				Meaning:    "wrong meaning",
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "test",
+						Meaning:    "wrong meaning",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: false, Context: ""},
+						},
+					},
+				},
 			},
 			wantCardsAfter: 0,
 		},
@@ -698,10 +710,16 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
-			mockOpenAIResponse: inference.AnswerQuestionResponse{
-				Correct:    true, // OpenAI says correct, but empty answer overrides it
-				Expression: "test",
-				Meaning:    "",
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "test",
+						Meaning:    "",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: ""}, // OpenAI says correct, but empty answer overrides it
+						},
+					},
+				},
 			},
 			wantCardsAfter: 0,
 		},
@@ -739,10 +757,16 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
-			mockOpenAIResponse: inference.AnswerQuestionResponse{
-				Correct:    true,
-				Expression: "test1",
-				Meaning:    "test meaning",
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "test1",
+						Meaning:    "test meaning",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: ""},
+						},
+					},
+				},
 			},
 			wantCardsAfter: 1, // One card should remain
 		},
@@ -767,10 +791,16 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
-			mockOpenAIResponse: inference.AnswerQuestionResponse{
-				Correct:    true,
-				Expression: "lookout",
-				Meaning:    "a person who has the responsibility of watching for something, especially danger, etc.",
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "lookout",
+						Meaning:    "a person who has the responsibility of watching for something, especially danger, etc.",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: ""},
+						},
+					},
+				},
 			},
 			wantCardsAfter: 0,
 		},
@@ -791,7 +821,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 			// Set expectation only if we have cards (otherwise errEnd is returned immediately)
 			if len(tt.cards) > 0 {
 				mockClient.EXPECT().
-					AnswerExpressionWithSingleContext(gomock.Any(), gomock.Any()).
+					AnswerMeanings(gomock.Any(), gomock.Any()).
 					Return(tt.mockOpenAIResponse, tt.mockOpenAIError).
 					AnyTimes()
 			}

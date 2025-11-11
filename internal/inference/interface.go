@@ -9,43 +9,35 @@ import (
 
 // Client interface defines the methods for AI inference operations
 type Client interface {
-	AnswerExpressionWithSingleContext(ctx context.Context, params AnswerExpressionWithSingleContextParams) (AnswerQuestionResponse, error)
-	AnswerExpressionWithMultipleContexts(ctx context.Context, params AnswerExpressionWithMultipleContextsParams) (MultipleAnswerQuestionResponse, error)
+	AnswerMeanings(ctx context.Context, params AnswerMeaningsRequest) (AnswerMeaningsResponse, error)
 }
 
-// AnswerExpressionWithSingleContextParams holds parameters for answering questions with a single context
-type AnswerExpressionWithSingleContextParams struct {
-	Expression        string
-	Meaning           string
-	Statements        []string
-	IsExpressionInput bool // true for FreeformQuiz (user inputs expression), false for NotebookQuiz (user inputs meaning)
+// Expression represents a single expression with its contexts
+type Expression struct {
+	Expression        string     `json:"expression"`
+	Meaning           string     `json:"meaning"`
+	Contexts          [][]string `json:"contexts,omitempty"`
+	IsExpressionInput bool       `json:"is_expression_input"`
 }
 
-// AnswerExpressionWithMultipleContextsParams holds parameters for answering questions with multiple contexts
-type AnswerExpressionWithMultipleContextsParams struct {
-	Expression        string
-	Meaning           string
-	Contexts          [][]string // Multiple sets of contexts (one per occurrence)
-	IsExpressionInput bool
+// AnswerMeaningsRequest holds parameters for answering multiple expressions
+type AnswerMeaningsRequest struct {
+	Expressions []Expression `json:"expressions"`
 }
 
-// AnswerQuestionResponse represents a single answer result
-type AnswerQuestionResponse struct {
-	Correct    bool   `json:"correct"`
-	Expression string `json:"expression"`
-	Meaning    string `json:"meaning"`
+type AnswerMeaningsResponse struct {
+	Answers []AnswerMeaning
 }
 
-// MultipleAnswerQuestionResponse represents multiple answer results
-type MultipleAnswerQuestionResponse struct {
-	Expression        string   `json:"expression"`
-	IsExpressionInput bool     `json:"is_expression_input"`
-	Meaning           string   `json:"meaning"`
-	AnswersForContext []Answer `json:"answers"`
+// AnswerMeaning represents a single answer result
+type AnswerMeaning struct {
+	Expression        string              `json:"expression"`
+	Meaning           string              `json:"meaning"`
+	AnswersForContext []AnswersForContext `json:"answers"`
 }
 
-// Answer represents a single answer for a specific context
-type Answer struct {
+// AnswersForContext represents a single answer for a specific context
+type AnswersForContext struct {
 	Correct bool   `json:"correct"`
 	Context string `json:"context"`
 }
