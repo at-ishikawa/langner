@@ -160,42 +160,93 @@ Return ONLY a JSON array. For each input expression, include:
 STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase.
 
 UNDERSTANDING THE INPUT
+- Each context may include a "reference_definition" field - this is ONLY a rough hint from a notebook and may be incomplete, incorrect, or empty.
+- DO NOT blindly trust or compare against the reference_definition. You must independently determine the true meaning from the context itself.
+- The reference_definition is provided only as a potential starting point for your analysis - always verify it matches the actual usage in context.
 - Each context may include a "usage" field showing the actual inflected form of the expression as it appears in that specific context.
 - Example: For expression "run", the usage might be "ran", "running", or "runs" depending on how it appears in the context sentence.
 - The usage field helps you identify which word form to focus on, but you should still normalize inflections when comparing meanings.
 - If usage is provided, use it to locate the expression in the context; if not provided, search for any inflected form.
 
 EVALUATION RULES
-1) Determine TRUE meaning per context
-   - Read the context carefully.
-   - Treat the target expression as a UNIT (not word-by-word), accounting for idiom, phrasal verb, or fixed phrase.
+1) Determine TRUE meaning per context INDEPENDENTLY
+   - Read the context carefully and determine the meaning YOURSELF by analyzing how the expression is actually used in the sentence.
+   - CRITICAL: DO NOT rely on the reference_definition field. It is often WRONG or misleading. Ignore it completely when determining the true meaning.
+   - The reference_definition may give a literal/dictionary meaning when the context uses a metaphorical/idiomatic sense, or vice versa.
+   - You must determine the meaning ONLY from the context itself, as if the reference_definition didn't exist.
+   - Treat the target expression as a UNIT (not word-by-word), accounting for idioms, phrasal verbs, or fixed phrases.
    - If a "usage" field is provided, it indicates the specific inflected form in that context (e.g., "ran" for "run").
    - Normalize inflection/tense/number (e.g., "broke" ↔ "break", "runs" ↔ "run") and ignore punctuation/markup (e.g., {{…}}).
    - Identify the sense and part-of-speech actually used (e.g., "run" = operate/manage vs move quickly).
+   - Be aware of metaphorical, idiomatic, and figurative uses (e.g., "disturbance in the wind" may mean "sensing danger" not "weather phenomenon").
+   - Consider collocations and common phrases (e.g., "for the cause" means "for a principle/ideal", not the literal "cause and effect").
    - If multiple senses are possible, choose the one most supported by the context; if still ambiguous, choose the most common idiomatic reading for that context.
 
-2) Compare to the user's meaning
-   - Consider the user's MEANING string as the claim being graded.
-   - Accept paraphrases ONLY if semantically equivalent to the TRUE meaning (core concept must match).
-   - Minor grammar/spelling doesn’t matter if the meaning is the same.
-   - Mark INCORRECT if the user’s meaning is:
-     • opposite or unrelated,
-     • a different sense of the same word,
-     • only partially correct or too vague,
-     • meaning of a different phrase in the sentence.
-   - Be conservative: if in doubt, mark incorrect.
+2) Compare to the user's meaning - BE STRICT
+   - STEP 1: Write down the TRUE meaning you determined from context (let's call this "TRUE_MEANING")
+   - STEP 2: Write down the user's provided meaning (let's call this "USER_MEANING")
+   - STEP 3: Compare these TWO meanings WORD BY WORD:
+     • Does USER_MEANING contain ALL the key concepts from TRUE_MEANING?
+     • Does USER_MEANING add any concepts NOT in TRUE_MEANING?
+     • Are they 100% semantically equivalent and interchangeable?
+   - STEP 4: If ANY answer above is "no", mark INCORRECT
+   - DEFAULT TO INCORRECT: Only mark CORRECT if you are absolutely certain the user's meaning is semantically equivalent to the TRUE meaning.
+   - Mark CORRECT only in these specific cases:
+     • The user's wording is a direct paraphrase expressing the EXACT same concept (e.g., "cease trying" = "stop trying", "depart quickly" = "leave in a hurry")
+     • The user uses a perfect synonym that could replace the expression in context (e.g., "wealthy" = "rich", "begin" = "start")
+     • The ONLY differences are grammar/spelling, not meaning
+   - Mark INCORRECT in ALL other cases, including:
+     • Related but distinct concepts, even if they seem similar (e.g., "miserable" ≠ "unpleasant", "annoying" ≠ "mysterious", "tasty" ≠ "spicy")
+     • Simplified definitions that lose important nuance (e.g., "coating" ≠ "protective layer formed by reaction", "place" ≠ "specific location")
+     • Over-generalizations (e.g., "song or place" when it's specifically "a particular song title")
+     • Opposite or contradictory meanings
+     • Different senses of polysemous words (e.g., "bank" as financial institution vs river edge)
+     • Partially correct but incomplete (e.g., "complete" when full meaning is "plan, organize, and complete")
+     • Missing critical attributes (e.g., "continuous sound" vs just "sound")
+     • Wrong attributes added (e.g., "pleasant sound" when there's no pleasantness implied)
+     • Confusing similar-sounding words (e.g., "accept" ≠ "except", user might be thinking of wrong word)
+     • Getting idiom meaning wrong (e.g., "hit the road" = leave/depart, not "strike the pavement")
+     • Defining only part of a multi-word expression
+     • Vague or unclear descriptions
+   - CRITICAL STRICTNESS RULES - FOLLOW THESE EXACTLY:
+     • WORD-BY-WORD CHECK: If user's meaning contains even ONE word that doesn't match the true meaning, immediately mark INCORRECT. For example:
+       - "sad and annoying" vs "sad and mysterious" → INCORRECT (annoying ≠ mysterious)
+       - "dark and cheerful" vs "dark and gloomy" → INCORRECT (cheerful ≠ gloomy)
+     • SIMPLIFICATION CHECK: If user removed ANY important detail from the definition, mark INCORRECT:
+       - "loud noise" vs "sudden explosive sound" → INCORRECT (missing "sudden", missing "explosive")
+      - "powder" vs "fine substance that creates powder" → INCORRECT (oversimplified, missing process)
+       - "red coating" vs "oxidized iron compound" → INCORRECT (missing chemical process)
+     • PROCESS/MECHANISM CHECK: If true meaning involves a process or mechanism (like "produces", "causes", "creates"), user must include it:
+       - User says "growth" but meaning is "organism that produces growth" → INCORRECT
+       - User says "container" but meaning is "vessel that holds liquid" → INCORRECT
+     • PARTIAL CORRECTNESS = INCORRECT: If user only captures part of a multi-part definition, mark INCORRECT:
+       - "complete" vs "plan, organize, and complete" → INCORRECT (missing "plan" and "organize")
+      - "accomplish" vs "prepare, execute, and accomplish" → INCORRECT (only final step, missing earlier steps)
+       - "finish" vs "design, build, and finish" → INCORRECT (missing earlier steps)
+     • SAME SEMANTIC FIELD ≠ CORRECT: Even if meanings are related or in same category, if not equivalent, mark INCORRECT:
+       - "annoying" and "mysterious" are both negative descriptors but DIFFERENT → INCORRECT
+       - "miserable" and "unpleasant" are both negative feelings but DIFFERENT → INCORRECT
+     • THE RESULT IS NOT THE THING: If true meaning is "X that produces/creates Y", user saying just "Y" is INCORRECT:
+       - User: "heat" vs True: "device that generates heat" → INCORRECT
+   - CRITICAL: Your job is to CATCH MISTAKES, not to accept similar answers. Be a STRICT grader.
+   - FINAL CHECK: Before marking CORRECT, ask yourself EXPLICITLY:
+     1. "Did I determine the TRUE_MEANING from context?"
+     2. "Does USER_MEANING contain EVERY key concept from TRUE_MEANING?"
+     3. "Are these definitions 100% interchangeable in a dictionary?"
+     4. If ANY answer is "no" or "unsure", mark INCORRECT.
 
 3) is_expression_input handling
-   - If is_expression_input = true: the typed expression may contain typos; judge what the USER INTENDED to say by that expression in the given context. Ignore typos in the expression itself; still grade the user’s MEANING strictly.
-   - If is_expression_input = false: treat the expression as correct/canonical and just grade the user’s MEANING.
+   - If is_expression_input = true: the typed expression may contain typos; judge what the USER INTENDED to say by that expression in the given context. Ignore typos in the expression itself; still grade the user's MEANING against the actual meaning.
+   - If is_expression_input = false: treat the expression as correct/canonical and just grade the user's MEANING.
 
 4) Canonical meaning field
-   - Set "meaning" to the best, short canonical gloss that fits the expression across its contexts (e.g., for “run” with both senses present, use a concise multi-sense gloss like "to move quickly by foot; to operate/manage", otherwise a single-sense gloss).
+   - Set "meaning" to the best, short canonical gloss that fits the expression across its contexts (e.g., for "run" with both senses present, use a concise multi-sense gloss like "to move quickly by foot; to operate/manage", otherwise a single-sense gloss).
    - Keep it short (≈3–8 words per sense). Use semicolons to separate multiple senses if needed.
 
 DECISION CHECKLIST (apply before output):
-- Did I identify the correct sense for THIS expression in THIS context?
-- Is the user’s meaning truly equivalent (not just similar words)?
+- Did I identify the correct sense for THIS expression in THIS context by reading the context itself?
+- Does the user's meaning capture the same core concept, even if worded differently?
+- Am I being fair in accepting paraphrases and synonyms that demonstrate understanding?
 - Are all booleans present and lowercase?
 - Is the top-level array valid JSON with the required fields only?
 
@@ -221,72 +272,162 @@ OUTPUT FORMAT (example skeleton):
 
 	examples := []promptExample{
 		{
-			description: "MIXED - Same expression, different contexts with different meanings. " +
-				"Tests: evaluating multiple contexts separately, detecting when meaning only applies to some contexts, using usage field",
+			description: "INCORRECT - User has one wrong word in compound meaning. " +
+				"Tests: rejecting when ANY word in user's meaning doesn't match",
 			userRequest: []inference.Expression{
 				{
-					Expression: "run",
-					Meaning:    "to move fast",
+					Expression: "gloomy",
+					Meaning:    "dark and depressing",
 					Contexts: []inference.Context{
-						{Context: "I need to run to the store before it closes.", Meaning: "to move quickly", Usage: "run"},
-						{Context: "She runs a successful startup company.", Meaning: "to operate or manage", Usage: "runs"},
+						{Context: "The gloomy forest felt mysterious and foreboding as we entered.", ReferenceDefinition: "dark and sad", Usage: "gloomy"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "run",
-					Meaning:    "to move quickly",
+					Expression: "gloomy",
+					Meaning:    "dark and threatening; mysterious",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "I need to run to the store before it closes."},
-						{Correct: false, Context: "She runs a successful startup company."},
+						{Correct: false, Context: "The gloomy forest felt mysterious and foreboding as we entered."},
 					},
 				},
 			},
 		},
 		{
-			description: "INCORRECT - User's meaning is opposite of actual meaning. " +
-				"Tests: rejecting opposite meanings even when hint shows the correct answer",
+			description: "INCORRECT - User over-simplified, losing critical detail. " +
+				"Tests: rejecting simplified definitions that remove important aspects",
 			userRequest: []inference.Expression{
 				{
-					Expression: "piece of cake",
-					Meaning:    "very difficult",
+					Expression: "rust",
+					Meaning:    "orange coating",
 					Contexts: []inference.Context{
-						{Context: "Don't worry, the test will be a piece of cake.", Meaning: "very easy"},
+						{Context: "The old car had rust all over its body.", ReferenceDefinition: "iron oxide coating formed by corrosion", Usage: "rust"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "piece of cake",
-					Meaning:    "very easy",
+					Expression: "rust",
+					Meaning:    "reddish-brown coating formed by oxidation of iron",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "Don't worry, the test will be a piece of cake."},
+						{Correct: false, Context: "The old car had rust all over its body."},
 					},
 				},
 			},
 		},
 		{
-			description: "INCORRECT - User took literal meaning instead of idiomatic. " +
-				"Tests: rejecting literal interpretation of idiomatic expressions, usage field with phrasal expression",
+			description: "INCORRECT - User described result instead of the organism/process that produces it. " +
+				"Tests: rejecting when definition says 'X that produces Y' but user only says 'Y'",
 			userRequest: []inference.Expression{
 				{
-					Expression: "make a scene",
-					Meaning:    "to create something",
+					Expression: "bacteria",
+					Meaning:    "germs",
 					Contexts: []inference.Context{
-						{Context: "Please don't make a scene in front of everyone at the restaurant.", Meaning: "to cause a public disturbance", Usage: "make a scene"},
+						{Context: "Wash your hands to remove bacteria.", ReferenceDefinition: "microscopic organisms that can cause disease", Usage: "bacteria"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "make a scene",
-					Meaning:    "to cause a public disturbance or display of emotion",
+					Expression: "bacteria",
+					Meaning:    "microscopic single-celled organisms",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "Please don't make a scene in front of everyone at the restaurant."},
+						{Correct: false, Context: "Wash your hands to remove bacteria."},
+					},
+				},
+			},
+		},
+		{
+			description: "INCORRECT - User confused similar-sounding words. " +
+				"Tests: catching when user gives meaning of wrong but similar word",
+			userRequest: []inference.Expression{
+				{
+					Expression: "hardy",
+					Meaning:    "barely or scarcely",
+					Contexts: []inference.Context{
+						{Context: "These hardy plants can survive the winter frost.", ReferenceDefinition: "robust, capable of endurance", Usage: "hardy"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "hardy",
+					Meaning:    "robust; capable of enduring difficult conditions",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: false, Context: "These hardy plants can survive the winter frost."},
+					},
+				},
+			},
+		},
+		{
+			description: "INCORRECT - User got idiom meaning completely wrong. " +
+				"Tests: recognizing idiomatic expressions and rejecting wrong interpretations",
+			userRequest: []inference.Expression{
+				{
+					Expression: "hit the books",
+					Meaning:    "to strike books physically",
+					Contexts: []inference.Context{
+						{Context: "I need to hit the books tonight to prepare for the exam.", ReferenceDefinition: "to study hard", Usage: "hit the books"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "hit the books",
+					Meaning:    "to study intensively",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: false, Context: "I need to hit the books tonight to prepare for the exam."},
+					},
+				},
+			},
+		},
+		{
+			description: "INCORRECT - User too general/vague about specific thing. " +
+				"Tests: rejecting when user gives general category instead of specific referent",
+			userRequest: []inference.Expression{
+				{
+					Expression: "Beatles",
+					Meaning:    "a famous band or insects",
+					Contexts: []inference.Context{
+						{Context: "I love listening to the Beatles, especially their early albums.", ReferenceDefinition: "famous British rock band from the 1960s", Usage: "Beatles"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "Beatles",
+					Meaning:    "a famous British rock band from the 1960s",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: false, Context: "I love listening to the Beatles, especially their early albums."},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - User's meaning is precise equivalent paraphrase. " +
+				"Tests: accepting when user demonstrates exact understanding with different words",
+			userRequest: []inference.Expression{
+				{
+					Expression: "put off",
+					Meaning:    "to delay or postpone",
+					Contexts: []inference.Context{
+						{Context: "Don't put off your homework until the last minute.", ReferenceDefinition: "to defer to a later time", Usage: "put off"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "put off",
+					Meaning:    "to postpone; to defer to a later time",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "Don't put off your homework until the last minute."},
 					},
 				},
 			},
@@ -329,13 +470,6 @@ OUTPUT FORMAT (example skeleton):
 
 	// Add actual user request
 	// Build user message with all expressions
-
-	// TOOD: With a meaning of a context, it doesn't work well.
-	for i := range args.Expressions {
-		for j := range args.Expressions[i].Contexts {
-			args.Expressions[i].Contexts[j].Meaning = ""
-		}
-	}
 	userContent := bytes.NewBuffer(nil)
 	if err := json.NewEncoder(userContent).Encode(args.Expressions); err != nil {
 		return ChatCompletionRequest{}, fmt.Errorf("failed to marshal expressions: %w", err)

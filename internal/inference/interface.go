@@ -22,8 +22,10 @@ type Expression struct {
 // Context represents a single example of an expression with its meaning from a registered notebook
 type Context struct {
 	Context string `json:"context"`
-	Meaning string `json:"meaning,omitempty"` // Optional: meaning from notebook, may not be correct
-	Usage   string `json:"usage,omitempty"`   // Optional: actual form of expression used in context (e.g., "ran" for "run")
+	Usage   string `json:"usage,omitempty"` // Optional: actual form of expression used in context (e.g., "ran" for "run")
+
+	// Unused for now. TODO: Improve the prompt to use this.
+	ReferenceDefinition string `json:"reference_definition,omitempty"` // Optional: hint/reference meaning from notebook, may be incomplete or incorrect
 }
 
 // AnswerMeaningsRequest holds parameters for answering multiple expressions

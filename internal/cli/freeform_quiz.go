@@ -98,9 +98,9 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	for _, occurrence := range needsLearning {
 		for _, ctx := range occurrence.Contexts {
 			contexts = append(contexts, inference.Context{
-				Context: ctx.Context,
-				Meaning: occurrence.Definition.Meaning, // Include meaning from notebook as hint
-				Usage:   ctx.Usage,                     // Include the actual form used in context
+				Context:             ctx.Context,
+				ReferenceDefinition: occurrence.Definition.Meaning, // Include meaning from notebook as hint
+				Usage:               ctx.Usage,                     // Include the actual form used in context
 			})
 		}
 	}
