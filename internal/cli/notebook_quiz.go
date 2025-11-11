@@ -109,12 +109,13 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		return fmt.Errorf("error reading input: %w", err)
 	}
 
-	// Convert string contexts to Context structs with meanings
+	// Convert contexts to Context structs with meanings and usage
 	var contexts []inference.Context
-	for _, contextStr := range currentCard.Contexts {
+	for _, ctx := range currentCard.Contexts {
 		contexts = append(contexts, inference.Context{
-			Context: contextStr,
+			Context: ctx.Context,
 			Meaning: currentCard.Definition.Meaning, // Include meaning from notebook as hint
+			Usage:   ctx.Usage,                      // Include the actual form used in context
 		})
 	}
 
@@ -243,10 +244,10 @@ func FormatQuestion(occurrence *WordOccurrence) string {
 
 	// Only convert markers if we have scene definitions
 	if occurrence.Scene != nil && len(occurrence.Scene.Definitions) > 0 {
-		for i, context := range occurrence.Contexts {
+		for i, ctx := range occurrence.Contexts {
 			// Convert only the specific expression to bold terminal text
 			convertedContext := notebook.ConvertMarkersInText(
-				context,
+				ctx.Context,
 				occurrence.Scene.Definitions,
 				notebook.ConversionStyleTerminal,
 				occurrence.Definition.Expression,
@@ -255,8 +256,8 @@ func FormatQuestion(occurrence *WordOccurrence) string {
 		}
 	} else {
 		// No scene definitions, just output contexts as-is
-		for i, context := range occurrence.Contexts {
-			question += fmt.Sprintf("  %d. %s\n", i+1, context)
+		for i, ctx := range occurrence.Contexts {
+			question += fmt.Sprintf("  %d. %s\n", i+1, ctx.Context)
 		}
 	}
 

@@ -96,10 +96,11 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	// Collect contexts from each occurrence that needs learning
 	var contexts []inference.Context
 	for _, occurrence := range needsLearning {
-		for _, contextStr := range occurrence.Contexts {
+		for _, ctx := range occurrence.Contexts {
 			contexts = append(contexts, inference.Context{
-				Context: contextStr,
+				Context: ctx.Context,
 				Meaning: occurrence.Definition.Meaning, // Include meaning from notebook as hint
+				Usage:   ctx.Usage,                     // Include the actual form used in context
 			})
 		}
 	}
@@ -128,7 +129,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	contextToOccurrence := make(map[string]int)
 	for i, occurrence := range needsLearning {
 		for _, ctx := range occurrence.Contexts {
-			contextToOccurrence[ctx] = i
+			contextToOccurrence[ctx.Context] = i
 		}
 	}
 
@@ -155,7 +156,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		displayOccurrence = needsLearning[0]
 		// Show the first context from the first occurrence
 		if len(displayOccurrence.Contexts) > 0 {
-			matchingContext = displayOccurrence.Contexts[0]
+			matchingContext = displayOccurrence.Contexts[0].Context
 		}
 	}
 

@@ -23,6 +23,7 @@ type Expression struct {
 type Context struct {
 	Context string `json:"context"`
 	Meaning string `json:"meaning,omitempty"` // Optional: meaning from notebook, may not be correct
+	Usage   string `json:"usage,omitempty"`   // Optional: actual form of expression used in context (e.g., "ran" for "run")
 }
 
 // AnswerMeaningsRequest holds parameters for answering multiple expressions
