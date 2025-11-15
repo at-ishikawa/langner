@@ -176,7 +176,7 @@ EVALUATION RULES
    - You must determine the meaning ONLY from the context itself, as if the reference_definition didn't exist.
    - Treat the target expression as a UNIT (not word-by-word), accounting for idioms, phrasal verbs, or fixed phrases.
    - If a "usage" field is provided, it indicates the specific inflected form in that context (e.g., "ran" for "run").
-   - Normalize inflection/tense/number (e.g., "broke" ↔ "break", "runs" ↔ "run") and ignore punctuation/markup (e.g., {{…}}).
+   - Normalize inflection/tense/number (e.g., "broke" ↔ "break", "runs" ↔ "run") and ignore punctuation/markup.
    - Identify the sense and part-of-speech actually used (e.g., "run" = operate/manage vs move quickly).
    - Be aware of metaphorical, idiomatic, and figurative uses (e.g., "disturbance in the wind" may mean "sensing danger" not "weather phenomenon").
    - Consider collocations and common phrases (e.g., "for the cause" means "for a principle/ideal", not the literal "cause and effect").

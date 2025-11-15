@@ -94,11 +94,13 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	}
 
 	// Collect contexts from each occurrence that needs learning
+	// Strip {{ }} markers from contexts before sending to inference API
 	var contexts []inference.Context
 	for _, occurrence := range needsLearning {
-		for _, ctx := range occurrence.Contexts {
+		cleanContexts := occurrence.GetCleanContexts()
+		for i, ctx := range occurrence.Contexts {
 			contexts = append(contexts, inference.Context{
-				Context:             ctx.Context,
+				Context:             cleanContexts[i],              // Use cleaned context without markers
 				ReferenceDefinition: occurrence.Definition.Meaning, // Include meaning from notebook as hint
 				Usage:               ctx.Usage,                     // Include the actual form used in context
 			})
