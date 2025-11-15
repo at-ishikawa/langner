@@ -6,6 +6,12 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
+// WordOccurrenceContext represents a context sentence with the actual word form used
+type WordOccurrenceContext struct {
+	Context string // The full conversation quote
+	Usage   string // The actual form of the word as it appears in the context
+}
+
 // WordOccurrence represents a single word/phrase occurrence in a story
 // Used by both FreeformQuizCLI (across multiple notebooks) and NotebookQuizCLI (single notebook)
 type WordOccurrence struct {
@@ -13,7 +19,7 @@ type WordOccurrence struct {
 	Story        *notebook.StoryNotebook // Which story contains this word
 	Scene        *notebook.StoryScene    // Which scene contains this word
 	Definition   *notebook.Note          // The complete definition/note
-	Contexts     []string                // Example sentences/conversations containing the word
+	Contexts     []WordOccurrenceContext // Example sentences/conversations with word forms
 }
 
 // GetExpression returns the word/phrase to display to the user
@@ -36,9 +42,22 @@ func (w *WordOccurrence) GetImages() []string {
 	return w.Definition.Images
 }
 
+// GetCleanContexts returns contexts with {{ }} markers removed
+// These cleaned contexts should be used when sending to inference APIs
+func (w *WordOccurrence) GetCleanContexts() []string {
+	cleaned := make([]string, len(w.Contexts))
+	for i, ctx := range w.Contexts {
+		// Use existing ConvertMarkersInText with ConversionStylePlain to strip markers
+		// Pass empty definitions slice since we want to strip all markers regardless
+		cleaned[i] = notebook.ConvertMarkersInText(ctx.Context, nil, notebook.ConversionStylePlain, "")
+	}
+	return cleaned
+}
+
 // extractContextsFromConversations finds conversations containing the expression or definition
-func extractContextsFromConversations(scene *notebook.StoryScene, expression, definition string) []string {
-	var contexts []string
+// and returns them with the actual word form used in each context
+func extractContextsFromConversations(scene *notebook.StoryScene, expression, definition string) []WordOccurrenceContext {
+	var contexts []WordOccurrenceContext
 
 	for _, conversation := range scene.Conversations {
 		if conversation.Quote == "" {
@@ -49,13 +68,19 @@ func extractContextsFromConversations(scene *notebook.StoryScene, expression, de
 
 		// Check if the conversation contains the expression
 		if strings.Contains(quoteLower, strings.ToLower(expression)) {
-			contexts = append(contexts, conversation.Quote)
+			contexts = append(contexts, WordOccurrenceContext{
+				Context: conversation.Quote,
+				Usage:   expression, // The expression form is what's used in the context
+			})
 			continue
 		}
 
 		// Also check for the definition if it exists
 		if definition != "" && strings.Contains(quoteLower, strings.ToLower(definition)) {
-			contexts = append(contexts, conversation.Quote)
+			contexts = append(contexts, WordOccurrenceContext{
+				Context: conversation.Quote,
+				Usage:   definition, // The definition form is what's used in the context
+			})
 		}
 	}
 

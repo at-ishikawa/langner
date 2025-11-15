@@ -3,7 +3,10 @@ module github.com/at-ishikawa/langner
 go 1.25
 
 require (
+	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/fatih/color v1.18.0
+	github.com/go-playground/locales v0.14.1
+	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-resty/resty/v2 v2.16.5
 	github.com/mandolyte/mdtopdf v1.5.3
 	github.com/spf13/cobra v1.10.1
@@ -20,8 +23,6 @@ require (
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-pdf/fpdf v0.9.0 // indirect
-	github.com/go-playground/locales v0.14.1 // indirect
-	github.com/go-playground/universal-translator v0.18.1 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/jessp01/gohighlight v0.21.4 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect

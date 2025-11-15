@@ -94,27 +94,44 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	}
 
 	// Collect contexts from each occurrence that needs learning
-	contextGroups := make([][]string, 0, len(needsLearning))
+	// Strip {{ }} markers from contexts before sending to inference API
+	var contexts []inference.Context
 	for _, occurrence := range needsLearning {
-		contextGroups = append(contextGroups, occurrence.Contexts)
+		cleanContexts := occurrence.GetCleanContexts()
+		for i, ctx := range occurrence.Contexts {
+			contexts = append(contexts, inference.Context{
+				Context:             cleanContexts[i],              // Use cleaned context without markers
+				ReferenceDefinition: occurrence.Definition.Meaning, // Include meaning from notebook as hint
+				Usage:               ctx.Usage,                     // Include the actual form used in context
+			})
+		}
 	}
 
 	// Validate meaning against all context groups in a single API call
-	result, err := r.openaiClient.AnswerExpressionWithMultipleContexts(ctx, inference.AnswerExpressionWithMultipleContextsParams{
-		Expression:        word,
-		Meaning:           meaning,
-		Contexts:          contextGroups,
-		IsExpressionInput: true, // FreeformQuiz: user inputs the expression
+	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{
+			{
+				Expression:        word,
+				Meaning:           meaning,
+				Contexts:          contexts,
+				IsExpressionInput: true, // FreeformQuiz: user inputs the expression
+			},
+		},
 	})
 	if err != nil {
-		return fmt.Errorf("openaiClient.AnswerExpressionWithMultipleContexts() > %w", err)
+		return fmt.Errorf("openaiClient.AnswerMeanings() > %w", err)
 	}
+
+	if len(results.Answers) == 0 {
+		return fmt.Errorf("no results returned from OpenAI")
+	}
+	result := results.Answers[0]
 
 	// Build a map from context string to occurrence index
 	contextToOccurrence := make(map[string]int)
 	for i, occurrence := range needsLearning {
 		for _, ctx := range occurrence.Contexts {
-			contextToOccurrence[ctx] = i
+			contextToOccurrence[ctx.Context] = i
 		}
 	}
 
@@ -141,7 +158,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		displayOccurrence = needsLearning[0]
 		// Show the first context from the first occurrence
 		if len(displayOccurrence.Contexts) > 0 {
-			matchingContext = displayOccurrence.Contexts[0]
+			matchingContext = displayOccurrence.Contexts[0].Context
 		}
 	}
 
