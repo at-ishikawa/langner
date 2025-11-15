@@ -110,10 +110,12 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	}
 
 	// Convert contexts to Context structs with meanings and usage
+	// Strip {{ }} markers from contexts before sending to inference API
+	cleanContexts := currentCard.GetCleanContexts()
 	var contexts []inference.Context
-	for _, ctx := range currentCard.Contexts {
+	for i, ctx := range currentCard.Contexts {
 		contexts = append(contexts, inference.Context{
-			Context:             ctx.Context,
+			Context:             cleanContexts[i],                // Use cleaned context without markers
 			ReferenceDefinition: currentCard.Definition.Meaning, // Include meaning from notebook as hint
 			Usage:               ctx.Usage,                      // Include the actual form used in context
 		})

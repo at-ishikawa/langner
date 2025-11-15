@@ -42,6 +42,18 @@ func (w *WordOccurrence) GetImages() []string {
 	return w.Definition.Images
 }
 
+// GetCleanContexts returns contexts with {{ }} markers removed
+// These cleaned contexts should be used when sending to inference APIs
+func (w *WordOccurrence) GetCleanContexts() []string {
+	cleaned := make([]string, len(w.Contexts))
+	for i, ctx := range w.Contexts {
+		// Use existing ConvertMarkersInText with ConversionStylePlain to strip markers
+		// Pass empty definitions slice since we want to strip all markers regardless
+		cleaned[i] = notebook.ConvertMarkersInText(ctx.Context, nil, notebook.ConversionStylePlain, "")
+	}
+	return cleaned
+}
+
 // extractContextsFromConversations finds conversations containing the expression or definition
 // and returns them with the actual word form used in each context
 func extractContextsFromConversations(scene *notebook.StoryScene, expression, definition string) []WordOccurrenceContext {

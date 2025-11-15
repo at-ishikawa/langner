@@ -88,3 +88,45 @@ func TestExtractContextsFromConversations(t *testing.T) {
 		})
 	}
 }
+
+func TestWordOccurrence_GetCleanContexts(t *testing.T) {
+	tests := []struct {
+		name     string
+		contexts []WordOccurrenceContext
+		want     []string
+	}{
+		{
+			name: "Multiple contexts with markers",
+			contexts: []WordOccurrenceContext{
+				{Context: "The {{student}} learned {{ words }} from the {{ teacher }}.", Usage: "student"},
+				{Context: "The {{ important }} {{ tasks }} are completed.", Usage: "task"},
+			},
+			want: []string{
+				"The student learned words from the teacher.",
+				"The important tasks are completed.",
+			},
+		},
+		{
+			name: "No markers",
+			contexts: []WordOccurrenceContext{
+				{Context: "This is a simple sentence.", Usage: "simple"},
+			},
+			want: []string{"This is a simple sentence."},
+		},
+		{
+			name:     "Empty list",
+			contexts: []WordOccurrenceContext{},
+			want:     []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			occurrence := &WordOccurrence{
+				Contexts: tt.contexts,
+			}
+			got := occurrence.GetCleanContexts()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
