@@ -214,7 +214,7 @@ type Phrase struct {
 func (note *Note) needsToLearnInFlashcard(lowerThresholdDay int) bool {
 	learnedLogs := note.LearnedLogs
 	if len(learnedLogs) == 0 {
-		return false
+		return true
 	}
 	sort.Slice(note.LearnedLogs, func(i, j int) bool {
 		return note.LearnedLogs[i].LearnedAt.After(note.LearnedLogs[j].LearnedAt.Time)

@@ -77,13 +77,13 @@ func TestNote_needsToLearnInFlashcard(t *testing.T) {
 		expected          bool
 	}{
 		{
-			name: "no logs - doesn't need learning",
+			name: "no logs - needs learning (never practiced)",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 			},
 			lowerThresholdDay: 0,
-			expected:          false,
+			expected:          true, // Changed: words never practiced should be included
 		},
 		{
 			name: "old misunderstood - needs learning",
