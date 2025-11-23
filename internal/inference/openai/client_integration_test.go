@@ -14,9 +14,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type IntegrationTestTargetWant struct {
+	Correct bool
+	Reason  string
+}
+
 type IntegrationTestTarget struct {
-	Expression   inference.Expression
-	WantCorrects []bool
+	Expression inference.Expression
+	Wants      []IntegrationTestTargetWant
 }
 
 // integrationTestTargets can be set in client_integration_data_test.go to override the default tests
@@ -57,7 +62,10 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 						{Context: "I run a small business downtown", ReferenceDefinition: "to operate"},
 					},
 				},
-				WantCorrects: []bool{true, false},
+				Wants: []IntegrationTestTargetWant{
+					{Correct: true, Reason: "user meaning matches the context"},
+					{Correct: false, Reason: "user meaning is about moving, not operating"},
+				},
 			},
 		}
 	}
@@ -83,32 +91,29 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 			for _, testTarget := range tc.testTarget {
 				request.Expressions = append(request.Expressions, testTarget.Expression)
 			}
-			wantCorrects := [][]bool{}
-			for _, testTarget := range tc.testTarget {
-				wantCorrects = append(wantCorrects, testTarget.WantCorrects)
-			}
 
-			require.Equal(t, len(request.Expressions), len(wantCorrects))
+			require.Equal(t, len(request.Expressions), len(tc.testTarget))
 			client := openai.NewClient(apiKey, model, 0)
 			defer func() {
 				_ = client.Close()
 			}()
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 
 			result, err := client.AnswerMeanings(ctx, request)
 			require.NoError(t, err)
 
-			for i, wantCorrectForExpression := range wantCorrects {
+			for i, testTarget := range tc.testTarget {
 				answer := result.Answers[i]
 				expression := answer.Expression
-				for j, wantCorrectForContext := range wantCorrectForExpression {
+				for j, want := range testTarget.Wants {
 					context := answer.AnswersForContext[j].Context
-					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v, Got meaning: %s", expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct, answer.Meaning)
+					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v, Got meaning: %s, Why %v is expected: %s",
+						expression, context, want.Correct, answer.AnswersForContext[j].Correct, answer.Meaning, want.Correct, want.Reason)
 
-					assert.Equal(t, wantCorrectForContext, answer.AnswersForContext[j].Correct,
-						"Expression %s, Context %s: want correct=%v, got=%v, got meaning=%s",
-						expression, context, wantCorrectForContext, answer.AnswersForContext[j].Correct, answer.Meaning)
+					assert.Equal(t, want.Correct, answer.AnswersForContext[j].Correct,
+						"Expression %s, Context %s: want correct=%v, got=%v, got meaning=%s, Why %v is expected: %s",
+						expression, context, want.Correct, answer.AnswersForContext[j].Correct, answer.Meaning, want.Correct, want.Reason)
 				}
 			}
 		})
