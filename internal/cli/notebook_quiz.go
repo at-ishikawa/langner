@@ -191,12 +191,8 @@ func extractWordOccurrences(notebookName string, stories []notebook.StoryNoteboo
 			for k := range scene.Definitions {
 				definition := &scene.Definitions[k]
 				// Extract contexts from conversations that contain the expression
+				// Words without contexts are still included for learning
 				contexts := extractContextsFromConversations(scene, definition.Expression, definition.Definition)
-
-				// Skip if no contexts found
-				if len(contexts) == 0 {
-					continue
-				}
 
 				occurrence := &WordOccurrence{
 					NotebookName: notebookName,
@@ -205,6 +201,7 @@ func extractWordOccurrences(notebookName string, stories []notebook.StoryNoteboo
 					Definition:   definition,
 					Contexts:     contexts,
 				}
+
 				occurrences = append(occurrences, occurrence)
 			}
 		}
@@ -218,7 +215,7 @@ func extractWordOccurrences(notebookName string, stories []notebook.StoryNoteboo
 func FormatQuestion(occurrence *WordOccurrence) string {
 	expression := occurrence.GetExpression()
 	if len(occurrence.Contexts) == 0 {
-		return fmt.Sprintf("What does '%s' mean?", expression)
+		return fmt.Sprintf("What does '%s' mean?\n", expression)
 	}
 
 	question := fmt.Sprintf("What does '%s' mean in the following context?\n", expression)
