@@ -104,16 +104,26 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 			require.NoError(t, err)
 
 			for i, testTarget := range tc.testTarget {
-				answer := result.Answers[i]
-				expression := answer.Expression
-				for j, want := range testTarget.Wants {
-					context := answer.AnswersForContext[j].Context
-					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v, Got meaning: %s, Why %v is expected: %s",
-						expression, context, want.Correct, answer.AnswersForContext[j].Correct, answer.Meaning, want.Correct, want.Reason)
+				if len(result.Answers) <= i {
+					assert.Fail(t, "failed to get answer", "want %d answers, got %d", len(tc.testTarget), len(result.Answers))
+					continue
+				}
 
-					assert.Equal(t, want.Correct, answer.AnswersForContext[j].Correct,
-						"Expression %s, Context %s: want correct=%v, got=%v, got meaning=%s, Why %v is expected: %s",
-						expression, context, want.Correct, answer.AnswersForContext[j].Correct, answer.Meaning, want.Correct, want.Reason)
+				got := result.Answers[i]
+				expression := got.Expression
+				for j, want := range testTarget.Wants {
+					if len(got.AnswersForContext) <= j {
+						assert.Fail(t, "failed to get answer for context", "want %d answers, got %d", len(testTarget.Wants), len(got.AnswersForContext))
+						continue
+					}
+					answerForContext := got.AnswersForContext[j]
+					context := answerForContext.Context
+					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v, Got meaning: %s, OpenAI reason: %s, Why %v is expected: %s",
+						expression, context, want.Correct, answerForContext.Correct, got.Meaning, answerForContext.Reason, want.Correct, want.Reason)
+
+					assert.Equal(t, want.Correct, answerForContext.Correct,
+						"Expression %s, Context %s: want correct=%v, got=%v, got meaning=%s, OpenAI reason: %s, Why %v is expected: %s",
+						expression, context, want.Correct, answerForContext.Correct, got.Meaning, answerForContext.Reason, want.Correct, want.Reason)
 				}
 			}
 		})

@@ -140,10 +140,15 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	result := results.Answers[0]
 
 	isCorrect := len(result.AnswersForContext) > 0 && result.AnswersForContext[0].Correct
+	reason := ""
+	if len(result.AnswersForContext) > 0 {
+		reason = result.AnswersForContext[0].Reason
+	}
 	answer := AnswerResponse{
 		Correct:    isCorrect,
 		Expression: result.Expression,
 		Meaning:    result.Meaning,
+		Reason:     reason,
 	}
 
 	if strings.TrimSpace(userAnswer) == "" {
@@ -168,6 +173,9 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 			r.bold.Sprintf("%s", answer.Expression),
 			r.italic.Sprintf("%s", answer.Meaning),
 		)
+	}
+	if answer.Reason != "" {
+		fmt.Printf("   Reason: %s\n", answer.Reason)
 	}
 
 	if len(currentCard.GetImages()) > 0 {

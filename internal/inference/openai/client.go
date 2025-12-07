@@ -155,113 +155,101 @@ Return ONLY a JSON array. For each input expression, include:
 - "expression": the expression as provided
 - "is_expression_input": boolean from input
 - "meaning": the CANONICAL meaning (lemma/inflection normalized) that best fits the expression across its contexts (not the user's meaning)
-- "answers": an array with one object per context: {"correct": boolean, "context": "<original context>"}
+- "answers": an array with one object per context: {"correct": boolean, "context": "<original context>", "reason": "<brief explanation>"}
 
-STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase.
+STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase. You MUST process ALL expressions provided in the input array.
 
 UNDERSTANDING THE INPUT
 - Each context may include a "reference_definition" field - this is ONLY a rough hint from a notebook and may be incomplete, incorrect, or empty.
-- DO NOT blindly trust or compare against the reference_definition. You must independently determine the true meaning from the context itself.
-- The reference_definition is provided only as a potential starting point for your analysis - always verify it matches the actual usage in context.
+- When context is PROVIDED: You must determine the true meaning from the context itself. The reference_definition is just a hint that may be wrong.
+- When context is EMPTY/MISSING: You MUST rely on the reference_definition and user's meaning. If they match exactly or nearly exactly, mark CORRECT.
+- DO NOT blindly trust the reference_definition when you have context. Always verify it matches actual usage.
 - Each context may include a "usage" field showing the actual inflected form of the expression as it appears in that specific context.
-- Example: For expression "run", the usage might be "ran", "running", or "runs" depending on how it appears in the context sentence.
-- The usage field helps you identify which word form to focus on, but you should still normalize inflections when comparing meanings.
 - If usage is provided, use it to locate the expression in the context; if not provided, search for any inflected form.
 
-EVALUATION RULES
-1) Determine TRUE meaning per context INDEPENDENTLY
-   - Read the context carefully and determine the meaning YOURSELF by analyzing how the expression is actually used in the sentence.
-   - CRITICAL: DO NOT rely on the reference_definition field. It is often WRONG or misleading. Ignore it completely when determining the true meaning.
-   - The reference_definition may give a literal/dictionary meaning when the context uses a metaphorical/idiomatic sense, or vice versa.
-   - You must determine the meaning ONLY from the context itself, as if the reference_definition didn't exist.
-   - Treat the target expression as a UNIT (not word-by-word), accounting for idioms, phrasal verbs, or fixed phrases.
-   - If a "usage" field is provided, it indicates the specific inflected form in that context (e.g., "ran" for "run").
-   - Normalize inflection/tense/number (e.g., "broke" ↔ "break", "runs" ↔ "run") and ignore punctuation/markup.
-   - Identify the sense and part-of-speech actually used (e.g., "run" = operate/manage vs move quickly).
-   - Be aware of metaphorical, idiomatic, and figurative uses (e.g., "disturbance in the wind" may mean "sensing danger" not "weather phenomenon").
-   - Consider collocations and common phrases (e.g., "for the cause" means "for a principle/ideal", not the literal "cause and effect").
-   - If multiple senses are possible, choose the one most supported by the context; if still ambiguous, choose the most common idiomatic reading for that context.
+**PRIORITY RULE: EXACT/NEAR-EXACT MATCH WITH REFERENCE DEFINITION**
+If the user's meaning EXACTLY or NEARLY EXACTLY matches the reference_definition (even with minor wording differences), you should strongly consider marking it CORRECT, especially when:
+- Context is empty/missing
+- The reference_definition appears to be a standard/dictionary definition
+- The user's meaning captures the same core concept as reference_definition
+- Synonymous phrases that convey the same essential concept with different wording
+This rule applies BEFORE other checks, but still reject if it's a fatal error (self-definition, opposite meaning, etc.)
 
-2) Compare to the user's meaning - BE STRICT
-   - STEP 1: Write down the TRUE meaning you determined from context (let's call this "TRUE_MEANING")
-   - STEP 2: Write down the user's provided meaning (let's call this "USER_MEANING")
-   - STEP 3: Compare these TWO meanings WORD BY WORD:
-     • Does USER_MEANING contain ALL the key concepts from TRUE_MEANING?
-     • Does USER_MEANING add any concepts NOT in TRUE_MEANING?
-     • Are they 100% semantically equivalent and interchangeable?
-   - STEP 4: If ANY answer above is "no", mark INCORRECT
-   - DEFAULT TO INCORRECT: Only mark CORRECT if you are absolutely certain the user's meaning is semantically equivalent to the TRUE meaning.
-   - Mark CORRECT only in these specific cases:
-     • The user's wording is a direct paraphrase expressing the EXACT same concept (e.g., "cease trying" = "stop trying", "depart quickly" = "leave in a hurry")
-     • The user uses a perfect synonym that could replace the expression in context (e.g., "wealthy" = "rich", "begin" = "start")
-     • The ONLY differences are grammar/spelling, not meaning
-   - Mark INCORRECT in ALL other cases, including:
-     • Related but distinct concepts, even if they seem similar (e.g., "miserable" ≠ "unpleasant", "annoying" ≠ "mysterious", "tasty" ≠ "spicy")
-     • Simplified definitions that lose important nuance (e.g., "coating" ≠ "protective layer formed by reaction", "place" ≠ "specific location")
-     • Over-generalizations (e.g., "song or place" when it's specifically "a particular song title")
-     • Opposite or contradictory meanings
-     • Different senses of polysemous words (e.g., "bank" as financial institution vs river edge)
-     • Partially correct but incomplete (e.g., "complete" when full meaning is "plan, organize, and complete")
-     • Missing critical attributes (e.g., "continuous sound" vs just "sound")
-     • Wrong attributes added (e.g., "pleasant sound" when there's no pleasantness implied)
-     • Confusing similar-sounding words (e.g., "accept" ≠ "except", user might be thinking of wrong word)
-     • Getting idiom meaning wrong (e.g., "hit the road" = leave/depart, not "strike the pavement")
-     • Defining only part of a multi-word expression
-     • Vague or unclear descriptions
-   - CRITICAL STRICTNESS RULES - FOLLOW THESE EXACTLY:
-     • WORD-BY-WORD CHECK: If user's meaning contains even ONE word that doesn't match the true meaning, immediately mark INCORRECT. For example:
-       - "sad and annoying" vs "sad and mysterious" → INCORRECT (annoying ≠ mysterious)
-       - "dark and cheerful" vs "dark and gloomy" → INCORRECT (cheerful ≠ gloomy)
-     • SIMPLIFICATION CHECK: If user removed ANY important detail from the definition, mark INCORRECT:
-       - "loud noise" vs "sudden explosive sound" → INCORRECT (missing "sudden", missing "explosive")
-      - "powder" vs "fine substance that creates powder" → INCORRECT (oversimplified, missing process)
-       - "red coating" vs "oxidized iron compound" → INCORRECT (missing chemical process)
-     • PROCESS/MECHANISM CHECK: If true meaning involves a process or mechanism (like "produces", "causes", "creates"), user must include it:
-       - User says "growth" but meaning is "organism that produces growth" → INCORRECT
-       - User says "container" but meaning is "vessel that holds liquid" → INCORRECT
-     • PARTIAL CORRECTNESS = INCORRECT: If user only captures part of a multi-part definition, mark INCORRECT:
-       - "complete" vs "plan, organize, and complete" → INCORRECT (missing "plan" and "organize")
-      - "accomplish" vs "prepare, execute, and accomplish" → INCORRECT (only final step, missing earlier steps)
-       - "finish" vs "design, build, and finish" → INCORRECT (missing earlier steps)
-     • SAME SEMANTIC FIELD ≠ CORRECT: Even if meanings are related or in same category, if not equivalent, mark INCORRECT:
-       - "annoying" and "mysterious" are both negative descriptors but DIFFERENT → INCORRECT
-       - "miserable" and "unpleasant" are both negative feelings but DIFFERENT → INCORRECT
-     • THE RESULT IS NOT THE THING: If true meaning is "X that produces/creates Y", user saying just "Y" is INCORRECT:
-       - User: "heat" vs True: "device that generates heat" → INCORRECT
-   - CRITICAL: Your job is to CATCH MISTAKES, not to accept similar answers. Be a STRICT grader.
-   - FINAL CHECK: Before marking CORRECT, ask yourself EXPLICITLY:
-     1. "Did I determine the TRUE_MEANING from context?"
-     2. "Does USER_MEANING contain EVERY key concept from TRUE_MEANING?"
-     3. "Are these definitions 100% interchangeable in a dictionary?"
-     4. If ANY answer is "no" or "unsure", mark INCORRECT.
+EVALUATION RULES
+
+**CRITICAL: CONSISTENCY ACROSS CONTEXTS**
+For the SAME expression with the SAME user meaning, you MUST give the SAME correctness result across ALL contexts.
+Do NOT mark one context as correct and another as incorrect if the user meaning and expression are identical.
+
+**MANDATORY FIRST CHECK - SELF-DEFINITION**
+Before ANY other evaluation, check: Does the user's meaning contain the expression itself (or a simple inflection)?
+- If user meaning = expression (e.g., "kicky" → "kicky"), mark INCORRECT immediately
+- If user meaning contains the expression as the main definition, mark INCORRECT
+- This check MUST happen FIRST, before any semantic analysis
+
+1) Determine TRUE meaning per context INDEPENDENTLY
+   - Read the context carefully and determine the meaning YOURSELF.
+   - CRITICAL: DO NOT rely on the reference_definition field when context is provided.
+   - If context is empty, use reference_definition and general knowledge.
+   - Treat the target expression as a UNIT (not word-by-word), accounting for idioms, phrasal verbs, or fixed phrases.
+   - Be aware of slang meanings that differ from literal meanings (e.g., "go commando" = not wearing underwear, NOT related to military).
+   - **CRITICAL NEGATION RULE**: When evaluating the user's meaning, you MUST focus ONLY on the EXPRESSION's inherent meaning, COMPLETELY IGNORING any negation in the context.
+     * Negation words like "no", "not", "isn't", "never" appearing BEFORE the expression in context DO NOT change the expression's meaning
+     * Example: "This is no walk in the park" - if user says the expression means "easy", that's CORRECT because "a walk in the park" DOES mean "easy"
+     * The negation in the sentence doesn't change what the expression itself means - user defines the EXPRESSION, not the full sentence
+     * ALWAYS evaluate the expression's positive/affirmative meaning, regardless of how it's used in context
+     * If the user defines an expression correctly but the context negates it, mark CORRECT
+
+2) Compare user's meaning to the actual meaning
+
+   Determine if the user's meaning is CORRECT or INCORRECT:
+
+   **Mark INCORRECT if:**
+   - The user simply repeats the expression itself instead of defining it
+   - The meaning is opposite or contradictory to the actual meaning
+   - The meaning is completely unrelated or from a different semantic field
+   - Key details or attributes are fundamentally wrong
+   - **CRITICAL IS vs USES/DOES DISTINCTION**: The user confuses what something IS (its nature/identity) with what it DOES, USES, or is USED FOR
+     * Example: If something IS a liquid, don't accept "something that takes liquid" (wrong category - container vs content)
+     * Example: If something IS a procedure, don't accept the tool used in that procedure
+     * The user must identify the correct category of thing
+   - The meaning is in the wrong category (e.g., describing one type of thing when it's another)
+   - **SUFFERING vs ENDURING**: Distinguish between passively receiving harm ("get damages", "receive beating") and actively withstanding it ("endure", "withstand")
+
+   **Mark CORRECT if:**
+   - The user's meaning matches or nearly matches the reference_definition
+   - The meaning is semantically equivalent even with different wording
+   - Synonyms are used that convey the same core concept
+   - Only minor differences in intensifiers or word order exist
+   - For multi-sense words, the user captured at least one valid sense
+   - **The meaning captures the essential concept even if not perfectly worded or missing specific details from reference**
+   - User's phrasing is different but the fundamental idea is the same
+
+   **When uncertain, default to INCORRECT**
 
 3) is_expression_input handling
-   - If is_expression_input = true: the typed expression may contain typos; judge what the USER INTENDED to say by that expression in the given context. Ignore typos in the expression itself; still grade the user's MEANING against the actual meaning.
-   - If is_expression_input = false: treat the expression as correct/canonical and just grade the user's MEANING.
+   - If is_expression_input = true: the typed expression may contain typos; judge what the USER INTENDED.
+   - If is_expression_input = false: treat the expression as correct/canonical.
 
 4) Canonical meaning field
-   - Set "meaning" to the best, short canonical gloss that fits the expression across its contexts (e.g., for "run" with both senses present, use a concise multi-sense gloss like "to move quickly by foot; to operate/manage", otherwise a single-sense gloss).
-   - Keep it short (≈3–8 words per sense). Use semicolons to separate multiple senses if needed.
+   - Set "meaning" to the best, short canonical gloss (≈3–8 words per sense).
 
-DECISION CHECKLIST (apply before output):
-- Did I identify the correct sense for THIS expression in THIS context by reading the context itself?
-- Does the user's meaning capture the same core concept, even if worded differently?
-- Am I being fair in accepting paraphrases and synonyms that demonstrate understanding?
-- Are all booleans present and lowercase?
-- Is the top-level array valid JSON with the required fields only?
-
-OUTPUT FORMAT (example skeleton):
+OUTPUT FORMAT:
 [
   {
     "expression": "…",
     "is_expression_input": false,
     "meaning": "…",
     "answers": [
-      {"correct": true,  "context": "…"},
-      {"correct": false, "context": "…"}
+      {"correct": true,  "context": "…", "reason": "user meaning matches: both mean X"},
+      {"correct": false, "context": "…", "reason": "user said X but it means Y - unrelated concepts"}
     ]
   }
-]`
+]
+
+REASON FORMAT:
+- For CORRECT: briefly explain why the meanings match (e.g., "exact match", "synonymous", "captures the core meaning")
+- For INCORRECT: explain what's wrong in plain language (e.g., "user repeated the word", "opposite meaning", "unrelated concept", "it IS X, not something that does X")`
 
 	// promptExample to demonstrate correct evaluation patterns
 	type promptExample struct {
@@ -272,162 +260,243 @@ OUTPUT FORMAT (example skeleton):
 
 	examples := []promptExample{
 		{
-			description: "INCORRECT - User has one wrong word in compound meaning. " +
-				"Tests: rejecting when ANY word in user's meaning doesn't match",
+			description: "INCORRECT - Self-definition: user uses the same word to define itself",
 			userRequest: []inference.Expression{
 				{
-					Expression: "gloomy",
-					Meaning:    "dark and depressing",
+					Expression: "snazzy",
+					Meaning:    "snazzy",
 					Contexts: []inference.Context{
-						{Context: "The gloomy forest felt mysterious and foreboding as we entered.", ReferenceDefinition: "dark and sad", Usage: "gloomy"},
+						{Context: "He wore a snazzy new suit to the interview.", ReferenceDefinition: "stylish and attractive", Usage: "snazzy"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "gloomy",
-					Meaning:    "dark and threatening; mysterious",
+					Expression: "snazzy",
+					Meaning:    "stylish and attractive",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The gloomy forest felt mysterious and foreboding as we entered."},
+						{Correct: false, Context: "He wore a snazzy new suit to the interview.", Reason: "user repeated the word 'snazzy' instead of defining it"},
 					},
 				},
 			},
 		},
 		{
-			description: "INCORRECT - User over-simplified, losing critical detail. " +
-				"Tests: rejecting simplified definitions that remove important aspects",
+			description: "INCORRECT - Opposite meaning: user says 'wear' but slang means 'not wearing'",
 			userRequest: []inference.Expression{
 				{
-					Expression: "rust",
-					Meaning:    "orange coating",
+					Expression: "freeball",
+					Meaning:    "to wear loose underwear",
 					Contexts: []inference.Context{
-						{Context: "The old car had rust all over its body.", ReferenceDefinition: "iron oxide coating formed by corrosion", Usage: "rust"},
+						{Context: "He decided to freeball at the gym today.", ReferenceDefinition: "to not wear underwear", Usage: "freeball"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "rust",
-					Meaning:    "reddish-brown coating formed by oxidation of iron",
+					Expression: "freeball",
+					Meaning:    "to not wear underwear",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The old car had rust all over its body."},
+						{Correct: false, Context: "He decided to freeball at the gym today.", Reason: "user said 'wear loose underwear' but the expression means the opposite - 'not wearing underwear'"},
 					},
 				},
 			},
 		},
 		{
-			description: "INCORRECT - User described result instead of the organism/process that produces it. " +
-				"Tests: rejecting when definition says 'X that produces Y' but user only says 'Y'",
+			description: "INCORRECT - Completely unrelated meaning from wrong semantic field (food vs personality)",
 			userRequest: []inference.Expression{
 				{
-					Expression: "bacteria",
-					Meaning:    "germs",
+					Expression: "spunky",
+					Meaning:    "salty",
 					Contexts: []inference.Context{
-						{Context: "Wash your hands to remove bacteria.", ReferenceDefinition: "microscopic organisms that can cause disease", Usage: "bacteria"},
+						{Context: "The spunky little dog barked at the mailman.", ReferenceDefinition: "courageous and determined; spirited", Usage: "spunky"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "bacteria",
-					Meaning:    "microscopic single-celled organisms",
+					Expression: "spunky",
+					Meaning:    "courageous and spirited",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "Wash your hands to remove bacteria."},
+						{Correct: false, Context: "The spunky little dog barked at the mailman.", Reason: "user said 'salty' which is about food/taste, but the expression describes personality traits - completely different concepts"},
 					},
 				},
 			},
 		},
 		{
-			description: "INCORRECT - User confused similar-sounding words. " +
-				"Tests: catching when user gives meaning of wrong but similar word",
+			description: "INCORRECT - Wrong attribute: user says 'mountain' but it's 'river'",
 			userRequest: []inference.Expression{
 				{
-					Expression: "hardy",
-					Meaning:    "barely or scarcely",
+					Expression: "the Thames",
+					Meaning:    "a mountain in England",
 					Contexts: []inference.Context{
-						{Context: "These hardy plants can survive the winter frost.", ReferenceDefinition: "robust, capable of endurance", Usage: "hardy"},
+						{Context: "We took a boat ride along the Thames.", ReferenceDefinition: "a major river flowing through London", Usage: "Thames"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "hardy",
-					Meaning:    "robust; capable of enduring difficult conditions",
+					Expression: "the Thames",
+					Meaning:    "a major river flowing through London",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "These hardy plants can survive the winter frost."},
+						{Correct: false, Context: "We took a boat ride along the Thames.", Reason: "user said 'mountain' but the Thames is a river - wrong geographic feature"},
 					},
 				},
 			},
 		},
 		{
-			description: "INCORRECT - User got idiom meaning completely wrong. " +
-				"Tests: recognizing idiomatic expressions and rejecting wrong interpretations",
+			description: "INCORRECT - IS vs USES error: user describes what it's used for, not what it IS",
 			userRequest: []inference.Expression{
 				{
-					Expression: "hit the books",
-					Meaning:    "to strike books physically",
+					Expression: "saline",
+					Meaning:    "a container for salt water",
 					Contexts: []inference.Context{
-						{Context: "I need to hit the books tonight to prepare for the exam.", ReferenceDefinition: "to study hard", Usage: "hit the books"},
+						{Context: "The nurse injected saline into the IV.", ReferenceDefinition: "a solution of salt in water", Usage: "saline"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "hit the books",
-					Meaning:    "to study intensively",
+					Expression: "saline",
+					Meaning:    "a solution of salt in water",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "I need to hit the books tonight to prepare for the exam."},
+						{Correct: false, Context: "The nurse injected saline into the IV.", Reason: "user said 'container' but saline IS the liquid solution itself, not the container - wrong category (container vs content)"},
 					},
 				},
 			},
 		},
 		{
-			description: "INCORRECT - User too general/vague about specific thing. " +
-				"Tests: rejecting when user gives general category instead of specific referent",
+			description: "INCORRECT - Suffering vs Enduring: user says passive harm reception when it means active withstanding",
 			userRequest: []inference.Expression{
 				{
-					Expression: "Beatles",
-					Meaning:    "a famous band or insects",
+					Expression: "stand one's ground",
+					Meaning:    "to get injured while staying in place",
 					Contexts: []inference.Context{
-						{Context: "I love listening to the Beatles, especially their early albums.", ReferenceDefinition: "famous British rock band from the 1960s", Usage: "Beatles"},
+						{Context: "Despite the criticism, she stood her ground on the issue.", ReferenceDefinition: "to maintain one's position; to refuse to retreat", Usage: "stood her ground"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "Beatles",
-					Meaning:    "a famous British rock band from the 1960s",
+					Expression: "stand one's ground",
+					Meaning:    "to maintain one's position; to refuse to retreat",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "I love listening to the Beatles, especially their early albums."},
+						{Correct: false, Context: "Despite the criticism, she stood her ground on the issue.", Reason: "user said 'get injured' which is passive suffering, but the expression means 'maintain position' which is actively resisting - different concepts"},
 					},
 				},
 			},
 		},
 		{
-			description: "CORRECT - User's meaning is precise equivalent paraphrase. " +
-				"Tests: accepting when user demonstrates exact understanding with different words",
+			description: "CORRECT - Semantically identical with minor word difference",
 			userRequest: []inference.Expression{
 				{
-					Expression: "put off",
-					Meaning:    "to delay or postpone",
+					Expression: "simple",
+					Meaning:    "easy",
 					Contexts: []inference.Context{
-						{Context: "Don't put off your homework until the last minute.", ReferenceDefinition: "to defer to a later time", Usage: "put off"},
+						{Context: "This is a simple task.", ReferenceDefinition: "easily done or understood", Usage: "simple"},
 					},
 					IsExpressionInput: false,
 				},
 			},
 			assistantAnswer: []inference.AnswerMeaning{
 				{
-					Expression: "put off",
-					Meaning:    "to postpone; to defer to a later time",
+					Expression: "simple",
+					Meaning:    "easy; not complicated",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "Don't put off your homework until the last minute."},
+						{Correct: true, Context: "This is a simple task.", Reason: "'easy' and 'simple' are synonymous - both convey the same core meaning"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Core concept captured with different phrasing",
+			userRequest: []inference.Expression{
+				{
+					Expression: "hit the hay",
+					Meaning:    "to start sleeping",
+					Contexts: []inference.Context{
+						{Context: "I'm exhausted. Time to hit the hay.", ReferenceDefinition: "to go to bed", Usage: "hit the hay"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "hit the hay",
+					Meaning:    "to go to bed",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "I'm exhausted. Time to hit the hay.", Reason: "user said 'start sleeping' and reference says 'go to bed' - these capture the same essential concept"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Expression meaning remains same even when negated in context",
+			userRequest: []inference.Expression{
+				{
+					Expression: "a piece of cake",
+					Meaning:    "something easy to do",
+					Contexts: []inference.Context{
+						{Context: "This test is no piece of cake.", ReferenceDefinition: "something very easy to do", Usage: "piece of cake"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "a piece of cake",
+					Meaning:    "something very easy to do",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "This test is no piece of cake.", Reason: "the expression itself means 'easy' - the negation in context doesn't change what the expression means"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Success concept matches even with different wording",
+			userRequest: []inference.Expression{
+				{
+					Expression: "nail it",
+					Meaning:    "to accomplish something perfectly",
+					Contexts: []inference.Context{
+						{Context: "You really nailed that presentation!", ReferenceDefinition: "to succeed at something; to do something very well", Usage: "nailed"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "nail it",
+					Meaning:    "to succeed at something; to do something very well",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "You really nailed that presentation!", Reason: "user said 'accomplish perfectly' which captures the success concept - same essential meaning as 'succeed' and 'do very well'"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Empty context with matching reference definition",
+			userRequest: []inference.Expression{
+				{
+					Expression: "cavalry",
+					Meaning:    "soldiers on horseback",
+					Contexts: []inference.Context{
+						{Context: "", ReferenceDefinition: "soldiers who fight on horseback", Usage: "cavalry"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "cavalry",
+					Meaning:    "soldiers who fight on horseback",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "", Reason: "user meaning matches the reference definition - both refer to soldiers on horseback"},
 					},
 				},
 			},

@@ -48,6 +48,7 @@ type AnswerMeaning struct {
 type AnswersForContext struct {
 	Correct bool   `json:"correct"`
 	Context string `json:"context"`
+	Reason  string `json:"reason"` // Explanation of why the answer is correct or incorrect
 }
 
 const (

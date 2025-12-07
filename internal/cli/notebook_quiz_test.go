@@ -650,7 +650,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test",
 						Meaning:    "test meaning",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: ""},
+							{Correct: true, Context: "", Reason: "exact match with reference definition"},
 						},
 					},
 				},
@@ -683,7 +683,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test",
 						Meaning:    "wrong meaning",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: false, Context: ""},
+							{Correct: false, Context: "", Reason: "A3 - unrelated: user meaning is from wrong semantic field"},
 						},
 					},
 				},
@@ -716,7 +716,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test",
 						Meaning:    "",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: ""}, // OpenAI says correct, but empty answer overrides it
+							{Correct: true, Context: "", Reason: "empty user input"}, // OpenAI says correct, but empty answer overrides it
 						},
 					},
 				},
@@ -763,7 +763,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "test1",
 						Meaning:    "test meaning",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: ""},
+							{Correct: true, Context: "", Reason: "synonym: meanings are equivalent"},
 						},
 					},
 				},
@@ -797,7 +797,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Expression: "lookout",
 						Meaning:    "a person who has the responsibility of watching for something, especially danger, etc.",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: ""},
+							{Correct: true, Context: "", Reason: "partial match covers main sense"},
 						},
 					},
 				},

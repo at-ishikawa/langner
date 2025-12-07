@@ -879,13 +879,15 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 		wantMeaningInOutput string
 		wantNotInOutput     string
 		wantContextInOutput string
+		wantReasonInOutput  string
 	}{
 		{
-			name: "Correct answer shows user's meaning",
+			name: "Correct answer shows user's meaning and reason",
 			answer: AnswerResponse{
 				Correct:    true,
 				Expression: "trinket",
 				Meaning:    "a small ornament",
+				Reason:     "partial match: user captured main sense",
 			},
 			occurrence: &WordOccurrence{
 				Definition: &notebook.Note{
@@ -894,6 +896,7 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 				},
 			},
 			wantMeaningInOutput: "a small ornament",
+			wantReasonInOutput:  "partial match: user captured main sense",
 		},
 		{
 			name: "Incorrect answer shows correct meaning from notebook with context",
@@ -902,6 +905,7 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 				Expression: "trinket",
 				Meaning:    "a container for cooking", // User's wrong answer
 				Context:    "She wore a beautiful trinket on her necklace",
+				Reason:     "A3 - unrelated: user said 'container for cooking' but it means 'small ornament'",
 			},
 			occurrence: &WordOccurrence{
 				Definition: &notebook.Note{
@@ -917,6 +921,7 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 			wantMeaningInOutput: "a small ornament or piece of jewelry",
 			wantNotInOutput:     "a container for cooking",
 			wantContextInOutput: "She wore a beautiful trinket on her necklace",
+			wantReasonInOutput:  "A3 - unrelated: user said 'container for cooking' but it means 'small ornament'",
 		},
 		{
 			name: "Incorrect answer with no occurrence falls back to answer.Meaning",
@@ -974,6 +979,10 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 
 			if tc.wantContextInOutput != "" {
 				assert.Contains(t, outputStr, tc.wantContextInOutput, "Output should contain the context")
+			}
+
+			if tc.wantReasonInOutput != "" {
+				assert.Contains(t, outputStr, tc.wantReasonInOutput, "Output should contain the reason")
 			}
 		})
 	}
@@ -1108,7 +1117,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 								Expression: "test",
 								Meaning:    "test meaning",
 								AnswersForContext: []inference.AnswersForContext{
-									{Correct: true, Context: "This is a test"},
+									{Correct: true, Context: "This is a test", Reason: "exact match with reference"},
 								},
 							},
 						},
@@ -1147,7 +1156,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 								Expression: "test",
 								Meaning:    "wrong meaning",
 								AnswersForContext: []inference.AnswersForContext{
-									{Correct: false, Context: "This is a test"},
+									{Correct: false, Context: "This is a test", Reason: "A3 - unrelated: meanings are from different semantic fields"},
 								},
 							},
 						},

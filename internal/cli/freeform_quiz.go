@@ -138,11 +138,13 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	// Find the first occurrence that has at least one correct context
 	var firstCorrectOccurrenceIdx = -1
 	var matchingContext string
+	var matchingReason string
 	for _, answer := range result.AnswersForContext {
 		if answer.Correct {
 			if occIdx, found := contextToOccurrence[answer.Context]; found {
 				firstCorrectOccurrenceIdx = occIdx
 				matchingContext = answer.Context
+				matchingReason = answer.Reason
 				break
 			}
 		}
@@ -160,6 +162,10 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		if len(displayOccurrence.Contexts) > 0 {
 			matchingContext = displayOccurrence.Contexts[0].Context
 		}
+		// Get reason from first answer context for incorrect answers
+		if len(result.AnswersForContext) > 0 {
+			matchingReason = result.AnswersForContext[0].Reason
+		}
 	}
 
 	// Build answer for display
@@ -168,6 +174,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		Expression: result.Expression,
 		Meaning:    result.Meaning,
 		Context:    matchingContext,
+		Reason:     matchingReason,
 	}
 
 	// Show result
@@ -296,6 +303,13 @@ func (r *FreeformQuizCLI) displayResult(answer AnswerResponse, occurrence *WordO
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
 		if _, err := fmt.Fprintln(r.stdoutWriter); err != nil {
+			return fmt.Errorf("failed to write to stdout: %w", err)
+		}
+	}
+
+	// Show reason if available
+	if answer.Reason != "" {
+		if _, err := fmt.Fprintf(r.stdoutWriter, "   Reason: %s\n", answer.Reason); err != nil {
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
 	}
