@@ -32,7 +32,7 @@ func TestExtractWordOccurrences(t *testing.T) {
 			expectedCardCount: 0,
 		},
 		{
-			name:         "No contexts - no conversations",
+			name:         "No contexts - no conversations (word still included)",
 			notebookName: "test-notebook",
 			stories: []notebook.StoryNotebook{
 				{
@@ -47,10 +47,17 @@ func TestExtractWordOccurrences(t *testing.T) {
 					},
 				},
 			},
-			expectedCardCount: 0,
+			expectedCardCount: 1,
+			validate: func(t *testing.T, cards []*WordOccurrence) {
+				card := cards[0]
+				assert.Equal(t, "word1", card.Definition.Expression)
+				assert.Equal(t, "meaning1", card.GetMeaning())
+				assert.Equal(t, 0, len(card.Contexts), "Word without context should have empty contexts")
+			},
 		},
+
 		{
-			name:         "Extract from conversations",
+			name:         "Extract from conversations (including words without context)",
 			notebookName: "test-notebook",
 			stories: []notebook.StoryNotebook{
 				{
@@ -76,7 +83,7 @@ func TestExtractWordOccurrences(t *testing.T) {
 								{
 									Expression: "test2",
 									Meaning:    "meaning2",
-									// No conversations contain test2 - should be skipped
+									// No conversations contain test2 - still included with empty contexts
 								},
 							},
 						},
@@ -104,7 +111,7 @@ func TestExtractWordOccurrences(t *testing.T) {
 					},
 				},
 			},
-			expectedCardCount: 2,
+			expectedCardCount: 3, // test1 (2 contexts), test2 (no context), test3 (1 context)
 			validate: func(t *testing.T, cards []*WordOccurrence) {
 				card1 := cards[0]
 				assert.Equal(t, "test1", card1.Definition.Expression)
@@ -116,13 +123,19 @@ func TestExtractWordOccurrences(t *testing.T) {
 				assert.Equal(t, "Scene 1", card1.Scene.Title)
 
 				card2 := cards[1]
-				assert.Equal(t, "test3", card2.Definition.Expression)
-				assert.Equal(t, "meaning3", card2.GetMeaning())
-				assert.Equal(t, 1, len(card2.Contexts))
-				assert.Contains(t, card2.Contexts[0], "test3")
-				assert.Equal(t, 2, len(card2.GetImages()))
+				assert.Equal(t, "test2", card2.Definition.Expression)
+				assert.Equal(t, "meaning2", card2.GetMeaning())
+				assert.Equal(t, 0, len(card2.Contexts), "Word without context should have empty contexts")
+
+				card3 := cards[2]
+				assert.Equal(t, "test3", card3.Definition.Expression)
+				assert.Equal(t, "meaning3", card3.GetMeaning())
+				assert.Equal(t, 1, len(card3.Contexts))
+				assert.Contains(t, card3.Contexts[0], "test3")
+				assert.Equal(t, 2, len(card3.GetImages()))
 			},
 		},
+
 		{
 			name:         "With definition field",
 			notebookName: "test-notebook",
@@ -183,7 +196,7 @@ func TestFormatQuestion(t *testing.T) {
 				Definition: &notebook.Note{Expression: "test"},
 				Contexts:   []string{},
 			},
-			expected: "What does 'test' mean?",
+			expected: "What does 'test' mean?\n",
 		},
 		{
 			name: "Single context",
