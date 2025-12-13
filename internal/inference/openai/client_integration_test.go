@@ -108,6 +108,10 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 					assert.Fail(t, "failed to get answer", "want %d answers, got %d", len(tc.testTarget), len(result.Answers))
 					continue
 				}
+				if testTarget.Expression.Expression != result.Answers[i].Expression {
+					assert.Fail(t, "expression mismatch", "want %s, got %s", testTarget.Expression.Expression, result.Answers[i].Expression)
+					continue
+				}
 
 				got := result.Answers[i]
 				expression := got.Expression

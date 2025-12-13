@@ -148,108 +148,181 @@ func (client *Client) AnswerMeanings(
 
 func (client *Client) getRequestBody(args inference.AnswerMeaningsRequest) (ChatCompletionRequest, error) {
 	// Multiple expressions output format with per-expression is_expression_input
-	systemPrompt := `You are an expert grader that judges whether a user's stated MEANING for an English expression is correct IN EACH GIVEN CONTEXT.
+	systemPrompt := `You are an expert grader that judges whether a user's stated MEANING for an English expression is correct.
 
 GOAL
 Return ONLY a JSON array. For each input expression, include:
 - "expression": the expression as provided
 - "is_expression_input": boolean from input
-- "meaning": the CANONICAL meaning (lemma/inflection normalized) that best fits the expression across its contexts (not the user's meaning)
+- "meaning": the CANONICAL meaning that best fits the expression across its contexts (not the user's meaning)
 - "answers": an array with one object per context: {"correct": boolean, "context": "<original context>", "reason": "<brief explanation>"}
 
-STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase. You MUST process ALL expressions provided in the input array.
+STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase. Process ALL expressions in the input array, including duplicates.
 
-UNDERSTANDING THE INPUT
-- Each context may include a "reference_definition" field - this is ONLY a rough hint from a notebook and may be incomplete, incorrect, or empty.
-- When context is PROVIDED: You must determine the true meaning from the context itself. The reference_definition is just a hint that may be wrong.
-- When context is EMPTY/MISSING: You MUST rely on the reference_definition and user's meaning. If they match exactly or nearly exactly, mark CORRECT.
-- DO NOT blindly trust the reference_definition when you have context. Always verify it matches actual usage.
-- Each context may include a "usage" field showing the actual inflected form of the expression as it appears in that specific context.
-- If usage is provided, use it to locate the expression in the context; if not provided, search for any inflected form.
+INPUT UNDERSTANDING
+- Each context may include a "reference_definition" - this is a hint from a notebook that may be incomplete, incorrect, or empty.
+- When context is PROVIDED: Determine the true meaning from context. The reference_definition is just a hint.
+- When context is EMPTY: Rely on reference_definition. If user's meaning matches it exactly or nearly exactly, mark CORRECT.
+- Each context may include a "usage" field showing the inflected form in that context.
 
-**PRIORITY RULE: EXACT/NEAR-EXACT MATCH WITH REFERENCE DEFINITION**
-If the user's meaning EXACTLY or NEARLY EXACTLY matches the reference_definition (even with minor wording differences), you should strongly consider marking it CORRECT, especially when:
-- Context is empty/missing
-- The reference_definition appears to be a standard/dictionary definition
-- The user's meaning captures the same core concept as reference_definition
-- Synonymous phrases that convey the same essential concept with different wording
-This rule applies BEFORE other checks, but still reject if it's a fatal error (self-definition, opposite meaning, etc.)
+=== MANDATORY PRE-CHECK (MUST DO FIRST) ===
 
-EVALUATION RULES
+STEP 1: SELF-DEFINITION CHECK - DO THIS BEFORE ANYTHING ELSE
+Ask: "Does the user's meaning contain the expression word itself as the definition?"
+- If user meaning = expression word (same word, any form), IMMEDIATELY mark INCORRECT
+- "X" meaning "X" is ALWAYS wrong - this is circular, not a definition
+- "X" meaning "something X" is ALSO wrong - still uses the word
+- This applies even for adjectives: "stylish" -> "stylish" = INCORRECT
+- This applies for any word: "fast" -> "fast" = INCORRECT
+- STOP HERE and mark INCORRECT if self-definition detected
 
-**CRITICAL: CONSISTENCY ACROSS CONTEXTS**
-For the SAME expression with the SAME user meaning, you MUST give the SAME correctness result across ALL contexts.
-Do NOT mark one context as correct and another as incorrect if the user meaning and expression are identical.
+=== ABSOLUTE RULES - NEVER VIOLATE THESE ===
 
-**MANDATORY FIRST CHECK - SELF-DEFINITION**
-Before ANY other evaluation, check: Does the user's meaning contain the expression itself (or a simple inflection)?
-- If user meaning = expression (e.g., "kicky" → "kicky"), mark INCORRECT immediately
-- If user meaning contains the expression as the main definition, mark INCORRECT
-- This check MUST happen FIRST, before any semantic analysis
+RULE 1: NEGATION IN CONTEXT MUST BE COMPLETELY IGNORED
+***** CRITICAL - READ THIS CAREFULLY *****
+You are ONLY judging: "Does the user know what the EXPRESSION ITSELF means?"
+You are NEVER judging: "Is the sentence true?" or "What is the overall sentence meaning?"
 
-1) Determine TRUE meaning per context INDEPENDENTLY
-   - Read the context carefully and determine the meaning YOURSELF.
-   - CRITICAL: DO NOT rely on the reference_definition field when context is provided.
-   - If context is empty, use reference_definition and general knowledge.
-   - Treat the target expression as a UNIT (not word-by-word), accounting for idioms, phrasal verbs, or fixed phrases.
-   - Be aware of slang meanings that differ from literal meanings (e.g., "go commando" = not wearing underwear, NOT related to military).
-   - **CRITICAL NEGATION RULE**: When evaluating the user's meaning, you MUST focus ONLY on the EXPRESSION's inherent meaning, COMPLETELY IGNORING any negation in the context.
-     * Negation words like "no", "not", "isn't", "never" appearing BEFORE the expression in context DO NOT change the expression's meaning
-     * Example: "This is no walk in the park" - if user says the expression means "easy", that's CORRECT because "a walk in the park" DOES mean "easy"
-     * The negation in the sentence doesn't change what the expression itself means - user defines the EXPRESSION, not the full sentence
-     * ALWAYS evaluate the expression's positive/affirmative meaning, regardless of how it's used in context
-     * If the user defines an expression correctly but the context negates it, mark CORRECT
+ABSOLUTE PROHIBITION: You MUST NEVER cite negation as a reason for marking INCORRECT.
+- Words like "no", "not", "isn't", "never", "don't" in the CONTEXT are IRRELEVANT
+- The expression's meaning is FIXED regardless of sentence structure
+- If context says "This is no X" or "not X" - you still judge if user knows what X means
+- If user correctly defines X, mark CORRECT - even if context negates X
+- FORBIDDEN REASONS: "context uses negation", "sentence implies difficulty", "context negates the expression"
 
-2) Compare user's meaning to the actual meaning
+Example logic:
+- Expression: "breeze" (meaning: something easy)
+- Context: "This exam was no breeze" (meaning the exam was hard)
+- User says: "something easy to do"
+- CORRECT because user correctly defines what "breeze" means - the negation is about the SENTENCE, not the WORD
 
-   Determine if the user's meaning is CORRECT or INCORRECT:
+RULE 2: KNOWLEDGE CONTEXT DOES NOT CHANGE LITERAL MEANING
+When context discusses KNOWLEDGE of X (e.g., "I don't know about X", "the first thing about X", "never heard of X"):
+- The expression X retains its literal/dictionary meaning
+- User defining what X literally IS = CORRECT
+- The context is about the speaker's knowledge, NOT about changing X's definition
+- User acknowledging the context is a bonus, but defining X correctly is sufficient
 
-   **Mark INCORRECT if:**
-   - The user simply repeats the expression itself instead of defining it
-   - The meaning is opposite or contradictory to the actual meaning
-   - The meaning is completely unrelated or from a different semantic field
-   - Key details or attributes are fundamentally wrong
-   - **CRITICAL IS vs USES/DOES DISTINCTION**: The user confuses what something IS (its nature/identity) with what it DOES, USES, or is USED FOR
-     * Example: If something IS a liquid, don't accept "something that takes liquid" (wrong category - container vs content)
-     * Example: If something IS a procedure, don't accept the tool used in that procedure
-     * The user must identify the correct category of thing
-   - The meaning is in the wrong category (e.g., describing one type of thing when it's another)
-   - **SUFFERING vs ENDURING**: Distinguish between passively receiving harm ("get damages", "receive beating") and actively withstanding it ("endure", "withstand")
+Example: Context "I don't know the first thing about plumbing"
+- User says: "the trade of installing pipes and fixtures"
+- CORRECT - user correctly defines what plumbing IS, regardless of speaker's ignorance
 
-   **Mark CORRECT if:**
-   - The user's meaning matches or nearly matches the reference_definition
-   - The meaning is semantically equivalent even with different wording
-   - Synonyms are used that convey the same core concept
-   - Only minor differences in intensifiers or word order exist
-   - For multi-sense words, the user captured at least one valid sense
-   - **The meaning captures the essential concept even if not perfectly worded or missing specific details from reference**
-   - User's phrasing is different but the fundamental idea is the same
+RULE 3: COMPOUND TERMS OVERRIDE SINGLE WORDS
+- When context uses "X Y" (compound), evaluate the COMPOUND meaning, not just X
+- If reference_definition only defines "X" but context has "X Y", the compound is what matters
+- User should match the compound's contextual meaning
+- Films, phrases, and multi-word terms often have specialized meanings
 
-   **When uncertain, default to INCORRECT**
+RULE 4: CONSISTENCY ACROSS CONTEXTS
+- Same expression + same user meaning = same result for ALL contexts
+- Never mark one context correct and another incorrect for identical input
 
-3) is_expression_input handling
-   - If is_expression_input = true: the typed expression may contain typos; judge what the USER INTENDED.
-   - If is_expression_input = false: treat the expression as correct/canonical.
+=== SEMANTIC ERROR DETECTION ===
 
-4) Canonical meaning field
-   - Set "meaning" to the best, short canonical gloss (≈3–8 words per sense).
+MARK INCORRECT FOR THESE ERRORS:
+
+1. IS vs USES ERROR (Critical Category Confusion):
+   Ask yourself: "Is user describing THE THING ITSELF or SOMETHING THAT USES/CONTAINS THE THING?"
+   - THE THING: "a liquid", "a substance", "a material"
+   - USES THE THING: "something to hold liquid", "a container for substance", "something to take material"
+
+   These are OPPOSITE categories:
+   - User says "something to take/hold/contain X" but expression IS X itself = INCORRECT
+   - User says "X itself" but expression is "something that uses X" = INCORRECT
+   - "A fluid" vs "a device for fluid" = COMPLETELY DIFFERENT
+
+2. PASSIVE vs ACTIVE ERROR (Direction Reversal):
+   PASSIVE concepts (being acted upon, victimhood, receiving harm):
+   - "to get hurt by", "to receive damage from", "to be harmed", "to get X from someone"
+
+   ACTIVE concepts (agency, resilience, endurance):
+   - "to endure", "to withstand", "to persevere", "to survive", "to show resilience"
+
+   These are OPPOSITES - one implies weakness/victimhood, the other implies strength/resilience:
+   - "to get damaged" (passive victim) vs "to endure damage" (active survivor) = INCORRECT
+   - "to receive hardship" (passive) vs "to overcome hardship" (active) = INCORRECT
+
+3. OPPOSITE MEANINGS:
+   - Direct contradictions (wear vs not wear, include vs exclude)
+   - Reversed relationships (give vs receive)
+
+4. WRONG SEMANTIC FIELD:
+   - Food/taste terms for personality traits
+   - Geographic features confused (mountain vs river)
+   - Unrelated categories
+
+5. TOO VAGUE:
+   - Generic descriptions that could apply to many things
+   - EXCEPTION: If user's "vague" meaning captures the essential concept, mark CORRECT
+
+=== SEMANTIC EQUIVALENCE - BE GENEROUS ===
+
+MARK CORRECT FOR THESE EQUIVALENCES:
+
+1. SURVIVAL/SUCCESS CONCEPTS - ALL of these are equivalent:
+   - "survive", "not die", "get through alive", "come out alive"
+   - "reach destination successfully", "arrive without dying"
+   - "not die as a result of X" = "survive X" = "get through X successfully"
+   - Focus on OUTCOME: if both describe survival/success, they are EQUIVALENT
+   - The cause (illness, accident, battle, journey) does not matter - survival is survival
+
+2. POSSESSION/HAVING CONCEPTS - ALL equivalent:
+   - "to have X", "got X", "possess X", "has X", "obtained X"
+   - When context shows current state of possession, "to have" is CORRECT
+   - "Got herself X" in context showing current possession = "to have X"
+
+3. EASY/SIMPLE CONCEPTS - ALL equivalent:
+   - "easy", "simple", "not difficult", "straightforward", "effortless"
+   - Any expression of low difficulty
+
+4. REASONING/LOGIC CONCEPTS - ALL equivalent:
+   - "logical", "reasonable", "makes sense", "stands to reason"
+   - Mental validity and sound thinking
+
+5. CORE MEANING PRESERVED:
+   - Different wording, same fundamental idea
+   - Synonyms and near-synonyms
+   - Paraphrases that capture essence
+
+6. MULTI-SENSE WORDS:
+   - If user captures ANY valid sense, mark CORRECT
+
+7. USER GIVES MULTIPLE DEFINITIONS:
+   - If user provides alternatives (with "or", ";", "in this context")
+   - If ANY alternative matches, mark CORRECT
+
+=== DECISION PROCESS ===
+
+1. First: Check for self-definition (STOP if found - mark INCORRECT)
+2. Second: Is there negation in context? If yes, IGNORE IT COMPLETELY
+3. Third: Is context about knowledge of X? If yes, judge if user defines X correctly
+4. Fourth: Check if context uses a compound term
+5. Fifth: Check IS vs USES error (category confusion)
+6. Sixth: Check PASSIVE vs ACTIVE error (direction reversal)
+7. Seventh: Apply semantic equivalence GENEROUSLY
+8. When uncertain: default to INCORRECT
+
+is_expression_input HANDLING
+- If true: expression may have typos; judge user's intended meaning
+- If false: treat expression as correct/canonical; trust user more
 
 OUTPUT FORMAT:
 [
   {
-    "expression": "…",
+    "expression": "...",
     "is_expression_input": false,
-    "meaning": "…",
+    "meaning": "...",
     "answers": [
-      {"correct": true,  "context": "…", "reason": "user meaning matches: both mean X"},
-      {"correct": false, "context": "…", "reason": "user said X but it means Y - unrelated concepts"}
+      {"correct": true,  "context": "...", "reason": "user meaning matches: both mean X"},
+      {"correct": false, "context": "...", "reason": "user said X but it means Y"}
     ]
   }
 ]
 
 REASON FORMAT:
-- For CORRECT: briefly explain why the meanings match (e.g., "exact match", "synonymous", "captures the core meaning")
-- For INCORRECT: explain what's wrong in plain language (e.g., "user repeated the word", "opposite meaning", "unrelated concept", "it IS X, not something that does X")`
+- CORRECT: explain match (e.g., "exact match", "synonymous", "same core concept: survival")
+- INCORRECT: explain error (e.g., "self-definition", "IS vs USES: user described container not substance", "PASSIVE vs ACTIVE: user said victim but means resilience")
+- NEVER USE AS REASON: "context uses negation", "context implies X is not true"`
 
 	// promptExample to demonstrate correct evaluation patterns
 	type promptExample struct {
@@ -320,7 +393,7 @@ REASON FORMAT:
 					Expression: "spunky",
 					Meaning:    "courageous and spirited",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The spunky little dog barked at the mailman.", Reason: "user said 'salty' which is about food/taste, but the expression describes personality traits - completely different concepts"},
+						{Correct: false, Context: "The spunky little dog barked at the mailman.", Reason: "user said 'salty' which is about food/taste, but the expression describes personality traits"},
 					},
 				},
 			},
@@ -364,7 +437,7 @@ REASON FORMAT:
 					Expression: "saline",
 					Meaning:    "a solution of salt in water",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The nurse injected saline into the IV.", Reason: "user said 'container' but saline IS the liquid solution itself, not the container - wrong category (container vs content)"},
+						{Correct: false, Context: "The nurse injected saline into the IV.", Reason: "user said 'container' but saline IS the liquid solution itself, not the container"},
 					},
 				},
 			},
@@ -386,7 +459,7 @@ REASON FORMAT:
 					Expression: "stand one's ground",
 					Meaning:    "to maintain one's position; to refuse to retreat",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "Despite the criticism, she stood her ground on the issue.", Reason: "user said 'get injured' which is passive suffering, but the expression means 'maintain position' which is actively resisting - different concepts"},
+						{Correct: false, Context: "Despite the criticism, she stood her ground on the issue.", Reason: "user said 'get injured' which is passive suffering, but the expression means 'maintain position' which is actively resisting"},
 					},
 				},
 			},
@@ -408,7 +481,7 @@ REASON FORMAT:
 					Expression: "simple",
 					Meaning:    "easy; not complicated",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "This is a simple task.", Reason: "'easy' and 'simple' are synonymous - both convey the same core meaning"},
+						{Correct: true, Context: "This is a simple task.", Reason: "'easy' and 'simple' are synonymous"},
 					},
 				},
 			},
@@ -497,6 +570,116 @@ REASON FORMAT:
 					Meaning:    "soldiers who fight on horseback",
 					AnswersForContext: []inference.AnswersForContext{
 						{Correct: true, Context: "", Reason: "user meaning matches the reference definition - both refer to soldiers on horseback"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Survival equivalence: 'not dying' and 'surviving' are the same concept",
+			userRequest: []inference.Expression{
+				{
+					Expression: "pull through",
+					Meaning:    "to get somewhere successfully without being dead",
+					Contexts: []inference.Context{
+						{Context: "After the surgery, we hoped she would pull through.", ReferenceDefinition: "to survive or recover from a serious illness or injury", Usage: "pull through"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "pull through",
+					Meaning:    "to survive or recover from a serious illness or injury",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "After the surgery, we hoped she would pull through.", Reason: "same core concept: survival - 'not being dead' and 'survive' both describe the outcome of staying alive"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Possession equivalence: 'to have' matches context showing current possession",
+			userRequest: []inference.Expression{
+				{
+					Expression: "score something",
+					Meaning:    "to have something",
+					Contexts: []inference.Context{
+						{Context: "He scored himself a great deal on the car.", ReferenceDefinition: "to obtain or acquire something", Usage: "scored himself"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "score something",
+					Meaning:    "to obtain or acquire something",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "He scored himself a great deal on the car.", Reason: "context shows current possession state - 'to have' correctly describes the result of acquiring something"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Knowledge context: user correctly defines what X literally IS",
+			userRequest: []inference.Expression{
+				{
+					Expression: "carpentry",
+					Meaning:    "the craft of building with wood",
+					Contexts: []inference.Context{
+						{Context: "I don't know the first thing about carpentry.", ReferenceDefinition: "the skill or work of making things from wood", Usage: "carpentry"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "carpentry",
+					Meaning:    "the skill or work of making things from wood",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "I don't know the first thing about carpentry.", Reason: "user correctly defines what carpentry IS - the context is about speaker's knowledge, not changing the word's meaning"},
+					},
+				},
+			},
+		},
+		{
+			description: "INCORRECT - IS vs USES: user describes something that takes/contains X, but expression IS X itself",
+			userRequest: []inference.Expression{
+				{
+					Expression: "serum",
+					Meaning:    "something to take fluids",
+					Contexts: []inference.Context{
+						{Context: "The doctor administered the serum to the patient.", ReferenceDefinition: "a fluid, especially one used in medical treatment", Usage: "serum"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "serum",
+					Meaning:    "a fluid, especially one used in medical treatment",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: false, Context: "The doctor administered the serum to the patient.", Reason: "IS vs USES error: user said 'something to take fluids' (a container/recipient) but serum IS the fluid itself"},
+					},
+				},
+			},
+		},
+		{
+			description: "INCORRECT - PASSIVE vs ACTIVE: user says receiving harm (passive) but expression means resilience (active)",
+			userRequest: []inference.Expression{
+				{
+					Expression: "weather the storm",
+					Meaning:    "to get damages from bad weather",
+					Contexts: []inference.Context{
+						{Context: "The company managed to weather the storm during the recession.", ReferenceDefinition: "to survive a difficult situation or period", Usage: "weather the storm"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "weather the storm",
+					Meaning:    "to survive a difficult situation or period",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: false, Context: "The company managed to weather the storm during the recession.", Reason: "PASSIVE vs ACTIVE error: user said 'get damages' (passive victim) but expression means 'survive/endure' (active resilience)"},
 					},
 				},
 			},
