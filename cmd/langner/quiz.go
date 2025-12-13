@@ -19,6 +19,7 @@ func newQuizCommand() *cobra.Command {
 
 	quizCommand.AddCommand(newQuizNotebookCommand())
 	quizCommand.AddCommand(newQuizFreeformCommand())
+	quizCommand.AddCommand(newQuizFlashcardCommand())
 
 	return quizCommand
 }
@@ -121,6 +122,54 @@ func newQuizNotebookCommand() *cobra.Command {
 
 	command.Flags().BoolVar(&includeNoCorrectAnswers, "include-no-correct-answers", false, "Include words that have never had a correct answer")
 	command.Flags().StringVarP(&notebookName, "notebook", "n", "", "Quiz from a specific notebook (empty for all notebooks)")
+
+	return command
+}
+
+func newQuizFlashcardCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "flashcard <flashcard id>",
+		Short: "Quiz from a flashcard notebook (shows word, you provide meaning)",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			flashcardID := args[0]
+
+			// Create OpenAI client
+			if cfg.OpenAI.APIKey == "" {
+				return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+			}
+			fmt.Printf("Using OpenAI provider (model: %s)\n", cfg.OpenAI.Model)
+			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+			defer func() {
+				_ = openaiClient.Close()
+			}()
+
+			// Create interactive CLI
+			flashcardCLI, err := cli.NewFlashcardQuizCLI(
+				flashcardID,
+				cfg.Notebooks.FlashcardsDirectory,
+				cfg.Notebooks.LearningNotesDirectory,
+				cfg.Dictionaries.RapidAPI.CacheDirectory,
+				openaiClient,
+			)
+			if err != nil {
+				return err
+			}
+			flashcardCLI.ShuffleCards()
+			fmt.Printf("Starting Q&A session with %d cards\n\n", flashcardCLI.GetCardCount())
+
+			return flashcardCLI.Run(context.Background(), flashcardCLI)
+		},
+	}
 
 	return command
 }

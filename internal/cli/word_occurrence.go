@@ -54,6 +54,41 @@ func (w *WordOccurrence) GetCleanContexts() []string {
 	return cleaned
 }
 
+// extractWordOccurrencesFromFlashcards creates WordOccurrence entries from flashcard notebooks.
+// Since flashcards don't have stories/scenes, Story and Scene will be nil.
+// Definition points to the card (Note), and Contexts use the card's Examples field if available.
+func extractWordOccurrencesFromFlashcards(notebookName string, notebooks []notebook.FlashcardNotebook) []*WordOccurrence {
+	var occurrences []*WordOccurrence
+
+	for i := range notebooks {
+		flashcardNotebook := &notebooks[i]
+		for j := range flashcardNotebook.Cards {
+			card := &flashcardNotebook.Cards[j]
+
+			// Convert string examples to WordOccurrenceContext
+			contexts := make([]WordOccurrenceContext, len(card.Examples))
+			for k, example := range card.Examples {
+				contexts[k] = WordOccurrenceContext{
+					Context: example,
+					Usage:   card.Expression,
+				}
+			}
+
+			occurrence := &WordOccurrence{
+				NotebookName: notebookName,
+				Story:        nil,
+				Scene:        nil,
+				Definition:   card,
+				Contexts:     contexts,
+			}
+
+			occurrences = append(occurrences, occurrence)
+		}
+	}
+
+	return occurrences
+}
+
 // extractContextsFromConversations finds conversations containing the expression or definition
 // and returns them with the actual word form used in each context
 func extractContextsFromConversations(scene *notebook.StoryScene, expression, definition string) []WordOccurrenceContext {

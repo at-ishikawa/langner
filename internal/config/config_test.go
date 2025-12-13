@@ -46,6 +46,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				Notebooks: NotebooksConfig{
 					StoriesDirectory:       filepath.Join("notebooks", "stories"),
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -75,6 +76,7 @@ outputs:
 				Notebooks: NotebooksConfig{
 					StoriesDirectory:       "custom/stories",
 					LearningNotesDirectory: "custom/learning",
+					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -98,6 +100,7 @@ outputs:
 				Notebooks: NotebooksConfig{
 					StoriesDirectory:       "partial/stories",
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{

@@ -43,7 +43,7 @@ func newInteractiveQuizCLI(
 	dictionaryMap := rapidapi.FromResponsesToMap(response)
 
 	// Create notebook reader
-	reader, err := notebook.NewReader(storiesDir, dictionaryMap)
+	reader, err := notebook.NewReader(storiesDir, "", dictionaryMap)
 	if err != nil {
 		return nil, nil, fmt.Errorf("notebook.NewReader() > %w", err)
 	}

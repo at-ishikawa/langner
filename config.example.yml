@@ -4,6 +4,9 @@ notebooks:
   # Directory containing story notebooks
   stories_directory: examples/stories
 
+  # Directory containing flashcard notebooks
+  flashcards_directory: examples/flashcards
+
   # Directory containing learning notes/history
   learning_notes_directory: examples/learning_notes
 

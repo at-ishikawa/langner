@@ -274,12 +274,26 @@ func extractWordOccurrences(notebookName string, stories []notebook.StoryNoteboo
 
 // FormatQuestion formats a question for display
 // It converts {{ }} markers for the specific expression being asked
+// For flashcards (when occurrence.Scene is nil), it shows a simpler question without scene context
 func FormatQuestion(occurrence *WordOccurrence) string {
 	expression := occurrence.GetExpression()
 	if len(occurrence.Contexts) == 0 {
 		return fmt.Sprintf("What does '%s' mean?\n", expression)
 	}
 
+	// For flashcards (no scene), show a simpler question with examples
+	if occurrence.Scene == nil {
+		question := fmt.Sprintf("What does '%s' mean?\n", expression)
+		if len(occurrence.Contexts) > 0 {
+			question += "Examples:\n"
+			for i, context := range occurrence.Contexts {
+				question += fmt.Sprintf("  %d. %s\n", i+1, context)
+			}
+		}
+		return question
+	}
+
+	// For story notebooks, show context-based question
 	question := fmt.Sprintf("What does '%s' mean in the following context?\n", expression)
 
 	// Only convert markers if we have scene definitions

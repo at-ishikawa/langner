@@ -77,7 +77,7 @@ func newNotebookCommand() *cobra.Command {
 			}
 			dictionaryMap := rapidapi.FromResponsesToMap(response)
 
-			reader, err := notebook.NewReader(cfg.Notebooks.StoriesDirectory, dictionaryMap)
+			reader, err := notebook.NewReader(cfg.Notebooks.StoriesDirectory, "", dictionaryMap)
 			if err != nil {
 				return fmt.Errorf("textbook.NewFlashcardReader() > %w", err)
 			}
@@ -96,6 +96,49 @@ func newNotebookCommand() *cobra.Command {
 	storiesCmd.Flags().BoolVar(&generatePDF, "pdf", false, "Generate PDF output in addition to markdown")
 
 	notebookCommands.AddCommand(storiesCmd)
+
+	var flashcardGeneratePDF bool
+	flashcardsCmd := &cobra.Command{
+		Use:   "flashcards <flashcard id>",
+		Short: "Generate markdown/PDF output from flashcard notebooks",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			flashcardID := args[0]
+
+			response, err := rapidapi.NewReader().Read(cfg.Dictionaries.RapidAPI.CacheDirectory)
+			if err != nil {
+				return fmt.Errorf("rapidapi.NewReader().Read() > %w", err)
+			}
+			dictionaryMap := rapidapi.FromResponsesToMap(response)
+
+			reader, err := notebook.NewReader("", cfg.Notebooks.FlashcardsDirectory, dictionaryMap)
+			if err != nil {
+				return fmt.Errorf("notebook.NewReader() > %w", err)
+			}
+			learningHistories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
+			if err != nil {
+				return fmt.Errorf("notebook.NewLearningHistories() > %w", err)
+			}
+
+			writer := notebook.NewFlashcardNotebookWriter(reader, "")
+			if err := writer.OutputFlashcardNotebooks(flashcardID, dictionaryMap, learningHistories, sortFlag == SortDescending, cfg.Outputs.StoryDirectory, flashcardGeneratePDF); err != nil {
+				return fmt.Errorf("writer.OutputFlashcardNotebooks > %w", err)
+			}
+			return nil
+		},
+	}
+	flashcardsCmd.Flags().BoolVar(&flashcardGeneratePDF, "pdf", false, "Generate PDF output in addition to markdown")
+
+	notebookCommands.AddCommand(flashcardsCmd)
 
 	return notebookCommands
 }
