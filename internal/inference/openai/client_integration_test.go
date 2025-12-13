@@ -3,6 +3,7 @@ package openai_test
 
 import (
 	"context"
+	"log/slog"
 	"os"
 	"testing"
 	"time"
@@ -13,75 +14,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestAnswerExpressionWithSingleContextIntegration tests the actual OpenAI API integration
-// This test requires OPENAI_API_KEY environment variable to be set
-// Run with: OPENAI_API_KEY=your-key go test -v ./internal/inference/openai -run TestAnswerExpressionWithSingleContextIntegration
-func TestAnswerExpressionWithSingleContextIntegration(t *testing.T) {
-	t.Parallel()
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		t.Skip("OPENAI_API_KEY environment variable not set, skipping integration test")
-	}
-
-	model := os.Getenv("OPENAI_MODEL")
-	if model == "" {
-		model = "gpt-4o-mini"
-	}
-
-	tests := []struct {
-		name              string
-		expression        string
-		userMeaning       string
-		context           string
-		isExpressionInput bool
-		expectCorrect     bool
-		description       string
-	}{
-		{
-			name:              "run",
-			expression:        "run",
-			userMeaning:       "to move quickly by foot",
-			context:           "I run every morning for exercise",
-			isExpressionInput: true,
-			expectCorrect:     true,
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			client := openai.NewClient(apiKey, model, inference.RetryConfig{MaxRetries: 0})
-			defer func() {
-				_ = client.Close()
-			}()
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-			defer cancel()
-
-			result, err := client.AnswerExpressionWithSingleContext(ctx,
-				inference.AnswerExpressionWithSingleContextParams{
-					Expression:        tc.expression,
-					Meaning:           tc.userMeaning,
-					Statements:        []string{tc.context},
-					IsExpressionInput: tc.isExpressionInput,
-				},
-			)
-			require.NoError(t, err, "API call should not fail")
-
-			assert.Equal(t, tc.expectCorrect, result.Correct,
-				"Expected correct=%v for '%s' with meaning '%s'\nAI returned meaning: %s",
-				tc.expectCorrect, tc.expression, tc.userMeaning, result.Meaning)
-
-			assert.Equal(t, tc.expression, result.Expression, "Expression should be preserved")
-			assert.NotEmpty(t, result.Meaning, "AI should provide a meaning")
-		})
-	}
+type IntegrationTestTargetWant struct {
+	Correct bool
+	Reason  string
 }
 
-// TestAnswerExpressionWithMultipleContextsIntegration tests the multiple contexts API integration
+type IntegrationTestTarget struct {
+	Expression inference.Expression
+	Wants      []IntegrationTestTargetWant
+}
+
+// integrationTestTargets can be set in client_integration_data_test.go to override the default tests
+// This is used to test for each user's case
+var integrationTestTargets []IntegrationTestTarget
+
+// TestClient_AnswerMeanings tests the multiple contexts API integration
 // This test requires OPENAI_API_KEY environment variable to be set
-// Run with: OPENAI_API_KEY=your-key go test -v ./internal/inference/openai -run TestAnswerExpressionWithMultipleContextsIntegration
-func TestAnswerExpressionWithMultipleContextsIntegration(t *testing.T) {
+// Run with: OPENAI_API_KEY=your-key go test -v ./internal/inference/openai -run TestClient_AnswerMeanings_Evaluate
+func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 	t.Parallel()
 
 	apiKey := os.Getenv("OPENAI_API_KEY")
@@ -94,36 +44,40 @@ func TestAnswerExpressionWithMultipleContextsIntegration(t *testing.T) {
 		model = "gpt-4o-mini"
 	}
 
+	slog.SetDefault(
+		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     slog.LevelDebug,
+			AddSource: true,
+		})),
+	)
+
+	if integrationTestTargets == nil {
+		integrationTestTargets = []IntegrationTestTarget{
+			{
+				Expression: inference.Expression{
+					Expression: "run",
+					Meaning:    "to move quickly by foot",
+					Contexts: []inference.Context{
+						{Context: "I run every morning for exercise", ReferenceDefinition: "to move quickly"},
+						{Context: "I run a small business downtown", ReferenceDefinition: "to operate"},
+					},
+				},
+				Wants: []IntegrationTestTargetWant{
+					{Correct: true, Reason: "user meaning matches the context"},
+					{Correct: false, Reason: "user meaning is about moving, not operating"},
+				},
+			},
+		}
+	}
+
 	tests := []struct {
-		name              string
-		expression        string
-		userMeaning       string
-		contexts          [][]string
-		isExpressionInput bool
-		expectedCorrect   []bool // Expected correctness for each context
-		description       string
+		name string
+
+		testTarget []IntegrationTestTarget
 	}{
 		{
-			name:        "run - multiple meanings, match one",
-			expression:  "run",
-			userMeaning: "to move quickly by foot",
-			contexts: [][]string{
-				{"I run every morning for exercise"},
-				{"I run a small business downtown"},
-			},
-			isExpressionInput: true,
-			expectedCorrect:   []bool{true, false}, // First context matches, second doesn't
-		},
-		{
-			name:        "turn down - same meaning in different contexts",
-			expression:  "turn down",
-			userMeaning: "to reject or refuse",
-			contexts: [][]string{
-				{"She turned down the job offer"},
-				{"He turned down the invitation to the party"},
-			},
-			isExpressionInput: false,
-			expectedCorrect:   []bool{true, true}, // Both contexts match
+			name:       "Check if the meaning of some word or phrases is correct",
+			testTarget: integrationTestTargets,
 		},
 	}
 
@@ -131,43 +85,50 @@ func TestAnswerExpressionWithMultipleContextsIntegration(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			client := openai.NewClient(apiKey, model, inference.RetryConfig{MaxRetries: 0})
+			request := inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{},
+			}
+			for _, testTarget := range tc.testTarget {
+				request.Expressions = append(request.Expressions, testTarget.Expression)
+			}
+
+			require.Equal(t, len(request.Expressions), len(tc.testTarget))
+			client := openai.NewClient(apiKey, model, 0)
 			defer func() {
 				_ = client.Close()
 			}()
-			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 			defer cancel()
 
-			result, err := client.AnswerExpressionWithMultipleContexts(ctx,
-				inference.AnswerExpressionWithMultipleContextsParams{
-					Expression:        tc.expression,
-					Meaning:           tc.userMeaning,
-					Contexts:          tc.contexts,
-					IsExpressionInput: tc.isExpressionInput,
-				},
-			)
-			require.NoError(t, err, "API call should not fail")
+			result, err := client.AnswerMeanings(ctx, request)
+			require.NoError(t, err)
 
-			assert.Equal(t, tc.expression, result.Expression, "Expression should be preserved")
-			assert.Equal(t, tc.isExpressionInput, result.IsExpressionInput, "IsExpressionInput should be preserved")
-			assert.NotEmpty(t, result.Meaning, "AI should provide a meaning")
+			for i, testTarget := range tc.testTarget {
+				if len(result.Answers) <= i {
+					assert.Fail(t, "failed to get answer", "want %d answers, got %d", len(tc.testTarget), len(result.Answers))
+					continue
+				}
+				if testTarget.Expression.Expression != result.Answers[i].Expression {
+					assert.Fail(t, "expression mismatch", "want %s, got %s", testTarget.Expression.Expression, result.Answers[i].Expression)
+					continue
+				}
 
-			// Flatten contexts to match the response format
-			var allContexts []string
-			for _, contextGroup := range tc.contexts {
-				allContexts = append(allContexts, contextGroup...)
-			}
+				got := result.Answers[i]
+				expression := got.Expression
+				for j, want := range testTarget.Wants {
+					if len(got.AnswersForContext) <= j {
+						assert.Fail(t, "failed to get answer for context", "want %d answers, got %d", len(testTarget.Wants), len(got.AnswersForContext))
+						continue
+					}
+					answerForContext := got.AnswersForContext[j]
+					context := answerForContext.Context
+					t.Logf("Expression: %s, Context: %s, Expected correct: %v, Got correct: %v, Got meaning: %s, OpenAI reason: %s, Why %v is expected: %s",
+						expression, context, want.Correct, answerForContext.Correct, got.Meaning, answerForContext.Reason, want.Correct, want.Reason)
 
-			require.Len(t, result.AnswersForContext, len(allContexts),
-				"Should have answer for each context")
-
-			// Check each answer
-			for i, answer := range result.AnswersForContext {
-				assert.Equal(t, allContexts[i], answer.Context,
-					"Context %d should match", i)
-				assert.Equal(t, tc.expectedCorrect[i], answer.Correct,
-					"Context %d: expected correct=%v for context '%s'\nUser meaning: '%s'\nAI meaning: '%s'",
-					i, tc.expectedCorrect[i], answer.Context, tc.userMeaning, result.Meaning)
+					assert.Equal(t, want.Correct, answerForContext.Correct,
+						"Expression %s, Context %s: want correct=%v, got=%v, got meaning=%s, OpenAI reason: %s, Why %v is expected: %s",
+						expression, context, want.Correct, answerForContext.Correct, got.Meaning, answerForContext.Reason, want.Correct, want.Reason)
+				}
 			}
 		})
 	}

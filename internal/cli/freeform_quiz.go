@@ -94,38 +94,57 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	}
 
 	// Collect contexts from each occurrence that needs learning
-	contextGroups := make([][]string, 0, len(needsLearning))
+	// Strip {{ }} markers from contexts before sending to inference API
+	var contexts []inference.Context
 	for _, occurrence := range needsLearning {
-		contextGroups = append(contextGroups, occurrence.Contexts)
+		cleanContexts := occurrence.GetCleanContexts()
+		for i, ctx := range occurrence.Contexts {
+			contexts = append(contexts, inference.Context{
+				Context:             cleanContexts[i],              // Use cleaned context without markers
+				ReferenceDefinition: occurrence.Definition.Meaning, // Include meaning from notebook as hint
+				Usage:               ctx.Usage,                     // Include the actual form used in context
+			})
+		}
 	}
 
 	// Validate meaning against all context groups in a single API call
-	result, err := r.openaiClient.AnswerExpressionWithMultipleContexts(ctx, inference.AnswerExpressionWithMultipleContextsParams{
-		Expression:        word,
-		Meaning:           meaning,
-		Contexts:          contextGroups,
-		IsExpressionInput: true, // FreeformQuiz: user inputs the expression
+	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{
+			{
+				Expression:        word,
+				Meaning:           meaning,
+				Contexts:          contexts,
+				IsExpressionInput: true, // FreeformQuiz: user inputs the expression
+			},
+		},
 	})
 	if err != nil {
-		return fmt.Errorf("openaiClient.AnswerExpressionWithMultipleContexts() > %w", err)
+		return fmt.Errorf("openaiClient.AnswerMeanings() > %w", err)
 	}
+
+	if len(results.Answers) == 0 {
+		return fmt.Errorf("no results returned from OpenAI")
+	}
+	result := results.Answers[0]
 
 	// Build a map from context string to occurrence index
 	contextToOccurrence := make(map[string]int)
 	for i, occurrence := range needsLearning {
 		for _, ctx := range occurrence.Contexts {
-			contextToOccurrence[ctx] = i
+			contextToOccurrence[ctx.Context] = i
 		}
 	}
 
 	// Find the first occurrence that has at least one correct context
 	var firstCorrectOccurrenceIdx = -1
 	var matchingContext string
+	var matchingReason string
 	for _, answer := range result.AnswersForContext {
 		if answer.Correct {
 			if occIdx, found := contextToOccurrence[answer.Context]; found {
 				firstCorrectOccurrenceIdx = occIdx
 				matchingContext = answer.Context
+				matchingReason = answer.Reason
 				break
 			}
 		}
@@ -141,7 +160,11 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		displayOccurrence = needsLearning[0]
 		// Show the first context from the first occurrence
 		if len(displayOccurrence.Contexts) > 0 {
-			matchingContext = displayOccurrence.Contexts[0]
+			matchingContext = displayOccurrence.Contexts[0].Context
+		}
+		// Get reason from first answer context for incorrect answers
+		if len(result.AnswersForContext) > 0 {
+			matchingReason = result.AnswersForContext[0].Reason
 		}
 	}
 
@@ -151,6 +174,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		Expression: result.Expression,
 		Meaning:    result.Meaning,
 		Context:    matchingContext,
+		Reason:     matchingReason,
 	}
 
 	// Show result
@@ -279,6 +303,13 @@ func (r *FreeformQuizCLI) displayResult(answer AnswerResponse, occurrence *WordO
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
 		if _, err := fmt.Fprintln(r.stdoutWriter); err != nil {
+			return fmt.Errorf("failed to write to stdout: %w", err)
+		}
+	}
+
+	// Show reason if available
+	if answer.Reason != "" {
+		if _, err := fmt.Fprintf(r.stdoutWriter, "   Reason: %s\n", answer.Reason); err != nil {
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
 	}

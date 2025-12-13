@@ -109,20 +109,46 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		return fmt.Errorf("error reading input: %w", err)
 	}
 
-	result, err := r.openaiClient.AnswerExpressionWithSingleContext(ctx, inference.AnswerExpressionWithSingleContextParams{
-		Expression:        currentCard.GetExpression(),
-		Meaning:           userAnswer,
-		Statements:        currentCard.Contexts,
-		IsExpressionInput: false, // NotebookQuiz: user inputs the meaning
-	})
-	if err != nil {
-		return fmt.Errorf("openaiClient.AnswerExpressionWithSingleContext() > %w", err)
+	// Convert contexts to Context structs with meanings and usage
+	// Strip {{ }} markers from contexts before sending to inference API
+	cleanContexts := currentCard.GetCleanContexts()
+	var contexts []inference.Context
+	for i, ctx := range currentCard.Contexts {
+		contexts = append(contexts, inference.Context{
+			Context:             cleanContexts[i],                // Use cleaned context without markers
+			ReferenceDefinition: currentCard.Definition.Meaning, // Include meaning from notebook as hint
+			Usage:               ctx.Usage,                      // Include the actual form used in context
+		})
 	}
 
+	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{
+			{
+				Expression:        currentCard.GetExpression(),
+				Meaning:           userAnswer,
+				Contexts:          contexts,
+				IsExpressionInput: false, // NotebookQuiz: user inputs the meaning
+			},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("openaiClient.AnswerQuestions() > %w", err)
+	}
+	if len(results.Answers) == 0 {
+		return fmt.Errorf("no results returned from OpenAI")
+	}
+	result := results.Answers[0]
+
+	isCorrect := len(result.AnswersForContext) > 0 && result.AnswersForContext[0].Correct
+	reason := ""
+	if len(result.AnswersForContext) > 0 {
+		reason = result.AnswersForContext[0].Reason
+	}
 	answer := AnswerResponse{
-		Correct:    result.Correct,
+		Correct:    isCorrect,
 		Expression: result.Expression,
 		Meaning:    result.Meaning,
+		Reason:     reason,
 	}
 
 	if strings.TrimSpace(userAnswer) == "" {
@@ -147,6 +173,9 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 			r.bold.Sprintf("%s", answer.Expression),
 			r.italic.Sprintf("%s", answer.Meaning),
 		)
+	}
+	if answer.Reason != "" {
+		fmt.Printf("   Reason: %s\n", answer.Reason)
 	}
 
 	if len(currentCard.GetImages()) > 0 {
@@ -222,10 +251,10 @@ func FormatQuestion(occurrence *WordOccurrence) string {
 
 	// Only convert markers if we have scene definitions
 	if occurrence.Scene != nil && len(occurrence.Scene.Definitions) > 0 {
-		for i, context := range occurrence.Contexts {
+		for i, ctx := range occurrence.Contexts {
 			// Convert only the specific expression to bold terminal text
 			convertedContext := notebook.ConvertMarkersInText(
-				context,
+				ctx.Context,
 				occurrence.Scene.Definitions,
 				notebook.ConversionStyleTerminal,
 				occurrence.Definition.Expression,
@@ -234,8 +263,8 @@ func FormatQuestion(occurrence *WordOccurrence) string {
 		}
 	} else {
 		// No scene definitions, just output contexts as-is
-		for i, context := range occurrence.Contexts {
-			question += fmt.Sprintf("  %d. %s\n", i+1, context)
+		for i, ctx := range occurrence.Contexts {
+			question += fmt.Sprintf("  %d. %s\n", i+1, ctx.Context)
 		}
 	}
 

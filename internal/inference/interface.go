@@ -2,68 +2,55 @@ package inference
 
 import (
 	"context"
-	"time"
 )
 
 //go:generate mockgen -source=interface.go -destination=../mocks/inference/mock_client.go -package=mock_inference
 
 // Client interface defines the methods for AI inference operations
 type Client interface {
-	AnswerExpressionWithSingleContext(ctx context.Context, params AnswerExpressionWithSingleContextParams) (AnswerQuestionResponse, error)
-	AnswerExpressionWithMultipleContexts(ctx context.Context, params AnswerExpressionWithMultipleContextsParams) (MultipleAnswerQuestionResponse, error)
+	AnswerMeanings(ctx context.Context, params AnswerMeaningsRequest) (AnswerMeaningsResponse, error)
 }
 
-// AnswerExpressionWithSingleContextParams holds parameters for answering questions with a single context
-type AnswerExpressionWithSingleContextParams struct {
-	Expression        string
-	Meaning           string
-	Statements        []string
-	IsExpressionInput bool // true for FreeformQuiz (user inputs expression), false for NotebookQuiz (user inputs meaning)
+// Expression represents a single expression with its contexts
+type Expression struct {
+	Expression        string    `json:"expression"`
+	Meaning           string    `json:"meaning"`
+	Contexts          []Context `json:"contexts,omitempty"`
+	IsExpressionInput bool      `json:"is_expression_input"`
 }
 
-// AnswerExpressionWithMultipleContextsParams holds parameters for answering questions with multiple contexts
-type AnswerExpressionWithMultipleContextsParams struct {
-	Expression        string
-	Meaning           string
-	Contexts          [][]string // Multiple sets of contexts (one per occurrence)
-	IsExpressionInput bool
+// Context represents a single example of an expression with its meaning from a registered notebook
+type Context struct {
+	Context string `json:"context"`
+	Usage   string `json:"usage,omitempty"` // Optional: actual form of expression used in context (e.g., "ran" for "run")
+
+	// Unused for now. TODO: Improve the prompt to use this.
+	ReferenceDefinition string `json:"reference_definition,omitempty"` // Optional: hint/reference meaning from notebook, may be incomplete or incorrect
 }
 
-// AnswerQuestionResponse represents a single answer result
-type AnswerQuestionResponse struct {
-	Correct    bool   `json:"correct"`
-	Expression string `json:"expression"`
-	Meaning    string `json:"meaning"`
+// AnswerMeaningsRequest holds parameters for answering multiple expressions
+type AnswerMeaningsRequest struct {
+	Expressions []Expression `json:"expressions"`
 }
 
-// MultipleAnswerQuestionResponse represents multiple answer results
-type MultipleAnswerQuestionResponse struct {
-	Expression        string   `json:"expression"`
-	IsExpressionInput bool     `json:"is_expression_input"`
-	Meaning           string   `json:"meaning"`
-	AnswersForContext []Answer `json:"answers"`
+type AnswerMeaningsResponse struct {
+	Answers []AnswerMeaning
 }
 
-// Answer represents a single answer for a specific context
-type Answer struct {
+// AnswerMeaning represents a single answer result
+type AnswerMeaning struct {
+	Expression        string              `json:"expression"`
+	Meaning           string              `json:"meaning"`
+	AnswersForContext []AnswersForContext `json:"answers"`
+}
+
+// AnswersForContext represents a single answer for a specific context
+type AnswersForContext struct {
 	Correct bool   `json:"correct"`
 	Context string `json:"context"`
+	Reason  string `json:"reason"` // Explanation of why the answer is correct or incorrect
 }
 
-// RetryConfig holds configuration for retry logic
-type RetryConfig struct {
-	MaxRetries     int
-	InitialBackoff time.Duration
-	MaxBackoff     time.Duration
-	BackoffFactor  float64
-}
-
-// DefaultRetryConfig returns default retry configuration
-func DefaultRetryConfig() RetryConfig {
-	return RetryConfig{
-		MaxRetries:     3,
-		InitialBackoff: 1 * time.Second,
-		MaxBackoff:     30 * time.Second,
-		BackoffFactor:  2.0,
-	}
-}
+const (
+	DefaultMaxRetryAttempts = 3
+)

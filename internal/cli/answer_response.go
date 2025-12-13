@@ -6,4 +6,5 @@ type AnswerResponse struct {
 	Expression string
 	Meaning    string
 	Context    string
+	Reason     string // Explanation of why the answer is correct or incorrect
 }
