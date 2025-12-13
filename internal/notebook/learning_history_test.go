@@ -189,6 +189,52 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 				{Status: "intuitive", LearnedAt: NewDateFromTime(fixedTime)},
 			},
 		},
+		{
+			name: "flashcard type - find expression",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{
+					NotebookID: "test-id",
+					Title:      "flashcards",
+					Type:       "flashcard",
+				},
+				Expressions: []LearningHistoryExpression{
+					{
+						Expression: "hello",
+						LearnedLogs: []LearningRecord{
+							{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+						},
+					},
+				},
+			},
+			notebookTitle: "flashcards",
+			sceneTitle:    "",
+			definition:    Note{Expression: "hello", Definition: "greeting"},
+			expected: []LearningRecord{
+				{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+			},
+		},
+		{
+			name: "flashcard type - expression not found",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{
+					NotebookID: "test-id",
+					Title:      "flashcards",
+					Type:       "flashcard",
+				},
+				Expressions: []LearningHistoryExpression{
+					{
+						Expression: "different",
+						LearnedLogs: []LearningRecord{
+							{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+						},
+					},
+				},
+			},
+			notebookTitle: "flashcards",
+			sceneTitle:    "",
+			definition:    Note{Expression: "hello", Definition: "greeting"},
+			expected:      nil,
+		},
 	}
 
 	for _, tt := range tests {

@@ -266,7 +266,24 @@ func (r *FreeformQuizCLI) hasCorrectAnswer(learningHistory []notebook.LearningHi
 			continue
 		}
 
-		// Check the latest status
+		// For flashcard type, check expressions directly
+		if hist.Metadata.Type == "flashcard" {
+			for _, expr := range hist.Expressions {
+				matchFound := r.isExpressionMatch(expr, wordCtx, word)
+				if matchFound {
+					status := expr.GetLatestStatus()
+					// If status is understood, usable, or intuitive, it's been answered correctly
+					if status == notebook.LearnedStatus("understood") ||
+						status == notebook.LearnedStatus("usable") ||
+						status == notebook.LearnedStatus("intuitive") {
+						return true
+					}
+				}
+			}
+			continue
+		}
+
+		// For story type, check the latest status in scenes
 		for _, scene := range hist.Scenes {
 			if scene.Metadata.Title != sceneTitle {
 				continue

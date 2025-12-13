@@ -9,13 +9,15 @@ import (
 )
 
 type LearningHistory struct {
-	Metadata LearningHistoryMetadata `yaml:"metadata"`
-	Scenes   []LearningScene         `yaml:"scenes"`
+	Metadata    LearningHistoryMetadata     `yaml:"metadata"`
+	Scenes      []LearningScene             `yaml:"scenes,omitempty"`
+	Expressions []LearningHistoryExpression `yaml:"expressions,omitempty"`
 }
 
 type LearningHistoryMetadata struct {
 	NotebookID string `yaml:"id"`
 	Title      string `yaml:"title"`
+	Type       string `yaml:"type,omitempty"`
 }
 
 func NewLearningHistories(directory string) (map[string][]LearningHistory, error) {
@@ -28,6 +30,17 @@ func (h LearningHistory) GetLogs(
 	notebookTitle, sceneTitle string, definition Note,
 ) []LearningRecord {
 	if h.Metadata.Title != notebookTitle {
+		return nil
+	}
+
+	// For flashcard type, search in expressions directly
+	if h.Metadata.Type == "flashcard" {
+		for _, expression := range h.Expressions {
+			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+				continue
+			}
+			return expression.LearnedLogs
+		}
 		return nil
 	}
 
@@ -227,6 +240,35 @@ func (scene *LearningScene) Validate(location string) []ValidationError {
 func (h *LearningHistory) Validate(location string) []ValidationError {
 	var errors []ValidationError
 
+	// For flashcard type, validate expressions directly
+	if h.Metadata.Type == "flashcard" {
+		for exprIdx, expr := range h.Expressions {
+			exprLocation := fmt.Sprintf("%s -> expression[%d]: %s", location, exprIdx, expr.Expression)
+			if exprErrors := expr.Validate(exprLocation); len(exprErrors) > 0 {
+				errors = append(errors, exprErrors...)
+			}
+		}
+
+		// Check for duplicate expressions in flashcard format
+		expressionSeen := make(map[string]bool)
+		for _, expr := range h.Expressions {
+			expression := strings.TrimSpace(expr.Expression)
+			if expression == "" {
+				continue
+			}
+			if expressionSeen[expression] {
+				errors = append(errors, ValidationError{
+					Location: location,
+					Message:  fmt.Sprintf("duplicate expression %q in flashcard format", expression),
+				})
+			}
+			expressionSeen[expression] = true
+		}
+
+		return errors
+	}
+
+	// For story type (default), validate scenes
 	for sceneIdx, scene := range h.Scenes {
 		sceneLocation := fmt.Sprintf("%s -> scene[%d]: %s", location, sceneIdx, scene.Metadata.Title)
 		if sceneErrors := scene.Validate(sceneLocation); len(sceneErrors) > 0 {

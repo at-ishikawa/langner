@@ -54,7 +54,8 @@ func TestConfigLoader_Load(t *testing.T) {
 					},
 				},
 				Outputs: OutputsConfig{
-					StoryDirectory: filepath.Join("outputs", "story"),
+					StoryDirectory:     filepath.Join("outputs", "story"),
+					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
@@ -84,7 +85,8 @@ outputs:
 					},
 				},
 				Outputs: OutputsConfig{
-					StoryDirectory: "custom/outputs",
+					StoryDirectory:     "custom/outputs",
+					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
@@ -108,7 +110,8 @@ outputs:
 					},
 				},
 				Outputs: OutputsConfig{
-					StoryDirectory: filepath.Join("outputs", "story"),
+					StoryDirectory:     filepath.Join("outputs", "story"),
+					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",

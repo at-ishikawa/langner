@@ -25,11 +25,13 @@ type NotebooksConfig struct {
 }
 
 type TemplatesConfig struct {
-	StoryNotebookTemplate string `mapstructure:"story_notebook_template" validate:"omitempty,file"`
+	StoryNotebookTemplate     string `mapstructure:"story_notebook_template" validate:"omitempty,file"`
+	FlashcardNotebookTemplate string `mapstructure:"flashcard_notebook_template" validate:"omitempty,file"`
 }
 
 type OutputsConfig struct {
-	StoryDirectory string `mapstructure:"story_directory"`
+	StoryDirectory     string `mapstructure:"story_directory"`
+	FlashcardDirectory string `mapstructure:"flashcard_directory"`
 }
 
 type DictionariesConfig struct {
@@ -85,7 +87,9 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("dictionaries.rapidapi.cache_directory", filepath.Join("dictionaries", "rapidapi"))
 	// Template is optional - if not specified, will use embedded fallback template
 	v.SetDefault("templates.story_notebook_template", "")
+	v.SetDefault("templates.flashcard_notebook_template", "")
 	v.SetDefault("outputs.story_directory", filepath.Join("outputs", "story"))
+	v.SetDefault("outputs.flashcard_directory", filepath.Join("outputs", "flashcard"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
 
 	// Bind RapidAPI config to environment variables only (not from config file)

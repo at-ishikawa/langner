@@ -129,8 +129,8 @@ func newNotebookCommand() *cobra.Command {
 				return fmt.Errorf("notebook.NewLearningHistories() > %w", err)
 			}
 
-			writer := notebook.NewFlashcardNotebookWriter(reader, "")
-			if err := writer.OutputFlashcardNotebooks(flashcardID, dictionaryMap, learningHistories, sortFlag == SortDescending, cfg.Outputs.StoryDirectory, flashcardGeneratePDF); err != nil {
+			writer := notebook.NewFlashcardNotebookWriter(reader, cfg.Templates.FlashcardNotebookTemplate)
+			if err := writer.OutputFlashcardNotebooks(flashcardID, dictionaryMap, learningHistories, sortFlag == SortDescending, cfg.Outputs.FlashcardDirectory, flashcardGeneratePDF); err != nil {
 				return fmt.Errorf("writer.OutputFlashcardNotebooks > %w", err)
 			}
 			return nil
