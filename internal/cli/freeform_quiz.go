@@ -13,25 +13,27 @@ import (
 // FreeformQuizCLI manages the interactive CLI session for freeform quiz
 type FreeformQuizCLI struct {
 	*InteractiveQuizCLI
-	allStories map[string][]notebook.StoryNotebook
+	allStories     map[string][]notebook.StoryNotebook
+	allFlashcards  map[string][]notebook.FlashcardNotebook
 }
 
 // NewFreeformQuizCLI creates a new freeform quiz interactive CLI
 func NewFreeformQuizCLI(
 	storiesDir string,
+	flashcardsDir string,
 	learningNotesDir string,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 ) (*FreeformQuizCLI, error) {
 	// Initialize base CLI
-	baseCLI, reader, err := newInteractiveQuizCLI(storiesDir, learningNotesDir, dictionaryCacheDir, openaiClient)
+	baseCLI, reader, err := initializeQuizCLI(storiesDir, flashcardsDir, learningNotesDir, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}
 
-	// Read all story notebooks for context lookup
+	// Read all story notebooks for context lookup (only from story indexes)
 	allStories := make(map[string][]notebook.StoryNotebook)
-	for notebookName := range baseCLI.learningHistories {
+	for notebookName := range reader.GetStoryIndexes() {
 		stories, err := reader.ReadStoryNotebooks(notebookName)
 		if err != nil {
 			fmt.Printf("Warning: could not read stories for %s: %v\n", notebookName, err)
@@ -40,9 +42,21 @@ func NewFreeformQuizCLI(
 		allStories[notebookName] = stories
 	}
 
+	// Read all flashcard notebooks for context lookup (only from flashcard indexes)
+	allFlashcards := make(map[string][]notebook.FlashcardNotebook)
+	for notebookName := range reader.GetFlashcardIndexes() {
+		flashcards, err := reader.ReadFlashcardNotebooks(notebookName)
+		if err != nil {
+			fmt.Printf("Warning: could not read flashcards for %s: %v\n", notebookName, err)
+			continue
+		}
+		allFlashcards[notebookName] = flashcards
+	}
+
 	return &FreeformQuizCLI{
 		InteractiveQuizCLI: baseCLI,
 		allStories:         allStories,
+		allFlashcards:      allFlashcards,
 	}, nil
 }
 
@@ -232,19 +246,29 @@ func (r *FreeformQuizCLI) findOccurrencesNeedingLearning(allWordContexts []*Word
 }
 
 func (r *FreeformQuizCLI) hasCorrectAnswer(learningHistory []notebook.LearningHistory, wordCtx *WordOccurrence, word string) bool {
+	// For flashcards (Story is nil), use "flashcards" as story title
+	storyTitle := "flashcards"
+	sceneTitle := ""
+	if wordCtx.Story != nil {
+		storyTitle = wordCtx.Story.Event
+	}
+	if wordCtx.Scene != nil {
+		sceneTitle = wordCtx.Scene.Title
+	}
+
 	for _, hist := range learningHistory {
-		if hist.Metadata.Title != wordCtx.Story.Event {
+		if hist.Metadata.Title != storyTitle {
 			continue
 		}
 
-		logs := hist.GetLogs(wordCtx.Story.Event, wordCtx.Scene.Title, *wordCtx.Definition)
+		logs := hist.GetLogs(storyTitle, sceneTitle, *wordCtx.Definition)
 		if len(logs) == 0 {
 			continue
 		}
 
 		// Check the latest status
 		for _, scene := range hist.Scenes {
-			if scene.Metadata.Title != wordCtx.Scene.Title {
+			if scene.Metadata.Title != sceneTitle {
 				continue
 			}
 			for _, expr := range scene.Expressions {
@@ -336,9 +360,14 @@ func (r *FreeformQuizCLI) displayResult(answer AnswerResponse, occurrence *WordO
 			return fmt.Errorf("failed to write to stdout: %w", err)
 		}
 		// Convert markers to show only the target expression in bold
+		// For flashcards (Scene is nil), pass empty definitions slice
+		var definitions []notebook.Note
+		if occurrence.Scene != nil {
+			definitions = occurrence.Scene.Definitions
+		}
 		convertedContext := notebook.ConvertMarkersInText(
 			answer.Context,
-			occurrence.Scene.Definitions,
+			definitions,
 			notebook.ConversionStyleTerminal,
 			occurrence.Definition.Expression,
 		)
@@ -366,14 +395,24 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 		expressionToRecord = occurrence.Definition.Definition
 	}
 
+	// For flashcards (Story is nil), use "flashcards" as story title
+	storyTitle := "flashcards"
+	sceneTitle := ""
+	if occurrence.Story != nil {
+		storyTitle = occurrence.Story.Event
+	}
+	if occurrence.Scene != nil {
+		sceneTitle = occurrence.Scene.Title
+	}
+
 	// Update learning history with "usable" status for correct answers
 	var err error
 	learningHistory, err = r.InteractiveQuizCLI.updateLearningHistory(
 		occurrence.NotebookName,
 		learningHistory,
 		occurrence.NotebookName,
-		occurrence.Story.Event,
-		occurrence.Scene.Title,
+		storyTitle,
+		sceneTitle,
 		expressionToRecord,
 		answer.Correct,
 		false, // isKnownWord=false to get "usable" status when correct
@@ -388,10 +427,11 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 	return nil
 }
 
-// findAllWordContexts searches for ALL occurrences of a word across all story notebooks
+// findAllWordContexts searches for ALL occurrences of a word across all story notebooks and flashcard notebooks
 func (r *FreeformQuizCLI) findAllWordContexts(word string) []*WordOccurrence {
 	var allContexts []*WordOccurrence
 
+	// Search story notebooks
 	for notebookName, stories := range r.allStories {
 		for i := range stories {
 			story := &stories[i]
@@ -414,6 +454,35 @@ func (r *FreeformQuizCLI) findAllWordContexts(word string) []*WordOccurrence {
 						Contexts:     contexts,
 					})
 				}
+			}
+		}
+	}
+
+	// Search flashcard notebooks
+	for notebookName, flashcards := range r.allFlashcards {
+		for i := range flashcards {
+			flashcard := &flashcards[i]
+			for j := range flashcard.Cards {
+				card := &flashcard.Cards[j]
+				// Check both Expression and Definition fields
+				if !strings.EqualFold(card.Expression, word) && !strings.EqualFold(card.Definition, word) {
+					continue
+				}
+				// Convert string examples to WordOccurrenceContext
+				contexts := make([]WordOccurrenceContext, len(card.Examples))
+				for k, example := range card.Examples {
+					contexts[k] = WordOccurrenceContext{
+						Context: example,
+						Usage:   card.Expression,
+					}
+				}
+				allContexts = append(allContexts, &WordOccurrence{
+					NotebookName: notebookName,
+					Story:        nil,
+					Scene:        nil,
+					Definition:   card,
+					Contexts:     contexts,
+				})
 			}
 		}
 	}

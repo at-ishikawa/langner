@@ -63,8 +63,7 @@ func (writer FlashcardNotebookWriter) OutputFlashcardNotebooks(
 	}()
 
 	// Convert notebooks to assets format
-	converter := newAssetsFlashcardConverter()
-	templateData := converter.convertToAssetsFlashcardTemplate(notebooks)
+	templateData := convertToAssetsFlashcardTemplate(notebooks)
 	if err := assets.WriteFlashcardNotebook(output, writer.templatePath, templateData); err != nil {
 		return fmt.Errorf("assets.WriteFlashcardNotebook(%s, %s, ) > %w", outputFilename, writer.templatePath, err)
 	}
@@ -82,25 +81,18 @@ func (writer FlashcardNotebookWriter) OutputFlashcardNotebooks(
 	return nil
 }
 
-type assetsFlashcardConverter struct {
-}
-
-func newAssetsFlashcardConverter() *assetsFlashcardConverter {
-	return &assetsFlashcardConverter{}
-}
-
 // convertToAssetsFlashcardTemplate converts notebook types to assets.FlashcardTemplate for template rendering
-func (converter assetsFlashcardConverter) convertToAssetsFlashcardTemplate(notebooks []FlashcardNotebook) assets.FlashcardTemplate {
+func convertToAssetsFlashcardTemplate(notebooks []FlashcardNotebook) assets.FlashcardTemplate {
 	assetsNotebooks := make([]assets.FlashcardNotebook, len(notebooks))
 	for i, nb := range notebooks {
-		assetsNotebooks[i] = converter.convertFlashcardNotebook(nb)
+		assetsNotebooks[i] = convertFlashcardNotebook(nb)
 	}
 	return assets.FlashcardTemplate{
 		Notebooks: assetsNotebooks,
 	}
 }
 
-func (converter assetsFlashcardConverter) convertFlashcardNotebook(nb FlashcardNotebook) assets.FlashcardNotebook {
+func convertFlashcardNotebook(nb FlashcardNotebook) assets.FlashcardNotebook {
 	assetsCards := make([]assets.FlashcardCard, len(nb.Cards))
 	for i, card := range nb.Cards {
 		assetsCards[i] = assets.FlashcardCard{

@@ -1,14 +1,11 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"math/rand"
-	"os"
 	"strings"
 
-	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/fatih/color"
@@ -29,35 +26,7 @@ func newFlashcardInteractiveQuizCLI(
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 ) (*InteractiveQuizCLI, *notebook.Reader, error) {
-	// Load dictionary responses
-	response, err := rapidapi.NewReader().Read(dictionaryCacheDir)
-	if err != nil {
-		return nil, nil, fmt.Errorf("rapidapi.NewReader().Read() > %w", err)
-	}
-	dictionaryMap := rapidapi.FromResponsesToMap(response)
-
-	// Create notebook reader for flashcards (empty string for storiesDir)
-	reader, err := notebook.NewReader("", flashcardsDir, dictionaryMap)
-	if err != nil {
-		return nil, nil, fmt.Errorf("notebook.NewReader() > %w", err)
-	}
-
-	// Load learning histories
-	learningHistories, err := notebook.NewLearningHistories(learningNotesDir)
-	if err != nil {
-		return nil, nil, fmt.Errorf("notebook.NewLearningHistories() > %w", err)
-	}
-
-	return &InteractiveQuizCLI{
-		learningNotesDir:  learningNotesDir,
-		learningHistories: learningHistories,
-		dictionaryMap:     dictionaryMap,
-		openaiClient:      openaiClient,
-		stdinReader:       bufio.NewReader(os.Stdin),
-		stdoutWriter:      os.Stdout,
-		bold:              color.New(color.Bold),
-		italic:            color.New(color.Italic),
-	}, reader, nil
+	return initializeQuizCLI("", flashcardsDir, learningNotesDir, dictionaryCacheDir, openaiClient)
 }
 
 // NewFlashcardQuizCLI creates a new flashcard quiz interactive CLI
