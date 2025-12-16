@@ -1087,6 +1087,47 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 			},
 		},
 		{
+			name:  "Correct answer with context mismatch - still updates learning history",
+			input: "test\ntest meaning\n",
+			allStories: map[string][]notebook.StoryNotebook{
+				"test-notebook": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Conversations: []notebook.Conversation{
+									{Speaker: "A", Quote: "This is a test"},
+								},
+								Definitions: []notebook.Note{
+									{Expression: "test", Meaning: "test meaning"},
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			setupMock: func(mockClient *mock_inference.MockClient) {
+				mockClient.EXPECT().
+					AnswerMeanings(gomock.Any(), gomock.Any()).
+					Return(inference.AnswerMeaningsResponse{
+						Answers: []inference.AnswerMeaning{
+							{
+								Expression: "test",
+								Meaning:    "test meaning",
+								AnswersForContext: []inference.AnswersForContext{
+									// Context doesn't match the sent context ("This is a test")
+									// This simulates when OpenAI returns a modified or different context
+									{Correct: true, Context: "Different context string", Reason: "correct meaning"},
+								},
+							},
+						},
+					}, nil).
+					Times(1)
+			},
+		},
+		{
 			name:  "Correct answer - updates learning history",
 			input: "test\ntest meaning\n",
 			allStories: map[string][]notebook.StoryNotebook{
