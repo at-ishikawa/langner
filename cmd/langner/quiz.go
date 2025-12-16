@@ -69,6 +69,8 @@ func newQuizFreeformCommand() *cobra.Command {
 }
 
 func newQuizNotebookCommand() *cobra.Command {
+	var includeNoCorrectAnswers bool
+
 	command := &cobra.Command{
 		Use:   "notebook",
 		Short: "Quiz from a specific notebook (shows word, you provide meaning)",
@@ -102,6 +104,7 @@ func newQuizNotebookCommand() *cobra.Command {
 				cfg.Notebooks.LearningNotesDirectory,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
 				openaiClient,
+				includeNoCorrectAnswers,
 			)
 			if err != nil {
 				return err
@@ -112,6 +115,8 @@ func newQuizNotebookCommand() *cobra.Command {
 			return notebookCLI.Run(context.Background(), notebookCLI)
 		},
 	}
+
+	command.Flags().BoolVar(&includeNoCorrectAnswers, "include-no-correct-answers", false, "Include words that have never had a correct answer")
 
 	return command
 }

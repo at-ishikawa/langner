@@ -260,6 +260,22 @@ func (note *Note) needsToLearnInStory() bool {
 	return now.After(lastLearnedResult.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
 }
 
+func (note Note) hasAnyCorrectAnswer() bool {
+	if len(note.LearnedLogs) == 0 {
+		return false
+	}
+
+	for _, log := range note.LearnedLogs {
+		if log.Status == learnedStatusUnderstood ||
+			log.Status == learnedStatusCanBeUsed ||
+			log.Status == learnedStatusIntuitivelyUsed {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (note Note) getNextLearningThresholdDays() int {
 	learnedLogs := note.LearnedLogs
 

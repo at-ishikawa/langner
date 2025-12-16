@@ -27,6 +27,7 @@ func NewNotebookQuizCLI(
 	learningNotesDir string,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
+	includeNoCorrectAnswers bool,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI
 	baseCLI, reader, err := newInteractiveQuizCLI(storiesDir, learningNotesDir, dictionaryCacheDir, openaiClient)
@@ -47,7 +48,7 @@ func NewNotebookQuizCLI(
 	}
 
 	// Filter stories based on learning history (without conversion)
-	stories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, true)
+	stories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, true, includeNoCorrectAnswers)
 	if err != nil {
 		return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
 	}
