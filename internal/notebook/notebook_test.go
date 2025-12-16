@@ -347,3 +347,110 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 		})
 	}
 }
+
+func TestNote_hasAnyCorrectAnswer(t *testing.T) {
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		note     Note
+		expected bool
+	}{
+		{
+			name: "no learning logs - returns false",
+			note: Note{
+				Expression:  "hello",
+				Definition:  "greeting",
+				LearnedLogs: []LearningRecord{},
+			},
+			expected: false,
+		},
+		{
+			name: "only misunderstood status - returns false",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime)},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "only empty/learning status - returns false",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(baseTime)},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "has understood status - returns true",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime)},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "has usable status - returns true",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(baseTime)},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "has intuitive status - returns true",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDateFromTime(baseTime)},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "mixed statuses with at least one correct - returns true",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-3 * time.Hour))},
+					{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(baseTime.Add(-2 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-1 * time.Hour))},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "mixed statuses with no correct (only misunderstood and empty) - returns false",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-2 * time.Hour))},
+					{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(baseTime.Add(-1 * time.Hour))},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.note.hasAnyCorrectAnswer()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

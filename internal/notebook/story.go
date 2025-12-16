@@ -124,7 +124,7 @@ const (
 	ConversionStylePlain
 )
 
-func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, isFlashcard bool) ([]StoryNotebook, error) {
+func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, isFlashcard bool, includeNoCorrectAnswers bool) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
 	for _, notebook := range storyNotebooks {
 		if len(notebook.Scenes) == 0 {
@@ -151,6 +151,10 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 
 				if strings.TrimSpace(definition.Expression) == "" {
 					return nil, fmt.Errorf("empty definition.Expression: %v in story %s", definition, notebook.Event)
+				}
+				// Filter out words without any correct answers if not included
+				if !includeNoCorrectAnswers && !definition.hasAnyCorrectAnswer() {
+					continue
 				}
 				if isFlashcard {
 					if !definition.needsToLearnInFlashcard(7) {
@@ -226,7 +230,7 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 	}
 	learningHistory := learningHistories[storyID]
 
-	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, false)
+	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, false, true)
 	if err != nil {
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}
