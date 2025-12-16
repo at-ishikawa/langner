@@ -135,6 +135,15 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		}
 	}
 
+	// Check if OpenAI marked any answer as correct
+	isCorrect := false
+	for _, answer := range result.AnswersForContext {
+		if answer.Correct {
+			isCorrect = true
+			break
+		}
+	}
+
 	// Find the first occurrence that has at least one correct context
 	var firstCorrectOccurrenceIdx = -1
 	var matchingContext string
@@ -170,7 +179,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 
 	// Build answer for display
 	answer := AnswerResponse{
-		Correct:    firstCorrectOccurrenceIdx >= 0,
+		Correct:    isCorrect,
 		Expression: result.Expression,
 		Meaning:    result.Meaning,
 		Context:    matchingContext,
@@ -182,10 +191,17 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		return err
 	}
 
-	// Update learning history only when answer is correct
-	if firstCorrectOccurrenceIdx >= 0 {
-		if err := r.updateLearningHistory(needsLearning[firstCorrectOccurrenceIdx], word, answer); err != nil {
-			return err
+	// Update learning history when answer is correct
+	if isCorrect {
+		// Use the occurrence that matched the correct context if found, otherwise use the first occurrence
+		occurrenceToUpdate := displayOccurrence
+		if firstCorrectOccurrenceIdx >= 0 {
+			occurrenceToUpdate = needsLearning[firstCorrectOccurrenceIdx]
+		}
+		if occurrenceToUpdate != nil {
+			if err := r.updateLearningHistory(occurrenceToUpdate, word, answer); err != nil {
+				return err
+			}
 		}
 	}
 
