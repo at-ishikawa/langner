@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -47,6 +48,10 @@ func NewFreeformQuizCLI(
 }
 
 func (r *FreeformQuizCLI) Session(ctx context.Context) error {
+	if r.openaiClient == nil {
+		return fmt.Errorf("OpenAI client is required for quiz sessions")
+	}
+
 	// Get word from user
 	fmt.Print("Word: ")
 	wordInput, err := r.stdinReader.ReadString('\n')
@@ -445,4 +450,124 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	return e.Message
+}
+
+// ListWordsNeedingLearning lists all words that need learning grouped by notebook
+func (r *FreeformQuizCLI) ListWordsNeedingLearning(writer io.Writer) error {
+	// Iterate through all notebooks
+	for notebookName, stories := range r.allStories {
+		if len(stories) == 0 {
+			continue
+		}
+
+		// Track if we found any words needing learning in this notebook
+		hasWordsNeedingLearning := false
+		notebookOutput := fmt.Sprintf("=== Notebook: %s ===\n\n", notebookName)
+
+		// Iterate through all stories and scenes
+		for i := range stories {
+			story := &stories[i]
+
+			for j := range story.Scenes {
+				scene := &story.Scenes[j]
+
+				// Track words for this scene
+				var sceneWords []string
+
+				// Check each definition in the scene
+				for k := range scene.Definitions {
+					definition := &scene.Definitions[k]
+
+					// Create a WordOccurrence to check if it needs learning
+					wordOccurrence := &WordOccurrence{
+						NotebookName: notebookName,
+						Story:        story,
+						Scene:        scene,
+						Definition:   definition,
+					}
+
+					// Get learning history for this notebook
+					learningHistory, ok := r.learningHistories[notebookName]
+					needsLearning := false
+
+					if !ok {
+						// No learning history, so it needs learning
+						needsLearning = true
+					} else {
+						// Check if has correct answer
+						hasCorrect := r.hasCorrectAnswer(learningHistory, wordOccurrence, definition.Expression)
+						needsLearning = !hasCorrect
+					}
+
+					if needsLearning {
+						// Determine the status
+						status := "no correct answer yet"
+						if ok {
+							// Check if it's been attempted
+							for _, hist := range learningHistory {
+								if hist.Metadata.Title != story.Event {
+									continue
+								}
+								for _, sceneHist := range hist.Scenes {
+									if sceneHist.Metadata.Title != scene.Title {
+										continue
+									}
+									for _, expr := range sceneHist.Expressions {
+										if r.isExpressionMatch(expr, wordOccurrence, definition.Expression) {
+											latestStatus := expr.GetLatestStatus()
+											if latestStatus == notebook.LearnedStatus("misunderstood") {
+												status = "misunderstood"
+											}
+											break
+										}
+									}
+								}
+							}
+						}
+
+						// Format the word entry
+						wordEntry := fmt.Sprintf("  - %s: %s (status: %s)",
+							definition.Expression,
+							definition.Meaning,
+							status,
+						)
+						sceneWords = append(sceneWords, wordEntry)
+					}
+				}
+
+				// If this scene has words needing learning, add the scene header
+				if len(sceneWords) > 0 {
+					if !hasWordsNeedingLearning {
+						// First time writing for this notebook
+						if _, err := fmt.Fprint(writer, notebookOutput); err != nil {
+							return fmt.Errorf("failed to write to writer: %w", err)
+						}
+						hasWordsNeedingLearning = true
+					}
+
+					// Write story and scene info
+					if _, err := fmt.Fprintf(writer, "Story: %s\n", story.Event); err != nil {
+						return fmt.Errorf("failed to write to writer: %w", err)
+					}
+					if _, err := fmt.Fprintf(writer, "Scene: %s\n", scene.Title); err != nil {
+						return fmt.Errorf("failed to write to writer: %w", err)
+					}
+
+					// Write all words for this scene
+					for _, wordEntry := range sceneWords {
+						if _, err := fmt.Fprintln(writer, wordEntry); err != nil {
+							return fmt.Errorf("failed to write to writer: %w", err)
+						}
+					}
+
+					// Add blank line after scene
+					if _, err := fmt.Fprintln(writer); err != nil {
+						return fmt.Errorf("failed to write to writer: %w", err)
+					}
+				}
+			}
+		}
+	}
+
+	return nil
 }
