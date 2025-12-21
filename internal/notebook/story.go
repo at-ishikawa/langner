@@ -61,6 +61,21 @@ func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error
 	return result, nil
 }
 
+// ReadAllStoryNotebooksMap reads all story notebooks and returns them as a map keyed by notebook ID
+func (reader *Reader) ReadAllStoryNotebooksMap() (map[string][]StoryNotebook, error) {
+	result := make(map[string][]StoryNotebook)
+
+	for id := range reader.indexes {
+		notebooks, err := reader.ReadStoryNotebooks(id)
+		if err != nil {
+			return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", id, err)
+		}
+		result[id] = notebooks
+	}
+
+	return result, nil
+}
+
 // ConvertMarkersInText converts {{ }} markers in a text string based on conversion style
 // If targetExpression is provided, only that expression will be highlighted
 // definitions is a list of expressions that should be learned

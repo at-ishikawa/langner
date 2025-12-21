@@ -35,29 +35,58 @@ func NewNotebookQuizCLI(
 		return nil, err
 	}
 
-	// Load stories for the specific notebook
-	stories, err := reader.ReadStoryNotebooks(notebookName)
-	if err != nil {
-		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookName, err)
+	var allStories []notebook.StoryNotebook
+	var cards []*WordOccurrence
+
+	// If notebookName is empty, load all notebooks
+	if notebookName == "" {
+		allNotebooks, err := reader.ReadAllStoryNotebooksMap()
+		if err != nil {
+			return nil, fmt.Errorf("ReadAllStoryNotebooksMap() > %w", err)
+		}
+
+		for notebookID, stories := range allNotebooks {
+			learningHistory, ok := baseCLI.learningHistories[notebookID]
+			if !ok {
+				// Skip notebooks without learning history
+				continue
+			}
+
+			filteredStories, err := notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, true, includeNoCorrectAnswers)
+			if err != nil {
+				return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
+			}
+
+			allStories = append(allStories, filteredStories...)
+			notebookCards := extractWordOccurrences(notebookID, filteredStories)
+			cards = append(cards, notebookCards...)
+		}
+	} else {
+		// Load stories for the specific notebook
+		stories, err := reader.ReadStoryNotebooks(notebookName)
+		if err != nil {
+			return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookName, err)
+		}
+
+		// Get learning history for this notebook
+		learningHistory, ok := baseCLI.learningHistories[notebookName]
+		if !ok {
+			return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
+		}
+
+		// Filter stories based on learning history (without conversion)
+		allStories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, true, includeNoCorrectAnswers)
+		if err != nil {
+			return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
+		}
+
+		cards = extractWordOccurrences(notebookName, allStories)
 	}
 
-	// Get learning history for this notebook
-	learningHistory, ok := baseCLI.learningHistories[notebookName]
-	if !ok {
-		return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
-	}
-
-	// Filter stories based on learning history (without conversion)
-	stories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, true, includeNoCorrectAnswers)
-	if err != nil {
-		return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
-	}
-
-	cards := extractWordOccurrences(notebookName, stories)
 	return &NotebookQuizCLI{
 		InteractiveQuizCLI: baseCLI,
 		notebookName:       notebookName,
-		stories:            stories,
+		stories:            allStories,
 		cards:              cards,
 	}, nil
 }
@@ -188,10 +217,13 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	// Use definition if available, otherwise use expression
 	wordToRecord := currentCard.GetExpression()
 
+	// Use the card's notebook name (important when loading all notebooks)
+	cardNotebookName := currentCard.NotebookName
+
 	learningHistory, err := r.updateLearningHistory(
-		r.notebookName,
-		r.learningHistories[r.notebookName],
-		r.notebookName,
+		cardNotebookName,
+		r.learningHistories[cardNotebookName],
+		cardNotebookName,
 		currentCard.Story.Event,
 		currentCard.Scene.Title,
 		wordToRecord,
@@ -203,7 +235,7 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		return err
 	}
 
-	r.learningHistories[r.notebookName] = learningHistory
+	r.learningHistories[cardNotebookName] = learningHistory
 
 	// Remove the card from the session
 	r.removeCurrentCard()
