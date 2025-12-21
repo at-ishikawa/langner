@@ -13,9 +13,9 @@ type WordOccurrenceContext struct {
 }
 
 // WordOccurrence represents a single word/phrase occurrence in a story
-// Used by both FreeformQuizCLI (across multiple notebooks) and NotebookQuizCLI (single notebook)
+// Used by both FreeformQuizCLI and NotebookQuizCLI (single or multiple notebooks)
 type WordOccurrence struct {
-	NotebookName string                  // Which notebook this word is from (empty for NotebookQuiz)
+	NotebookName string                  // Which notebook this word is from
 	Story        *notebook.StoryNotebook // Which story contains this word
 	Scene        *notebook.StoryScene    // Which scene contains this word
 	Definition   *notebook.Note          // The complete definition/note

@@ -70,11 +70,11 @@ func newQuizFreeformCommand() *cobra.Command {
 
 func newQuizNotebookCommand() *cobra.Command {
 	var includeNoCorrectAnswers bool
+	var notebookName string
 
 	command := &cobra.Command{
 		Use:   "notebook",
-		Short: "Quiz from a specific notebook (shows word, you provide meaning)",
-		Args:  cobra.ExactArgs(1),
+		Short: "Quiz from notebooks (shows word, you provide meaning). By default, quizzes from all notebooks",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loader, err := config.NewConfigLoader(configFile)
 			if err != nil {
@@ -84,8 +84,6 @@ func newQuizNotebookCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
 			}
-
-			notebookName := args[0]
 
 			// Create OpenAI client
 			if cfg.OpenAI.APIKey == "" {
@@ -110,13 +108,19 @@ func newQuizNotebookCommand() *cobra.Command {
 				return err
 			}
 			notebookCLI.ShuffleCards()
-			fmt.Printf("Starting Q&A session with %d cards\n\n", notebookCLI.GetCardCount())
+
+			if notebookName != "" {
+				fmt.Printf("Starting Q&A session for notebook %s with %d cards\n\n", notebookName, notebookCLI.GetCardCount())
+			} else {
+				fmt.Printf("Starting Q&A session with all notebooks with %d cards\n\n", notebookCLI.GetCardCount())
+			}
 
 			return notebookCLI.Run(context.Background(), notebookCLI)
 		},
 	}
 
 	command.Flags().BoolVar(&includeNoCorrectAnswers, "include-no-correct-answers", false, "Include words that have never had a correct answer")
+	command.Flags().StringVarP(&notebookName, "notebook", "n", "", "Quiz from a specific notebook (empty for all notebooks)")
 
 	return command
 }

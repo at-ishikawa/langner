@@ -616,6 +616,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 		wantErr            bool
 		wantReturn         error
 		wantCardsAfter     int
+		validate           func(t *testing.T, cli *NotebookQuizCLI)
 	}{
 		{
 			name:           "No more cards - returns errEnd",
@@ -804,6 +805,71 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 			},
 			wantCardsAfter: 0,
 		},
+		{
+			name:  "Card from different notebook - updates correct notebook's learning history",
+			input: "test meaning\n",
+			cards: []*WordOccurrence{
+				{
+					NotebookName: "notebook-a",
+					Story: &notebook.StoryNotebook{
+						Event: "Story A",
+					},
+					Scene: &notebook.StoryScene{
+						Title: "Scene A",
+					},
+					Definition: &notebook.Note{
+						Expression: "test",
+						Meaning:    "test meaning",
+					},
+					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{
+				"notebook-a": {},
+				"notebook-b": {},
+			},
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "test",
+						Meaning:    "test meaning",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: "", Reason: "exact match with reference definition"},
+						},
+					},
+				},
+			},
+			wantCardsAfter: 0,
+			validate: func(t *testing.T, cli *NotebookQuizCLI) {
+				// Verify notebook-a has learning history updated
+				historyA := cli.learningHistories["notebook-a"]
+				require.NotEmpty(t, historyA, "notebook-a should have learning history")
+
+				// Find the learning history for the story and expression
+				found := false
+				for _, history := range historyA {
+					if history.Metadata.Title == "Story A" {
+						for _, scene := range history.Scenes {
+							if scene.Metadata.Title == "Scene A" {
+								for _, expr := range scene.Expressions {
+									if expr.Expression == "test" {
+										found = true
+										assert.NotEmpty(t, expr.LearnedLogs, "Expression should have learning logs")
+										assert.Equal(t, "understood", string(expr.GetLatestStatus()), "Latest status should be understood for correct answer")
+										break
+									}
+								}
+							}
+						}
+					}
+				}
+				assert.True(t, found, "Should find the test expression in notebook-a learning history")
+
+				// Verify notebook-b has no learning history (should remain empty)
+				historyB := cli.learningHistories["notebook-b"]
+				assert.Empty(t, historyB, "notebook-b should have no learning history updates")
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -855,6 +921,11 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 
 			// Verify card count after session
 			assert.Equal(t, tt.wantCardsAfter, len(cli.cards))
+
+			// Run custom validation if provided
+			if tt.validate != nil {
+				tt.validate(t, cli)
+			}
 		})
 	}
 }
