@@ -65,7 +65,7 @@ type LearningHistoryExpression struct {
 
 func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	if len(exp.LearnedLogs) == 0 {
-		return learnedStatusLearning
+		return LearnedStatusLearning
 	}
 	// Get the first element since AddRecord prepends new logs
 	lastLog := exp.LearnedLogs[0]
@@ -76,9 +76,9 @@ func (exp *LearningHistoryExpression) AddRecord(isCorrect, isKnownWord bool) {
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
-			status = learnedStatusUnderstood
+			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
@@ -103,9 +103,9 @@ func (exp *LearningHistoryExpression) AddRecordAlways(isCorrect, isKnownWord boo
 	var status LearnedStatus
 
 	if isCorrect {
-		status = learnedStatusUnderstood
+		status = LearnedStatusUnderstood
 		if !isKnownWord {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	} else {
 		// Record misunderstood status for incorrect answers
@@ -147,11 +147,11 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 
 	// Validate learned logs
 	validStatuses := map[LearnedStatus]bool{
-		learnedStatusLearning:        true,
+		LearnedStatusLearning:        true,
 		LearnedStatusMisunderstood:   true,
-		learnedStatusUnderstood:      true,
-		learnedStatusCanBeUsed:       true,
-		learnedStatusIntuitivelyUsed: true,
+		LearnedStatusUnderstood:      true,
+		LearnedStatusCanBeUsed:       true,
+		LearnedStatusIntuitivelyUsed: true,
 	}
 
 	seenDates := make(map[string]bool)

@@ -257,9 +257,9 @@ func (r *FreeformQuizCLI) hasCorrectAnswer(learningHistory []notebook.LearningHi
 				if matchFound {
 					status := expr.GetLatestStatus()
 					// If status is understood, usable, or intuitive, it's been answered correctly
-					if status == notebook.LearnedStatus("understood") ||
-						status == notebook.LearnedStatus("usable") ||
-						status == notebook.LearnedStatus("intuitive") {
+					if status == notebook.LearnedStatusUnderstood ||
+						status == notebook.LearnedStatusCanBeUsed ||
+						status == notebook.LearnedStatusIntuitivelyUsed {
 						return true
 					}
 				}
@@ -515,7 +515,7 @@ func (r *FreeformQuizCLI) ListWordsNeedingLearning(writer io.Writer) error {
 									for _, expr := range sceneHist.Expressions {
 										if r.isExpressionMatch(expr, wordOccurrence, definition.Expression) {
 											latestStatus := expr.GetLatestStatus()
-											if latestStatus == notebook.LearnedStatus("misunderstood") {
+											if latestStatus == notebook.LearnedStatusMisunderstood {
 												status = "misunderstood"
 											}
 											break

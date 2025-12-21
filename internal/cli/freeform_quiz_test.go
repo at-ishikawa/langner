@@ -423,7 +423,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isCorrect:      true,
 			isKnownWord:    false,
 			wantCount:      1,
-			wantStatus:     func() *notebook.LearnedStatus { s := notebook.LearnedStatus("usable"); return &s }(),
+			wantStatus:     func() *notebook.LearnedStatus { s := notebook.LearnedStatusCanBeUsed; return &s }(),
 		},
 		{
 			name:           "Incorrect answer sets status to misunderstood",
@@ -455,7 +455,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []notebook.LearningRecord{
 										{
-											Status:    "understood",
+											Status:    notebook.LearnedStatusUnderstood,
 											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
 										},
 									},
@@ -472,7 +472,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isCorrect:   true,
 			isKnownWord: false,
 			wantCount:   1,
-			wantStatus:  func() *notebook.LearnedStatus { s := notebook.LearnedStatus("usable"); return &s }(),
+			wantStatus:  func() *notebook.LearnedStatus { s := notebook.LearnedStatusCanBeUsed; return &s }(),
 		},
 		{
 			name:           "Base form 'come along' should be recorded",
@@ -514,7 +514,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []notebook.LearningRecord{
 										{
-											Status:    "usable",
+											Status:    notebook.LearnedStatusCanBeUsed,
 											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
 										},
 									},
@@ -599,7 +599,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 			name:          "Always saves on correct answer",
 			answerCorrect: true,
 			wantFileSaved: true,
-			wantStatus:    "usable",
+			wantStatus:    notebook.LearnedStatusCanBeUsed,
 		},
 		{
 			name:          "Does not save on incorrect answer",
@@ -850,7 +850,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 			for _, sceneTitle := range tt.wantRecordedScenes {
 				gotStatus := findExpressionStatus(savedHistory, "Test Story", sceneTitle, tt.word)
 				require.NotNil(t, gotStatus, "%s should have '%s' recorded", sceneTitle, tt.word)
-				assert.Equal(t, notebook.LearnedStatus("usable"), *gotStatus)
+				assert.Equal(t, notebook.LearnedStatusCanBeUsed, *gotStatus)
 			}
 
 			// Verify expected scenes do NOT have the word recorded
@@ -1071,7 +1071,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 										Expression: "test",
 										LearnedLogs: []notebook.LearningRecord{
 											{
-												Status:    "understood",
+												Status:    notebook.LearnedStatusUnderstood,
 												LearnedAt: notebook.NewDateFromTime(time.Now()),
 											},
 										},
@@ -1455,7 +1455,7 @@ Scene: Scene 1
 										Expression: "word1",
 										LearnedLogs: []notebook.LearningRecord{
 											{
-												Status:    notebook.LearnedStatus("usable"),
+												Status:    notebook.LearnedStatusCanBeUsed,
 												LearnedAt: notebook.NewDateFromTime(time.Now()),
 											},
 										},

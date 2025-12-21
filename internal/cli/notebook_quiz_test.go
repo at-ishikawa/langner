@@ -244,7 +244,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isKnownWord:    false,
 			commandType:    "practice",
 			wantLogs:       1,
-			wantStatus:     "usable",
+			wantStatus:     notebook.LearnedStatusCanBeUsed,
 		},
 		{
 			name:           "QA command correct answer → understood",
@@ -254,7 +254,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isKnownWord:    true,
 			commandType:    "qa",
 			wantLogs:       1,
-			wantStatus:     "understood",
+			wantStatus:     notebook.LearnedStatusUnderstood,
 		},
 		{
 			name:           "Practice command incorrect answer → misunderstood",
@@ -264,7 +264,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isKnownWord:    false,
 			commandType:    "practice",
 			wantLogs:       1,
-			wantStatus:     "misunderstood",
+			wantStatus:     notebook.LearnedStatusMisunderstood,
 		},
 		{
 			name:           "QA command incorrect answer → misunderstood",
@@ -274,7 +274,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isKnownWord:    true,
 			commandType:    "qa",
 			wantLogs:       1,
-			wantStatus:     "misunderstood",
+			wantStatus:     notebook.LearnedStatusMisunderstood,
 		},
 		// QA command always-record behavior
 		{
@@ -295,7 +295,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []notebook.LearningRecord{
 										{
-											Status:    "understood",
+											Status:    notebook.LearnedStatusUnderstood,
 											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
 										},
 									},
@@ -310,7 +310,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isKnownWord: true,
 			commandType: "qa",
 			wantLogs:    2,
-			wantStatus:  "understood",
+			wantStatus:  notebook.LearnedStatusUnderstood,
 		},
 		{
 			name: "QA should NOT record duplicate misunderstood status",
@@ -405,7 +405,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isKnownWord: true,
 			commandType: "qa",
 			wantLogs:    2,
-			wantStatus:  "understood",
+			wantStatus:  notebook.LearnedStatusUnderstood,
 		},
 	}
 

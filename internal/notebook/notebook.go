@@ -29,11 +29,11 @@ type Notebook struct {
 type LearnedStatus string
 
 const (
-	learnedStatusLearning        LearnedStatus = ""
+	LearnedStatusLearning        LearnedStatus = ""
 	LearnedStatusMisunderstood   LearnedStatus = "misunderstood"
-	learnedStatusUnderstood      LearnedStatus = "understood"
-	learnedStatusCanBeUsed       LearnedStatus = "usable"
-	learnedStatusIntuitivelyUsed LearnedStatus = "intuitive"
+	LearnedStatusUnderstood      LearnedStatus = "understood"
+	LearnedStatusCanBeUsed       LearnedStatus = "usable"
+	LearnedStatusIntuitivelyUsed LearnedStatus = "intuitive"
 )
 
 type ExpressionLevel string
@@ -138,15 +138,15 @@ func (note Note) getLearnScore() int {
 	score := 0
 	for _, learnedLog := range note.LearnedLogs {
 		switch learnedLog.Status {
-		case learnedStatusLearning:
+		case LearnedStatusLearning:
 		case LearnedStatusMisunderstood:
 			// Misunderstood has negative impact on score
 			score -= 5
-		case learnedStatusUnderstood:
+		case LearnedStatusUnderstood:
 			score += 10
-		case learnedStatusCanBeUsed:
+		case LearnedStatusCanBeUsed:
 			score += 1_000
-		case learnedStatusIntuitivelyUsed:
+		case LearnedStatusIntuitivelyUsed:
 			score += 100_000
 		}
 	}
@@ -266,9 +266,9 @@ func (note Note) hasAnyCorrectAnswer() bool {
 	}
 
 	for _, log := range note.LearnedLogs {
-		if log.Status == learnedStatusUnderstood ||
-			log.Status == learnedStatusCanBeUsed ||
-			log.Status == learnedStatusIntuitivelyUsed {
+		if log.Status == LearnedStatusUnderstood ||
+			log.Status == LearnedStatusCanBeUsed ||
+			log.Status == LearnedStatusIntuitivelyUsed {
 			return true
 		}
 	}
@@ -281,7 +281,7 @@ func (note Note) getNextLearningThresholdDays() int {
 
 	count := 0
 	for _, learnedLog := range learnedLogs {
-		if learnedLog.Status == learnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
+		if learnedLog.Status == LearnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
 			continue
 		}
 		count++
