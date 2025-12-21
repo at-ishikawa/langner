@@ -515,7 +515,7 @@ func (r *FreeformQuizCLI) ListWordsNeedingLearning(writer io.Writer) error {
 									for _, expr := range sceneHist.Expressions {
 										if r.isExpressionMatch(expr, wordOccurrence, definition.Expression) {
 											latestStatus := expr.GetLatestStatus()
-											if latestStatus == notebook.LearnedStatus("misunderstood") {
+											if latestStatus == notebook.LearnedStatusMisunderstood {
 												status = "misunderstood"
 											}
 											break
