@@ -1396,7 +1396,7 @@ Scene: Scene 1
 										Expression: "word1",
 										LearnedLogs: []notebook.LearningRecord{
 											{
-												Status:    notebook.LearnedStatus("understood"),
+												Status:    notebook.LearnedStatusUnderstood,
 												LearnedAt: notebook.NewDateFromTime(time.Now()),
 											},
 										},
