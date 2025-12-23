@@ -46,6 +46,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				Notebooks: NotebooksConfig{
 					StoriesDirectory:       filepath.Join("notebooks", "stories"),
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -53,7 +54,8 @@ func TestConfigLoader_Load(t *testing.T) {
 					},
 				},
 				Outputs: OutputsConfig{
-					StoryDirectory: filepath.Join("outputs", "story"),
+					StoryDirectory:     filepath.Join("outputs", "story"),
+					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
@@ -75,6 +77,7 @@ outputs:
 				Notebooks: NotebooksConfig{
 					StoriesDirectory:       "custom/stories",
 					LearningNotesDirectory: "custom/learning",
+					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -82,7 +85,8 @@ outputs:
 					},
 				},
 				Outputs: OutputsConfig{
-					StoryDirectory: "custom/outputs",
+					StoryDirectory:     "custom/outputs",
+					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
@@ -98,6 +102,7 @@ outputs:
 				Notebooks: NotebooksConfig{
 					StoriesDirectory:       "partial/stories",
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -105,7 +110,8 @@ outputs:
 					},
 				},
 				Outputs: OutputsConfig{
-					StoryDirectory: filepath.Join("outputs", "story"),
+					StoryDirectory:     filepath.Join("outputs", "story"),
+					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",

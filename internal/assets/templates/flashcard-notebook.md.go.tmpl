@@ -1,0 +1,47 @@
+# Flashcard Notebook
+
+{{ range $notebook := .Notebooks }}
+## {{ $notebook.Title }}
+
+{{ if $notebook.Description -}}
+{{ $notebook.Description }}
+
+{{ end -}}
+_Date: {{ $notebook.Date.Format "2006-01-02" }}_
+
+### Words and Phrases
+
+{{ range $card := $notebook.Cards }}
+#### {{ $card.Expression }}{{ if $card.Definition }} ({{ $card.Definition }}){{ end }}
+
+{{ if $card.Pronunciation -}}_{{ $card.Pronunciation }}_{{ end }}{{ if $card.PartOfSpeech }} [{{ $card.PartOfSpeech }}]{{ end }}
+
+{{ if $card.Meaning -}}
+Meaning: {{ $card.Meaning }}
+{{ end }}
+{{ if $card.Examples -}}
+Examples:
+{{ range $example := $card.Examples -}}
+- {{ $example }}
+{{ end }}
+{{ end -}}
+{{ if $card.Origin -}}
+Origin: {{ $card.Origin }}
+{{ end }}
+{{ if $card.Synonyms -}}
+Synonyms: {{ join $card.Synonyms ", " }}
+{{ end }}
+{{ if $card.Antonyms -}}
+Antonyms: {{ join $card.Antonyms ", " }}
+{{ end }}
+{{ if $card.Images -}}
+Images:
+{{ range $image := $card.Images -}}
+- ![height:400px]({{ $image }})
+{{ end }}
+{{ end -}}
+
+---
+
+{{ end }}
+{{ end }}

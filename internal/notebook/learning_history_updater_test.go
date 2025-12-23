@@ -248,6 +248,53 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			wantExpressions: 3,
 			wantStatus: LearnedStatusMisunderstood,
 		},
+		{
+			name:            "Create new flashcard expression in empty history",
+			initialHistory:  []LearningHistory{},
+			notebookID:      "test-notebook",
+			storyTitle:      "flashcards",
+			sceneTitle:      "",
+			expression:      "test-word",
+			isCorrect:       true,
+			isKnownWord:     true,
+			alwaysRecord:    false,
+			wantFound:       false,
+			wantExpressions: 1,
+			wantStatus:      learnedStatusUnderstood,
+		},
+		{
+			name: "Update existing flashcard expression",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "flashcards",
+						Type:       "flashcard",
+					},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression: "test-word",
+							LearnedLogs: []LearningRecord{
+								{
+									Status:    LearnedStatusMisunderstood,
+									LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
+								},
+							},
+						},
+					},
+				},
+			},
+			notebookID:      "test-notebook",
+			storyTitle:      "flashcards",
+			sceneTitle:      "",
+			expression:      "test-word",
+			isCorrect:       true,
+			isKnownWord:     true,
+			alwaysRecord:    false,
+			wantFound:       true,
+			wantExpressions: 1,
+			wantStatus:      learnedStatusUnderstood,
+		},
 	}
 
 	for _, tc := range tests {
@@ -278,13 +325,25 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 
 			for _, story := range history {
 				if story.Metadata.Title == tc.storyTitle {
-					for _, scene := range story.Scenes {
-						if scene.Metadata.Title == tc.sceneTitle {
-							gotExpressions = len(scene.Expressions)
-							for _, exp := range scene.Expressions {
-								if exp.Expression == tc.expression {
-									gotExpression = &exp
-									break
+					// For flashcard type, check expressions directly
+					if story.Metadata.Type == "flashcard" || (tc.storyTitle == "flashcards" && tc.sceneTitle == "") {
+						gotExpressions = len(story.Expressions)
+						for _, exp := range story.Expressions {
+							if exp.Expression == tc.expression {
+								gotExpression = &exp
+								break
+							}
+						}
+					} else {
+						// For story type, check scenes
+						for _, scene := range story.Scenes {
+							if scene.Metadata.Title == tc.sceneTitle {
+								gotExpressions = len(scene.Expressions)
+								for _, exp := range scene.Expressions {
+									if exp.Expression == tc.expression {
+										gotExpression = &exp
+										break
+									}
 								}
 							}
 						}

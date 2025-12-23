@@ -287,7 +287,7 @@ func TestReader_ReadAllStoryNotebooksMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := tt.setupFunc(t)
 
-			reader, err := NewReader(tempDir, map[string]rapidapi.Response{})
+			reader, err := NewReader(tempDir, "", map[string]rapidapi.Response{})
 			require.NoError(t, err)
 
 			result, err := reader.ReadAllStoryNotebooksMap()

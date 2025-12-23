@@ -1,0 +1,67 @@
+- title: "English Vocabulary Examples"
+  description: "A collection of example vocabulary cards demonstrating different features of the flashcard format"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    # Example 1: Card with all fields filled (comprehensive example)
+    - expression: "serendipity"
+      definition: "serendipity"
+      meaning: "the occurrence and development of events by chance in a happy or beneficial way"
+      part_of_speech: "noun"
+      pronunciation: "/ˌserənˈdɪpəti/"
+      examples:
+        - "It was pure serendipity that we met at the coffee shop that day."
+        - "The discovery of penicillin was a famous example of serendipity in science."
+      synonyms:
+        - "chance"
+        - "luck"
+        - "fortune"
+        - "happenstance"
+      origin: "coined by Horace Walpole in 1754, from the Persian fairy tale 'The Three Princes of Serendip'"
+
+    # Example 2: Minimal card (just expression and meaning)
+    - expression: "ephemeral"
+      meaning: "lasting for a very short time; transitory"
+
+    # Example 3: Card with examples and part of speech
+    - expression: "ubiquitous"
+      definition: "ubiquitous"
+      meaning: "present, appearing, or found everywhere"
+      part_of_speech: "adjective"
+      pronunciation: "/juːˈbɪkwɪtəs/"
+      examples:
+        - "Smartphones have become ubiquitous in modern society."
+        - "Coffee shops are ubiquitous in this city."
+      synonyms:
+        - "omnipresent"
+        - "pervasive"
+        - "universal"
+
+    # Example 4: Card with images field (for visual learning)
+    - expression: "juxtapose"
+      definition: "juxtapose"
+      meaning: "to place or deal with close together for contrasting effect"
+      part_of_speech: "verb"
+      examples:
+        - "The artist juxtaposed modern technology with traditional farming in the painting."
+      images:
+        - "https://example.com/juxtapose-art-example.jpg"
+
+    # Example 5: Card with antonyms and comprehensive fields
+    - expression: "ameliorate"
+      definition: "ameliorate"
+      meaning: "to make something bad or unsatisfactory better; to improve"
+      part_of_speech: "verb"
+      pronunciation: "/əˈmiːliəreɪt/"
+      examples:
+        - "The new policies were designed to ameliorate working conditions."
+        - "We need to ameliorate the situation before it gets worse."
+      synonyms:
+        - "improve"
+        - "enhance"
+        - "better"
+        - "upgrade"
+      antonyms:
+        - "worsen"
+        - "deteriorate"
+        - "aggravate"
+      origin: "from Latin 'melior' meaning 'better'"

@@ -57,16 +57,18 @@ func (r *ValidationResult) AddWarning(err ValidationError) {
 
 // Validator performs validation of learning notes and story notebooks
 type Validator struct {
-	learningNotesDir string
+	learningNotesDir  string
 	storyNotebooksDir string
-	dictionaryDir    string
+	flashcardsDir     string
+	dictionaryDir     string
 }
 
 // NewValidator creates a new validator
-func NewValidator(learningNotesDir, storyNotebooksDir, dictionaryDir string) *Validator {
+func NewValidator(learningNotesDir, storyNotebooksDir, flashcardsDir, dictionaryDir string) *Validator {
 	return &Validator{
 		learningNotesDir:  learningNotesDir,
 		storyNotebooksDir: storyNotebooksDir,
+		flashcardsDir:     flashcardsDir,
 		dictionaryDir:     dictionaryDir,
 	}
 }
@@ -85,6 +87,17 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 	storyNotebooks, err := v.loadStoryNotebooks()
 	if err != nil {
 		return nil, fmt.Errorf("loadStoryNotebooks() > %w", err)
+	}
+
+	// Load all flashcard notebooks if flashcardsDir is configured
+	if v.flashcardsDir != "" {
+		flashcardNotebooks, err := v.loadFlashcardNotebooks()
+		if err != nil {
+			return nil, fmt.Errorf("loadFlashcardNotebooks() > %w", err)
+		}
+
+		// Validate flashcard notebooks
+		v.validateFlashcardNotebooks(flashcardNotebooks, result)
 	}
 
 	// Validate learning notes structure
@@ -159,6 +172,9 @@ type learningHistoryFile = yamlFile[[]LearningHistory]
 // storyNotebookFile is a type alias for story notebook files
 type storyNotebookFile = yamlFile[[]StoryNotebook]
 
+// flashcardNotebookFile is a type alias for flashcard notebook files
+type flashcardNotebookFile = yamlFile[[]FlashcardNotebook]
+
 func (v *Validator) loadLearningHistories() ([]learningHistoryFile, error) {
 	return loadYamlFiles[[]LearningHistory](v.learningNotesDir, func(path string, info os.FileInfo) bool {
 		return !info.IsDir() && filepath.Ext(path) == ".yml"
@@ -167,6 +183,12 @@ func (v *Validator) loadLearningHistories() ([]learningHistoryFile, error) {
 
 func (v *Validator) loadStoryNotebooks() ([]storyNotebookFile, error) {
 	return loadYamlFiles[[]StoryNotebook](v.storyNotebooksDir, func(path string, info os.FileInfo) bool {
+		return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
+	})
+}
+
+func (v *Validator) loadFlashcardNotebooks() ([]flashcardNotebookFile, error) {
+	return loadYamlFiles[[]FlashcardNotebook](v.flashcardsDir, func(path string, info os.FileInfo) bool {
 		return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
 	})
 }
@@ -1085,6 +1107,22 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 			for _, err := range errors {
 				err.File = file.path
 				result.AddError("consistency", err)
+			}
+		}
+	}
+}
+
+// validateFlashcardNotebooks validates all flashcard notebook files
+func (v *Validator) validateFlashcardNotebooks(files []flashcardNotebookFile, result *ValidationResult) {
+	for _, file := range files {
+		for notebookIdx, notebook := range file.contents {
+			notebookLocation := fmt.Sprintf("notebook[%d]: %s", notebookIdx, notebook.Title)
+
+			// Call the Validate method on the FlashcardNotebook object
+			errors := notebook.Validate(notebookLocation)
+			for _, err := range errors {
+				err.File = file.path
+				result.AddError("learning_notes", err)
 			}
 		}
 	}

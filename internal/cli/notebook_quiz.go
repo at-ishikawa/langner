@@ -13,14 +13,14 @@ import (
 )
 
 // NotebookQuizCLI manages the interactive CLI session for a specific notebook
+// Handles both story notebooks and flashcard notebooks
 type NotebookQuizCLI struct {
 	*InteractiveQuizCLI
 	notebookName string
-	stories      []notebook.StoryNotebook
 	cards        []*WordOccurrence
 }
 
-// NewNotebookQuizCLI creates a new notebook quiz interactive CLI
+// NewNotebookQuizCLI creates a new notebook quiz interactive CLI for story notebooks
 func NewNotebookQuizCLI(
 	notebookName string,
 	storiesDir string,
@@ -35,7 +35,6 @@ func NewNotebookQuizCLI(
 		return nil, err
 	}
 
-	var allStories []notebook.StoryNotebook
 	var cards []*WordOccurrence
 
 	// If notebookName is empty, load all notebooks
@@ -57,7 +56,6 @@ func NewNotebookQuizCLI(
 				return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
 			}
 
-			allStories = append(allStories, filteredStories...)
 			notebookCards := extractWordOccurrences(notebookID, filteredStories)
 			cards = append(cards, notebookCards...)
 		}
@@ -75,18 +73,57 @@ func NewNotebookQuizCLI(
 		}
 
 		// Filter stories based on learning history (without conversion)
-		allStories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, true, includeNoCorrectAnswers)
+		stories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, true, includeNoCorrectAnswers)
 		if err != nil {
 			return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
 		}
 
-		cards = extractWordOccurrences(notebookName, allStories)
+		cards = extractWordOccurrences(notebookName, stories)
 	}
 
 	return &NotebookQuizCLI{
 		InteractiveQuizCLI: baseCLI,
 		notebookName:       notebookName,
-		stories:            allStories,
+		cards:              cards,
+	}, nil
+}
+
+// NewFlashcardQuizCLI creates a new notebook quiz interactive CLI for flashcard notebooks
+func NewFlashcardQuizCLI(
+	notebookName string,
+	flashcardsDir string,
+	learningNotesDir string,
+	dictionaryCacheDir string,
+	openaiClient inference.Client,
+) (*NotebookQuizCLI, error) {
+	// Initialize base CLI for flashcards
+	baseCLI, reader, err := initializeQuizCLI("", flashcardsDir, learningNotesDir, dictionaryCacheDir, openaiClient)
+	if err != nil {
+		return nil, err
+	}
+
+	// Load flashcard notebooks for the specific notebook
+	notebooks, err := reader.ReadFlashcardNotebooks(notebookName)
+	if err != nil {
+		return nil, fmt.Errorf("ReadFlashcardNotebooks(%s) > %w", notebookName, err)
+	}
+
+	// Get learning history for this notebook
+	learningHistory, ok := baseCLI.learningHistories[notebookName]
+	if !ok {
+		return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
+	}
+
+	// Filter notebooks based on learning history
+	notebooks, err = notebook.FilterFlashcardNotebooks(notebooks, learningHistory, baseCLI.dictionaryMap, false, 0)
+	if err != nil {
+		return nil, fmt.Errorf("notebook.FilterFlashcardNotebooks > %w", err)
+	}
+
+	cards := extractWordOccurrencesFromFlashcards(notebookName, notebooks)
+	return &NotebookQuizCLI{
+		InteractiveQuizCLI: baseCLI,
+		notebookName:       notebookName,
 		cards:              cards,
 	}, nil
 }
@@ -220,12 +257,20 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	// Use the card's notebook name (important when loading all notebooks)
 	cardNotebookName := currentCard.NotebookName
 
+	// For flashcards (Story is nil), use generic story/scene titles
+	storyTitle := "flashcards"
+	sceneTitle := ""
+	if currentCard.Story != nil {
+		storyTitle = currentCard.Story.Event
+		sceneTitle = currentCard.Scene.Title
+	}
+
 	learningHistory, err := r.updateLearningHistory(
 		cardNotebookName,
 		r.learningHistories[cardNotebookName],
 		cardNotebookName,
-		currentCard.Story.Event,
-		currentCard.Scene.Title,
+		storyTitle,
+		sceneTitle,
 		wordToRecord,
 		answer.Correct,
 		true, // qa command always marks correct answers as known words
@@ -274,12 +319,26 @@ func extractWordOccurrences(notebookName string, stories []notebook.StoryNoteboo
 
 // FormatQuestion formats a question for display
 // It converts {{ }} markers for the specific expression being asked
+// For flashcards (when occurrence.Scene is nil), it shows a simpler question without scene context
 func FormatQuestion(occurrence *WordOccurrence) string {
 	expression := occurrence.GetExpression()
 	if len(occurrence.Contexts) == 0 {
 		return fmt.Sprintf("What does '%s' mean?\n", expression)
 	}
 
+	// For flashcards (no scene), show a simpler question with examples
+	if occurrence.Scene == nil {
+		question := fmt.Sprintf("What does '%s' mean?\n", expression)
+		if len(occurrence.Contexts) > 0 {
+			question += "Examples:\n"
+			for i, context := range occurrence.Contexts {
+				question += fmt.Sprintf("  %d. %s\n", i+1, context)
+			}
+		}
+		return question
+	}
+
+	// For story notebooks, show context-based question
 	question := fmt.Sprintf("What does '%s' mean in the following context?\n", expression)
 
 	// Only convert markers if we have scene definitions

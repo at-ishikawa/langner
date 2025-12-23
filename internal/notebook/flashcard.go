@@ -10,16 +10,18 @@ import (
 )
 
 type Reader struct {
-	indexes       map[string]Index
-	dictionaryMap map[string]rapidapi.Response
+	indexes          map[string]Index
+	flashcardIndexes map[string]FlashcardIndex
+	dictionaryMap    map[string]rapidapi.Response
 }
 
-func NewReader(
-	rootStoryNotebookDirectory string,
-	dictionaryMap map[string]rapidapi.Response,
-) (*Reader, error) {
-	indexes := make(map[string]Index, 0)
-	err := filepath.Walk(rootStoryNotebookDirectory, func(path string, info os.FileInfo, err error) error {
+// walkIndexFiles walks a directory and loads index.yml files into the provided map
+func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[string]T) error {
+	if rootDir == "" {
+		return nil
+	}
+
+	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -30,21 +32,44 @@ func NewReader(
 			return nil
 		}
 
-		index, err := readYamlFile[Index](path)
+		index, err := readYamlFile[T](path)
 		if err != nil {
 			return err
 		}
-		index.path = filepath.Dir(path)
-		indexes[index.ID] = index
+
+		// Set the path field on the index using type assertion
+		// This works because both Index and FlashcardIndex have a path field
+		switch v := any(&index).(type) {
+		case *Index:
+			v.path = filepath.Dir(path)
+			indexMap[v.ID] = any(*v).(T)
+		case *FlashcardIndex:
+			v.path = filepath.Dir(path)
+			indexMap[v.ID] = any(*v).(T)
+		}
 		return nil
 	})
-	if err != nil {
-		return nil, fmt.Errorf("filepath.Walk() > %w", err)
+}
+
+func NewReader(
+	rootStoryNotebookDirectory string,
+	rootFlashcardDirectory string,
+	dictionaryMap map[string]rapidapi.Response,
+) (*Reader, error) {
+	indexes := make(map[string]Index, 0)
+	if err := walkIndexFiles(rootStoryNotebookDirectory, indexes); err != nil {
+		return nil, fmt.Errorf("walkIndexFiles(story) > %w", err)
+	}
+
+	flashcardIndexes := make(map[string]FlashcardIndex, 0)
+	if err := walkIndexFiles(rootFlashcardDirectory, flashcardIndexes); err != nil {
+		return nil, fmt.Errorf("walkIndexFiles(flashcard) > %w", err)
 	}
 
 	return &Reader{
-		indexes:       indexes,
-		dictionaryMap: dictionaryMap,
+		indexes:          indexes,
+		flashcardIndexes: flashcardIndexes,
+		dictionaryMap:    dictionaryMap,
 	}, nil
 }
 
@@ -102,4 +127,44 @@ func (f Reader) ReadAllNotes(storyID string, learningHistories map[string][]Lear
 		return flashCards[i].getLearnScore() < flashCards[j].getLearnScore()
 	})
 	return flashCards, nil
+}
+
+func (f Reader) ReadFlashcardNotebooks(flashcardID string) ([]FlashcardNotebook, error) {
+	index, ok := f.flashcardIndexes[flashcardID]
+	if !ok {
+		return nil, fmt.Errorf("flashcard %s not found", flashcardID)
+	}
+
+	result := make([]FlashcardNotebook, 0)
+	for _, notebookPath := range index.NotebookPaths {
+		path := filepath.Join(index.path, notebookPath)
+
+		notebooks, err := readYamlFile[[]FlashcardNotebook](path)
+		if err != nil {
+			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, err)
+		}
+
+		index.Notebooks = append(index.Notebooks, notebooks...)
+		result = append(result, notebooks...)
+	}
+	f.flashcardIndexes[flashcardID] = index
+	return result, nil
+}
+
+func (f Reader) ReadAllFlashcardNotebooks() (map[string]FlashcardIndex, error) {
+	for _, index := range f.flashcardIndexes {
+		_, err := f.ReadFlashcardNotebooks(index.ID)
+		if err != nil {
+			return nil, fmt.Errorf("ReadFlashcardNotebooks() > %w", err)
+		}
+	}
+	return f.flashcardIndexes, nil
+}
+
+func (f Reader) GetFlashcardIndexes() map[string]FlashcardIndex {
+	return f.flashcardIndexes
+}
+
+func (f Reader) GetStoryIndexes() map[string]Index {
+	return f.indexes
 }

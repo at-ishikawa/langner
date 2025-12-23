@@ -201,6 +201,7 @@ func TestFormatQuestion(t *testing.T) {
 		{
 			name: "Single context",
 			card: WordOccurrence{
+				Scene:      &notebook.StoryScene{},
 				Definition: &notebook.Note{Expression: "test"},
 				Contexts:   []WordOccurrenceContext{{Context: "This is a test example", Usage: "test"}},
 			},
@@ -209,6 +210,7 @@ func TestFormatQuestion(t *testing.T) {
 		{
 			name: "Multiple contexts",
 			card: WordOccurrence{
+				Scene:      &notebook.StoryScene{},
 				Definition: &notebook.Note{Expression: "test"},
 				Contexts:   []WordOccurrenceContext{{Context: "First example", Usage: "test"}, {Context: "Second example", Usage: "test"}},
 			},
