@@ -216,7 +216,7 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
-			expectedStatus: learnedStatusUnderstood,
+			expectedStatus: LearnedStatusUnderstood,
 			expectedCount:  1,
 		},
 		{
@@ -227,7 +227,7 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			},
 			isCorrect:      true,
 			isKnownWord:    false,
-			expectedStatus: learnedStatusCanBeUsed,
+			expectedStatus: LearnedStatusCanBeUsed,
 			expectedCount:  1,
 		},
 		{
@@ -251,7 +251,7 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
-			expectedStatus: learnedStatusUnderstood,
+			expectedStatus: LearnedStatusUnderstood,
 			expectedCount:  2,
 		},
 		{
@@ -272,12 +272,12 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			initialExpression: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 				},
 			},
 			isCorrect:      true,
 			isKnownWord:    false,
-			expectedStatus: learnedStatusCanBeUsed,
+			expectedStatus: LearnedStatusCanBeUsed,
 			expectedCount:  1, // Should remain 1, not add duplicate
 		},
 		{
@@ -285,12 +285,12 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			initialExpression: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 				},
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
-			expectedStatus: learnedStatusUnderstood,
+			expectedStatus: LearnedStatusUnderstood,
 			expectedCount:  1, // Should remain 1, not add duplicate
 		},
 	}
@@ -449,13 +449,13 @@ func TestAddRecordAlways(t *testing.T) {
 			initialExpression: LearningHistoryExpression{
 				Expression: "test",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 				},
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
 			expectedCount:  2, // Should add duplicate
-			expectedStatus: learnedStatusUnderstood,
+			expectedStatus: LearnedStatusUnderstood,
 		},
 		{
 			name: "incorrect answer - should NOT add any record",
@@ -481,7 +481,7 @@ func TestAddRecordAlways(t *testing.T) {
 			isCorrect:      true,
 			isKnownWord:    true,
 			expectedCount:  2, // Should add new status
-			expectedStatus: learnedStatusUnderstood,
+			expectedStatus: LearnedStatusUnderstood,
 		},
 		{
 			name: "incorrect answer with empty history - should add misunderstood",
@@ -499,13 +499,13 @@ func TestAddRecordAlways(t *testing.T) {
 			initialExpression: LearningHistoryExpression{
 				Expression: "test",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 				},
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
 			expectedCount:  2, // Should add new record
-			expectedStatus: learnedStatusUnderstood,
+			expectedStatus: LearnedStatusUnderstood,
 		},
 	}
 

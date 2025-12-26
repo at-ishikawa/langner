@@ -76,9 +76,9 @@ func (exp *LearningHistoryExpression) AddRecord(isCorrect, isKnownWord bool) {
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
-			status = learnedStatusUnderstood
+			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
@@ -103,9 +103,9 @@ func (exp *LearningHistoryExpression) AddRecordAlways(isCorrect, isKnownWord boo
 	var status LearnedStatus
 
 	if isCorrect {
-		status = learnedStatusUnderstood
+		status = LearnedStatusUnderstood
 		if !isKnownWord {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	} else {
 		// Record misunderstood status for incorrect answers
@@ -149,8 +149,8 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 	validStatuses := map[LearnedStatus]bool{
 		learnedStatusLearning:        true,
 		LearnedStatusMisunderstood:   true,
-		learnedStatusUnderstood:      true,
-		learnedStatusCanBeUsed:       true,
+		LearnedStatusUnderstood:      true,
+		LearnedStatusCanBeUsed:       true,
 		learnedStatusIntuitivelyUsed: true,
 	}
 
