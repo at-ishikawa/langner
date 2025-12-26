@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 
 	"github.com/at-ishikawa/langner/internal/cli"
 	"github.com/at-ishikawa/langner/internal/config"
@@ -62,6 +63,43 @@ func newQuizFreeformCommand() *cobra.Command {
 			fmt.Println("Enter word and meaning pairs. Type 'quit' to exit.")
 			fmt.Println()
 			return freeformCLI.Run(context.Background(), freeformCLI)
+		},
+	}
+
+	command.AddCommand(newQuizFreeformListCommand())
+
+	return command
+}
+
+func newQuizFreeformListCommand() *cobra.Command {
+	command := &cobra.Command{
+		Use:   "list",
+		Short: "List words that need learning (without correct answers)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			// Create FreeformQuizCLI without OpenAI client (list command doesn't need AI)
+			freeformCLI, err := cli.NewFreeformQuizCLI(
+				cfg.Notebooks.StoriesDirectory,
+				cfg.Notebooks.LearningNotesDirectory,
+				cfg.Dictionaries.RapidAPI.CacheDirectory,
+				nil,
+			)
+			if err != nil {
+				return fmt.Errorf("failed to create freeform quiz CLI: %w", err)
+			}
+
+			if err := freeformCLI.ListWordsNeedingLearning(os.Stdout); err != nil {
+				return fmt.Errorf("failed to list words needing learning: %w", err)
+			}
+			return nil
 		},
 	}
 

@@ -1241,3 +1241,256 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 		})
 	}
 }
+
+func TestFreeformQuizCLI_ListWordsNeedingLearning(t *testing.T) {
+	tests := []struct {
+		name              string
+		allStories        map[string][]notebook.StoryNotebook
+		learningHistories map[string][]notebook.LearningHistory
+		wantOutput        string
+	}{
+		{
+			name: "Lists words needing learning grouped by notebook",
+			allStories: map[string][]notebook.StoryNotebook{
+				"notebook1": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []notebook.Note{
+									{Expression: "word1", Meaning: "meaning of word1"},
+									{Expression: "word2", Meaning: "meaning of word2"},
+								},
+							},
+							{
+								Title: "Scene 2",
+								Definitions: []notebook.Note{
+									{Expression: "word3", Meaning: "meaning of word3"},
+								},
+							},
+						},
+					},
+				},
+				"notebook2": {
+					{
+						Event: "Story A",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene A",
+								Definitions: []notebook.Note{
+									{Expression: "wordA", Meaning: "meaning of wordA"},
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			wantOutput: `=== Notebook: notebook1 ===
+
+Story: Story 1
+Scene: Scene 1
+  - word1: meaning of word1 (status: no correct answer yet)
+  - word2: meaning of word2 (status: no correct answer yet)
+
+Story: Story 1
+Scene: Scene 2
+  - word3: meaning of word3 (status: no correct answer yet)
+
+=== Notebook: notebook2 ===
+
+Story: Story A
+Scene: Scene A
+  - wordA: meaning of wordA (status: no correct answer yet)
+
+`,
+		},
+		{
+			name: "Shows misunderstood status for words with incorrect answers",
+			allStories: map[string][]notebook.StoryNotebook{
+				"notebook1": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []notebook.Note{
+									{Expression: "word1", Meaning: "meaning of word1"},
+									{Expression: "word2", Meaning: "meaning of word2"},
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{
+				"notebook1": {
+					{
+						Metadata: notebook.LearningHistoryMetadata{
+							NotebookID: "notebook1",
+							Title:      "Story 1",
+						},
+						Scenes: []notebook.LearningScene{
+							{
+								Metadata: notebook.LearningSceneMetadata{
+									Title: "Scene 1",
+								},
+								Expressions: []notebook.LearningHistoryExpression{
+									{
+										Expression: "word1",
+										LearnedLogs: []notebook.LearningRecord{
+											{
+												Status:    notebook.LearnedStatusMisunderstood,
+												LearnedAt: notebook.NewDateFromTime(time.Now()),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantOutput: `=== Notebook: notebook1 ===
+
+Story: Story 1
+Scene: Scene 1
+  - word1: meaning of word1 (status: misunderstood)
+  - word2: meaning of word2 (status: no correct answer yet)
+
+`,
+		},
+		{
+			name: "Excludes words with correct answers",
+			allStories: map[string][]notebook.StoryNotebook{
+				"notebook1": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []notebook.Note{
+									{Expression: "word1", Meaning: "meaning of word1"},
+									{Expression: "word2", Meaning: "meaning of word2"},
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{
+				"notebook1": {
+					{
+						Metadata: notebook.LearningHistoryMetadata{
+							NotebookID: "notebook1",
+							Title:      "Story 1",
+						},
+						Scenes: []notebook.LearningScene{
+							{
+								Metadata: notebook.LearningSceneMetadata{
+									Title: "Scene 1",
+								},
+								Expressions: []notebook.LearningHistoryExpression{
+									{
+										Expression: "word1",
+										LearnedLogs: []notebook.LearningRecord{
+											{
+												Status:    notebook.LearnedStatusUnderstood,
+												LearnedAt: notebook.NewDateFromTime(time.Now()),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantOutput: `=== Notebook: notebook1 ===
+
+Story: Story 1
+Scene: Scene 1
+  - word2: meaning of word2 (status: no correct answer yet)
+
+`,
+		},
+		{
+			name:              "Empty output when no stories",
+			allStories:        map[string][]notebook.StoryNotebook{},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			wantOutput:        "",
+		},
+		{
+			name: "Empty output when all words mastered",
+			allStories: map[string][]notebook.StoryNotebook{
+				"notebook1": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []notebook.Note{
+									{Expression: "word1", Meaning: "meaning of word1"},
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{
+				"notebook1": {
+					{
+						Metadata: notebook.LearningHistoryMetadata{
+							NotebookID: "notebook1",
+							Title:      "Story 1",
+						},
+						Scenes: []notebook.LearningScene{
+							{
+								Metadata: notebook.LearningSceneMetadata{
+									Title: "Scene 1",
+								},
+								Expressions: []notebook.LearningHistoryExpression{
+									{
+										Expression: "word1",
+										LearnedLogs: []notebook.LearningRecord{
+											{
+												Status:    notebook.LearnedStatusCanBeUsed,
+												LearnedAt: notebook.NewDateFromTime(time.Now()),
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wantOutput: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+
+			cli := &FreeformQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{
+					learningHistories: tt.learningHistories,
+				},
+				allStories: tt.allStories,
+			}
+
+			err := cli.ListWordsNeedingLearning(&buf)
+			require.NoError(t, err)
+
+			output := buf.String()
+			// For easier debugging, show both outputs if they don't match
+			if output != tt.wantOutput {
+				t.Logf("Got output:\n%s", output)
+				t.Logf("Want output:\n%s", tt.wantOutput)
+			}
+			assert.Equal(t, tt.wantOutput, output)
+		})
+	}
+}

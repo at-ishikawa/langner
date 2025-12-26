@@ -36,7 +36,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			alwaysRecord:    false,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name: "Update existing expression",
@@ -75,7 +75,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			alwaysRecord:   false,
 			wantFound:    true,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus: LearnedStatusUnderstood,
 		},
 		{
 			name: "Create new scene in existing story",
@@ -104,7 +104,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			alwaysRecord:   false,
 			wantFound:    false,
 			wantExpressions: 1,
-			wantStatus: learnedStatusCanBeUsed,
+			wantStatus: LearnedStatusCanBeUsed,
 		},
 		{
 			name: "Create new story in existing history",
@@ -140,7 +140,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			alwaysRecord:   false,
 			wantFound:    false,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus: LearnedStatusUnderstood,
 		},
 		{
 			name:           "Special characters in names",
@@ -154,7 +154,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			alwaysRecord:   false,
 			wantFound:    false,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus: LearnedStatusUnderstood,
 		},
 		{
 			name: "Update expression with existing logs",
@@ -178,7 +178,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 										{
-											Status:    learnedStatusCanBeUsed,
+											Status:    LearnedStatusCanBeUsed,
 											LearnedAt: Date{Time: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)},
 										},
 									},
@@ -197,7 +197,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			alwaysRecord:   false,
 			wantFound:    true,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus: LearnedStatusUnderstood,
 			wantLogs:   3,
 		},
 		{
@@ -218,7 +218,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 									Expression: "word1",
 									LearnedLogs: []LearningRecord{
 										{
-											Status:    learnedStatusUnderstood,
+											Status:    LearnedStatusUnderstood,
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 									},
@@ -227,7 +227,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 									Expression: "word2",
 									LearnedLogs: []LearningRecord{
 										{
-											Status:    learnedStatusCanBeUsed,
+											Status:    LearnedStatusCanBeUsed,
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 									},
