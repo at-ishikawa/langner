@@ -27,6 +27,7 @@ func main() {
 	rootCommand.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug mode")
 
 	rootCommand.AddCommand(
+		newAnalyzeCommand(),
 		newDictionaryCommand(),
 		newQuizCommand(),
 		newNotebookCommand(),

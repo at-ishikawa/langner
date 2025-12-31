@@ -3,5 +3,4 @@ config.yml
 .claude/*
 !.claude/docs
 
-langner
 .vscode
