@@ -405,7 +405,7 @@ func (r *FreeformQuizCLI) findAllWordContexts(word string) []*WordOccurrence {
 					if !strings.EqualFold(definition.Expression, word) && !strings.EqualFold(definition.Definition, word) {
 						continue
 					}
-					contexts := extractContextsFromConversations(scene, word, definition.Expression)
+					contexts := extractContextsFromConversations(scene, definition.Expression, definition.Definition)
 					allContexts = append(allContexts, &WordOccurrence{
 						NotebookName: notebookName,
 						Story:        story,

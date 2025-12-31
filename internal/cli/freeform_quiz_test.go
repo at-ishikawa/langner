@@ -86,11 +86,12 @@ func TestValidationError(t *testing.T) {
 
 func TestFreeformQuizCLI_FindAllWordContexts(t *testing.T) {
 	tests := []struct {
-		name              string
-		allStories        map[string][]notebook.StoryNotebook
-		searchWord        string
-		wantContextsCount int
-		wantNotebookCount map[string]int
+		name                        string
+		allStories                  map[string][]notebook.StoryNotebook
+		searchWord                  string
+		wantContextsCount           int
+		wantNotebookCount           map[string]int
+		wantTotalConversationQuotes int // total number of conversation quotes found across all occurrences
 	}{
 		{
 			name: "find word across multiple notebooks and scenes",
@@ -332,6 +333,34 @@ func TestFreeformQuizCLI_FindAllWordContexts(t *testing.T) {
 			searchWord:        "sit",
 			wantContextsCount: 3,
 		},
+		{
+			name: "search by expression finds contexts containing definition",
+			allStories: map[string][]notebook.StoryNotebook{
+				"vocab1": {
+					{
+						Event: "Unit 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Phrasal Verbs",
+								Conversations: []notebook.Conversation{
+									{Speaker: "A", Quote: "Come here please"}, // contains "come" only, not "come along"
+								},
+								Definitions: []notebook.Note{
+									{
+										Expression: "come along",
+										Definition: "come",
+										Meaning:    "to arrive",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			searchWord:                  "come along", // search by Expression
+			wantContextsCount:           1,            // should find 1 WordOccurrence
+			wantTotalConversationQuotes: 1,            // should find conversation containing "come"
+		},
 	}
 
 	for _, tt := range tests {
@@ -352,6 +381,14 @@ func TestFreeformQuizCLI_FindAllWordContexts(t *testing.T) {
 				for notebook, expectedCount := range tt.wantNotebookCount {
 					assert.Equal(t, expectedCount, notebookCount[notebook])
 				}
+			}
+
+			if tt.wantTotalConversationQuotes > 0 {
+				totalQuotes := 0
+				for _, ctx := range contexts {
+					totalQuotes += len(ctx.Contexts)
+				}
+				assert.Equal(t, tt.wantTotalConversationQuotes, totalQuotes, "total conversation quotes should match")
 			}
 		})
 	}
