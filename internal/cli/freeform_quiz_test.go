@@ -790,6 +790,245 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 		},
 	}
 
+	t.Run("Update expression with empty learned_logs (Definition form)", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a story with Expression and Definition fields
+		testStories := map[string][]notebook.StoryNotebook{
+			"test-notebook": {
+				{
+					Event: "Lesson 3",
+					Scenes: []notebook.StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []notebook.Conversation{
+								{Speaker: "Lisa", Quote: "Ted would like to run some ideas by us for our new ad campaign."},
+							},
+							Definitions: []notebook.Note{
+								{
+									Expression: "run some ideas by us",
+									Definition: "run some ideas by someone", // This is the Definition form (base form)
+									Meaning:    "to discuss some new ideas",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Create learning history with the Definition form having empty learned_logs
+		testLearningHistories := map[string][]notebook.LearningHistory{
+			"test-notebook": {
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Lesson 3",
+					},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression:  "run some ideas by someone", // Definition form exists with empty logs
+									LearnedLogs: []notebook.LearningRecord{},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cli := &FreeformQuizCLI{
+			InteractiveQuizCLI: &InteractiveQuizCLI{
+				learningNotesDir:  tmpDir,
+				learningHistories: testLearningHistories,
+				stdoutWriter:      os.Stdout,
+			},
+			allStories: testStories,
+		}
+
+		// User types the Expression form (NOT the Definition form)
+		word := "run some ideas by us"
+
+		// Find occurrences
+		wordContexts := cli.findAllWordContexts(word)
+		require.Len(t, wordContexts, 1, "Should find 1 occurrence")
+
+		// Check if it needs learning
+		needsLearning := cli.findOccurrencesNeedingLearning(wordContexts, word)
+		require.Len(t, needsLearning, 1, "Should need learning since learned_logs is empty")
+
+		// Simulate correct answer
+		answer := AnswerResponse{
+			Correct:    true,
+			Expression: word,
+			Meaning:    "to discuss some new ideas",
+		}
+
+		// Update learning history
+		err := cli.updateLearningHistory(needsLearning[0], word, answer)
+		require.NoError(t, err)
+
+		// Read the saved history
+		learningNotePath := filepath.Join(tmpDir, "test-notebook.yml")
+		var savedHistory []notebook.LearningHistory
+		file, err := os.Open(learningNotePath)
+		require.NoError(t, err)
+		defer file.Close()
+
+		err = yaml.NewDecoder(file).Decode(&savedHistory)
+		require.NoError(t, err)
+
+		// Verify that the DEFINITION form was updated (not the Expression form)
+		gotStatusDefinition := findExpressionStatus(savedHistory, "Lesson 3", "Scene 1", "run some ideas by someone")
+		require.NotNil(t, gotStatusDefinition, "Definition form 'run some ideas by someone' should have status")
+		assert.Equal(t, notebook.LearnedStatus("usable"), *gotStatusDefinition, "Definition form status should be 'usable'")
+
+		// Verify that the EXPRESSION form was NOT recorded
+		gotStatusExpression := findExpressionStatus(savedHistory, "Lesson 3", "Scene 1", "run some ideas by us")
+		assert.Nil(t, gotStatusExpression, "Expression form 'run some ideas by us' should NOT be recorded")
+	})
+
+	t.Run("Update expression with empty learned_logs when sibling expression has usable status", func(t *testing.T) {
+		tmpDir := t.TempDir()
+
+		// Create a story with Expression and Definition fields
+		testStories := map[string][]notebook.StoryNotebook{
+			"test-notebook": {
+				{
+					Event: "Lesson 3",
+					Scenes: []notebook.StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []notebook.Conversation{
+								{Speaker: "Lisa", Quote: "Ted would like to run some ideas by us for our new ad campaign."},
+							},
+							Definitions: []notebook.Note{
+								{
+									Expression: "run some ideas by us",
+									Definition: "run some ideas by someone", // This is the Definition form (base form)
+									Meaning:    "to discuss some new ideas",
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Create learning history with TWO expressions in the SAME scene:
+		// 1. "run some ideas by someone" (Definition form) with empty learned_logs
+		// 2. "run some ideas by us" (Expression form) with learned_logs containing status "usable" - THIS SHOULD NOT EXIST
+		//    because we should only record the Definition form
+		testLearningHistories := map[string][]notebook.LearningHistory{
+			"test-notebook": {
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Lesson 3",
+					},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression:  "run some ideas by someone", // Definition form with empty logs - needs update
+									LearnedLogs: []notebook.LearningRecord{},
+								},
+								{
+									Expression: "run some ideas by us", // Expression form - should not exist, but testing legacy data
+									LearnedLogs: []notebook.LearningRecord{
+										{
+											Status:    "usable",
+											LearnedAt: notebook.NewDateFromTime(time.Now()),
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		cli := &FreeformQuizCLI{
+			InteractiveQuizCLI: &InteractiveQuizCLI{
+				learningNotesDir:  tmpDir,
+				learningHistories: testLearningHistories,
+				stdoutWriter:      os.Stdout,
+			},
+			allStories: testStories,
+		}
+
+		// User types the Expression form (NOT the Definition form)
+		word := "run some ideas by us"
+
+		// Find occurrences
+		wordContexts := cli.findAllWordContexts(word)
+		require.Len(t, wordContexts, 1, "Should find 1 occurrence")
+
+		// Check if it needs learning
+		needsLearning := cli.findOccurrencesNeedingLearning(wordContexts, word)
+		require.Len(t, needsLearning, 1, "Should need learning since Definition form 'run some ideas by someone' has empty learned_logs")
+
+		// Simulate correct answer
+		answer := AnswerResponse{
+			Correct:    true,
+			Expression: word,
+			Meaning:    "to discuss some new ideas",
+		}
+
+		// Update learning history
+		err := cli.updateLearningHistory(needsLearning[0], word, answer)
+		require.NoError(t, err)
+
+		// Read the saved history
+		learningNotePath := filepath.Join(tmpDir, "test-notebook.yml")
+		var savedHistory []notebook.LearningHistory
+		file, err := os.Open(learningNotePath)
+		require.NoError(t, err)
+		defer file.Close()
+
+		err = yaml.NewDecoder(file).Decode(&savedHistory)
+		require.NoError(t, err)
+
+		// Verify that the DEFINITION form "run some ideas by someone" was updated to "usable"
+		gotStatusDefinition := findExpressionStatus(savedHistory, "Lesson 3", "Scene 1", "run some ideas by someone")
+		require.NotNil(t, gotStatusDefinition, "Definition form 'run some ideas by someone' should have status")
+		assert.Equal(t, notebook.LearnedStatus("usable"), *gotStatusDefinition, "Definition form status should be 'usable'")
+
+		// Verify the legacy sibling expression "run some ideas by us" still exists but was NOT updated
+		// It should remain unchanged at "usable" status (not get a new record)
+		gotStatusExpression := findExpressionStatus(savedHistory, "Lesson 3", "Scene 1", "run some ideas by us")
+		if gotStatusExpression != nil {
+			// If it exists (legacy data), it should still be "usable" and not have been modified
+			assert.Equal(t, notebook.LearnedStatus("usable"), *gotStatusExpression, "Expression form status should remain 'usable' (unchanged)")
+		}
+
+		// Verify that Definition form exists in the saved file
+		var foundDefinition bool
+		for _, history := range savedHistory {
+			if history.Metadata.Title != "Lesson 3" {
+				continue
+			}
+			for _, scene := range history.Scenes {
+				if scene.Metadata.Title != "Scene 1" {
+					continue
+				}
+				for _, expr := range scene.Expressions {
+					if expr.Expression == "run some ideas by someone" {
+						foundDefinition = true
+						// Ensure it has exactly one record now (the new one we just added)
+						assert.Len(t, expr.LearnedLogs, 1, "Definition form should have exactly 1 learned log")
+					}
+				}
+			}
+		}
+		assert.True(t, foundDefinition, "Definition form 'run some ideas by someone' should exist in saved history")
+	})
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			tmpDir := t.TempDir()
@@ -1023,6 +1262,70 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFreeformQuizCLI_hasCorrectAnswer(t *testing.T) {
+	t.Run("Two related expressions in same scene - one with usable status, one with empty logs", func(t *testing.T) {
+		// Setup: Create learning history with TWO expressions in the SAME scene:
+		// 1. "run some ideas by someone" with empty learned_logs
+		// 2. "run some ideas by us" with learned_logs containing status "usable"
+		learningHistory := []notebook.LearningHistory{
+			{
+				Metadata: notebook.LearningHistoryMetadata{
+					NotebookID: "test-notebook",
+					Title:      "Lesson 3",
+				},
+				Scenes: []notebook.LearningScene{
+					{
+						Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+						Expressions: []notebook.LearningHistoryExpression{
+							{
+								Expression:  "run some ideas by someone",
+								LearnedLogs: []notebook.LearningRecord{}, // Empty logs
+							},
+							{
+								Expression: "run some ideas by us",
+								LearnedLogs: []notebook.LearningRecord{
+									{
+										Status:    "usable",
+										LearnedAt: notebook.NewDateFromTime(time.Now()),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// Create a WordOccurrence representing the notebook entry
+		// Expression="run some ideas by us", Definition="run some ideas by someone"
+		wordCtx := &WordOccurrence{
+			Story: &notebook.StoryNotebook{
+				Event: "Lesson 3",
+			},
+			Scene: &notebook.StoryScene{
+				Title: "Scene 1",
+			},
+			Definition: &notebook.Note{
+				Expression: "run some ideas by us",
+				Definition: "run some ideas by someone",
+				Meaning:    "to discuss some new ideas",
+			},
+		}
+
+		cli := &FreeformQuizCLI{}
+
+		// Test: User types "run some ideas by someone" (the Definition form)
+		word := "run some ideas by someone"
+
+		// Act: Check if this should be considered as already having a correct answer
+		result := cli.hasCorrectAnswer(learningHistory, wordCtx, word)
+
+		// Assert: Should return false because the specific expression "run some ideas by someone"
+		// has empty learned_logs, even though the related expression "run some ideas by us" has "usable" status
+		assert.False(t, result, "hasCorrectAnswer should return false because 'run some ideas by someone' has empty learned_logs")
+	})
 }
 
 func TestFreeformQuizCLI_session(t *testing.T) {
@@ -1274,6 +1577,137 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestFreeformQuizCLI_UpdateLearningHistory_AlwaysRecordsDefinitionForm(t *testing.T) {
+	tests := []struct {
+		name                   string
+		userTypedWord          string // What the user actually typed
+		noteExpression         string // The Expression field in the notebook
+		noteDefinition         string // The Definition field in the notebook (the canonical base form)
+		wantRecordedExpression string // What should be recorded in learning notes
+	}{
+		{
+			name:                   "User types Expression form - should record Definition form",
+			userTypedWord:          "run some ideas by us",
+			noteExpression:         "run some ideas by us",
+			noteDefinition:         "run some ideas by someone",
+			wantRecordedExpression: "run some ideas by someone", // Definition form should be recorded
+		},
+		{
+			name:                   "User types Definition form - should record Definition form",
+			userTypedWord:          "run some ideas by someone",
+			noteExpression:         "run some ideas by us",
+			noteDefinition:         "run some ideas by someone",
+			wantRecordedExpression: "run some ideas by someone", // Definition form should be recorded
+		},
+		{
+			name:                   "Definition field is empty - should record Expression",
+			userTypedWord:          "simple word",
+			noteExpression:         "simple word",
+			noteDefinition:         "", // Empty Definition field
+			wantRecordedExpression: "simple word", // Expression should be recorded as fallback
+		},
+		{
+			name:                   "Case insensitive: User types definition in different case",
+			userTypedWord:          "RUN SOME IDEAS BY SOMEONE",
+			noteExpression:         "run some ideas by us",
+			noteDefinition:         "run some ideas by someone",
+			wantRecordedExpression: "run some ideas by someone", // Definition form should be recorded
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmpDir := t.TempDir()
+
+			// Create a story with Expression and Definition fields
+			testStories := map[string][]notebook.StoryNotebook{
+				"test-notebook": {
+					{
+						Event: "Test Story",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Test Scene",
+								Conversations: []notebook.Conversation{
+									{Speaker: "A", Quote: fmt.Sprintf("Context for %s", tt.noteExpression)},
+								},
+								Definitions: []notebook.Note{
+									{
+										Expression: tt.noteExpression,
+										Definition: tt.noteDefinition,
+										Meaning:    "test meaning",
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+
+			// Start with empty learning history
+			testLearningHistories := map[string][]notebook.LearningHistory{
+				"test-notebook": {},
+			}
+
+			cli := &FreeformQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{
+					learningNotesDir:  tmpDir,
+					learningHistories: testLearningHistories,
+					stdoutWriter:      os.Stdout,
+				},
+				allStories: testStories,
+			}
+
+			// Find the word occurrence
+			wordContexts := cli.findAllWordContexts(tt.userTypedWord)
+			require.Len(t, wordContexts, 1, "Should find 1 occurrence")
+
+			needsLearning := cli.findOccurrencesNeedingLearning(wordContexts, tt.userTypedWord)
+			require.Len(t, needsLearning, 1, "Should need learning")
+
+			// Simulate correct answer
+			answer := AnswerResponse{
+				Correct:    true,
+				Expression: tt.userTypedWord,
+				Meaning:    "test meaning",
+			}
+
+			// Update learning history
+			err := cli.updateLearningHistory(needsLearning[0], tt.userTypedWord, answer)
+			require.NoError(t, err)
+
+			// Read the saved history
+			learningNotePath := filepath.Join(tmpDir, "test-notebook.yml")
+			var savedHistory []notebook.LearningHistory
+			file, err := os.Open(learningNotePath)
+			require.NoError(t, err)
+			defer file.Close()
+
+			err = yaml.NewDecoder(file).Decode(&savedHistory)
+			require.NoError(t, err)
+
+			// Verify the EXPECTED expression (Definition form if available, Expression otherwise) was recorded
+			gotStatus := findExpressionStatus(savedHistory, "Test Story", "Test Scene", tt.wantRecordedExpression)
+			require.NotNil(t, gotStatus, "Expression '%s' should be recorded in learning history", tt.wantRecordedExpression)
+			assert.Equal(t, notebook.LearnedStatus("usable"), *gotStatus, "Status should be 'usable'")
+
+			// Verify that the OTHER form was NOT recorded (to prevent duplicates)
+			var otherForm string
+			if tt.noteDefinition != "" && tt.wantRecordedExpression == tt.noteDefinition {
+				// We recorded the Definition, so Expression should NOT be recorded
+				otherForm = tt.noteExpression
+			} else if tt.noteDefinition != "" && tt.wantRecordedExpression == tt.noteExpression {
+				// We recorded the Expression (because Definition is empty), so Definition should NOT be recorded
+				otherForm = tt.noteDefinition
+			}
+
+			if otherForm != "" && otherForm != tt.wantRecordedExpression {
+				otherStatus := findExpressionStatus(savedHistory, "Test Story", "Test Scene", otherForm)
+				assert.Nil(t, otherStatus, "The other form '%s' should NOT be recorded to avoid duplicates", otherForm)
 			}
 		})
 	}
