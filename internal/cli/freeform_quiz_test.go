@@ -366,7 +366,8 @@ func TestFreeformQuizCLI_FindAllWordContexts(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			cli := &FreeformQuizCLI{
-				allStories: tt.allStories,
+				allStories:    tt.allStories,
+				allFlashcards: make(map[string][]notebook.FlashcardNotebook),
 			}
 
 			contexts := cli.findAllWordContexts(tt.searchWord)
@@ -702,7 +703,8 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 					learningHistories: testLearningHistories,
 					stdoutWriter:      os.Stdout,
 				},
-				allStories: testStories,
+				allStories:    testStories,
+				allFlashcards: make(map[string][]notebook.FlashcardNotebook),
 			}
 
 			answer := AnswerResponse{
@@ -849,7 +851,8 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 					learningHistories: testLearningHistories,
 					stdoutWriter:      os.Stdout,
 				},
-				allStories: testStories,
+				allStories:    testStories,
+				allFlashcards: make(map[string][]notebook.FlashcardNotebook),
 			}
 
 			// Find all occurrences
@@ -1266,7 +1269,8 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 					bold:              color.New(color.Bold),
 					italic:            color.New(color.Italic),
 				},
-				allStories: tt.allStories,
+				allStories:    tt.allStories,
+				allFlashcards: make(map[string][]notebook.FlashcardNotebook),
 			}
 
 			err := cli.Session(context.Background())

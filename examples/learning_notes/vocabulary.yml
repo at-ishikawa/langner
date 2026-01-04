@@ -1,0 +1,37 @@
+- metadata:
+    id: vocabulary
+    title: flashcards
+    type: flashcard
+  expressions:
+    - expression: serendipity
+      learned_logs:
+        - status: usable
+          learned_at: "2025-12-13"
+        - status: usable
+          learned_at: "2025-01-12"
+        - status: understood
+          learned_at: "2025-01-10"
+    - expression: ephemeral
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2025-12-13"
+        - status: understood
+          learned_at: "2025-01-11"
+        - status: misunderstood
+          learned_at: "2025-01-08"
+    - expression: ubiquitous
+      learned_logs:
+        - status: understood
+          learned_at: "2025-01-09"
+    - expression: juxtapose
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2025-12-13"
+    - expression: ameliorate
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2025-12-13"
+        - status: intuitive
+          learned_at: "2025-01-13"
+        - status: usable
+          learned_at: "2025-01-07"

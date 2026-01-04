@@ -17,12 +17,35 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpression(
 	notebookID, storyTitle, sceneTitle, expression string,
 	isCorrect, isKnownWord, alwaysRecord bool,
 ) bool {
+	// Determine if this is flashcard format based on story and scene titles
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+
 	// First, try to find and update existing expression
 	for hi, h := range u.history {
 		if h.Metadata.Title != storyTitle {
 			continue
 		}
 
+		// For flashcard type, search in expressions directly
+		if isFlashcard || h.Metadata.Type == "flashcard" {
+			for ei, exp := range h.Expressions {
+				if exp.Expression != expression {
+					continue
+				}
+
+				// Found existing expression - update it
+				if alwaysRecord {
+					exp.AddRecordAlways(isCorrect, isKnownWord)
+				} else {
+					exp.AddRecord(isCorrect, isKnownWord)
+				}
+				u.history[hi].Expressions[ei] = exp
+				return true
+			}
+			continue
+		}
+
+		// For story type, search in scenes
 		for si, s := range h.Scenes {
 			if s.Metadata.Title != sceneTitle {
 				continue
@@ -55,11 +78,11 @@ func (u *LearningHistoryUpdater) createNewExpression(
 	notebookID, storyTitle, sceneTitle, expression string,
 	isCorrect, isKnownWord, alwaysRecord bool,
 ) {
-	// Find or create the story entry
-	storyIndex := u.findOrCreateStory(notebookID, storyTitle)
+	// Determine if this is flashcard format
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
 
-	// Find or create the scene entry
-	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
+	// Find or create the story entry
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
 
 	// Create new expression entry
 	newExpression := LearningHistoryExpression{
@@ -73,16 +96,29 @@ func (u *LearningHistoryUpdater) createNewExpression(
 	}
 
 	// Only add the expression if it has at least one learning record
-	if len(newExpression.LearnedLogs) > 0 {
-		u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
-			u.history[storyIndex].Scenes[sceneIndex].Expressions,
+	if len(newExpression.LearnedLogs) == 0 {
+		return
+	}
+
+	// For flashcard type, add expression directly to the history
+	if isFlashcard || u.history[storyIndex].Metadata.Type == "flashcard" {
+		u.history[storyIndex].Expressions = append(
+			u.history[storyIndex].Expressions,
 			newExpression,
 		)
+		return
 	}
+
+	// For story type, add expression to a scene
+	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
+	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
+		u.history[storyIndex].Scenes[sceneIndex].Expressions,
+		newExpression,
+	)
 }
 
 // findOrCreateStory finds an existing story or creates a new one
-func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle string) int {
+func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle string, isFlashcard bool) int {
 	// Try to find existing story
 	for i, h := range u.history {
 		if h.Metadata.Title == storyTitle {
@@ -90,14 +126,21 @@ func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle string
 		}
 	}
 
-	// Create new story
+	// Create new story with appropriate type
 	newStory := LearningHistory{
 		Metadata: LearningHistoryMetadata{
 			NotebookID: notebookID,
 			Title:      storyTitle,
 		},
-		Scenes: []LearningScene{},
 	}
+
+	if isFlashcard {
+		newStory.Metadata.Type = "flashcard"
+		newStory.Expressions = []LearningHistoryExpression{}
+	} else {
+		newStory.Scenes = []LearningScene{}
+	}
+
 	u.history = append(u.history, newStory)
 	return len(u.history) - 1
 }

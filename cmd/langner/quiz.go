@@ -8,6 +8,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/spf13/cobra"
 )
 
@@ -50,6 +51,7 @@ func newQuizFreeformCommand() *cobra.Command {
 			// Create interactive CLI
 			freeformCLI, err := cli.NewFreeformQuizCLI(
 				cfg.Notebooks.StoriesDirectory,
+				cfg.Notebooks.FlashcardsDirectory,
 				cfg.Notebooks.LearningNotesDirectory,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
 				openaiClient,
@@ -70,11 +72,11 @@ func newQuizFreeformCommand() *cobra.Command {
 
 func newQuizNotebookCommand() *cobra.Command {
 	var includeNoCorrectAnswers bool
-	var notebookName string
 
 	command := &cobra.Command{
-		Use:   "notebook",
-		Short: "Quiz from notebooks (shows word, you provide meaning). By default, quizzes from all notebooks",
+		Use:   "notebook <notebook-id>",
+		Short: "Quiz from a specific notebook (shows word, you provide meaning)",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loader, err := config.NewConfigLoader(configFile)
 			if err != nil {
@@ -83,6 +85,22 @@ func newQuizNotebookCommand() *cobra.Command {
 			cfg, err := loader.Load()
 			if err != nil {
 				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			notebookID := args[0]
+
+			// Create a reader to detect notebook type
+			reader, err := notebook.NewReader(cfg.Notebooks.StoriesDirectory, cfg.Notebooks.FlashcardsDirectory, nil)
+			if err != nil {
+				return fmt.Errorf("failed to create notebook reader: %w", err)
+			}
+
+			// Check if notebook exists in story or flashcard indexes
+			_, isStory := reader.GetStoryIndexes()[notebookID]
+			_, isFlashcard := reader.GetFlashcardIndexes()[notebookID]
+
+			if !isStory && !isFlashcard {
+				return fmt.Errorf("notebook %q not found in stories or flashcards", notebookID)
 			}
 
 			// Create OpenAI client
@@ -95,9 +113,27 @@ func newQuizNotebookCommand() *cobra.Command {
 				_ = openaiClient.Close()
 			}()
 
-			// Create interactive CLI
+			// Create interactive CLI based on detected type
+			if isFlashcard {
+				flashcardCLI, err := cli.NewFlashcardQuizCLI(
+					notebookID,
+					cfg.Notebooks.FlashcardsDirectory,
+					cfg.Notebooks.LearningNotesDirectory,
+					cfg.Dictionaries.RapidAPI.CacheDirectory,
+					openaiClient,
+				)
+				if err != nil {
+					return err
+				}
+				flashcardCLI.ShuffleCards()
+				fmt.Printf("Starting flashcard Q&A session with %d cards\n\n", flashcardCLI.GetCardCount())
+
+				return flashcardCLI.Run(context.Background(), flashcardCLI)
+			}
+
+			// Story notebook
 			notebookCLI, err := cli.NewNotebookQuizCLI(
-				notebookName,
+				notebookID,
 				cfg.Notebooks.StoriesDirectory,
 				cfg.Notebooks.LearningNotesDirectory,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
@@ -108,19 +144,13 @@ func newQuizNotebookCommand() *cobra.Command {
 				return err
 			}
 			notebookCLI.ShuffleCards()
-
-			if notebookName != "" {
-				fmt.Printf("Starting Q&A session for notebook %s with %d cards\n\n", notebookName, notebookCLI.GetCardCount())
-			} else {
-				fmt.Printf("Starting Q&A session with all notebooks with %d cards\n\n", notebookCLI.GetCardCount())
-			}
+			fmt.Printf("Starting story Q&A session with %d cards\n\n", notebookCLI.GetCardCount())
 
 			return notebookCLI.Run(context.Background(), notebookCLI)
 		},
 	}
 
 	command.Flags().BoolVar(&includeNoCorrectAnswers, "include-no-correct-answers", false, "Include words that have never had a correct answer")
-	command.Flags().StringVarP(&notebookName, "notebook", "n", "", "Quiz from a specific notebook (empty for all notebooks)")
 
 	return command
 }
