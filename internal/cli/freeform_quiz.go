@@ -19,14 +19,14 @@ type FreeformQuizCLI struct {
 
 // NewFreeformQuizCLI creates a new freeform quiz interactive CLI
 func NewFreeformQuizCLI(
-	storiesDir string,
-	flashcardsDir string,
+	storiesDirs []string,
+	flashcardsDirs []string,
 	learningNotesDir string,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 ) (*FreeformQuizCLI, error) {
 	// Initialize base CLI
-	baseCLI, reader, err := initializeQuizCLI(storiesDir, flashcardsDir, learningNotesDir, dictionaryCacheDir, openaiClient)
+	baseCLI, reader, err := initializeQuizCLI(storiesDirs, flashcardsDirs, learningNotesDir, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}

@@ -52,18 +52,22 @@ func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[strin
 }
 
 func NewReader(
-	rootStoryNotebookDirectory string,
-	rootFlashcardDirectory string,
+	storyDirectories []string,
+	flashcardDirectories []string,
 	dictionaryMap map[string]rapidapi.Response,
 ) (*Reader, error) {
 	indexes := make(map[string]Index, 0)
-	if err := walkIndexFiles(rootStoryNotebookDirectory, indexes); err != nil {
-		return nil, fmt.Errorf("walkIndexFiles(story) > %w", err)
+	for _, dir := range storyDirectories {
+		if err := walkIndexFiles(dir, indexes); err != nil {
+			return nil, fmt.Errorf("walkIndexFiles(story, %s) > %w", dir, err)
+		}
 	}
 
 	flashcardIndexes := make(map[string]FlashcardIndex, 0)
-	if err := walkIndexFiles(rootFlashcardDirectory, flashcardIndexes); err != nil {
-		return nil, fmt.Errorf("walkIndexFiles(flashcard) > %w", err)
+	for _, dir := range flashcardDirectories {
+		if err := walkIndexFiles(dir, flashcardIndexes); err != nil {
+			return nil, fmt.Errorf("walkIndexFiles(flashcard, %s) > %w", dir, err)
+		}
 	}
 
 	return &Reader{

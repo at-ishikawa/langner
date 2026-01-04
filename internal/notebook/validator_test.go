@@ -1088,7 +1088,7 @@ func TestValidator_Fix(t *testing.T) {
 			require.NoError(t, WriteYamlFile(storyPath, tt.storyNotebook))
 
 			// Create validator
-			validator := NewValidator(learningNotesDir, storiesDir, "", dictionaryDir)
+			validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir)
 
 			// Run Fix
 			result, err := validator.Fix()

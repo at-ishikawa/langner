@@ -28,8 +28,8 @@ func newValidateCommand() *cobra.Command {
 			// Create validator
 			validator := notebook.NewValidator(
 				cfg.Notebooks.LearningNotesDirectory,
-				cfg.Notebooks.StoriesDirectory,
-				"", // flashcardsDir - not configured yet
+				cfg.Notebooks.StoriesDirectories,
+				cfg.Notebooks.FlashcardsDirectories,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
 			)
 
