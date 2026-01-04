@@ -405,10 +405,9 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 		learningHistory = []notebook.LearningHistory{}
 	}
 
-	// Record what the user actually practiced
+	// Always prefer the Definition form (canonical/base form) for consistent tracking
 	expressionToRecord := occurrence.Definition.Expression
-	if occurrence.Definition.Definition != "" && strings.EqualFold(word, occurrence.Definition.Definition) {
-		// User practiced the base form (definition), so record that
+	if occurrence.Definition.Definition != "" {
 		expressionToRecord = occurrence.Definition.Definition
 	}
 

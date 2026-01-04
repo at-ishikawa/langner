@@ -237,16 +237,51 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 					},
 				},
 			},
-			notebookID:     "notebook1",
-			storyTitle:     "Story 1",
-			sceneTitle:     "Scene 1",
-			expression:     "word3",
-			isCorrect:      false,
-			isKnownWord:    false,
-			alwaysRecord:   false,
-			wantFound:    false,
+			notebookID:      "notebook1",
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene 1",
+			expression:      "word3",
+			isCorrect:       false,
+			isKnownWord:     false,
+			alwaysRecord:    false,
+			wantFound:       false,
 			wantExpressions: 3,
-			wantStatus: LearnedStatusMisunderstood,
+			wantStatus:      LearnedStatusMisunderstood,
+		},
+		{
+			name: "Update existing expression with empty learned_logs",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "notebook1",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{
+								Title: "Scene 1",
+							},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression:  "run some ideas by someone",
+									LearnedLogs: []LearningRecord{}, // Empty learned_logs!
+								},
+							},
+						},
+					},
+				},
+			},
+			notebookID:      "notebook1",
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene 1",
+			expression:      "run some ideas by someone",
+			isCorrect:       true,
+			isKnownWord:     false, // Same as freeform quiz
+			alwaysRecord:    false,
+			wantFound:       true,
+			wantExpressions: 1,
+			wantStatus:      learnedStatusCanBeUsed, // Should be "usable"
+			wantLogs:        1,                      // Should have 1 log after update
 		},
 		{
 			name:            "Create new flashcard expression in empty history",
