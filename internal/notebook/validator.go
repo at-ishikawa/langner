@@ -57,19 +57,19 @@ func (r *ValidationResult) AddWarning(err ValidationError) {
 
 // Validator performs validation of learning notes and story notebooks
 type Validator struct {
-	learningNotesDir  string
-	storyNotebooksDir string
-	flashcardsDir     string
-	dictionaryDir     string
+	learningNotesDir   string
+	storyNotebooksDirs []string
+	flashcardsDirs     []string
+	dictionaryDir      string
 }
 
 // NewValidator creates a new validator
-func NewValidator(learningNotesDir, storyNotebooksDir, flashcardsDir, dictionaryDir string) *Validator {
+func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, dictionaryDir string) *Validator {
 	return &Validator{
-		learningNotesDir:  learningNotesDir,
-		storyNotebooksDir: storyNotebooksDir,
-		flashcardsDir:     flashcardsDir,
-		dictionaryDir:     dictionaryDir,
+		learningNotesDir:   learningNotesDir,
+		storyNotebooksDirs: storyNotebooksDirs,
+		flashcardsDirs:     flashcardsDirs,
+		dictionaryDir:      dictionaryDir,
 	}
 }
 
@@ -89,8 +89,8 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 		return nil, fmt.Errorf("loadStoryNotebooks() > %w", err)
 	}
 
-	// Load all flashcard notebooks if flashcardsDir is configured
-	if v.flashcardsDir != "" {
+	// Load all flashcard notebooks if flashcardsDirs is configured
+	if len(v.flashcardsDirs) > 0 {
 		flashcardNotebooks, err := v.loadFlashcardNotebooks()
 		if err != nil {
 			return nil, fmt.Errorf("loadFlashcardNotebooks() > %w", err)
@@ -182,15 +182,31 @@ func (v *Validator) loadLearningHistories() ([]learningHistoryFile, error) {
 }
 
 func (v *Validator) loadStoryNotebooks() ([]storyNotebookFile, error) {
-	return loadYamlFiles[[]StoryNotebook](v.storyNotebooksDir, func(path string, info os.FileInfo) bool {
-		return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
-	})
+	var allFiles []storyNotebookFile
+	for _, dir := range v.storyNotebooksDirs {
+		files, err := loadYamlFiles[[]StoryNotebook](dir, func(path string, info os.FileInfo) bool {
+			return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
+		})
+		if err != nil {
+			return nil, fmt.Errorf("loadYamlFiles(%s) > %w", dir, err)
+		}
+		allFiles = append(allFiles, files...)
+	}
+	return allFiles, nil
 }
 
 func (v *Validator) loadFlashcardNotebooks() ([]flashcardNotebookFile, error) {
-	return loadYamlFiles[[]FlashcardNotebook](v.flashcardsDir, func(path string, info os.FileInfo) bool {
-		return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
-	})
+	var allFiles []flashcardNotebookFile
+	for _, dir := range v.flashcardsDirs {
+		files, err := loadYamlFiles[[]FlashcardNotebook](dir, func(path string, info os.FileInfo) bool {
+			return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
+		})
+		if err != nil {
+			return nil, fmt.Errorf("loadYamlFiles(%s) > %w", dir, err)
+		}
+		allFiles = append(allFiles, files...)
+	}
+	return allFiles, nil
 }
 
 func (v *Validator) validateLearningNotesStructure(files []learningHistoryFile, result *ValidationResult) {

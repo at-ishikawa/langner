@@ -19,9 +19,9 @@ type Config struct {
 }
 
 type NotebooksConfig struct {
-	StoriesDirectory       string `mapstructure:"stories_directory"`
-	LearningNotesDirectory string `mapstructure:"learning_notes_directory"`
-	FlashcardsDirectory    string `mapstructure:"flashcards_directory"`
+	StoriesDirectories     []string `mapstructure:"stories_directories"`
+	LearningNotesDirectory string   `mapstructure:"learning_notes_directory"`
+	FlashcardsDirectories  []string `mapstructure:"flashcards_directories"`
 }
 
 type TemplatesConfig struct {
@@ -81,9 +81,9 @@ func NewConfigLoader(configFile string) (*ConfigLoader, error) {
 func (loader *ConfigLoader) Load() (*Config, error) {
 	v := loader.viper
 
-	v.SetDefault("notebooks.stories_directory", filepath.Join("notebooks", "stories"))
+	v.SetDefault("notebooks.stories_directories", []string{filepath.Join("notebooks", "stories")})
 	v.SetDefault("notebooks.learning_notes_directory", filepath.Join("notebooks", "learning_notes"))
-	v.SetDefault("notebooks.flashcards_directory", filepath.Join("notebooks", "flashcards"))
+	v.SetDefault("notebooks.flashcards_directories", []string{filepath.Join("notebooks", "flashcards")})
 	v.SetDefault("dictionaries.rapidapi.cache_directory", filepath.Join("dictionaries", "rapidapi"))
 	// Template is optional - if not specified, will use embedded fallback template
 	v.SetDefault("templates.story_notebook_template", "")

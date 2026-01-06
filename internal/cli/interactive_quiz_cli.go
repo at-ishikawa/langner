@@ -30,8 +30,8 @@ type InteractiveQuizCLI struct {
 
 // initializeQuizCLI is a common initialization function for quiz CLIs
 func initializeQuizCLI(
-	storiesDir string,
-	flashcardsDir string,
+	storiesDirs []string,
+	flashcardsDirs []string,
 	learningNotesDir string,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
@@ -44,7 +44,7 @@ func initializeQuizCLI(
 	dictionaryMap := rapidapi.FromResponsesToMap(response)
 
 	// Create notebook reader
-	reader, err := notebook.NewReader(storiesDir, flashcardsDir, dictionaryMap)
+	reader, err := notebook.NewReader(storiesDirs, flashcardsDirs, dictionaryMap)
 	if err != nil {
 		return nil, nil, fmt.Errorf("notebook.NewReader() > %w", err)
 	}
@@ -69,12 +69,12 @@ func initializeQuizCLI(
 
 // newInteractiveQuizCLI creates the base CLI with shared initialization for story notebooks
 func newInteractiveQuizCLI(
-	storiesDir string,
+	storiesDirs []string,
 	learningNotesDir string,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 ) (*InteractiveQuizCLI, *notebook.Reader, error) {
-	return initializeQuizCLI(storiesDir, "", learningNotesDir, dictionaryCacheDir, openaiClient)
+	return initializeQuizCLI(storiesDirs, nil, learningNotesDir, dictionaryCacheDir, openaiClient)
 }
 
 //go:generate mockgen -source=interactive_quiz_cli.go -destination=../mocks/cli/mock_session.go -package=mock_cli Session

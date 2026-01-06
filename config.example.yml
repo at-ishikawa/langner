@@ -1,11 +1,13 @@
 # Langner Configuration
 
 notebooks:
-  # Directory containing story notebooks
-  stories_directory: examples/stories
+  # Directories containing story notebooks (supports multiple directories)
+  stories_directories:
+    - examples/stories
 
-  # Directory containing flashcard notebooks
-  flashcards_directory: examples/flashcards
+  # Directories containing flashcard notebooks (supports multiple directories)
+  flashcards_directories:
+    - examples/flashcards
 
   # Directory containing learning notes/history
   learning_notes_directory: examples/learning_notes

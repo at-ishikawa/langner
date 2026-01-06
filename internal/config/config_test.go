@@ -44,9 +44,9 @@ func TestConfigLoader_Load(t *testing.T) {
 			configContent: "# Empty config\n",
 			want: &Config{
 				Notebooks: NotebooksConfig{
-					StoriesDirectory:       filepath.Join("notebooks", "stories"),
+					StoriesDirectories:     []string{filepath.Join("notebooks", "stories")},
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
+					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -65,7 +65,7 @@ func TestConfigLoader_Load(t *testing.T) {
 		{
 			name: "loads custom values without template",
 			configContent: `notebooks:
-  stories_directory: custom/stories
+  stories_directories: [custom/stories]
   learning_notes_directory: custom/learning
 dictionaries:
   rapidapi:
@@ -75,9 +75,9 @@ outputs:
 `,
 			want: &Config{
 				Notebooks: NotebooksConfig{
-					StoriesDirectory:       "custom/stories",
+					StoriesDirectories:     []string{"custom/stories"},
 					LearningNotesDirectory: "custom/learning",
-					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
+					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -96,13 +96,13 @@ outputs:
 		{
 			name: "partial config merges with defaults",
 			configContent: `notebooks:
-  stories_directory: partial/stories
+  stories_directories: [partial/stories]
 `,
 			want: &Config{
 				Notebooks: NotebooksConfig{
-					StoriesDirectory:       "partial/stories",
+					StoriesDirectories:     []string{"partial/stories"},
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectory:    filepath.Join("notebooks", "flashcards"),
+					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -121,7 +121,7 @@ outputs:
 		{
 			name: "invalid YAML",
 			configContent: `notebooks:
-  stories_directory: test
+  stories_directories: [test]
   invalid yaml: [[[
 `,
 			wantErr: "configuration file found but could not be read",

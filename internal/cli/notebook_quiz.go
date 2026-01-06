@@ -23,14 +23,14 @@ type NotebookQuizCLI struct {
 // NewNotebookQuizCLI creates a new notebook quiz interactive CLI for story notebooks
 func NewNotebookQuizCLI(
 	notebookName string,
-	storiesDir string,
+	storiesDirs []string,
 	learningNotesDir string,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 	includeNoCorrectAnswers bool,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI
-	baseCLI, reader, err := newInteractiveQuizCLI(storiesDir, learningNotesDir, dictionaryCacheDir, openaiClient)
+	baseCLI, reader, err := newInteractiveQuizCLI(storiesDirs, learningNotesDir, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}
@@ -91,13 +91,13 @@ func NewNotebookQuizCLI(
 // NewFlashcardQuizCLI creates a new notebook quiz interactive CLI for flashcard notebooks
 func NewFlashcardQuizCLI(
 	notebookName string,
-	flashcardsDir string,
+	flashcardsDirs []string,
 	learningNotesDir string,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI for flashcards
-	baseCLI, reader, err := initializeQuizCLI("", flashcardsDir, learningNotesDir, dictionaryCacheDir, openaiClient)
+	baseCLI, reader, err := initializeQuizCLI(nil, flashcardsDirs, learningNotesDir, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}
