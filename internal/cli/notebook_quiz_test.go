@@ -315,7 +315,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			wantStatus:  "understood",
 		},
 		{
-			name: "QA should NOT record duplicate misunderstood status",
+			name: "QA should record duplicate misunderstood status",
 			initialHistory: []notebook.LearningHistory{
 				{
 					Metadata: notebook.LearningHistoryMetadata{
@@ -346,7 +346,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isCorrect:   false,
 			isKnownWord: true,
 			commandType: "qa",
-			wantLogs:    1,
+			wantLogs:    2,
 			wantStatus:  notebook.LearnedStatusMisunderstood,
 		},
 		{
@@ -429,7 +429,6 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 					tt.expression,
 					tt.isCorrect,
 					tt.isKnownWord,
-					false, // alwaysRecord=false for practice
 				)
 			} else {
 				gotHistory, err = cli.updateLearningHistory(
@@ -441,7 +440,6 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 					tt.expression,
 					tt.isCorrect,
 					tt.isKnownWord,
-					true, // alwaysRecord=true for qa
 				)
 			}
 			require.NoError(t, err)

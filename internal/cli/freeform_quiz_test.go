@@ -535,7 +535,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			wantCount:      1,
 		},
 		{
-			name: "No duplicate status - should not add new record",
+			name: "Duplicate status - should add new record",
 			initialHistory: []notebook.LearningHistory{
 				{
 					Metadata: notebook.LearningHistoryMetadata{
@@ -569,7 +569,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			isCorrect:       true,
 			isKnownWord:     false,
 			wantCount:       1,
-			wantRecordCount: func() *int { c := 1; return &c }(),
+			wantRecordCount: func() *int { c := 2; return &c }(),
 		},
 	}
 
@@ -587,7 +587,6 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 				tc.expression,
 				tc.isCorrect,
 				tc.isKnownWord,
-				false, // alwaysRecord=false for freeform quiz
 			)
 			require.NoError(t, err)
 

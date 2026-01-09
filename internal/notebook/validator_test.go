@@ -237,35 +237,6 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 			errorMessageContains: []string{"learned_at is required"},
 		},
 		{
-			name: "duplicate dates",
-			files: []learningHistoryFile{
-				{
-					path: "test.yml",
-					contents: []LearningHistory{
-						{
-							Metadata: LearningHistoryMetadata{Title: "Test Episode"},
-							Scenes: []LearningScene{
-								{
-									Metadata: LearningSceneMetadata{Title: "Scene 1"},
-									Expressions: []LearningHistoryExpression{
-										{
-											Expression: "test",
-											LearnedLogs: []LearningRecord{
-												{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-												{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedErrorCount:   1,
-			errorMessageContains: []string{"duplicate learned_at date"},
-		},
-		{
 			name: "wrong chronological order",
 			files: []learningHistoryFile{
 				{

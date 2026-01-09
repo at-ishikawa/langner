@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -272,10 +273,16 @@ func (r *FreeformQuizCLI) hasCorrectAnswer(learningHistory []notebook.LearningHi
 				matchFound := r.isExpressionMatch(expr, wordCtx, word)
 				if matchFound {
 					status := expr.GetLatestStatus()
-					// If status is understood, usable, or intuitive, it's been answered correctly
+					// If status is understood, usable, or intuitive, check if threshold has passed
 					if status == notebook.LearnedStatus("understood") ||
 						status == notebook.LearnedStatus("usable") ||
 						status == notebook.LearnedStatus("intuitive") {
+						// Check if the spaced repetition threshold has passed
+						if r.hasThresholdPassed(expr.LearnedLogs) {
+							// Threshold has passed, needs re-learning
+							return false
+						}
+						// Threshold has not passed, still mastered
 						return true
 					}
 				}
@@ -292,10 +299,16 @@ func (r *FreeformQuizCLI) hasCorrectAnswer(learningHistory []notebook.LearningHi
 				matchFound := r.isExpressionMatch(expr, wordCtx, word)
 				if matchFound {
 					status := expr.GetLatestStatus()
-					// If status is understood, usable, or intuitive, it's been answered correctly
+					// If status is understood, usable, or intuitive, check if threshold has passed
 					if status == notebook.LearnedStatus("understood") ||
 						status == notebook.LearnedStatus("usable") ||
 						status == notebook.LearnedStatus("intuitive") {
+						// Check if the spaced repetition threshold has passed
+						if r.hasThresholdPassed(expr.LearnedLogs) {
+							// Threshold has passed, needs re-learning
+							return false
+						}
+						// Threshold has not passed, still mastered
 						return true
 					}
 				}
@@ -303,6 +316,62 @@ func (r *FreeformQuizCLI) hasCorrectAnswer(learningHistory []notebook.LearningHi
 		}
 	}
 	return false
+}
+
+// hasThresholdPassed checks if the spaced repetition threshold has passed
+// based on the learning logs. Returns true if threshold has passed (needs re-learning),
+// false if still within threshold (mastered).
+func (r *FreeformQuizCLI) hasThresholdPassed(logs []notebook.LearningRecord) bool {
+	if len(logs) == 0 {
+		return true
+	}
+
+	// Count correct answers (not misunderstood or learning)
+	count := 0
+	for _, log := range logs {
+		if log.Status == notebook.LearnedStatus("") || log.Status == notebook.LearnedStatus("misunderstood") {
+			continue
+		}
+		count++
+	}
+
+	// Get threshold days based on count
+	threshold := getThresholdDays(count)
+
+	// Most recent log is at index 0 (logs are sorted newest first)
+	lastCorrectLog := logs[0]
+	now := time.Now()
+	thresholdDate := lastCorrectLog.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24)
+
+	// If now is after the threshold date, threshold has passed
+	return now.After(thresholdDate)
+}
+
+// getThresholdDays returns the number of days until next review based on
+// the number of correct answers. This matches the logic in notebook.getNextLearningThresholdDays().
+func getThresholdDays(count int) int {
+	thresholds := map[int]int{
+		1:  3,
+		2:  7,
+		3:  14,
+		4:  30,
+		5:  60,
+		6:  90,
+		7:  180,
+		8:  270,
+		9:  365,
+		10: 540,
+		11: 730,
+		12: 1095,
+	}
+	threshold, exists := thresholds[count]
+	if exists {
+		return threshold
+	}
+	if count > 12 {
+		return 365 * 100 // Very large number for "mastered"
+	}
+	return 0
 }
 
 func (r *FreeformQuizCLI) isExpressionMatch(expr notebook.LearningHistoryExpression, wordCtx *WordOccurrence, word string) bool {
@@ -432,7 +501,6 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 		expressionToRecord,
 		answer.Correct,
 		false, // isKnownWord=false to get "usable" status when correct
-		false, // alwaysRecord=false for freeform quiz
 	)
 	if err != nil {
 		return err

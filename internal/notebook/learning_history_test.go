@@ -301,7 +301,7 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			expectedCount:  2,
 		},
 		{
-			name: "should not add duplicate misunderstood status",
+			name: "should add duplicate misunderstood status",
 			initialExpression: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
@@ -311,10 +311,10 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			isCorrect:      false,
 			isKnownWord:    false,
 			expectedStatus: LearnedStatusMisunderstood,
-			expectedCount:  1, // Should remain 1, not add duplicate
+			expectedCount:  2, // Should add duplicate
 		},
 		{
-			name: "should not add duplicate usable status",
+			name: "should add duplicate usable status",
 			initialExpression: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
@@ -324,10 +324,10 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			isCorrect:      true,
 			isKnownWord:    false,
 			expectedStatus: learnedStatusCanBeUsed,
-			expectedCount:  1, // Should remain 1, not add duplicate
+			expectedCount:  2, // Should add duplicate
 		},
 		{
-			name: "should not add duplicate understood status",
+			name: "should add duplicate understood status",
 			initialExpression: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
@@ -337,7 +337,7 @@ func TestLearningHistoryExpression_AddRecord(t *testing.T) {
 			isCorrect:      true,
 			isKnownWord:    true,
 			expectedStatus: learnedStatusUnderstood,
-			expectedCount:  1, // Should remain 1, not add duplicate
+			expectedCount:  2, // Should add duplicate
 		},
 	}
 
@@ -480,89 +480,3 @@ func TestNewLearningHistories_NonexistentDirectory(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-// TestAddRecordAlways verifies QA command only records correct answers
-func TestAddRecordAlways(t *testing.T) {
-	tests := []struct {
-		name              string
-		initialExpression LearningHistoryExpression
-		isCorrect         bool
-		isKnownWord       bool
-		expectedCount     int
-		expectedStatus    LearnedStatus
-	}{
-		{
-			name: "correct answer with duplicate understood status - should add",
-			initialExpression: LearningHistoryExpression{
-				Expression: "test",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      true,
-			isKnownWord:    true,
-			expectedCount:  2, // Should add duplicate
-			expectedStatus: learnedStatusUnderstood,
-		},
-		{
-			name: "incorrect answer - should NOT add any record",
-			initialExpression: LearningHistoryExpression{
-				Expression: "test",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      false,
-			isKnownWord:    false,
-			expectedCount:  1, // Should NOT add any record
-			expectedStatus: LearnedStatusMisunderstood,
-		},
-		{
-			name: "correct answer changing from misunderstood to understood - should add",
-			initialExpression: LearningHistoryExpression{
-				Expression: "test",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      true,
-			isKnownWord:    true,
-			expectedCount:  2, // Should add new status
-			expectedStatus: learnedStatusUnderstood,
-		},
-		{
-			name: "incorrect answer with empty history - should add misunderstood",
-			initialExpression: LearningHistoryExpression{
-				Expression:  "test",
-				LearnedLogs: []LearningRecord{},
-			},
-			isCorrect:      false,
-			isKnownWord:    false,
-			expectedCount:  1, // Should add misunderstood record
-			expectedStatus: LearnedStatusMisunderstood,
-		},
-		{
-			name: "correct answer with usable status - should add understood",
-			initialExpression: LearningHistoryExpression{
-				Expression: "test",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      true,
-			isKnownWord:    true,
-			expectedCount:  2, // Should add new record
-			expectedStatus: learnedStatusUnderstood,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			tt.initialExpression.AddRecordAlways(tt.isCorrect, tt.isKnownWord)
-			
-			assert.Len(t, tt.initialExpression.LearnedLogs, tt.expectedCount)
-			if tt.expectedCount > 0 {
-				assert.Equal(t, tt.expectedStatus, tt.initialExpression.GetLatestStatus())
-			}
-		})
-	}
-}

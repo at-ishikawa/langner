@@ -127,7 +127,7 @@ func (cli *InteractiveQuizCLI) updateLearningHistory(
 	notebookName string,
 	learningHistory []notebook.LearningHistory,
 	notebookID, storyTitle, sceneTitle, expression string,
-	isCorrect, isKnownWord, alwaysRecord bool,
+	isCorrect, isKnownWord bool,
 ) ([]notebook.LearningHistory, error) {
 	updater := notebook.NewLearningHistoryUpdater(learningHistory)
 	updater.UpdateOrCreateExpression(
@@ -137,7 +137,6 @@ func (cli *InteractiveQuizCLI) updateLearningHistory(
 		expression,
 		isCorrect,
 		isKnownWord,
-		alwaysRecord,
 	)
 	learningHistory = updater.GetHistory()
 
