@@ -290,7 +290,7 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name: "one understood - 7 day threshold",
+			name: "one understood - 3 day threshold",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
@@ -298,10 +298,10 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 					{Status: learnedStatusUnderstood, LearnedAt: NewDate()},
 				},
 			},
-			expected: 7, // count=1 -> 7 days
+			expected: 3, // count=1 -> 3 days
 		},
 		{
-			name: "two understood - 30 day threshold",
+			name: "two understood - 7 day threshold",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
@@ -310,10 +310,10 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-time.Hour))},
 				},
 			},
-			expected: 30, // count=2 -> 30 days
+			expected: 7, // count=2 -> 7 days
 		},
 		{
-			name: "three understood - 90 day threshold",
+			name: "three understood - 14 day threshold",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
@@ -323,7 +323,7 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-2 * time.Hour))},
 				},
 			},
-			expected: 90, // count=3 -> 90 days
+			expected: 14, // count=3 -> 14 days
 		},
 		{
 			name: "multiple logs - counts non-learning statuses",
@@ -331,12 +331,12 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate()},                                           // most recent
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-time.Hour))},        // 2 non-learning
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now().Add(-2 * time.Hour))}, // 3 non-learning
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate()},                                           // counted (1)
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-time.Hour))},        // counted (2)
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now().Add(-2 * time.Hour))}, // not counted
 				},
 			},
-			expected: 30,
+			expected: 7, // count=2 -> 7 days
 		},
 	}
 

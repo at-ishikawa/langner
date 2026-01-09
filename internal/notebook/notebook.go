@@ -2,6 +2,7 @@ package notebook
 
 import (
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -288,17 +289,25 @@ func (note Note) getNextLearningThresholdDays() int {
 	}
 
 	thresholds := map[int]int{
-		1: 7,
-		2: 30,
-		3: 90,
-		4: 365,
+		1:  3,
+		2:  7,
+		3:  14,
+		4:  30,
+		5:  60,
+		6:  90,
+		7:  180,
+		8:  270,
+		9:  365,
+		10: 540,
+		11: 730,
+		12: 1095,
 	}
 	threshold, exists := thresholds[count]
 	if exists {
 		return threshold
 	}
-	if count > 4 {
-		return 1_000
+	if count > 12 {
+		return math.MaxInt
 	}
 	return 0
 }
