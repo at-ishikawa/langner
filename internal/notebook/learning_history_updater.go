@@ -15,7 +15,7 @@ func NewLearningHistoryUpdater(history []LearningHistory) *LearningHistoryUpdate
 // updateOrCreateExpression is the internal implementation
 func (u *LearningHistoryUpdater) UpdateOrCreateExpression(
 	notebookID, storyTitle, sceneTitle, expression string,
-	isCorrect, isKnownWord, alwaysRecord bool,
+	isCorrect, isKnownWord bool,
 ) bool {
 	// Determine if this is flashcard format based on story and scene titles
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
@@ -34,11 +34,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpression(
 				}
 
 				// Found existing expression - update it
-				if alwaysRecord {
-					exp.AddRecordAlways(isCorrect, isKnownWord)
-				} else {
-					exp.AddRecord(isCorrect, isKnownWord)
-				}
+				exp.AddRecord(isCorrect, isKnownWord)
 				u.history[hi].Expressions[ei] = exp
 				return true
 			}
@@ -57,11 +53,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpression(
 				}
 
 				// Found existing expression - update it
-				if alwaysRecord {
-					exp.AddRecordAlways(isCorrect, isKnownWord)
-				} else {
-					exp.AddRecord(isCorrect, isKnownWord)
-				}
+				exp.AddRecord(isCorrect, isKnownWord)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
 			}
@@ -69,14 +61,14 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpression(
 	}
 
 	// Expression not found - create new entry
-	u.createNewExpression(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, alwaysRecord)
+	u.createNewExpression(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord)
 	return false
 }
 
 // createNewExpression creates a new expression entry in the learning history
 func (u *LearningHistoryUpdater) createNewExpression(
 	notebookID, storyTitle, sceneTitle, expression string,
-	isCorrect, isKnownWord, alwaysRecord bool,
+	isCorrect, isKnownWord bool,
 ) {
 	// Determine if this is flashcard format
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
@@ -89,11 +81,7 @@ func (u *LearningHistoryUpdater) createNewExpression(
 		Expression:  expression,
 		LearnedLogs: []LearningRecord{},
 	}
-	if alwaysRecord {
-		newExpression.AddRecordAlways(isCorrect, isKnownWord)
-	} else {
-		newExpression.AddRecord(isCorrect, isKnownWord)
-	}
+	newExpression.AddRecord(isCorrect, isKnownWord)
 
 	// Only add the expression if it has at least one learning record
 	if len(newExpression.LearnedLogs) == 0 {

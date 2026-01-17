@@ -274,7 +274,6 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		wordToRecord,
 		answer.Correct,
 		true, // qa command always marks correct answers as known words
-		true, // qa command always records even if status doesn't change
 	)
 	if err != nil {
 		return err

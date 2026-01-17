@@ -95,43 +95,6 @@ func (exp *LearningHistoryExpression) AddRecord(isCorrect, isKnownWord bool) {
 		}
 	}
 
-	// Check if the status would change from the current status
-	currentStatus := exp.GetLatestStatus()
-	if currentStatus == status {
-		// Status hasn't changed, don't add a duplicate record
-		return
-	}
-
-	exp.LearnedLogs = append([]LearningRecord{
-		{
-			Status:    status,
-			LearnedAt: NewDate(),
-		},
-	}, exp.LearnedLogs...)
-}
-
-// AddRecordAlways adds a learning record for QA command
-// Records both correct and incorrect answers
-func (exp *LearningHistoryExpression) AddRecordAlways(isCorrect, isKnownWord bool) {
-	var status LearnedStatus
-
-	if isCorrect {
-		status = learnedStatusUnderstood
-		if !isKnownWord {
-			status = learnedStatusCanBeUsed
-		}
-	} else {
-		// Record misunderstood status for incorrect answers
-		status = LearnedStatusMisunderstood
-
-		// Check if the last status was already misunderstood
-		if exp.GetLatestStatus() == LearnedStatusMisunderstood {
-			// Don't record duplicate consecutive misunderstood entries
-			return
-		}
-	}
-
-	// Record the learning attempt
 	exp.LearnedLogs = append([]LearningRecord{
 		{
 			Status:    status,
@@ -167,7 +130,6 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 		learnedStatusIntuitivelyUsed: true,
 	}
 
-	seenDates := make(map[string]bool)
 	var prevDate time.Time
 
 	for logIdx, log := range exp.LearnedLogs {
@@ -195,16 +157,6 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 			})
 			continue
 		}
-
-		// Check for duplicate dates
-		dateStr := log.LearnedAt.Format("2006-01-02")
-		if seenDates[dateStr] {
-			errors = append(errors, ValidationError{
-				Location: location,
-				Message:  fmt.Sprintf("duplicate learned_at date: %s", dateStr),
-			})
-		}
-		seenDates[dateStr] = true
 
 		// Check chronological order (logs should be sorted newest first)
 		if logIdx > 0 && log.LearnedAt.After(prevDate) {

@@ -277,17 +277,10 @@ func (note Note) hasAnyCorrectAnswer() bool {
 	return false
 }
 
-func (note Note) getNextLearningThresholdDays() int {
-	learnedLogs := note.LearnedLogs
-
-	count := 0
-	for _, learnedLog := range learnedLogs {
-		if learnedLog.Status == learnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
-			continue
-		}
-		count++
-	}
-
+// GetThresholdDaysFromCount returns the number of days until next review
+// based on the number of correct answers. This implements the spaced repetition
+// algorithm used across all quiz types.
+func GetThresholdDaysFromCount(count int) int {
 	thresholds := map[int]int{
 		1:  3,
 		2:  7,
@@ -310,6 +303,20 @@ func (note Note) getNextLearningThresholdDays() int {
 		return math.MaxInt
 	}
 	return 0
+}
+
+func (note Note) getNextLearningThresholdDays() int {
+	learnedLogs := note.LearnedLogs
+
+	count := 0
+	for _, learnedLog := range learnedLogs {
+		if learnedLog.Status == learnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
+			continue
+		}
+		count++
+	}
+
+	return GetThresholdDaysFromCount(count)
 }
 
 type Template struct {

@@ -18,7 +18,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 		expression      string
 		isCorrect       bool
 		isKnownWord     bool
-		alwaysRecord    bool
 		wantFound       bool
 		wantExpressions int
 		wantStatus      LearnedStatus
@@ -33,7 +32,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "test-word",
 			isCorrect:       true,
 			isKnownWord:     true,
-			alwaysRecord:    false,
 			wantFound:       false,
 			wantExpressions: 1,
 			wantStatus:      learnedStatusUnderstood,
@@ -72,7 +70,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:     "test-word",
 			isCorrect:      true,
 			isKnownWord:    true,
-			alwaysRecord:   false,
 			wantFound:    true,
 			wantExpressions: 1,
 			wantStatus: learnedStatusUnderstood,
@@ -101,7 +98,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:     "test-word",
 			isCorrect:      true,
 			isKnownWord:    false,
-			alwaysRecord:   false,
 			wantFound:    false,
 			wantExpressions: 1,
 			wantStatus: learnedStatusCanBeUsed,
@@ -123,7 +119,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:     "test-word",
 			isCorrect:      false,
 			isKnownWord:    true,
-			alwaysRecord:   false,
 			wantFound:    false,
 			wantExpressions: 1,
 			wantStatus: LearnedStatusMisunderstood,
@@ -137,7 +132,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:     "",
 			isCorrect:      true,
 			isKnownWord:    true,
-			alwaysRecord:   false,
 			wantFound:    false,
 			wantExpressions: 1,
 			wantStatus: learnedStatusUnderstood,
@@ -151,7 +145,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:     "word/with/slashes",
 			isCorrect:      true,
 			isKnownWord:    true,
-			alwaysRecord:   false,
 			wantFound:    false,
 			wantExpressions: 1,
 			wantStatus: learnedStatusUnderstood,
@@ -194,7 +187,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:     "word1",
 			isCorrect:      true,
 			isKnownWord:    true,
-			alwaysRecord:   false,
 			wantFound:    true,
 			wantExpressions: 1,
 			wantStatus: learnedStatusUnderstood,
@@ -243,7 +235,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "word3",
 			isCorrect:       false,
 			isKnownWord:     false,
-			alwaysRecord:    false,
 			wantFound:       false,
 			wantExpressions: 3,
 			wantStatus:      LearnedStatusMisunderstood,
@@ -277,7 +268,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "run some ideas by someone",
 			isCorrect:       true,
 			isKnownWord:     false, // Same as freeform quiz
-			alwaysRecord:    false,
 			wantFound:       true,
 			wantExpressions: 1,
 			wantStatus:      learnedStatusCanBeUsed, // Should be "usable"
@@ -292,7 +282,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "test-word",
 			isCorrect:       true,
 			isKnownWord:     true,
-			alwaysRecord:    false,
 			wantFound:       false,
 			wantExpressions: 1,
 			wantStatus:      learnedStatusUnderstood,
@@ -325,7 +314,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "test-word",
 			isCorrect:       true,
 			isKnownWord:     true,
-			alwaysRecord:    false,
 			wantFound:       true,
 			wantExpressions: 1,
 			wantStatus:      learnedStatusUnderstood,
@@ -345,7 +333,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 				tc.expression,
 				tc.isCorrect,
 				tc.isKnownWord,
-				tc.alwaysRecord,
 			)
 
 			// Verify if expression was found

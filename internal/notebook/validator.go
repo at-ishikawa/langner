@@ -457,7 +457,7 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 
 				scene.Expressions = mergedExpressions
 
-				// Then, fix duplicate dates within each expression and sort chronologically
+				// Sort learned logs chronologically (newest first)
 				for exprIdx := range scene.Expressions {
 					expr := &scene.Expressions[exprIdx]
 
@@ -465,33 +465,10 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						continue
 					}
 
-					// Fix duplicate dates by removing duplicates
-					seenDates := make(map[string]bool)
-					uniqueLogs := make([]LearningRecord, 0, len(expr.LearnedLogs))
-
-					for _, log := range expr.LearnedLogs {
-						if log.LearnedAt.IsZero() {
-							continue
-						}
-
-						dateStr := log.LearnedAt.Format("2006-01-02")
-						if !seenDates[dateStr] {
-							seenDates[dateStr] = true
-							uniqueLogs = append(uniqueLogs, log)
-						} else {
-							result.AddWarning(ValidationError{
-								File:    file.path,
-								Message: fmt.Sprintf("Removed duplicate learned_at date %s for expression %q", dateStr, expr.Expression),
-							})
-						}
-					}
-
 					// Sort by date descending (newest first)
-					sort.Slice(uniqueLogs, func(i, j int) bool {
-						return uniqueLogs[i].LearnedAt.After(uniqueLogs[j].LearnedAt.Time)
+					sort.Slice(expr.LearnedLogs, func(i, j int) bool {
+						return expr.LearnedLogs[i].LearnedAt.After(expr.LearnedLogs[j].LearnedAt.Time)
 					})
-
-					expr.LearnedLogs = uniqueLogs
 				}
 			}
 
@@ -554,7 +531,7 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 				}
 			}
 
-			// After merging across scenes, need to re-deduplicate and sort within each scene
+			// After merging across scenes, need to sort within each scene
 			for sceneIdx := range file.contents[histIdx].Scenes {
 				scene := &file.contents[histIdx].Scenes[sceneIdx]
 				for exprIdx := range scene.Expressions {
@@ -564,28 +541,10 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						continue
 					}
 
-					// Remove duplicate dates
-					seenDates := make(map[string]bool)
-					uniqueLogs := make([]LearningRecord, 0, len(expr.LearnedLogs))
-
-					for _, log := range expr.LearnedLogs {
-						if log.LearnedAt.IsZero() {
-							continue
-						}
-
-						dateStr := log.LearnedAt.Format("2006-01-02")
-						if !seenDates[dateStr] {
-							seenDates[dateStr] = true
-							uniqueLogs = append(uniqueLogs, log)
-						}
-					}
-
 					// Sort by date descending (newest first)
-					sort.Slice(uniqueLogs, func(i, j int) bool {
-						return uniqueLogs[i].LearnedAt.After(uniqueLogs[j].LearnedAt.Time)
+					sort.Slice(expr.LearnedLogs, func(i, j int) bool {
+						return expr.LearnedLogs[i].LearnedAt.After(expr.LearnedLogs[j].LearnedAt.Time)
 					})
-
-					expr.LearnedLogs = uniqueLogs
 				}
 			}
 		}
