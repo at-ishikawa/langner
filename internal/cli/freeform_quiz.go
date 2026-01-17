@@ -336,7 +336,7 @@ func (r *FreeformQuizCLI) hasThresholdPassed(logs []notebook.LearningRecord) boo
 	}
 
 	// Get threshold days based on count
-	threshold := getThresholdDays(count)
+	threshold := notebook.GetThresholdDaysFromCount(count)
 
 	// Most recent log is at index 0 (logs are sorted newest first)
 	lastCorrectLog := logs[0]
@@ -345,33 +345,6 @@ func (r *FreeformQuizCLI) hasThresholdPassed(logs []notebook.LearningRecord) boo
 
 	// If now is after the threshold date, threshold has passed
 	return now.After(thresholdDate)
-}
-
-// getThresholdDays returns the number of days until next review based on
-// the number of correct answers. This matches the logic in notebook.getNextLearningThresholdDays().
-func getThresholdDays(count int) int {
-	thresholds := map[int]int{
-		1:  3,
-		2:  7,
-		3:  14,
-		4:  30,
-		5:  60,
-		6:  90,
-		7:  180,
-		8:  270,
-		9:  365,
-		10: 540,
-		11: 730,
-		12: 1095,
-	}
-	threshold, exists := thresholds[count]
-	if exists {
-		return threshold
-	}
-	if count > 12 {
-		return 365 * 100 // Very large number for "mastered"
-	}
-	return 0
 }
 
 func (r *FreeformQuizCLI) isExpressionMatch(expr notebook.LearningHistoryExpression, wordCtx *WordOccurrence, word string) bool {
