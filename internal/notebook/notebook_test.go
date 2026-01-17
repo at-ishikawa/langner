@@ -67,133 +67,7 @@ func TestNote_getLearnScore(t *testing.T) {
 	}
 }
 
-func TestNote_needsToLearnInFlashcard(t *testing.T) {
-	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-
-	tests := []struct {
-		name              string
-		note              Note
-		lowerThresholdDay int
-		expected          bool
-	}{
-		{
-			name: "no logs - needs learning (never practiced)",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-			},
-			lowerThresholdDay: 0,
-			expected:          true, // Changed: words never practiced should be included
-		},
-		{
-			name: "old misunderstood - needs learning",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-1 * 24 * time.Hour))},
-				},
-			},
-			lowerThresholdDay: 0,
-			expected:          true,
-		},
-		{
-			name: "old understood - needs learning",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-8 * 24 * time.Hour))},
-				},
-			},
-			lowerThresholdDay: 0,
-			expected:          true,
-		},
-		{
-			name: "old usable - needs learning again",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(baseTime.Add(-31 * 24 * time.Hour))},
-				},
-			},
-			lowerThresholdDay: 0,
-			expected:          true,
-		},
-		{
-			name: "recent usable - doesn't need learning",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-1 * time.Hour))}, // very recent, less than 7 days
-				},
-			},
-			lowerThresholdDay: 0,
-			expected:          false,
-		},
-		{
-			name: "with lower threshold filter",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-8 * 24 * time.Hour))},
-				},
-			},
-			lowerThresholdDay: 10, // threshold is 7 for understood, but we want >= 10
-			expected:          false,
-		},
-		{
-			name: "recent misunderstood with lower threshold - always needs learning",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now().Add(-1 * time.Hour))},
-				},
-			},
-			lowerThresholdDay: 7, // even with threshold filter
-			expected:          true,
-		},
-		{
-			name: "very recent misunderstood - always needs learning",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now())},
-				},
-			},
-			lowerThresholdDay: 7,
-			expected:          true,
-		},
-		{
-			name: "misunderstood with high lower threshold - still needs learning",
-			note: Note{
-				Expression: "hello",
-				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-2 * 24 * time.Hour))},
-				},
-			},
-			lowerThresholdDay: 30, // high threshold, but misunderstood should bypass it
-			expected:          true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := tt.note.needsToLearnInFlashcard(tt.lowerThresholdDay)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestNote_needsToLearnInStory(t *testing.T) {
-	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
-
+func TestNote_needsToLearn(t *testing.T) {
 	tests := []struct {
 		name     string
 		note     Note
@@ -208,65 +82,80 @@ func TestNote_needsToLearnInStory(t *testing.T) {
 			expected: true,
 		},
 		{
-			name: "old misunderstood - needs learning",
+			name: "misunderstood - always needs learning",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-1 * 24 * time.Hour))},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now())},
 				},
 			},
 			expected: true,
 		},
 		{
-			name: "understood - doesn't need learning in story",
+			name: "1 correct answer, 4 days ago - needs learning (threshold is 3 days)",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-6 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-4 * 24 * time.Hour))},
 				},
 			},
-			expected: false, // threshold > 1, so false for story
+			expected: true,
 		},
 		{
-			name: "usable - doesn't need learning in story",
+			name: "1 correct answer, 2 days ago - doesn't need learning (threshold is 3 days)",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(baseTime.Add(-29 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-2 * 24 * time.Hour))},
 				},
 			},
-			expected: false, // threshold > 1, so false for story
+			expected: false,
 		},
 		{
-			name: "intuitive - doesn't need learning in story",
+			name: "2 correct answers, 8 days ago - needs learning (threshold is 7 days)",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDateFromTime(baseTime.Add(-100 * 24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-8 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-12 * 24 * time.Hour))},
 				},
 			},
-			expected: false, // threshold > 1, so false for story
+			expected: true,
 		},
 		{
-			name: "recent misunderstood - always needs learning in story",
+			name: "2 correct answers, 5 days ago - doesn't need learning (threshold is 7 days)",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-1 * time.Hour))}, // very recent
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-5 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-10 * 24 * time.Hour))},
 				},
 			},
-			expected: true, // misunderstood expressions are always included in stories
+			expected: false,
+		},
+		{
+			name: "3 correct answers, 15 days ago - needs learning (threshold is 14 days)",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDateFromTime(time.Now().Add(-15 * 24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-20 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-25 * 24 * time.Hour))},
+				},
+			},
+			expected: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.note.needsToLearnInStory()
+			result := tt.note.needsToLearn()
 			assert.Equal(t, tt.expected, result)
 		})
 	}

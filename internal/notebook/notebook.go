@@ -212,9 +212,8 @@ type Phrase struct {
 	Remarks string `yaml:"remarks"`
 }
 
-func (note *Note) needsToLearnInFlashcard(lowerThresholdDay int) bool {
-	learnedLogs := note.LearnedLogs
-	if len(learnedLogs) == 0 {
+func (note *Note) needsToLearn() bool {
+	if len(note.LearnedLogs) == 0 {
 		return true
 	}
 	sort.Slice(note.LearnedLogs, func(i, j int) bool {
@@ -228,35 +227,6 @@ func (note *Note) needsToLearnInFlashcard(lowerThresholdDay int) bool {
 	}
 
 	threshold := note.getNextLearningThresholdDays()
-	if lowerThresholdDay > 0 && threshold < lowerThresholdDay {
-		return false
-	}
-
-	now := time.Now()
-	return now.After(lastLearnedResult.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
-}
-
-func (note *Note) needsToLearnInStory() bool {
-	if len(note.LearnedLogs) == 0 {
-		return true
-	}
-	sort.Slice(note.LearnedLogs, func(i, j int) bool {
-		return note.LearnedLogs[i].LearnedAt.After(note.LearnedLogs[j].LearnedAt.Time)
-	})
-	lastLearnedResult := note.LearnedLogs[0]
-
-	// Always include misunderstood expressions in stories for review
-	if lastLearnedResult.Status == LearnedStatusMisunderstood {
-		return true
-	}
-
-	threshold := note.getNextLearningThresholdDays()
-	// learn new words in a flashcard after the 1st time
-	if threshold > 1 {
-		// if threshold > 7 {
-		return false
-	}
-
 	now := time.Now()
 	return now.After(lastLearnedResult.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
 }
