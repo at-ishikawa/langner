@@ -171,7 +171,7 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 				if !includeNoCorrectAnswers && !definition.hasAnyCorrectAnswer() {
 					continue
 				}
-				if !definition.needsToLearn() {
+				if !definition.needsToLearnInNotebook() {
 					continue
 				}
 				if err := definition.setDetails(dictionaryMap, ""); err != nil {

@@ -343,3 +343,86 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 		})
 	}
 }
+
+func TestNote_needsToLearnInNotebook(t *testing.T) {
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name     string
+		note     Note
+		expected bool
+	}{
+		{
+			name: "no logs - needs learning",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+			},
+			expected: true,
+		},
+		{
+			name: "only misunderstood - needs learning (no correct answers)",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime)},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "latest is misunderstood after correct - needs learning",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-24 * time.Hour))},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "latest is correct - doesn't need learning (no spaced repetition)",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime)},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "multiple correct answers, latest is correct - doesn't need learning",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-24 * time.Hour))},
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "correct answer from long ago - doesn't need learning (notebook ignores time threshold)",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-365 * 24 * time.Hour))},
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := tt.note.needsToLearnInNotebook()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

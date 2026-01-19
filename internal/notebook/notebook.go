@@ -231,6 +231,25 @@ func (note *Note) needsToLearn() bool {
 	return now.After(lastLearnedResult.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
 }
 
+// needsToLearnInNotebook returns true if the note should be shown in notebook quiz.
+// Notebook quiz shows words that have no correct answers (never practiced) or
+// have a misunderstood latest answer.
+func (note *Note) needsToLearnInNotebook() bool {
+	// Show if no correct answers (never practiced successfully)
+	if !note.hasAnyCorrectAnswer() {
+		return true
+	}
+
+	// Show if latest answer is misunderstood
+	if len(note.LearnedLogs) == 0 {
+		return true
+	}
+	sort.Slice(note.LearnedLogs, func(i, j int) bool {
+		return note.LearnedLogs[i].LearnedAt.After(note.LearnedLogs[j].LearnedAt.Time)
+	})
+	return note.LearnedLogs[0].Status == LearnedStatusMisunderstood
+}
+
 func (note Note) hasAnyCorrectAnswer() bool {
 	if len(note.LearnedLogs) == 0 {
 		return false
