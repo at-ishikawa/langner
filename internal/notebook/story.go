@@ -139,7 +139,7 @@ const (
 	ConversionStylePlain
 )
 
-func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool) ([]StoryNotebook, error) {
+func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
 	for _, notebook := range storyNotebooks {
 		if len(notebook.Scenes) == 0 {
@@ -171,8 +171,14 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 				if !includeNoCorrectAnswers && !definition.hasAnyCorrectAnswer() {
 					continue
 				}
-				if !definition.needsToLearnInNotebook() {
-					continue
+				if useSpacedRepetition {
+					if !definition.needsToLearn() {
+						continue
+					}
+				} else {
+					if !definition.needsToLearnInNotebook() {
+						continue
+					}
 				}
 				if err := definition.setDetails(dictionaryMap, ""); err != nil {
 					return nil, fmt.Errorf("definition.setDetails() > %w", err)
@@ -239,7 +245,7 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 	}
 	learningHistory := learningHistories[storyID]
 
-	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true)
+	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false)
 	if err != nil {
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}

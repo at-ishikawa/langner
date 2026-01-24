@@ -51,7 +51,7 @@ func NewNotebookQuizCLI(
 				continue
 			}
 
-			filteredStories, err := notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, includeNoCorrectAnswers)
+			filteredStories, err := notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, includeNoCorrectAnswers, true)
 			if err != nil {
 				return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
 			}
@@ -73,7 +73,7 @@ func NewNotebookQuizCLI(
 		}
 
 		// Filter stories based on learning history (without conversion)
-		stories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, includeNoCorrectAnswers)
+		stories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, includeNoCorrectAnswers, true)
 		if err != nil {
 			return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
 		}
