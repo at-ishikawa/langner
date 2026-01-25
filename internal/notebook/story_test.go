@@ -148,6 +148,333 @@ func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
 	}
 }
 
+func TestFilterStoryNotebooks(t *testing.T) {
+	tests := []struct {
+		name                    string
+		storyNotebooks          []StoryNotebook
+		learningHistory         []LearningHistory
+		sortDesc                bool
+		includeNoCorrectAnswers bool
+		useSpacedRepetition     bool
+		expectedWordCount       int
+		expectedWords           []string
+	}{
+		{
+			name: "useSpacedRepetition=false, usable status - word NOT included",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test word"},
+							},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "notebook1",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression: "test",
+									LearnedLogs: []LearningRecord{
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-60 * 24 * time.Hour))},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     false,
+			expectedWordCount:       0,
+			expectedWords:           nil,
+		},
+		{
+			name: "useSpacedRepetition=true, usable status past interval - word INCLUDED",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test word"},
+							},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "notebook1",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression: "test",
+									LearnedLogs: []LearningRecord{
+										// 1 correct answer, threshold is 3 days, 4 days ago - should need learning
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-4 * 24 * time.Hour))},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       1,
+			expectedWords:           []string{"test"},
+		},
+		{
+			name: "useSpacedRepetition=true, usable status NOT past interval - word NOT included",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test word"},
+							},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "notebook1",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression: "test",
+									LearnedLogs: []LearningRecord{
+										// 1 correct answer, threshold is 3 days, 1 day ago - should NOT need learning
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-1 * 24 * time.Hour))},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       0,
+			expectedWords:           nil,
+		},
+		{
+			name: "Both modes - misunderstood status always included (useSpacedRepetition=false)",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test word"},
+							},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "notebook1",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression: "test",
+									LearnedLogs: []LearningRecord{
+										{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now())},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     false,
+			expectedWordCount:       1,
+			expectedWords:           []string{"test"},
+		},
+		{
+			name: "Both modes - misunderstood status always included (useSpacedRepetition=true)",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test word"},
+							},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "notebook1",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression: "test",
+									LearnedLogs: []LearningRecord{
+										{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now())},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       1,
+			expectedWords:           []string{"test"},
+		},
+		{
+			name: "Both modes - no learning history always included (useSpacedRepetition=false)",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test word"},
+							},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory:         []LearningHistory{},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     false,
+			expectedWordCount:       1,
+			expectedWords:           []string{"test"},
+		},
+		{
+			name: "Both modes - no learning history always included (useSpacedRepetition=true)",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test word"},
+							},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory:         []LearningHistory{},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       1,
+			expectedWords:           []string{"test"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := FilterStoryNotebooks(
+				tt.storyNotebooks,
+				tt.learningHistory,
+				map[string]rapidapi.Response{},
+				tt.sortDesc,
+				tt.includeNoCorrectAnswers,
+				tt.useSpacedRepetition,
+			)
+			require.NoError(t, err)
+
+			// Count total words
+			wordCount := 0
+			var words []string
+			for _, notebook := range result {
+				for _, scene := range notebook.Scenes {
+					for _, definition := range scene.Definitions {
+						wordCount++
+						words = append(words, definition.Expression)
+					}
+				}
+			}
+
+			assert.Equal(t, tt.expectedWordCount, wordCount, "Expected %d words, got %d", tt.expectedWordCount, wordCount)
+			assert.Equal(t, tt.expectedWords, words, "Expected words %v, got %v", tt.expectedWords, words)
+		})
+	}
+}
+
 func TestReader_ReadAllStoryNotebooksMap(t *testing.T) {
 	tests := []struct {
 		name            string

@@ -112,7 +112,7 @@ func (f Reader) ReadAllNotes(storyID string, learningHistories map[string][]Lear
 					definition.LearnedLogs = logs
 				}
 
-				if !definition.needsToLearnInFlashcard(30) {
+				if !definition.needsToLearn() {
 					continue
 				}
 				if err := definition.setDetails(f.dictionaryMap, ""); err != nil {

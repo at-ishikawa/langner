@@ -139,7 +139,7 @@ const (
 	ConversionStylePlain
 )
 
-func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, isFlashcard bool, includeNoCorrectAnswers bool) ([]StoryNotebook, error) {
+func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
 	for _, notebook := range storyNotebooks {
 		if len(notebook.Scenes) == 0 {
@@ -171,12 +171,12 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 				if !includeNoCorrectAnswers && !definition.hasAnyCorrectAnswer() {
 					continue
 				}
-				if isFlashcard {
-					if !definition.needsToLearnInFlashcard(7) {
+				if useSpacedRepetition {
+					if !definition.needsToLearn() {
 						continue
 					}
 				} else {
-					if !definition.needsToLearnInStory() {
+					if !definition.needsToLearnInNotebook() {
 						continue
 					}
 				}
@@ -245,7 +245,7 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 	}
 	learningHistory := learningHistories[storyID]
 
-	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, false, true)
+	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false)
 	if err != nil {
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}

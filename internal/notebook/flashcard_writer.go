@@ -41,7 +41,7 @@ func (writer FlashcardNotebookWriter) OutputFlashcardNotebooks(
 	}
 	learningHistory := learningHistories[flashcardID]
 
-	notebooks, err = FilterFlashcardNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, 7)
+	notebooks, err = FilterFlashcardNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc)
 	if err != nil {
 		return fmt.Errorf("FilterFlashcardNotebooks() > %w", err)
 	}

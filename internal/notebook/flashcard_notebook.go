@@ -90,7 +90,6 @@ func FilterFlashcardNotebooks(
 	learningHistory []LearningHistory,
 	dictionaryMap map[string]rapidapi.Response,
 	sortDesc bool,
-	lowerThresholdDay int,
 ) ([]FlashcardNotebook, error) {
 	result := make([]FlashcardNotebook, 0)
 
@@ -120,7 +119,7 @@ func FilterFlashcardNotebooks(
 			}
 
 			// Check if card needs to be learned based on spaced repetition
-			if !card.needsToLearnInFlashcard(lowerThresholdDay) {
+			if !card.needsToLearn() {
 				continue
 			}
 
