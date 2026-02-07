@@ -143,8 +143,8 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 										{
 											Expression: "test word",
 											LearnedLogs: []LearningRecord{
-												{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
-												{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+												{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
+												{Status: learnedStatusLearning, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 											},
 										},
 									},
@@ -195,7 +195,7 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 										{
 											Expression: "test",
 											LearnedLogs: []LearningRecord{
-												{Status: LearnedStatus("invalid"), LearnedAt: NewDateFromTime(time.Now())},
+												{Status: LearnedStatus("invalid"), LearnedAt: NewDate(time.Now())},
 											},
 										},
 									},
@@ -251,8 +251,8 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 										{
 											Expression: "test",
 											LearnedLogs: []LearningRecord{
-												{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-												{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
+												{Status: learnedStatusLearning, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+												{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
 											},
 										},
 									},
@@ -1109,7 +1109,7 @@ func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 									{
 										Expression: "ovulate",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 										},
 									},
 								},
@@ -1120,7 +1120,7 @@ func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 									{
 										Expression: "ovulate",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
 										},
 									},
 								},
@@ -1154,7 +1154,7 @@ func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 									{
 										Expression: "ovulate",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 										},
 									},
 								},
@@ -1165,7 +1165,7 @@ func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 									{
 										Expression: "ovulate",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
 										},
 									},
 								},

@@ -120,19 +120,12 @@ func (d *Date) UnmarshalYAML(value *yaml.Node) error {
 	return fmt.Errorf("unable to parse date '%s': expected YYYY-MM-DD, RFC3339, or RFC3339Nano format", value.Value)
 }
 
-// NewDate creates a new Date from the current time
-func NewDate() Date {
+// NewDate creates a new Date from the current time or a provided time
+func NewDate(t ...time.Time) Date {
+	if len(t) > 0 {
+		return Date{Time: t[0]}
+	}
 	return Date{Time: time.Now()}
-}
-
-// NewDateFromTime creates a new Date from a time.Time
-func NewDateFromTime(t time.Time) Date {
-	return Date{Time: t}
-}
-
-type LearningRecord struct {
-	Status    LearnedStatus `yaml:"status,omitempty"`
-	LearnedAt Date          `yaml:"learned_at,omitempty"`
 }
 
 func (note Note) getLearnScore() int {
@@ -226,7 +219,11 @@ func (note *Note) needsToLearn() bool {
 		return true
 	}
 
-	threshold := note.getNextLearningThresholdDays()
+	// Use stored interval if available, otherwise use legacy calculation
+	threshold := lastLearnedResult.IntervalDays
+	if threshold == 0 {
+		threshold = note.getNextLearningThresholdDays()
+	}
 	now := time.Now()
 	return now.After(lastLearnedResult.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
 }

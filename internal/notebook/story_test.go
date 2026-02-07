@@ -191,7 +191,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-60 * 24 * time.Hour))},
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
 									},
 								},
 							},
@@ -238,7 +238,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
 										// 1 correct answer, threshold is 3 days, 4 days ago - should need learning
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-4 * 24 * time.Hour))},
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-4 * 24 * time.Hour))},
 									},
 								},
 							},
@@ -285,7 +285,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
 										// 1 correct answer, threshold is 3 days, 1 day ago - should NOT need learning
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-1 * 24 * time.Hour))},
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
 									},
 								},
 							},
@@ -331,7 +331,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now())},
+										{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now())},
 									},
 								},
 							},
@@ -377,7 +377,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now())},
+										{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now())},
 									},
 								},
 							},

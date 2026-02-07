@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/at-ishikawa/langner/internal/cli"
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -33,6 +35,7 @@ func main() {
 		newNotebookCommand(),
 		newValidateCommand(),
 		newParseCommand(),
+		newMigrateCommand(),
 	)
 	if err := rootCommand.Execute(); err != nil {
 		if _, fprintfErr := fmt.Fprintf(os.Stderr, "failed to execute a command: %+v\n", err); fprintfErr != nil {
@@ -56,4 +59,34 @@ func setupLogger(debugMode bool) {
 			AddSource: true,
 		})),
 	)
+}
+
+func newMigrateCommand() *cobra.Command {
+	migrateCmd := &cobra.Command{
+		Use:   "migrate",
+		Short: "Migration commands",
+	}
+
+	migrateCmd.AddCommand(newMigrateLearningHistoryCommand())
+
+	return migrateCmd
+}
+
+func newMigrateLearningHistoryCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "learning-history",
+		Short: "Migrate learning history files to new SM-2 format",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			return cli.MigrateLearningHistory(cfg.Notebooks.LearningNotesDirectory)
+		},
+	}
 }

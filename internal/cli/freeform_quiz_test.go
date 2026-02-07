@@ -494,7 +494,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									LearnedLogs: []notebook.LearningRecord{
 										{
 											Status:    "understood",
-											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
+											LearnedAt: notebook.NewDate(time.Now().AddDate(0, 0, -1)),
 										},
 									},
 								},
@@ -553,7 +553,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									LearnedLogs: []notebook.LearningRecord{
 										{
 											Status:    "usable",
-											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
+											LearnedAt: notebook.NewDate(time.Now().AddDate(0, 0, -1)),
 										},
 									},
 								},
@@ -578,7 +578,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			cli := &InteractiveQuizCLI{
 				learningNotesDir: t.TempDir(),
 			}
-			result, err := cli.updateLearningHistory(
+			result, err := cli.updateLearningHistoryWithQuality(
 				tc.notebookID,
 				tc.initialHistory,
 				tc.notebookID,
@@ -587,6 +587,9 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 				tc.expression,
 				tc.isCorrect,
 				tc.isKnownWord,
+				4,
+				1000,
+				notebook.QuizTypeFreeform,
 			)
 			require.NoError(t, err)
 
@@ -719,7 +722,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 
 				needsLearning := cli.findOccurrencesNeedingLearning(wordContexts, "test")
 				require.Len(t, needsLearning, 1, "Should have one occurrence needing learning")
-				err := cli.updateLearningHistory(needsLearning[0], "test", answer)
+				err := cli.updateLearningHistory(needsLearning[0], "test", answer, 4, 1000)
 				require.NoError(t, err)
 			}
 
@@ -869,7 +872,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 		}
 
 		// Update learning history
-		err := cli.updateLearningHistory(needsLearning[0], word, answer)
+		err := cli.updateLearningHistory(needsLearning[0], word, answer, 4, 1000)
 		require.NoError(t, err)
 
 		// Read the saved history
@@ -943,7 +946,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 									LearnedLogs: []notebook.LearningRecord{
 										{
 											Status:    "usable",
-											LearnedAt: notebook.NewDateFromTime(time.Now()),
+											LearnedAt: notebook.NewDate(time.Now()),
 										},
 									},
 								},
@@ -982,7 +985,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 		}
 
 		// Update learning history
-		err := cli.updateLearningHistory(needsLearning[0], word, answer)
+		err := cli.updateLearningHistory(needsLearning[0], word, answer, 4, 1000)
 		require.NoError(t, err)
 
 		// Read the saved history
@@ -1110,7 +1113,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 
 			// Update each occurrence individually
 			for i := 0; i < tt.numToUpdate; i++ {
-				err := cli.updateLearningHistory(needsLearning[i], tt.word, answer)
+				err := cli.updateLearningHistory(needsLearning[i], tt.word, answer, 4, 1000)
 				require.NoError(t, err)
 			}
 
@@ -1290,7 +1293,7 @@ func TestFreeformQuizCLI_hasCorrectAnswer(t *testing.T) {
 								LearnedLogs: []notebook.LearningRecord{
 									{
 										Status:    "usable",
-										LearnedAt: notebook.NewDateFromTime(time.Now()),
+										LearnedAt: notebook.NewDate(time.Now()),
 									},
 								},
 							},
@@ -1414,7 +1417,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 										LearnedLogs: []notebook.LearningRecord{
 											{
 												Status:    "understood",
-												LearnedAt: notebook.NewDateFromTime(time.Now()),
+												LearnedAt: notebook.NewDate(time.Now()),
 											},
 										},
 									},
@@ -1680,7 +1683,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory_AlwaysRecordsDefinitionForm(t *te
 			}
 
 			// Update learning history
-			err := cli.updateLearningHistory(needsLearning[0], tt.userTypedWord, answer)
+			err := cli.updateLearningHistory(needsLearning[0], tt.userTypedWord, answer, 4, 1000)
 			require.NoError(t, err)
 
 			// Read the saved history

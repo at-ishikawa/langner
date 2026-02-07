@@ -82,7 +82,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 									{
 										Expression: "test",
 										LearnedLogs: []notebook.LearningRecord{
-											{Status: "usable", LearnedAt: notebook.NewDateFromTime(time.Now().Add(-4 * 24 * time.Hour))},
+											{Status: "usable", LearnedAt: notebook.NewDate(time.Now().Add(-4 * 24 * time.Hour))},
 										},
 									},
 								},
@@ -157,7 +157,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 									{
 										Expression: "test",
 										LearnedLogs: []notebook.LearningRecord{
-											{Status: "usable", LearnedAt: notebook.NewDateFromTime(time.Now().Add(-1 * 24 * time.Hour))},
+											{Status: "usable", LearnedAt: notebook.NewDate(time.Now().Add(-1 * 24 * time.Hour))},
 										},
 									},
 								},
@@ -228,7 +228,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 									{
 										Expression: "test",
 										LearnedLogs: []notebook.LearningRecord{
-											{Status: "misunderstood", LearnedAt: notebook.NewDateFromTime(time.Now())},
+											{Status: "misunderstood", LearnedAt: notebook.NewDate(time.Now())},
 										},
 									},
 								},
@@ -633,7 +633,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									LearnedLogs: []notebook.LearningRecord{
 										{
 											Status:    "understood",
-											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
+											LearnedAt: notebook.NewDate(time.Now().AddDate(0, 0, -1)),
 										},
 									},
 								},
@@ -668,7 +668,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									LearnedLogs: []notebook.LearningRecord{
 										{
 											Status:    notebook.LearnedStatusMisunderstood,
-											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
+											LearnedAt: notebook.NewDate(time.Now().AddDate(0, 0, -1)),
 										},
 									},
 								},
@@ -728,7 +728,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 									LearnedLogs: []notebook.LearningRecord{
 										{
 											Status:    notebook.LearnedStatusMisunderstood,
-											LearnedAt: notebook.NewDateFromTime(time.Now().AddDate(0, 0, -1)),
+											LearnedAt: notebook.NewDate(time.Now().AddDate(0, 0, -1)),
 										},
 									},
 								},
@@ -754,29 +754,19 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 
 			var gotHistory []notebook.LearningHistory
 			var err error
-			if tt.commandType == "practice" {
-				gotHistory, err = cli.updateLearningHistory(
-					"test-notebook",
-					tt.initialHistory,
-					"test-notebook",
-					"Test Story",
-					"Test Scene",
-					tt.expression,
-					tt.isCorrect,
-					tt.isKnownWord,
-				)
-			} else {
-				gotHistory, err = cli.updateLearningHistory(
-					"test-notebook",
-					tt.initialHistory,
-					"test-notebook",
-					"Test Story",
-					"Test Scene",
-					tt.expression,
-					tt.isCorrect,
-					tt.isKnownWord,
-				)
-			}
+			gotHistory, err = cli.updateLearningHistoryWithQuality(
+				"test-notebook",
+				tt.initialHistory,
+				"test-notebook",
+				"Test Story",
+				"Test Scene",
+				tt.expression,
+				tt.isCorrect,
+				tt.isKnownWord,
+				4,
+				1000,
+				notebook.QuizTypeNotebook,
+			)
 			require.NoError(t, err)
 
 			// Find the expression

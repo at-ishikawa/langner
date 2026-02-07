@@ -69,19 +69,21 @@ func TestDate_MarshalUnmarshal(t *testing.T) {
 }
 
 func TestDate_NewDate(t *testing.T) {
-	date := NewDate()
-	assert.False(t, date.IsZero())
+	t.Run("without argument uses current time", func(t *testing.T) {
+		date := NewDate()
+		assert.False(t, date.IsZero())
 
-	// Should be close to current time (within 1 second)
-	now := time.Now()
-	diff := now.Sub(date.Time)
-	assert.True(t, diff < time.Second && diff > -time.Second)
-}
+		// Should be close to current time (within 1 second)
+		now := time.Now()
+		diff := now.Sub(date.Time)
+		assert.True(t, diff < time.Second && diff > -time.Second)
+	})
 
-func TestDate_NewDateFromTime(t *testing.T) {
-	testTime := time.Date(2025, 6, 13, 14, 30, 0, 0, time.UTC)
-	date := NewDateFromTime(testTime)
+	t.Run("with argument uses provided time", func(t *testing.T) {
+		testTime := time.Date(2025, 6, 13, 14, 30, 0, 0, time.UTC)
+		date := NewDate(testTime)
 
-	assert.Equal(t, testTime, date.Time)
-	assert.Equal(t, "2025-06-13", date.Format("2006-01-02"))
+		assert.Equal(t, testTime, date.Time)
+		assert.Equal(t, "2025-06-13", date.Format("2006-01-02"))
+	})
 }

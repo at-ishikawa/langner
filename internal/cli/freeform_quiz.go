@@ -62,7 +62,8 @@ func NewFreeformQuizCLI(
 }
 
 func (r *FreeformQuizCLI) Session(ctx context.Context) error {
-	// Get word from user
+	startTime := time.Now()
+
 	fmt.Print("Word: ")
 	wordInput, err := r.stdinReader.ReadString('\n')
 	if err != nil {
@@ -75,7 +76,6 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		return nil
 	}
 
-	// Get meaning from user
 	fmt.Print("Meaning: ")
 	meaningInput, err := r.stdinReader.ReadString('\n')
 	if err != nil {
@@ -83,13 +83,12 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	}
 	meaning := strings.TrimSpace(meaningInput)
 
-	// Validate inputs
 	if err := ValidateInput(word, meaning); err != nil {
 		fmt.Printf("Invalid input: %v\n", err)
 		return nil
 	}
 
-	// Look up ALL occurrences of the word across all story notebooks
+	responseTimeMs := time.Since(startTime).Milliseconds()
 	allWordContexts := r.findAllWordContexts(word)
 
 	if len(allWordContexts) == 0 {
@@ -99,7 +98,6 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		fmt.Printf("Found %d occurrences of '%s' across notebooks\n", len(allWordContexts), word)
 	}
 
-	// Check each occurrence to see if it needs to be learned
 	needsLearning := r.findOccurrencesNeedingLearning(allWordContexts, word)
 	fmt.Printf("Found %d occurrences that need to be learned\n", len(needsLearning))
 	if len(needsLearning) == 0 {
@@ -108,8 +106,6 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		return nil
 	}
 
-	// Collect contexts from each occurrence that needs learning
-	// Strip {{ }} markers from contexts before sending to inference API
 	var contexts []inference.Context
 	for _, occurrence := range needsLearning {
 		cleanContexts := occurrence.GetCleanContexts()
@@ -122,14 +118,14 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		}
 	}
 
-	// Validate meaning against all context groups in a single API call
 	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
 		Expressions: []inference.Expression{
 			{
 				Expression:        word,
 				Meaning:           meaning,
 				Contexts:          contexts,
-				IsExpressionInput: true, // FreeformQuiz: user inputs the expression
+				IsExpressionInput: true,           // FreeformQuiz: user inputs the expression
+				ResponseTimeMs:    responseTimeMs, // For quality assessment
 			},
 		},
 	})
@@ -142,7 +138,6 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	}
 	result := results.Answers[0]
 
-	// Build a map from context string to occurrence index
 	contextToOccurrence := make(map[string]int)
 	for i, occurrence := range needsLearning {
 		for _, ctx := range occurrence.Contexts {
@@ -150,7 +145,6 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		}
 	}
 
-	// Check if OpenAI marked any answer as correct
 	isCorrect := false
 	for _, answer := range result.AnswersForContext {
 		if answer.Correct {
@@ -159,7 +153,19 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		}
 	}
 
-	// Find the first occurrence that has at least one correct context
+	quality := 1
+	if len(result.AnswersForContext) > 0 {
+		quality = result.AnswersForContext[0].Quality
+		if quality == 0 {
+			// Fallback if OpenAI didn't return quality
+			if isCorrect {
+				quality = 4
+			} else {
+				quality = 1
+			}
+		}
+	}
+
 	var firstCorrectOccurrenceIdx = -1
 	var matchingContext string
 	var matchingReason string
@@ -206,17 +212,14 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 		return err
 	}
 
-	// Update learning history when answer is correct
-	if isCorrect {
-		// Use the occurrence that matched the correct context if found, otherwise use the first occurrence
-		occurrenceToUpdate := displayOccurrence
-		if firstCorrectOccurrenceIdx >= 0 {
-			occurrenceToUpdate = needsLearning[firstCorrectOccurrenceIdx]
-		}
-		if occurrenceToUpdate != nil {
-			if err := r.updateLearningHistory(occurrenceToUpdate, word, answer); err != nil {
-				return err
-			}
+	// Update learning history for all answers (correct and incorrect)
+	occurrenceToUpdate := displayOccurrence
+	if firstCorrectOccurrenceIdx >= 0 {
+		occurrenceToUpdate = needsLearning[firstCorrectOccurrenceIdx]
+	}
+	if occurrenceToUpdate != nil {
+		if err := r.updateLearningHistory(occurrenceToUpdate, word, answer, quality, responseTimeMs); err != nil {
+			return err
 		}
 	}
 
@@ -335,8 +338,11 @@ func (r *FreeformQuizCLI) hasThresholdPassed(logs []notebook.LearningRecord) boo
 		count++
 	}
 
-	// Get threshold days based on count
-	threshold := notebook.GetThresholdDaysFromCount(count)
+	// Use stored interval if available, otherwise use legacy calculation
+	threshold := logs[0].IntervalDays
+	if threshold == 0 {
+		threshold = notebook.GetThresholdDaysFromCount(count)
+	}
 
 	// Most recent log is at index 0 (logs are sorted newest first)
 	lastCorrectLog := logs[0]
@@ -441,6 +447,8 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 	occurrence *WordOccurrence,
 	word string,
 	answer AnswerResponse,
+	quality int,
+	responseTimeMs int64,
 ) error {
 	learningHistory, ok := r.learningHistories[occurrence.NotebookName]
 	if !ok {
@@ -463,9 +471,8 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 		sceneTitle = occurrence.Scene.Title
 	}
 
-	// Update learning history with "usable" status for correct answers
 	var err error
-	learningHistory, err = r.InteractiveQuizCLI.updateLearningHistory(
+	learningHistory, err = r.updateLearningHistoryWithQuality(
 		occurrence.NotebookName,
 		learningHistory,
 		occurrence.NotebookName,
@@ -474,6 +481,9 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 		expressionToRecord,
 		answer.Correct,
 		false, // isKnownWord=false to get "usable" status when correct
+		quality,
+		responseTimeMs,
+		notebook.QuizTypeFreeform,
 	)
 	if err != nil {
 		return err

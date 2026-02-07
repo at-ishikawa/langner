@@ -306,6 +306,23 @@ is_expression_input HANDLING
 - If true: expression may have typos; judge user's intended meaning
 - If false: treat expression as correct/canonical; trust user more
 
+## Response Speed Assessment
+
+For each answer, also assess response speed quality (1-5):
+- If incorrect: quality = 1
+- If correct, evaluate response time relative to meaning complexity:
+  - Fast (quick recall for this meaning's length): quality = 5
+  - Normal (reasonable time): quality = 4
+  - Slow (took long relative to meaning complexity): quality = 3
+
+Consider:
+- Short meanings ("cat", "run") should be answered in ~2-5 seconds
+- Medium meanings ("to move quickly") should be answered in ~5-10 seconds
+- Long/complex meanings should be answered in ~10-20 seconds
+- Quiz type affects expectations (freeform requires typing word too)
+
+The input will include "response_time_ms" for each expression. Use this to assess quality.
+
 OUTPUT FORMAT:
 [
   {
@@ -313,8 +330,8 @@ OUTPUT FORMAT:
     "is_expression_input": false,
     "meaning": "...",
     "answers": [
-      {"correct": true,  "context": "...", "reason": "user meaning matches: both mean X"},
-      {"correct": false, "context": "...", "reason": "user said X but it means Y"}
+      {"correct": true,  "context": "...", "reason": "user meaning matches: both mean X", "quality": 5},
+      {"correct": false, "context": "...", "reason": "user said X but it means Y", "quality": 1}
     ]
   }
 ]
@@ -349,7 +366,7 @@ REASON FORMAT:
 					Expression: "snazzy",
 					Meaning:    "stylish and attractive",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "He wore a snazzy new suit to the interview.", Reason: "user repeated the word 'snazzy' instead of defining it"},
+						{Correct: false, Context: "He wore a snazzy new suit to the interview.", Reason: "user repeated the word 'snazzy' instead of defining it", Quality: 1},
 					},
 				},
 			},
@@ -371,7 +388,7 @@ REASON FORMAT:
 					Expression: "freeball",
 					Meaning:    "to not wear underwear",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "He decided to freeball at the gym today.", Reason: "user said 'wear loose underwear' but the expression means the opposite - 'not wearing underwear'"},
+						{Correct: false, Context: "He decided to freeball at the gym today.", Reason: "user said 'wear loose underwear' but the expression means the opposite - 'not wearing underwear'", Quality: 1},
 					},
 				},
 			},
@@ -393,7 +410,7 @@ REASON FORMAT:
 					Expression: "spunky",
 					Meaning:    "courageous and spirited",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The spunky little dog barked at the mailman.", Reason: "user said 'salty' which is about food/taste, but the expression describes personality traits"},
+						{Correct: false, Context: "The spunky little dog barked at the mailman.", Reason: "user said 'salty' which is about food/taste, but the expression describes personality traits", Quality: 1},
 					},
 				},
 			},
@@ -415,7 +432,7 @@ REASON FORMAT:
 					Expression: "the Thames",
 					Meaning:    "a major river flowing through London",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "We took a boat ride along the Thames.", Reason: "user said 'mountain' but the Thames is a river - wrong geographic feature"},
+						{Correct: false, Context: "We took a boat ride along the Thames.", Reason: "user said 'mountain' but the Thames is a river - wrong geographic feature", Quality: 1},
 					},
 				},
 			},
@@ -437,7 +454,7 @@ REASON FORMAT:
 					Expression: "saline",
 					Meaning:    "a solution of salt in water",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The nurse injected saline into the IV.", Reason: "user said 'container' but saline IS the liquid solution itself, not the container"},
+						{Correct: false, Context: "The nurse injected saline into the IV.", Reason: "user said 'container' but saline IS the liquid solution itself, not the container", Quality: 1},
 					},
 				},
 			},
@@ -459,7 +476,7 @@ REASON FORMAT:
 					Expression: "stand one's ground",
 					Meaning:    "to maintain one's position; to refuse to retreat",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "Despite the criticism, she stood her ground on the issue.", Reason: "user said 'get injured' which is passive suffering, but the expression means 'maintain position' which is actively resisting"},
+						{Correct: false, Context: "Despite the criticism, she stood her ground on the issue.", Reason: "user said 'get injured' which is passive suffering, but the expression means 'maintain position' which is actively resisting", Quality: 1},
 					},
 				},
 			},
@@ -481,7 +498,7 @@ REASON FORMAT:
 					Expression: "simple",
 					Meaning:    "easy; not complicated",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "This is a simple task.", Reason: "'easy' and 'simple' are synonymous"},
+						{Correct: true, Context: "This is a simple task.", Reason: "'easy' and 'simple' are synonymous", Quality: 5},
 					},
 				},
 			},
@@ -503,7 +520,7 @@ REASON FORMAT:
 					Expression: "hit the hay",
 					Meaning:    "to go to bed",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "I'm exhausted. Time to hit the hay.", Reason: "user said 'start sleeping' and reference says 'go to bed' - these capture the same essential concept"},
+						{Correct: true, Context: "I'm exhausted. Time to hit the hay.", Reason: "user said 'start sleeping' and reference says 'go to bed' - these capture the same essential concept", Quality: 4},
 					},
 				},
 			},
@@ -525,7 +542,7 @@ REASON FORMAT:
 					Expression: "a piece of cake",
 					Meaning:    "something very easy to do",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "This test is no piece of cake.", Reason: "the expression itself means 'easy' - the negation in context doesn't change what the expression means"},
+						{Correct: true, Context: "This test is no piece of cake.", Reason: "the expression itself means 'easy' - the negation in context doesn't change what the expression means", Quality: 5},
 					},
 				},
 			},
@@ -547,7 +564,7 @@ REASON FORMAT:
 					Expression: "nail it",
 					Meaning:    "to succeed at something; to do something very well",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "You really nailed that presentation!", Reason: "user said 'accomplish perfectly' which captures the success concept - same essential meaning as 'succeed' and 'do very well'"},
+						{Correct: true, Context: "You really nailed that presentation!", Reason: "user said 'accomplish perfectly' which captures the success concept - same essential meaning as 'succeed' and 'do very well'", Quality: 4},
 					},
 				},
 			},
@@ -569,7 +586,7 @@ REASON FORMAT:
 					Expression: "cavalry",
 					Meaning:    "soldiers who fight on horseback",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "", Reason: "user meaning matches the reference definition - both refer to soldiers on horseback"},
+						{Correct: true, Context: "", Reason: "user meaning matches the reference definition - both refer to soldiers on horseback", Quality: 5},
 					},
 				},
 			},
@@ -591,7 +608,7 @@ REASON FORMAT:
 					Expression: "pull through",
 					Meaning:    "to survive or recover from a serious illness or injury",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "After the surgery, we hoped she would pull through.", Reason: "same core concept: survival - 'not being dead' and 'survive' both describe the outcome of staying alive"},
+						{Correct: true, Context: "After the surgery, we hoped she would pull through.", Reason: "same core concept: survival - 'not being dead' and 'survive' both describe the outcome of staying alive", Quality: 4},
 					},
 				},
 			},
@@ -613,7 +630,7 @@ REASON FORMAT:
 					Expression: "score something",
 					Meaning:    "to obtain or acquire something",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "He scored himself a great deal on the car.", Reason: "context shows current possession state - 'to have' correctly describes the result of acquiring something"},
+						{Correct: true, Context: "He scored himself a great deal on the car.", Reason: "context shows current possession state - 'to have' correctly describes the result of acquiring something", Quality: 5},
 					},
 				},
 			},
@@ -635,7 +652,7 @@ REASON FORMAT:
 					Expression: "carpentry",
 					Meaning:    "the skill or work of making things from wood",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: true, Context: "I don't know the first thing about carpentry.", Reason: "user correctly defines what carpentry IS - the context is about speaker's knowledge, not changing the word's meaning"},
+						{Correct: true, Context: "I don't know the first thing about carpentry.", Reason: "user correctly defines what carpentry IS - the context is about speaker's knowledge, not changing the word's meaning", Quality: 4},
 					},
 				},
 			},
@@ -657,7 +674,7 @@ REASON FORMAT:
 					Expression: "serum",
 					Meaning:    "a fluid, especially one used in medical treatment",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The doctor administered the serum to the patient.", Reason: "IS vs USES error: user said 'something to take fluids' (a container/recipient) but serum IS the fluid itself"},
+						{Correct: false, Context: "The doctor administered the serum to the patient.", Reason: "IS vs USES error: user said 'something to take fluids' (a container/recipient) but serum IS the fluid itself", Quality: 1},
 					},
 				},
 			},
@@ -679,7 +696,7 @@ REASON FORMAT:
 					Expression: "weather the storm",
 					Meaning:    "to survive a difficult situation or period",
 					AnswersForContext: []inference.AnswersForContext{
-						{Correct: false, Context: "The company managed to weather the storm during the recession.", Reason: "PASSIVE vs ACTIVE error: user said 'get damages' (passive victim) but expression means 'survive/endure' (active resilience)"},
+						{Correct: false, Context: "The company managed to weather the storm during the recession.", Reason: "PASSIVE vs ACTIVE error: user said 'get damages' (passive victim) but expression means 'survive/endure' (active resilience)", Quality: 1},
 					},
 				},
 			},

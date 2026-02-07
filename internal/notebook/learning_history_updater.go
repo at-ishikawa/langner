@@ -157,3 +157,93 @@ func (u *LearningHistoryUpdater) findOrCreateScene(storyIndex int, sceneTitle st
 func (u *LearningHistoryUpdater) GetHistory() []LearningHistory {
 	return u.history
 }
+
+// UpdateOrCreateExpressionWithQuality updates or creates an expression with SM-2 quality assessment
+func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
+	notebookID, storyTitle, sceneTitle, expression string,
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+	quizType QuizType,
+) bool {
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+
+	// Try to find existing expression
+	for hi, h := range u.history {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+
+		// For flashcard type, search in expressions directly
+		if isFlashcard || h.Metadata.Type == "flashcard" {
+			for ei, exp := range h.Expressions {
+				if exp.Expression != expression {
+					continue
+				}
+				// Found existing expression - update it
+				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				u.history[hi].Expressions[ei] = exp
+				return true
+			}
+			continue
+		}
+
+		// For story type, search in scenes
+		for si, s := range h.Scenes {
+			if s.Metadata.Title != sceneTitle {
+				continue
+			}
+
+			for ei, exp := range s.Expressions {
+				if exp.Expression != expression {
+					continue
+				}
+				// Found existing expression - update it
+				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				u.history[hi].Scenes[si].Expressions[ei] = exp
+				return true
+			}
+		}
+	}
+
+	// Expression not found - create new entry
+	u.createNewExpressionWithQuality(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	return false
+}
+
+// createNewExpressionWithQuality creates a new expression entry with quality data
+func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
+	notebookID, storyTitle, sceneTitle, expression string,
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+	quizType QuizType,
+) {
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
+
+	newExpression := LearningHistoryExpression{
+		Expression:     expression,
+		LearnedLogs:    []LearningRecord{},
+		EasinessFactor: DefaultEasinessFactor,
+	}
+	newExpression.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+
+	if len(newExpression.LearnedLogs) == 0 {
+		return
+	}
+
+	if isFlashcard || u.history[storyIndex].Metadata.Type == "flashcard" {
+		u.history[storyIndex].Expressions = append(
+			u.history[storyIndex].Expressions,
+			newExpression,
+		)
+		return
+	}
+
+	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
+	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
+		u.history[storyIndex].Scenes[sceneIndex].Expressions,
+		newExpression,
+	)
+}

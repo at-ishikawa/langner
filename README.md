@@ -111,16 +111,7 @@ langner quiz freeform
 ```
 
 **Spaced Repetition System:**
-Langner uses spaced repetition to optimize your learning. Words are reviewed at increasing intervals:
-- After 1st correct answer: review in 3 days
-- After 2nd correct answer: review in 7 days
-- After 3rd correct answer: review in 14 days
-- After 4th correct answer: review in 30 days
-- After 5th correct answer: review in 60 days
-- After 6th correct answer: review in 90 days
-- And so on up to 1,095 days (3 years)
-
-The `quiz notebook` command automatically shows you only words that are due for review based on these intervals. Words you answered incorrectly (marked as "misunderstood") will always appear in quizzes until you answer them correctly.
+Langner uses a modified SM-2 algorithm for spaced repetition. Words are reviewed at increasing intervals based on how well you know them. Words you answer correctly appear less frequently, while words you struggle with appear more often.
 
 ### Validate Your Notebooks
 
