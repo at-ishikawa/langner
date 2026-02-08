@@ -25,7 +25,8 @@ theme = 'hugo-book'
   BookSearch = true
 
   # (Optional, default docs) Specify root page to render child pages as menu.
-  BookSection = 'docs'
+  # Use '/' to render all sections to menu from content root
+  BookSection = '/'
 
   # Specifies the menu bundle file.
   BookMenuBundle = '/menu'
