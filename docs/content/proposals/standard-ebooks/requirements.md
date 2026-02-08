@@ -103,12 +103,17 @@ Add ebook settings to `config.yml`:
 
 ```yaml
 notebooks:
-  ebooks_directory: ebooks
+  books_directories:
+    - notebooks/books
+
+books:
+  repo_directory: ebooks
 ```
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| `notebooks.ebooks_directory` | Directory where ebooks are cloned | `ebooks` |
+| `notebooks.books_directories` | Directories containing book notebooks | `notebooks/books` |
+| `books.repo_directory` | Directory where ebooks are cloned | `ebooks` |
 
 ## Commands
 

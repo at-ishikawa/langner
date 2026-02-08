@@ -231,25 +231,32 @@ mary-shelley_frankenstein/
 
 ## Parsing EPUB/OPF
 
-Since we clone the git repository (not the `.epub` archive), we work with unzipped files.
+Since we clone the git repository (not the `.epub` archive), we parse `content.opf` directly as XML.
 
-### Recommended Library
-
-[pirmd/epub](https://pkg.go.dev/github.com/pirmd/epub) - Parses OPF metadata including title, creator, and handles both EPUB2 and EPUB3:
+### Option 1: Standard library `encoding/xml`
 
 ```go
-import "github.com/pirmd/epub"
+import "encoding/xml"
 
-book, err := epub.Open("ebooks/mary-shelley_frankenstein/src/epub/content.opf")
-title := book.Metadata.Title
-author := book.Metadata.Creator
+type Package struct {
+    Metadata struct {
+        Title   string `xml:"title"`
+        Creator string `xml:"creator"`
+    } `xml:"metadata"`
+}
+
+var pkg Package
+xml.Unmarshal(opfData, &pkg)
 ```
 
-### Alternative Libraries
+### Option 2: EPUB libraries
 
-- [mathieu-keller/epub-parser](https://github.com/mathieu-keller/epub-parser) - Extracts metadata from OPF files
-- [taylorskalyo/goreader/epub](https://pkg.go.dev/github.com/taylorskalyo/goreader/epub) - Parses rootfile (content.opf)
-- [ArcadiaLin/go-epub](https://pkg.go.dev/github.com/ArcadiaLin/go-epub) - Has `ParseOpf` function for metadata
+Some libraries may support parsing OPF directly:
+- [pirmd/epub](https://pkg.go.dev/github.com/pirmd/epub)
+- [mathieu-keller/epub-parser](https://github.com/mathieu-keller/epub-parser)
+- [taylorskalyo/goreader/epub](https://pkg.go.dev/github.com/taylorskalyo/goreader/epub)
+
+Note: Many EPUB libraries expect `.epub` archives, not raw directories. Verify compatibility before use.
 
 ## Clone Command URL Derivation
 

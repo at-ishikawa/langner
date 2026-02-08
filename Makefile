@@ -32,5 +32,5 @@ docs-setup:
 	git submodule update --init --recursive
 
 .PHONY: docs-server
-docs-server:
+docs-server: docs-setup
 	hugo server -s docs
