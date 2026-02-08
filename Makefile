@@ -27,6 +27,10 @@ test-integration:
 	@OPENAI_API_KEY=$(OPENAI_API_KEY) \
 		go test -v ./internal/inference/openai -run Integration -timeout 60s
 
+.PHONY: docs-setup
+docs-setup:
+	git submodule update --init --recursive
+
 .PHONY: docs-server
 docs-server:
 	hugo server -s docs

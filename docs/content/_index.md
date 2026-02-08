@@ -1,6 +1,7 @@
 ---
 title: "Langner Documentation"
 type: docs
+bookFlatSection: true
 ---
 
 # Langner
@@ -13,10 +14,10 @@ Langner is a CLI tool to help you learn English by creating interactive vocabula
 
 Learn how to install and configure Langner.
 
-[Get Started →]({{< relref "/docs/getting-started" >}})
+[Get Started →]({{< relref "getting-started" >}})
 
 ## Features
 
 Explore what Langner can do for your language learning.
 
-[View Features →]({{< relref "/docs/features" >}})
+[View Features →]({{< relref "features" >}})
