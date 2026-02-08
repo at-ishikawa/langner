@@ -122,21 +122,27 @@ func (cli *InteractiveQuizCLI) Run(ctx context.Context, session Session) error {
 	return nil
 }
 
-// updateLearningHistoryRecord updates or creates an expression in the learning history
-func (cli *InteractiveQuizCLI) updateLearningHistory(
+// updateLearningHistoryWithQuality updates or creates an expression with SM-2 quality data
+func (cli *InteractiveQuizCLI) updateLearningHistoryWithQuality(
 	notebookName string,
 	learningHistory []notebook.LearningHistory,
 	notebookID, storyTitle, sceneTitle, expression string,
 	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+	quizType notebook.QuizType,
 ) ([]notebook.LearningHistory, error) {
 	updater := notebook.NewLearningHistoryUpdater(learningHistory)
-	updater.UpdateOrCreateExpression(
+	updater.UpdateOrCreateExpressionWithQuality(
 		notebookID,
 		storyTitle,
 		sceneTitle,
 		expression,
 		isCorrect,
 		isKnownWord,
+		quality,
+		responseTimeMs,
+		quizType,
 	)
 	learningHistory = updater.GetHistory()
 

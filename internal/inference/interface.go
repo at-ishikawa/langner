@@ -17,6 +17,7 @@ type Expression struct {
 	Meaning           string    `json:"meaning"`
 	Contexts          []Context `json:"contexts,omitempty"`
 	IsExpressionInput bool      `json:"is_expression_input"`
+	ResponseTimeMs    int64     `json:"response_time_ms,omitempty"` // For quality assessment
 }
 
 // Context represents a single example of an expression with its meaning from a registered notebook
@@ -48,7 +49,8 @@ type AnswerMeaning struct {
 type AnswersForContext struct {
 	Correct bool   `json:"correct"`
 	Context string `json:"context"`
-	Reason  string `json:"reason"` // Explanation of why the answer is correct or incorrect
+	Reason  string `json:"reason"`  // Explanation of why the answer is correct or incorrect
+	Quality int    `json:"quality"` // 1-5 based on correctness + response time
 }
 
 const (

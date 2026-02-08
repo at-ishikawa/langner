@@ -71,21 +71,41 @@ type LearningSceneMetadata struct {
 	Title string `yaml:"title"`
 }
 
+// LearningRecord represents a single learning event for an expression
+type LearningRecord struct {
+	Status         LearnedStatus `yaml:"status,omitempty"`
+	LearnedAt      Date          `yaml:"learned_at,omitempty"`
+	Quality        int           `yaml:"quality,omitempty"`          // 0-5 grade
+	ResponseTimeMs int64         `yaml:"response_time_ms,omitempty"` // milliseconds
+	QuizType       string        `yaml:"quiz_type,omitempty"`        // "freeform" or "notebook"
+	IntervalDays   int           `yaml:"interval_days,omitempty"`    // days until next review
+}
+
 type LearningHistoryExpression struct {
-	Expression  string           `yaml:"expression"`
-	LearnedLogs []LearningRecord `yaml:"learned_logs"`
+	Expression     string           `yaml:"expression"`
+	LearnedLogs    []LearningRecord `yaml:"learned_logs"`
+	EasinessFactor float64          `yaml:"easiness_factor,omitempty"` // default 2.5
 }
 
 func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	if len(exp.LearnedLogs) == 0 {
 		return learnedStatusLearning
 	}
-	// Get the first element since AddRecord prepends new logs
+	// Get the first element since new logs are prepended
 	lastLog := exp.LearnedLogs[0]
 	return lastLog.Status
 }
 
-func (exp *LearningHistoryExpression) AddRecord(isCorrect, isKnownWord bool) {
+// AddRecordWithQuality adds a new learning record with SM-2 quality data
+func (exp *LearningHistoryExpression) AddRecordWithQuality(
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+	quizType QuizType,
+) {
+	correctStreak := GetCorrectStreak(exp.LearnedLogs)
+	lastInterval := GetLastInterval(exp.LearnedLogs)
+
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
@@ -93,14 +113,26 @@ func (exp *LearningHistoryExpression) AddRecord(isCorrect, isKnownWord bool) {
 		} else {
 			status = learnedStatusCanBeUsed
 		}
+		correctStreak++
 	}
 
-	exp.LearnedLogs = append([]LearningRecord{
-		{
-			Status:    status,
-			LearnedAt: NewDate(),
-		},
-	}, exp.LearnedLogs...)
+	if exp.EasinessFactor == 0 {
+		exp.EasinessFactor = DefaultEasinessFactor
+	}
+
+	exp.EasinessFactor = UpdateEasinessFactor(exp.EasinessFactor, quality, correctStreak)
+	nextInterval := CalculateNextInterval(lastInterval, exp.EasinessFactor, quality, correctStreak)
+
+	newRecord := LearningRecord{
+		Status:         status,
+		LearnedAt:      NewDate(),
+		Quality:        quality,
+		ResponseTimeMs: responseTimeMs,
+		QuizType:       string(quizType),
+		IntervalDays:   nextInterval,
+	}
+
+	exp.LearnedLogs = append([]LearningRecord{newRecord}, exp.LearnedLogs...)
 }
 
 // Validate validates a LearningHistoryExpression

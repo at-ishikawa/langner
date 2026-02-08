@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -166,7 +167,8 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		return errEnd
 	}
 
-	// Display the question
+	startTime := time.Now()
+
 	question := FormatQuestion(currentCard)
 	fmt.Print(question)
 	_, _ = r.bold.Printf("%s: ", currentCard.GetExpression())
@@ -176,8 +178,7 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		return fmt.Errorf("error reading input: %w", err)
 	}
 
-	// Convert contexts to Context structs with meanings and usage
-	// Strip {{ }} markers from contexts before sending to inference API
+	responseTimeMs := time.Since(startTime).Milliseconds()
 	cleanContexts := currentCard.GetCleanContexts()
 	var contexts []inference.Context
 	for i, ctx := range currentCard.Contexts {
@@ -194,7 +195,8 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 				Expression:        currentCard.GetExpression(),
 				Meaning:           userAnswer,
 				Contexts:          contexts,
-				IsExpressionInput: false, // NotebookQuiz: user inputs the meaning
+				IsExpressionInput: false,          // NotebookQuiz: user inputs the meaning
+				ResponseTimeMs:    responseTimeMs, // For quality assessment
 			},
 		},
 	})
@@ -211,6 +213,20 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	if len(result.AnswersForContext) > 0 {
 		reason = result.AnswersForContext[0].Reason
 	}
+
+	quality := 1
+	if len(result.AnswersForContext) > 0 {
+		quality = result.AnswersForContext[0].Quality
+		if quality == 0 {
+			// Fallback if OpenAI didn't return quality
+			if isCorrect {
+				quality = 4
+			} else {
+				quality = 1
+			}
+		}
+	}
+
 	answer := AnswerResponse{
 		Correct:    isCorrect,
 		Expression: result.Expression,
@@ -265,7 +281,7 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		sceneTitle = currentCard.Scene.Title
 	}
 
-	learningHistory, err := r.updateLearningHistory(
+	learningHistory, err := r.updateLearningHistoryWithQuality(
 		cardNotebookName,
 		r.learningHistories[cardNotebookName],
 		cardNotebookName,
@@ -274,6 +290,9 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		wordToRecord,
 		answer.Correct,
 		true, // qa command always marks correct answers as known words
+		quality,
+		responseTimeMs,
+		notebook.QuizTypeNotebook,
 	)
 	if err != nil {
 		return err

@@ -31,7 +31,7 @@ func TestNote_getLearnScore(t *testing.T) {
 				Definition:   "greeting",
 				notebookDate: baseTime.Add(-30 * 24 * time.Hour),
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-1 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
 				},
 			},
 			expected: 10, // 10 from understood status minus time factors
@@ -43,7 +43,7 @@ func TestNote_getLearnScore(t *testing.T) {
 				Definition:   "greeting",
 				notebookDate: baseTime.Add(-10 * 24 * time.Hour),
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(baseTime.Add(-5 * 24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(baseTime.Add(-5 * 24 * time.Hour))},
 				},
 			},
 			expected: 1000, // 1000 from usable status minus time factors
@@ -87,7 +87,7 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now())},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now())},
 				},
 			},
 			expected: true,
@@ -98,7 +98,7 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-4 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-4 * 24 * time.Hour))},
 				},
 			},
 			expected: true,
@@ -109,7 +109,7 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-2 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-2 * 24 * time.Hour))},
 				},
 			},
 			expected: false,
@@ -120,8 +120,8 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-8 * 24 * time.Hour))},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-12 * 24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-8 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-12 * 24 * time.Hour))},
 				},
 			},
 			expected: true,
@@ -132,8 +132,8 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-5 * 24 * time.Hour))},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-10 * 24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-5 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-10 * 24 * time.Hour))},
 				},
 			},
 			expected: false,
@@ -144,9 +144,9 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDateFromTime(time.Now().Add(-15 * 24 * time.Hour))},
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Now().Add(-20 * 24 * time.Hour))},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-25 * 24 * time.Hour))},
+					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDate(time.Now().Add(-15 * 24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-20 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-25 * 24 * time.Hour))},
 				},
 			},
 			expected: true,
@@ -196,7 +196,7 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
 					{Status: learnedStatusUnderstood, LearnedAt: NewDate()},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-time.Hour))},
 				},
 			},
 			expected: 7, // count=2 -> 7 days
@@ -208,8 +208,8 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
 					{Status: learnedStatusUnderstood, LearnedAt: NewDate()},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-time.Hour))},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-2 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-2 * time.Hour))},
 				},
 			},
 			expected: 14, // count=3 -> 14 days
@@ -221,8 +221,8 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
 					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate()},                                           // counted (1)
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Now().Add(-time.Hour))},        // counted (2)
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Now().Add(-2 * time.Hour))}, // not counted
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-time.Hour))},        // counted (2)
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now().Add(-2 * time.Hour))}, // not counted
 				},
 			},
 			expected: 7, // count=2 -> 7 days
@@ -260,7 +260,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: false,
@@ -271,7 +271,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: learnedStatusLearning, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: false,
@@ -282,7 +282,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: true,
@@ -293,7 +293,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: true,
@@ -304,7 +304,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: true,
@@ -315,9 +315,9 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-3 * time.Hour))},
-					{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(baseTime.Add(-2 * time.Hour))},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-1 * time.Hour))},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime.Add(-3 * time.Hour))},
+					{Status: learnedStatusLearning, LearnedAt: NewDate(baseTime.Add(-2 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
 				},
 			},
 			expected: true,
@@ -328,8 +328,8 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime.Add(-2 * time.Hour))},
-					{Status: learnedStatusLearning, LearnedAt: NewDateFromTime(baseTime.Add(-1 * time.Hour))},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime.Add(-2 * time.Hour))},
+					{Status: learnedStatusLearning, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
 				},
 			},
 			expected: false,
@@ -366,7 +366,7 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: true,
@@ -377,8 +377,8 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(baseTime)},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-24 * time.Hour))},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime)},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-24 * time.Hour))},
 				},
 			},
 			expected: true,
@@ -389,7 +389,7 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime)},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: false,
@@ -400,8 +400,8 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(baseTime)},
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(baseTime)},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-24 * time.Hour))},
 				},
 			},
 			expected: false,
@@ -412,7 +412,7 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(baseTime.Add(-365 * 24 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-365 * 24 * time.Hour))},
 				},
 			},
 			expected: false,

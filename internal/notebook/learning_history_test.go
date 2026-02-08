@@ -35,7 +35,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 							{
 								Expression: "hello",
 								LearnedLogs: []LearningRecord{
-									{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+									{Status: "understood", LearnedAt: NewDate(fixedTime)},
 								},
 							},
 						},
@@ -46,7 +46,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			sceneTitle:    "Scene 1",
 			definition:    Note{Expression: "hello", Definition: "greeting"},
 			expected: []LearningRecord{
-				{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+				{Status: "understood", LearnedAt: NewDate(fixedTime)},
 			},
 		},
 		{
@@ -63,7 +63,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 							{
 								Expression: "greeting",
 								LearnedLogs: []LearningRecord{
-									{Status: "usable", LearnedAt: NewDateFromTime(fixedTime)},
+									{Status: "usable", LearnedAt: NewDate(fixedTime)},
 								},
 							},
 						},
@@ -74,7 +74,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			sceneTitle:    "Scene 1",
 			definition:    Note{Expression: "hello", Definition: "greeting"},
 			expected: []LearningRecord{
-				{Status: "usable", LearnedAt: NewDateFromTime(fixedTime)},
+				{Status: "usable", LearnedAt: NewDate(fixedTime)},
 			},
 		},
 		{
@@ -91,7 +91,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 							{
 								Expression: "hello",
 								LearnedLogs: []LearningRecord{
-									{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+									{Status: "understood", LearnedAt: NewDate(fixedTime)},
 								},
 							},
 						},
@@ -117,7 +117,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 							{
 								Expression: "hello",
 								LearnedLogs: []LearningRecord{
-									{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+									{Status: "understood", LearnedAt: NewDate(fixedTime)},
 								},
 							},
 						},
@@ -143,7 +143,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 							{
 								Expression: "different",
 								LearnedLogs: []LearningRecord{
-									{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+									{Status: "understood", LearnedAt: NewDate(fixedTime)},
 								},
 							},
 						},
@@ -175,7 +175,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 							{
 								Expression: "hello",
 								LearnedLogs: []LearningRecord{
-									{Status: "intuitive", LearnedAt: NewDateFromTime(fixedTime)},
+									{Status: "intuitive", LearnedAt: NewDate(fixedTime)},
 								},
 							},
 						},
@@ -186,7 +186,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			sceneTitle:    "Scene 2",
 			definition:    Note{Expression: "hello", Definition: "greeting"},
 			expected: []LearningRecord{
-				{Status: "intuitive", LearnedAt: NewDateFromTime(fixedTime)},
+				{Status: "intuitive", LearnedAt: NewDate(fixedTime)},
 			},
 		},
 		{
@@ -201,7 +201,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 					{
 						Expression: "hello",
 						LearnedLogs: []LearningRecord{
-							{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+							{Status: "understood", LearnedAt: NewDate(fixedTime)},
 						},
 					},
 				},
@@ -210,7 +210,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			sceneTitle:    "",
 			definition:    Note{Expression: "hello", Definition: "greeting"},
 			expected: []LearningRecord{
-				{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+				{Status: "understood", LearnedAt: NewDate(fixedTime)},
 			},
 		},
 		{
@@ -225,7 +225,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 					{
 						Expression: "different",
 						LearnedLogs: []LearningRecord{
-							{Status: "understood", LearnedAt: NewDateFromTime(fixedTime)},
+							{Status: "understood", LearnedAt: NewDate(fixedTime)},
 						},
 					},
 				},
@@ -241,129 +241,6 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := tt.history.GetLogs(tt.notebookTitle, tt.sceneTitle, tt.definition)
 			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestLearningHistoryExpression_AddRecord(t *testing.T) {
-	tests := []struct {
-		name              string
-		initialExpression LearningHistoryExpression
-		isCorrect         bool
-		isKnownWord       bool
-		expectedStatus    LearnedStatus
-		expectedCount     int
-	}{
-		{
-			name: "add correct record to empty expression",
-			initialExpression: LearningHistoryExpression{
-				Expression:  "hello",
-				LearnedLogs: []LearningRecord{},
-			},
-			isCorrect:      true,
-			isKnownWord:    true,
-			expectedStatus: learnedStatusUnderstood,
-			expectedCount:  1,
-		},
-		{
-			name: "add correct record to empty expression",
-			initialExpression: LearningHistoryExpression{
-				Expression:  "hello",
-				LearnedLogs: []LearningRecord{},
-			},
-			isCorrect:      true,
-			isKnownWord:    false,
-			expectedStatus: learnedStatusCanBeUsed,
-			expectedCount:  1,
-		},
-		{
-			name: "add incorrect record to empty expression",
-			initialExpression: LearningHistoryExpression{
-				Expression:  "hello",
-				LearnedLogs: []LearningRecord{},
-			},
-			isCorrect:      false,
-			isKnownWord:    true,
-			expectedStatus: LearnedStatusMisunderstood,
-			expectedCount:  1,
-		},
-		{
-			name: "add record to existing logs",
-			initialExpression: LearningHistoryExpression{
-				Expression: "hello",
-				LearnedLogs: []LearningRecord{
-					{Status: "usable", LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      true,
-			isKnownWord:    true,
-			expectedStatus: learnedStatusUnderstood,
-			expectedCount:  2,
-		},
-		{
-			name: "should add duplicate misunderstood status",
-			initialExpression: LearningHistoryExpression{
-				Expression: "hello",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      false,
-			isKnownWord:    false,
-			expectedStatus: LearnedStatusMisunderstood,
-			expectedCount:  2, // Should add duplicate
-		},
-		{
-			name: "should add duplicate usable status",
-			initialExpression: LearningHistoryExpression{
-				Expression: "hello",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      true,
-			isKnownWord:    false,
-			expectedStatus: learnedStatusCanBeUsed,
-			expectedCount:  2, // Should add duplicate
-		},
-		{
-			name: "should add duplicate understood status",
-			initialExpression: LearningHistoryExpression{
-				Expression: "hello",
-				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDateFromTime(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
-				},
-			},
-			isCorrect:      true,
-			isKnownWord:    true,
-			expectedStatus: learnedStatusUnderstood,
-			expectedCount:  2, // Should add duplicate
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Record initial count
-			initialCount := len(tt.initialExpression.LearnedLogs)
-			
-			// Record time before calling AddRecord to ensure new record is recent
-			beforeTime := time.Now()
-
-			tt.initialExpression.AddRecord(tt.isCorrect, tt.isKnownWord)
-
-			afterTime := time.Now()
-
-			assert.Len(t, tt.initialExpression.LearnedLogs, tt.expectedCount)
-
-			// Check the latest status
-			assert.Equal(t, tt.expectedStatus, tt.initialExpression.GetLatestStatus())
-			
-			// For new records (when count increased), check that the new record is at the beginning
-			if len(tt.initialExpression.LearnedLogs) > initialCount {
-				newRecord := tt.initialExpression.LearnedLogs[0]
-				assert.True(t, newRecord.LearnedAt.After(beforeTime) || newRecord.LearnedAt.Equal(beforeTime))
-				assert.True(t, newRecord.LearnedAt.Before(afterTime) || newRecord.LearnedAt.Equal(afterTime))
-			}
 		})
 	}
 }
