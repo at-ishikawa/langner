@@ -26,3 +26,7 @@ test-integration:
 	@echo "Running OpenAI integration tests..."
 	@OPENAI_API_KEY=$(OPENAI_API_KEY) \
 		go test -v ./internal/inference/openai -run Integration -timeout 60s
+
+.PHONY: docs-server
+docs-server:
+	hugo server -s docs

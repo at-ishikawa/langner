@@ -1,0 +1,38 @@
+baseURL = 'https://example.org/'
+languageCode = 'en-us'
+title = 'Langner Documentation'
+theme = 'hugo-book'
+
+# Book configuration
+[params]
+  # (Optional, default light) Sets color theme: light, dark or auto.
+  BookTheme = 'auto'
+
+  # (Optional, default true) Controls table of contents visibility on right side of pages.
+  BookToC = true
+
+  # (Optional) Set source repository location.
+  # Used for 'Last Modified' and 'Edit this page' links.
+  BookRepo = 'https://github.com/at-ishikawa/langner'
+
+  # (Optional) Enable 'Edit this page' links for 'doc' page type.
+  BookEditPath = 'edit/main/docs/content'
+
+  # (Optional, default January 2, 2006) Configure the date format used on the pages
+  BookDateFormat = 'January 2, 2006'
+
+  # (Optional, default true) Enables search function with flexsearch.
+  BookSearch = true
+
+  # (Optional, default docs) Specify root page to render child pages as menu.
+  BookSection = 'docs'
+
+  # Specifies the menu bundle file.
+  BookMenuBundle = '/menu'
+
+[markup]
+  [markup.goldmark]
+    [markup.goldmark.renderer]
+      unsafe = true
+  [markup.highlight]
+    style = 'monokai'
