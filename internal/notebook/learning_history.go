@@ -91,27 +91,9 @@ func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	if len(exp.LearnedLogs) == 0 {
 		return learnedStatusLearning
 	}
-	// Get the first element since AddRecord prepends new logs
+	// Get the first element since new logs are prepended
 	lastLog := exp.LearnedLogs[0]
 	return lastLog.Status
-}
-
-func (exp *LearningHistoryExpression) AddRecord(isCorrect, isKnownWord bool) {
-	status := LearnedStatusMisunderstood
-	if isCorrect {
-		if isKnownWord {
-			status = learnedStatusUnderstood
-		} else {
-			status = learnedStatusCanBeUsed
-		}
-	}
-
-	exp.LearnedLogs = append([]LearningRecord{
-		{
-			Status:    status,
-			LearnedAt: NewDate(),
-		},
-	}, exp.LearnedLogs...)
 }
 
 // AddRecordWithQuality adds a new learning record with SM-2 quality data

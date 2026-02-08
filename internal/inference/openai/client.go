@@ -311,17 +311,11 @@ is_expression_input HANDLING
 For each answer, also assess response speed quality (1-5):
 - If incorrect: quality = 1
 - If correct, evaluate response time relative to meaning complexity:
-  - Fast (quick recall for this meaning's length): quality = 5
-  - Normal (reasonable time): quality = 4
+  - Fast (quick recall for this meaning's length/complexity): quality = 5
+  - Normal (reasonable time for this meaning): quality = 4
   - Slow (took long relative to meaning complexity): quality = 3
 
-Consider:
-- Short meanings ("cat", "run") should be answered in ~2-5 seconds
-- Medium meanings ("to move quickly") should be answered in ~5-10 seconds
-- Long/complex meanings should be answered in ~10-20 seconds
-- Quiz type affects expectations (freeform requires typing word too)
-
-The input will include "response_time_ms" for each expression. Use this to assess quality.
+The input will include "response_time_ms" for each expression. Use your judgment to determine what constitutes fast/normal/slow based on the meaning's length and complexity.
 
 OUTPUT FORMAT:
 [

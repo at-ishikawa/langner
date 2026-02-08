@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
+func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T) {
 	tests := []struct {
 		name            string
 		initialHistory  []LearningHistory
@@ -18,6 +18,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 		expression      string
 		isCorrect       bool
 		isKnownWord     bool
+		quality         int
+		responseTimeMs  int64
+		quizType        QuizType
 		wantFound       bool
 		wantExpressions int
 		wantStatus      LearnedStatus
@@ -32,6 +35,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "test-word",
 			isCorrect:       true,
 			isKnownWord:     true,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  5000,
+			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 1,
 			wantStatus:      learnedStatusUnderstood,
@@ -64,15 +70,18 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 					},
 				},
 			},
-			notebookID:     "test-notebook",
-			storyTitle:     "Story 1",
-			sceneTitle:     "Scene 1",
-			expression:     "test-word",
-			isCorrect:      true,
-			isKnownWord:    true,
-			wantFound:    true,
+			notebookID:      "test-notebook",
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene 1",
+			expression:      "test-word",
+			isCorrect:       true,
+			isKnownWord:     true,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  3000,
+			quizType:        QuizTypeNotebook,
+			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus:      learnedStatusUnderstood,
 		},
 		{
 			name: "Create new scene in existing story",
@@ -92,15 +101,18 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 					},
 				},
 			},
-			notebookID:     "test-notebook",
-			storyTitle:     "Story 1",
-			sceneTitle:     "Scene 2",
-			expression:     "test-word",
-			isCorrect:      true,
-			isKnownWord:    false,
-			wantFound:    false,
+			notebookID:      "test-notebook",
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene 2",
+			expression:      "test-word",
+			isCorrect:       true,
+			isKnownWord:     false,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  4000,
+			quizType:        QuizTypeFreeform,
+			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus: learnedStatusCanBeUsed,
+			wantStatus:      learnedStatusCanBeUsed,
 		},
 		{
 			name: "Create new story in existing history",
@@ -113,41 +125,50 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 					Scenes: []LearningScene{},
 				},
 			},
-			notebookID:     "test-notebook",
-			storyTitle:     "Story 2",
-			sceneTitle:     "Scene 1",
-			expression:     "test-word",
-			isCorrect:      false,
-			isKnownWord:    true,
-			wantFound:    false,
+			notebookID:      "test-notebook",
+			storyTitle:      "Story 2",
+			sceneTitle:      "Scene 1",
+			expression:      "test-word",
+			isCorrect:       false,
+			isKnownWord:     true,
+			quality:         int(QualityWrong),
+			responseTimeMs:  10000,
+			quizType:        QuizTypeFreeform,
+			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus: LearnedStatusMisunderstood,
+			wantStatus:      LearnedStatusMisunderstood,
 		},
 		{
-			name:           "Empty expression name",
-			initialHistory: []LearningHistory{},
-			notebookID:     "notebook1",
-			storyTitle:     "Story 1",
-			sceneTitle:     "Scene 1",
-			expression:     "",
-			isCorrect:      true,
-			isKnownWord:    true,
-			wantFound:    false,
+			name:            "Empty expression name",
+			initialHistory:  []LearningHistory{},
+			notebookID:      "notebook1",
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene 1",
+			expression:      "",
+			isCorrect:       true,
+			isKnownWord:     true,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  2000,
+			quizType:        QuizTypeNotebook,
+			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus:      learnedStatusUnderstood,
 		},
 		{
-			name:           "Special characters in names",
-			initialHistory: []LearningHistory{},
-			notebookID:     "notebook1",
-			storyTitle:     "Story: With Special Characters!",
-			sceneTitle:     "Scene (with parentheses)",
-			expression:     "word/with/slashes",
-			isCorrect:      true,
-			isKnownWord:    true,
-			wantFound:    false,
+			name:            "Special characters in names",
+			initialHistory:  []LearningHistory{},
+			notebookID:      "notebook1",
+			storyTitle:      "Story: With Special Characters!",
+			sceneTitle:      "Scene (with parentheses)",
+			expression:      "word/with/slashes",
+			isCorrect:       true,
+			isKnownWord:     true,
+			quality:         int(QualityCorrectFast),
+			responseTimeMs:  1000,
+			quizType:        QuizTypeNotebook,
+			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus:      learnedStatusUnderstood,
 		},
 		{
 			name: "Update expression with existing logs",
@@ -181,16 +202,19 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 					},
 				},
 			},
-			notebookID:     "notebook1",
-			storyTitle:     "Story 1",
-			sceneTitle:     "Scene 1",
-			expression:     "word1",
-			isCorrect:      true,
-			isKnownWord:    true,
-			wantFound:    true,
+			notebookID:      "notebook1",
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene 1",
+			expression:      "word1",
+			isCorrect:       true,
+			isKnownWord:     true,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  5000,
+			quizType:        QuizTypeFreeform,
+			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus: learnedStatusUnderstood,
-			wantLogs:   3,
+			wantStatus:      learnedStatusUnderstood,
+			wantLogs:        3,
 		},
 		{
 			name: "Add expression to scene with existing expressions",
@@ -235,6 +259,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "word3",
 			isCorrect:       false,
 			isKnownWord:     false,
+			quality:         int(QualityWrong),
+			responseTimeMs:  15000,
+			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 3,
 			wantStatus:      LearnedStatusMisunderstood,
@@ -255,7 +282,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 							Expressions: []LearningHistoryExpression{
 								{
 									Expression:  "run some ideas by someone",
-									LearnedLogs: []LearningRecord{}, // Empty learned_logs!
+									LearnedLogs: []LearningRecord{},
 								},
 							},
 						},
@@ -267,11 +294,14 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			sceneTitle:      "Scene 1",
 			expression:      "run some ideas by someone",
 			isCorrect:       true,
-			isKnownWord:     false, // Same as freeform quiz
+			isKnownWord:     false,
+			quality:         int(QualityCorrectSlow),
+			responseTimeMs:  8000,
+			quizType:        QuizTypeFreeform,
 			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusCanBeUsed, // Should be "usable"
-			wantLogs:        1,                      // Should have 1 log after update
+			wantStatus:      learnedStatusCanBeUsed,
+			wantLogs:        1,
 		},
 		{
 			name:            "Create new flashcard expression in empty history",
@@ -282,6 +312,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "test-word",
 			isCorrect:       true,
 			isKnownWord:     true,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  3000,
+			quizType:        QuizTypeNotebook,
 			wantFound:       false,
 			wantExpressions: 1,
 			wantStatus:      learnedStatusUnderstood,
@@ -314,6 +347,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 			expression:      "test-word",
 			isCorrect:       true,
 			isKnownWord:     true,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  4000,
+			quizType:        QuizTypeNotebook,
 			wantFound:       true,
 			wantExpressions: 1,
 			wantStatus:      learnedStatusUnderstood,
@@ -322,17 +358,18 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpression(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Create updater with initial history
 			updater := NewLearningHistoryUpdater(tc.initialHistory)
 
-			// Update or create expression
-			found := updater.UpdateOrCreateExpression(
+			found := updater.UpdateOrCreateExpressionWithQuality(
 				tc.notebookID,
 				tc.storyTitle,
 				tc.sceneTitle,
 				tc.expression,
 				tc.isCorrect,
 				tc.isKnownWord,
+				tc.quality,
+				tc.responseTimeMs,
+				tc.quizType,
 			)
 
 			// Verify if expression was found

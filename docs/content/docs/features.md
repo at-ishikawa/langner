@@ -93,14 +93,6 @@ Unlike standard SM-2 which resets to day 1 on any mistake, Langner uses **propor
 
 This preserves your learning progress while still ensuring you review the word sooner.
 
-### Migration
-
-If upgrading from an older version, run the migration command to convert existing learning history:
-
-```bash
-langner migrate learning-history
-```
-
 ## Dictionary Lookup
 
 Look up word definitions using WordsAPI:
@@ -130,4 +122,3 @@ langner validate --fix
 | `langner quiz freeform` | Freeform recall quiz | `OPENAI_API_KEY` |
 | `langner dictionary lookup <word>` | Look up word definition | `RAPID_API_HOST`, `RAPID_API_KEY` |
 | `langner validate` | Check notebooks for errors | None |
-| `langner migrate learning-history` | Migrate learning data to SM-2 format | None |
