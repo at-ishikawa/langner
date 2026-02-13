@@ -9,3 +9,4 @@ bookCollapseSection: true
 Feature proposals for Langner. Each proposal includes product requirements and technical design.
 
 - [Standard Ebooks]({{< relref "standard-ebooks" >}}) - Learn vocabulary from public domain books
+- [Reverse Quiz]({{< relref "reverse-quiz" >}}) - Quiz mode that shows meaning and asks for the word
