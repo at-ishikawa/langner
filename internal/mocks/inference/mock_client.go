@@ -55,3 +55,18 @@ func (mr *MockClientMockRecorder) AnswerMeanings(ctx, params any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnswerMeanings", reflect.TypeOf((*MockClient)(nil).AnswerMeanings), ctx, params)
 }
+
+// ValidateWordForm mocks base method.
+func (m *MockClient) ValidateWordForm(ctx context.Context, params inference.ValidateWordFormRequest) (inference.ValidateWordFormResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateWordForm", ctx, params)
+	ret0, _ := ret[0].(inference.ValidateWordFormResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateWordForm indicates an expected call of ValidateWordForm.
+func (mr *MockClientMockRecorder) ValidateWordForm(ctx, params any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateWordForm", reflect.TypeOf((*MockClient)(nil).ValidateWordForm), ctx, params)
+}

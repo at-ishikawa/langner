@@ -20,6 +20,7 @@ func newQuizCommand() *cobra.Command {
 
 	quizCommand.AddCommand(newQuizNotebookCommand())
 	quizCommand.AddCommand(newQuizFreeformCommand())
+	quizCommand.AddCommand(newQuizReverseCommand())
 
 	return quizCommand
 }
@@ -169,6 +170,82 @@ func newQuizNotebookCommand() *cobra.Command {
 
 	command.Flags().BoolVar(&includeNoCorrectAnswers, "include-no-correct-answers", false, "Include words that have never had a correct answer")
 	command.Flags().StringVarP(&notebookName, "notebook", "n", "", "Quiz from a specific notebook (empty for all story notebooks)")
+
+	return command
+}
+
+func newQuizReverseCommand() *cobra.Command {
+	var notebookName string
+	var listMissingContext bool
+
+	command := &cobra.Command{
+		Use:   "reverse",
+		Short: "Reverse quiz (shows meaning, you provide the word). Tests productive vocabulary",
+		Long: `Reverse quiz mode shows you the meaning and asks you to provide the word.
+This tests productive vocabulary - a fundamentally different cognitive skill from recognition.
+
+The quiz validates your answer using:
+1. Exact match with the expected word (case-insensitive)
+2. Match with alternate forms (e.g., "ran" for "run")
+3. If you provide a synonym, you get one retry to provide the exact word`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("failed to create config loader: %w", err)
+			}
+			cfg, err := loader.Load()
+			if err != nil {
+				return fmt.Errorf("failed to load configuration: %w", err)
+			}
+
+			// Create OpenAI client
+			if cfg.OpenAI.APIKey == "" {
+				return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+			}
+			fmt.Printf("Using OpenAI provider (model: %s)\n", cfg.OpenAI.Model)
+			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+			defer func() {
+				_ = openaiClient.Close()
+			}()
+
+			// Create reverse quiz CLI
+			reverseCLI, err := cli.NewReverseQuizCLI(
+				notebookName,
+				cfg.Notebooks.StoriesDirectories,
+				cfg.Notebooks.FlashcardsDirectories,
+				cfg.Notebooks.LearningNotesDirectory,
+				cfg.Dictionaries.RapidAPI.CacheDirectory,
+				openaiClient,
+				listMissingContext,
+			)
+			if err != nil {
+				return err
+			}
+
+			// If listing missing context, just output and exit
+			if listMissingContext {
+				reverseCLI.ListMissingContext()
+				return nil
+			}
+
+			if reverseCLI.GetCardCount() == 0 {
+				fmt.Println("No cards need reverse quiz review.")
+				return nil
+			}
+
+			reverseCLI.ShuffleCards()
+			if notebookName == "" {
+				fmt.Printf("Starting reverse quiz session with %d cards from all notebooks\n\n", reverseCLI.GetCardCount())
+			} else {
+				fmt.Printf("Starting reverse quiz session for notebook %s with %d cards\n\n", notebookName, reverseCLI.GetCardCount())
+			}
+
+			return reverseCLI.Run(context.Background(), reverseCLI)
+		},
+	}
+
+	command.Flags().StringVarP(&notebookName, "notebook", "n", "", "Quiz from a specific notebook (empty for all notebooks)")
+	command.Flags().BoolVar(&listMissingContext, "list-missing-context", false, "List words that don't have context sentences for reverse quiz")
 
 	return command
 }

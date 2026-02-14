@@ -83,14 +83,16 @@ type Note struct {
 	YoutubeURL string `yaml:",omitempty"`
 }
 
-// Date represents a date in YYYY-MM-DD format for YAML serialization
+// Date represents a timestamp for YAML serialization
+// Stored as RFC3339 format to preserve timezone information
 type Date struct {
 	time.Time
 }
 
 // MarshalYAML implements the yaml.Marshaler interface
+// Stores as RFC3339 format to preserve full timestamp with timezone
 func (d Date) MarshalYAML() (interface{}, error) {
-	return d.Format("2006-01-02"), nil
+	return d.Format(time.RFC3339), nil
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface

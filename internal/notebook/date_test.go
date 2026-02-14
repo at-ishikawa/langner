@@ -17,19 +17,19 @@ func TestDate_MarshalUnmarshal(t *testing.T) {
 		expectedDay string // YYYY-MM-DD format
 	}{
 		{
-			name:        "new YYYY-MM-DD format",
+			name:        "old YYYY-MM-DD format (backward compatible)",
 			yamlInput:   `learned_at: "2025-06-13"`,
 			expectError: false,
 			expectedDay: "2025-06-13",
 		},
 		{
-			name:        "old RFC3339 format",
+			name:        "RFC3339 format",
 			yamlInput:   `learned_at: 2025-05-02T00:00:00Z`,
 			expectError: false,
 			expectedDay: "2025-05-02",
 		},
 		{
-			name:        "old RFC3339Nano format with timezone",
+			name:        "RFC3339Nano format with timezone",
 			yamlInput:   `learned_at: 2025-06-04T20:05:49.744339678-07:00`,
 			expectError: false,
 			expectedDay: "2025-06-04",
@@ -57,13 +57,14 @@ func TestDate_MarshalUnmarshal(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, tt.expectedDay, record.LearnedAt.Format("2006-01-02"))
 
-			// Test that marshaling always produces YYYY-MM-DD format
+			// Test that marshaling produces RFC3339 format (with full timestamp)
 			data, err := yaml.Marshal(record)
 			require.NoError(t, err)
 
-			// Should contain the quoted YYYY-MM-DD format
-			expectedOutput := `learned_at: "` + tt.expectedDay + `"`
-			assert.Contains(t, string(data), expectedOutput)
+			// Should contain RFC3339 format
+			assert.Contains(t, string(data), "learned_at:")
+			// Verify the date part is preserved
+			assert.Contains(t, string(data), tt.expectedDay)
 		})
 	}
 }

@@ -85,6 +85,10 @@ type LearningHistoryExpression struct {
 	Expression     string           `yaml:"expression"`
 	LearnedLogs    []LearningRecord `yaml:"learned_logs"`
 	EasinessFactor float64          `yaml:"easiness_factor,omitempty"` // default 2.5
+
+	// Reverse quiz fields - track separately from regular quiz
+	ReverseLogs           []LearningRecord `yaml:"reverse_logs,omitempty"`
+	ReverseEasinessFactor float64          `yaml:"reverse_easiness_factor,omitempty"` // default 2.5
 }
 
 func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
@@ -94,6 +98,103 @@ func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	// Get the first element since new logs are prepended
 	lastLog := exp.LearnedLogs[0]
 	return lastLog.Status
+}
+
+// GetLogsForQuizType returns learning logs for the specified quiz type
+func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []LearningRecord {
+	if quizType == QuizTypeReverse {
+		return exp.ReverseLogs
+	}
+	return exp.LearnedLogs
+}
+
+// GetEasinessFactorForQuizType returns the easiness factor for the specified quiz type
+func (exp LearningHistoryExpression) GetEasinessFactorForQuizType(quizType QuizType) float64 {
+	if quizType == QuizTypeReverse {
+		if exp.ReverseEasinessFactor == 0 {
+			return DefaultEasinessFactor
+		}
+		return exp.ReverseEasinessFactor
+	}
+	if exp.EasinessFactor == 0 {
+		return DefaultEasinessFactor
+	}
+	return exp.EasinessFactor
+}
+
+// AddRecordWithQualityForReverse adds a new learning record for reverse quiz with SM-2 quality data
+func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+) {
+	correctStreak := GetCorrectStreak(exp.ReverseLogs)
+	lastInterval := GetLastInterval(exp.ReverseLogs)
+
+	status := LearnedStatusMisunderstood
+	if isCorrect {
+		if isKnownWord {
+			status = learnedStatusUnderstood
+		} else {
+			status = learnedStatusCanBeUsed
+		}
+		correctStreak++
+	}
+
+	if exp.ReverseEasinessFactor == 0 {
+		exp.ReverseEasinessFactor = DefaultEasinessFactor
+	}
+
+	exp.ReverseEasinessFactor = UpdateEasinessFactor(exp.ReverseEasinessFactor, quality, correctStreak)
+	nextInterval := CalculateNextInterval(lastInterval, exp.ReverseEasinessFactor, quality, correctStreak)
+
+	newRecord := LearningRecord{
+		Status:         status,
+		LearnedAt:      NewDate(),
+		Quality:        quality,
+		ResponseTimeMs: responseTimeMs,
+		QuizType:       string(QuizTypeReverse),
+		IntervalDays:   nextInterval,
+	}
+
+	exp.ReverseLogs = append([]LearningRecord{newRecord}, exp.ReverseLogs...)
+}
+
+// NeedsReverseReview returns true if the expression needs reverse quiz review
+// based on spaced repetition algorithm
+func (exp LearningHistoryExpression) NeedsReverseReview() bool {
+	if len(exp.ReverseLogs) == 0 {
+		return true
+	}
+
+	lastLog := exp.ReverseLogs[0]
+
+	// Always include misunderstood expressions for review
+	if lastLog.Status == LearnedStatusMisunderstood {
+		return true
+	}
+
+	// Use stored interval if available
+	threshold := lastLog.IntervalDays
+	if threshold == 0 {
+		// Fallback: calculate based on correct streak
+		correctCount := 0
+		for _, log := range exp.ReverseLogs {
+			if log.Status != LearnedStatusMisunderstood && log.Status != learnedStatusLearning {
+				correctCount++
+			}
+		}
+		threshold = GetThresholdDaysFromCount(correctCount)
+	}
+
+	// Calculate elapsed days since last review
+	// LearnedAt is stored as RFC3339 timestamp, so we can calculate actual elapsed time
+	now := time.Now()
+	elapsed := now.Sub(lastLog.LearnedAt.Time)
+	elapsedDays := int(elapsed.Hours() / 24)
+
+	// Need review if elapsed days >= threshold
+	return elapsedDays >= threshold
 }
 
 // AddRecordWithQuality adds a new learning record with SM-2 quality data
