@@ -1,5 +1,14 @@
 package notebook
 
+import "strings"
+
+// normalizeTitle normalizes a title for comparison by trimming whitespace
+// and normalizing internal whitespace (newlines, multiple spaces -> single space)
+func normalizeTitle(s string) string {
+	s = strings.TrimSpace(s)
+	return strings.Join(strings.Fields(s), " ")
+}
+
 // LearningHistoryUpdater provides methods to update learning history
 type LearningHistoryUpdater struct {
 	history []LearningHistory
@@ -106,6 +115,91 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 
 	u.createNewExpressionWithQuality(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 	return false
+}
+
+// UpdateOrCreateExpressionWithQualityForReverse updates or creates an expression with SM-2 quality assessment for reverse quiz
+func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
+	notebookID, storyTitle, sceneTitle, expression string,
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+) bool {
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	normalizedSceneTitle := normalizeTitle(sceneTitle)
+
+	for hi, h := range u.history {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+
+		if isFlashcard || h.Metadata.Type == "flashcard" {
+			for ei, exp := range h.Expressions {
+				if exp.Expression != expression {
+					continue
+				}
+				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+				u.history[hi].Expressions[ei] = exp
+				return true
+			}
+			continue
+		}
+
+		for si, s := range h.Scenes {
+			if normalizeTitle(s.Metadata.Title) != normalizedSceneTitle {
+				continue
+			}
+
+			for ei, exp := range s.Expressions {
+				if exp.Expression != expression {
+					continue
+				}
+				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+				u.history[hi].Scenes[si].Expressions[ei] = exp
+				return true
+			}
+		}
+	}
+
+	u.createNewExpressionWithQualityForReverse(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs)
+	return false
+}
+
+// createNewExpressionWithQualityForReverse creates a new expression entry with quality data for reverse quiz
+func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
+	notebookID, storyTitle, sceneTitle, expression string,
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+) {
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
+
+	newExpression := LearningHistoryExpression{
+		Expression:            expression,
+		LearnedLogs:           []LearningRecord{},
+		EasinessFactor:        DefaultEasinessFactor,
+		ReverseLogs:           []LearningRecord{},
+		ReverseEasinessFactor: DefaultEasinessFactor,
+	}
+	newExpression.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+
+	if len(newExpression.ReverseLogs) == 0 {
+		return
+	}
+
+	if isFlashcard || u.history[storyIndex].Metadata.Type == "flashcard" {
+		u.history[storyIndex].Expressions = append(
+			u.history[storyIndex].Expressions,
+			newExpression,
+		)
+		return
+	}
+
+	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
+	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
+		u.history[storyIndex].Scenes[sceneIndex].Expressions,
+		newExpression,
+	)
 }
 
 // createNewExpressionWithQuality creates a new expression entry with quality data

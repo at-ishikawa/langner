@@ -801,3 +801,129 @@ func (client *Client) answerMeanings(
 	}
 	return inference.AnswerMeaningsResponse{Answers: decoded}, nil
 }
+
+// ValidateWordForm validates if the user's answer matches the expected word
+func (client *Client) ValidateWordForm(
+	ctx context.Context,
+	params inference.ValidateWordFormRequest,
+) (inference.ValidateWordFormResponse, error) {
+	var result inference.ValidateWordFormResponse
+	if err := retry.Do(
+		func() error {
+			response, err := client.validateWordForm(ctx, params)
+			if err != nil {
+				if !isRetryableError(err) {
+					return retry.Unrecoverable(err)
+				}
+				return err
+			}
+			result = response
+			return nil
+		},
+		retry.Context(ctx),
+		retry.Attempts(client.maxRetryAttempts+1),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			return retry.BackOffDelay(n, err, config)
+		}),
+	); err != nil {
+		return inference.ValidateWordFormResponse{}, err
+	}
+	return result, nil
+}
+
+func (client *Client) validateWordForm(
+	ctx context.Context,
+	params inference.ValidateWordFormRequest,
+) (inference.ValidateWordFormResponse, error) {
+	systemPrompt := `You are a vocabulary quiz validator for a reverse quiz (meaning → word production).
+
+The user was shown a MEANING and asked to produce a word with that meaning.
+You must classify their answer into one of three categories.
+
+CLASSIFICATION RULES:
+
+1. "same_word" - The user's answer IS the expected word, just in a different form:
+   - Different tense: "ran" for "run", "swimming" for "swim"
+   - Different number: "boxes" for "box", "children" for "child"
+   - Different case: "Hello" for "hello"
+   - With/without articles: "the dog" for "dog"
+   - Spelling variants: "colour" for "color"
+
+2. "synonym" - The user's answer is NOT the expected word but IS a valid word with the same meaning:
+   - "happy" when expected "glad" (both mean joyful)
+   - "thrilled" when expected "excited" (both mean very happy)
+   - The synonym must genuinely fit the meaning shown
+
+3. "wrong" - The user's answer does not convey the meaning:
+   - Wrong definition entirely
+   - Antonym (opposite meaning)
+   - Unrelated word
+   - Gibberish or empty
+
+IMPORTANT:
+- Focus on whether the meaning matches, not exact word form
+- If the user's word legitimately expresses the given meaning, it's either "same_word" or "synonym"
+- Be generous with morphological variants of the expected word
+
+OUTPUT FORMAT (JSON only):
+{
+  "classification": "same_word" | "synonym" | "wrong",
+  "reason": "<brief explanation>"
+}
+
+Do NOT include any text outside the JSON.`
+
+	contextInfo := ""
+	if params.Context != "" {
+		contextInfo = fmt.Sprintf("\nContext sentence: %s", params.Context)
+	}
+
+	userMessage := fmt.Sprintf(`Expected word: %s
+Meaning shown: %s%s
+User's answer: %s
+
+Classify this answer.`, params.Expected, params.Meaning, contextInfo, params.UserAnswer)
+
+	requestBody := ChatCompletionRequest{
+		Model:       client.model,
+		Temperature: 0.1,
+		Messages: []Message{
+			{Role: RoleSystem, Content: systemPrompt},
+			{Role: RoleUser, Content: userMessage},
+		},
+	}
+
+	response, err := client.httpClient.R().
+		SetContext(ctx).
+		SetBody(requestBody).
+		SetResult(&ChatCompletionResponse{}).
+		Post("/chat/completions")
+	if err != nil {
+		return inference.ValidateWordFormResponse{}, fmt.Errorf("httpClient.Post > %w", err)
+	}
+	if response.IsError() {
+		return inference.ValidateWordFormResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+	}
+
+	responseBody := response.Result().(*ChatCompletionResponse)
+	if responseBody == nil || len(responseBody.Choices) == 0 {
+		return inference.ValidateWordFormResponse{}, fmt.Errorf("empty response body or choices: %s", response.String())
+	}
+
+	content := responseBody.Choices[0].Message.Content
+	if content == "" {
+		return inference.ValidateWordFormResponse{}, fmt.Errorf("empty response content: %s", response.String())
+	}
+
+	slog.Default().Debug("validateWordForm response",
+		"request", requestBody,
+		"response", content,
+	)
+
+	var decoded inference.ValidateWordFormResponse
+	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
+		return inference.ValidateWordFormResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
+	}
+
+	return decoded, nil
+}

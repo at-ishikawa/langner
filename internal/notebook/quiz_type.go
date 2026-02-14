@@ -6,6 +6,7 @@ type QuizType string
 const (
 	QuizTypeFreeform QuizType = "freeform"
 	QuizTypeNotebook QuizType = "notebook"
+	QuizTypeReverse  QuizType = "reverse"
 )
 
 // Quality represents the quality of a response in the SM-2 algorithm

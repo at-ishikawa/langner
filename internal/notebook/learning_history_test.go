@@ -357,3 +357,106 @@ func TestNewLearningHistories_NonexistentDirectory(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestLearningHistoryExpression_NeedsReverseReview(t *testing.T) {
+	// Use actual timestamps for elapsed time calculation
+	// The function calculates elapsed days from the stored timestamp
+	now := time.Now()
+	oneHourAgo := now.Add(-1 * time.Hour)
+	oneDayAgo := now.Add(-25 * time.Hour)   // 25 hours = 1 day elapsed
+	twoDaysAgo := now.Add(-49 * time.Hour)  // 49 hours = 2 days elapsed
+
+	tests := []struct {
+		name       string
+		expression LearningHistoryExpression
+		want       bool
+	}{
+		{
+			name: "No reverse logs - needs review",
+			expression: LearningHistoryExpression{
+				Expression:  "test",
+				ReverseLogs: []LearningRecord{},
+			},
+			want: true,
+		},
+		{
+			name: "Misunderstood status - needs review",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				ReverseLogs: []LearningRecord{
+					{
+						Status:       LearnedStatusMisunderstood,
+						LearnedAt:    NewDate(oneHourAgo),
+						IntervalDays: 1,
+					},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Answered recently with 1 day interval - should NOT need review",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				ReverseLogs: []LearningRecord{
+					{
+						Status:       "usable",
+						LearnedAt:    NewDate(oneHourAgo), // 0 days elapsed
+						IntervalDays: 1,
+					},
+				},
+			},
+			want: false, // 0 < 1, no review needed
+		},
+		{
+			name: "Answered 1 day ago with 1 day interval - should need review",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				ReverseLogs: []LearningRecord{
+					{
+						Status:       "usable",
+						LearnedAt:    NewDate(oneDayAgo), // 1 day elapsed
+						IntervalDays: 1,
+					},
+				},
+			},
+			want: true, // 1 >= 1, needs review
+		},
+		{
+			name: "Answered 2 days ago with 6 day interval - should NOT need review",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				ReverseLogs: []LearningRecord{
+					{
+						Status:       "usable",
+						LearnedAt:    NewDate(twoDaysAgo), // 2 days elapsed
+						IntervalDays: 6,
+					},
+				},
+			},
+			want: false, // 2 < 6, no review needed
+		},
+		{
+			name: "IntervalDays is 0 - fallback to count-based threshold",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				ReverseLogs: []LearningRecord{
+					{
+						Status:       "usable",
+						LearnedAt:    NewDate(oneHourAgo), // 0 days elapsed
+						IntervalDays: 0,                   // No interval stored
+					},
+				},
+			},
+			// With 1 correct answer, threshold should be 1 day (from GetThresholdDaysFromCount)
+			// 0 days elapsed < 1 day threshold, so should NOT need review
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.expression.NeedsReverseReview()
+			assert.Equal(t, tt.want, got, "NeedsReverseReview() = %v, want %v", got, tt.want)
+		})
+	}
+}
+
