@@ -73,12 +73,12 @@ func newQuizFreeformCommand() *cobra.Command {
 func newQuizNotebookCommand() *cobra.Command {
 	var includeNoCorrectAnswers bool
 	var notebookName string
-	var quizType string
+	var quizMode string
 	var listMissingContext bool
 
 	command := &cobra.Command{
 		Use:   "notebook",
-		Short: "Quiz from notebooks. Use --type to select quiz mode",
+		Short: "Quiz from notebooks. Use --mode to select quiz mode",
 		Long: `Quiz from notebooks with different modes:
 
   recognition (default): Shows word, you provide meaning
@@ -86,8 +86,8 @@ func newQuizNotebookCommand() *cobra.Command {
 
 Examples:
   langner quiz notebook                           # Recognition quiz from all notebooks
-  langner quiz notebook --type=reverse            # Reverse quiz from all notebooks
-  langner quiz notebook -n friends --type=reverse # Reverse quiz from specific notebook`,
+  langner quiz notebook --mode=reverse            # Reverse quiz from all notebooks
+  langner quiz notebook -n friends --mode=reverse # Reverse quiz from specific notebook`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			loader, err := config.NewConfigLoader(configFile)
 			if err != nil {
@@ -109,7 +109,7 @@ Examples:
 			}()
 
 			// Handle reverse quiz mode
-			if quizType == "reverse" {
+			if quizMode == "reverse" {
 				return runReverseQuiz(cfg, openaiClient, notebookName, listMissingContext)
 			}
 
@@ -120,7 +120,7 @@ Examples:
 
 	command.Flags().BoolVar(&includeNoCorrectAnswers, "include-no-correct-answers", false, "Include words that have never had a correct answer (recognition mode only)")
 	command.Flags().StringVarP(&notebookName, "notebook", "n", "", "Quiz from a specific notebook (empty for all notebooks)")
-	command.Flags().StringVarP(&quizType, "type", "t", "recognition", "Quiz type: recognition (default) or reverse")
+	command.Flags().StringVarP(&quizMode, "mode", "m", "recognition", "Quiz mode: recognition (default) or reverse")
 	command.Flags().BoolVar(&listMissingContext, "list-missing-context", false, "List words without context sentences (reverse mode only)")
 
 	return command
