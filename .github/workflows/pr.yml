@@ -31,8 +31,8 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: 'go.mod'
-      - name: Run go test
-        run: go test -v ./...
+      - name: Run tests with coverage check
+        run: make test-coverage
 
   validate-examples:
     name: Validate example configurations
