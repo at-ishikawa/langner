@@ -21,6 +21,21 @@ validate:
 test:
 	go test ./...
 
+COVERAGE_THRESHOLD ?= 53
+
+.PHONY: test-coverage
+test-coverage:
+	@go test -coverprofile=coverage.out ./...
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	COVERAGE_INT=$${COVERAGE%.*}; \
+	echo "Total coverage: $${COVERAGE}%"; \
+	echo "Threshold: $(COVERAGE_THRESHOLD)%"; \
+	if [ "$$COVERAGE_INT" -lt "$(COVERAGE_THRESHOLD)" ]; then \
+		echo "ERROR: Coverage $${COVERAGE}% is below threshold $(COVERAGE_THRESHOLD)%"; \
+		exit 1; \
+	fi; \
+	echo "Coverage check passed!"
+
 .PHONY: test-integration
 test-integration:
 	@echo "Running OpenAI integration tests..."
