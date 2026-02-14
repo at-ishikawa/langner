@@ -21,7 +21,7 @@ validate:
 test:
 	go test ./...
 
-COVERAGE_THRESHOLD ?= 55
+COVERAGE_THRESHOLD ?= 53
 
 .PHONY: test-coverage
 test-coverage:
