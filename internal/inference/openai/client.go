@@ -117,6 +117,360 @@ func isRetryableError(err error) bool {
 	return false
 }
 
+// commonWords are words that don't contribute to semantic meaning comparison
+var commonWords = map[string]bool{
+	"a": true, "an": true, "the": true, "to": true, "be": true, "is": true,
+	"of": true, "for": true, "in": true, "on": true, "at": true, "by": true,
+	"it": true, "i": true, "you": true, "we": true, "they": true, "he": true, "she": true,
+	"my": true, "your": true, "our": true, "their": true, "his": true, "her": true,
+	"this": true, "that": true, "these": true, "those": true,
+	"and": true, "or": true, "but": true, "if": true, "so": true,
+	"all": true, "too": true, "well": true, "very": true,
+	"yourself": true, "myself": true, "ourselves": true, "themselves": true,
+}
+
+// isMissingActionVerbPattern checks if shorter is missing the action verb from longer
+// Returns true only if longer is "to [verb] X" and shorter is just "X" (missing the verb)
+// Returns false if shorter has the same verb (e.g., "save X" vs "to save X")
+func isMissingActionVerbPattern(shorter, longer string) bool {
+	if !strings.HasPrefix(longer, "to ") {
+		return false
+	}
+	if strings.HasPrefix(shorter, "to ") {
+		return false
+	}
+
+	// Extract verb from longer
+	longerWithoutTo := strings.TrimPrefix(longer, "to ")
+	longerWords := strings.Fields(longerWithoutTo)
+	if len(longerWords) == 0 {
+		return false
+	}
+	verb := longerWords[0]
+
+	// Check if shorter starts with the same verb
+	shorterWords := strings.Fields(shorter)
+	if len(shorterWords) > 0 && shorterWords[0] == verb {
+		return false // Has the verb, just missing "to"
+	}
+
+	return true // Missing the actual verb
+}
+
+// normalizeText applies general normalization for comparison
+func normalizeText(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	// Remove common subject prefixes
+	for _, prefix := range []string{"i ", "you ", "we ", "they ", "it "} {
+		if strings.HasPrefix(s, prefix) {
+			s = strings.TrimPrefix(s, prefix)
+			break
+		}
+	}
+	// Normalize common synonyms (general linguistic equivalences)
+	s = strings.ReplaceAll(s, "listen to", "hear")
+	s = strings.ReplaceAll(s, "listen", "hear")
+	return s
+}
+
+// referenceMatchesUser checks if user meaning matches reference_definition.
+// This is a general, model-agnostic check.
+func referenceMatchesUser(userMeaning, refDef string) bool {
+	if refDef == "" {
+		return false
+	}
+	userLower := strings.ToLower(strings.TrimSpace(userMeaning))
+	refLower := strings.ToLower(strings.TrimSpace(refDef))
+
+	// Split reference on "but in" to get the base definition (handles notebook annotations)
+	if idx := strings.Index(refLower, ", but in"); idx > 0 {
+		refLower = strings.TrimSpace(refLower[:idx])
+	} else if idx := strings.Index(refLower, "; but in"); idx > 0 {
+		refLower = strings.TrimSpace(refLower[:idx])
+	}
+
+	// Handle semicolon-separated multiple definitions
+	refParts := strings.Split(refLower, ";")
+
+	// Exact match against any part
+	for _, part := range refParts {
+		part = strings.TrimSpace(part)
+		if part == userLower {
+			return true
+		}
+	}
+
+	// User contains full reference or a ref part
+	if strings.Contains(userLower, refLower) {
+		return true
+	}
+	for _, part := range refParts {
+		part = strings.TrimSpace(part)
+		if part != "" && strings.Contains(userLower, part) {
+			return true
+		}
+	}
+
+	// Check with normalized text (handles listen/hear equivalence)
+	userNorm := normalizeText(userMeaning)
+	for _, part := range refParts {
+		partNorm := normalizeText(part)
+		if partNorm != "" && (userNorm == partNorm || strings.Contains(userNorm, partNorm) || strings.Contains(partNorm, userNorm)) {
+			return true
+		}
+	}
+
+	// Reference contains user meaning, but guard against missing action verbs
+	// "hardship" should NOT match "to endure hardship"
+	// But "save a lot of money" SHOULD match "to save a lot of money"
+	if strings.Contains(refLower, userLower) {
+		if isMissingActionVerbPattern(userLower, refLower) {
+			return false
+		}
+		// If lengths are close enough, it's a match
+		if len(userLower) >= len(refLower)-15 {
+			return true
+		}
+		return false
+	}
+
+	return false
+}
+
+// hasMissingActionVerb detects when user defines only the object/state
+// but misses the critical action verb from the reference definition.
+// E.g., user says "hardship" when reference says "to endure hardship".
+// But "save a lot of money" vs "to save a lot of money" is NOT missing - user has the verb.
+func hasMissingActionVerb(userMeaning, refDef string) bool {
+	if refDef == "" {
+		return false
+	}
+	userLower := strings.ToLower(strings.TrimSpace(userMeaning))
+	refLower := strings.ToLower(strings.TrimSpace(refDef))
+
+	// Only applies when reference starts with "to [verb]"
+	if !strings.HasPrefix(refLower, "to ") {
+		return false
+	}
+
+	// If user also starts with "to ", they included an action verb
+	if strings.HasPrefix(userLower, "to ") {
+		return false
+	}
+
+	// Extract the verb from reference (word after "to ")
+	refWithoutTo := strings.TrimPrefix(refLower, "to ")
+	refWords := strings.Fields(refWithoutTo)
+	if len(refWords) == 0 {
+		return false
+	}
+	refVerb := refWords[0]
+
+	// If user meaning starts with the same verb, they have the action verb
+	// (just missing the infinitive marker "to")
+	userWords := strings.Fields(userLower)
+	if len(userWords) > 0 && userWords[0] == refVerb {
+		return false // User has the verb, not missing action verb
+	}
+
+	// Check if user meaning is a subset of the reference (just the object/noun part)
+	// by seeing if reference contains the user's words
+	if strings.Contains(refLower, userLower) {
+		return true
+	}
+
+	return false
+}
+
+// isSelfDefinition checks if user meaning is actually a self-definition
+// (i.e., user repeats the expression's key words instead of defining it)
+// This is a general, model-agnostic check.
+func isSelfDefinition(expression, userMeaning string) bool {
+	exprLower := strings.ToLower(expression)
+	userLower := strings.ToLower(userMeaning)
+
+	// Extract content words from expression
+	exprWords := strings.FieldsFunc(exprLower, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || r == '\'')
+	})
+
+	keyWordsRepeated := 0
+	totalKeyWords := 0
+
+	for _, word := range exprWords {
+		word = strings.Trim(word, "'")
+		if len(word) < 3 || commonWords[word] {
+			continue
+		}
+		totalKeyWords++
+		if strings.Contains(userLower, word) {
+			keyWordsRepeated++
+		}
+	}
+
+	// If no key words, can't be self-definition
+	if totalKeyWords == 0 {
+		return false
+	}
+
+	// If half or more key words are repeated, it's likely a self-definition
+	return float64(keyWordsRepeated)/float64(totalKeyWords) >= 0.5
+}
+
+// meaningsSimilar checks if two meanings are semantically similar
+// It's strict: requires high word overlap to avoid false positives
+func meaningsSimilar(meaning1, meaning2 string) bool {
+	if meaning1 == "" || meaning2 == "" {
+		return false
+	}
+	m1 := normalizeText(meaning1)
+	m2 := normalizeText(meaning2)
+
+	// Exact match
+	if m1 == m2 {
+		return true
+	}
+
+	// If model's meaning has multiple parts (semicolon-separated),
+	// check if user matches ANY part exactly
+	if strings.Contains(m2, ";") {
+		parts := strings.Split(m2, ";")
+		for _, part := range parts {
+			partNorm := normalizeText(part)
+			if partNorm == m1 || strings.Contains(m1, partNorm) || strings.Contains(partNorm, m1) {
+				// Ensure lengths are close (avoid partial matches)
+				if len(m1) >= len(partNorm)-10 && len(m1) <= len(partNorm)+10 {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// For single meanings, check word overlap with high threshold
+	words1 := extractContentWords(m1)
+	words2 := extractContentWords(m2)
+
+	if len(words1) == 0 || len(words2) == 0 {
+		return false
+	}
+
+	// Count matching words
+	matches := 0
+	for _, w1 := range words1 {
+		for _, w2 := range words2 {
+			if w1 == w2 {
+				matches++
+				break
+			}
+		}
+	}
+
+	// Require high overlap (70%+) from both sides to avoid partial matches
+	overlap1 := float64(matches) / float64(len(words1))
+	overlap2 := float64(matches) / float64(len(words2))
+	return overlap1 >= 0.7 && overlap2 >= 0.7
+}
+
+// extractContentWords extracts meaningful words from text
+func extractContentWords(s string) []string {
+	words := strings.FieldsFunc(s, func(r rune) bool {
+		return !((r >= 'a' && r <= 'z') || r == '\'')
+	})
+	var result []string
+	for _, word := range words {
+		word = strings.Trim(word, "'")
+		if len(word) >= 3 && !commonWords[word] {
+			result = append(result, word)
+		}
+	}
+	return result
+}
+
+// postProcessAnswers applies general, model-agnostic corrections to model output.
+// It validates against reference_definition OR the model's own canonical meaning:
+// 1. False negatives: model rejected but user meaning matches reference/model meaning → flip to CORRECT
+// 2. False positives: model accepted but user meaning is missing action verb → flip to INCORRECT
+func postProcessAnswers(answers []inference.AnswerMeaning, expressions []inference.Expression) []inference.AnswerMeaning {
+	// Build lookup from expression name to input data
+	exprData := make(map[string]struct {
+		contexts []inference.Context
+		meaning  string
+	})
+	for _, expr := range expressions {
+		exprData[expr.Expression] = struct {
+			contexts []inference.Context
+			meaning  string
+		}{
+			contexts: expr.Contexts,
+			meaning:  expr.Meaning,
+		}
+	}
+
+	for i, answer := range answers {
+		data, ok := exprData[answer.Expression]
+		if !ok {
+			continue
+		}
+
+		for j, ansCtx := range answer.AnswersForContext {
+			// --- Fix false negatives: model rejected but user meaning matches ---
+			if !ansCtx.Correct {
+				corrected := false
+
+				// Check against reference_definition
+				for _, ctx := range data.contexts {
+					if referenceMatchesUser(data.meaning, ctx.ReferenceDefinition) {
+						slog.Default().Info("Post-process: correcting false negative",
+							"expression", answer.Expression,
+							"userMeaning", data.meaning,
+							"reason", "user meaning matches reference definition",
+							"originalReason", ansCtx.Reason)
+						answers[i].AnswersForContext[j].Correct = true
+						answers[i].AnswersForContext[j].Reason = "post-processed: user meaning matches reference definition"
+						corrected = true
+						break
+					}
+				}
+
+				// Check against model's own canonical meaning
+				// Only do this when model has a single meaning (no semicolon)
+				// When model has multiple meanings, user providing one meaning is partial
+				// and model's per-context judgment should be respected
+				if !corrected && answer.Meaning != "" && !strings.Contains(answer.Meaning, ";") {
+					if meaningsSimilar(data.meaning, answer.Meaning) {
+						slog.Default().Info("Post-process: correcting false negative",
+							"expression", answer.Expression,
+							"userMeaning", data.meaning,
+							"modelMeaning", answer.Meaning,
+							"reason", "user meaning matches model's canonical meaning",
+							"originalReason", ansCtx.Reason)
+						answers[i].AnswersForContext[j].Correct = true
+						answers[i].AnswersForContext[j].Reason = "post-processed: user meaning matches model's canonical meaning"
+					}
+				}
+			}
+
+			// --- Fix false positives: model accepted but action verb is missing ---
+			if answers[i].AnswersForContext[j].Correct {
+				for _, ctx := range data.contexts {
+					if hasMissingActionVerb(data.meaning, ctx.ReferenceDefinition) {
+						slog.Default().Info("Post-process: correcting false positive (missing action verb)",
+							"expression", answer.Expression,
+							"userMeaning", data.meaning,
+							"refDef", ctx.ReferenceDefinition)
+						answers[i].AnswersForContext[j].Correct = false
+						answers[i].AnswersForContext[j].Reason = "post-processed: user meaning missing action verb from reference definition"
+						break
+					}
+				}
+			}
+		}
+	}
+
+	return answers
+}
+
 // AnswerMeanings implements the inference.Client interface
 func (client *Client) AnswerMeanings(
 	ctx context.Context,
@@ -159,148 +513,52 @@ Return ONLY a JSON array. For each input expression, include:
 
 STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase. Process ALL expressions in the input array, including duplicates.
 
-INPUT UNDERSTANDING
-- Each context may include a "reference_definition" - this is a hint from a notebook that may be incomplete, incorrect, or empty.
-- When context is PROVIDED: Determine the true meaning from context. The reference_definition is just a hint.
-- When context is EMPTY: Rely on reference_definition. If user's meaning matches it exactly or nearly exactly, mark CORRECT.
-- Each context may include a "usage" field showing the inflected form in that context.
+=== CORE RULES ===
 
-=== MANDATORY PRE-CHECK (MUST DO FIRST) ===
+RULE 1: REFERENCE MATCH = CORRECT
+If user's meaning matches reference_definition (exactly or semantically), mark CORRECT immediately.
+- Do NOT say "but in context it means X" when user matches reference
+- Minor grammatical variations are acceptable
 
-STEP 1: SELF-DEFINITION CHECK - DO THIS BEFORE ANYTHING ELSE
-Ask: "Does the user's meaning contain the expression word itself as the definition?"
-- If user meaning = expression word (same word, any form), IMMEDIATELY mark INCORRECT
-- "X" meaning "X" is ALWAYS wrong - this is circular, not a definition
-- "X" meaning "something X" is ALSO wrong - still uses the word
-- This applies even for adjectives: "stylish" -> "stylish" = INCORRECT
-- This applies for any word: "fast" -> "fast" = INCORRECT
-- STOP HERE and mark INCORRECT if self-definition detected
+RULE 2: SELF-DEFINITION = INCORRECT
+If user repeats the SAME KEY WORD from the expression, mark INCORRECT.
+- Expression "fast" → meaning "fast" = INCORRECT
+- Expression "beautiful" → meaning "beautiful" = INCORRECT
+- BUT: Synonyms and paraphrases are NOT self-definitions (mark CORRECT)
 
-=== ABSOLUTE RULES - NEVER VIOLATE THESE ===
+RULE 3: CONTEXT SHOWS USAGE, NOT MEANING
+Judge the EXPRESSION's meaning, not the sentence's meaning.
+- Negation in context does NOT change expression meaning
+- FORBIDDEN: "context implies X", "in context it means X", "but in context..."
 
-RULE 1: NEGATION IN CONTEXT MUST BE COMPLETELY IGNORED
-***** CRITICAL - READ THIS CAREFULLY *****
-You are ONLY judging: "Does the user know what the EXPRESSION ITSELF means?"
-You are NEVER judging: "Is the sentence true?" or "What is the overall sentence meaning?"
+RULE 4: CONTEXT MODIFIERS MATTER
+When context has "MODIFIER + expression", use the modified meaning:
+- Look for adjectives/nouns before the expression that change its meaning
+- User matching the contextual modified meaning = CORRECT
 
-ABSOLUTE PROHIBITION: You MUST NEVER cite negation as a reason for marking INCORRECT.
-- Words like "no", "not", "isn't", "never", "don't" in the CONTEXT are IRRELEVANT
-- The expression's meaning is FIXED regardless of sentence structure
-- If context says "This is no X" or "not X" - you still judge if user knows what X means
-- If user correctly defines X, mark CORRECT - even if context negates X
-- FORBIDDEN REASONS: "context uses negation", "sentence implies difficulty", "context negates the expression"
+RULE 5: FIGURATIVE LANGUAGE IS VALID
+Phrases like "[verb] into someone" are usually figurative, not literal.
+- Accept user's figurative interpretation as CORRECT
+- Do NOT reject figurative meanings as "literal meaning expected"
 
-Example logic:
-- Expression: "breeze" (meaning: something easy)
-- Context: "This exam was no breeze" (meaning the exam was hard)
-- User says: "something easy to do"
-- CORRECT because user correctly defines what "breeze" means - the negation is about the SENTENCE, not the WORD
+RULE 6: MISSING ACTION VERB = INCORRECT
+When reference starts with "to [verb]...", the verb is essential:
+- Reference "to endure hardship" vs user "hardship" = INCORRECT (missing verb)
+- Reference "to save money" vs user "save money" = CORRECT (has verb)
 
-RULE 2: KNOWLEDGE CONTEXT DOES NOT CHANGE LITERAL MEANING
-When context discusses KNOWLEDGE of X (e.g., "I don't know about X", "the first thing about X", "never heard of X"):
-- The expression X retains its literal/dictionary meaning
-- User defining what X literally IS = CORRECT
-- The context is about the speaker's knowledge, NOT about changing X's definition
-- User acknowledging the context is a bonus, but defining X correctly is sufficient
+=== FORBIDDEN REJECTION REASONS ===
+NEVER use these as reasons to mark INCORRECT:
+- "too specific" or "too vague"
+- "context implies/suggests/indicates X"
+- "in context it means X" or "but in context..."
+- "doesn't capture the broader idea"
+- "which is a different concept" (for synonymous terms)
 
-Example: Context "I don't know the first thing about plumbing"
-- User says: "the trade of installing pipes and fixtures"
-- CORRECT - user correctly defines what plumbing IS, regardless of speaker's ignorance
-
-RULE 3: COMPOUND TERMS OVERRIDE SINGLE WORDS
-- When context uses "X Y" (compound), evaluate the COMPOUND meaning, not just X
-- If reference_definition only defines "X" but context has "X Y", the compound is what matters
-- User should match the compound's contextual meaning
-- Films, phrases, and multi-word terms often have specialized meanings
-
-RULE 4: CONSISTENCY ACROSS CONTEXTS
-- Same expression + same user meaning = same result for ALL contexts
-- Never mark one context correct and another incorrect for identical input
-
-=== SEMANTIC ERROR DETECTION ===
-
-MARK INCORRECT FOR THESE ERRORS:
-
-1. IS vs USES ERROR (Critical Category Confusion):
-   Ask yourself: "Is user describing THE THING ITSELF or SOMETHING THAT USES/CONTAINS THE THING?"
-   - THE THING: "a liquid", "a substance", "a material"
-   - USES THE THING: "something to hold liquid", "a container for substance", "something to take material"
-
-   These are OPPOSITE categories:
-   - User says "something to take/hold/contain X" but expression IS X itself = INCORRECT
-   - User says "X itself" but expression is "something that uses X" = INCORRECT
-   - "A fluid" vs "a device for fluid" = COMPLETELY DIFFERENT
-
-2. PASSIVE vs ACTIVE ERROR (Direction Reversal):
-   PASSIVE concepts (being acted upon, victimhood, receiving harm):
-   - "to get hurt by", "to receive damage from", "to be harmed", "to get X from someone"
-
-   ACTIVE concepts (agency, resilience, endurance):
-   - "to endure", "to withstand", "to persevere", "to survive", "to show resilience"
-
-   These are OPPOSITES - one implies weakness/victimhood, the other implies strength/resilience:
-   - "to get damaged" (passive victim) vs "to endure damage" (active survivor) = INCORRECT
-   - "to receive hardship" (passive) vs "to overcome hardship" (active) = INCORRECT
-
-3. OPPOSITE MEANINGS:
-   - Direct contradictions (wear vs not wear, include vs exclude)
-   - Reversed relationships (give vs receive)
-
-4. WRONG SEMANTIC FIELD:
-   - Food/taste terms for personality traits
-   - Geographic features confused (mountain vs river)
-   - Unrelated categories
-
-5. TOO VAGUE:
-   - Generic descriptions that could apply to many things
-   - EXCEPTION: If user's "vague" meaning captures the essential concept, mark CORRECT
-
-=== SEMANTIC EQUIVALENCE - BE GENEROUS ===
-
-MARK CORRECT FOR THESE EQUIVALENCES:
-
-1. SURVIVAL/SUCCESS CONCEPTS - ALL of these are equivalent:
-   - "survive", "not die", "get through alive", "come out alive"
-   - "reach destination successfully", "arrive without dying"
-   - "not die as a result of X" = "survive X" = "get through X successfully"
-   - Focus on OUTCOME: if both describe survival/success, they are EQUIVALENT
-   - The cause (illness, accident, battle, journey) does not matter - survival is survival
-
-2. POSSESSION/HAVING CONCEPTS - ALL equivalent:
-   - "to have X", "got X", "possess X", "has X", "obtained X"
-   - When context shows current state of possession, "to have" is CORRECT
-   - "Got herself X" in context showing current possession = "to have X"
-
-3. EASY/SIMPLE CONCEPTS - ALL equivalent:
-   - "easy", "simple", "not difficult", "straightforward", "effortless"
-   - Any expression of low difficulty
-
-4. REASONING/LOGIC CONCEPTS - ALL equivalent:
-   - "logical", "reasonable", "makes sense", "stands to reason"
-   - Mental validity and sound thinking
-
-5. CORE MEANING PRESERVED:
-   - Different wording, same fundamental idea
-   - Synonyms and near-synonyms
-   - Paraphrases that capture essence
-
-6. MULTI-SENSE WORDS:
-   - If user captures ANY valid sense, mark CORRECT
-
-7. USER GIVES MULTIPLE DEFINITIONS:
-   - If user provides alternatives (with "or", ";", "in this context")
-   - If ANY alternative matches, mark CORRECT
-
-=== DECISION PROCESS ===
-
-1. First: Check for self-definition (STOP if found - mark INCORRECT)
-2. Second: Is there negation in context? If yes, IGNORE IT COMPLETELY
-3. Third: Is context about knowledge of X? If yes, judge if user defines X correctly
-4. Fourth: Check if context uses a compound term
-5. Fifth: Check IS vs USES error (category confusion)
-6. Sixth: Check PASSIVE vs ACTIVE error (direction reversal)
-7. Seventh: Apply semantic equivalence GENEROUSLY
-8. When uncertain: default to INCORRECT
+=== SEMANTIC EQUIVALENCE ===
+Be generous with equivalences:
+- Synonyms and near-synonyms are equivalent
+- Paraphrases that capture the essence are equivalent
+- If user captures ANY valid sense of a multi-sense word, mark CORRECT
 
 is_expression_input HANDLING
 - If true: expression may have typos; judge user's intended meaning
@@ -331,9 +589,9 @@ OUTPUT FORMAT:
 ]
 
 REASON FORMAT:
-- CORRECT: explain match (e.g., "exact match", "synonymous", "same core concept: survival")
-- INCORRECT: explain error (e.g., "self-definition", "IS vs USES: user described container not substance", "PASSIVE vs ACTIVE: user said victim but means resilience")
-- NEVER USE AS REASON: "context uses negation", "context implies X is not true"`
+- CORRECT: explain match (e.g., "exact match", "synonymous", "same core concept: survival", "matches contextual meaning")
+- INCORRECT: explain error (e.g., "self-definition", "IS vs USES: user described container not substance", "PASSIVE vs ACTIVE: user said victim but means resilience", "missing action verb: user said X but not 'to endure X'")
+- NEVER USE AS REASON: "context uses negation", "context implies X is not true", "in context it means the opposite because of negation"`
 
 	// promptExample to demonstrate correct evaluation patterns
 	type promptExample struct {
@@ -695,6 +953,95 @@ REASON FORMAT:
 				},
 			},
 		},
+		// New examples to address specific failure patterns
+		{
+			description: "CORRECT - User's more detailed definition captures core concept (counters 'too specific' rejection)",
+			userRequest: []inference.Expression{
+				{
+					Expression: "clue",
+					Meaning:    "a piece of information that helps solve a problem or mystery",
+					Contexts: []inference.Context{
+						{Context: "The detective found a crucial clue.", ReferenceDefinition: "information that helps", Usage: "clue"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "clue",
+					Meaning:    "information that helps",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "The detective found a crucial clue.", Reason: "user's more detailed definition captures the core concept - extra detail about 'solve a problem or mystery' is fine, not 'too specific'"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Generic definition valid even when context uses figuratively",
+			userRequest: []inference.Expression{
+				{
+					Expression: "sharp",
+					Meaning:    "having a fine edge or point",
+					Contexts: []inference.Context{
+						{Context: "She has a sharp mind.", ReferenceDefinition: "having a fine edge or point", Usage: "sharp"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "sharp",
+					Meaning:    "having a fine edge or point",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "She has a sharp mind.", Reason: "user defines the primary meaning correctly - context uses 'sharp' figuratively but base definition is valid"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Context modifier 'oven' overrides general reference definition",
+			userRequest: []inference.Expression{
+				{
+					Expression: "glove",
+					Meaning:    "hand covering for protection from heat",
+					Contexts: []inference.Context{
+						{Context: "Put on oven gloves before touching the hot pan.", ReferenceDefinition: "a covering for the hand worn for protection", Usage: "gloves"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "glove",
+					Meaning:    "a covering for the hand worn for protection",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "Put on oven gloves before touching the hot pan.", Reason: "context says 'oven gloves' - user correctly identified the contextual meaning of heat protection"},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Negation in context doesn't affect expression definition",
+			userRequest: []inference.Expression{
+				{
+					Expression: "fool around",
+					Meaning:    "to behave in a silly way or waste time",
+					Contexts: []inference.Context{
+						{Context: "Stop fooling around and focus!", ReferenceDefinition: "to behave in a silly way or waste time", Usage: "fooling around"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "fool around",
+					Meaning:    "to behave in a silly way or waste time",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "Stop fooling around and focus!", Reason: "user correctly defines what 'fool around' means - the command 'stop' is about the sentence, not the expression's definition"},
+					},
+				},
+			},
+		},
 	}
 
 	// Build messages: system prompt + few-shot examples + actual request
@@ -799,6 +1146,10 @@ func (client *Client) answerMeanings(
 			"error", err)
 		return inference.AnswerMeaningsResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
 	}
+
+	// Post-process: fix false negatives (forbidden patterns) and false positives (missing action verbs)
+	decoded = postProcessAnswers(decoded, args.Expressions)
+
 	return inference.AnswerMeaningsResponse{Answers: decoded}, nil
 }
 
