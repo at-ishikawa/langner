@@ -111,11 +111,11 @@ func TestMaskWordInContext(t *testing.T) {
 		},
 		{
 			name:       "Expression ending with question mark",
-			context:    "Do I have to spell it out for you? The future of our company is at stake!",
-			expression: "Do I have to spell it out for you?",
+			context:    "Are you out of your mind? That's way too dangerous.",
+			expression: "Are you out of your mind?",
 			definition: "",
 			usage:      "",
-			want:       "______ The future of our company is at stake!",
+			want:       "______ That's way too dangerous.",
 		},
 		{
 			name:       "Expression ending with exclamation mark",
