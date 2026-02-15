@@ -49,3 +49,11 @@ docs-setup:
 .PHONY: docs-server
 docs-server: docs-setup
 	hugo server -s docs
+
+.PHONY: db-import
+db-import:
+	go run ./cmd/langner db import --config config.example.yml
+
+.PHONY: db-export
+db-export:
+	go run ./cmd/langner db export --config config.example.yml --output ./export
