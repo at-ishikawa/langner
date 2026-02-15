@@ -30,7 +30,9 @@ type Metadata struct {
 
 type StoryScene struct {
 	Title         string         `yaml:"scene"`
-	Conversations []Conversation `yaml:"conversations"`
+	Conversations []Conversation `yaml:"conversations,omitempty"`
+	Statements    []string       `yaml:"statements,omitempty"`
+	Type          string         `yaml:"type,omitempty"`
 	Definitions   []Note         `yaml:"definitions,omitempty"`
 }
 
@@ -46,6 +48,7 @@ func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error
 	}
 
 	result := make([]StoryNotebook, 0)
+	notebookPaths := make([]string, 0)
 	for _, notebookPath := range index.NotebookPaths {
 		path := filepath.Join(index.path, notebookPath)
 
@@ -56,8 +59,16 @@ func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error
 
 		index.Notebooks = append(index.Notebooks, notebooks)
 		result = append(result, notebooks...)
+		// Track notebook paths for definitions merging
+		for range notebooks {
+			notebookPaths = append(notebookPaths, notebookPath)
+		}
 	}
 	reader.indexes[storyID] = index
+
+	// Merge definitions from separate definitions files
+	result = MergeDefinitionsIntoNotebooks(storyID, result, notebookPaths, reader.definitionsMap)
+
 	return result, nil
 }
 
@@ -139,7 +150,7 @@ const (
 	ConversionStylePlain
 )
 
-func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool) ([]StoryNotebook, error) {
+func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool, preserveOrder bool) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
 	for _, notebook := range storyNotebooks {
 		if len(notebook.Scenes) == 0 {
@@ -190,8 +201,8 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 			}
 
 			scene.Definitions = definitions
-			if len(scene.Conversations) == 0 {
-				return nil, fmt.Errorf("empty scene.Conversations: %v in story %s", scene, notebook.Event)
+			if len(scene.Conversations) == 0 && len(scene.Statements) == 0 {
+				return nil, fmt.Errorf("empty scene.Conversations and Statements: %v in story %s", scene, notebook.Event)
 			}
 			scenes = append(scenes, scene)
 		}
@@ -203,14 +214,16 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 		result = append(result, notebook)
 	}
 
-	if sortDesc {
-		sort.Slice(result, func(i, j int) bool {
-			return result[i].Date.After(result[j].Date)
-		})
-	} else {
-		sort.Slice(result, func(i, j int) bool {
-			return result[i].Date.Before(result[j].Date)
-		})
+	if !preserveOrder {
+		if sortDesc {
+			sort.Slice(result, func(i, j int) bool {
+				return result[i].Date.After(result[j].Date)
+			})
+		} else {
+			sort.Slice(result, func(i, j int) bool {
+				return result[i].Date.Before(result[j].Date)
+			})
+		}
 	}
 
 	return result, nil
@@ -245,7 +258,9 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 	}
 	learningHistory := learningHistories[storyID]
 
-	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false)
+	// For books, preserve index order instead of sorting by date
+	preserveOrder := writer.reader.IsBook(storyID)
+	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false, preserveOrder)
 	if err != nil {
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}
@@ -286,11 +301,11 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 	return nil
 }
 
-// Validate validates a StoryScene and its definitions against conversations
+// Validate validates a StoryScene and its definitions against conversations and statements
 func (scene *StoryScene) Validate(location string) []ValidationError {
 	var errors []ValidationError
 
-	// Check each definition appears in at least one conversation
+	// Check each definition appears in at least one conversation or statement
 	for defIdx, def := range scene.Definitions {
 		// Skip expressions marked as not_used
 		if def.NotUsed {
@@ -304,11 +319,12 @@ func (scene *StoryScene) Validate(location string) []ValidationError {
 
 		defLocation := fmt.Sprintf("%s -> definition[%d]: %s", location, defIdx, expression)
 
-		// Check if expression appears in any conversation quote (case-insensitive)
+		// Check if expression appears in any conversation quote or statement (case-insensitive)
 		foundWithMarker := false
 		foundWithoutMarker := false
 		lowerExpression := strings.ToLower(expression)
 
+		// Check conversations
 		for _, conv := range scene.Conversations {
 			lowerQuote := strings.ToLower(conv.Quote)
 
@@ -325,13 +341,32 @@ func (scene *StoryScene) Validate(location string) []ValidationError {
 			}
 		}
 
+		// Check statements if not already found with marker
+		if !foundWithMarker {
+			for _, statement := range scene.Statements {
+				lowerStatement := strings.ToLower(statement)
+
+				// Check for {{ expression }} marker (case-insensitive)
+				if strings.Contains(lowerStatement, fmt.Sprintf("{{ %s }}", lowerExpression)) ||
+					strings.Contains(lowerStatement, fmt.Sprintf("{{%s}}", lowerExpression)) {
+					foundWithMarker = true
+					break
+				}
+
+				// Check case-insensitive in plain text (without markers)
+				if strings.Contains(lowerStatement, lowerExpression) {
+					foundWithoutMarker = true
+				}
+			}
+		}
+
 		// If not found at all, report error
 		if !foundWithMarker && !foundWithoutMarker {
 			errors = append(errors, ValidationError{
 				Location: defLocation,
-				Message:  fmt.Sprintf("expression %q not found in any conversation quote", expression),
+				Message:  fmt.Sprintf("expression %q not found in any conversation quote or statement", expression),
 				Suggestions: []string{
-					"add the expression to a conversation quote",
+					"add the expression to a conversation quote or statement",
 					"or mark it as not_used: true",
 				},
 			})
@@ -339,7 +374,7 @@ func (scene *StoryScene) Validate(location string) []ValidationError {
 			// Found without marker - report as error
 			errors = append(errors, ValidationError{
 				Location: defLocation,
-				Message:  fmt.Sprintf("expression %q found in conversation but missing {{ }} markers", expression),
+				Message:  fmt.Sprintf("expression %q found in conversation or statement but missing {{ }} markers", expression),
 				Suggestions: []string{
 					"run highlight-expressions command to add {{ }} markers",
 				},
@@ -411,6 +446,12 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 		}
 	}
 
+	// Convert statements with marker processing
+	assetsStatements := make([]string, len(scene.Statements))
+	for i, statement := range scene.Statements {
+		assetsStatements[i] = ConvertMarkersInText(statement, scene.Definitions, ConversionStyleMarkdown, "")
+	}
+
 	assetsNotes := make([]assets.StoryNote, len(scene.Definitions))
 	for i, note := range scene.Definitions {
 		assetsNotes[i] = assets.StoryNote{
@@ -430,6 +471,8 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 	return assets.StoryScene{
 		Title:         scene.Title,
 		Conversations: assetsConversations,
+		Statements:    assetsStatements,
+		Type:          scene.Type,
 		Definitions:   assetsNotes,
 	}
 }

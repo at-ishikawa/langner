@@ -16,12 +16,15 @@ type Config struct {
 	Templates    TemplatesConfig    `mapstructure:"templates"`
 	Outputs      OutputsConfig      `mapstructure:"outputs"`
 	OpenAI       OpenAIConfig       `mapstructure:"openai"`
+	Books        BooksConfig        `mapstructure:"books"`
 }
 
 type NotebooksConfig struct {
-	StoriesDirectories     []string `mapstructure:"stories_directories"`
-	LearningNotesDirectory string   `mapstructure:"learning_notes_directory"`
-	FlashcardsDirectories  []string `mapstructure:"flashcards_directories"`
+	StoriesDirectories      []string `mapstructure:"stories_directories"`
+	LearningNotesDirectory  string   `mapstructure:"learning_notes_directory"`
+	FlashcardsDirectories   []string `mapstructure:"flashcards_directories"`
+	BooksDirectories        []string `mapstructure:"books_directories"`
+	DefinitionsDirectories  []string `mapstructure:"definitions_directories"`
 }
 
 type TemplatesConfig struct {
@@ -47,6 +50,11 @@ type RapidAPIConfig struct {
 type OpenAIConfig struct {
 	APIKey string `mapstructure:"api_key"`
 	Model  string `mapstructure:"model"`
+}
+
+type BooksConfig struct {
+	RepoDirectory    string `mapstructure:"repo_directory"`
+	RepositoriesFile string `mapstructure:"repositories_file"`
 }
 
 type ConfigLoader struct {
@@ -91,6 +99,10 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("outputs.story_directory", filepath.Join("outputs", "story"))
 	v.SetDefault("outputs.flashcard_directory", filepath.Join("outputs", "flashcard"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
+	v.SetDefault("notebooks.books_directories", []string{filepath.Join("notebooks", "books")})
+	v.SetDefault("notebooks.definitions_directories", []string{filepath.Join("notebooks", "definitions")})
+	v.SetDefault("books.repo_directory", "ebooks")
+	v.SetDefault("books.repositories_file", "books.yml")
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {

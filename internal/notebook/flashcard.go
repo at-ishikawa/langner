@@ -13,11 +13,18 @@ type Reader struct {
 	indexes          map[string]Index
 	flashcardIndexes map[string]FlashcardIndex
 	dictionaryMap    map[string]rapidapi.Response
+	definitionsMap   DefinitionsMap
 }
 
 // walkIndexFiles walks a directory and loads index.yml files into the provided map
-func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[string]T) error {
+// isBook is used to mark Index entries as books (only applies to Index type)
+func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[string]T, isBook bool) error {
 	if rootDir == "" {
+		return nil
+	}
+
+	// Skip if directory doesn't exist
+	if _, err := os.Stat(rootDir); os.IsNotExist(err) {
 		return nil
 	}
 
@@ -42,6 +49,7 @@ func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[strin
 		switch v := any(&index).(type) {
 		case *Index:
 			v.path = filepath.Dir(path)
+			v.isBook = isBook
 			indexMap[v.ID] = any(*v).(T)
 		case *FlashcardIndex:
 			v.path = filepath.Dir(path)
@@ -54,26 +62,40 @@ func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[strin
 func NewReader(
 	storyDirectories []string,
 	flashcardDirectories []string,
+	booksDirectories []string,
+	definitionsDirectories []string,
 	dictionaryMap map[string]rapidapi.Response,
 ) (*Reader, error) {
 	indexes := make(map[string]Index, 0)
 	for _, dir := range storyDirectories {
-		if err := walkIndexFiles(dir, indexes); err != nil {
+		if err := walkIndexFiles(dir, indexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(story, %s) > %w", dir, err)
 		}
 	}
 
 	flashcardIndexes := make(map[string]FlashcardIndex, 0)
 	for _, dir := range flashcardDirectories {
-		if err := walkIndexFiles(dir, flashcardIndexes); err != nil {
+		if err := walkIndexFiles(dir, flashcardIndexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(flashcard, %s) > %w", dir, err)
 		}
+	}
+
+	for _, dir := range booksDirectories {
+		if err := walkIndexFiles(dir, indexes, true); err != nil {
+			return nil, fmt.Errorf("walkIndexFiles(books, %s) > %w", dir, err)
+		}
+	}
+
+	definitionsMap, err := NewDefinitionsMap(definitionsDirectories)
+	if err != nil {
+		return nil, fmt.Errorf("NewDefinitionsMap: %w", err)
 	}
 
 	return &Reader{
 		indexes:          indexes,
 		flashcardIndexes: flashcardIndexes,
 		dictionaryMap:    dictionaryMap,
+		definitionsMap:   definitionsMap,
 	}, nil
 }
 
@@ -85,7 +107,15 @@ func (f Reader) ReadAllStoryNotebooks() (map[string]Index, error) {
 		}
 	}
 	return f.indexes, nil
+}
 
+// IsBook returns true if the given ID is a book (loaded from books directories)
+func (f Reader) IsBook(id string) bool {
+	index, ok := f.indexes[id]
+	if !ok {
+		return false
+	}
+	return index.IsBook()
 }
 func (f Reader) ReadAllNotes(storyID string, learningHistories map[string][]LearningHistory) ([]Note, error) {
 	notebooks, err := f.ReadStoryNotebooks(storyID)

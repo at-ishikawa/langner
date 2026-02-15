@@ -1,0 +1,7 @@
+repositories:
+    - id: frankenstein
+      repo_path: ebooks/mary-shelley_frankenstein
+      source_url: https://github.com/standardebooks/mary-shelley_frankenstein
+      web_url: https://standardebooks.org/ebooks/mary-shelley/frankenstein
+      title: Frankenstein, or the Modern Prometheus
+      author: Mary Shelley

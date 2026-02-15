@@ -147,7 +147,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 	}
 
 	// Create a reader to detect notebook type
-	reader, err := notebook.NewReader(cfg.Notebooks.StoriesDirectories, cfg.Notebooks.FlashcardsDirectories, nil)
+	reader, err := notebook.NewReader(cfg.Notebooks.StoriesDirectories, cfg.Notebooks.FlashcardsDirectories, cfg.Notebooks.BooksDirectories, cfg.Notebooks.DefinitionsDirectories, nil)
 	if err != nil {
 		return fmt.Errorf("failed to create notebook reader: %w", err)
 	}

@@ -34,6 +34,8 @@ type Metadata struct {
 type StoryScene struct {
 	Title         string
 	Conversations []Conversation
+	Statements    []string
+	Type          string
 	Definitions   []StoryNote
 }
 
