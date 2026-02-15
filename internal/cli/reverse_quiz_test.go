@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -108,6 +109,22 @@ func TestMaskWordInContext(t *testing.T) {
 			usage:      "",
 			want:       "Don't ______, Nicole.",
 		},
+		{
+			name:       "Expression ending with question mark",
+			context:    "Do I have to spell it out for you? The future of our company is at stake!",
+			expression: "Do I have to spell it out for you?",
+			definition: "",
+			usage:      "",
+			want:       "______ The future of our company is at stake!",
+		},
+		{
+			name:       "Expression ending with exclamation mark",
+			context:    "You're kidding me! That's impossible.",
+			expression: "You're kidding me!",
+			definition: "",
+			usage:      "",
+			want:       "______ That's impossible.",
+		},
 	}
 
 	for _, tt := range tests {
@@ -120,9 +137,9 @@ func TestMaskWordInContext(t *testing.T) {
 
 func TestFormatReverseQuestion(t *testing.T) {
 	tests := []struct {
-		name     string
-		card     *WordOccurrence
-		expected string
+		name string
+		card *WordOccurrence
+		want string
 	}{
 		{
 			name: "With context",
@@ -135,7 +152,7 @@ func TestFormatReverseQuestion(t *testing.T) {
 					{Context: "I am so excited about the trip!", Usage: "excited"},
 				},
 			},
-			expected: "Meaning: feeling or showing enthusiasm\nContext:\n  1. I am so ______ about the trip!\n\n",
+			want: "Meaning: feeling or showing enthusiasm\nContext:\n  1. I am so ______ about the trip!\n\n",
 		},
 		{
 			name: "Without context",
@@ -146,7 +163,7 @@ func TestFormatReverseQuestion(t *testing.T) {
 				},
 				Contexts: []WordOccurrenceContext{},
 			},
-			expected: "Meaning: soldiers who fight on horseback\n\n",
+			want: "Meaning: soldiers who fight on horseback\nContext: (no context available - this word may be difficult to answer)\n\n",
 		},
 		{
 			name: "Multiple contexts",
@@ -160,14 +177,14 @@ func TestFormatReverseQuestion(t *testing.T) {
 					{Context: "We are thrilled about the results.", Usage: "thrilled"},
 				},
 			},
-			expected: "Meaning: extremely pleased and excited\nContext:\n  1. She was ______ to hear the news.\n  2. We are ______ about the results.\n\n",
+			want: "Meaning: extremely pleased and excited\nContext:\n  1. She was ______ to hear the news.\n  2. We are ______ about the results.\n\n",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := FormatReverseQuestion(tt.card)
-			assert.Equal(t, tt.expected, got)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
@@ -183,7 +200,7 @@ func TestExtractReverseQuizCards(t *testing.T) {
 		validate           func(t *testing.T, cards []*WordOccurrence)
 	}{
 		{
-			name:         "All words need review (no history)",
+			name:         "Words without any correct answers are skipped (no history)",
 			notebookName: "test-notebook",
 			stories: []notebook.StoryNotebook{
 				{
@@ -203,7 +220,100 @@ func TestExtractReverseQuizCards(t *testing.T) {
 			},
 			learningHistory:    []notebook.LearningHistory{},
 			listMissingContext: false,
-			wantCount:          1,
+			wantCount:          0, // No history = no correct answers = skip for reverse quiz
+		},
+		{
+			name:         "Word with correct forward answer needs reverse review",
+			notebookName: "test-notebook",
+			stories: []notebook.StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []notebook.StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []notebook.Conversation{
+								{Speaker: "A", Quote: "I am excited about this!"},
+							},
+							Definitions: []notebook.Note{
+								{Expression: "excited", Meaning: "feeling enthusiasm"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression: "excited",
+									LearnedLogs: []notebook.LearningRecord{
+										{Status: "understood"}, // Has correct answer in forward quiz
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			listMissingContext: false,
+			wantCount:          1, // Has correct answer in forward quiz, needs reverse review
+		},
+		{
+			name:         "Word with empty learned_logs but has reverse_logs - should be SKIPPED",
+			notebookName: "test-notebook",
+			stories: []notebook.StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []notebook.StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []notebook.Conversation{
+								{Speaker: "A", Quote: "She broke the ice at the party."},
+							},
+							Definitions: []notebook.Note{
+								{Expression: "broke the ice", Meaning: "to initiate conversation"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression:     "broke the ice",
+									LearnedLogs:    []notebook.LearningRecord{}, // EMPTY - no correct forward answers
+									EasinessFactor: 2.5,
+									ReverseLogs: []notebook.LearningRecord{
+										{
+											Status:       "understood",
+											LearnedAt:    notebook.NewDate(time.Now()),
+											Quality:      3,
+											IntervalDays: 14,
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			listMissingContext: false,
+			wantCount:          0, // Should be skipped - no correct answers in forward quiz
 		},
 		{
 			name:         "Word with recent reverse review skipped",
@@ -236,6 +346,9 @@ func TestExtractReverseQuizCards(t *testing.T) {
 							Expressions: []notebook.LearningHistoryExpression{
 								{
 									Expression: "excited",
+									LearnedLogs: []notebook.LearningRecord{
+										{Status: "understood"}, // Has correct answer in forward quiz
+									},
 									ReverseLogs: []notebook.LearningRecord{
 										{
 											Status:       "usable",
@@ -279,6 +392,124 @@ func TestExtractReverseQuizCards(t *testing.T) {
 				assert.Equal(t, "lonely", cards[0].Definition.Expression)
 			},
 		},
+		{
+			name:         "Normal quiz mode - includes words with correct answers but without context",
+			notebookName: "test-notebook",
+			stories: []notebook.StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []notebook.StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []notebook.Conversation{
+								{Speaker: "A", Quote: "I am excited about this!"},
+							},
+							Definitions: []notebook.Note{
+								{Expression: "excited", Meaning: "feeling enthusiasm"},
+								{Expression: "lonely", Meaning: "feeling alone"}, // No conversation contains this
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression: "excited",
+									LearnedLogs: []notebook.LearningRecord{
+										{Status: "understood"},
+									},
+								},
+								{
+									Expression: "lonely",
+									LearnedLogs: []notebook.LearningRecord{
+										{Status: "understood"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			listMissingContext: false,
+			wantCount:          2, // Both words have correct answers, so both included (sorting happens separately)
+		},
+		{
+			// This tests the bug scenario: learning history has TWO entries for the same expression
+			// One entry (base form) has learned_logs from forward quiz
+			// Another entry (context form) has reverse_logs from old reverse quiz (before fix)
+			// The word should be SKIPPED because it was recently reviewed in reverse quiz
+			name:         "Duplicate entries - expression and definition match different history entries",
+			notebookName: "test-notebook",
+			stories: []notebook.StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []notebook.StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []notebook.Conversation{
+								{Speaker: "A", Quote: "He lost his temper again."},
+							},
+							Definitions: []notebook.Note{
+								{
+									Expression: "lost his temper",
+									Definition: "lose one's temper", // Definition differs from Expression
+									Meaning:    "to become angry",
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								// Entry 1: matches via definition field, has learned_logs (from forward quiz)
+								{
+									Expression: "lose one's temper",
+									LearnedLogs: []notebook.LearningRecord{
+										{Status: "understood", LearnedAt: notebook.NewDate(time.Now().Add(-7 * 24 * time.Hour))},
+									},
+									EasinessFactor: 2.36,
+									// Note: no reverse_logs here - forward quiz used this key
+								},
+								// Entry 2: matches via expression field, has reverse_logs (from old reverse quiz)
+								{
+									Expression:     "lost his temper",
+									LearnedLogs:    []notebook.LearningRecord{}, // Empty - no forward quiz here
+									EasinessFactor: 2.5,
+									ReverseLogs: []notebook.LearningRecord{
+										{
+											Status:       "understood",
+											LearnedAt:    notebook.NewDate(time.Now()), // Reviewed today
+											Quality:      4,
+											IntervalDays: 14, // Next review in 14 days
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			listMissingContext: false,
+			wantCount:          0, // Should be SKIPPED because reverse review was done recently
+		},
 	}
 
 	for _, tt := range tests {
@@ -287,6 +518,70 @@ func TestExtractReverseQuizCards(t *testing.T) {
 			assert.Equal(t, tt.wantCount, len(cards))
 			if tt.validate != nil {
 				tt.validate(t, cards)
+			}
+		})
+	}
+}
+
+func TestSortCardsByContextAvailability(t *testing.T) {
+	// Create cards with and without context
+	cardWithContext := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "excited",
+			Meaning:    "feeling enthusiasm",
+		},
+		Contexts: []WordOccurrenceContext{
+			{Context: "I am excited!", Usage: "excited"},
+		},
+	}
+	cardWithoutContext1 := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "lonely",
+			Meaning:    "feeling alone",
+		},
+		Contexts: []WordOccurrenceContext{},
+	}
+	cardWithoutContext2 := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "melancholy",
+			Meaning:    "deep sadness",
+		},
+		Contexts: []WordOccurrenceContext{},
+	}
+
+	tests := []struct {
+		name     string
+		input    []*WordOccurrence
+		wantOrder []string
+	}{
+		{
+			name:      "Words without context come first",
+			input:     []*WordOccurrence{cardWithContext, cardWithoutContext1},
+			wantOrder: []string{"lonely", "excited"},
+		},
+		{
+			name:      "Multiple words without context",
+			input:     []*WordOccurrence{cardWithContext, cardWithoutContext1, cardWithoutContext2},
+			wantOrder: []string{"lonely", "melancholy", "excited"},
+		},
+		{
+			name:      "All words have context",
+			input:     []*WordOccurrence{cardWithContext},
+			wantOrder: []string{"excited"},
+		},
+		{
+			name:      "All words missing context",
+			input:     []*WordOccurrence{cardWithoutContext1, cardWithoutContext2},
+			wantOrder: []string{"lonely", "melancholy"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := sortCardsByContextAvailability(tt.input)
+			assert.Equal(t, len(tt.wantOrder), len(result))
+			for i, expr := range tt.wantOrder {
+				assert.Equal(t, expr, result[i].Definition.Expression)
 			}
 		})
 	}
@@ -772,6 +1067,9 @@ func TestNewReverseQuizCLI(t *testing.T) {
 								Expressions: []notebook.LearningHistoryExpression{
 									{
 										Expression: "excited",
+										LearnedLogs: []notebook.LearningRecord{
+											{Status: "understood"}, // Has correct answer in forward quiz
+										},
 										ReverseLogs: []notebook.LearningRecord{
 											{
 												Status:       "usable",
@@ -888,6 +1186,9 @@ func TestNewReverseQuizCLI_MultiLineSceneTitle(t *testing.T) {
 					Expressions: []notebook.LearningHistoryExpression{
 						{
 							Expression: "excited",
+							LearnedLogs: []notebook.LearningRecord{
+								{Status: "understood"}, // Has correct answer in forward quiz
+							},
 							ReverseLogs: []notebook.LearningRecord{
 								{
 									Status:       "usable",
@@ -962,11 +1263,11 @@ func TestNewReverseQuizCLI_YAMLRoundTrip(t *testing.T) {
 			wantCardCount:  0,              // Should match via Definition
 		},
 		{
-			name:           "No match - different expression",
+			name:           "No match - different expression (no learning history for word)",
 			noteExpression: "excited",
 			noteDefinition: "",
-			histExpression: "different_word",
-			wantCardCount:  1, // Should NOT be skipped
+			histExpression: "different_word", // This doesn't match "excited"
+			wantCardCount:  0,                // Should be skipped - no matching learning history with correct answers
 		},
 	}
 
@@ -987,6 +1288,8 @@ func TestNewReverseQuizCLI_YAMLRoundTrip(t *testing.T) {
 			indexPath := filepath.Join(notebookDir, "index.yml")
 			require.NoError(t, notebook.WriteYamlFile(indexPath, index))
 
+			// Include expression in conversation so context is found
+			conversationQuote := fmt.Sprintf("I am so %s about this!", tt.noteExpression)
 			stories := []notebook.StoryNotebook{
 				{
 					Event: "Story 1",
@@ -995,7 +1298,7 @@ func TestNewReverseQuizCLI_YAMLRoundTrip(t *testing.T) {
 						{
 							Title: "Scene 1",
 							Conversations: []notebook.Conversation{
-								{Speaker: "A", Quote: "Test conversation"},
+								{Speaker: "A", Quote: conversationQuote},
 							},
 							Definitions: []notebook.Note{
 								{
@@ -1092,7 +1395,7 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 	storiesPath := filepath.Join(notebookDir, "stories.yml")
 	require.NoError(t, notebook.WriteYamlFile(storiesPath, stories))
 
-	// Create empty learning history (no reverse_logs yet)
+	// Create learning history with correct answer in forward quiz but no reverse_logs
 	learningHistory := []notebook.LearningHistory{
 		{
 			Metadata: notebook.LearningHistoryMetadata{
@@ -1104,9 +1407,11 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 					Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
 					Expressions: []notebook.LearningHistoryExpression{
 						{
-							Expression:  "excited",
-							LearnedLogs: []notebook.LearningRecord{},
-							// No ReverseLogs - word should be shown
+							Expression: "excited",
+							LearnedLogs: []notebook.LearningRecord{
+								{Status: "understood"}, // Has correct answer in forward quiz
+							},
+							// No ReverseLogs - word should be shown for reverse quiz
 						},
 					},
 				},

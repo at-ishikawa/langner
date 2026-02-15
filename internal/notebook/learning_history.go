@@ -160,6 +160,20 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 	exp.ReverseLogs = append([]LearningRecord{newRecord}, exp.ReverseLogs...)
 }
 
+// HasAnyCorrectAnswer returns true if the expression has at least one correct answer
+// in the forward quiz (LearnedLogs). This is used to determine if a word is ready
+// for reverse quiz - words should be learned in forward direction first.
+func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
+	for _, log := range exp.LearnedLogs {
+		if log.Status == learnedStatusUnderstood ||
+			log.Status == learnedStatusCanBeUsed ||
+			log.Status == learnedStatusIntuitivelyUsed {
+			return true
+		}
+	}
+	return false
+}
+
 // NeedsReverseReview returns true if the expression needs reverse quiz review
 // based on spaced repetition algorithm
 func (exp LearningHistoryExpression) NeedsReverseReview() bool {
