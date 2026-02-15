@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 900" width="375" height="900">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .heading { font-size: 22px; font-weight: 700; fill: #111; }
+      .muted { font-size: 12px; fill: #999; }
+      .btn-text { font-size: 15px; font-weight: 600; fill: #fff; }
+      .stat-number { font-size: 36px; font-weight: 700; }
+      .stat-label { font-size: 13px; fill: #666; }
+      .section-label { font-size: 13px; font-weight: 600; fill: #333; }
+      .word-text { font-size: 14px; fill: #333; }
+      .word-meaning { font-size: 12px; fill: #999; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="900" fill="#f8f9fa"/>
+
+  <!-- Status bar area -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Header -->
+  <rect y="44" width="375" height="56" fill="#fff"/>
+  <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb" stroke-width="1"/>
+  <text x="187" y="78" text-anchor="middle" class="title">Quiz</text>
+
+  <!-- Progress bar (full) -->
+  <rect x="24" y="112" width="327" height="4" rx="2" fill="#2563eb"/>
+
+  <!-- Completion message -->
+  <text x="187" y="168" text-anchor="middle" class="heading">Session Complete</text>
+
+  <!-- Stats card -->
+  <rect x="16" y="190" width="343" height="160" rx="12" fill="#fff" stroke="#e5e7eb" stroke-width="1"/>
+
+  <!-- Total -->
+  <text x="187" y="234" text-anchor="middle" class="stat-number" fill="#111">25</text>
+  <text x="187" y="254" text-anchor="middle" class="stat-label">words practiced</text>
+
+  <!-- Correct -->
+  <text x="110" y="310" text-anchor="middle" class="stat-number" fill="#16a34a">18</text>
+  <text x="110" y="330" text-anchor="middle" class="stat-label">correct</text>
+
+  <!-- Divider -->
+  <line x1="187" y1="280" x2="187" y2="340" stroke="#e5e7eb" stroke-width="1"/>
+
+  <!-- Incorrect -->
+  <text x="265" y="310" text-anchor="middle" class="stat-number" fill="#dc2626">7</text>
+  <text x="265" y="330" text-anchor="middle" class="stat-label">incorrect</text>
+
+  <!-- Correct words list -->
+  <text x="24" y="392" class="section-label" fill="#16a34a">Correct</text>
+
+  <rect x="16" y="404" width="343" height="148" rx="12" fill="#fff" stroke="#e5e7eb" stroke-width="1"/>
+
+  <text x="40" y="432" class="word-text">hit the hay</text>
+  <text x="40" y="448" class="word-meaning">to go to bed or to go to sleep</text>
+  <line x1="40" y1="460" x2="335" y2="460" stroke="#f3f4f6" stroke-width="1"/>
+
+  <text x="40" y="482" class="word-text">break the ice</text>
+  <text x="40" y="498" class="word-meaning">to make people feel more comfortable</text>
+  <line x1="40" y1="510" x2="335" y2="510" stroke="#f3f4f6" stroke-width="1"/>
+
+  <text x="40" y="532" class="word-text">...</text>
+
+  <!-- Incorrect words list -->
+  <text x="24" y="590" class="section-label" fill="#dc2626">Incorrect</text>
+
+  <rect x="16" y="602" width="343" height="148" rx="12" fill="#fff" stroke="#e5e7eb" stroke-width="1"/>
+
+  <text x="40" y="630" class="word-text">kick the bucket</text>
+  <text x="40" y="646" class="word-meaning">to die</text>
+  <line x1="40" y1="658" x2="335" y2="658" stroke="#f3f4f6" stroke-width="1"/>
+
+  <text x="40" y="680" class="word-text">let the cat out of the bag</text>
+  <text x="40" y="696" class="word-meaning">to reveal a secret</text>
+  <line x1="40" y1="708" x2="335" y2="708" stroke="#f3f4f6" stroke-width="1"/>
+
+  <text x="40" y="730" class="word-text">...</text>
+
+  <!-- Back to Start button -->
+  <rect x="24" y="784" width="327" height="52" rx="10" fill="#2563eb"/>
+  <text x="187" y="816" text-anchor="middle" class="btn-text">Back to Start</text>
+</svg>
