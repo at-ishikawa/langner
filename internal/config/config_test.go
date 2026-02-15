@@ -44,9 +44,11 @@ func TestConfigLoader_Load(t *testing.T) {
 			configContent: "# Empty config\n",
 			want: &Config{
 				Notebooks: NotebooksConfig{
-					StoriesDirectories:     []string{filepath.Join("notebooks", "stories")},
-					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
+					StoriesDirectories:      []string{filepath.Join("notebooks", "stories")},
+					LearningNotesDirectory:  filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -59,6 +61,10 @@ func TestConfigLoader_Load(t *testing.T) {
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
+				},
+				Books: BooksConfig{
+					RepoDirectory:    "ebooks",
+					RepositoriesFile: "books.yml",
 				},
 			},
 		},
@@ -75,9 +81,11 @@ outputs:
 `,
 			want: &Config{
 				Notebooks: NotebooksConfig{
-					StoriesDirectories:     []string{"custom/stories"},
-					LearningNotesDirectory: "custom/learning",
-					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
+					StoriesDirectories:      []string{"custom/stories"},
+					LearningNotesDirectory:  "custom/learning",
+					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -91,6 +99,10 @@ outputs:
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Books: BooksConfig{
+					RepoDirectory:    "ebooks",
+					RepositoriesFile: "books.yml",
+				},
 			},
 		},
 		{
@@ -100,9 +112,11 @@ outputs:
 `,
 			want: &Config{
 				Notebooks: NotebooksConfig{
-					StoriesDirectories:     []string{"partial/stories"},
-					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
+					StoriesDirectories:      []string{"partial/stories"},
+					LearningNotesDirectory:  filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -115,6 +129,10 @@ outputs:
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
+				},
+				Books: BooksConfig{
+					RepoDirectory:    "ebooks",
+					RepositoriesFile: "books.yml",
 				},
 			},
 		},

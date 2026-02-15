@@ -9,8 +9,23 @@ notebooks:
   flashcards_directories:
     - examples/flashcards
 
+  # Directories containing book notebooks (auto-generated from ebooks)
+  books_directories:
+    - examples/books
+
+  # Directories containing definitions for books (separate from auto-generated content)
+  definitions_directories:
+    - examples/definitions
+
   # Directory containing learning notes/history
   learning_notes_directory: examples/learning_notes
+
+books:
+  # Directory where ebook repositories are cloned
+  repo_directory: ebooks
+
+  # YAML file tracking cloned repositories
+  repositories_file: books.example.yml
 
 dictionaries:
   rapidapi:

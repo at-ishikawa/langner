@@ -36,6 +36,7 @@ func main() {
 		newValidateCommand(),
 		newParseCommand(),
 		newMigrateCommand(),
+		newEbookCommand(),
 	)
 	if err := rootCommand.Execute(); err != nil {
 		if _, fprintfErr := fmt.Fprintf(os.Stderr, "failed to execute a command: %+v\n", err); fprintfErr != nil {

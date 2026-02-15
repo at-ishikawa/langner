@@ -95,7 +95,7 @@ func TestNewReader_EmptyStoriesDirValidFlashcardDir(t *testing.T) {
 	env.createCardFile(flashcardDir, "cards.yml", cardsContent)
 
 	// Test with empty slice for stories directories
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 
@@ -116,7 +116,7 @@ func TestNewReader_ValidStoriesDirEmptyFlashcardDir(t *testing.T) {
 	storyDir := env.createStoryIndex("stories", "Story One", []string{"./notebook.yml"})
 
 	// Test with empty slice for flashcard directories
-	reader, err := NewReader([]string{storyDir}, []string{}, nil)
+	reader, err := NewReader([]string{storyDir}, []string{}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 
@@ -131,7 +131,7 @@ func TestNewReader_ValidStoriesDirEmptyFlashcardDir(t *testing.T) {
 
 func TestNewReader_BothDirectoriesEmpty(t *testing.T) {
 	// Test with both directories as empty slices
-	reader, err := NewReader([]string{}, []string{}, nil)
+	reader, err := NewReader([]string{}, []string{}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 
@@ -151,7 +151,7 @@ func TestNewReader_MultipleFlashcardIndexes(t *testing.T) {
 	env.createFlashcardIndex("idioms", "English Idioms", []string{"./idioms.yml"})
 
 	// Test loading multiple indexes
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 	assert.NotNil(t, reader)
 
@@ -201,7 +201,7 @@ func TestReadFlashcardNotebooks_Success(t *testing.T) {
 	env.createCardFile(flashcardDir, "advanced.yml", advancedContent)
 
 	// Create reader and read flashcard notebooks
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	notebooks, err := reader.ReadFlashcardNotebooks("vocab")
@@ -245,7 +245,7 @@ func TestReadFlashcardNotebooks_FlashcardIDNotFound(t *testing.T) {
 	env.createFlashcardIndex("vocab", "Vocabulary", []string{"./cards.yml"})
 
 	// Create reader
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Try to read flashcard notebooks with non-existent ID
@@ -268,7 +268,7 @@ func TestReadFlashcardNotebooks_InvalidYAMLFile(t *testing.T) {
 	env.createCardFile(flashcardDir, "invalid.yml", invalidContent)
 
 	// Create reader
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Try to read flashcard notebooks with invalid YAML
@@ -285,7 +285,7 @@ func TestReadFlashcardNotebooks_MissingNotebookFile(t *testing.T) {
 	env.createFlashcardIndex("vocab", "Vocabulary", []string{"./missing.yml"})
 
 	// Create reader
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Try to read flashcard notebooks with missing notebook file
@@ -302,7 +302,7 @@ func TestReadFlashcardNotebooks_EmptyNotebooksList(t *testing.T) {
 	env.createFlashcardIndex("vocab", "Vocabulary", []string{})
 
 	// Create reader
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Read flashcard notebooks with empty notebooks list
@@ -331,7 +331,7 @@ func TestReadFlashcardNotebooks_WithImages(t *testing.T) {
 	env.createCardFile(flashcardDir, "cards.yml", cardsContent)
 
 	// Create reader and read flashcard notebooks
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	notebooks, err := reader.ReadFlashcardNotebooks("visual")
@@ -372,7 +372,7 @@ func TestReadAllFlashcardNotebooks(t *testing.T) {
 	env.createCardFile(flashcardDir2, "idioms.yml", idioms2Content)
 
 	// Create reader
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Read all flashcard notebooks
@@ -407,7 +407,7 @@ func TestReadAllFlashcardNotebooks_OneInvalidNotebook(t *testing.T) {
 	env.createFlashcardIndex("idioms", "English Idioms", []string{"./missing.yml"})
 
 	// Create reader
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Read all flashcard notebooks - should fail on the invalid one
@@ -433,7 +433,7 @@ func TestFlashcardNotebook_DateParsing(t *testing.T) {
 	env.createCardFile(flashcardDir, "cards.yml", cardsContent)
 
 	// Create reader and read notebooks
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	notebooks, err := reader.ReadFlashcardNotebooks("vocab")
@@ -452,7 +452,7 @@ func TestGetFlashcardIndexes(t *testing.T) {
 	env.createFlashcardIndex("vocab", "Vocabulary", []string{"./cards.yml"})
 
 	// Create reader
-	reader, err := NewReader([]string{}, []string{env.tempDir}, nil)
+	reader, err := NewReader([]string{}, []string{env.tempDir}, nil, nil, nil)
 	require.NoError(t, err)
 
 	// Get flashcard indexes
@@ -461,4 +461,51 @@ func TestGetFlashcardIndexes(t *testing.T) {
 	assert.Contains(t, indexes, "vocab")
 	assert.Equal(t, "Vocabulary", indexes["vocab"].Name)
 	assert.Equal(t, []string{"./cards.yml"}, indexes["vocab"].NotebookPaths)
+}
+
+func TestReader_IsBook(t *testing.T) {
+	env := newTestFlashcardEnv(t)
+
+	// Create a stories directory
+	storiesDir := filepath.Join(env.tempDir, "stories")
+	err := os.MkdirAll(storiesDir, 0755)
+	require.NoError(t, err)
+
+	// Create a books directory
+	booksDir := filepath.Join(env.tempDir, "books")
+	err = os.MkdirAll(booksDir, 0755)
+	require.NoError(t, err)
+
+	// Create story index
+	storyDir := filepath.Join(storiesDir, "friends")
+	err = os.MkdirAll(storyDir, 0755)
+	require.NoError(t, err)
+	storyIndex := `id: friends
+name: "Friends Episodes"
+notebooks:
+  - episode1.yml
+`
+	err = os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(storyIndex), 0644)
+	require.NoError(t, err)
+
+	// Create book index
+	bookDir := filepath.Join(booksDir, "frankenstein")
+	err = os.MkdirAll(bookDir, 0755)
+	require.NoError(t, err)
+	bookIndex := `id: frankenstein
+name: "Frankenstein"
+notebooks:
+  - chapter1.yml
+`
+	err = os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(bookIndex), 0644)
+	require.NoError(t, err)
+
+	// Create reader with both directories
+	reader, err := NewReader([]string{storiesDir}, nil, []string{booksDir}, nil, nil)
+	require.NoError(t, err)
+
+	// Test IsBook
+	assert.False(t, reader.IsBook("friends"), "friends should not be a book")
+	assert.True(t, reader.IsBook("frankenstein"), "frankenstein should be a book")
+	assert.False(t, reader.IsBook("unknown"), "unknown should return false")
 }

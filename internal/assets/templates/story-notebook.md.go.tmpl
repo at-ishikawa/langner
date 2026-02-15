@@ -12,6 +12,13 @@
 {{ range $conversation := $scene.Conversations }}
 - _{{ $conversation.Speaker }}_: {{ $conversation.Quote }}
 {{- end }}
+{{- if $scene.Statements }}
+{{ if eq $scene.Type "blockquote" }}
+> {{ range $index, $statement := $scene.Statements }}{{ if $index }} {{ end }}{{ $statement }}{{ end }}
+{{ else }}
+{{ range $index, $statement := $scene.Statements }}{{ if $index }} {{ end }}{{ $statement }}{{ end }}
+{{ end }}
+{{- end }}
 
 #### Words and phrases
 

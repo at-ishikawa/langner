@@ -124,6 +124,7 @@ func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
 								Conversations: []assets.Conversation{
 									{Speaker: "A", Quote: "This is a **test phrase** here."},
 								},
+								Statements: []string{},
 								Definitions: []assets.StoryNote{
 									{
 										Expression: "test phrase",
@@ -454,6 +455,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 				tt.sortDesc,
 				tt.includeNoCorrectAnswers,
 				tt.useSpacedRepetition,
+				false,
 			)
 			require.NoError(t, err)
 
@@ -614,7 +616,7 @@ func TestReader_ReadAllStoryNotebooksMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := tt.setupFunc(t)
 
-			reader, err := NewReader([]string{tempDir}, []string{}, map[string]rapidapi.Response{})
+			reader, err := NewReader([]string{tempDir}, []string{}, nil, nil, map[string]rapidapi.Response{})
 			require.NoError(t, err)
 
 			result, err := reader.ReadAllStoryNotebooksMap()
