@@ -460,3 +460,69 @@ func TestLearningHistoryExpression_NeedsReverseReview(t *testing.T) {
 	}
 }
 
+func TestLearningHistoryExpression_HasAnyCorrectAnswer(t *testing.T) {
+	tests := []struct {
+		name       string
+		expression LearningHistoryExpression
+		want       bool
+	}{
+		{
+			name: "No logs - no correct answers",
+			expression: LearningHistoryExpression{
+				Expression:  "test",
+				LearnedLogs: []LearningRecord{},
+			},
+			want: false,
+		},
+		{
+			name: "Only misunderstood - no correct answers",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood},
+					{Status: LearnedStatusMisunderstood},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "Has understood status - has correct answer",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood},
+					{Status: learnedStatusUnderstood},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Has usable status - has correct answer",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusCanBeUsed},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "Has intuitive status - has correct answer",
+			expression: LearningHistoryExpression{
+				Expression: "test",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusIntuitivelyUsed},
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.expression.HasAnyCorrectAnswer()
+			assert.Equal(t, tt.want, got, "HasAnyCorrectAnswer() = %v, want %v", got, tt.want)
+		})
+	}
+}
+

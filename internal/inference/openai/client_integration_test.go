@@ -28,6 +28,16 @@ type IntegrationTestTarget struct {
 // This is used to test for each user's case
 var integrationTestTargets []IntegrationTestTarget
 
+// ValidateWordFormTestTarget represents a test case for ValidateWordForm
+type ValidateWordFormTestTarget struct {
+	Request            inference.ValidateWordFormRequest
+	WantClassification inference.ValidateWordFormClassification
+	Reason             string // Why this classification is expected
+}
+
+// validateWordFormTestTargets can be set in client_integration_data_test.go to override the default tests
+var validateWordFormTestTargets []ValidateWordFormTestTarget
+
 // TestClient_AnswerMeanings tests the multiple contexts API integration
 // This test requires OPENAI_API_KEY environment variable to be set
 // Run with: OPENAI_API_KEY=your-key go test -v ./internal/inference/openai -run TestClient_AnswerMeanings_Evaluate
@@ -130,6 +140,73 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 						expression, context, want.Correct, answerForContext.Correct, got.Meaning, answerForContext.Reason, want.Correct, want.Reason)
 				}
 			}
+		})
+	}
+}
+
+// TestClient_ValidateWordForm tests the ValidateWordForm API integration for reverse quiz
+// This test requires OPENAI_API_KEY environment variable to be set
+// Run with: OPENAI_API_KEY=your-key go test -v ./internal/inference/openai -run TestClient_ValidateWordForm_Evaluate
+func TestClient_ValidateWordForm_Evaluate(t *testing.T) {
+	t.Parallel()
+
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		t.Skip("OPENAI_API_KEY environment variable not set, skipping integration test")
+	}
+
+	model := os.Getenv("OPENAI_MODEL")
+	if model == "" {
+		model = "gpt-4o-mini"
+	}
+
+	slog.SetDefault(
+		slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level:     slog.LevelDebug,
+			AddSource: true,
+		})),
+	)
+
+	// Use default test targets if not overridden by client_integration_data_test.go
+	if validateWordFormTestTargets == nil {
+		validateWordFormTestTargets = []ValidateWordFormTestTarget{
+			{
+				Request: inference.ValidateWordFormRequest{
+					Expected:   "run",
+					UserAnswer: "ran",
+					Meaning:    "to move quickly by foot",
+					Context:    "I ______ every morning for exercise.",
+				},
+				WantClassification: inference.ClassificationSameWord,
+				Reason:             "ran is the past tense of run",
+			},
+		}
+	}
+
+	client := openai.NewClient(apiKey, model, 0)
+	defer func() {
+		_ = client.Close()
+	}()
+
+	for _, tc := range validateWordFormTestTargets {
+		testName := tc.Request.Expected + "_vs_" + tc.Request.UserAnswer
+		t.Run(testName, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+
+			result, err := client.ValidateWordForm(ctx, tc.Request)
+			require.NoError(t, err)
+
+			t.Logf("Expected: %s, UserAnswer: %s, Meaning: %s, Context: %s",
+				tc.Request.Expected, tc.Request.UserAnswer, tc.Request.Meaning, tc.Request.Context)
+			t.Logf("Got classification: %s, Got reason: %s", result.Classification, result.Reason)
+			t.Logf("Want classification: %s, Why: %s", tc.WantClassification, tc.Reason)
+
+			assert.Equal(t, tc.WantClassification, result.Classification,
+				"Expected: %s, UserAnswer: %s, Want: %s, Got: %s, OpenAI reason: %s, Why %s is expected: %s",
+				tc.Request.Expected, tc.Request.UserAnswer, tc.WantClassification, result.Classification, result.Reason, tc.WantClassification, tc.Reason)
 		})
 	}
 }

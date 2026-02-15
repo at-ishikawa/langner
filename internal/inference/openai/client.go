@@ -837,33 +837,42 @@ func (client *Client) validateWordForm(
 ) (inference.ValidateWordFormResponse, error) {
 	systemPrompt := `You are a vocabulary quiz validator for a reverse quiz (meaning → word production).
 
-The user was shown a MEANING and asked to produce a word with that meaning.
+The user was shown a MEANING and asked to produce a SPECIFIC word/expression.
 You must classify their answer into one of three categories.
 
 CLASSIFICATION RULES:
 
-1. "same_word" - The user's answer IS the expected word, just in a different form:
+1. "same_word" - The user's answer IS the expected word/expression, just in a different form:
    - Different tense: "ran" for "run", "swimming" for "swim"
    - Different number: "boxes" for "box", "children" for "child"
    - Different case: "Hello" for "hello"
-   - With/without articles: "the dog" for "dog"
+   - With/without articles: "a book" for "book", missing "a" or "the" within expressions
    - Spelling variants: "colour" for "color"
+   - Pronoun variants in expressions: "lost his way" for "lose one's way"
+   - Optional parenthetical parts omitted: if expected has "(word)" meaning optional, omitting it is OK
+   - Minor word omissions: missing small words (articles, prepositions) that don't change the core meaning
+   - Preposition variants in fixed expressions: "in" vs "on" when the core phrase is identical
+   - Minor typos: transposed letters, missing/extra letter, or small spelling errors that clearly show the user knows the word
+   - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
 
-2. "synonym" - The user's answer is NOT the expected word but IS a valid word with the same meaning:
-   - "happy" when expected "glad" (both mean joyful)
-   - "thrilled" when expected "excited" (both mean very happy)
-   - The synonym must genuinely fit the meaning shown
+2. "synonym" - For SINGLE WORDS only: a different word with the same core meaning:
+   - "joyful" when expected "happy" (different single words, same meaning)
+   - "big" when expected "large" (different single words, same meaning)
+   - This applies when BOTH the expected word AND user's answer are single words
+   - If they genuinely mean the same thing, classify as "synonym"
 
-3. "wrong" - The user's answer does not convey the meaning:
+3. "wrong" - The user's answer is incorrect:
    - Wrong definition entirely
    - Antonym (opposite meaning)
    - Unrelated word
    - Gibberish or empty
+   - A DIFFERENT multi-word expression/phrase/idiom even if it has similar meaning
 
-IMPORTANT:
-- Focus on whether the meaning matches, not exact word form
-- If the user's word legitimately expresses the given meaning, it's either "same_word" or "synonym"
-- Be generous with morphological variants of the expected word
+CRITICAL RULE FOR MULTI-WORD EXPRESSIONS:
+- For phrasal verbs, idioms, and multi-word expressions, ONLY accept morphological variants of the SAME expression
+- A completely different expression with similar meaning is "wrong", NOT "synonym"
+- The goal is to learn the SPECIFIC expression, not just any expression with similar meaning
+- However, minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should still be classified as "same_word"
 
 OUTPUT FORMAT (JSON only):
 {

@@ -104,6 +104,10 @@ func NewReverseQuizCLI(
 	// Deduplicate cards by expression to avoid asking the same word multiple times
 	cards = deduplicateCardsByExpression(cards)
 
+	// Sort cards so that words without context come first
+	// This way users are notified upfront about missing context
+	cards = sortCardsByContextAvailability(cards)
+
 	return &ReverseQuizCLI{
 		InteractiveQuizCLI: baseCLI,
 		notebookName:       notebookName,
@@ -137,10 +141,43 @@ func deduplicateCardsByExpression(cards []*WordOccurrence) []*WordOccurrence {
 	return result
 }
 
-// ShuffleCards shuffles the quiz cards
+// sortCardsByContextAvailability sorts cards so that words without context come first.
+// This allows users to see which words are missing context before proceeding to words with context.
+func sortCardsByContextAvailability(cards []*WordOccurrence) []*WordOccurrence {
+	// Partition cards into two groups: without context and with context
+	var withoutContext, withContext []*WordOccurrence
+	for _, card := range cards {
+		if len(card.Contexts) == 0 {
+			withoutContext = append(withoutContext, card)
+		} else {
+			withContext = append(withContext, card)
+		}
+	}
+
+	// Return cards without context first, then cards with context
+	result := make([]*WordOccurrence, 0, len(cards))
+	result = append(result, withoutContext...)
+	result = append(result, withContext...)
+	return result
+}
+
+// ShuffleCards shuffles the quiz cards within each context-availability group,
+// preserving the partition where cards without context come first.
 func (r *ReverseQuizCLI) ShuffleCards() {
-	rand.Shuffle(len(r.cards), func(i, j int) {
-		r.cards[i], r.cards[j] = r.cards[j], r.cards[i]
+	// Find the boundary between no-context and with-context groups
+	boundary := 0
+	for boundary < len(r.cards) && len(r.cards[boundary].Contexts) == 0 {
+		boundary++
+	}
+
+	// Shuffle each group independently
+	noContext := r.cards[:boundary]
+	withContext := r.cards[boundary:]
+	rand.Shuffle(len(noContext), func(i, j int) {
+		noContext[i], noContext[j] = noContext[j], noContext[i]
+	})
+	rand.Shuffle(len(withContext), func(i, j int) {
+		withContext[i], withContext[j] = withContext[j], withContext[i]
 	})
 }
 
@@ -326,17 +363,25 @@ func (r *ReverseQuizCLI) displayResult(card *WordOccurrence, userAnswer string, 
 	if reason != "" {
 		fmt.Printf("   Reason: %s\n", reason)
 	}
+
+	// Show context sentences (unmasked) to help understand the phrase in context
+	if len(card.Contexts) > 0 {
+		fmt.Println()
+		fmt.Println("   Context:")
+		cleanContexts := card.GetCleanContexts()
+		for i, cleanContext := range cleanContexts {
+			fmt.Printf("   %d. %s\n", i+1, cleanContext)
+		}
+	}
 	fmt.Println()
 }
 
 // updateReverseHistory updates the learning history for reverse quiz
 func (r *ReverseQuizCLI) updateReverseHistory(card *WordOccurrence, isCorrect bool, quality int, responseTimeMs int64) error {
-	// Use the original Expression field to match learning history entries
-	// (learning history may store Expression, not Definition)
-	wordToRecord := card.Definition.Expression
-	if wordToRecord == "" {
-		wordToRecord = card.GetExpression()
-	}
+	// Use GetExpression() to match learning history entries consistently with forward quiz
+	// GetExpression() returns Definition.Definition if set, otherwise Definition.Expression
+	// This ensures both forward and reverse quiz use the same expression key
+	wordToRecord := card.GetExpression()
 	cardNotebookName := card.NotebookName
 
 	storyTitle := "flashcards"
@@ -384,6 +429,8 @@ func FormatReverseQuestion(occurrence *WordOccurrence) string {
 			maskedContext := maskWordInContext(ctx.Context, expression, occurrence.Definition.Definition, ctx.Usage)
 			sb.WriteString(fmt.Sprintf("  %d. %s\n", i+1, maskedContext))
 		}
+	} else {
+		sb.WriteString("Context: (no context available - this word may be difficult to answer)\n")
 	}
 
 	sb.WriteString("\n")
@@ -412,8 +459,40 @@ func maskWordInContext(context, expression, definition, usage string) string {
 	for word := range wordsToMask {
 		// Escape special regex characters in the word
 		escapedWord := regexp.QuoteMeta(word)
-		// Create pattern for word boundary matching (case-insensitive)
-		pattern := regexp.MustCompile(`(?i)\b` + escapedWord + `\b`)
+
+		// Build pattern with smart word boundaries:
+		// - Use \b for word characters (letters, digits, underscore)
+		// - Skip \b for punctuation (which doesn't have word boundaries)
+		var patternStr string
+		if len(word) > 0 {
+			firstChar := word[0]
+			lastChar := word[len(word)-1]
+
+			// Check if first char is a word character (letter, digit, underscore)
+			// Note: word is always lowercase (from strings.ToLower), so no need to check 'A'-'Z'
+			isFirstWordChar := (firstChar >= 'a' && firstChar <= 'z') ||
+				(firstChar >= '0' && firstChar <= '9') ||
+				firstChar == '_'
+
+			// Check if last char is a word character
+			isLastWordChar := (lastChar >= 'a' && lastChar <= 'z') ||
+				(lastChar >= '0' && lastChar <= '9') ||
+				lastChar == '_'
+
+			// Build pattern with appropriate boundaries
+			if isFirstWordChar {
+				patternStr = `(?i)\b` + escapedWord
+			} else {
+				patternStr = `(?i)` + escapedWord
+			}
+			if isLastWordChar {
+				patternStr += `\b`
+			}
+		} else {
+			continue // Skip empty words
+		}
+
+		pattern := regexp.MustCompile(patternStr)
 		context = pattern.ReplaceAllString(context, "______")
 	}
 
@@ -436,24 +515,26 @@ func extractReverseQuizCards(
 			for k := range scene.Definitions {
 				definition := &scene.Definitions[k]
 
-				// Get reverse logs from learning history
-				reverseNeedsReview := needsReverseReviewForStory(
-					learningHistory,
-					story.Event,
-					scene.Title,
-					definition,
-				)
-
-				if !reverseNeedsReview {
-					continue
-				}
-
-				// Extract contexts
+				// Extract contexts first (needed for both regular quiz and listMissingContext)
 				contexts := extractContextsFromConversations(scene, definition.Expression, definition.Definition)
 
-				// If listMissingContext, only include words without context
-				if listMissingContext && len(contexts) > 0 {
-					continue
+				// If listMissingContext mode, skip the review check - we're just looking for missing context
+				if listMissingContext {
+					if len(contexts) > 0 {
+						continue // Skip words with context
+					}
+				} else {
+					// Regular quiz mode: check if word needs reverse review
+					reverseNeedsReview := needsReverseReviewForStory(
+						learningHistory,
+						story.Event,
+						scene.Title,
+						definition,
+					)
+
+					if !reverseNeedsReview {
+						continue
+					}
 				}
 
 				occurrence := &WordOccurrence{
@@ -486,17 +567,6 @@ func extractReverseQuizCardsFromFlashcards(
 		for j := range flashcard.Cards {
 			card := &flashcard.Cards[j]
 
-			// Get reverse logs from learning history
-			reverseNeedsReview := needsReverseReviewForFlashcard(
-				learningHistory,
-				flashcard.Title,
-				card,
-			)
-
-			if !reverseNeedsReview {
-				continue
-			}
-
 			// Convert string examples to WordOccurrenceContext
 			contexts := make([]WordOccurrenceContext, 0, len(card.Examples))
 			for _, example := range card.Examples {
@@ -509,10 +579,23 @@ func extractReverseQuizCardsFromFlashcards(
 				}
 			}
 
-			// If listMissingContext, only include words without context
+			// If listMissingContext mode, skip the review check - we're just looking for missing context
 			hasMeaningfulContext := len(contexts) > 0
-			if listMissingContext && hasMeaningfulContext {
-				continue
+			if listMissingContext {
+				if hasMeaningfulContext {
+					continue // Skip words with context
+				}
+			} else {
+				// Regular quiz mode: check if card needs reverse review
+				reverseNeedsReview := needsReverseReviewForFlashcard(
+					learningHistory,
+					flashcard.Title,
+					card,
+				)
+
+				if !reverseNeedsReview {
+					continue
+				}
 			}
 
 			occurrence := &WordOccurrence{
@@ -538,7 +621,48 @@ func normalizeTitle(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// needsReverseReviewForStory checks if a word needs reverse review based on learning history
+// evaluateReverseReviewNeed checks if matching expressions indicate a need for reverse review.
+// Returns false if:
+// - No matching expressions exist (word hasn't been practiced yet)
+// - No matching expression has correct answers in forward quiz
+// - Any matching expression with reverse_logs was recently reviewed
+// Returns true if the word has been learned and needs reverse review.
+func evaluateReverseReviewNeed(matchingExpressions []notebook.LearningHistoryExpression) bool {
+	if len(matchingExpressions) == 0 {
+		return false
+	}
+
+	// Check if ANY matching expression has correct answers in forward quiz
+	hasCorrectAnswers := false
+	for _, expr := range matchingExpressions {
+		if expr.HasAnyCorrectAnswer() {
+			hasCorrectAnswers = true
+			break
+		}
+	}
+
+	if !hasCorrectAnswers {
+		return false
+	}
+
+	// Check if ANY matching expression with reverse_logs doesn't need review
+	// (meaning it was recently reviewed under any key)
+	for _, expr := range matchingExpressions {
+		if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
+			return false
+		}
+	}
+
+	// If we get here, either:
+	// - No expression has reverse_logs (never reviewed) -> needs review
+	// - All expressions with reverse_logs need review -> needs review
+	return true
+}
+
+// needsReverseReviewForStory checks if a word needs reverse review based on learning history.
+//
+// Note: This function checks ALL matching expressions (both Expression and Definition matches)
+// to handle cases where learning history has duplicate entries from inconsistent recording.
 func needsReverseReviewForStory(
 	learningHistory []notebook.LearningHistory,
 	storyTitle, sceneTitle string,
@@ -546,6 +670,7 @@ func needsReverseReviewForStory(
 ) bool {
 	normalizedSceneTitle := normalizeTitle(sceneTitle)
 
+	var matchingExpressions []notebook.LearningHistoryExpression
 	for _, h := range learningHistory {
 		if h.Metadata.Title != storyTitle {
 			continue
@@ -560,22 +685,24 @@ func needsReverseReviewForStory(
 				if expr.Expression != definition.Expression && expr.Expression != definition.Definition {
 					continue
 				}
-
-				return expr.NeedsReverseReview()
+				matchingExpressions = append(matchingExpressions, expr)
 			}
 		}
 	}
 
-	// No learning history found - needs review
-	return true
+	return evaluateReverseReviewNeed(matchingExpressions)
 }
 
-// needsReverseReviewForFlashcard checks if a flashcard needs reverse review
+// needsReverseReviewForFlashcard checks if a flashcard needs reverse review.
+//
+// Note: This function checks ALL matching expressions (both Expression and Definition matches)
+// to handle cases where learning history has duplicate entries from inconsistent recording.
 func needsReverseReviewForFlashcard(
 	learningHistory []notebook.LearningHistory,
 	flashcardTitle string,
 	card *notebook.Note,
 ) bool {
+	var matchingExpressions []notebook.LearningHistoryExpression
 	for _, h := range learningHistory {
 		if h.Metadata.Title != flashcardTitle {
 			continue
@@ -585,13 +712,11 @@ func needsReverseReviewForFlashcard(
 			if expr.Expression != card.Expression && expr.Expression != card.Definition {
 				continue
 			}
-
-			return expr.NeedsReverseReview()
+			matchingExpressions = append(matchingExpressions, expr)
 		}
 	}
 
-	// No learning history found - needs review
-	return true
+	return evaluateReverseReviewNeed(matchingExpressions)
 }
 
 // ListMissingContext returns cards that are missing context
