@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
@@ -335,8 +336,10 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 
 			cli, err := NewNotebookQuizCLI(
 				tt.notebookName,
-				[]string{storiesDir},
-				learningNotesDir,
+				config.NotebooksConfig{
+					StoriesDirectories:     []string{storiesDir},
+					LearningNotesDirectory: learningNotesDir,
+				},
 				dictionaryCacheDir,
 				mockClient,
 				true, // includeNoCorrectAnswers

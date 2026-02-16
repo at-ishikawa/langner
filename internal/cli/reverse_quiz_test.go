@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
@@ -1114,9 +1115,11 @@ func TestNewReverseQuizCLI(t *testing.T) {
 
 			cli, err := NewReverseQuizCLI(
 				tt.notebookName,
-				storiesDirs,
-				flashcardsDirs,
-				learningNotesDir,
+				config.NotebooksConfig{
+					StoriesDirectories:     storiesDirs,
+					FlashcardsDirectories:  flashcardsDirs,
+					LearningNotesDirectory: learningNotesDir,
+				},
 				dictionaryCacheDir,
 				mockClient,
 				tt.listMissingContext,
@@ -1220,9 +1223,10 @@ func TestNewReverseQuizCLI_MultiLineSceneTitle(t *testing.T) {
 
 	cli, err := NewReverseQuizCLI(
 		"test-notebook",
-		[]string{storiesDir},
-		nil,
-		learningNotesDir,
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
 		t.TempDir(),
 		mockClient,
 		false,
@@ -1339,9 +1343,10 @@ func TestNewReverseQuizCLI_YAMLRoundTrip(t *testing.T) {
 
 			cli, err := NewReverseQuizCLI(
 				"test-notebook",
-				[]string{storiesDir},
-				nil,
-				learningNotesDir,
+				config.NotebooksConfig{
+					StoriesDirectories:     []string{storiesDir},
+					LearningNotesDirectory: learningNotesDir,
+				},
 				t.TempDir(),
 				mockClient,
 				false,
@@ -1428,9 +1433,10 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 	// Create first quiz - should have 1 card (no reverse_logs)
 	cli1, err := NewReverseQuizCLI(
 		"test-notebook",
-		[]string{storiesDir},
-		nil,
-		learningNotesDir,
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
 		t.TempDir(),
 		mockClient,
 		false,
@@ -1462,9 +1468,10 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 	// Create second quiz - should have 0 cards (word was answered today)
 	cli2, err := NewReverseQuizCLI(
 		"test-notebook",
-		[]string{storiesDir},
-		nil,
-		learningNotesDir,
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
 		t.TempDir(),
 		mockClient,
 		false,

@@ -50,9 +50,7 @@ func newQuizFreeformCommand() *cobra.Command {
 
 			// Create interactive CLI
 			freeformCLI, err := cli.NewFreeformQuizCLI(
-				cfg.Notebooks.StoriesDirectories,
-				cfg.Notebooks.FlashcardsDirectories,
-				cfg.Notebooks.LearningNotesDirectory,
+				cfg.Notebooks,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
 				openaiClient,
 			)
@@ -131,8 +129,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 	if notebookName == "" {
 		notebookCLI, err := cli.NewNotebookQuizCLI(
 			"",
-			cfg.Notebooks.StoriesDirectories,
-			cfg.Notebooks.LearningNotesDirectory,
+			cfg.Notebooks,
 			cfg.Dictionaries.RapidAPI.CacheDirectory,
 			openaiClient,
 			includeNoCorrectAnswers,
@@ -164,8 +161,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 	if isFlashcard {
 		flashcardCLI, err := cli.NewFlashcardQuizCLI(
 			notebookName,
-			cfg.Notebooks.FlashcardsDirectories,
-			cfg.Notebooks.LearningNotesDirectory,
+			cfg.Notebooks,
 			cfg.Dictionaries.RapidAPI.CacheDirectory,
 			openaiClient,
 		)
@@ -181,8 +177,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 	// Story notebook
 	notebookCLI, err := cli.NewNotebookQuizCLI(
 		notebookName,
-		cfg.Notebooks.StoriesDirectories,
-		cfg.Notebooks.LearningNotesDirectory,
+		cfg.Notebooks,
 		cfg.Dictionaries.RapidAPI.CacheDirectory,
 		openaiClient,
 		includeNoCorrectAnswers,
@@ -199,9 +194,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 func runReverseQuiz(cfg *config.Config, openaiClient inference.Client, notebookName string, listMissingContext bool) error {
 	reverseCLI, err := cli.NewReverseQuizCLI(
 		notebookName,
-		cfg.Notebooks.StoriesDirectories,
-		cfg.Notebooks.FlashcardsDirectories,
-		cfg.Notebooks.LearningNotesDirectory,
+		cfg.Notebooks,
 		cfg.Dictionaries.RapidAPI.CacheDirectory,
 		openaiClient,
 		listMissingContext,

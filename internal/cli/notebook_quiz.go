@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/fatih/color"
@@ -24,14 +25,13 @@ type NotebookQuizCLI struct {
 // NewNotebookQuizCLI creates a new notebook quiz interactive CLI for story notebooks
 func NewNotebookQuizCLI(
 	notebookName string,
-	storiesDirs []string,
-	learningNotesDir string,
+	notebooksConfig config.NotebooksConfig,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 	includeNoCorrectAnswers bool,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI
-	baseCLI, reader, err := newInteractiveQuizCLI(storiesDirs, learningNotesDir, dictionaryCacheDir, openaiClient)
+	baseCLI, reader, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}
@@ -92,13 +92,12 @@ func NewNotebookQuizCLI(
 // NewFlashcardQuizCLI creates a new notebook quiz interactive CLI for flashcard notebooks
 func NewFlashcardQuizCLI(
 	notebookName string,
-	flashcardsDirs []string,
-	learningNotesDir string,
+	notebooksConfig config.NotebooksConfig,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI for flashcards
-	baseCLI, reader, err := initializeQuizCLI(nil, flashcardsDirs, learningNotesDir, dictionaryCacheDir, openaiClient)
+	baseCLI, reader, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}

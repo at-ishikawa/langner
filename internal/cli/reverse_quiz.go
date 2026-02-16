@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/fatih/color"
@@ -25,15 +26,13 @@ type ReverseQuizCLI struct {
 // NewReverseQuizCLI creates a new reverse quiz interactive CLI
 func NewReverseQuizCLI(
 	notebookName string,
-	storiesDirs []string,
-	flashcardsDirs []string,
-	learningNotesDir string,
+	notebooksConfig config.NotebooksConfig,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 	listMissingContext bool,
 ) (*ReverseQuizCLI, error) {
 	// Initialize base CLI
-	baseCLI, reader, err := initializeQuizCLI(storiesDirs, flashcardsDirs, learningNotesDir, dictionaryCacheDir, openaiClient)
+	baseCLI, reader, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}

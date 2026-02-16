@@ -4,6 +4,6 @@ config.yml
 !.claude/docs
 
 .vscode
-langner
+/langner
 
 ebooks/
