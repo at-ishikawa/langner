@@ -55,3 +55,7 @@ DATABASE_URL ?= mysql://user:password@tcp(localhost:3306)/local?multiStatements=
 .PHONY: db-migrate
 db-migrate:
 	migrate -source file://schemas/migrations -database "$(DATABASE_URL)" up
+
+.PHONY: db-import
+db-import:
+	go run ./cmd/langner migrate import-db --config config.example.yml

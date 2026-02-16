@@ -3,6 +3,7 @@ module github.com/at-ishikawa/langner
 go 1.25
 
 require (
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/fatih/color v1.18.0
 	github.com/go-playground/locales v0.14.1
