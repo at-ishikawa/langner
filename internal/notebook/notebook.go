@@ -89,8 +89,6 @@ type Date struct {
 	time.Time
 }
 
-// MarshalYAML implements the yaml.Marshaler interface
-// Stores as RFC3339 format to preserve full timestamp with timezone
 func (d Date) MarshalYAML() (interface{}, error) {
 	return d.Format(time.RFC3339), nil
 }

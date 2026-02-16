@@ -10,3 +10,4 @@ Feature proposals for Langner. Each proposal includes product requirements and t
 
 - [Standard Ebooks]({{< relref "standard-ebooks" >}}) - Learn vocabulary from public domain books
 - [Reverse Quiz]({{< relref "reverse-quiz" >}}) - Quiz mode that shows meaning and asks for the word
+- [Database Support]({{< relref "database-support" >}}) - Replace YAML storage with MySQL

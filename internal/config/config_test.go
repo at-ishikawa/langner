@@ -66,6 +66,13 @@ func TestConfigLoader_Load(t *testing.T) {
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
 				},
+				Database: DatabaseConfig{
+					Host:     "localhost",
+					Port:     3306,
+					Database: "local",
+					Username: "user",
+					TLS:      false,
+				},
 			},
 		},
 		{
@@ -103,6 +110,13 @@ outputs:
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
 				},
+				Database: DatabaseConfig{
+					Host:     "localhost",
+					Port:     3306,
+					Database: "local",
+					Username: "user",
+					TLS:      false,
+				},
 			},
 		},
 		{
@@ -133,6 +147,13 @@ outputs:
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
+				},
+				Database: DatabaseConfig{
+					Host:     "localhost",
+					Port:     3306,
+					Database: "local",
+					Username: "user",
+					TLS:      false,
 				},
 			},
 		},
