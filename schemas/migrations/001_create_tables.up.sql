@@ -2,13 +2,13 @@ CREATE TABLE notes (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     `usage` VARCHAR(255) NOT NULL COMMENT 'The expression or phrase as used in context',
     entry VARCHAR(255) NOT NULL COMMENT 'The dictionary form or base word',
-    meaning VARCHAR(1000) COMMENT 'Definition or meaning of the word/phrase',
+    meaning TEXT COMMENT 'Definition or meaning of the word/phrase',
     level VARCHAR(50) COMMENT 'Proficiency level (e.g., beginner, intermediate)',
     dictionary_number INT COMMENT 'Index of the selected dictionary definition',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_notes_usage (`usage`),
-    INDEX idx_notes_entry (entry)
+    INDEX (`usage`),
+    INDEX (entry)
 ) COMMENT='Vocabulary notes for words and phrases';
 
 CREATE TABLE notebook_notes (
@@ -21,8 +21,8 @@ CREATE TABLE notebook_notes (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (note_id) REFERENCES notes(id),
-    INDEX idx_notebook_notes_note (note_id),
-    INDEX idx_notebook_notes_notebook (notebook_type, notebook_id)
+    INDEX (note_id),
+    INDEX (notebook_type, notebook_id)
 ) COMMENT='Links notes to their source notebooks';
 
 CREATE TABLE note_images (
@@ -59,9 +59,8 @@ CREATE TABLE learning_logs (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (note_id) REFERENCES notes(id),
-    INDEX idx_learning_logs_note (note_id, quiz_type),
-    INDEX idx_learning_logs_status (note_id, quiz_type, status),
-    INDEX idx_learning_logs_date (learned_at)
+    INDEX (note_id, quiz_type),
+    INDEX (learned_at)
 ) COMMENT='Spaced repetition learning history for vocabulary notes';
 
 CREATE TABLE dictionary_entries (
