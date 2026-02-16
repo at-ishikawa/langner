@@ -1,5 +1,16 @@
 # Langner Configuration
 
+database:
+  host: localhost
+  port: 3306
+  database: local
+  username: user
+  password: password
+  tls: false
+  # Additional MySQL driver parameters
+  # params:
+  #   charset: utf8mb4
+
 notebooks:
   # Directories containing story notebooks (supports multiple directories)
   stories_directories:

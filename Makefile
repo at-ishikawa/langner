@@ -49,3 +49,9 @@ docs-setup:
 .PHONY: docs-server
 docs-server: docs-setup
 	hugo server -s docs
+
+DATABASE_URL ?= mysql://user:password@tcp(localhost:3306)/local?multiStatements=true
+
+.PHONY: db-migrate
+db-migrate:
+	migrate -source file://schemas/migrations -database "$(DATABASE_URL)" up
