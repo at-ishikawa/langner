@@ -7,9 +7,9 @@ database:
   username: user
   password: password
   tls: false
-  # Additional MySQL driver parameters (passed as session variables)
+  # Additional MySQL driver parameters
   # params:
-  #   tidb_skip_isolation_level_check: "1"
+  #   charset: utf8mb4
 
 notebooks:
   # Directories containing story notebooks (supports multiple directories)
