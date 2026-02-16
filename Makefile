@@ -53,7 +53,3 @@ docs-server: docs-setup
 .PHONY: db-import
 db-import:
 	go run ./cmd/langner migrate import-db --config config.example.yml
-
-.PHONY: db-export
-db-export:
-	go run ./cmd/langner migrate export-yaml --config config.example.yml --output ./export
