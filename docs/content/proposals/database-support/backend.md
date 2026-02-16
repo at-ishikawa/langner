@@ -22,11 +22,9 @@ This document describes the Go backend changes to support MySQL storage for note
 ```
 schemas/
 ├── migrations/                      # SQL migration files (outside internal/)
-│   ├── 001_create_notes.up.sql
-│   ├── 001_create_notes.down.sql
+│   ├── 001_create_tables.up.sql
+│   ├── 001_create_tables.down.sql
 │   └── ...
-├── schema.sql                       # Up-to-date full schema for reference
-
 internal/
 ├── database/
 │   └── db.go                        # Connection setup + migration runner
@@ -156,13 +154,13 @@ DictionaryRepository (DB) → fallback to API call → DictionaryRepository.Upse
 
 ## Configuration
 
-Add `DatabaseConfig` to `internal/config/config.go` with host, port, database, username, and password fields. Password is resolved from environment variable.
+Add `DatabaseConfig` to `internal/config/config.go` with host, port, database, username, and password fields.
 
 ## Schema Migrations
 
-SQL migration files live at `schemas/migrations/`. Use `golang-migrate/migrate` to run them. The full up-to-date schema is maintained at `schemas/schema.sql` for reference.
+SQL migration files live at `schemas/migrations/`. Use `golang-migrate/migrate` CLI to run them.
 
-Migrations run automatically on application startup.
+Migrations are run manually via the `migrate` CLI or `make db-migrate`.
 
 ## Testing
 

@@ -77,7 +77,7 @@ Book definitions (`definitions_directories`) provide vocabulary for Standard Ebo
 | scenes[].expressions[].dictionary_number | dictionary_number |
 
 **Duplicate detection:**
-- Unique key: `(usage, entry)`
+- Unique constraint: `(usage, entry)` enforced at the database level
 - If exists: skip (or update if `--update-existing`)
 
 **notebook_notes mapping:**

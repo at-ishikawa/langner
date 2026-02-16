@@ -6,7 +6,7 @@ bookCollapseSection: true
 
 # Database Support
 
-Replace YAML file storage with MySQL for improved querying and scalability.
+Introduce a hybrid storage model that keeps notebooks in YAML while storing learning data in MySQL for improved querying and scalability.
 
 ## Documents
 

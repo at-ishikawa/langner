@@ -50,7 +50,7 @@ docs-setup:
 docs-server: docs-setup
 	hugo server -s docs
 
-DATABASE_URL ?= mysql://user:password@tcp(localhost:3306)/local
+DATABASE_URL ?= mysql://user:password@tcp(localhost:3306)/local?multiStatements=true
 
 .PHONY: db-migrate
 db-migrate:

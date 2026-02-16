@@ -8,7 +8,8 @@ CREATE TABLE notes (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX (`usage`),
-    INDEX (entry)
+    INDEX (entry),
+    UNIQUE (`usage`, entry)
 ) COMMENT='Vocabulary notes for words and phrases';
 
 CREATE TABLE notebook_notes (
@@ -22,7 +23,8 @@ CREATE TABLE notebook_notes (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (note_id) REFERENCES notes(id),
     INDEX (note_id),
-    INDEX (notebook_type, notebook_id)
+    INDEX (notebook_type, notebook_id),
+    UNIQUE (note_id, notebook_type, notebook_id, `group`)
 ) COMMENT='Links notes to their source notebooks';
 
 CREATE TABLE note_images (
@@ -53,13 +55,13 @@ CREATE TABLE learning_logs (
     learned_at DATETIME NOT NULL COMMENT 'When the study session occurred',
     quality INT COMMENT 'SM-2 quality grade (0-5)',
     response_time_ms INT COMMENT 'Response time in milliseconds',
-    quiz_type VARCHAR(50) NOT NULL COMMENT 'Quiz type: notebook or reverse',
+    quiz_type VARCHAR(50) NOT NULL COMMENT 'Quiz type: freeform, notebook, or reverse',
     interval_days INT COMMENT 'Days until next review (SM-2 spaced repetition)',
-    easiness_factor DECIMAL(3,2) COMMENT 'SM-2 easiness factor (default 2.50)',
+    easiness_factor DECIMAL(3,2) COMMENT 'SM-2 easiness factor',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (note_id) REFERENCES notes(id),
-    INDEX (note_id, quiz_type),
+    UNIQUE (note_id, quiz_type, learned_at),
     INDEX (learned_at)
 ) COMMENT='Spaced repetition learning history for vocabulary notes';
 
