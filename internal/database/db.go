@@ -27,6 +27,9 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 	if cfg.TLS {
 		mysqlCfg.TLSConfig = "true"
 	}
+	if len(cfg.Params) > 0 {
+		mysqlCfg.Params = cfg.Params
+	}
 
 	db, err := sqlx.Open("mysql", mysqlCfg.FormatDSN())
 	if err != nil {
@@ -38,9 +41,7 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 
 // RunMigrations runs all pending database migrations.
 func RunMigrations(db *sqlx.DB) error {
-	driver, err := mysqlMigrate.WithInstance(db.DB, &mysqlMigrate.Config{
-		NoLock: true,
-	})
+	driver, err := mysqlMigrate.WithInstance(db.DB, &mysqlMigrate.Config{})
 	if err != nil {
 		return fmt.Errorf("mysqlMigrate.WithInstance() > %w", err)
 	}

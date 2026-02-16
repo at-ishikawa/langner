@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
@@ -13,6 +14,19 @@ import (
 	"github.com/at-ishikawa/langner/internal/note"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
+
+type noteKey struct{ usage, entry string }
+
+type nnKey struct {
+	noteID                                 int64
+	notebookType, notebookID, group string
+}
+
+type logKey struct {
+	noteID    int64
+	quizType  string
+	learnedAt time.Time
+}
 
 // ImportResult tracks counts for each import operation.
 type ImportResult struct {
@@ -57,6 +71,23 @@ func NewImporter(noteRepo note.NoteRepository, learningRepo learning.LearningRep
 func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]notebook.Index, flashcardIndexes map[string]notebook.FlashcardIndex, opts ImportOptions) (*ImportResult, error) {
 	var result ImportResult
 
+	allNotes, err := imp.noteRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("FindAll() > %w", err)
+	}
+
+	noteCache := make(map[noteKey]*note.Note, len(allNotes))
+	for i := range allNotes {
+		noteCache[noteKey{allNotes[i].Usage, allNotes[i].Entry}] = &allNotes[i]
+	}
+
+	nnCache := make(map[nnKey]bool)
+	for _, n := range allNotes {
+		for _, nn := range n.NotebookNotes {
+			nnCache[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}] = true
+		}
+	}
+
 	// Import story/book notebooks
 	for indexID, index := range storyIndexes {
 		notebookType := "story"
@@ -68,7 +99,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]no
 			for _, sn := range storyNotebooks {
 				for _, scene := range sn.Scenes {
 					for _, def := range scene.Definitions {
-						if err := imp.importNote(ctx, def, indexID, notebookType, sn.Event, scene.Title, opts, &result); err != nil {
+						if err := imp.importNote(ctx, def, indexID, notebookType, sn.Event, scene.Title, opts, &result, noteCache, nnCache); err != nil {
 							return nil, fmt.Errorf("importNote() > %w", err)
 						}
 					}
@@ -81,7 +112,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]no
 	for flashcardID, flashcardIndex := range flashcardIndexes {
 		for _, fn := range flashcardIndex.Notebooks {
 			for _, card := range fn.Cards {
-				if err := imp.importNote(ctx, card, flashcardID, "flashcard", fn.Title, "", opts, &result); err != nil {
+				if err := imp.importNote(ctx, card, flashcardID, "flashcard", fn.Title, "", opts, &result, noteCache, nnCache); err != nil {
 					return nil, fmt.Errorf("importNote() > %w", err)
 				}
 			}
@@ -91,7 +122,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]no
 	return &result, nil
 }
 
-func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebookID, notebookType, group, subgroup string, opts ImportOptions, result *ImportResult) error {
+func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebookID, notebookType, group, subgroup string, opts ImportOptions, result *ImportResult, noteCache map[noteKey]*note.Note, nnCache map[nnKey]bool) error {
 	usage := def.Expression
 	entry := def.Definition
 	if entry == "" {
@@ -115,10 +146,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 		}
 	}
 
-	existing, err := imp.noteRepo.FindByUsageAndEntry(ctx, usage, entry)
-	if err != nil {
-		return fmt.Errorf("FindByUsageAndEntry(%s, %s) > %w", usage, entry, err)
-	}
+	existing := noteCache[noteKey{usage, entry}]
 
 	var noteID int64
 	if existing != nil {
@@ -162,6 +190,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 			}
 			noteID = n.ID
 		}
+		noteCache[noteKey{usage, entry}] = n
 		fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", usage, entry)
 		result.NotesNew++
 
@@ -171,11 +200,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 	}
 
 	// Create notebook_note link for existing notes
-	existingNN, err := imp.noteRepo.FindNotebookNote(ctx, noteID, notebookType, notebookID, group)
-	if err != nil {
-		return fmt.Errorf("FindNotebookNote() > %w", err)
-	}
-	if existingNN != nil {
+	if nnCache[nnKey{noteID, notebookType, notebookID, group}] {
 		result.NotebookSkipped++
 		return nil
 	}
@@ -192,6 +217,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 			return fmt.Errorf("CreateNotebookNote() > %w", err)
 		}
 	}
+	nnCache[nnKey{noteID, notebookType, notebookID, group}] = true
 	result.NotebookNew++
 	return nil
 }
@@ -209,6 +235,15 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 		noteMap[allNotes[i].Entry] = &allNotes[i]
 	}
 
+	allLogs, err := imp.learningRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("learningRepo.FindAll() > %w", err)
+	}
+	logCache := make(map[logKey]bool, len(allLogs))
+	for _, l := range allLogs {
+		logCache[logKey{l.NoteID, l.QuizType, l.LearnedAt}] = true
+	}
+
 	for _, histories := range learningHistories {
 		for _, h := range histories {
 			var expressions []notebook.LearningHistoryExpression
@@ -224,15 +259,24 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 			for _, expr := range expressions {
 				n, ok := noteMap[expr.Expression]
 				if !ok {
-					fmt.Fprintf(imp.writer, "  [WARN]  note not found for %q\n", expr.Expression)
-					result.LearningWarnings++
-					continue
+					n = &note.Note{
+						Usage: expr.Expression,
+						Entry: expr.Expression,
+					}
+					if !opts.DryRun {
+						if err := imp.noteRepo.Create(ctx, n); err != nil {
+							return nil, fmt.Errorf("Create() > %w", err)
+						}
+					}
+					noteMap[expr.Expression] = n
+					fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", expr.Expression, expr.Expression)
+					result.NotesNew++
 				}
 
-				if err := imp.importLearningRecords(ctx, n.ID, expr.LearnedLogs, expr.EasinessFactor, false, opts, &result); err != nil {
+				if err := imp.importLearningRecords(ctx, n.ID, expr.LearnedLogs, expr.EasinessFactor, false, opts, &result, logCache); err != nil {
 					return nil, fmt.Errorf("importLearningRecords() > %w", err)
 				}
-				if err := imp.importLearningRecords(ctx, n.ID, expr.ReverseLogs, expr.ReverseEasinessFactor, true, opts, &result); err != nil {
+				if err := imp.importLearningRecords(ctx, n.ID, expr.ReverseLogs, expr.ReverseEasinessFactor, true, opts, &result, logCache); err != nil {
 					return nil, fmt.Errorf("importLearningRecords(reverse) > %w", err)
 				}
 			}
@@ -242,7 +286,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 	return &result, nil
 }
 
-func (imp *Importer) importLearningRecords(ctx context.Context, noteID int64, records []notebook.LearningRecord, easinessFactor float64, forceReverse bool, opts ImportOptions, result *ImportResult) error {
+func (imp *Importer) importLearningRecords(ctx context.Context, noteID int64, records []notebook.LearningRecord, easinessFactor float64, forceReverse bool, opts ImportOptions, result *ImportResult, logCache map[logKey]bool) error {
 	for _, rec := range records {
 		quizType := rec.QuizType
 		if quizType == "" {
@@ -252,11 +296,7 @@ func (imp *Importer) importLearningRecords(ctx context.Context, noteID int64, re
 			quizType = "reverse"
 		}
 
-		existing, err := imp.learningRepo.FindByNoteQuizTypeAndLearnedAt(ctx, noteID, quizType, rec.LearnedAt.Time)
-		if err != nil {
-			return fmt.Errorf("FindByNoteQuizTypeAndLearnedAt() > %w", err)
-		}
-		if existing != nil {
+		if logCache[logKey{noteID, quizType, rec.LearnedAt.Time}] {
 			result.LearningSkipped++
 			continue
 		}
@@ -276,6 +316,7 @@ func (imp *Importer) importLearningRecords(ctx context.Context, noteID int64, re
 				return fmt.Errorf("Create() > %w", err)
 			}
 		}
+		logCache[logKey{noteID, quizType, rec.LearnedAt.Time}] = true
 		result.LearningNew++
 	}
 	return nil
@@ -285,16 +326,22 @@ func (imp *Importer) importLearningRecords(ctx context.Context, noteID int64, re
 func (imp *Importer) ImportDictionary(ctx context.Context, responses []rapidapi.Response, opts ImportOptions) (*ImportResult, error) {
 	var result ImportResult
 
+	allEntries, err := imp.dictionaryRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("dictionaryRepo.FindAll() > %w", err)
+	}
+	entryCache := make(map[string]*dictionary.DictionaryEntry, len(allEntries))
+	for i := range allEntries {
+		entryCache[allEntries[i].Word] = &allEntries[i]
+	}
+
 	for _, resp := range responses {
 		data, err := json.Marshal(resp)
 		if err != nil {
 			return nil, fmt.Errorf("json.Marshal() > %w", err)
 		}
 
-		existing, err := imp.dictionaryRepo.FindByWord(ctx, resp.Word)
-		if err != nil {
-			return nil, fmt.Errorf("FindByWord(%s) > %w", resp.Word, err)
-		}
+		existing := entryCache[resp.Word]
 
 		if existing != nil {
 			if !opts.UpdateExisting {
