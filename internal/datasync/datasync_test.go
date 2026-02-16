@@ -347,13 +347,14 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 					{ID: 1, Entry: "break the ice"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, log *learning.LearningLog) error {
-						assert.Equal(t, int64(1), log.NoteID)
-						assert.Equal(t, "understood", log.Status)
-						assert.Equal(t, "notebook", log.QuizType)
-						assert.Equal(t, 4, log.Quality)
-						assert.Equal(t, 2.5, log.EasinessFactor)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 1)
+						assert.Equal(t, int64(1), logs[0].NoteID)
+						assert.Equal(t, "understood", logs[0].Status)
+						assert.Equal(t, "notebook", logs[0].QuizType)
+						assert.Equal(t, 4, logs[0].Quality)
+						assert.Equal(t, 2.5, logs[0].EasinessFactor)
 						return nil
 					})
 			},
@@ -425,16 +426,22 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 			},
 			opts: ImportOptions{},
 			setup: func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{}, nil)
-				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *note.Note) error {
-						n.ID = 10
+				first := noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{}, nil)
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*note.Note) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "unknown phrase", notes[0].Usage)
+						assert.Equal(t, "unknown phrase", notes[0].Entry)
 						return nil
-					})
-				learningRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, log *learning.LearningLog) error {
-						assert.Equal(t, int64(10), log.NoteID)
+					}).After(first)
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+					{ID: 10, Entry: "unknown phrase", Usage: "unknown phrase"},
+				}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 1)
+						assert.Equal(t, int64(10), logs[0].NoteID)
 						return nil
 					})
 			},
@@ -471,10 +478,11 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 					{ID: 5, Entry: "resilient"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, log *learning.LearningLog) error {
-						assert.Equal(t, "freeform", log.QuizType)
-						assert.Equal(t, 2.3, log.EasinessFactor)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 1)
+						assert.Equal(t, "freeform", logs[0].QuizType)
+						assert.Equal(t, 2.3, logs[0].EasinessFactor)
 						return nil
 					})
 			},
@@ -510,10 +518,11 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 					{ID: 5, Entry: "resilient"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, log *learning.LearningLog) error {
-						assert.Equal(t, "reverse", log.QuizType)
-						assert.Equal(t, 2.1, log.EasinessFactor)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 1)
+						assert.Equal(t, "reverse", logs[0].QuizType)
+						assert.Equal(t, 2.1, logs[0].EasinessFactor)
 						return nil
 					})
 			},
@@ -551,7 +560,12 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 					{ID: 1, Entry: "break the ice"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(nil)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 1)
+						assert.Equal(t, "notebook", logs[0].QuizType)
+						return nil
+					})
 			},
 			want: &ImportResult{
 				LearningNew: 1,
@@ -594,11 +608,12 @@ func TestImporter_ImportDictionary(t *testing.T) {
 			opts: ImportOptions{},
 			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository) {
 				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{}, nil)
-				dictRepo.EXPECT().Upsert(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, entry *dictionary.DictionaryEntry) error {
-						assert.Equal(t, "resilient", entry.Word)
-						assert.Equal(t, "rapidapi", entry.SourceType)
-						assert.NotEmpty(t, entry.Response)
+				dictRepo.EXPECT().BatchUpsert(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, entries []*dictionary.DictionaryEntry) error {
+						require.Len(t, entries, 1)
+						assert.Equal(t, "resilient", entries[0].Word)
+						assert.Equal(t, "rapidapi", entries[0].SourceType)
+						assert.NotEmpty(t, entries[0].Response)
 						return nil
 					})
 			},
@@ -616,6 +631,7 @@ func TestImporter_ImportDictionary(t *testing.T) {
 				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
 					{Word: "resilient"},
 				}, nil)
+				dictRepo.EXPECT().BatchUpsert(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: &ImportResult{
 				DictionarySkipped: 1,
@@ -631,7 +647,7 @@ func TestImporter_ImportDictionary(t *testing.T) {
 				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
 					{Word: "resilient", Response: json.RawMessage(`{}`)},
 				}, nil)
-				dictRepo.EXPECT().Upsert(gomock.Any(), gomock.Any()).Return(nil)
+				dictRepo.EXPECT().BatchUpsert(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: &ImportResult{
 				DictionaryUpdated: 1,

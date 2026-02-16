@@ -33,6 +33,7 @@ type LearningRepository interface {
 	FindLatestByNote(ctx context.Context, noteID int64, quizType string) (*LearningLog, error)
 	FindByNoteQuizTypeAndLearnedAt(ctx context.Context, noteID int64, quizType string, learnedAt time.Time) (*LearningLog, error)
 	Create(ctx context.Context, log *LearningLog) error
+	BatchCreate(ctx context.Context, logs []*LearningLog) error
 }
 
 // DBLearningRepository implements LearningRepository using MySQL.
@@ -110,5 +111,34 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 		return fmt.Errorf("result.LastInsertId() > %w", err)
 	}
 	log.ID = id
+	return nil
+}
+
+// BatchCreate inserts multiple learning logs.
+func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*LearningLog) error {
+	if len(logs) == 0 {
+		return nil
+	}
+	const batchSize = 100
+	for i := 0; i < len(logs); i += batchSize {
+		end := i + batchSize
+		if end > len(logs) {
+			end = len(logs)
+		}
+		batch := logs[i:end]
+
+		query := "INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, easiness_factor) VALUES "
+		args := make([]interface{}, 0, len(batch)*8)
+		for j, l := range batch {
+			if j > 0 {
+				query += ", "
+			}
+			query += "(?, ?, ?, ?, ?, ?, ?, ?)"
+			args = append(args, l.NoteID, l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.EasinessFactor)
+		}
+		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("db.ExecContext(batch insert learning_logs) > %w", err)
+		}
+	}
 	return nil
 }

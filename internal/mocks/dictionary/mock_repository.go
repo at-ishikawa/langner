@@ -41,6 +41,20 @@ func (m *MockDictionaryRepository) EXPECT() *MockDictionaryRepositoryMockRecorde
 	return m.recorder
 }
 
+// BatchUpsert mocks base method.
+func (m *MockDictionaryRepository) BatchUpsert(ctx context.Context, entries []*dictionary.DictionaryEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchUpsert", ctx, entries)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchUpsert indicates an expected call of BatchUpsert.
+func (mr *MockDictionaryRepositoryMockRecorder) BatchUpsert(ctx, entries any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchUpsert", reflect.TypeOf((*MockDictionaryRepository)(nil).BatchUpsert), ctx, entries)
+}
+
 // FindAll mocks base method.
 func (m *MockDictionaryRepository) FindAll(ctx context.Context) ([]dictionary.DictionaryEntry, error) {
 	m.ctrl.T.Helper()

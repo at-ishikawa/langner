@@ -244,82 +244,118 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 		logCache[logKey{l.NoteID, l.QuizType, l.LearnedAt}] = true
 	}
 
+	// Collect all expressions across all histories
+	type historyExpression struct {
+		expr notebook.LearningHistoryExpression
+	}
+	var allExpressions []historyExpression
 	for _, histories := range learningHistories {
 		for _, h := range histories {
-			var expressions []notebook.LearningHistoryExpression
-
 			if h.Metadata.Type == "flashcard" {
-				expressions = h.Expressions
+				for _, expr := range h.Expressions {
+					allExpressions = append(allExpressions, historyExpression{expr: expr})
+				}
 			} else {
 				for _, scene := range h.Scenes {
-					expressions = append(expressions, scene.Expressions...)
-				}
-			}
-
-			for _, expr := range expressions {
-				n, ok := noteMap[expr.Expression]
-				if !ok {
-					n = &note.Note{
-						Usage: expr.Expression,
-						Entry: expr.Expression,
+					for _, expr := range scene.Expressions {
+						allExpressions = append(allExpressions, historyExpression{expr: expr})
 					}
-					if !opts.DryRun {
-						if err := imp.noteRepo.Create(ctx, n); err != nil {
-							return nil, fmt.Errorf("Create() > %w", err)
-						}
-					}
-					noteMap[expr.Expression] = n
-					fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", expr.Expression, expr.Expression)
-					result.NotesNew++
-				}
-
-				if err := imp.importLearningRecords(ctx, n.ID, expr.LearnedLogs, expr.EasinessFactor, false, opts, &result, logCache); err != nil {
-					return nil, fmt.Errorf("importLearningRecords() > %w", err)
-				}
-				if err := imp.importLearningRecords(ctx, n.ID, expr.ReverseLogs, expr.ReverseEasinessFactor, true, opts, &result, logCache); err != nil {
-					return nil, fmt.Errorf("importLearningRecords(reverse) > %w", err)
 				}
 			}
 		}
 	}
 
-	return &result, nil
-}
-
-func (imp *Importer) importLearningRecords(ctx context.Context, noteID int64, records []notebook.LearningRecord, easinessFactor float64, forceReverse bool, opts ImportOptions, result *ImportResult, logCache map[logKey]bool) error {
-	for _, rec := range records {
-		quizType := rec.QuizType
-		if quizType == "" {
-			quizType = "notebook"
+	// First pass: batch-create auto notes for unknown expressions
+	newNoteEntries := make(map[string]bool)
+	var newNotes []*note.Note
+	for _, he := range allExpressions {
+		if _, ok := noteMap[he.expr.Expression]; !ok && !newNoteEntries[he.expr.Expression] {
+			newNoteEntries[he.expr.Expression] = true
+			n := &note.Note{
+				Usage: he.expr.Expression,
+				Entry: he.expr.Expression,
+			}
+			newNotes = append(newNotes, n)
+			fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", he.expr.Expression, he.expr.Expression)
+			result.NotesNew++
 		}
-		if forceReverse {
-			quizType = "reverse"
-		}
+	}
 
-		if logCache[logKey{noteID, quizType, rec.LearnedAt.Time}] {
-			result.LearningSkipped++
+	if !opts.DryRun && len(newNotes) > 0 {
+		if err := imp.noteRepo.BatchCreate(ctx, newNotes); err != nil {
+			return nil, fmt.Errorf("BatchCreate() > %w", err)
+		}
+		// Re-fetch all notes to get the auto-generated IDs
+		allNotes, err = imp.noteRepo.FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("FindAll() > %w", err)
+		}
+		noteMap = make(map[string]*note.Note, len(allNotes))
+		for i := range allNotes {
+			noteMap[allNotes[i].Entry] = &allNotes[i]
+		}
+	}
+
+	// Second pass: collect learning logs with correct note IDs
+	var newLogs []*learning.LearningLog
+	for _, he := range allExpressions {
+		n, ok := noteMap[he.expr.Expression]
+		if !ok {
+			// In dry-run mode, notes weren't actually created
 			continue
 		}
 
-		if !opts.DryRun {
-			log := &learning.LearningLog{
-				NoteID:         noteID,
+		for _, rec := range he.expr.LearnedLogs {
+			quizType := rec.QuizType
+			if quizType == "" {
+				quizType = "notebook"
+			}
+			if logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] {
+				result.LearningSkipped++
+				continue
+			}
+			newLogs = append(newLogs, &learning.LearningLog{
+				NoteID:         n.ID,
 				Status:         string(rec.Status),
 				LearnedAt:      rec.LearnedAt.Time,
 				Quality:        rec.Quality,
 				ResponseTimeMs: int(rec.ResponseTimeMs),
 				QuizType:       quizType,
 				IntervalDays:   rec.IntervalDays,
-				EasinessFactor: easinessFactor,
-			}
-			if err := imp.learningRepo.Create(ctx, log); err != nil {
-				return fmt.Errorf("Create() > %w", err)
-			}
+				EasinessFactor: he.expr.EasinessFactor,
+			})
+			logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] = true
+			result.LearningNew++
 		}
-		logCache[logKey{noteID, quizType, rec.LearnedAt.Time}] = true
-		result.LearningNew++
+
+		for _, rec := range he.expr.ReverseLogs {
+			quizType := "reverse"
+			if logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] {
+				result.LearningSkipped++
+				continue
+			}
+			newLogs = append(newLogs, &learning.LearningLog{
+				NoteID:         n.ID,
+				Status:         string(rec.Status),
+				LearnedAt:      rec.LearnedAt.Time,
+				Quality:        rec.Quality,
+				ResponseTimeMs: int(rec.ResponseTimeMs),
+				QuizType:       quizType,
+				IntervalDays:   rec.IntervalDays,
+				EasinessFactor: he.expr.ReverseEasinessFactor,
+			})
+			logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] = true
+			result.LearningNew++
+		}
 	}
-	return nil
+
+	if !opts.DryRun && len(newLogs) > 0 {
+		if err := imp.learningRepo.BatchCreate(ctx, newLogs); err != nil {
+			return nil, fmt.Errorf("BatchCreate() > %w", err)
+		}
+	}
+
+	return &result, nil
 }
 
 // ImportDictionary imports dictionary API responses into the database.
@@ -335,6 +371,8 @@ func (imp *Importer) ImportDictionary(ctx context.Context, responses []rapidapi.
 		entryCache[allEntries[i].Word] = &allEntries[i]
 	}
 
+	var newEntries []*dictionary.DictionaryEntry
+	var updateEntries []*dictionary.DictionaryEntry
 	for _, resp := range responses {
 		data, err := json.Marshal(resp)
 		if err != nil {
@@ -349,26 +387,24 @@ func (imp *Importer) ImportDictionary(ctx context.Context, responses []rapidapi.
 				continue
 			}
 			existing.Response = data
-			if !opts.DryRun {
-				if err := imp.dictionaryRepo.Upsert(ctx, existing); err != nil {
-					return nil, fmt.Errorf("Upsert() > %w", err)
-				}
-			}
+			updateEntries = append(updateEntries, existing)
 			result.DictionaryUpdated++
 			continue
 		}
 
-		entry := &dictionary.DictionaryEntry{
+		newEntries = append(newEntries, &dictionary.DictionaryEntry{
 			Word:       resp.Word,
 			SourceType: "rapidapi",
 			Response:   data,
-		}
-		if !opts.DryRun {
-			if err := imp.dictionaryRepo.Upsert(ctx, entry); err != nil {
-				return nil, fmt.Errorf("Upsert() > %w", err)
-			}
-		}
+		})
 		result.DictionaryNew++
+	}
+
+	if !opts.DryRun {
+		allBatch := append(newEntries, updateEntries...)
+		if err := imp.dictionaryRepo.BatchUpsert(ctx, allBatch); err != nil {
+			return nil, fmt.Errorf("BatchUpsert() > %w", err)
+		}
 	}
 
 	return &result, nil

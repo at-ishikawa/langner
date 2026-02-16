@@ -66,6 +66,7 @@ type NoteRepository interface {
 	FindByNotebook(ctx context.Context, notebookType, notebookID string) ([]Note, error)
 	FindNotebookNote(ctx context.Context, noteID int64, notebookType, notebookID, group string) (*NotebookNote, error)
 	Create(ctx context.Context, note *Note) error
+	BatchCreate(ctx context.Context, notes []*Note) error
 	CreateNotebookNote(ctx context.Context, nn *NotebookNote) error
 	Update(ctx context.Context, note *Note) error
 }
@@ -208,6 +209,35 @@ func (r *DBNoteRepository) Create(ctx context.Context, note *Note) error {
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("tx.Commit() > %w", err)
+	}
+	return nil
+}
+
+// BatchCreate inserts multiple simple notes (no images/references/notebook_notes).
+func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*Note) error {
+	if len(notes) == 0 {
+		return nil
+	}
+	const batchSize = 100
+	for i := 0; i < len(notes); i += batchSize {
+		end := i + batchSize
+		if end > len(notes) {
+			end = len(notes)
+		}
+		batch := notes[i:end]
+
+		query := "INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number) VALUES "
+		args := make([]interface{}, 0, len(batch)*5)
+		for j, n := range batch {
+			if j > 0 {
+				query += ", "
+			}
+			query += "(?, ?, ?, ?, ?)"
+			args = append(args, n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber)
+		}
+		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("db.ExecContext(batch insert notes) > %w", err)
+		}
 	}
 	return nil
 }

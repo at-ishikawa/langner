@@ -45,6 +45,7 @@ type DictionaryRepository interface {
 	FindAll(ctx context.Context) ([]DictionaryEntry, error)
 	FindByWord(ctx context.Context, word string) (*DictionaryEntry, error)
 	Upsert(ctx context.Context, entry *DictionaryEntry) error
+	BatchUpsert(ctx context.Context, entries []*DictionaryEntry) error
 }
 
 // DBDictionaryRepository implements DictionaryRepository using MySQL.
@@ -88,6 +89,36 @@ func (r *DBDictionaryRepository) Upsert(ctx context.Context, entry *DictionaryEn
 		entry.Word, entry.SourceType, entry.SourceURL, entry.Response)
 	if err != nil {
 		return fmt.Errorf("db.ExecContext(upsert dictionary_entry) > %w", err)
+	}
+	return nil
+}
+
+// BatchUpsert inserts or updates multiple dictionary entries.
+func (r *DBDictionaryRepository) BatchUpsert(ctx context.Context, entries []*DictionaryEntry) error {
+	if len(entries) == 0 {
+		return nil
+	}
+	const batchSize = 50
+	for i := 0; i < len(entries); i += batchSize {
+		end := i + batchSize
+		if end > len(entries) {
+			end = len(entries)
+		}
+		batch := entries[i:end]
+
+		query := "INSERT INTO dictionary_entries (word, source_type, source_url, response) VALUES "
+		args := make([]interface{}, 0, len(batch)*4)
+		for j, e := range batch {
+			if j > 0 {
+				query += ", "
+			}
+			query += "(?, ?, ?, ?)"
+			args = append(args, e.Word, e.SourceType, e.SourceURL, e.Response)
+		}
+		query += " ON DUPLICATE KEY UPDATE source_type = VALUES(source_type), source_url = VALUES(source_url), response = VALUES(response)"
+		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("db.ExecContext(batch upsert dictionary_entries) > %w", err)
+		}
 	}
 	return nil
 }

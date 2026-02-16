@@ -42,6 +42,20 @@ func (m *MockLearningRepository) EXPECT() *MockLearningRepositoryMockRecorder {
 	return m.recorder
 }
 
+// BatchCreate mocks base method.
+func (m *MockLearningRepository) BatchCreate(ctx context.Context, logs []*learning.LearningLog) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchCreate", ctx, logs)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchCreate indicates an expected call of BatchCreate.
+func (mr *MockLearningRepositoryMockRecorder) BatchCreate(ctx, logs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchCreate", reflect.TypeOf((*MockLearningRepository)(nil).BatchCreate), ctx, logs)
+}
+
 // Create mocks base method.
 func (m *MockLearningRepository) Create(ctx context.Context, log *learning.LearningLog) error {
 	m.ctrl.T.Helper()
