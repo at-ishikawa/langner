@@ -1,8 +1,0 @@
-CREATE TABLE dictionary_entries (
-    word VARCHAR(255) PRIMARY KEY,
-    source_type VARCHAR(50) NOT NULL,
-    source_url TEXT,
-    response JSON,
-    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
