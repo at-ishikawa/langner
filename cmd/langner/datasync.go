@@ -38,10 +38,6 @@ func newMigrateImportDBCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("database.Open() > %w", err)
 			}
-			if err := database.RunMigrations(db); err != nil {
-				return fmt.Errorf("database.RunMigrations() > %w", err)
-			}
-
 			noteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo := learning.NewDBLearningRepository(db)
 			dictRepo := dictionary.NewDBDictionaryRepository(db)
@@ -114,30 +110,4 @@ func newMigrateImportDBCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without modifying the database")
 	cmd.Flags().BoolVar(&updateExisting, "update-existing", false, "Update existing records with new data")
 	return cmd
-}
-
-func newMigrateUpCommand() *cobra.Command {
-	return &cobra.Command{
-		Use:   "up",
-		Short: "Run database migrations",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
-			if err != nil {
-				return fmt.Errorf("config.NewConfigLoader() > %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("loader.Load() > %w", err)
-			}
-			db, err := database.Open(cfg.Database)
-			if err != nil {
-				return fmt.Errorf("database.Open() > %w", err)
-			}
-			if err := database.RunMigrations(db); err != nil {
-				return fmt.Errorf("database.RunMigrations() > %w", err)
-			}
-			fmt.Println("Migrations completed successfully.")
-			return nil
-		},
-	}
 }

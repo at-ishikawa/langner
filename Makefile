@@ -52,7 +52,7 @@ docs-server: docs-setup
 
 .PHONY: db-migrate
 db-migrate:
-	go run ./cmd/langner migrate up --config config.example.yml
+	migrate -source file://schemas/migrations -database "mysql://user:password@tcp(localhost:3306)/local" up
 
 .PHONY: db-import
 db-import:
