@@ -33,6 +33,19 @@ func TestOpen(t *testing.T) {
 				Password: "secret",
 			},
 		},
+		{
+			name: "creates connection with pool settings",
+			cfg: config.DatabaseConfig{
+				Host:            "localhost",
+				Port:            3306,
+				Database:        "testdb",
+				Username:        "testuser",
+				Password:        "testpass",
+				MaxOpenConns:    25,
+				MaxIdleConns:    5,
+				ConnMaxLifetime: 300,
+			},
+		},
 	}
 
 	for _, tt := range tests {

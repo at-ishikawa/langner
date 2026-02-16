@@ -21,13 +21,16 @@ type Config struct {
 }
 
 type DatabaseConfig struct {
-	Host     string            `mapstructure:"host"`
-	Port     int               `mapstructure:"port"`
-	Database string            `mapstructure:"database"`
-	Username string            `mapstructure:"username"`
-	Password string            `mapstructure:"password"`
-	TLS      bool              `mapstructure:"tls"`
-	Params   map[string]string `mapstructure:"params"`
+	Host            string            `mapstructure:"host"`
+	Port            int               `mapstructure:"port"`
+	Database        string            `mapstructure:"database"`
+	Username        string            `mapstructure:"username"`
+	Password        string            `mapstructure:"password"`
+	TLS             bool              `mapstructure:"tls"`
+	Params          map[string]string `mapstructure:"params"`
+	MaxOpenConns    int               `mapstructure:"max_open_conns"`
+	MaxIdleConns    int               `mapstructure:"max_idle_conns"`
+	ConnMaxLifetime int               `mapstructure:"conn_max_lifetime_seconds"`
 }
 
 type NotebooksConfig struct {
