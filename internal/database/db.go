@@ -38,7 +38,9 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 
 // RunMigrations runs all pending database migrations.
 func RunMigrations(db *sqlx.DB) error {
-	driver, err := mysqlMigrate.WithInstance(db.DB, &mysqlMigrate.Config{})
+	driver, err := mysqlMigrate.WithInstance(db.DB, &mysqlMigrate.Config{
+		NoLock: true,
+	})
 	if err != nil {
 		return fmt.Errorf("mysqlMigrate.WithInstance() > %w", err)
 	}
