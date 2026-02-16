@@ -18,22 +18,12 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-func newDbCommand() *cobra.Command {
-	dbCmd := &cobra.Command{
-		Use:   "db",
-		Short: "Database operations",
-	}
-	dbCmd.AddCommand(newDbImportCommand())
-	dbCmd.AddCommand(newDbExportCommand())
-	return dbCmd
-}
-
-func newDbImportCommand() *cobra.Command {
+func newMigrateImportDBCommand() *cobra.Command {
 	var dryRun bool
 	var updateExisting bool
 
 	cmd := &cobra.Command{
-		Use:   "import",
+		Use:   "import-db",
 		Short: "Import notebook data into the database",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
@@ -129,11 +119,11 @@ func newDbImportCommand() *cobra.Command {
 	return cmd
 }
 
-func newDbExportCommand() *cobra.Command {
+func newMigrateExportYAMLCommand() *cobra.Command {
 	var outputDir string
 
 	cmd := &cobra.Command{
-		Use:   "export",
+		Use:   "export-yaml",
 		Short: "Export database data to YAML files",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()

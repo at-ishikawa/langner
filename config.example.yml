@@ -6,6 +6,7 @@ database:
   database: local
   username: user
   password: password
+  tls: false
 
 notebooks:
   # Directories containing story notebooks (supports multiple directories)

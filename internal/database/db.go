@@ -24,6 +24,9 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 	mysqlCfg.DBName = cfg.Database
 	mysqlCfg.ParseTime = true
 	mysqlCfg.MultiStatements = true
+	if cfg.TLS {
+		mysqlCfg.TLSConfig = "true"
+	}
 
 	db, err := sqlx.Open("mysql", mysqlCfg.FormatDSN())
 	if err != nil {

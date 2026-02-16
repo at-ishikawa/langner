@@ -26,6 +26,7 @@ type DatabaseConfig struct {
 	Database string `mapstructure:"database"`
 	Username string `mapstructure:"username"`
 	Password string `mapstructure:"password"`
+	TLS      bool   `mapstructure:"tls"`
 }
 
 type NotebooksConfig struct {
