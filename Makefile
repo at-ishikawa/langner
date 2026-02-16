@@ -50,9 +50,11 @@ docs-setup:
 docs-server: docs-setup
 	hugo server -s docs
 
+DATABASE_URL ?= mysql://user:password@tcp(localhost:3306)/local
+
 .PHONY: db-migrate
 db-migrate:
-	migrate -source file://schemas/migrations -database "mysql://user:password@tcp(localhost:3306)/local" up
+	migrate -source file://schemas/migrations -database "$(DATABASE_URL)" up
 
 .PHONY: db-import
 db-import:
