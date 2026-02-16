@@ -11,7 +11,6 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/learning"
-	"github.com/at-ishikawa/langner/internal/note"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -51,14 +50,14 @@ type ImportOptions struct {
 
 // Importer reads YAML notebook data and writes to DB.
 type Importer struct {
-	noteRepo       note.NoteRepository
+	noteRepo       notebook.NoteRepository
 	learningRepo   learning.LearningRepository
 	dictionaryRepo dictionary.DictionaryRepository
 	writer         io.Writer
 }
 
 // NewImporter creates a new Importer.
-func NewImporter(noteRepo note.NoteRepository, learningRepo learning.LearningRepository, dictionaryRepo dictionary.DictionaryRepository, writer io.Writer) *Importer {
+func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, dictionaryRepo dictionary.DictionaryRepository, writer io.Writer) *Importer {
 	return &Importer{
 		noteRepo:       noteRepo,
 		learningRepo:   learningRepo,
@@ -76,7 +75,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]no
 		return nil, fmt.Errorf("FindAll() > %w", err)
 	}
 
-	noteCache := make(map[noteKey]*note.Note, len(allNotes))
+	noteCache := make(map[noteKey]*notebook.NoteRecord, len(allNotes))
 	for i := range allNotes {
 		noteCache[noteKey{allNotes[i].Usage, allNotes[i].Entry}] = &allNotes[i]
 	}
@@ -122,24 +121,24 @@ func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]no
 	return &result, nil
 }
 
-func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebookID, notebookType, group, subgroup string, opts ImportOptions, result *ImportResult, noteCache map[noteKey]*note.Note, nnCache map[nnKey]bool) error {
+func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebookID, notebookType, group, subgroup string, opts ImportOptions, result *ImportResult, noteCache map[noteKey]*notebook.NoteRecord, nnCache map[nnKey]bool) error {
 	usage := def.Expression
 	entry := def.Definition
 	if entry == "" {
 		entry = def.Expression
 	}
 
-	images := make([]note.NoteImage, len(def.Images))
+	images := make([]notebook.NoteImage, len(def.Images))
 	for i, img := range def.Images {
-		images[i] = note.NoteImage{
+		images[i] = notebook.NoteImage{
 			URL:       img,
 			SortOrder: i,
 		}
 	}
 
-	references := make([]note.NoteReference, len(def.References))
+	references := make([]notebook.NoteReference, len(def.References))
 	for i, ref := range def.References {
-		references[i] = note.NoteReference{
+		references[i] = notebook.NoteReference{
 			Link:        ref.URL,
 			Description: ref.Description,
 			SortOrder:   i,
@@ -167,7 +166,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 			result.NotesUpdated++
 		}
 	} else {
-		n := &note.Note{
+		n := &notebook.NoteRecord{
 			Usage:            usage,
 			Entry:            entry,
 			Meaning:          def.Meaning,
@@ -175,7 +174,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 			DictionaryNumber: def.DictionaryNumber,
 			Images:           images,
 			References:       references,
-			NotebookNotes: []note.NotebookNote{
+			NotebookNotes: []notebook.NotebookNote{
 				{
 					NotebookType: notebookType,
 					NotebookID:   notebookID,
@@ -206,7 +205,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 	}
 
 	if !opts.DryRun {
-		nn := &note.NotebookNote{
+		nn := &notebook.NotebookNote{
 			NoteID:       noteID,
 			NotebookType: notebookType,
 			NotebookID:   notebookID,
@@ -230,7 +229,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 	if err != nil {
 		return nil, fmt.Errorf("FindAll() > %w", err)
 	}
-	noteMap := make(map[string]*note.Note, len(allNotes))
+	noteMap := make(map[string]*notebook.NoteRecord, len(allNotes))
 	for i := range allNotes {
 		noteMap[allNotes[i].Entry] = &allNotes[i]
 	}
@@ -267,11 +266,11 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 
 	// First pass: batch-create auto notes for unknown expressions
 	newNoteEntries := make(map[string]bool)
-	var newNotes []*note.Note
+	var newNotes []*notebook.NoteRecord
 	for _, he := range allExpressions {
 		if _, ok := noteMap[he.expr.Expression]; !ok && !newNoteEntries[he.expr.Expression] {
 			newNoteEntries[he.expr.Expression] = true
-			n := &note.Note{
+			n := &notebook.NoteRecord{
 				Usage: he.expr.Expression,
 				Entry: he.expr.Expression,
 			}
@@ -290,7 +289,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 		if err != nil {
 			return nil, fmt.Errorf("FindAll() > %w", err)
 		}
-		noteMap = make(map[string]*note.Note, len(allNotes))
+		noteMap = make(map[string]*notebook.NoteRecord, len(allNotes))
 		for i := range allNotes {
 			noteMap[allNotes[i].Entry] = &allNotes[i]
 		}

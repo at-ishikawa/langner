@@ -1,5 +1,4 @@
-// Package note provides note domain models and repository interfaces.
-package note
+package notebook
 
 import (
 	"context"
@@ -11,8 +10,8 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// Note represents a vocabulary word or phrase.
-type Note struct {
+// NoteRecord represents a vocabulary word or phrase in the database.
+type NoteRecord struct {
 	ID               int64           `db:"id" yaml:"id"`
 	Usage            string          `db:"usage" yaml:"usage"`
 	Entry            string          `db:"entry" yaml:"entry"`
@@ -61,14 +60,14 @@ type NotebookNote struct {
 
 // NoteRepository defines operations for managing notes.
 type NoteRepository interface {
-	FindAll(ctx context.Context) ([]Note, error)
-	FindByUsageAndEntry(ctx context.Context, usage, entry string) (*Note, error)
-	FindByNotebook(ctx context.Context, notebookType, notebookID string) ([]Note, error)
+	FindAll(ctx context.Context) ([]NoteRecord, error)
+	FindByUsageAndEntry(ctx context.Context, usage, entry string) (*NoteRecord, error)
+	FindByNotebook(ctx context.Context, notebookType, notebookID string) ([]NoteRecord, error)
 	FindNotebookNote(ctx context.Context, noteID int64, notebookType, notebookID, group string) (*NotebookNote, error)
-	Create(ctx context.Context, note *Note) error
-	BatchCreate(ctx context.Context, notes []*Note) error
+	Create(ctx context.Context, note *NoteRecord) error
+	BatchCreate(ctx context.Context, notes []*NoteRecord) error
 	CreateNotebookNote(ctx context.Context, nn *NotebookNote) error
-	Update(ctx context.Context, note *Note) error
+	Update(ctx context.Context, note *NoteRecord) error
 }
 
 // DBNoteRepository implements NoteRepository using MySQL.
@@ -82,8 +81,8 @@ func NewDBNoteRepository(db *sqlx.DB) *DBNoteRepository {
 }
 
 // FindAll returns all notes with their images, references, and notebook notes.
-func (r *DBNoteRepository) FindAll(ctx context.Context) ([]Note, error) {
-	var notes []Note
+func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
+	var notes []NoteRecord
 	if err := r.db.SelectContext(ctx, &notes, "SELECT * FROM notes ORDER BY id"); err != nil {
 		return nil, fmt.Errorf("db.SelectContext(notes) > %w", err)
 	}
@@ -94,8 +93,8 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]Note, error) {
 }
 
 // FindByUsageAndEntry returns a note matching the usage and entry, or nil if not found.
-func (r *DBNoteRepository) FindByUsageAndEntry(ctx context.Context, usage, entry string) (*Note, error) {
-	var n Note
+func (r *DBNoteRepository) FindByUsageAndEntry(ctx context.Context, usage, entry string) (*NoteRecord, error) {
+	var n NoteRecord
 	err := r.db.GetContext(ctx, &n, "SELECT * FROM notes WHERE `usage` = ? AND entry = ?", usage, entry)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -103,7 +102,7 @@ func (r *DBNoteRepository) FindByUsageAndEntry(ctx context.Context, usage, entry
 	if err != nil {
 		return nil, fmt.Errorf("db.GetContext(note) > %w", err)
 	}
-	notes := []Note{n}
+	notes := []NoteRecord{n}
 	if err := r.loadRelations(ctx, notes); err != nil {
 		return nil, err
 	}
@@ -111,8 +110,8 @@ func (r *DBNoteRepository) FindByUsageAndEntry(ctx context.Context, usage, entry
 }
 
 // FindByNotebook returns notes linked to a specific notebook.
-func (r *DBNoteRepository) FindByNotebook(ctx context.Context, notebookType, notebookID string) ([]Note, error) {
-	var notes []Note
+func (r *DBNoteRepository) FindByNotebook(ctx context.Context, notebookType, notebookID string) ([]NoteRecord, error) {
+	var notes []NoteRecord
 	query := `SELECT n.* FROM notes n
 		JOIN notebook_notes nn ON n.id = nn.note_id
 		WHERE nn.notebook_type = ? AND nn.notebook_id = ?
@@ -157,7 +156,7 @@ func (r *DBNoteRepository) CreateNotebookNote(ctx context.Context, nn *NotebookN
 }
 
 // Create inserts a note with its images, references, and notebook notes in a transaction.
-func (r *DBNoteRepository) Create(ctx context.Context, note *Note) error {
+func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	tx, err := r.db.BeginTxx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("db.BeginTxx() > %w", err)
@@ -214,7 +213,7 @@ func (r *DBNoteRepository) Create(ctx context.Context, note *Note) error {
 }
 
 // BatchCreate inserts multiple simple notes (no images/references/notebook_notes).
-func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*Note) error {
+func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord) error {
 	if len(notes) == 0 {
 		return nil
 	}
@@ -243,7 +242,7 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*Note) error
 }
 
 // Update updates a note's fields (not related records).
-func (r *DBNoteRepository) Update(ctx context.Context, note *Note) error {
+func (r *DBNoteRepository) Update(ctx context.Context, note *NoteRecord) error {
 	_, err := r.db.ExecContext(ctx,
 		"UPDATE notes SET `usage` = ?, entry = ?, meaning = ?, level = ?, dictionary_number = ? WHERE id = ?",
 		note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ID)
@@ -253,13 +252,13 @@ func (r *DBNoteRepository) Update(ctx context.Context, note *Note) error {
 	return nil
 }
 
-func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []Note) error {
+func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord) error {
 	if len(notes) == 0 {
 		return nil
 	}
 
 	noteIDs := make([]int64, len(notes))
-	noteMap := make(map[int64]*Note, len(notes))
+	noteMap := make(map[int64]*NoteRecord, len(notes))
 	for i := range notes {
 		noteIDs[i] = notes[i].ID
 		noteMap[notes[i].ID] = &notes[i]

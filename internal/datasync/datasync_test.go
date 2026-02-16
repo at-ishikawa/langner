@@ -16,8 +16,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_dictionary "github.com/at-ishikawa/langner/internal/mocks/dictionary"
 	mock_learning "github.com/at-ishikawa/langner/internal/mocks/learning"
-	mock_note "github.com/at-ishikawa/langner/internal/mocks/note"
-	"github.com/at-ishikawa/langner/internal/note"
+	mock_notebook "github.com/at-ishikawa/langner/internal/mocks/notebook"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -27,7 +26,7 @@ func TestImporter_ImportNotes(t *testing.T) {
 		stories    map[string]notebook.Index
 		flashcards map[string]notebook.FlashcardIndex
 		opts       ImportOptions
-		setup      func(noteRepo *mock_note.MockNoteRepository)
+		setup      func(noteRepo *mock_notebook.MockNoteRepository)
 		want       *ImportResult
 	}{
 		{
@@ -58,10 +57,10 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 			flashcards: map[string]notebook.FlashcardIndex{},
 			opts:       ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{}, nil)
+			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *note.Note) error {
+					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
 						n.ID = 1
 						assert.Equal(t, "break the ice", n.Usage)
 						assert.Equal(t, "start a conversation", n.Entry)
@@ -106,9 +105,9 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 			flashcards: map[string]notebook.FlashcardIndex{},
 			opts:       ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
-					{ID: 1, Usage: "break the ice", Entry: "start a conversation", NotebookNotes: []note.NotebookNote{
+			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Usage: "break the ice", Entry: "start a conversation", NotebookNotes: []notebook.NotebookNote{
 						{NoteID: 1, NotebookType: "story", NotebookID: "test-story", Group: "Episode 1"},
 					}},
 				}, nil)
@@ -146,12 +145,12 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 			flashcards: map[string]notebook.FlashcardIndex{},
 			opts:       ImportOptions{UpdateExisting: true},
-			setup: func(noteRepo *mock_note.MockNoteRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Usage: "break the ice", Entry: "start a conversation"},
 				}, nil)
 				noteRepo.EXPECT().Update(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *note.Note) error {
+					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
 						assert.Equal(t, "updated meaning", n.Meaning)
 						return nil
 					})
@@ -183,10 +182,10 @@ func TestImporter_ImportNotes(t *testing.T) {
 				},
 			},
 			opts: ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{}, nil)
+			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *note.Note) error {
+					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
 						n.ID = 2
 						assert.Equal(t, "flashcard", n.NotebookNotes[0].NotebookType)
 						assert.Equal(t, "vocab-cards", n.NotebookNotes[0].NotebookID)
@@ -227,8 +226,8 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 			flashcards: map[string]notebook.FlashcardIndex{},
 			opts:       ImportOptions{DryRun: true},
-			setup: func(noteRepo *mock_note.MockNoteRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{}, nil)
+			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				// No Create or CreateNotebookNote calls expected
 			},
 			want: &ImportResult{
@@ -263,10 +262,10 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 			flashcards: map[string]notebook.FlashcardIndex{},
 			opts:       ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{}, nil)
+			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *note.Note) error {
+					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
 						n.ID = 3
 						assert.Equal(t, "resilient", n.Usage)
 						assert.Equal(t, "resilient", n.Entry)
@@ -283,7 +282,7 @@ func TestImporter_ImportNotes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			noteRepo := mock_note.NewMockNoteRepository(ctrl)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
 			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 
@@ -306,7 +305,7 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 		name      string
 		histories map[string][]notebook.LearningHistory
 		opts      ImportOptions
-		setup     func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository)
+		setup     func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository)
 		want      *ImportResult
 	}{
 		{
@@ -342,8 +341,8 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 				},
 			},
 			opts: ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Entry: "break the ice"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
@@ -388,8 +387,8 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 				},
 			},
 			opts: ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Entry: "break the ice"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{
@@ -425,16 +424,16 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 				},
 			},
 			opts: ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
-				first := noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{}, nil)
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				first := noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, notes []*note.Note) error {
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
 						require.Len(t, notes, 1)
 						assert.Equal(t, "unknown phrase", notes[0].Usage)
 						assert.Equal(t, "unknown phrase", notes[0].Entry)
 						return nil
 					}).After(first)
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 10, Entry: "unknown phrase", Usage: "unknown phrase"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
@@ -473,8 +472,8 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 				},
 			},
 			opts: ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 5, Entry: "resilient"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
@@ -513,8 +512,8 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 				},
 			},
 			opts: ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 5, Entry: "resilient"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
@@ -555,8 +554,8 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 				},
 			},
 			opts: ImportOptions{},
-			setup: func(noteRepo *mock_note.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]note.Note{
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Entry: "break the ice"},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
@@ -576,7 +575,7 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			noteRepo := mock_note.NewMockNoteRepository(ctrl)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
 			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 
@@ -671,7 +670,7 @@ func TestImporter_ImportDictionary(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			noteRepo := mock_note.NewMockNoteRepository(ctrl)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
 			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 

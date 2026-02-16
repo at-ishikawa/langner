@@ -1,4 +1,4 @@
-package note
+package notebook
 
 import (
 	"context"
@@ -78,7 +78,7 @@ func TestDBNoteRepository_FindByUsageAndEntry(t *testing.T) {
 		usage     string
 		entry     string
 		setupMock func(mock sqlmock.Sqlmock)
-		want      *Note
+		want      *NoteRecord
 		wantErr   bool
 	}{
 		{
@@ -109,7 +109,7 @@ func TestDBNoteRepository_FindByUsageAndEntry(t *testing.T) {
 						"id", "note_id", "notebook_type", "notebook_id", "group", "subgroup", "created_at", "updated_at",
 					}))
 			},
-			want: &Note{
+			want: &NoteRecord{
 				ID:               1,
 				Usage:            "idiom",
 				Entry:            "break the ice",
@@ -219,7 +219,7 @@ func TestDBNoteRepository_Create(t *testing.T) {
 	repo := NewDBNoteRepository(sqlxDB)
 	ctx := context.Background()
 
-	note := &Note{
+	note := &NoteRecord{
 		Usage:            "idiom",
 		Entry:            "lose one's temper",
 		Meaning:          "to become angry",
@@ -384,7 +384,7 @@ func TestDBNoteRepository_Update(t *testing.T) {
 	repo := NewDBNoteRepository(sqlxDB)
 	ctx := context.Background()
 
-	note := &Note{
+	note := &NoteRecord{
 		ID:               1,
 		Usage:            "idiom",
 		Entry:            "break the ice",
