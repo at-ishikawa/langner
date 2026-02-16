@@ -17,14 +17,28 @@ type Config struct {
 	Outputs      OutputsConfig      `mapstructure:"outputs"`
 	OpenAI       OpenAIConfig       `mapstructure:"openai"`
 	Books        BooksConfig        `mapstructure:"books"`
+	Database     DatabaseConfig     `mapstructure:"database"`
+}
+
+type DatabaseConfig struct {
+	Host            string            `mapstructure:"host"`
+	Port            int               `mapstructure:"port"`
+	Database        string            `mapstructure:"database"`
+	Username        string            `mapstructure:"username"`
+	Password        string            `mapstructure:"password"`
+	TLS             bool              `mapstructure:"tls"`
+	Params          map[string]string `mapstructure:"params"`
+	MaxOpenConns    int               `mapstructure:"max_open_conns"`
+	MaxIdleConns    int               `mapstructure:"max_idle_conns"`
+	ConnMaxLifetime int               `mapstructure:"conn_max_lifetime_seconds"`
 }
 
 type NotebooksConfig struct {
-	StoriesDirectories      []string `mapstructure:"stories_directories"`
-	LearningNotesDirectory  string   `mapstructure:"learning_notes_directory"`
-	FlashcardsDirectories   []string `mapstructure:"flashcards_directories"`
-	BooksDirectories        []string `mapstructure:"books_directories"`
-	DefinitionsDirectories  []string `mapstructure:"definitions_directories"`
+	StoriesDirectories     []string `mapstructure:"stories_directories"`
+	LearningNotesDirectory string   `mapstructure:"learning_notes_directory"`
+	FlashcardsDirectories  []string `mapstructure:"flashcards_directories"`
+	BooksDirectories       []string `mapstructure:"books_directories"`
+	DefinitionsDirectories []string `mapstructure:"definitions_directories"`
 }
 
 type TemplatesConfig struct {
@@ -103,6 +117,10 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("notebooks.definitions_directories", []string{filepath.Join("notebooks", "definitions")})
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
+	v.SetDefault("database.host", "localhost")
+	v.SetDefault("database.port", 3306)
+	v.SetDefault("database.database", "local")
+	v.SetDefault("database.username", "user")
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {
@@ -118,6 +136,11 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	}
 	if err := v.BindEnv("openai.model", "OPENAI_MODEL"); err != nil {
 		return nil, fmt.Errorf("failed to bind OPENAI_MODEL environment variable: %w", err)
+	}
+
+	// Bind database password to environment variable
+	if err := v.BindEnv("database.password", "DB_PASSWORD"); err != nil {
+		return nil, fmt.Errorf("failed to bind DB_PASSWORD environment variable: %w", err)
 	}
 
 	if err := v.ReadInConfig(); err != nil {
