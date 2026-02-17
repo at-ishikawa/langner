@@ -8,7 +8,7 @@ weight: 4
 ## File Structure
 
 ```
-web/
+frontend/
   src/
     app/
       layout.tsx            # Root layout with Chakra UI provider

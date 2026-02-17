@@ -16,21 +16,22 @@ Connect RPC is built on Go's standard `net/http`. Handlers are registered as `ht
 ## File Structure
 
 ```
-cmd/
-  langner/          # Existing CLI (unchanged)
-  langner-server/   # New HTTP server entry point
-
-internal/
-  notebook/         # Existing domain logic (reused as-is)
-  inference/        # Existing OpenAI client (reused as-is)
-  config/           # Existing config (reused as-is)
-  server/           # New: Connect RPC handlers
-    quiz_handler.go
-
-proto/              # Protobuf definitions
+proto/                # Protobuf definitions (shared)
   quiz/
     v1/
       quiz.proto
+
+backend/
+  cmd/
+    langner/          # Existing CLI (unchanged)
+    langner-server/   # New HTTP server entry point
+
+  internal/
+    notebook/         # Existing domain logic (reused as-is)
+    inference/        # Existing OpenAI client (reused as-is)
+    config/           # Existing config (reused as-is)
+    server/           # New: Connect RPC handlers
+      quiz_handler.go
 ```
 
 ## Code Generation
