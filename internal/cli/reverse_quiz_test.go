@@ -16,6 +16,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -851,192 +852,184 @@ func TestReverseQuizCLI_CalculateQuality(t *testing.T) {
 	}
 }
 
-func TestReverseQuizCLI_ValidateAnswer_ExactMatch(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
+func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
+	tests := []struct {
+		name               string
+		card               *WordOccurrence
+		answer             string
+		responseTimeMs     int64
+		mockResponse       *inference.ValidateWordFormResponse // nil = no mock expected
+		mockError          error
+		wantCorrect        bool
+		wantQuality        int
+		wantReason         string
+		wantReasonContains string // for partial matching (ValidationError case)
+	}{
+		{
+			name: "exact match",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "excited",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "exact match",
+		},
+		{
+			name: "case insensitive",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "EXCITED",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "exact match",
+		},
+		{
+			name: "definition match via GetExpression",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "remove", Definition: "take off", Meaning: "to remove something"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "take off",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "exact match",
+		},
+		{
+			name: "definition match via Expression field",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "remove", Definition: "take off", Meaning: "to remove something"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "remove",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "matches expression",
+		},
+		{
+			name: "same word classification",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "run", Meaning: "to move quickly on foot"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "ran",
+			responseTimeMs: 2000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "different tense of the same word"},
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "different tense of the same word",
+		},
+		{
+			name: "wrong classification",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "apple",
+			responseTimeMs: 2000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "unrelated word"},
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "unrelated word",
+		},
+		{
+			name: "empty answer",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "",
+			responseTimeMs: 2000,
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "empty answer",
+		},
+		{
+			name: "wrong answer different word",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "correct-word", Meaning: "the right word"},
+			},
+			answer:         "wrong-word",
+			responseTimeMs: 5000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "different word"},
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "different word",
+		},
+		{
+			name: "matches expression field",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "ran away", Definition: "run away", Meaning: "to flee"},
+			},
+			answer:         "ran away",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "matches expression",
+		},
+		{
+			name: "validation error",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "correct-word", Meaning: "the right word"},
+			},
+			answer:             "some-word",
+			responseTimeMs:     5000,
+			mockResponse:       &inference.ValidateWordFormResponse{},
+			mockError:          fmt.Errorf("API error"),
+			wantCorrect:        false,
+			wantQuality:        int(notebook.QualityWrong),
+			wantReasonContains: "validation error",
+		},
+		{
+			name: "unknown classification",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "word", Meaning: "meaning"},
+			},
+			answer:         "answer",
+			responseTimeMs: 5000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: "unknown_type", Reason: "unexpected"},
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "unknown classification",
 		},
 	}
 
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockClient := mock_inference.NewMockClient(ctrl)
+			if tt.mockResponse != nil {
+				mockClient.EXPECT().
+					ValidateWordForm(gomock.Any(), gomock.Any()).
+					Return(*tt.mockResponse, tt.mockError)
+			}
+
+			cli := &ReverseQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{
+					openaiClient: mockClient,
+				},
+			}
+
+			isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), tt.card, tt.answer, tt.responseTimeMs, false)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantCorrect, isCorrect)
+			assert.Equal(t, tt.wantQuality, quality)
+			if tt.wantReasonContains != "" {
+				assert.Contains(t, reason, tt.wantReasonContains)
+			} else {
+				assert.Equal(t, tt.wantReason, reason)
+			}
+		})
 	}
-
-	// Exact match should not call OpenAI
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "excited", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "exact match", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_CaseInsensitive(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// Case insensitive match should not call OpenAI
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "EXCITED", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "exact match", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_DefinitionMatch(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "remove",
-			Definition: "take off",
-			Meaning:    "to remove something",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// When Definition is set, GetExpression() returns Definition ("take off")
-	// So typing "take off" is an exact match, not a definition match
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "take off", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "exact match", reason)
-
-	// Typing the Expression ("remove") should also work via the expression field check
-	isCorrect, quality, reason, err = cli.validateAnswer(context.Background(), card, "remove", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "matches expression", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_SameWord(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-	mockClient.EXPECT().
-		ValidateWordForm(gomock.Any(), gomock.Any()).
-		Return(inference.ValidateWordFormResponse{
-			Classification: inference.ClassificationSameWord,
-			Reason:         "different tense of the same word",
-		}, nil)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "run",
-			Meaning:    "to move quickly on foot",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// "ran" is a different form of "run"
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "ran", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "different tense of the same word", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_Wrong(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-	mockClient.EXPECT().
-		ValidateWordForm(gomock.Any(), gomock.Any()).
-		Return(inference.ValidateWordFormResponse{
-			Classification: inference.ClassificationWrong,
-			Reason:         "unrelated word",
-		}, nil)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "apple", 2000, false)
-	require.NoError(t, err)
-	assert.False(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityWrong), quality)
-	assert.Equal(t, "unrelated word", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_EmptyAnswer(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// Empty answer should not call OpenAI
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "", 2000, false)
-	require.NoError(t, err)
-	assert.False(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityWrong), quality)
-	assert.Equal(t, "empty answer", reason)
 }
 
 func TestReverseQuizCLI_Session(t *testing.T) {
@@ -2144,77 +2137,8 @@ func TestNewReverseQuizCLI_AllNotebooks(t *testing.T) {
 	learningNotesDir := t.TempDir()
 	dictionaryCacheDir := t.TempDir()
 
-	// Create story notebook
-	notebookDir := filepath.Join(storiesDir, "test-story")
-	require.NoError(t, os.MkdirAll(notebookDir, 0755))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "index.yml"), notebook.Index{
-		Kind: "story", ID: "test-story", Name: "Test Story",
-		NotebookPaths: []string{"stories.yml"},
-	}))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "stories.yml"), []notebook.StoryNotebook{
-		{
-			Event: "Story 1",
-			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-			Scenes: []notebook.StoryScene{
-				{
-					Title: "Scene 1",
-					Conversations: []notebook.Conversation{
-						{Speaker: "A", Quote: "I am eager to learn!"},
-					},
-					Definitions: []notebook.Note{
-						{Expression: "eager", Meaning: "wanting to do something very much"},
-					},
-				},
-			},
-		},
-	}))
-
-	// Create flashcard notebook
-	fcDir := filepath.Join(flashcardsDir, "test-fc")
-	require.NoError(t, os.MkdirAll(fcDir, 0755))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "index.yml"), notebook.FlashcardIndex{
-		ID: "test-fc", Name: "Test FC",
-		NotebookPaths: []string{"cards.yml"},
-	}))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "cards.yml"), []notebook.FlashcardNotebook{
-		{
-			Title: "Common Words",
-			Cards: []notebook.Note{
-				{Expression: "break the ice", Meaning: "to initiate social interaction", Examples: []string{"She told a joke to break the ice."}},
-			},
-		},
-	}))
-
-	// Create learning history for story
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-story.yml"), []notebook.LearningHistory{
-		{
-			Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-story", Title: "Story 1"},
-			Scenes: []notebook.LearningScene{
-				{
-					Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
-					Expressions: []notebook.LearningHistoryExpression{
-						{
-							Expression:  "eager",
-							LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}},
-						},
-					},
-				},
-			},
-		},
-	}))
-
-	// Create learning history for flashcard
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-fc.yml"), []notebook.LearningHistory{
-		{
-			Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-fc", Title: "Common Words", Type: "flashcard"},
-			Expressions: []notebook.LearningHistoryExpression{
-				{
-					Expression:  "break the ice",
-					LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}},
-				},
-			},
-		},
-	}))
+	testutil.CreateStoryNotebook(t, storiesDir, learningNotesDir, "test-story", testutil.WithStoryLearningStatus("usable"))
+	testutil.CreateFlashcardNotebook(t, flashcardsDir, learningNotesDir, "test-fc", testutil.WithFlashcardLearningStatus("usable"))
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -2240,32 +2164,7 @@ func TestNewReverseQuizCLI_FlashcardNotebook(t *testing.T) {
 	learningNotesDir := t.TempDir()
 	dictionaryCacheDir := t.TempDir()
 
-	fcDir := filepath.Join(flashcardsDir, "my-fc")
-	require.NoError(t, os.MkdirAll(fcDir, 0755))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "index.yml"), notebook.FlashcardIndex{
-		ID: "my-fc", Name: "My Flashcards",
-		NotebookPaths: []string{"cards.yml"},
-	}))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "cards.yml"), []notebook.FlashcardNotebook{
-		{
-			Title: "Unit 1",
-			Cards: []notebook.Note{
-				{Expression: "break the ice", Meaning: "to initiate social interaction", Examples: []string{"She told a joke to break the ice."}},
-			},
-		},
-	}))
-
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "my-fc.yml"), []notebook.LearningHistory{
-		{
-			Metadata: notebook.LearningHistoryMetadata{NotebookID: "my-fc", Title: "Unit 1", Type: "flashcard"},
-			Expressions: []notebook.LearningHistoryExpression{
-				{
-					Expression:  "break the ice",
-					LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}},
-				},
-			},
-		},
-	}))
+	testutil.CreateFlashcardNotebook(t, flashcardsDir, learningNotesDir, "my-fc", testutil.WithFlashcardLearningStatus("usable"))
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -2438,116 +2337,3 @@ func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
 	assert.Equal(t, "exact match", reason)
 }
 
-func TestReverseQuizCLI_ValidateAnswer_WrongAnswer(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
-		Classification: inference.ClassificationWrong,
-		Reason:         "different word",
-	}, nil)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-			bold:         color.New(color.Bold),
-			italic:       color.New(color.Italic),
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "correct-word",
-			Meaning:    "the right word",
-		},
-	}
-
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "wrong-word", 5000, false)
-	assert.NoError(t, err)
-	assert.False(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityWrong), quality)
-	assert.Equal(t, "different word", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_MatchesExpression(t *testing.T) {
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			bold:   color.New(color.Bold),
-			italic: color.New(color.Italic),
-		},
-	}
-
-	// Card where Definition != Expression, user answers with Expression
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "ran away",
-			Definition: "run away",
-			Meaning:    "to flee",
-		},
-	}
-
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "ran away", 2000, false)
-	assert.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Greater(t, quality, 0)
-	assert.Equal(t, "matches expression", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_ValidationError(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{}, fmt.Errorf("API error"))
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-			bold:         color.New(color.Bold),
-			italic:       color.New(color.Italic),
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "correct-word",
-			Meaning:    "the right word",
-		},
-	}
-
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "some-word", 5000, false)
-	assert.NoError(t, err)
-	assert.False(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityWrong), quality)
-	assert.Contains(t, reason, "validation error")
-}
-
-func TestReverseQuizCLI_ValidateAnswer_UnknownClassification(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
-		Classification: "unknown_type",
-		Reason:         "unexpected",
-	}, nil)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-			bold:         color.New(color.Bold),
-			italic:       color.New(color.Italic),
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{Expression: "word", Meaning: "meaning"},
-	}
-
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "answer", 5000, false)
-	assert.NoError(t, err)
-	assert.False(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityWrong), quality)
-	assert.Equal(t, "unknown classification", reason)
-}

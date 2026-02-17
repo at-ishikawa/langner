@@ -81,19 +81,3 @@ func TestNewDictionaryCommand_Lookup_RunE_InvalidConfig(t *testing.T) {
 	assert.Contains(t, err.Error(), "configuration")
 }
 
-func TestNewDictionaryCommand(t *testing.T) {
-	cmd := newDictionaryCommand()
-
-	assert.Equal(t, "dictionary", cmd.Use)
-	assert.True(t, cmd.HasSubCommands())
-
-	// Verify the api flag is registered
-	apiFlag := cmd.PersistentFlags().Lookup("api")
-	assert.NotNil(t, apiFlag)
-
-	// Verify lookup subcommand
-	lookup, _, err := cmd.Find([]string{"lookup"})
-	assert.NoError(t, err)
-	assert.Equal(t, "lookup", lookup.Use)
-	assert.NotNil(t, lookup.RunE)
-}

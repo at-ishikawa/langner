@@ -71,8 +71,8 @@ func TestCreateStoryNotebook(t *testing.T) {
 		{
 			name:          "custom learning status",
 			id:            "story-2",
-			opts:          []StoryNotebookOption{WithStoryLearningStatus(notebook.LearnedStatusMisunderstood)},
-			wantStatusStr: "misunderstood",
+			opts:          []StoryNotebookOption{WithStoryLearningStatus(notebook.LearnedStatus("understood"))},
+			wantStatusStr: "understood",
 		},
 	}
 
@@ -130,8 +130,8 @@ func TestCreateFlashcardNotebook(t *testing.T) {
 		{
 			name:          "custom learning status",
 			id:            "fc-2",
-			opts:          []FlashcardNotebookOption{WithFlashcardLearningStatus(notebook.LearnedStatusMisunderstood)},
-			wantStatusStr: "misunderstood",
+			opts:          []FlashcardNotebookOption{WithFlashcardLearningStatus(notebook.LearnedStatus("understood"))},
+			wantStatusStr: "understood",
 		},
 	}
 

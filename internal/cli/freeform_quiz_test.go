@@ -66,13 +66,13 @@ func TestValidateInput(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			err := ValidateInput(tc.word, tc.meaning)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateInput(tt.word, tt.meaning)
 
-			if tc.expectError {
+			if tt.expectError {
 				assert.Error(t, err)
-				assert.Equal(t, tc.errorType, err)
+				assert.Equal(t, tt.errorType, err)
 			} else {
 				assert.NoError(t, err)
 			}
@@ -574,36 +574,36 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			cli := &InteractiveQuizCLI{
 				learningNotesDir: t.TempDir(),
 			}
 			result, err := cli.updateLearningHistoryWithQuality(
-				tc.notebookID,
-				tc.initialHistory,
-				tc.notebookID,
-				tc.storyTitle,
-				tc.sceneTitle,
-				tc.expression,
-				tc.isCorrect,
-				tc.isKnownWord,
+				tt.notebookID,
+				tt.initialHistory,
+				tt.notebookID,
+				tt.storyTitle,
+				tt.sceneTitle,
+				tt.expression,
+				tt.isCorrect,
+				tt.isKnownWord,
 				4,
 				1000,
 				notebook.QuizTypeFreeform,
 			)
 			require.NoError(t, err)
 
-			assert.Len(t, result, tc.wantCount)
+			assert.Len(t, result, tt.wantCount)
 
 			// Find the expression
 			var foundExpression *notebook.LearningHistoryExpression
 			for _, story := range result {
-				if story.Metadata.Title == tc.storyTitle {
+				if story.Metadata.Title == tt.storyTitle {
 					for _, scene := range story.Scenes {
-						if scene.Metadata.Title == tc.sceneTitle {
+						if scene.Metadata.Title == tt.sceneTitle {
 							for _, exp := range scene.Expressions {
-								if exp.Expression == tc.expression {
+								if exp.Expression == tt.expression {
 									foundExpression = &exp
 									break
 								}
@@ -617,13 +617,13 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 			assert.NotEmpty(t, foundExpression.LearnedLogs)
 
 			// Check want status if specified
-			if tc.wantStatus != nil {
-				assert.Equal(t, *tc.wantStatus, foundExpression.GetLatestStatus())
+			if tt.wantStatus != nil {
+				assert.Equal(t, *tt.wantStatus, foundExpression.GetLatestStatus())
 			}
 
 			// Check want record count if specified
-			if tc.wantRecordCount != nil {
-				assert.Equal(t, *tc.wantRecordCount, len(foundExpression.LearnedLogs), "Should not add duplicate status record")
+			if tt.wantRecordCount != nil {
+				assert.Equal(t, *tt.wantRecordCount, len(foundExpression.LearnedLogs), "Should not add duplicate status record")
 			}
 		})
 	}
@@ -1214,8 +1214,8 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 		},
 	}
 
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			// Disable color for testing
 			color.NoColor = true
 			defer func() { color.NoColor = false }()
@@ -1231,22 +1231,22 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 				},
 			}
 
-			err := cli.displayResult(tc.answer, tc.occurrence)
+			err := cli.displayResult(tt.answer, tt.occurrence)
 			require.NoError(t, err)
 
 			outputStr := buf.String()
-			assert.Contains(t, outputStr, tc.wantMeaningInOutput, "Output should contain the expected meaning")
+			assert.Contains(t, outputStr, tt.wantMeaningInOutput, "Output should contain the expected meaning")
 
-			if tc.wantNotInOutput != "" {
-				assert.NotContains(t, outputStr, tc.wantNotInOutput, "Output should not contain the wrong meaning")
+			if tt.wantNotInOutput != "" {
+				assert.NotContains(t, outputStr, tt.wantNotInOutput, "Output should not contain the wrong meaning")
 			}
 
-			if tc.wantContextInOutput != "" {
-				assert.Contains(t, outputStr, tc.wantContextInOutput, "Output should contain the context")
+			if tt.wantContextInOutput != "" {
+				assert.Contains(t, outputStr, tt.wantContextInOutput, "Output should contain the context")
 			}
 
-			if tc.wantReasonInOutput != "" {
-				assert.Contains(t, outputStr, tc.wantReasonInOutput, "Output should contain the reason")
+			if tt.wantReasonInOutput != "" {
+				assert.Contains(t, outputStr, tt.wantReasonInOutput, "Output should contain the reason")
 			}
 		})
 	}

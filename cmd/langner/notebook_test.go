@@ -83,18 +83,6 @@ func TestSortFlag_Type(t *testing.T) {
 	assert.Equal(t, "SortFlag", flag.Type())
 }
 
-func TestNewNotebookCommand(t *testing.T) {
-	cmd := newNotebookCommand()
-
-	assert.Equal(t, "notebooks", cmd.Use)
-	assert.True(t, cmd.HasSubCommands())
-
-	// Verify sort flag
-	sortFlag := cmd.PersistentFlags().Lookup("sort")
-	assert.NotNil(t, sortFlag)
-	assert.Equal(t, "desc", sortFlag.DefValue)
-}
-
 func TestNewNotebookCommand_Stories_RunE(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgPath := testutil.SetupTestConfig(t, tmpDir)

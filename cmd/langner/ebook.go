@@ -5,7 +5,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/ebook"
 	"github.com/spf13/cobra"
 )
@@ -24,13 +23,9 @@ func newEbookCommand() *cobra.Command {
 }
 
 func newEbookManager() (*ebook.Manager, error) {
-	loader, err := config.NewConfigLoader(configFile)
+	cfg, err := loadConfig()
 	if err != nil {
-		return nil, fmt.Errorf("failed to create config loader: %w", err)
-	}
-	cfg, err := loader.Load()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load configuration: %w", err)
+		return nil, err
 	}
 	var booksDir string
 	if len(cfg.Notebooks.BooksDirectories) > 0 {

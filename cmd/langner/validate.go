@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/spf13/cobra"
 )
@@ -16,13 +15,9 @@ func newValidateCommand() *cobra.Command {
 		Use:   "validate",
 		Short: "Validate learning notes and story notebooks for consistency and correctness",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			// Create validator

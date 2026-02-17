@@ -29,13 +29,9 @@ func newQuizFreeformCommand() *cobra.Command {
 		Use:   "freeform",
 		Short: "Freeform quiz where you provide both word and meaning from memory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			// Create OpenAI client
@@ -87,13 +83,9 @@ Examples:
   langner quiz notebook --mode=reverse            # Reverse quiz from all notebooks
   langner quiz notebook -n friends --mode=reverse # Reverse quiz from specific notebook`,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			// Create OpenAI client

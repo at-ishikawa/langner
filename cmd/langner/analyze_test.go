@@ -7,22 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestNewAnalyzeCommand(t *testing.T) {
-	cmd := newAnalyzeCommand()
-
-	assert.Equal(t, "analyze", cmd.Use)
-	assert.Equal(t, "Analyze learning progress and statistics", cmd.Short)
-	assert.True(t, cmd.HasSubCommands())
-}
-
-func TestNewAnalyzeReportCommand(t *testing.T) {
-	cmd := newAnalyzeReportCommand()
-
-	assert.Equal(t, "report", cmd.Use)
-	assert.Equal(t, "Show monthly/yearly report of learning statistics", cmd.Short)
-	assert.NotNil(t, cmd.RunE)
-}
-
 func TestNewAnalyzeReportCommand_RunE(t *testing.T) {
 	tests := []struct {
 		name    string

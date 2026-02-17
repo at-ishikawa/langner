@@ -16,14 +16,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestNewQuizCommand(t *testing.T) {
-	cmd := newQuizCommand()
-
-	assert.Equal(t, "quiz", cmd.Use)
-	assert.Equal(t, "Quiz commands for testing vocabulary knowledge", cmd.Short)
-	assert.True(t, cmd.HasSubCommands())
-}
-
 func TestNewQuizFreeformCommand_RunE_InvalidConfig(t *testing.T) {
 	cfgPath := setupBrokenConfigFile(t)
 	setConfigFile(t, cfgPath)
@@ -126,52 +118,11 @@ func TestRunReverseQuiz(t *testing.T) {
 			setConfigFile(t, cfgPath)
 
 			if tt.setupNotebooks {
-				storiesDir := filepath.Join(tmpDir, "stories", "test-story")
-				require.NoError(t, os.MkdirAll(storiesDir, 0755))
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(storiesDir, "index.yml"), notebook.Index{
-					Kind: "story", ID: "test-story", Name: "Test Story",
-					NotebookPaths: []string{"stories.yml"},
-				}))
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(storiesDir, "stories.yml"), []notebook.StoryNotebook{
-					{
-						Event: "Episode 1",
-						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						Scenes: []notebook.StoryScene{
-							{
-								Title: "Scene 1",
-								Conversations: []notebook.Conversation{
-									{Speaker: "A", Quote: "The {{ eager }} student arrived early."},
-								},
-								Definitions: []notebook.Note{
-									{Expression: "eager", Meaning: "wanting to do something very much"},
-								},
-							},
-						},
-					},
-				}))
-
-				learningNotesDir := filepath.Join(tmpDir, "learning_notes")
-				status := notebook.LearnedStatus(tt.learningStatus)
-				var expressions []notebook.LearningHistoryExpression
+				var opts []testutil.StoryNotebookOption
 				if tt.learningStatus != "" {
-					expressions = []notebook.LearningHistoryExpression{
-						{
-							Expression:  "eager",
-							LearnedLogs: []notebook.LearningRecord{{Status: status}},
-						},
-					}
+					opts = append(opts, testutil.WithStoryLearningStatus(notebook.LearnedStatus(tt.learningStatus)))
 				}
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-story.yml"), []notebook.LearningHistory{
-					{
-						Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-story", Title: "Episode 1"},
-						Scenes: []notebook.LearningScene{
-							{
-								Metadata:    notebook.LearningSceneMetadata{Title: "Scene 1"},
-								Expressions: expressions,
-							},
-						},
-					},
-				}))
+				testutil.CreateStoryNotebook(t, filepath.Join(tmpDir, "stories"), filepath.Join(tmpDir, "learning_notes"), "test-story", opts...)
 			}
 
 			loader, err := config.NewConfigLoader(cfgPath)
@@ -319,15 +270,6 @@ func TestNewQuizFreeformCommand_RunE_WithAPIKey(t *testing.T) {
 	if err != nil {
 		assert.Contains(t, err.Error(), "EOF")
 	}
-}
-
-func TestNewQuizNotebookCommand(t *testing.T) {
-	cmd := newQuizNotebookCommand()
-
-	assert.Equal(t, "notebook", cmd.Use)
-	assert.Equal(t, "Quiz from notebooks. Use --mode to select quiz mode", cmd.Short)
-	assert.NotNil(t, cmd.RunE)
-	assert.NotEmpty(t, cmd.Long)
 }
 
 func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {

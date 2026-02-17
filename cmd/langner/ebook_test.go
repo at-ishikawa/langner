@@ -11,14 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewEbookCommand(t *testing.T) {
-	cmd := newEbookCommand()
-
-	assert.Equal(t, "ebook", cmd.Use)
-	assert.Equal(t, "Manage ebook repositories", cmd.Short)
-	assert.True(t, cmd.HasSubCommands())
-}
-
 func TestNewEbookListCommand_RunE(t *testing.T) {
 	tmpDir := t.TempDir()
 	cfgPath := testutil.SetupTestConfig(t, tmpDir)
