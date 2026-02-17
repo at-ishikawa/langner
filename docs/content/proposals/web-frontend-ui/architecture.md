@@ -18,12 +18,17 @@ Next.js Frontend (localhost:3000)  ──Connect RPC──>  Go Backend API (loc
                                                           └── OpenAI API
 ```
 
-## Why Connect RPC
+## Why Connect RPC over gRPC or Twirp
 
-- **Type-safe API contracts** — Single `.proto` files generate both Go server code and TypeScript client code
-- **HTTP/1.1 compatible** — Works with simple POST requests, no HTTP/2 required
-- **No proxy required** — Unlike gRPC-Web, Connect protocol works directly from the browser
-- **Official Buf tooling** — First-class support for both Go and TypeScript code generation
+| | Connect RPC | gRPC | Twirp |
+|---|---|---|---|
+| Go dependency | `net/http` only | `google.golang.org/grpc` | `net/http` only |
+| Browser support | Direct (HTTP/1.1 POST) | Requires gRPC-Web proxy | Direct (HTTP/1.1 POST) |
+| TypeScript codegen | Official Buf tooling (`@connectrpc/protoc-gen-connect-es`) | Third-party | Third-party |
+| Protocols | Connect + gRPC + gRPC-Web | gRPC only | Twirp only |
+| HTTP/2 required | No | Yes | No |
+
+Connect RPC was chosen for official Buf tooling support on both Go and TypeScript, and direct browser compatibility without a proxy.
 
 ## Stack
 
@@ -112,33 +117,6 @@ message SubmitAnswerResponse {
   string reason = 3;
 }
 ```
-
-## Backend Architecture
-
-The Go backend reuses existing code from the CLI. No new data storage is needed — it reads/writes the same YAML files.
-
-```
-cmd/
-  langner/          # Existing CLI (unchanged)
-  langner-server/   # New HTTP server entry point
-
-internal/
-  notebook/         # Existing domain logic (reused as-is)
-  inference/        # Existing OpenAI client (reused as-is)
-  config/           # Existing config (reused as-is)
-  server/           # New: Connect RPC handlers
-    quiz_handler.go
-```
-
-## Code Generation
-
-Protobuf definitions live in a `proto/` directory at the project root. Code generation produces:
-- **Go server code** — `protoc-gen-go` + `protoc-gen-connect-go`
-- **TypeScript client code** — `@bufbuild/protoc-gen-es` + `@connectrpc/protoc-gen-connect-es`
-
-## CORS
-
-Since the frontend and backend run on different ports locally, the Go backend must enable CORS.
 
 ## Out of Scope
 
