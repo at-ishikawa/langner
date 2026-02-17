@@ -51,3 +51,16 @@ func TestNewMigrateLearningHistoryCommand(t *testing.T) {
 	assert.Equal(t, "Migrate learning history files to new SM-2 format", cmd.Short)
 	assert.NotNil(t, cmd.RunE)
 }
+
+func TestNewMigrateLearningHistoryCommand_RunE(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := setupTestConfigFile(t, tmpDir)
+	oldConfigFile := configFile
+	configFile = cfgPath
+	defer func() { configFile = oldConfigFile }()
+
+	cmd := newMigrateLearningHistoryCommand()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+	assert.NoError(t, err)
+}

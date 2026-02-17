@@ -164,3 +164,42 @@ func TestDisplayValidationResults_ManyMissingLearningNotes(t *testing.T) {
 
 	assert.Contains(t, output, "... and 5 more")
 }
+
+func TestNewValidateCommand_RunE_InvalidConfig(t *testing.T) {
+	cfgPath := setupBrokenConfigFile(t)
+	oldConfigFile := configFile
+	configFile = cfgPath
+	defer func() { configFile = oldConfigFile }()
+
+	cmd := newValidateCommand()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "configuration")
+}
+
+func TestNewValidateCommand_RunE(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := setupTestConfigFile(t, tmpDir)
+	oldConfigFile := configFile
+	configFile = cfgPath
+	defer func() { configFile = oldConfigFile }()
+
+	cmd := newValidateCommand()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+	assert.NoError(t, err)
+}
+
+func TestNewValidateCommand_RunE_WithFix(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := setupTestConfigFile(t, tmpDir)
+	oldConfigFile := configFile
+	configFile = cfgPath
+	defer func() { configFile = oldConfigFile }()
+
+	cmd := newValidateCommand()
+	cmd.SetArgs([]string{"--fix"})
+	err := cmd.Execute()
+	assert.NoError(t, err)
+}

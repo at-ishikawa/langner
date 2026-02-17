@@ -172,6 +172,13 @@ outputs:
 `,
 			wantErr: "templates.story_notebook_template must be an existing and readable file",
 		},
+		{
+			name: "directory as template path",
+			configContent: `templates:
+  story_notebook_template: /tmp
+`,
+			wantErr: "templates.story_notebook_template must be an existing and readable file",
+		},
 	}
 
 	for _, tt := range tests {
@@ -199,4 +206,23 @@ outputs:
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestConfigLoader_Load_ValidTemplateFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a valid template file
+	templatePath := filepath.Join(tempDir, "story.tmpl")
+	require.NoError(t, os.WriteFile(templatePath, []byte("{{.}}"), 0644))
+
+	configContent := "templates:\n  story_notebook_template: " + templatePath + "\n"
+	configPath := filepath.Join(tempDir, "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0644))
+
+	loader, err := NewConfigLoader(configPath)
+	require.NoError(t, err)
+
+	cfg, err := loader.Load()
+	require.NoError(t, err)
+	assert.Equal(t, templatePath, cfg.Templates.StoryNotebookTemplate)
 }

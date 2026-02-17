@@ -32,6 +32,21 @@ func TestConvertMarkdownToPDF(t *testing.T) {
 			wantErrMsg:   "os.ReadFile",
 		},
 		{
+			name: "conversion with blockquote bold",
+			setupFile: func(t *testing.T) string {
+				tmpDir := t.TempDir()
+				mdPath := filepath.Join(tmpDir, "test.md")
+				content := []byte("# Test\n\n> This has **bold** text in a blockquote.\n\nNormal paragraph.\n")
+				require.NoError(t, os.WriteFile(mdPath, content, 0644))
+				return mdPath
+			},
+			wantErr: false,
+			validateAfter: func(t *testing.T, pdfPath string) {
+				_, err := os.Stat(pdfPath)
+				assert.NoError(t, err)
+			},
+		},
+		{
 			name: "successful conversion",
 			setupFile: func(t *testing.T) string {
 				tmpDir := t.TempDir()

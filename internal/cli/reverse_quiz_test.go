@@ -2137,3 +2137,417 @@ func TestNormalizeTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestNewReverseQuizCLI_AllNotebooks(t *testing.T) {
+	storiesDir := t.TempDir()
+	flashcardsDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	// Create story notebook
+	notebookDir := filepath.Join(storiesDir, "test-story")
+	require.NoError(t, os.MkdirAll(notebookDir, 0755))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "index.yml"), notebook.Index{
+		Kind: "story", ID: "test-story", Name: "Test Story",
+		NotebookPaths: []string{"stories.yml"},
+	}))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "stories.yml"), []notebook.StoryNotebook{
+		{
+			Event: "Story 1",
+			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+			Scenes: []notebook.StoryScene{
+				{
+					Title: "Scene 1",
+					Conversations: []notebook.Conversation{
+						{Speaker: "A", Quote: "I am eager to learn!"},
+					},
+					Definitions: []notebook.Note{
+						{Expression: "eager", Meaning: "wanting to do something very much"},
+					},
+				},
+			},
+		},
+	}))
+
+	// Create flashcard notebook
+	fcDir := filepath.Join(flashcardsDir, "test-fc")
+	require.NoError(t, os.MkdirAll(fcDir, 0755))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "index.yml"), notebook.FlashcardIndex{
+		ID: "test-fc", Name: "Test FC",
+		NotebookPaths: []string{"cards.yml"},
+	}))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "cards.yml"), []notebook.FlashcardNotebook{
+		{
+			Title: "Common Words",
+			Cards: []notebook.Note{
+				{Expression: "break the ice", Meaning: "to initiate social interaction", Examples: []string{"She told a joke to break the ice."}},
+			},
+		},
+	}))
+
+	// Create learning history for story
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-story.yml"), []notebook.LearningHistory{
+		{
+			Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-story", Title: "Story 1"},
+			Scenes: []notebook.LearningScene{
+				{
+					Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "eager",
+							LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}},
+						},
+					},
+				},
+			},
+		},
+	}))
+
+	// Create learning history for flashcard
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-fc.yml"), []notebook.LearningHistory{
+		{
+			Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-fc", Title: "Common Words", Type: "flashcard"},
+			Expressions: []notebook.LearningHistoryExpression{
+				{
+					Expression:  "break the ice",
+					LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}},
+				},
+			},
+		},
+	}))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	cli, err := NewReverseQuizCLI(
+		"", // empty = all notebooks
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			FlashcardsDirectories:  []string{flashcardsDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, cli.GetCardCount(), 1)
+}
+
+func TestNewReverseQuizCLI_FlashcardNotebook(t *testing.T) {
+	flashcardsDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	fcDir := filepath.Join(flashcardsDir, "my-fc")
+	require.NoError(t, os.MkdirAll(fcDir, 0755))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "index.yml"), notebook.FlashcardIndex{
+		ID: "my-fc", Name: "My Flashcards",
+		NotebookPaths: []string{"cards.yml"},
+	}))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "cards.yml"), []notebook.FlashcardNotebook{
+		{
+			Title: "Unit 1",
+			Cards: []notebook.Note{
+				{Expression: "break the ice", Meaning: "to initiate social interaction", Examples: []string{"She told a joke to break the ice."}},
+			},
+		},
+	}))
+
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "my-fc.yml"), []notebook.LearningHistory{
+		{
+			Metadata: notebook.LearningHistoryMetadata{NotebookID: "my-fc", Title: "Unit 1", Type: "flashcard"},
+			Expressions: []notebook.LearningHistoryExpression{
+				{
+					Expression:  "break the ice",
+					LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}},
+				},
+			},
+		},
+	}))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	cli, err := NewReverseQuizCLI(
+		"my-fc",
+		config.NotebooksConfig{
+			FlashcardsDirectories:  []string{flashcardsDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, cli.GetCardCount())
+}
+
+func TestNewReverseQuizCLI_NotebookNotFound(t *testing.T) {
+	storiesDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	_, err := NewReverseQuizCLI(
+		"nonexistent",
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestNewReverseQuizCLI_NoLearningNote(t *testing.T) {
+	storiesDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	notebookDir := filepath.Join(storiesDir, "test-story")
+	require.NoError(t, os.MkdirAll(notebookDir, 0755))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "index.yml"), notebook.Index{
+		Kind: "story", ID: "test-story", Name: "Test Story",
+		NotebookPaths: []string{"stories.yml"},
+	}))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "stories.yml"), []notebook.StoryNotebook{
+		{
+			Event: "Story 1",
+			Scenes: []notebook.StoryScene{
+				{Title: "Scene 1", Definitions: []notebook.Note{{Expression: "eager", Meaning: "wanting to do something"}}},
+			},
+		},
+	}))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	_, err := NewReverseQuizCLI(
+		"test-story",
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "learning note")
+}
+
+func TestNewReverseQuizCLI_ListMissingContext(t *testing.T) {
+	flashcardsDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	fcDir := filepath.Join(flashcardsDir, "test-fc")
+	require.NoError(t, os.MkdirAll(fcDir, 0755))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "index.yml"), notebook.FlashcardIndex{
+		ID: "test-fc", Name: "Test FC",
+		NotebookPaths: []string{"cards.yml"},
+	}))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "cards.yml"), []notebook.FlashcardNotebook{
+		{
+			Title: "Unit 1",
+			Cards: []notebook.Note{
+				{Expression: "abstruse", Meaning: "difficult to understand"},      // no examples
+				{Expression: "break the ice", Meaning: "to initiate interaction", Examples: []string{"She told a joke to break the ice."}},
+			},
+		},
+	}))
+
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-fc.yml"), []notebook.LearningHistory{
+		{
+			Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-fc", Title: "Unit 1", Type: "flashcard"},
+			Expressions: []notebook.LearningHistoryExpression{
+				{Expression: "abstruse", LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}}},
+				{Expression: "break the ice", LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}}},
+			},
+		},
+	}))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	cli, err := NewReverseQuizCLI(
+		"test-fc",
+		config.NotebooksConfig{
+			FlashcardsDirectories:  []string{flashcardsDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		true, // listMissingContext
+	)
+	require.NoError(t, err)
+	// Should have 1 card (abstruse without context)
+	assert.Equal(t, 1, cli.GetCardCount())
+	cli.ListMissingContext()
+}
+
+func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	// First call: classify as synonym
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
+		Classification: inference.ClassificationSynonym,
+		Reason:         "similar meaning",
+	}, nil)
+
+	// Create a reader that provides retry input (exact match with expression)
+	retryInput := "correct-word\n"
+	stdinReader := bufio.NewReader(strings.NewReader(retryInput))
+
+	cli := &ReverseQuizCLI{
+		InteractiveQuizCLI: &InteractiveQuizCLI{
+			openaiClient: mockClient,
+			stdinReader:  stdinReader,
+			bold:         color.New(color.Bold),
+			italic:       color.New(color.Italic),
+		},
+	}
+
+	card := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "correct-word",
+			Meaning:    "the right word",
+		},
+		Contexts: []WordOccurrenceContext{
+			{Context: "This is the context.", Usage: "correct-word"},
+		},
+	}
+
+	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "synonym-word", 5000, false)
+	assert.NoError(t, err)
+	assert.True(t, isCorrect)
+	assert.Greater(t, quality, 0)
+	assert.Equal(t, "exact match", reason)
+}
+
+func TestReverseQuizCLI_ValidateAnswer_WrongAnswer(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
+		Classification: inference.ClassificationWrong,
+		Reason:         "different word",
+	}, nil)
+
+	cli := &ReverseQuizCLI{
+		InteractiveQuizCLI: &InteractiveQuizCLI{
+			openaiClient: mockClient,
+			bold:         color.New(color.Bold),
+			italic:       color.New(color.Italic),
+		},
+	}
+
+	card := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "correct-word",
+			Meaning:    "the right word",
+		},
+	}
+
+	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "wrong-word", 5000, false)
+	assert.NoError(t, err)
+	assert.False(t, isCorrect)
+	assert.Equal(t, int(notebook.QualityWrong), quality)
+	assert.Equal(t, "different word", reason)
+}
+
+func TestReverseQuizCLI_ValidateAnswer_MatchesExpression(t *testing.T) {
+	cli := &ReverseQuizCLI{
+		InteractiveQuizCLI: &InteractiveQuizCLI{
+			bold:   color.New(color.Bold),
+			italic: color.New(color.Italic),
+		},
+	}
+
+	// Card where Definition != Expression, user answers with Expression
+	card := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "ran away",
+			Definition: "run away",
+			Meaning:    "to flee",
+		},
+	}
+
+	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "ran away", 2000, false)
+	assert.NoError(t, err)
+	assert.True(t, isCorrect)
+	assert.Greater(t, quality, 0)
+	assert.Equal(t, "matches expression", reason)
+}
+
+func TestReverseQuizCLI_ValidateAnswer_ValidationError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{}, fmt.Errorf("API error"))
+
+	cli := &ReverseQuizCLI{
+		InteractiveQuizCLI: &InteractiveQuizCLI{
+			openaiClient: mockClient,
+			bold:         color.New(color.Bold),
+			italic:       color.New(color.Italic),
+		},
+	}
+
+	card := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "correct-word",
+			Meaning:    "the right word",
+		},
+	}
+
+	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "some-word", 5000, false)
+	assert.NoError(t, err)
+	assert.False(t, isCorrect)
+	assert.Equal(t, int(notebook.QualityWrong), quality)
+	assert.Contains(t, reason, "validation error")
+}
+
+func TestReverseQuizCLI_ValidateAnswer_UnknownClassification(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
+		Classification: "unknown_type",
+		Reason:         "unexpected",
+	}, nil)
+
+	cli := &ReverseQuizCLI{
+		InteractiveQuizCLI: &InteractiveQuizCLI{
+			openaiClient: mockClient,
+			bold:         color.New(color.Bold),
+			italic:       color.New(color.Italic),
+		},
+	}
+
+	card := &WordOccurrence{
+		Definition: &notebook.Note{Expression: "word", Meaning: "meaning"},
+	}
+
+	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "answer", 5000, false)
+	assert.NoError(t, err)
+	assert.False(t, isCorrect)
+	assert.Equal(t, int(notebook.QualityWrong), quality)
+	assert.Equal(t, "unknown classification", reason)
+}

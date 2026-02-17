@@ -757,4 +757,171 @@ func TestOutputStoryNotebooks(t *testing.T) {
 		err := writer.OutputStoryNotebooks("nonexistent", map[string]rapidapi.Response{}, map[string][]LearningHistory{}, false, outputDir, false)
 		assert.Error(t, err)
 	})
+
+	t.Run("empty notebooks after filter", func(t *testing.T) {
+		// Use a learning history that filters out all words
+		learningHistories := map[string][]LearningHistory{
+			"test-story": {
+				{
+					Metadata: LearningHistoryMetadata{NotebookID: "test-story", Title: "Episode 1"},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression: "tricky",
+									LearnedLogs: []LearningRecord{
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		// This should produce an output even if all words are filtered (no definitions remaining)
+		err := writer.OutputStoryNotebooks("test-story", map[string]rapidapi.Response{}, learningHistories, true, outputDir, false)
+		// No error - it just writes a notebook with no definitions
+		assert.NoError(t, err)
+	})
+}
+
+func TestStoryScene_Validate(t *testing.T) {
+	tests := []struct {
+		name       string
+		scene      StoryScene
+		location   string
+		wantErrors int
+		wantMsg    string
+	}{
+		{
+			name: "expression found with marker in conversation",
+			scene: StoryScene{
+				Conversations: []Conversation{{Speaker: "A", Quote: "The {{ eager }} student."}},
+				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+			},
+			location:   "test",
+			wantErrors: 0,
+		},
+		{
+			name: "expression found without marker in conversation",
+			scene: StoryScene{
+				Conversations: []Conversation{{Speaker: "A", Quote: "The eager student."}},
+				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+			},
+			location:   "test",
+			wantErrors: 1,
+			wantMsg:    "missing {{ }} markers",
+		},
+		{
+			name: "expression not found at all",
+			scene: StoryScene{
+				Conversations: []Conversation{{Speaker: "A", Quote: "A completely different sentence."}},
+				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+			},
+			location:   "test",
+			wantErrors: 1,
+			wantMsg:    "not found in any conversation",
+		},
+		{
+			name: "expression marked as not_used",
+			scene: StoryScene{
+				Conversations: []Conversation{{Speaker: "A", Quote: "A different sentence."}},
+				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something", NotUsed: true}},
+			},
+			location:   "test",
+			wantErrors: 0,
+		},
+		{
+			name: "empty expression is skipped",
+			scene: StoryScene{
+				Conversations: []Conversation{{Speaker: "A", Quote: "A sentence."}},
+				Definitions:   []Note{{Expression: "  ", Meaning: "blank"}},
+			},
+			location:   "test",
+			wantErrors: 0,
+		},
+		{
+			name: "expression found with marker in statement",
+			scene: StoryScene{
+				Statements:  []string{"The {{ eager }} student arrived."},
+				Definitions: []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+			},
+			location:   "test",
+			wantErrors: 0,
+		},
+		{
+			name: "expression found without marker in statement",
+			scene: StoryScene{
+				Statements:  []string{"The eager student arrived."},
+				Definitions: []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+			},
+			location:   "test",
+			wantErrors: 1,
+			wantMsg:    "missing {{ }} markers",
+		},
+		{
+			name: "expression not found in statement either",
+			scene: StoryScene{
+				Statements:  []string{"A completely different statement."},
+				Definitions: []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+			},
+			location:   "test",
+			wantErrors: 1,
+			wantMsg:    "not found in any conversation",
+		},
+		{
+			name: "expression with {{}} no-space markers",
+			scene: StoryScene{
+				Conversations: []Conversation{{Speaker: "A", Quote: "The {{eager}} student."}},
+				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+			},
+			location:   "test",
+			wantErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errors := tt.scene.Validate(tt.location)
+			assert.Len(t, errors, tt.wantErrors)
+			if tt.wantMsg != "" && len(errors) > 0 {
+				assert.Contains(t, errors[0].Message, tt.wantMsg)
+			}
+		})
+	}
+}
+
+func TestStoryNotebook_Validate(t *testing.T) {
+	t.Run("no errors", func(t *testing.T) {
+		nb := StoryNotebook{
+			Event: "Episode 1",
+			Scenes: []StoryScene{
+				{
+					Title:         "Scene 1",
+					Conversations: []Conversation{{Speaker: "A", Quote: "The {{ eager }} student."}},
+					Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
+				},
+			},
+		}
+		errors := nb.Validate("test")
+		assert.Empty(t, errors)
+	})
+
+	t.Run("scene validation errors", func(t *testing.T) {
+		nb := StoryNotebook{
+			Event: "Episode 1",
+			Scenes: []StoryScene{
+				{
+					Title:         "Scene 1",
+					Conversations: []Conversation{{Speaker: "A", Quote: "No match here."}},
+					Definitions:   []Note{{Expression: "missing", Meaning: "not here"}},
+				},
+			},
+		}
+		errors := nb.Validate("test")
+		assert.NotEmpty(t, errors)
+	})
 }

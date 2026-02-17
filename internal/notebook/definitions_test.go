@@ -74,6 +74,36 @@ func TestNewDefinitionsMap(t *testing.T) {
 			wantErr:     false,
 		},
 		{
+			name: "nonexistent directory is skipped",
+			setup: func(t *testing.T) string {
+				return t.TempDir()
+			},
+			directories: []string{"/nonexistent/definitions/path"},
+			want:        DefinitionsMap{},
+			wantErr:     false,
+		},
+		{
+			name: "non-yml files are skipped",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "notes.txt"), []byte("not yaml"), 0644))
+				return dir
+			},
+			directories: nil,
+			want:        DefinitionsMap{},
+			wantErr:     false,
+		},
+		{
+			name: "invalid YAML file returns error",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "bad.yml"), []byte("not: [valid: yaml"), 0644))
+				return dir
+			},
+			directories: nil,
+			wantErr:     true,
+		},
+		{
 			name: "valid definitions file",
 			setup: func(t *testing.T) string {
 				dir := t.TempDir()
@@ -362,6 +392,56 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 							Title:      "Scene 1",
 							Statements: []string{"This is a test."},
 						},
+					},
+				},
+			},
+		},
+		{
+			name:   "more notebooks than paths skips extra notebooks",
+			bookID: "mybook",
+			notebooks: []StoryNotebook{
+				{Event: "Chapter 1", Scenes: []StoryScene{{Title: "Scene 1"}}},
+				{Event: "Chapter 2", Scenes: []StoryScene{{Title: "Scene 1"}}},
+			},
+			notebookPaths: []string{"chapter-1.yml"},
+			definitionsMap: DefinitionsMap{
+				"mybook": {
+					"chapter-1.yml": {
+						0: []Note{{Expression: "test", Meaning: "a test word"}},
+					},
+				},
+			},
+			want: []StoryNotebook{
+				{Event: "Chapter 1", Scenes: []StoryScene{{Title: "Scene 1", Definitions: []Note{{Expression: "test", Meaning: "a test word"}}}}},
+				{Event: "Chapter 2", Scenes: []StoryScene{{Title: "Scene 1"}}},
+			},
+		},
+		{
+			name:   "scene index not in definitions is skipped",
+			bookID: "mybook",
+			notebooks: []StoryNotebook{
+				{
+					Event: "Chapter 1",
+					Scenes: []StoryScene{
+						{Title: "Scene 1"},
+						{Title: "Scene 2"},
+					},
+				},
+			},
+			notebookPaths: []string{"chapter-1.yml"},
+			definitionsMap: DefinitionsMap{
+				"mybook": {
+					"chapter-1.yml": {
+						0: []Note{{Expression: "test", Meaning: "a test word"}},
+					},
+				},
+			},
+			want: []StoryNotebook{
+				{
+					Event: "Chapter 1",
+					Scenes: []StoryScene{
+						{Title: "Scene 1", Definitions: []Note{{Expression: "test", Meaning: "a test word"}}},
+						{Title: "Scene 2"},
 					},
 				},
 			},

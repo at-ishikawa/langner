@@ -152,6 +152,22 @@ func TestCalculateNextInterval(t *testing.T) {
 			correctStreak: 12,
 			expected:      126, // 180 * 0.7
 		},
+		{
+			name:          "default EF when zero",
+			lastInterval:  6,
+			ef:            0,
+			quality:       4,
+			correctStreak: 3,
+			expected:      15, // 6 * 2.5 (default EF)
+		},
+		{
+			name:          "fallback lastInterval when zero on high streak",
+			lastInterval:  0,
+			ef:            2.5,
+			quality:       4,
+			correctStreak: 3,
+			expected:      15, // fallback to 6 * 2.5
+		},
 	}
 
 	for _, tt := range tests {

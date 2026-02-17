@@ -123,6 +123,20 @@ func TestWriteFlashcardNotebook(t *testing.T) {
 	}
 }
 
+func TestWriteFlashcardNotebook_NonExistentTemplatePath(t *testing.T) {
+	var buf bytes.Buffer
+	err := WriteFlashcardNotebook(&buf, "/non/existent/template.tmpl", FlashcardTemplate{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "template file not found")
+}
+
+func TestWriteStoryNotebook_NonExistentTemplatePath(t *testing.T) {
+	var buf bytes.Buffer
+	err := WriteStoryNotebook(&buf, "/non/existent/template.tmpl", StoryTemplate{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "template file not found")
+}
+
 func TestWriteStoryNotebook(t *testing.T) {
 	tests := []struct {
 		name         string

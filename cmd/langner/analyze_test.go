@@ -48,3 +48,50 @@ func TestNewAnalyzeReportCommand_InvalidMonth(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "--month must be between 1 and 12")
 }
+
+func TestNewAnalyzeReportCommand_RunE_WithConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := setupTestConfigFile(t, tmpDir)
+	oldConfigFile := configFile
+	configFile = cfgPath
+	defer func() { configFile = oldConfigFile }()
+
+	cmd := newAnalyzeReportCommand()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+	assert.NoError(t, err)
+}
+
+func TestNewAnalyzeReportCommand_RunE_WithYearMonth(t *testing.T) {
+	tmpDir := t.TempDir()
+	cfgPath := setupTestConfigFile(t, tmpDir)
+	oldConfigFile := configFile
+	configFile = cfgPath
+	defer func() { configFile = oldConfigFile }()
+
+	cmd := newAnalyzeReportCommand()
+	cmd.SetArgs([]string{"--year", "2025", "--month", "6"})
+	err := cmd.Execute()
+	assert.NoError(t, err)
+}
+
+func TestNewAnalyzeReportCommand_RunE_NegativeMonth(t *testing.T) {
+	cmd := newAnalyzeReportCommand()
+	cmd.SetArgs([]string{"--year", "2025", "--month", "-1"})
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "--month must be between 1 and 12")
+}
+
+func TestNewAnalyzeReportCommand_RunE_InvalidConfig(t *testing.T) {
+	cfgPath := setupBrokenConfigFile(t)
+	oldConfigFile := configFile
+	configFile = cfgPath
+	defer func() { configFile = oldConfigFile }()
+
+	cmd := newAnalyzeReportCommand()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "configuration")
+}

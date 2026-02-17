@@ -1149,6 +1149,45 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 			wantReasonInOutput:  "A3 - unrelated: user said 'container for cooking' but it means 'small ornament'",
 		},
 		{
+			name: "Correct answer with context and scene definitions",
+			answer: AnswerResponse{
+				Correct:    true,
+				Expression: "trinket",
+				Meaning:    "a small ornament",
+				Context:    "She wore a beautiful {{ trinket }} on her necklace",
+			},
+			occurrence: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "trinket",
+					Meaning:    "a small ornament or piece of jewelry",
+				},
+				Scene: &notebook.StoryScene{
+					Definitions: []notebook.Note{
+						{Expression: "trinket", Meaning: "a small ornament or piece of jewelry"},
+					},
+				},
+			},
+			wantMeaningInOutput: "a small ornament",
+			wantContextInOutput: "She wore a beautiful",
+		},
+		{
+			name: "Correct answer with context but nil scene (flashcard)",
+			answer: AnswerResponse{
+				Correct:    true,
+				Expression: "trinket",
+				Meaning:    "a small ornament",
+				Context:    "She wore a beautiful trinket on her necklace",
+			},
+			occurrence: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "trinket",
+					Meaning:    "a small ornament or piece of jewelry",
+				},
+			},
+			wantMeaningInOutput: "a small ornament",
+			wantContextInOutput: "She wore a beautiful trinket on her necklace",
+		},
+		{
 			name: "Incorrect answer with no occurrence falls back to answer.Meaning",
 			answer: AnswerResponse{
 				Correct:    false,
@@ -1279,6 +1318,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 		name              string
 		input             string
 		allStories        map[string][]notebook.StoryNotebook
+		allFlashcards     map[string][]notebook.FlashcardNotebook
 		learningHistories map[string][]notebook.LearningHistory
 		setupMock         func(*mock_inference.MockClient)
 		wantErr           bool
@@ -1453,6 +1493,98 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 			},
 		},
 		{
+			name:  "AnswerMeanings API error",
+			input: "test\ntest meaning\n",
+			allStories: map[string][]notebook.StoryNotebook{
+				"test-notebook": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Conversations: []notebook.Conversation{
+									{Speaker: "A", Quote: "This is a test"},
+								},
+								Definitions: []notebook.Note{
+									{Expression: "test", Meaning: "test meaning"},
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			setupMock: func(mockClient *mock_inference.MockClient) {
+				mockClient.EXPECT().
+					AnswerMeanings(gomock.Any(), gomock.Any()).
+					Return(inference.AnswerMeaningsResponse{}, fmt.Errorf("API error")).
+					Times(1)
+			},
+			wantErr: true,
+		},
+		{
+			name:  "AnswerMeanings returns empty answers",
+			input: "test\ntest meaning\n",
+			allStories: map[string][]notebook.StoryNotebook{
+				"test-notebook": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Conversations: []notebook.Conversation{
+									{Speaker: "A", Quote: "This is a test"},
+								},
+								Definitions: []notebook.Note{
+									{Expression: "test", Meaning: "test meaning"},
+								},
+							},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			setupMock: func(mockClient *mock_inference.MockClient) {
+				mockClient.EXPECT().
+					AnswerMeanings(gomock.Any(), gomock.Any()).
+					Return(inference.AnswerMeaningsResponse{Answers: []inference.AnswerMeaning{}}, nil).
+					Times(1)
+			},
+			wantErr: true,
+		},
+		{
+			name:       "Word found in flashcard context",
+			input:      "hello\na greeting\n",
+			allStories: map[string][]notebook.StoryNotebook{},
+			allFlashcards: map[string][]notebook.FlashcardNotebook{
+				"test-flashcard": {
+					{
+						Title: "Greetings",
+						Cards: []notebook.Note{
+							{Expression: "hello", Meaning: "a greeting used to say hi"},
+						},
+					},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			setupMock: func(mockClient *mock_inference.MockClient) {
+				mockClient.EXPECT().
+					AnswerMeanings(gomock.Any(), gomock.Any()).
+					Return(inference.AnswerMeaningsResponse{
+						Answers: []inference.AnswerMeaning{
+							{
+								Expression: "hello",
+								Meaning:    "a greeting",
+								AnswersForContext: []inference.AnswersForContext{
+									{Correct: true, Context: "Hello there!", Reason: "correct"},
+								},
+							},
+						},
+					}, nil).
+					Times(1)
+			},
+		},
+		{
 			name:  "Incorrect answer - does not update learning history",
 			input: "test\nwrong meaning\n",
 			allStories: map[string][]notebook.StoryNotebook{
@@ -1504,6 +1636,10 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 			// Setup mock expectations
 			tt.setupMock(mockClient)
 
+			allFlashcards := tt.allFlashcards
+			if allFlashcards == nil {
+				allFlashcards = make(map[string][]notebook.FlashcardNotebook)
+			}
 			cli := &FreeformQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
 					learningNotesDir:  t.TempDir(),
@@ -1516,7 +1652,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 					italic:            color.New(color.Italic),
 				},
 				allStories:    tt.allStories,
-				allFlashcards: make(map[string][]notebook.FlashcardNotebook),
+				allFlashcards: allFlashcards,
 			}
 
 			err := cli.Session(context.Background())

@@ -1459,3 +1459,516 @@ func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 		assert.Contains(t, result.Warnings[0].Message, "Merged duplicate expression")
 	})
 }
+
+func TestValidator_FixDictionaryReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+	dictionaryDir := filepath.Join(tmpDir, "dict")
+	require.NoError(t, os.MkdirAll(dictionaryDir, 0755))
+
+	// Create a dictionary file for "hello"
+	require.NoError(t, os.WriteFile(filepath.Join(dictionaryDir, "hello.json"), []byte(`{}`), 0644))
+
+	v := &Validator{dictionaryDir: dictionaryDir}
+
+	t.Run("removes dictionary_number when file missing", func(t *testing.T) {
+		files := []storyNotebookFile{
+			{
+				path: "test.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []Note{
+									{Expression: "nonexistent", DictionaryNumber: 1},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := &ValidationResult{}
+		fixed := v.fixDictionaryReferences(files, result)
+		assert.Equal(t, 0, fixed[0].contents[0].Scenes[0].Definitions[0].DictionaryNumber)
+		assert.Len(t, result.Warnings, 1)
+		assert.Contains(t, result.Warnings[0].Message, "Removed dictionary_number")
+	})
+
+	t.Run("keeps dictionary_number when file exists", func(t *testing.T) {
+		files := []storyNotebookFile{
+			{
+				path: "test.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []Note{
+									{Expression: "hello", DictionaryNumber: 1},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := &ValidationResult{}
+		fixed := v.fixDictionaryReferences(files, result)
+		assert.Equal(t, 1, fixed[0].contents[0].Scenes[0].Definitions[0].DictionaryNumber)
+		assert.Len(t, result.Warnings, 0)
+	})
+
+	t.Run("skips definitions without dictionary_number", func(t *testing.T) {
+		files := []storyNotebookFile{
+			{
+				path: "test.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []Note{
+									{Expression: "hello", DictionaryNumber: 0},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := &ValidationResult{}
+		fixed := v.fixDictionaryReferences(files, result)
+		assert.Equal(t, 0, fixed[0].contents[0].Scenes[0].Definitions[0].DictionaryNumber)
+		assert.Len(t, result.Warnings, 0)
+	})
+
+	t.Run("uses definition field for lookup when set", func(t *testing.T) {
+		files := []storyNotebookFile{
+			{
+				path: "test.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{
+								Title: "Scene 1",
+								Definitions: []Note{
+									{Expression: "running", Definition: "hello", DictionaryNumber: 1},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		result := &ValidationResult{}
+		fixed := v.fixDictionaryReferences(files, result)
+		// "hello" dict file exists, so it should keep the dictionary_number
+		assert.Equal(t, 1, fixed[0].contents[0].Scenes[0].Definitions[0].DictionaryNumber)
+	})
+}
+
+func TestValidator_FixMismatchedScenes(t *testing.T) {
+	v := &Validator{}
+
+	t.Run("moves expression to correct scene", func(t *testing.T) {
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{Title: "Scene A", Definitions: []Note{{Expression: "eager"}}},
+							{Title: "Scene B", Definitions: []Note{{Expression: "brave"}}},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{Expression: "eager"},
+									{Expression: "brave"}, // wrong scene
+								},
+							},
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene B"},
+								Expressions: []LearningHistoryExpression{},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixMismatchedScenes(learningFiles, storyFiles, result)
+
+		// Scene A should only have "eager"
+		assert.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
+		assert.Equal(t, "eager", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+
+		// Scene B should have "brave"
+		assert.Len(t, fixed[0].contents[0].Scenes[1].Expressions, 1)
+		assert.Equal(t, "brave", fixed[0].contents[0].Scenes[1].Expressions[0].Expression)
+
+		assert.Len(t, result.Warnings, 1)
+		assert.Contains(t, result.Warnings[0].Message, "Moved expression")
+	})
+
+	t.Run("creates new scene when target scene does not exist", func(t *testing.T) {
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{Title: "Scene A", Definitions: []Note{{Expression: "eager"}}},
+							{Title: "Scene B", Definitions: []Note{{Expression: "brave"}}},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{Expression: "eager"},
+									{Expression: "brave"}, // wrong scene, Scene B doesn't exist in learning notes
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixMismatchedScenes(learningFiles, storyFiles, result)
+
+		// Scene A should only have "eager"
+		assert.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
+		assert.Equal(t, "eager", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+
+		// A new Scene B should have been created with "brave"
+		require.Len(t, fixed[0].contents[0].Scenes, 2)
+		assert.Equal(t, "Scene B", fixed[0].contents[0].Scenes[1].Metadata.Title)
+		assert.Len(t, fixed[0].contents[0].Scenes[1].Expressions, 1)
+		assert.Equal(t, "brave", fixed[0].contents[0].Scenes[1].Expressions[0].Expression)
+	})
+}
+
+func TestValidator_FixExpressionNames(t *testing.T) {
+	v := &Validator{}
+
+	t.Run("updates expression to use definition from story", func(t *testing.T) {
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{
+								Title: "Scene A",
+								Definitions: []Note{
+									{Expression: "ran away", Definition: "run away"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{Expression: "ran away"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixExpressionNames(learningFiles, storyFiles, result)
+
+		assert.Equal(t, "run away", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+		assert.Len(t, result.Warnings, 1)
+		assert.Contains(t, result.Warnings[0].Message, "Updated expression")
+	})
+
+	t.Run("does not update when expression already matches definition", func(t *testing.T) {
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{
+								Title: "Scene A",
+								Definitions: []Note{
+									{Expression: "eager", Definition: "eager"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{Expression: "eager"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixExpressionNames(learningFiles, storyFiles, result)
+
+		assert.Equal(t, "eager", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+		assert.Len(t, result.Warnings, 0)
+	})
+}
+
+func TestValidator_FixConsistency(t *testing.T) {
+	v := &Validator{}
+
+	t.Run("removes orphaned expressions without learned_logs", func(t *testing.T) {
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{
+								Title: "Scene A",
+								Definitions: []Note{
+									{Expression: "eager"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{Expression: "eager", LearnedLogs: []LearningRecord{}},
+									{Expression: "orphaned_word", LearnedLogs: []LearningRecord{}}, // not in story, no logs
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixConsistency(learningFiles, storyFiles, result)
+
+		// Should keep "eager" (exists in story) and remove "orphaned_word" (not in story, no logs)
+		assert.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
+		assert.Equal(t, "eager", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+		assert.Len(t, result.Warnings, 1)
+		assert.Contains(t, result.Warnings[0].Message, "Removed orphaned expression")
+	})
+
+	t.Run("keeps orphaned expressions with learned_logs", func(t *testing.T) {
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{Title: "Scene A", Definitions: []Note{{Expression: "eager"}}},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{Expression: "eager", LearnedLogs: []LearningRecord{}},
+									{Expression: "orphaned_word", LearnedLogs: []LearningRecord{{Status: "usable"}}}, // not in story but has logs
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixConsistency(learningFiles, storyFiles, result)
+
+		assert.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 2)
+		assert.Len(t, result.Warnings, 0)
+	})
+}
+
+func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {
+	tmpDir := t.TempDir()
+	learningNotesDir := filepath.Join(tmpDir, "learning_notes")
+	storiesDir := filepath.Join(tmpDir, "stories")
+	dictionaryDir := filepath.Join(tmpDir, "dictionaries")
+
+	require.NoError(t, os.MkdirAll(learningNotesDir, 0755))
+	require.NoError(t, os.MkdirAll(storiesDir, 0755))
+	require.NoError(t, os.MkdirAll(dictionaryDir, 0755))
+
+	// Create story with dictionary references
+	storyPath := filepath.Join(storiesDir, "test.yml")
+	require.NoError(t, WriteYamlFile(storyPath, []StoryNotebook{
+		{
+			Event: "Episode 1",
+			Metadata: Metadata{Series: "Test Show", Season: 1, Episode: 1},
+			Scenes: []StoryScene{
+				{
+					Title: "Scene 1",
+					Definitions: []Note{
+						{Expression: "eager", DictionaryNumber: 1, Meaning: "wanting to do something"},
+						{Expression: "brave", DictionaryNumber: 2, Meaning: "courageous"},
+					},
+				},
+			},
+		},
+	}))
+
+	// Create dictionary file for "eager" only
+	require.NoError(t, os.WriteFile(filepath.Join(dictionaryDir, "eager.json"), []byte(`{}`), 0644))
+
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir)
+	result, err := v.Fix()
+	require.NoError(t, err)
+
+	// Should have warnings about creating learning notes and removing dictionary reference
+	hasRemovedDictWarning := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w.Message, "Removed dictionary_number") && strings.Contains(w.Message, "brave") {
+			hasRemovedDictWarning = true
+		}
+	}
+	assert.True(t, hasRemovedDictWarning, "should have warning about removing dictionary_number for brave")
+
+	// Verify the story file was updated
+	var stories []StoryNotebook
+	stories, err = readYamlFile[[]StoryNotebook](storyPath)
+	require.NoError(t, err)
+	// "eager" should keep dictionary_number, "brave" should have it removed
+	assert.Equal(t, 1, stories[0].Scenes[0].Definitions[0].DictionaryNumber)
+	assert.Equal(t, 0, stories[0].Scenes[0].Definitions[1].DictionaryNumber)
+}
+
+func TestValidator_Fix_WithMismatchedScenes(t *testing.T) {
+	tmpDir := t.TempDir()
+	learningNotesDir := filepath.Join(tmpDir, "learning_notes")
+	storiesDir := filepath.Join(tmpDir, "stories")
+	dictionaryDir := filepath.Join(tmpDir, "dictionaries")
+
+	require.NoError(t, os.MkdirAll(learningNotesDir, 0755))
+	require.NoError(t, os.MkdirAll(storiesDir, 0755))
+	require.NoError(t, os.MkdirAll(dictionaryDir, 0755))
+
+	// Create story
+	require.NoError(t, WriteYamlFile(filepath.Join(storiesDir, "test.yml"), []StoryNotebook{
+		{
+			Event: "Episode 1",
+			Metadata: Metadata{Series: "Test Show", Season: 1, Episode: 1},
+			Scenes: []StoryScene{
+				{Title: "Scene A", Definitions: []Note{{Expression: "eager", Meaning: "wanting to do something"}}},
+				{Title: "Scene B", Definitions: []Note{{Expression: "brave", Meaning: "courageous"}}},
+			},
+		},
+	}))
+
+	// Create learning notes with mismatched scene (brave in Scene A instead of Scene B)
+	require.NoError(t, WriteYamlFile(filepath.Join(learningNotesDir, "test-show.yml"), []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{NotebookID: "test-show", Title: "Episode 1"},
+			Scenes: []LearningScene{
+				{
+					Metadata: LearningSceneMetadata{Title: "Scene A"},
+					Expressions: []LearningHistoryExpression{
+						{Expression: "eager", LearnedLogs: []LearningRecord{}},
+						{Expression: "brave", LearnedLogs: []LearningRecord{{Status: "usable"}}},
+					},
+				},
+			},
+		},
+	}))
+
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir)
+	result, err := v.Fix()
+	require.NoError(t, err)
+
+	// Should have a warning about moving the expression
+	hasMovedWarning := false
+	for _, w := range result.Warnings {
+		if strings.Contains(w.Message, "Moved expression") && strings.Contains(w.Message, "brave") {
+			hasMovedWarning = true
+		}
+	}
+	assert.True(t, hasMovedWarning, "should have warning about moving brave to correct scene")
+}

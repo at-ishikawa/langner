@@ -1319,6 +1319,65 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 			wantCardsAfter: 0,
 		},
 		{
+			name:  "Flashcard card (Story is nil) - uses flashcards as story title",
+			input: "to initiate social interaction\n",
+			cards: []*WordOccurrence{
+				{
+					NotebookName: "test-flashcard",
+					Story:        nil,
+					Scene:        nil,
+					Definition: &notebook.Note{
+						Expression: "break the ice",
+						Meaning:    "to initiate social interaction",
+					},
+					Contexts: []WordOccurrenceContext{{Context: "She told a joke to break the ice.", Usage: "break the ice"}},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "break the ice",
+						Meaning:    "to initiate social interaction",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: "", Reason: "exact match"},
+						},
+					},
+				},
+			},
+			wantCardsAfter: 0,
+		},
+		{
+			name:  "Card with images - displays images",
+			input: "test meaning\n",
+			cards: []*WordOccurrence{
+				{
+					NotebookName: "test-notebook",
+					Story:        &notebook.StoryNotebook{Event: "Story 1"},
+					Scene:        &notebook.StoryScene{Title: "Scene 1"},
+					Definition: &notebook.Note{
+						Expression: "test",
+						Meaning:    "test meaning",
+						Images:     []string{"image1.jpg"},
+					},
+					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "test",
+						Meaning:    "test meaning",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: "", Reason: "exact match"},
+						},
+					},
+				},
+			},
+			wantCardsAfter: 0,
+		},
+		{
 			name:  "Card from different notebook - updates correct notebook's learning history",
 			input: "test meaning\n",
 			cards: []*WordOccurrence{

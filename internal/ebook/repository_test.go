@@ -56,6 +56,15 @@ func TestManager_List(t *testing.T) {
 				},
 			},
 		},
+		{
+			name: "returns error for invalid YAML",
+			setup: func(t *testing.T, dir string) string {
+				filePath := filepath.Join(dir, "repos.yml")
+				require.NoError(t, os.WriteFile(filePath, []byte("not: [valid: yaml"), 0644))
+				return filePath
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -132,6 +141,16 @@ func TestManager_Remove(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			name: "returns error for invalid YAML",
+			id:   "test",
+			setup: func(t *testing.T, dir string) string {
+				filePath := filepath.Join(dir, "repos.yml")
+				require.NoError(t, os.WriteFile(filePath, []byte("not: [valid: yaml"), 0644))
+				return filePath
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -184,6 +203,16 @@ func TestManager_addRepository(t *testing.T) {
 				require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
 				return filePath
 			},
+		},
+		{
+			name: "returns error for invalid YAML",
+			repo: Repository{ID: "new-book", Title: "New Book"},
+			setup: func(t *testing.T, dir string) string {
+				filePath := filepath.Join(dir, "repos.yml")
+				require.NoError(t, os.WriteFile(filePath, []byte("not: [valid: yaml"), 0644))
+				return filePath
+			},
+			wantErr: true,
 		},
 		{
 			name: "returns error for duplicate ID",

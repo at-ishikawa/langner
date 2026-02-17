@@ -449,6 +449,90 @@ func TestParseToc(t *testing.T) {
 	}
 }
 
+func TestParseChapterFile_FileNotFound(t *testing.T) {
+	_, err := parseChapterFile("/nonexistent/path/chapter.xhtml")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open file")
+}
+
+func TestParseChapterFile_TitleFallbackToFilename(t *testing.T) {
+	tmpDir := t.TempDir()
+	// XHTML with no title element and no heading - should fall back to filename
+	content := `<?xml version="1.0" encoding="utf-8"?>
+<html><head></head><body>
+<p>Some text without a title.</p>
+</body></html>`
+	filePath := filepath.Join(tmpDir, "epilogue.xhtml")
+	require.NoError(t, os.WriteFile(filePath, []byte(content), 0644))
+
+	got, err := parseChapterFile(filePath)
+	require.NoError(t, err)
+	assert.Equal(t, "epilogue", got.Title)
+}
+
+func TestParseChapters_SpineOrderError(t *testing.T) {
+	// No content.opf exists, so parseSpineOrder should fail
+	tmpDir := t.TempDir()
+	_, err := ParseChapters(tmpDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse spine order")
+}
+
+func TestParseChapters_MissingToc(t *testing.T) {
+	// Set up ebook with content.opf and chapter file but no toc.xhtml
+	tmpDir := t.TempDir()
+	textDir := filepath.Join(tmpDir, "src", "epub", "text")
+	epubDir := filepath.Join(tmpDir, "src", "epub")
+	require.NoError(t, os.MkdirAll(textDir, 0755))
+
+	opfContent := `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+    <spine><itemref idref="chapter-1.xhtml"/></spine>
+</package>`
+	require.NoError(t, os.WriteFile(filepath.Join(epubDir, "content.opf"), []byte(opfContent), 0644))
+
+	chapterContent := `<html><head><title>Chapter 1</title></head><body>
+<p>Some text here.</p></body></html>`
+	require.NoError(t, os.WriteFile(filepath.Join(textDir, "chapter-1.xhtml"), []byte(chapterContent), 0644))
+
+	chapters, err := ParseChapters(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, chapters, 1)
+	assert.Equal(t, "Chapter 1", chapters[0].Title)
+}
+
+func TestParseChapters_NonexistentSpineFile(t *testing.T) {
+	// Spine references a file that doesn't exist in the text directory
+	tmpDir := t.TempDir()
+	textDir := filepath.Join(tmpDir, "src", "epub", "text")
+	epubDir := filepath.Join(tmpDir, "src", "epub")
+	require.NoError(t, os.MkdirAll(textDir, 0755))
+
+	opfContent := `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf">
+    <spine>
+        <itemref idref="chapter-1.xhtml"/>
+        <itemref idref="nonexistent.xhtml"/>
+    </spine>
+</package>`
+	require.NoError(t, os.WriteFile(filepath.Join(epubDir, "content.opf"), []byte(opfContent), 0644))
+
+	tocContent := `<?xml version="1.0" encoding="utf-8"?>
+<html><body><nav id="toc"><ol>
+    <li><a href="text/chapter-1.xhtml">Chapter I</a></li>
+</ol></nav></body></html>`
+	require.NoError(t, os.WriteFile(filepath.Join(epubDir, "toc.xhtml"), []byte(tocContent), 0644))
+
+	chapterContent := `<html><head><title>Chapter 1</title></head><body>
+<p>Some text here.</p></body></html>`
+	require.NoError(t, os.WriteFile(filepath.Join(textDir, "chapter-1.xhtml"), []byte(chapterContent), 0644))
+
+	chapters, err := ParseChapters(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, chapters, 1)
+	assert.Equal(t, "Chapter I", chapters[0].Title)
+}
+
 func TestParseChapters(t *testing.T) {
 	// Set up a minimal ebook directory structure
 	tmpDir := t.TempDir()
