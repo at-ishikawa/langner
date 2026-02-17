@@ -895,9 +895,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 		assert.Nil(t, gotStatusExpression, "Expression form 'run some ideas by us' should NOT be recorded")
 	})
 
-	t.Run("Update expression with empty learned_logs when sibling expression has usable status", func(t *testing.T) {
-		tmpDir := t.TempDir()
-
+	t.Run("Duplicate expressions with empty and usable logs - word already mastered", func(t *testing.T) {
 		// Create a story with Expression and Definition fields
 		testStories := map[string][]notebook.StoryNotebook{
 			"test-notebook": {
@@ -912,7 +910,7 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 							Definitions: []notebook.Note{
 								{
 									Expression: "run some ideas by us",
-									Definition: "run some ideas by someone", // This is the Definition form (base form)
+									Definition: "run some ideas by someone",
 									Meaning:    "to discuss some new ideas",
 								},
 							},
@@ -924,8 +922,8 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 
 		// Create learning history with TWO expressions in the SAME scene:
 		// 1. "run some ideas by someone" (Definition form) with empty learned_logs
-		// 2. "run some ideas by us" (Expression form) with learned_logs containing status "usable" - THIS SHOULD NOT EXIST
-		//    because we should only record the Definition form
+		// 2. "run some ideas by us" (Expression form) with usable status
+		// GetLogs should skip the empty-log entry and find the usable one
 		testLearningHistories := map[string][]notebook.LearningHistory{
 			"test-notebook": {
 				{
@@ -938,11 +936,11 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
 							Expressions: []notebook.LearningHistoryExpression{
 								{
-									Expression:  "run some ideas by someone", // Definition form with empty logs - needs update
+									Expression:  "run some ideas by someone",
 									LearnedLogs: []notebook.LearningRecord{},
 								},
 								{
-									Expression: "run some ideas by us", // Expression form - should not exist, but testing legacy data
+									Expression: "run some ideas by us",
 									LearnedLogs: []notebook.LearningRecord{
 										{
 											Status:    "usable",
@@ -959,78 +957,23 @@ func TestFreeformQuizCLI_UpdateLearningHistory(t *testing.T) {
 
 		cli := &FreeformQuizCLI{
 			InteractiveQuizCLI: &InteractiveQuizCLI{
-				learningNotesDir:  tmpDir,
 				learningHistories: testLearningHistories,
 				stdoutWriter:      os.Stdout,
 			},
 			allStories: testStories,
 		}
 
-		// User types the Expression form (NOT the Definition form)
+		// User types the Expression form
 		word := "run some ideas by us"
 
 		// Find occurrences
 		wordContexts := cli.findAllWordContexts(word)
 		require.Len(t, wordContexts, 1, "Should find 1 occurrence")
 
-		// Check if it needs learning
+		// GetLogs now skips the empty-log entry and finds the usable one,
+		// so the word should NOT need learning
 		needsLearning := cli.findOccurrencesNeedingLearning(wordContexts, word)
-		require.Len(t, needsLearning, 1, "Should need learning since Definition form 'run some ideas by someone' has empty learned_logs")
-
-		// Simulate correct answer
-		answer := AnswerResponse{
-			Correct:    true,
-			Expression: word,
-			Meaning:    "to discuss some new ideas",
-		}
-
-		// Update learning history
-		err := cli.updateLearningHistory(needsLearning[0], word, answer, 4, 1000)
-		require.NoError(t, err)
-
-		// Read the saved history
-		learningNotePath := filepath.Join(tmpDir, "test-notebook.yml")
-		var savedHistory []notebook.LearningHistory
-		file, err := os.Open(learningNotePath)
-		require.NoError(t, err)
-		defer file.Close()
-
-		err = yaml.NewDecoder(file).Decode(&savedHistory)
-		require.NoError(t, err)
-
-		// Verify that the DEFINITION form "run some ideas by someone" was updated to "usable"
-		gotStatusDefinition := findExpressionStatus(savedHistory, "Lesson 3", "Scene 1", "run some ideas by someone")
-		require.NotNil(t, gotStatusDefinition, "Definition form 'run some ideas by someone' should have status")
-		assert.Equal(t, notebook.LearnedStatus("usable"), *gotStatusDefinition, "Definition form status should be 'usable'")
-
-		// Verify the legacy sibling expression "run some ideas by us" still exists but was NOT updated
-		// It should remain unchanged at "usable" status (not get a new record)
-		gotStatusExpression := findExpressionStatus(savedHistory, "Lesson 3", "Scene 1", "run some ideas by us")
-		if gotStatusExpression != nil {
-			// If it exists (legacy data), it should still be "usable" and not have been modified
-			assert.Equal(t, notebook.LearnedStatus("usable"), *gotStatusExpression, "Expression form status should remain 'usable' (unchanged)")
-		}
-
-		// Verify that Definition form exists in the saved file
-		var foundDefinition bool
-		for _, history := range savedHistory {
-			if history.Metadata.Title != "Lesson 3" {
-				continue
-			}
-			for _, scene := range history.Scenes {
-				if scene.Metadata.Title != "Scene 1" {
-					continue
-				}
-				for _, expr := range scene.Expressions {
-					if expr.Expression == "run some ideas by someone" {
-						foundDefinition = true
-						// Ensure it has exactly one record now (the new one we just added)
-						assert.Len(t, expr.LearnedLogs, 1, "Definition form should have exactly 1 learned log")
-					}
-				}
-			}
-		}
-		assert.True(t, foundDefinition, "Definition form 'run some ideas by someone' should exist in saved history")
+		assert.Len(t, needsLearning, 0, "Should not need learning since sibling expression has usable status")
 	})
 
 	for _, tt := range tests {
@@ -1270,10 +1213,11 @@ func TestFreeformQuizCLI_displayResult(t *testing.T) {
 }
 
 func TestFreeformQuizCLI_hasCorrectAnswer(t *testing.T) {
-	t.Run("Two related expressions in same scene - one with usable status, one with empty logs", func(t *testing.T) {
+	t.Run("Duplicate expressions - first empty, second usable - returns true", func(t *testing.T) {
 		// Setup: Create learning history with TWO expressions in the SAME scene:
 		// 1. "run some ideas by someone" with empty learned_logs
 		// 2. "run some ideas by us" with learned_logs containing status "usable"
+		// GetLogs skips the empty-log entry and finds the usable one
 		learningHistory := []notebook.LearningHistory{
 			{
 				Metadata: notebook.LearningHistoryMetadata{
@@ -1286,7 +1230,7 @@ func TestFreeformQuizCLI_hasCorrectAnswer(t *testing.T) {
 						Expressions: []notebook.LearningHistoryExpression{
 							{
 								Expression:  "run some ideas by someone",
-								LearnedLogs: []notebook.LearningRecord{}, // Empty logs
+								LearnedLogs: []notebook.LearningRecord{},
 							},
 							{
 								Expression: "run some ideas by us",
@@ -1303,8 +1247,6 @@ func TestFreeformQuizCLI_hasCorrectAnswer(t *testing.T) {
 			},
 		}
 
-		// Create a WordOccurrence representing the notebook entry
-		// Expression="run some ideas by us", Definition="run some ideas by someone"
 		wordCtx := &WordOccurrence{
 			Story: &notebook.StoryNotebook{
 				Event: "Lesson 3",
@@ -1321,15 +1263,13 @@ func TestFreeformQuizCLI_hasCorrectAnswer(t *testing.T) {
 
 		cli := &FreeformQuizCLI{}
 
-		// Test: User types "run some ideas by someone" (the Definition form)
 		word := "run some ideas by someone"
 
-		// Act: Check if this should be considered as already having a correct answer
 		result := cli.hasCorrectAnswer(learningHistory, wordCtx, word)
 
-		// Assert: Should return false because the specific expression "run some ideas by someone"
-		// has empty learned_logs, even though the related expression "run some ideas by us" has "usable" status
-		assert.False(t, result, "hasCorrectAnswer should return false because 'run some ideas by someone' has empty learned_logs")
+		// GetLogs now skips the empty-log entry and finds the usable status,
+		// so the word is correctly identified as already having a correct answer
+		assert.True(t, result, "hasCorrectAnswer should return true because GetLogs finds the usable logs from sibling expression")
 	})
 }
 

@@ -89,6 +89,49 @@ func TestExtractContextsFromConversations(t *testing.T) {
 	}
 }
 
+func TestWordOccurrence_GetExpression(t *testing.T) {
+	tests := []struct {
+		name       string
+		definition *notebook.Note
+		want       string
+	}{
+		{
+			name: "Return Definition over Expression when Definition is set",
+			definition: &notebook.Note{
+				Expression: "lost his temper",
+				Definition: "lose one's temper",
+			},
+			want: "lose one's temper",
+		},
+		{
+			name: "Return Expression when Definition is empty",
+			definition: &notebook.Note{
+				Expression: "break the ice",
+				Definition: "",
+			},
+			want: "break the ice",
+		},
+		{
+			name: "Return empty string when both are empty",
+			definition: &notebook.Note{
+				Expression: "",
+				Definition: "",
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			occurrence := &WordOccurrence{
+				Definition: tt.definition,
+			}
+			got := occurrence.GetExpression()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestWordOccurrence_GetCleanContexts(t *testing.T) {
 	tests := []struct {
 		name     string

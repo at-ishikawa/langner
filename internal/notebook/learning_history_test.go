@@ -235,6 +235,66 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			definition:    Note{Expression: "hello", Definition: "greeting"},
 			expected:      nil,
 		},
+		{
+			name: "duplicate expressions - first empty, second has logs",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{
+					NotebookID: "test-id",
+					Title:      "Test Notebook",
+				},
+				Scenes: []LearningScene{
+					{
+						Metadata: LearningSceneMetadata{Title: "Scene 1"},
+						Expressions: []LearningHistoryExpression{
+							{
+								Expression:  "break the ice",
+								LearnedLogs: []LearningRecord{},
+							},
+							{
+								Expression: "break someone's ice",
+								LearnedLogs: []LearningRecord{
+									{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+								},
+							},
+						},
+					},
+				},
+			},
+			notebookTitle: "Test Notebook",
+			sceneTitle:    "Scene 1",
+			definition:    Note{Expression: "break the ice", Definition: "break someone's ice"},
+			expected: []LearningRecord{
+				{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+			},
+		},
+		{
+			name: "flashcard type - duplicate expressions - first empty, second has logs",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{
+					NotebookID: "test-id",
+					Title:      "flashcards",
+					Type:       "flashcard",
+				},
+				Expressions: []LearningHistoryExpression{
+					{
+						Expression:  "lose one's temper",
+						LearnedLogs: []LearningRecord{},
+					},
+					{
+						Expression: "lose someone's temper",
+						LearnedLogs: []LearningRecord{
+							{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+						},
+					},
+				},
+			},
+			notebookTitle: "flashcards",
+			sceneTitle:    "",
+			definition:    Note{Expression: "lose one's temper", Definition: "lose someone's temper"},
+			expected: []LearningRecord{
+				{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+			},
+		},
 	}
 
 	for _, tt := range tests {

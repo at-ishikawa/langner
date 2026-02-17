@@ -444,6 +444,56 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			expectedWordCount:       1,
 			expectedWords:           []string{"test"},
 		},
+		{
+			name: "duplicate expression entries - first empty, second usable - word NOT included",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "I need to break the ice"},
+							},
+							Definitions: []Note{
+								{Expression: "break the ice", Definition: "break someone's ice", Meaning: "initiate conversation"},
+							},
+						},
+					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "notebook1",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression:  "break the ice",
+									LearnedLogs: []LearningRecord{},
+								},
+								{
+									Expression: "break someone's ice",
+									LearnedLogs: []LearningRecord{
+										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			sortDesc:                false,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     false,
+			expectedWordCount:       0,
+			expectedWords:           nil,
+		},
 	}
 
 	for _, tt := range tests {
