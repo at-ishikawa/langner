@@ -3,6 +3,7 @@ package openai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -12,6 +13,170 @@ import (
 	"github.com/stretchr/testify/require"
 	"resty.dev/v3"
 )
+
+func TestIsRetryableError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{
+			name: "nil error",
+			err:  nil,
+			want: false,
+		},
+		{
+			name: "json unmarshal error",
+			err:  errors.New("json.Unmarshal failed"),
+			want: true,
+		},
+		{
+			name: "unexpected end of JSON input",
+			err:  errors.New("unexpected end of JSON input"),
+			want: true,
+		},
+		{
+			name: "connection refused",
+			err:  errors.New("connection refused"),
+			want: true,
+		},
+		{
+			name: "i/o timeout",
+			err:  errors.New("i/o timeout"),
+			want: true,
+		},
+		{
+			name: "server error 500",
+			err:  errors.New("response error 500"),
+			want: true,
+		},
+		{
+			name: "server error 503",
+			err:  errors.New("response error 503"),
+			want: true,
+		},
+		{
+			name: "rate limiting 429",
+			err:  errors.New("response error 429"),
+			want: true,
+		},
+		{
+			name: "client error 400 - not retryable",
+			err:  errors.New("response error 400: bad request"),
+			want: false,
+		},
+		{
+			name: "generic error - not retryable",
+			err:  errors.New("something went wrong"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isRetryableError(tt.err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestClient_getRequestBody(t *testing.T) {
+	tests := []struct {
+		name    string
+		model   string
+		args    inference.AnswerMeaningsRequest
+		wantErr bool
+	}{
+		{
+			name:  "single expression with context",
+			model: "gpt-4",
+			args: inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{
+					{
+						Expression: "break the ice",
+						Meaning:    "to initiate conversation in an awkward situation",
+						Contexts: []inference.Context{
+							{
+								Context:             "She told a joke to break the ice at the party.",
+								ReferenceDefinition: "to make people feel more relaxed",
+								Usage:               "break the ice",
+							},
+						},
+						IsExpressionInput: false,
+					},
+				},
+			},
+		},
+		{
+			name:  "multiple expressions",
+			model: "gpt-4o-mini",
+			args: inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{
+					{
+						Expression: "piece of cake",
+						Meaning:    "something easy",
+						Contexts: []inference.Context{
+							{Context: "The test was a piece of cake.", Usage: "piece of cake"},
+						},
+					},
+					{
+						Expression: "hit the road",
+						Meaning:    "to leave",
+						Contexts: []inference.Context{
+							{Context: "We should hit the road before it gets dark.", Usage: "hit the road"},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:  "expression with is_expression_input true",
+			model: "gpt-4",
+			args: inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{
+					{
+						Expression:    "runing",
+						Meaning:       "to move quickly on foot",
+						Contexts:      []inference.Context{{Context: "I was runing in the park."}},
+						IsExpressionInput: true,
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{model: tt.model}
+
+			got, err := client.getRequestBody(tt.args)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			// Verify model
+			assert.Equal(t, tt.model, got.Model)
+
+			// Verify temperature
+			assert.InDelta(t, 0.3, got.Temperature, 0.001)
+
+			// Verify messages structure: system + few-shot examples (pairs) + user request
+			assert.NotEmpty(t, got.Messages)
+			assert.Equal(t, RoleSystem, got.Messages[0].Role)
+
+			// Last message should be the user request
+			lastMsg := got.Messages[len(got.Messages)-1]
+			assert.Equal(t, RoleUser, lastMsg.Role)
+
+			// Verify user request contains expressions
+			for _, expr := range tt.args.Expressions {
+				assert.Contains(t, lastMsg.Content, expr.Expression)
+			}
+		})
+	}
+}
 
 func TestClient_AnswerMeanings(t *testing.T) {
 	tests := []struct {
