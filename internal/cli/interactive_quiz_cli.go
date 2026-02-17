@@ -10,6 +10,7 @@ import (
 	"os/signal"
 	"path/filepath"
 
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -30,9 +31,7 @@ type InteractiveQuizCLI struct {
 
 // initializeQuizCLI is a common initialization function for quiz CLIs
 func initializeQuizCLI(
-	storiesDirs []string,
-	flashcardsDirs []string,
-	learningNotesDir string,
+	notebooksConfig config.NotebooksConfig,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 ) (*InteractiveQuizCLI, *notebook.Reader, error) {
@@ -44,19 +43,19 @@ func initializeQuizCLI(
 	dictionaryMap := rapidapi.FromResponsesToMap(response)
 
 	// Create notebook reader
-	reader, err := notebook.NewReader(storiesDirs, flashcardsDirs, nil, nil, dictionaryMap)
+	reader, err := notebook.NewReader(notebooksConfig.StoriesDirectories, notebooksConfig.FlashcardsDirectories, notebooksConfig.BooksDirectories, notebooksConfig.DefinitionsDirectories, dictionaryMap)
 	if err != nil {
 		return nil, nil, fmt.Errorf("notebook.NewReader() > %w", err)
 	}
 
 	// Load learning histories
-	learningHistories, err := notebook.NewLearningHistories(learningNotesDir)
+	learningHistories, err := notebook.NewLearningHistories(notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return nil, nil, fmt.Errorf("notebook.NewLearningHistories() > %w", err)
 	}
 
 	return &InteractiveQuizCLI{
-		learningNotesDir:  learningNotesDir,
+		learningNotesDir:  notebooksConfig.LearningNotesDirectory,
 		learningHistories: learningHistories,
 		dictionaryMap:     dictionaryMap,
 		openaiClient:      openaiClient,
@@ -65,16 +64,6 @@ func initializeQuizCLI(
 		bold:              color.New(color.Bold),
 		italic:            color.New(color.Italic),
 	}, reader, nil
-}
-
-// newInteractiveQuizCLI creates the base CLI with shared initialization for story notebooks
-func newInteractiveQuizCLI(
-	storiesDirs []string,
-	learningNotesDir string,
-	dictionaryCacheDir string,
-	openaiClient inference.Client,
-) (*InteractiveQuizCLI, *notebook.Reader, error) {
-	return initializeQuizCLI(storiesDirs, nil, learningNotesDir, dictionaryCacheDir, openaiClient)
 }
 
 //go:generate mockgen -source=interactive_quiz_cli.go -destination=../mocks/cli/mock_session.go -package=mock_cli Session

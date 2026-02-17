@@ -39,7 +39,9 @@ func (h LearningHistory) GetLogs(
 			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
 				continue
 			}
-			return expression.LearnedLogs
+			if len(expression.LearnedLogs) > 0 {
+				return expression.LearnedLogs
+			}
 		}
 		return nil
 	}
@@ -55,8 +57,9 @@ func (h LearningHistory) GetLogs(
 			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
 				continue
 			}
-
-			return expression.LearnedLogs
+			if len(expression.LearnedLogs) > 0 {
+				return expression.LearnedLogs
+			}
 		}
 	}
 	return nil
