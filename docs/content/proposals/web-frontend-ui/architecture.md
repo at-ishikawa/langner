@@ -130,22 +130,6 @@ internal/
     quiz_handler.go
 ```
 
-## Frontend Architecture
-
-```
-web/
-  src/
-    app/
-      page.tsx              # Quiz start screen
-      quiz/
-        page.tsx            # Quiz card + feedback screens
-      complete/
-        page.tsx            # Session complete screen
-    gen/                    # Generated protobuf/Connect code
-```
-
-The frontend calls the Go backend directly using `@connectrpc/connect-web`.
-
 ## Code Generation
 
 Protobuf definitions live in a `proto/` directory at the project root. Code generation produces:
