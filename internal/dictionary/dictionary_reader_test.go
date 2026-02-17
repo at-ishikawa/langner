@@ -2,9 +2,13 @@ package dictionary
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewReader(t *testing.T) {
@@ -72,4 +76,62 @@ func TestReader_LookupFromCache(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestReader_LookupFromCacheHit(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Pre-populate cache with a valid JSON file
+	cacheContent := `{"word": "hello", "results": [{"definition": "a greeting", "partOfSpeech": "noun", "examples": ["hello there"]}], "pronunciation": {"all": "həˈloʊ"}}`
+	err := os.WriteFile(filepath.Join(tempDir, "hello.json"), []byte(cacheContent), 0644)
+	require.NoError(t, err)
+
+	reader := NewReader(tempDir, Config{
+		RapidAPIHost: "test.rapidapi.com",
+		RapidAPIKey:  "test-key",
+	})
+
+	ctx := context.Background()
+	result, err := reader.Lookup(ctx, "hello")
+	require.NoError(t, err)
+	assert.Equal(t, "hello", result.Word)
+	assert.Len(t, result.Results, 1)
+	assert.Equal(t, "a greeting", result.Results[0].Definition)
+}
+
+func TestReader_LookupInvalidJSON(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Pre-populate cache with invalid JSON
+	err := os.WriteFile(filepath.Join(tempDir, "bad.json"), []byte(`{invalid}`), 0644)
+	require.NoError(t, err)
+
+	reader := NewReader(tempDir, Config{})
+
+	ctx := context.Background()
+	_, err = reader.Lookup(ctx, "bad")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "json.Unmarshal")
+}
+
+func TestReader_Show(t *testing.T) {
+	reader := NewReader(t.TempDir(), Config{})
+
+	response := rapidapi.Response{
+		Word: "hello",
+		Results: []rapidapi.Result{
+			{
+				PartOfSpeech: "noun",
+				Definition:   "a greeting",
+				Synonyms:     []string{"hi", "hey"},
+			},
+			{
+				PartOfSpeech: "interjection",
+				Definition:   "used as a greeting",
+			},
+		},
+	}
+
+	// Show should not panic
+	reader.Show(response)
 }

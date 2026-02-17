@@ -554,6 +554,15 @@ func TestFormatQuestion(t *testing.T) {
 			},
 			expected: "What does 'test' mean in the following context?\n  1. First example\n  2. Second example\n",
 		},
+		{
+			name: "Flashcard with contexts (Scene is nil)",
+			card: WordOccurrence{
+				Scene:      nil,
+				Definition: &notebook.Note{Expression: "hello"},
+				Contexts:   []WordOccurrenceContext{{Context: "Hello there!", Usage: "hello"}},
+			},
+			expected: "What does 'hello' mean?\nExamples:\n  1. {Hello there! hello}\n",
+		},
 	}
 
 	for _, tc := range tests {

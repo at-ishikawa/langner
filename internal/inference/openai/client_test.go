@@ -447,3 +447,216 @@ func TestClient_AnswerMeanings(t *testing.T) {
 		})
 	}
 }
+
+func TestClient_ValidateWordForm(t *testing.T) {
+	tests := []struct {
+		name              string
+		request           inference.ValidateWordFormRequest
+		mockServerHandler func(t *testing.T, w http.ResponseWriter, r *http.Request)
+		wantResponse      inference.ValidateWordFormResponse
+		wantError         bool
+		wantErrorString   string
+	}{
+		{
+			name: "same_word classification",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "run",
+				UserAnswer: "ran",
+				Meaning:    "to move quickly on foot",
+				Context:    "I need to run to the store.",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				assert.Equal(t, http.MethodPost, r.Method)
+				assert.Equal(t, "/chat/completions", r.URL.Path)
+
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{
+						{
+							Message: ChoiceMessage{
+								Role:    RoleAssistant,
+								Content: `{"classification": "same_word", "reason": "ran is the past tense of run"}`,
+							},
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			wantResponse: inference.ValidateWordFormResponse{
+				Classification: inference.ClassificationSameWord,
+				Reason:         "ran is the past tense of run",
+			},
+		},
+		{
+			name: "synonym classification",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "happy",
+				UserAnswer: "joyful",
+				Meaning:    "feeling pleasure",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{
+						{
+							Message: ChoiceMessage{
+								Role:    RoleAssistant,
+								Content: `{"classification": "synonym", "reason": "joyful is a synonym of happy"}`,
+							},
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			wantResponse: inference.ValidateWordFormResponse{
+				Classification: inference.ClassificationSynonym,
+				Reason:         "joyful is a synonym of happy",
+			},
+		},
+		{
+			name: "wrong classification",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "happy",
+				UserAnswer: "sad",
+				Meaning:    "feeling pleasure",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{
+						{
+							Message: ChoiceMessage{
+								Role:    RoleAssistant,
+								Content: `{"classification": "wrong", "reason": "sad is an antonym of happy"}`,
+							},
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			wantResponse: inference.ValidateWordFormResponse{
+				Classification: inference.ClassificationWrong,
+				Reason:         "sad is an antonym of happy",
+			},
+		},
+		{
+			name: "HTTP error",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "test",
+				UserAnswer: "test",
+				Meaning:    "a trial",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(`{"error": "server error"}`))
+			},
+			wantError: true,
+		},
+		{
+			name: "empty choices in response",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "test",
+				UserAnswer: "test",
+				Meaning:    "a trial",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			wantError:       true,
+			wantErrorString: "empty response body or choices",
+		},
+		{
+			name: "empty content in response",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "test",
+				UserAnswer: "test",
+				Meaning:    "a trial",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{
+						{
+							Message: ChoiceMessage{
+								Role:    RoleAssistant,
+								Content: "",
+							},
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			wantError:       true,
+			wantErrorString: "empty response content",
+		},
+		{
+			name: "invalid JSON in response content",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "test",
+				UserAnswer: "test",
+				Meaning:    "a trial",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{
+						{
+							Message: ChoiceMessage{
+								Role:    RoleAssistant,
+								Content: "not valid json",
+							},
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			wantError:       true,
+			wantErrorString: "json.Unmarshal",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				tt.mockServerHandler(t, w, r)
+			}))
+			defer server.Close()
+
+			client := &Client{
+				httpClient:       resty.New().SetBaseURL(server.URL),
+				model:            "gpt-4",
+				maxRetryAttempts: 0,
+			}
+
+			ctx := context.Background()
+			got, err := client.ValidateWordForm(ctx, tt.request)
+
+			if tt.wantError {
+				require.Error(t, err)
+				if tt.wantErrorString != "" {
+					assert.Contains(t, err.Error(), tt.wantErrorString)
+				}
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantResponse, got)
+		})
+	}
+}
+
+func TestNewClient(t *testing.T) {
+	client := NewClient("test-key", "gpt-4", 3)
+	assert.NotNil(t, client)
+	assert.Equal(t, "gpt-4", client.GetModel())
+	assert.Equal(t, uint(3), client.maxRetryAttempts)
+}
+
+func TestClient_GetModel(t *testing.T) {
+	client := &Client{model: "gpt-4o-mini"}
+	assert.Equal(t, "gpt-4o-mini", client.GetModel())
+}

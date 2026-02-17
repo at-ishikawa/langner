@@ -4,8 +4,256 @@ import (
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/stretchr/testify/assert"
+	"gopkg.in/yaml.v3"
 )
+
+func TestDate_UnmarshalYAML(t *testing.T) {
+	tests := []struct {
+		name    string
+		yaml    string
+		wantErr bool
+		wantDay int
+	}{
+		{
+			name:    "YYYY-MM-DD format",
+			yaml:    "date: 2025-06-15\n",
+			wantDay: 15,
+		},
+		{
+			name:    "RFC3339 format",
+			yaml:    "date: 2025-06-15T10:30:00Z\n",
+			wantDay: 15,
+		},
+		{
+			name:    "RFC3339Nano format",
+			yaml:    "date: 2025-06-15T10:30:00.123456789Z\n",
+			wantDay: 15,
+		},
+		{
+			name:    "invalid format",
+			yaml:    "date: not-a-date\n",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var result struct {
+				Date Date `yaml:"date"`
+			}
+			err := yaml.Unmarshal([]byte(tt.yaml), &result)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantDay, result.Date.Day())
+		})
+	}
+}
+
+func TestDate_MarshalYAML(t *testing.T) {
+	d := NewDate(time.Date(2025, 6, 15, 10, 30, 0, 0, time.UTC))
+	got, err := d.MarshalYAML()
+	assert.NoError(t, err)
+	assert.Equal(t, "2025-06-15T10:30:00Z", got)
+}
+
+func TestNewDate(t *testing.T) {
+	t.Run("with time argument", func(t *testing.T) {
+		fixedTime := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+		d := NewDate(fixedTime)
+		assert.Equal(t, fixedTime, d.Time)
+	})
+
+	t.Run("without argument uses current time", func(t *testing.T) {
+		before := time.Now()
+		d := NewDate()
+		after := time.Now()
+		assert.False(t, d.Time.Before(before))
+		assert.False(t, d.Time.After(after))
+	})
+}
+
+func TestNote_setDetails(t *testing.T) {
+	tests := []struct {
+		name          string
+		note          Note
+		dictionaryMap map[string]rapidapi.Response
+		youTubeURL    string
+		wantErr       bool
+		wantMeaning   string
+	}{
+		{
+			name: "set details from dictionary",
+			note: Note{
+				Expression:       "hello",
+				DictionaryNumber: 1,
+			},
+			dictionaryMap: map[string]rapidapi.Response{
+				"hello": {
+					Word: "hello",
+					Pronunciation: rapidapi.Pronunciation{All: "heh-loh"},
+					Results: []rapidapi.Result{
+						{
+							PartOfSpeech: "interjection",
+							Definition:   "a greeting",
+							Synonyms:     []string{"hi"},
+							Examples:     []string{"Hello there!"},
+						},
+					},
+				},
+			},
+			wantMeaning: "a greeting",
+		},
+		{
+			name: "dictionary number out of range",
+			note: Note{
+				Expression:       "hello",
+				DictionaryNumber: 5,
+			},
+			dictionaryMap: map[string]rapidapi.Response{
+				"hello": {
+					Word: "hello",
+					Results: []rapidapi.Result{
+						{Definition: "a greeting"},
+					},
+				},
+			},
+			wantErr: true,
+		},
+		{
+			name: "word not in dictionary but has meaning",
+			note: Note{
+				Expression: "hello",
+				Meaning:    "a greeting",
+			},
+			dictionaryMap: map[string]rapidapi.Response{},
+			wantMeaning:   "a greeting",
+		},
+		{
+			name: "word not in dictionary, no meaning, no images, no statements",
+			note: Note{
+				Expression: "hello",
+				Level:      ExpressionLevelNew,
+			},
+			dictionaryMap: map[string]rapidapi.Response{},
+			wantErr:       true,
+		},
+		{
+			name: "word not in dictionary but has statements",
+			note: Note{
+				Expression: "hello",
+				Statements: []Phrase{{Remarks: "hi there"}},
+			},
+			dictionaryMap: map[string]rapidapi.Response{},
+		},
+		{
+			name: "word not in dictionary but has images",
+			note: Note{
+				Expression: "hello",
+				Level:      ExpressionLevelNew,
+				Images:     []string{"hello.png"},
+			},
+			dictionaryMap: map[string]rapidapi.Response{},
+		},
+		{
+			name: "word not in dictionary but has synonyms",
+			note: Note{
+				Expression: "hello",
+				Level:      ExpressionLevelNew,
+				Synonyms:   []string{"hi"},
+			},
+			dictionaryMap: map[string]rapidapi.Response{},
+		},
+		{
+			name: "word with unusable level and no meaning is valid",
+			note: Note{
+				Expression: "hello",
+				Level:      ExpressionLevelUnusable,
+			},
+			dictionaryMap: map[string]rapidapi.Response{},
+		},
+		{
+			name: "uses definition field as dictionary key",
+			note: Note{
+				Expression:       "greetings",
+				Definition:       "hello",
+				DictionaryNumber: 1,
+			},
+			dictionaryMap: map[string]rapidapi.Response{
+				"hello": {
+					Word:          "hello",
+					Pronunciation: rapidapi.Pronunciation{All: "heh-loh"},
+					Results: []rapidapi.Result{
+						{Definition: "a greeting", PartOfSpeech: "noun"},
+					},
+				},
+			},
+			wantMeaning: "a greeting",
+		},
+		{
+			name: "sets youtube URL when time seconds present",
+			note: Note{
+				Expression:         "hello",
+				DictionaryNumber:   1,
+				YouTubeTimeSeconds: 42,
+			},
+			dictionaryMap: map[string]rapidapi.Response{
+				"hello": {
+					Word: "hello",
+					Results: []rapidapi.Result{
+						{Definition: "a greeting"},
+					},
+				},
+			},
+			youTubeURL:  "https://youtube.com/watch?v=abc",
+			wantMeaning: "a greeting",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			note := tt.note
+			err := note.setDetails(tt.dictionaryMap, tt.youTubeURL)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			if tt.wantMeaning != "" {
+				assert.Equal(t, tt.wantMeaning, note.Meaning)
+			}
+		})
+	}
+}
+
+func TestGetThresholdDaysFromCount(t *testing.T) {
+	tests := []struct {
+		name  string
+		count int
+		want  int
+	}{
+		{name: "count 0", count: 0, want: 0},
+		{name: "count 1", count: 1, want: 3},
+		{name: "count 6", count: 6, want: 90},
+		{name: "count 12", count: 12, want: 1095},
+		{name: "count > 12", count: 15, want: 9223372036854775807}, // math.MaxInt
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := GetThresholdDaysFromCount(tt.count)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
 
 func TestNote_getLearnScore(t *testing.T) {
 	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)

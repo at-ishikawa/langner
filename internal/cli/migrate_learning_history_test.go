@@ -1,11 +1,102 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestMigrateLearningHistory(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupFiles map[string]string
+		wantErr    bool
+	}{
+		{
+			name: "migrate expressions without easiness factor",
+			setupFiles: map[string]string{
+				"notebook1.yml": `- metadata:
+    id: test-id
+    title: Test Notebook
+  scenes:
+    - metadata:
+        title: Scene 1
+      expressions:
+        - expression: hello
+          learned_logs:
+            - status: understood
+              learned_at: "2025-06-01"`,
+			},
+			wantErr: false,
+		},
+		{
+			name: "migrate flashcard expressions",
+			setupFiles: map[string]string{
+				"flashcard1.yml": `- metadata:
+    id: flash-id
+    title: Flashcards
+    type: flashcard
+  expressions:
+    - expression: hello
+      learned_logs:
+        - status: understood
+          learned_at: "2025-06-01"`,
+			},
+			wantErr: false,
+		},
+		{
+			name: "already migrated - no changes",
+			setupFiles: map[string]string{
+				"notebook1.yml": `- metadata:
+    id: test-id
+    title: Test Notebook
+  scenes:
+    - metadata:
+        title: Scene 1
+      expressions:
+        - expression: hello
+          easiness_factor: 2.5
+          learned_logs:
+            - status: understood
+              learned_at: "2025-06-01"
+              quality: 4
+              interval_days: 3`,
+			},
+			wantErr: false,
+		},
+		{
+			name:       "empty directory",
+			setupFiles: map[string]string{},
+			wantErr:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			for filename, content := range tt.setupFiles {
+				err := os.WriteFile(filepath.Join(tempDir, filename), []byte(content), 0644)
+				require.NoError(t, err)
+			}
+
+			err := MigrateLearningHistory(tempDir)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestMigrateLearningHistory_NonexistentDirectory(t *testing.T) {
+	err := MigrateLearningHistory("/nonexistent/directory")
+	assert.Error(t, err)
+}
 
 func TestCalculateEasinessFactor(t *testing.T) {
 	tests := []struct {

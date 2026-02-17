@@ -524,6 +524,225 @@ func TestExtractReverseQuizCards(t *testing.T) {
 	}
 }
 
+func TestExtractReverseQuizCardsFromFlashcards(t *testing.T) {
+	tests := []struct {
+		name               string
+		notebookName       string
+		flashcards         []notebook.FlashcardNotebook
+		learningHistory    []notebook.LearningHistory
+		listMissingContext bool
+		wantCount          int
+	}{
+		{
+			name:         "empty flashcards",
+			notebookName: "test",
+			flashcards:   []notebook.FlashcardNotebook{},
+			wantCount:    0,
+		},
+		{
+			name:         "card with correct forward answer needs reverse review",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting", Examples: []string{"Hello there!"}},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "hello",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+						},
+					},
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name:         "card without forward correct answer is skipped",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting"},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{},
+			wantCount:       0,
+		},
+		{
+			name:         "list missing context mode - shows cards without matching example",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting", Examples: []string{"Hello there!"}}, // has context
+						{Expression: "world", Meaning: "the earth", Examples: []string{"big universe"}},  // no matching context
+					},
+				},
+			},
+			listMissingContext: true,
+			wantCount:          1, // only "world" since "hello" example contains "hello"
+		},
+		{
+			name:         "card with recent reverse review is skipped",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting"},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "hello",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+							ReverseLogs: []notebook.LearningRecord{
+								{Status: "usable", LearnedAt: notebook.NewDate(time.Now()), IntervalDays: 7},
+							},
+						},
+					},
+				},
+			},
+			wantCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractReverseQuizCardsFromFlashcards(tt.notebookName, tt.flashcards, tt.learningHistory, tt.listMissingContext)
+			assert.Len(t, result, tt.wantCount)
+		})
+	}
+}
+
+func TestNeedsReverseReviewForFlashcard(t *testing.T) {
+	tests := []struct {
+		name            string
+		learningHistory []notebook.LearningHistory
+		flashcardTitle  string
+		card            *notebook.Note
+		want            bool
+	}{
+		{
+			name:            "no matching history - no review needed",
+			learningHistory: []notebook.LearningHistory{},
+			flashcardTitle:  "Unit 1",
+			card:            &notebook.Note{Expression: "hello"},
+			want:            false,
+		},
+		{
+			name: "matching expression with correct forward answer - needs review",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "hello",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+						},
+					},
+				},
+			},
+			flashcardTitle: "Unit 1",
+			card:           &notebook.Note{Expression: "hello"},
+			want:           true,
+		},
+		{
+			name: "matching via definition field",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "greet",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+						},
+					},
+				},
+			},
+			flashcardTitle: "Unit 1",
+			card:           &notebook.Note{Expression: "hello", Definition: "greet"},
+			want:           true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := needsReverseReviewForFlashcard(tt.learningHistory, tt.flashcardTitle, tt.card)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestReverseQuizCLI_ShuffleCards(t *testing.T) {
+	cardWithContext := &WordOccurrence{
+		Definition: &notebook.Note{Expression: "hello"},
+		Contexts:   []WordOccurrenceContext{{Context: "Hello there!", Usage: "hello"}},
+	}
+	cardWithoutContext := &WordOccurrence{
+		Definition: &notebook.Note{Expression: "world"},
+		Contexts:   []WordOccurrenceContext{},
+	}
+
+	cli := &ReverseQuizCLI{
+		cards: []*WordOccurrence{cardWithoutContext, cardWithContext},
+	}
+
+	// ShuffleCards should preserve the partition: no-context first, with-context last
+	cli.ShuffleCards()
+
+	// With only 1 card in each group, the partition should be maintained
+	assert.Equal(t, 0, len(cli.cards[0].Contexts))
+	assert.Greater(t, len(cli.cards[1].Contexts), 0)
+}
+
+func TestReverseQuizCLI_ListMissingContext(t *testing.T) {
+	t.Run("empty cards", func(t *testing.T) {
+		cli := &ReverseQuizCLI{
+			InteractiveQuizCLI: &InteractiveQuizCLI{
+				bold: color.New(color.Bold),
+			},
+			cards: []*WordOccurrence{},
+		}
+		// Should not panic
+		cli.ListMissingContext()
+	})
+
+	t.Run("cards with missing context", func(t *testing.T) {
+		cli := &ReverseQuizCLI{
+			InteractiveQuizCLI: &InteractiveQuizCLI{
+				bold: color.New(color.Bold),
+			},
+			cards: []*WordOccurrence{
+				{
+					NotebookName: "test-notebook",
+					Definition: &notebook.Note{
+						Expression: "hello",
+						Meaning:    "a greeting",
+					},
+					Contexts: []WordOccurrenceContext{},
+				},
+			},
+		}
+		// Should not panic
+		cli.ListMissingContext()
+	})
+}
+
 func TestSortCardsByContextAvailability(t *testing.T) {
 	// Create cards with and without context
 	cardWithContext := &WordOccurrence{

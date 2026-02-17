@@ -1,0 +1,119 @@
+package notebook
+
+import (
+	"testing"
+	"time"
+
+	"github.com/at-ishikawa/langner/internal/assets"
+	"github.com/stretchr/testify/assert"
+)
+
+func TestConvertToAssetsFlashcardTemplate(t *testing.T) {
+	date := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		notebooks []FlashcardNotebook
+		wantLen   int
+	}{
+		{
+			name:      "empty notebooks",
+			notebooks: []FlashcardNotebook{},
+			wantLen:   0,
+		},
+		{
+			name: "single notebook with cards",
+			notebooks: []FlashcardNotebook{
+				{
+					Title:       "Unit 1",
+					Description: "First unit",
+					Date:        date,
+					Cards: []Note{
+						{
+							Expression:    "hello",
+							Definition:    "greeting",
+							Meaning:       "a word used to greet",
+							Examples:      []string{"Hello there!"},
+							Pronunciation: "heh-loh",
+							PartOfSpeech:  "interjection",
+							Origin:        "Old English",
+							Synonyms:      []string{"hi", "hey"},
+							Antonyms:      []string{"goodbye"},
+							Images:        []string{"hello.png"},
+						},
+					},
+				},
+			},
+			wantLen: 1,
+		},
+		{
+			name: "multiple notebooks",
+			notebooks: []FlashcardNotebook{
+				{Title: "Unit 1", Date: date, Cards: []Note{{Expression: "hello", Meaning: "a greeting"}}},
+				{Title: "Unit 2", Date: date, Cards: []Note{{Expression: "world", Meaning: "the earth"}}},
+			},
+			wantLen: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertToAssetsFlashcardTemplate(tt.notebooks)
+			assert.Len(t, result.Notebooks, tt.wantLen)
+
+			if tt.wantLen > 0 {
+				got := result.Notebooks[0]
+				want := tt.notebooks[0]
+				assert.Equal(t, want.Title, got.Title)
+				assert.Equal(t, want.Description, got.Description)
+				assert.Equal(t, want.Date, got.Date)
+				assert.Len(t, got.Cards, len(want.Cards))
+			}
+		})
+	}
+}
+
+func TestConvertFlashcardNotebook(t *testing.T) {
+	date := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
+
+	nb := FlashcardNotebook{
+		Title:       "Unit 1",
+		Description: "First unit",
+		Date:        date,
+		Cards: []Note{
+			{
+				Expression:    "hello",
+				Definition:    "greeting",
+				Meaning:       "a word used to greet",
+				Examples:      []string{"Hello there!"},
+				Pronunciation: "heh-loh",
+				PartOfSpeech:  "interjection",
+				Origin:        "Old English",
+				Synonyms:      []string{"hi", "hey"},
+				Antonyms:      []string{"goodbye"},
+				Images:        []string{"hello.png"},
+			},
+		},
+	}
+
+	result := convertFlashcardNotebook(nb)
+
+	assert.Equal(t, "Unit 1", result.Title)
+	assert.Equal(t, "First unit", result.Description)
+	assert.Equal(t, date, result.Date)
+	assert.Len(t, result.Cards, 1)
+
+	card := result.Cards[0]
+	assert.Equal(t, assets.FlashcardCard{
+		Expression:    "hello",
+		Definition:    "greeting",
+		Meaning:       "a word used to greet",
+		Examples:      []string{"Hello there!"},
+		Pronunciation: "heh-loh",
+		PartOfSpeech:  "interjection",
+		Origin:        "Old English",
+		Synonyms:      []string{"hi", "hey"},
+		Antonyms:      []string{"goodbye"},
+		Images:        []string{"hello.png"},
+	}, card)
+}
