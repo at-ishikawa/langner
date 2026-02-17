@@ -15,6 +15,50 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func TestNewQuizCommand(t *testing.T) {
+	cmd := newQuizCommand()
+
+	assert.Equal(t, "quiz", cmd.Use)
+	assert.Equal(t, "Quiz commands for testing vocabulary knowledge", cmd.Short)
+	assert.True(t, cmd.HasSubCommands())
+}
+
+func TestNewQuizFreeformCommand(t *testing.T) {
+	cmd := newQuizFreeformCommand()
+
+	assert.Equal(t, "freeform", cmd.Use)
+	assert.Equal(t, "Freeform quiz where you provide both word and meaning from memory", cmd.Short)
+	assert.NotNil(t, cmd.RunE)
+}
+
+func TestNewQuizNotebookCommand(t *testing.T) {
+	cmd := newQuizNotebookCommand()
+
+	assert.Equal(t, "notebook", cmd.Use)
+	assert.Equal(t, "Quiz from notebooks. Use --mode to select quiz mode", cmd.Short)
+	assert.NotNil(t, cmd.RunE)
+	assert.NotEmpty(t, cmd.Long)
+
+	// Verify flags
+	includeFlag := cmd.Flags().Lookup("include-no-correct-answers")
+	assert.NotNil(t, includeFlag)
+	assert.Equal(t, "false", includeFlag.DefValue)
+
+	notebookFlag := cmd.Flags().Lookup("notebook")
+	assert.NotNil(t, notebookFlag)
+	assert.Equal(t, "", notebookFlag.DefValue)
+	assert.Equal(t, "n", notebookFlag.Shorthand)
+
+	modeFlag := cmd.Flags().Lookup("mode")
+	assert.NotNil(t, modeFlag)
+	assert.Equal(t, "recognition", modeFlag.DefValue)
+	assert.Equal(t, "m", modeFlag.Shorthand)
+
+	listMissingFlag := cmd.Flags().Lookup("list-missing-context")
+	assert.NotNil(t, listMissingFlag)
+	assert.Equal(t, "false", listMissingFlag.DefValue)
+}
+
 func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 	tests := []struct {
 		name          string

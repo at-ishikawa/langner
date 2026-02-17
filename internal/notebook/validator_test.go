@@ -1094,6 +1094,265 @@ func TestValidator_Fix(t *testing.T) {
 	}
 }
 
+func TestExtractSeriesName(t *testing.T) {
+	tests := []struct {
+		name       string
+		eventLower string
+		want       string
+	}{
+		{
+			name:       "event with season keyword",
+			eventLower: "friends season 1 episode 1",
+			want:       "friends",
+		},
+		{
+			name:       "event with episode keyword",
+			eventLower: "the office episode 5",
+			want:       "the office",
+		},
+		{
+			name:       "event without keywords",
+			eventLower: "random title",
+			want:       "",
+		},
+		{
+			name:       "season at start",
+			eventLower: "season 1",
+			want:       "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractSeriesName(tt.eventLower)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidator_EventsRelated(t *testing.T) {
+	v := &Validator{}
+
+	tests := []struct {
+		name   string
+		event1 string
+		event2 string
+		want   bool
+	}{
+		{
+			name:   "same series with episode keyword",
+			event1: "Friends Episode 1",
+			event2: "Friends Episode 2",
+			want:   true,
+		},
+		{
+			name:   "same series with season keyword",
+			event1: "Friends Season 1",
+			event2: "Friends Season 2",
+			want:   true,
+		},
+		{
+			name:   "different series with episode keyword",
+			event1: "Friends Episode 1",
+			event2: "Seinfeld Episode 1",
+			want:   false,
+		},
+		{
+			name:   "no episode or season keywords",
+			event1: "Random Title A",
+			event2: "Random Title B",
+			want:   false,
+		},
+		{
+			name:   "one has episode, other does not",
+			event1: "Friends Episode 1",
+			event2: "Random Title",
+			want:   false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := v.eventsRelated(tt.event1, tt.event2)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestValidator_ValidateFlashcardNotebooks(t *testing.T) {
+	tests := []struct {
+		name               string
+		files              []flashcardNotebookFile
+		expectedErrorCount int
+	}{
+		{
+			name: "valid flashcard notebooks",
+			files: []flashcardNotebookFile{
+				{
+					path: "test.yml",
+					contents: []FlashcardNotebook{
+						{
+							Title: "Unit 1",
+							Cards: []Note{
+								{Expression: "hello", Meaning: "a greeting"},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorCount: 0,
+		},
+		{
+			name: "flashcard notebook with empty title",
+			files: []flashcardNotebookFile{
+				{
+					path: "test.yml",
+					contents: []FlashcardNotebook{
+						{
+							Title: "",
+							Cards: []Note{
+								{Expression: "hello", Meaning: "a greeting"},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorCount: 1,
+		},
+		{
+			name: "flashcard with empty expression",
+			files: []flashcardNotebookFile{
+				{
+					path: "test.yml",
+					contents: []FlashcardNotebook{
+						{
+							Title: "Unit 1",
+							Cards: []Note{
+								{Expression: "", Meaning: "a greeting"},
+							},
+						},
+					},
+				},
+			},
+			expectedErrorCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &Validator{}
+			result := &ValidationResult{}
+
+			v.validateFlashcardNotebooks(tt.files, result)
+
+			assert.Len(t, result.LearningNotesErrors, tt.expectedErrorCount)
+		})
+	}
+}
+
+func TestValidator_LoadFlashcardNotebooks(t *testing.T) {
+	// Create temp directory with flashcard YAML files
+	tmpDir, err := os.MkdirTemp("", "flashcard-load-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	// Create a valid flashcard YAML file
+	content := `- title: "Unit 1"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "hello"
+      meaning: "a greeting"
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "cards.yml"), []byte(content), 0644)
+	require.NoError(t, err)
+
+	// Create index.yml (should be skipped)
+	err = os.WriteFile(filepath.Join(tmpDir, "index.yml"), []byte("id: test\n"), 0644)
+	require.NoError(t, err)
+
+	v := &Validator{flashcardsDirs: []string{tmpDir}}
+
+	files, err := v.loadFlashcardNotebooks()
+	require.NoError(t, err)
+	assert.Len(t, files, 1)
+	assert.Len(t, files[0].contents, 1)
+	assert.Equal(t, "Unit 1", files[0].contents[0].Title)
+}
+
+func TestValidator_Validate(t *testing.T) {
+	// Create temp directories
+	tmpDir, err := os.MkdirTemp("", "validator-test-*")
+	require.NoError(t, err)
+	defer os.RemoveAll(tmpDir)
+
+	learningNotesDir := filepath.Join(tmpDir, "learning_notes")
+	storiesDir := filepath.Join(tmpDir, "stories")
+	flashcardsDir := filepath.Join(tmpDir, "flashcards")
+	dictionaryDir := filepath.Join(tmpDir, "dictionaries")
+
+	require.NoError(t, os.MkdirAll(learningNotesDir, 0755))
+	require.NoError(t, os.MkdirAll(storiesDir, 0755))
+	require.NoError(t, os.MkdirAll(flashcardsDir, 0755))
+	require.NoError(t, os.MkdirAll(dictionaryDir, 0755))
+
+	// Create valid story notebook
+	storyContent := []StoryNotebook{
+		{
+			Event: "Episode 1",
+			Scenes: []StoryScene{
+				{
+					Title: "Scene 1",
+					Conversations: []Conversation{
+						{Speaker: "A", Quote: "Let's {{ break the ice }}"},
+					},
+					Definitions: []Note{
+						{Expression: "break the ice", Meaning: "to initiate social interaction"},
+					},
+				},
+			},
+		},
+	}
+	require.NoError(t, WriteYamlFile(filepath.Join(storiesDir, "test.yml"), storyContent))
+
+	// Create matching learning notes
+	learningContent := []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+			Scenes: []LearningScene{
+				{
+					Metadata: LearningSceneMetadata{Title: "Scene 1"},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression: "break the ice",
+							LearnedLogs: []LearningRecord{
+								{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	require.NoError(t, WriteYamlFile(filepath.Join(learningNotesDir, "test.yml"), learningContent))
+
+	// Create valid flashcard notebook
+	flashcardContent := []FlashcardNotebook{
+		{
+			Title: "Common Idioms",
+			Cards: []Note{
+				{Expression: "lose one's temper", Meaning: "to become very angry"},
+			},
+		},
+	}
+	require.NoError(t, WriteYamlFile(filepath.Join(flashcardsDir, "idioms.yml"), flashcardContent))
+
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{flashcardsDir}, dictionaryDir)
+
+	result, err := v.Validate()
+	require.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
 func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 	t.Run("validates duplicate expressions across scenes in same episode", func(t *testing.T) {
 		files := []learningHistoryFile{

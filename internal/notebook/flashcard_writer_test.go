@@ -1,12 +1,26 @@
 package notebook
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/assets"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
+
+func TestNewFlashcardNotebookWriter(t *testing.T) {
+	reader, err := NewReader(nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	writer := NewFlashcardNotebookWriter(reader, "template.md")
+	assert.NotNil(t, writer)
+	assert.Equal(t, reader, writer.reader)
+	assert.Equal(t, "template.md", writer.templatePath)
+}
 
 func TestConvertToAssetsFlashcardTemplate(t *testing.T) {
 	date := time.Date(2025, 6, 15, 0, 0, 0, 0, time.UTC)
@@ -116,4 +130,56 @@ func TestConvertFlashcardNotebook(t *testing.T) {
 		Antonyms:      []string{"goodbye"},
 		Images:        []string{"hello.png"},
 	}, card)
+}
+
+func TestOutputFlashcardNotebooks(t *testing.T) {
+	flashcardsDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create flashcard data
+	flashcardDir := filepath.Join(flashcardsDir, "test-flashcard")
+	require.NoError(t, os.MkdirAll(flashcardDir, 0755))
+	require.NoError(t, WriteYamlFile(filepath.Join(flashcardDir, "index.yml"), FlashcardIndex{
+		ID: "test-flashcard", Name: "Test Flashcards",
+		NotebookPaths: []string{"cards.yml"},
+	}))
+	require.NoError(t, WriteYamlFile(filepath.Join(flashcardDir, "cards.yml"), []FlashcardNotebook{
+		{
+			Title: "Common Words",
+			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+			Cards: []Note{
+				{Expression: "hello", Meaning: "a greeting"},
+			},
+		},
+	}))
+
+	reader, err := NewReader(nil, []string{flashcardsDir}, nil, nil, nil)
+	require.NoError(t, err)
+
+	writer := NewFlashcardNotebookWriter(reader, "")
+
+	t.Run("success", func(t *testing.T) {
+		learningHistories := map[string][]LearningHistory{
+			"test-flashcard": {
+				{
+					Metadata: LearningHistoryMetadata{NotebookID: "test-flashcard", Title: "flashcards", Type: "flashcard"},
+					Expressions: []LearningHistoryExpression{
+						{Expression: "hello", LearnedLogs: []LearningRecord{{Status: "misunderstood", LearnedAt: NewDate(time.Now())}}},
+					},
+				},
+			},
+		}
+
+		err := writer.OutputFlashcardNotebooks("test-flashcard", map[string]rapidapi.Response{}, learningHistories, false, outputDir, false)
+		require.NoError(t, err)
+
+		outputFile := filepath.Join(outputDir, "test-flashcard.md")
+		_, err = os.Stat(outputFile)
+		assert.NoError(t, err)
+	})
+
+	t.Run("notebook not found", func(t *testing.T) {
+		err := writer.OutputFlashcardNotebooks("nonexistent", map[string]rapidapi.Response{}, map[string][]LearningHistory{}, false, outputDir, false)
+		assert.Error(t, err)
+	})
 }

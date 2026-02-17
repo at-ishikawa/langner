@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
@@ -1655,6 +1656,590 @@ func TestFreeformQuizCLI_UpdateLearningHistory_AlwaysRecordsDefinitionForm(t *te
 				otherStatus := findExpressionStatus(savedHistory, "Test Story", "Test Scene", otherForm)
 				assert.Nil(t, otherStatus, "The other form '%s' should NOT be recorded to avoid duplicates", otherForm)
 			}
+		})
+	}
+}
+
+func TestNewFreeformQuizCLI(t *testing.T) {
+	tests := []struct {
+		name          string
+		setupFunc     func(t *testing.T) (storiesDir, flashcardsDir, learningNotesDir string)
+		wantWordCount int
+		wantErr       bool
+	}{
+		{
+			name: "loads story notebooks",
+			setupFunc: func(t *testing.T) (string, string, string) {
+				t.Helper()
+				storiesDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+
+				storyDir := filepath.Join(storiesDir, "test-story")
+				require.NoError(t, os.MkdirAll(storyDir, 0755))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(storyDir, "index.yml"), notebook.Index{
+					Kind: "story", ID: "test-story", Name: "Test Story",
+					NotebookPaths: []string{"stories.yml"},
+				}))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(storyDir, "stories.yml"), []notebook.StoryNotebook{
+					{
+						Event: "Episode 1",
+						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						Scenes: []notebook.StoryScene{
+							{
+								Title:         "Scene 1",
+								Conversations: []notebook.Conversation{{Speaker: "A", Quote: "A {{ tricky }} situation."}},
+								Definitions:   []notebook.Note{{Expression: "tricky", Meaning: "difficult to deal with"}},
+							},
+						},
+					},
+				}))
+				return storiesDir, "", learningNotesDir
+			},
+			wantWordCount: 1,
+		},
+		{
+			name: "loads flashcard notebooks",
+			setupFunc: func(t *testing.T) (string, string, string) {
+				t.Helper()
+				flashcardsDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+
+				flashcardDir := filepath.Join(flashcardsDir, "test-flashcard")
+				require.NoError(t, os.MkdirAll(flashcardDir, 0755))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "index.yml"), notebook.FlashcardIndex{
+					ID: "test-flashcard", Name: "Test Flashcards",
+					NotebookPaths: []string{"cards.yml"},
+				}))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "cards.yml"), []notebook.FlashcardNotebook{
+					{
+						Title: "Common Words",
+						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						Cards: []notebook.Note{
+							{Expression: "break the ice", Meaning: "to initiate social interaction"},
+						},
+					},
+				}))
+				return "", flashcardsDir, learningNotesDir
+			},
+			wantWordCount: 1,
+		},
+		{
+			name: "empty directories",
+			setupFunc: func(t *testing.T) (string, string, string) {
+				return t.TempDir(), t.TempDir(), t.TempDir()
+			},
+			wantWordCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			storiesDir, flashcardsDir, learningNotesDir := tt.setupFunc(t)
+			dictionaryCacheDir := t.TempDir()
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockClient := mock_inference.NewMockClient(ctrl)
+
+			var storiesDirs, flashcardsDirs []string
+			if storiesDir != "" {
+				storiesDirs = []string{storiesDir}
+			}
+			if flashcardsDir != "" {
+				flashcardsDirs = []string{flashcardsDir}
+			}
+
+			got, err := NewFreeformQuizCLI(
+				config.NotebooksConfig{
+					StoriesDirectories:     storiesDirs,
+					FlashcardsDirectories:  flashcardsDirs,
+					LearningNotesDirectory: learningNotesDir,
+				},
+				dictionaryCacheDir,
+				mockClient,
+			)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantWordCount, got.WordCount())
+		})
+	}
+}
+
+func TestWordCount(t *testing.T) {
+	tests := []struct {
+		name       string
+		stories    map[string][]notebook.StoryNotebook
+		flashcards map[string][]notebook.FlashcardNotebook
+		want       int
+	}{
+		{
+			name:       "empty",
+			stories:    map[string][]notebook.StoryNotebook{},
+			flashcards: map[string][]notebook.FlashcardNotebook{},
+			want:       0,
+		},
+		{
+			name: "story definitions counted",
+			stories: map[string][]notebook.StoryNotebook{
+				"test": {
+					{
+						Scenes: []notebook.StoryScene{
+							{Definitions: []notebook.Note{{Expression: "a"}, {Expression: "b"}}},
+						},
+					},
+				},
+			},
+			flashcards: map[string][]notebook.FlashcardNotebook{},
+			want:       2,
+		},
+		{
+			name:    "flashcard cards counted",
+			stories: map[string][]notebook.StoryNotebook{},
+			flashcards: map[string][]notebook.FlashcardNotebook{
+				"test": {
+					{Cards: []notebook.Note{{Expression: "a"}, {Expression: "b"}, {Expression: "c"}}},
+				},
+			},
+			want: 3,
+		},
+		{
+			name: "combined count",
+			stories: map[string][]notebook.StoryNotebook{
+				"story1": {
+					{Scenes: []notebook.StoryScene{{Definitions: []notebook.Note{{Expression: "a"}}}}},
+				},
+			},
+			flashcards: map[string][]notebook.FlashcardNotebook{
+				"flash1": {
+					{Cards: []notebook.Note{{Expression: "b"}}},
+				},
+			},
+			want: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cli := &FreeformQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{},
+				allStories:         tt.stories,
+				allFlashcards:      tt.flashcards,
+			}
+			assert.Equal(t, tt.want, cli.WordCount())
+		})
+	}
+}
+
+func TestFreeformQuizCLI_findAllWordContexts(t *testing.T) {
+	tests := []struct {
+		name       string
+		stories    map[string][]notebook.StoryNotebook
+		flashcards map[string][]notebook.FlashcardNotebook
+		word       string
+		wantCount  int
+		validate   func(t *testing.T, result []*WordOccurrence)
+	}{
+		{
+			name:       "empty notebooks",
+			stories:    map[string][]notebook.StoryNotebook{},
+			flashcards: map[string][]notebook.FlashcardNotebook{},
+			word:       "hello",
+			wantCount:  0,
+		},
+		{
+			name: "finds word in story conversations",
+			stories: map[string][]notebook.StoryNotebook{
+				"test-story": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Conversations: []notebook.Conversation{
+									{Speaker: "A", Quote: "I need to study hard"},
+								},
+								Definitions: []notebook.Note{
+									{Expression: "study", Meaning: "to learn"},
+								},
+							},
+						},
+					},
+				},
+			},
+			flashcards: map[string][]notebook.FlashcardNotebook{},
+			word:       "study",
+			wantCount:  1,
+			validate: func(t *testing.T, result []*WordOccurrence) {
+				assert.Equal(t, "test-story", result[0].NotebookName)
+				assert.NotNil(t, result[0].Story)
+				assert.NotNil(t, result[0].Scene)
+			},
+		},
+		{
+			name:    "finds word in flashcards",
+			stories: map[string][]notebook.StoryNotebook{},
+			flashcards: map[string][]notebook.FlashcardNotebook{
+				"test-flashcard": {
+					{
+						Title: "Common Words",
+						Cards: []notebook.Note{
+							{
+								Expression: "break the ice",
+								Meaning:    "to initiate social interaction",
+								Examples:   []string{"She told a joke to break the ice."},
+							},
+						},
+					},
+				},
+			},
+			word:      "break the ice",
+			wantCount: 1,
+			validate: func(t *testing.T, result []*WordOccurrence) {
+				assert.Equal(t, "test-flashcard", result[0].NotebookName)
+				assert.Nil(t, result[0].Story)
+				assert.Nil(t, result[0].Scene)
+				assert.Equal(t, 1, len(result[0].Contexts))
+				assert.Equal(t, "break the ice", result[0].Contexts[0].Usage)
+			},
+		},
+		{
+			name: "finds word in both story and flashcard",
+			stories: map[string][]notebook.StoryNotebook{
+				"test-story": {
+					{
+						Event: "Story 1",
+						Scenes: []notebook.StoryScene{
+							{
+								Title: "Scene 1",
+								Conversations: []notebook.Conversation{
+									{Speaker: "A", Quote: "Time to study"},
+								},
+								Definitions: []notebook.Note{
+									{Expression: "study", Meaning: "to learn"},
+								},
+							},
+						},
+					},
+				},
+			},
+			flashcards: map[string][]notebook.FlashcardNotebook{
+				"test-flashcard": {
+					{
+						Title: "Words",
+						Cards: []notebook.Note{
+							{Expression: "study", Meaning: "to learn by reading"},
+						},
+					},
+				},
+			},
+			word:      "study",
+			wantCount: 2,
+		},
+		{
+			name: "case insensitive match in flashcards",
+			stories: map[string][]notebook.StoryNotebook{},
+			flashcards: map[string][]notebook.FlashcardNotebook{
+				"test": {
+					{
+						Title: "Words",
+						Cards: []notebook.Note{
+							{Expression: "Hello", Meaning: "a greeting"},
+						},
+					},
+				},
+			},
+			word:      "hello",
+			wantCount: 1,
+		},
+		{
+			name:    "match via definition field in flashcard",
+			stories: map[string][]notebook.StoryNotebook{},
+			flashcards: map[string][]notebook.FlashcardNotebook{
+				"test": {
+					{
+						Title: "Words",
+						Cards: []notebook.Note{
+							{Expression: "lost his temper", Definition: "lose one's temper", Meaning: "to become angry"},
+						},
+					},
+				},
+			},
+			word:      "lose one's temper",
+			wantCount: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cli := &FreeformQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{},
+				allStories:         tt.stories,
+				allFlashcards:      tt.flashcards,
+			}
+			result := cli.findAllWordContexts(tt.word)
+			assert.Equal(t, tt.wantCount, len(result))
+			if tt.validate != nil {
+				tt.validate(t, result)
+			}
+		})
+	}
+}
+
+func TestFreeformQuizCLI_hasCorrectAnswer_FlashcardAndStory(t *testing.T) {
+	tests := []struct {
+		name            string
+		learningHistory []notebook.LearningHistory
+		wordCtx         *WordOccurrence
+		word            string
+		want            bool
+	}{
+		{
+			name: "flashcard type with understood status and recent threshold - mastered",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						Title: "flashcards",
+						Type:  "flashcard",
+					},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression: "break the ice",
+							LearnedLogs: []notebook.LearningRecord{
+								{Status: "understood", LearnedAt: notebook.NewDate(time.Now()), IntervalDays: 7},
+							},
+						},
+					},
+				},
+			},
+			wordCtx: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "break the ice", Meaning: "to initiate social interaction"},
+			},
+			word: "break the ice",
+			want: true,
+		},
+		{
+			name: "flashcard type with understood status and expired threshold - needs learning",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						Title: "flashcards",
+						Type:  "flashcard",
+					},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression: "break the ice",
+							LearnedLogs: []notebook.LearningRecord{
+								{Status: "understood", LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), IntervalDays: 7},
+							},
+						},
+					},
+				},
+			},
+			wordCtx: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "break the ice", Meaning: "to initiate social interaction"},
+			},
+			word: "break the ice",
+			want: false,
+		},
+		{
+			name: "story type with understood status and recent threshold - mastered",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{
+						Title: "Story 1",
+					},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression: "study",
+									LearnedLogs: []notebook.LearningRecord{
+										{Status: "understood", LearnedAt: notebook.NewDate(time.Now()), IntervalDays: 7},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			wordCtx: &WordOccurrence{
+				Story:      &notebook.StoryNotebook{Event: "Story 1"},
+				Scene:      &notebook.StoryScene{Title: "Scene 1"},
+				Definition: &notebook.Note{Expression: "study", Meaning: "to learn"},
+			},
+			word: "study",
+			want: true,
+		},
+		{
+			name:            "no matching learning history",
+			learningHistory: []notebook.LearningHistory{},
+			wordCtx: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "hello", Meaning: "a greeting"},
+			},
+			word: "hello",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cli := &FreeformQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{},
+			}
+			got := cli.hasCorrectAnswer(tt.learningHistory, tt.wordCtx, tt.word)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestFreeformQuizCLI_hasThresholdPassed(t *testing.T) {
+	tests := []struct {
+		name string
+		logs []notebook.LearningRecord
+		want bool
+	}{
+		{
+			name: "empty logs - threshold passed",
+			logs: []notebook.LearningRecord{},
+			want: true,
+		},
+		{
+			name: "recent log with interval - threshold not passed",
+			logs: []notebook.LearningRecord{
+				{
+					Status:       "understood",
+					LearnedAt:    notebook.NewDate(time.Now()),
+					IntervalDays: 7,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "old log with interval - threshold passed",
+			logs: []notebook.LearningRecord{
+				{
+					Status:       "understood",
+					LearnedAt:    notebook.NewDate(time.Now().Add(-10 * 24 * time.Hour)),
+					IntervalDays: 7,
+				},
+			},
+			want: true,
+		},
+		{
+			name: "legacy log without interval - uses count-based threshold",
+			logs: []notebook.LearningRecord{
+				{
+					Status:    "understood",
+					LearnedAt: notebook.NewDate(time.Now()),
+				},
+			},
+			want: false,
+		},
+		{
+			name: "only learning/misunderstood logs - uses count 0 threshold",
+			logs: []notebook.LearningRecord{
+				{
+					Status:    "",
+					LearnedAt: notebook.NewDate(time.Now().Add(-100 * 24 * time.Hour)),
+				},
+				{
+					Status:    "misunderstood",
+					LearnedAt: notebook.NewDate(time.Now().Add(-50 * 24 * time.Hour)),
+				},
+			},
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cli := &FreeformQuizCLI{}
+			got := cli.hasThresholdPassed(tt.logs)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestFreeformQuizCLI_isExpressionMatch(t *testing.T) {
+	tests := []struct {
+		name    string
+		expr    notebook.LearningHistoryExpression
+		wordCtx *WordOccurrence
+		word    string
+		want    bool
+	}{
+		{
+			name: "direct expression match",
+			expr: notebook.LearningHistoryExpression{
+				Expression: "break the ice",
+			},
+			wordCtx: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "break the ice",
+					Meaning:    "to initiate social interaction",
+				},
+			},
+			word: "break the ice",
+			want: true,
+		},
+		{
+			name: "no match",
+			expr: notebook.LearningHistoryExpression{
+				Expression: "different word",
+			},
+			wordCtx: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "break the ice",
+					Meaning:    "to initiate social interaction",
+				},
+			},
+			word: "break the ice",
+			want: false,
+		},
+		{
+			name: "match via definition field",
+			expr: notebook.LearningHistoryExpression{
+				Expression: "lose one's temper",
+			},
+			wordCtx: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "lost his temper",
+					Definition: "lose one's temper",
+					Meaning:    "to become angry",
+				},
+			},
+			word: "lost his temper",
+			want: true,
+		},
+		{
+			name: "user practices definition form - expression in history matches",
+			expr: notebook.LearningHistoryExpression{
+				Expression: "lost his temper",
+			},
+			wordCtx: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "lost his temper",
+					Definition: "lose one's temper",
+					Meaning:    "to become angry",
+				},
+			},
+			word: "lose one's temper",
+			want: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cli := &FreeformQuizCLI{}
+			got := cli.isExpressionMatch(tt.expr, tt.wordCtx, tt.word)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

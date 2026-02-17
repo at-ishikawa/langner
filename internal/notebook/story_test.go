@@ -12,6 +12,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestNewStoryNotebookWriter(t *testing.T) {
+	reader, err := NewReader(nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	writer := NewStoryNotebookWriter(reader, "template.md")
+	assert.NotNil(t, writer)
+	assert.Equal(t, reader, writer.reader)
+	assert.Equal(t, "template.md", writer.templatePath)
+}
+
 func TestConvertMarkersInText(t *testing.T) {
 	definitions := []Note{
 		{Expression: "test phrase"},
@@ -686,4 +696,65 @@ func TestReader_ReadAllStoryNotebooksMap(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestOutputStoryNotebooks(t *testing.T) {
+	storiesDir := t.TempDir()
+	outputDir := t.TempDir()
+
+	// Create story data
+	storyDir := filepath.Join(storiesDir, "test-story")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, WriteYamlFile(filepath.Join(storyDir, "index.yml"), Index{
+		Kind: "story", ID: "test-story", Name: "Test Story",
+		NotebookPaths: []string{"stories.yml"},
+	}))
+	require.NoError(t, WriteYamlFile(filepath.Join(storyDir, "stories.yml"), []StoryNotebook{
+		{
+			Event: "Episode 1",
+			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+			Scenes: []StoryScene{
+				{
+					Title:         "Scene 1",
+					Conversations: []Conversation{{Speaker: "A", Quote: "A {{ tricky }} situation."}},
+					Definitions:   []Note{{Expression: "tricky", Meaning: "difficult to deal with"}},
+				},
+			},
+		},
+	}))
+
+	reader, err := NewReader([]string{storiesDir}, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	writer := NewStoryNotebookWriter(reader, "")
+
+	t.Run("success", func(t *testing.T) {
+		learningHistories := map[string][]LearningHistory{
+			"test-story": {
+				{
+					Metadata: LearningHistoryMetadata{NotebookID: "test-story", Title: "Episode 1"},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{Expression: "tricky", LearnedLogs: []LearningRecord{{Status: "misunderstood", LearnedAt: NewDate(time.Now())}}},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		err := writer.OutputStoryNotebooks("test-story", map[string]rapidapi.Response{}, learningHistories, false, outputDir, false)
+		require.NoError(t, err)
+
+		outputFile := filepath.Join(outputDir, "test-story.md")
+		_, err = os.Stat(outputFile)
+		assert.NoError(t, err)
+	})
+
+	t.Run("story not found", func(t *testing.T) {
+		err := writer.OutputStoryNotebooks("nonexistent", map[string]rapidapi.Response{}, map[string][]LearningHistory{}, false, outputDir, false)
+		assert.Error(t, err)
+	})
 }

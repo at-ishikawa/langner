@@ -322,6 +322,55 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 				assert.Equal(t, "test", cli.cards[0].Definition.Expression)
 			},
 		},
+		{
+			name: "All notebooks - empty notebookName loads all stories",
+			setupFunc: func(t *testing.T) (string, string) {
+				storiesDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+
+				notebookDir := filepath.Join(storiesDir, "test-notebook")
+				require.NoError(t, os.MkdirAll(notebookDir, 0755))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "index.yml"), notebook.Index{
+					Kind: "story", ID: "test-notebook", Name: "Test Notebook",
+					NotebookPaths: []string{"stories.yml"},
+				}))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "stories.yml"), []notebook.StoryNotebook{
+					{
+						Event: "Story 1",
+						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						Scenes: []notebook.StoryScene{
+							{
+								Title:         "Scene 1",
+								Conversations: []notebook.Conversation{{Speaker: "A", Quote: "This is a test word"}},
+								Definitions:   []notebook.Note{{Expression: "test", Meaning: "test meaning"}},
+							},
+						},
+					},
+				}))
+
+				learningHistory := []notebook.LearningHistory{
+					{
+						Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-notebook", Title: "Story 1"},
+						Scenes: []notebook.LearningScene{
+							{
+								Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+								Expressions: []notebook.LearningHistoryExpression{
+									{
+										Expression:  "test",
+										LearnedLogs: []notebook.LearningRecord{{Status: "misunderstood", LearnedAt: notebook.NewDate(time.Now())}},
+									},
+								},
+							},
+						},
+					},
+				}
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-notebook.yml"), learningHistory))
+
+				return storiesDir, learningNotesDir
+			},
+			notebookName:      "",
+			expectedCardCount: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -351,6 +400,119 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			if tt.validate != nil {
 				tt.validate(t, cli)
 			}
+		})
+	}
+}
+
+func TestNewFlashcardQuizCLI(t *testing.T) {
+	tests := []struct {
+		name              string
+		setupFunc         func(t *testing.T) (flashcardsDir, learningNotesDir string)
+		notebookName      string
+		expectedCardCount int
+		wantErr           bool
+	}{
+		{
+			name: "loads flashcard with learning history - misunderstood word included",
+			setupFunc: func(t *testing.T) (string, string) {
+				flashcardsDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+
+				flashcardDir := filepath.Join(flashcardsDir, "test-flashcard")
+				require.NoError(t, os.MkdirAll(flashcardDir, 0755))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "index.yml"), notebook.FlashcardIndex{
+					ID: "test-flashcard", Name: "Test Flashcards",
+					NotebookPaths: []string{"cards.yml"},
+				}))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "cards.yml"), []notebook.FlashcardNotebook{
+					{
+						Title: "Common Words",
+						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						Cards: []notebook.Note{
+							{Expression: "break the ice", Meaning: "to initiate social interaction"},
+						},
+					},
+				}))
+
+				learningHistory := []notebook.LearningHistory{
+					{
+						Metadata: notebook.LearningHistoryMetadata{
+							NotebookID: "test-flashcard",
+							Title:      "flashcards",
+							Type:       "flashcard",
+						},
+						Expressions: []notebook.LearningHistoryExpression{
+							{
+								Expression: "break the ice",
+								LearnedLogs: []notebook.LearningRecord{
+									{Status: "misunderstood", LearnedAt: notebook.NewDate(time.Now())},
+								},
+							},
+						},
+					},
+				}
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-flashcard.yml"), learningHistory))
+
+				return flashcardsDir, learningNotesDir
+			},
+			notebookName:      "test-flashcard",
+			expectedCardCount: 1,
+		},
+		{
+			name: "no learning history returns error",
+			setupFunc: func(t *testing.T) (string, string) {
+				flashcardsDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+
+				flashcardDir := filepath.Join(flashcardsDir, "test-flashcard")
+				require.NoError(t, os.MkdirAll(flashcardDir, 0755))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "index.yml"), notebook.FlashcardIndex{
+					ID: "test-flashcard", Name: "Test Flashcards",
+					NotebookPaths: []string{"cards.yml"},
+				}))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "cards.yml"), []notebook.FlashcardNotebook{
+					{
+						Title: "Common Words",
+						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						Cards: []notebook.Note{
+							{Expression: "test", Meaning: "test meaning"},
+						},
+					},
+				}))
+
+				return flashcardsDir, learningNotesDir
+			},
+			notebookName: "test-flashcard",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flashcardsDir, learningNotesDir := tt.setupFunc(t)
+			dictionaryCacheDir := t.TempDir()
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockClient := mock_inference.NewMockClient(ctrl)
+
+			cli, err := NewFlashcardQuizCLI(
+				tt.notebookName,
+				config.NotebooksConfig{
+					FlashcardsDirectories:  []string{flashcardsDir},
+					LearningNotesDirectory: learningNotesDir,
+				},
+				dictionaryCacheDir,
+				mockClient,
+			)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCardCount, cli.GetCardCount())
 		})
 	}
 }
@@ -562,6 +724,20 @@ func TestFormatQuestion(t *testing.T) {
 				Contexts:   []WordOccurrenceContext{{Context: "Hello there!", Usage: "hello"}},
 			},
 			expected: "What does 'hello' mean?\nExamples:\n  1. {Hello there! hello}\n",
+		},
+		{
+			name: "Scene with definitions - converts markers",
+			card: WordOccurrence{
+				Scene: &notebook.StoryScene{
+					Title: "Scene 1",
+					Definitions: []notebook.Note{
+						{Expression: "excited", Meaning: "feeling enthusiasm"},
+					},
+				},
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{{Context: "I am so {{ excited }} about the trip!", Usage: "excited"}},
+			},
+			expected: "What does 'excited' mean in the following context?\n  1. I am so \x1b[1mexcited\x1b[22m about the trip!\n",
 		},
 	}
 
