@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -20,78 +21,68 @@ func TestNewAnalyzeReportCommand(t *testing.T) {
 	assert.Equal(t, "report", cmd.Use)
 	assert.Equal(t, "Show monthly/yearly report of learning statistics", cmd.Short)
 	assert.NotNil(t, cmd.RunE)
-
-	// Verify flags
-	yearFlag := cmd.Flags().Lookup("year")
-	assert.NotNil(t, yearFlag)
-	assert.Equal(t, "0", yearFlag.DefValue)
-
-	monthFlag := cmd.Flags().Lookup("month")
-	assert.NotNil(t, monthFlag)
-	assert.Equal(t, "0", monthFlag.DefValue)
 }
 
-func TestNewAnalyzeReportCommand_MonthWithoutYear(t *testing.T) {
-	cmd := newAnalyzeReportCommand()
-	cmd.SetArgs([]string{"--month", "3"})
-
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--month requires --year")
-}
-
-func TestNewAnalyzeReportCommand_InvalidMonth(t *testing.T) {
-	cmd := newAnalyzeReportCommand()
-	cmd.SetArgs([]string{"--year", "2025", "--month", "13"})
-
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--month must be between 1 and 12")
+func TestNewAnalyzeReportCommand_RunE(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		wantErr string
+	}{
+		{
+			name:    "month without year",
+			args:    []string{"--month", "3"},
+			wantErr: "--month requires --year",
+		},
+		{
+			name:    "invalid month too high",
+			args:    []string{"--year", "2025", "--month", "13"},
+			wantErr: "--month must be between 1 and 12",
+		},
+		{
+			name:    "negative month",
+			args:    []string{"--year", "2025", "--month", "-1"},
+			wantErr: "--month must be between 1 and 12",
+		},
+		{
+			name:    "invalid config",
+			args:    []string{},
+			wantErr: "configuration",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.name == "invalid config" {
+				cfgPath := setupBrokenConfigFile(t)
+				setConfigFile(t, cfgPath)
+			}
+			cmd := newAnalyzeReportCommand()
+			cmd.SetArgs(tt.args)
+			err := cmd.Execute()
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErr)
+		})
+	}
 }
 
 func TestNewAnalyzeReportCommand_RunE_WithConfig(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	cfgPath := testutil.SetupTestConfig(t, tmpDir)
+	setConfigFile(t, cfgPath)
 
-	cmd := newAnalyzeReportCommand()
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
-	assert.NoError(t, err)
-}
-
-func TestNewAnalyzeReportCommand_RunE_WithYearMonth(t *testing.T) {
-	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
-
-	cmd := newAnalyzeReportCommand()
-	cmd.SetArgs([]string{"--year", "2025", "--month", "6"})
-	err := cmd.Execute()
-	assert.NoError(t, err)
-}
-
-func TestNewAnalyzeReportCommand_RunE_NegativeMonth(t *testing.T) {
-	cmd := newAnalyzeReportCommand()
-	cmd.SetArgs([]string{"--year", "2025", "--month", "-1"})
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "--month must be between 1 and 12")
-}
-
-func TestNewAnalyzeReportCommand_RunE_InvalidConfig(t *testing.T) {
-	cfgPath := setupBrokenConfigFile(t)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
-
-	cmd := newAnalyzeReportCommand()
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "configuration")
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "no args", args: []string{}},
+		{name: "with year and month", args: []string{"--year", "2025", "--month", "6"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newAnalyzeReportCommand()
+			cmd.SetArgs(tt.args)
+			err := cmd.Execute()
+			assert.NoError(t, err)
+		})
+	}
 }

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -165,41 +166,51 @@ func TestDisplayValidationResults_ManyMissingLearningNotes(t *testing.T) {
 	assert.Contains(t, output, "... and 5 more")
 }
 
-func TestNewValidateCommand_RunE_InvalidConfig(t *testing.T) {
-	cfgPath := setupBrokenConfigFile(t)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
-
-	cmd := newValidateCommand()
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "configuration")
-}
-
 func TestNewValidateCommand_RunE(t *testing.T) {
-	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
-
-	cmd := newValidateCommand()
-	cmd.SetArgs([]string{})
-	err := cmd.Execute()
-	assert.NoError(t, err)
-}
-
-func TestNewValidateCommand_RunE_WithFix(t *testing.T) {
-	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
-
-	cmd := newValidateCommand()
-	cmd.SetArgs([]string{"--fix"})
-	err := cmd.Execute()
-	assert.NoError(t, err)
+	tests := []struct {
+		name    string
+		setup   func(t *testing.T)
+		args    []string
+		wantErr string
+	}{
+		{
+			name: "invalid config",
+			setup: func(t *testing.T) {
+				cfgPath := setupBrokenConfigFile(t)
+				setConfigFile(t, cfgPath)
+			},
+			wantErr: "configuration",
+		},
+		{
+			name: "valid config",
+			setup: func(t *testing.T) {
+				tmpDir := t.TempDir()
+				cfgPath := testutil.SetupTestConfig(t, tmpDir)
+				setConfigFile(t, cfgPath)
+			},
+		},
+		{
+			name: "with fix flag",
+			setup: func(t *testing.T) {
+				tmpDir := t.TempDir()
+				cfgPath := testutil.SetupTestConfig(t, tmpDir)
+				setConfigFile(t, cfgPath)
+			},
+			args: []string{"--fix"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup(t)
+			cmd := newValidateCommand()
+			cmd.SetArgs(tt.args)
+			err := cmd.Execute()
+			if tt.wantErr != "" {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.wantErr)
+				return
+			}
+			assert.NoError(t, err)
+		})
+	}
 }

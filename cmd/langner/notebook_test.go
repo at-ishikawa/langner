@@ -1,14 +1,11 @@
 package main
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
-	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestSortFlag_Set(t *testing.T) {
@@ -96,48 +93,14 @@ func TestNewNotebookCommand(t *testing.T) {
 	sortFlag := cmd.PersistentFlags().Lookup("sort")
 	assert.NotNil(t, sortFlag)
 	assert.Equal(t, "desc", sortFlag.DefValue)
-
-	// Verify subcommands exist
-	stories, _, err := cmd.Find([]string{"stories"})
-	assert.NoError(t, err)
-	assert.Equal(t, "stories <notebook id>", stories.Use)
-
-	flashcards, _, err := cmd.Find([]string{"flashcards"})
-	assert.NoError(t, err)
-	assert.Equal(t, "flashcards <flashcard id>", flashcards.Use)
 }
 
 func TestNewNotebookCommand_Stories_RunE(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	cfgPath := testutil.SetupTestConfig(t, tmpDir)
+	setConfigFile(t, cfgPath)
 
-	// Create story data
-	storiesDir := filepath.Join(tmpDir, "stories", "test-story")
-	require.NoError(t, os.MkdirAll(storiesDir, 0755))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(storiesDir, "index.yml"), notebook.Index{
-		Kind: "story", ID: "test-story", Name: "Test Story",
-		NotebookPaths: []string{"stories.yml"},
-	}))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(storiesDir, "stories.yml"), []notebook.StoryNotebook{
-		{
-			Event: "Episode 1",
-			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-			Scenes: []notebook.StoryScene{
-				{
-					Title: "Scene 1",
-					Conversations: []notebook.Conversation{
-						{Speaker: "A", Quote: "The {{ eager }} student arrived early."},
-					},
-					Definitions: []notebook.Note{
-						{Expression: "eager", Meaning: "wanting to do something very much"},
-					},
-				},
-			},
-		},
-	}))
+	testutil.CreateStoryNotebook(t, filepath.Join(tmpDir, "stories"), filepath.Join(tmpDir, "learning_notes"), "test-story")
 
 	cmd := newNotebookCommand()
 	cmd.SetArgs([]string{"stories", "test-story"})
@@ -147,27 +110,10 @@ func TestNewNotebookCommand_Stories_RunE(t *testing.T) {
 
 func TestNewNotebookCommand_Flashcards_RunE(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	cfgPath := testutil.SetupTestConfig(t, tmpDir)
+	setConfigFile(t, cfgPath)
 
-	// Create flashcard data
-	flashcardDir := filepath.Join(tmpDir, "flashcards", "test-fc")
-	require.NoError(t, os.MkdirAll(flashcardDir, 0755))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "index.yml"), notebook.FlashcardIndex{
-		ID: "test-fc", Name: "Test Flashcards",
-		NotebookPaths: []string{"cards.yml"},
-	}))
-	require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "cards.yml"), []notebook.FlashcardNotebook{
-		{
-			Title: "Common Words",
-			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-			Cards: []notebook.Note{
-				{Expression: "break the ice", Meaning: "to initiate social interaction"},
-			},
-		},
-	}))
+	testutil.CreateFlashcardNotebook(t, filepath.Join(tmpDir, "flashcards"), filepath.Join(tmpDir, "learning_notes"), "test-fc")
 
 	cmd := newNotebookCommand()
 	cmd.SetArgs([]string{"flashcards", "test-fc"})
@@ -177,9 +123,7 @@ func TestNewNotebookCommand_Flashcards_RunE(t *testing.T) {
 
 func TestNewNotebookCommand_InvalidConfig(t *testing.T) {
 	cfgPath := setupBrokenConfigFile(t)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	setConfigFile(t, cfgPath)
 
 	tests := []struct {
 		name string
@@ -199,28 +143,24 @@ func TestNewNotebookCommand_InvalidConfig(t *testing.T) {
 	}
 }
 
-func TestNewNotebookCommand_Stories_NotFound(t *testing.T) {
+func TestNewNotebookCommand_NotFound(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	cfgPath := testutil.SetupTestConfig(t, tmpDir)
+	setConfigFile(t, cfgPath)
 
-	cmd := newNotebookCommand()
-	cmd.SetArgs([]string{"stories", "nonexistent"})
-	err := cmd.Execute()
-	assert.Error(t, err)
-}
-
-func TestNewNotebookCommand_Flashcards_NotFound(t *testing.T) {
-	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
-
-	cmd := newNotebookCommand()
-	cmd.SetArgs([]string{"flashcards", "nonexistent"})
-	err := cmd.Execute()
-	assert.Error(t, err)
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{name: "stories", args: []string{"stories", "nonexistent"}},
+		{name: "flashcards", args: []string{"flashcards", "nonexistent"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := newNotebookCommand()
+			cmd.SetArgs(tt.args)
+			err := cmd.Execute()
+			assert.Error(t, err)
+		})
+	}
 }

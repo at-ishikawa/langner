@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -55,10 +56,8 @@ func TestAPI_Type(t *testing.T) {
 
 func TestNewDictionaryCommand_Lookup_RunE_CachedWord(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	cfgPath := testutil.SetupTestConfig(t, tmpDir)
+	setConfigFile(t, cfgPath)
 
 	// Create a cached dictionary response
 	cacheDir := filepath.Join(tmpDir, "dictionaries")
@@ -73,9 +72,7 @@ func TestNewDictionaryCommand_Lookup_RunE_CachedWord(t *testing.T) {
 
 func TestNewDictionaryCommand_Lookup_RunE_InvalidConfig(t *testing.T) {
 	cfgPath := setupBrokenConfigFile(t)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	setConfigFile(t, cfgPath)
 
 	cmd := newDictionaryCommand()
 	cmd.SetArgs([]string{"lookup", "test"})

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -54,10 +55,8 @@ func TestNewMigrateLearningHistoryCommand(t *testing.T) {
 
 func TestNewMigrateLearningHistoryCommand_RunE(t *testing.T) {
 	tmpDir := t.TempDir()
-	cfgPath := setupTestConfigFile(t, tmpDir)
-	oldConfigFile := configFile
-	configFile = cfgPath
-	defer func() { configFile = oldConfigFile }()
+	cfgPath := testutil.SetupTestConfig(t, tmpDir)
+	setConfigFile(t, cfgPath)
 
 	cmd := newMigrateLearningHistoryCommand()
 	cmd.SetArgs([]string{})

@@ -14,6 +14,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -179,74 +180,14 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			setupFunc: func(t *testing.T) (string, string) {
 				storiesDir := t.TempDir()
 				learningNotesDir := t.TempDir()
-
-				// Create notebook directory structure
-				notebookDir := filepath.Join(storiesDir, "test-notebook")
-				require.NoError(t, os.MkdirAll(notebookDir, 0755))
-
-				// Create index.yml
-				index := notebook.Index{
-					Kind:          "story",
-					ID:            "test-notebook",
-					Name:          "Test Notebook",
-					NotebookPaths: []string{"stories.yml"},
-				}
-				indexPath := filepath.Join(notebookDir, "index.yml")
-				require.NoError(t, notebook.WriteYamlFile(indexPath, index))
-
-				// Create stories.yml
-				stories := []notebook.StoryNotebook{
-					{
-						Event: "Story 1",
-						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						Scenes: []notebook.StoryScene{
-							{
-								Title: "Scene 1",
-								Conversations: []notebook.Conversation{
-									{Speaker: "A", Quote: "This is a test word"},
-								},
-								Definitions: []notebook.Note{
-									{Expression: "test", Meaning: "test meaning"},
-								},
-							},
-						},
-					},
-				}
-				storiesPath := filepath.Join(notebookDir, "stories.yml")
-				require.NoError(t, notebook.WriteYamlFile(storiesPath, stories))
-
-				// Create learning history with misunderstood word
-				learningHistory := []notebook.LearningHistory{
-					{
-						Metadata: notebook.LearningHistoryMetadata{
-							NotebookID: "test-notebook",
-							Title:      "Story 1",
-						},
-						Scenes: []notebook.LearningScene{
-							{
-								Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
-								Expressions: []notebook.LearningHistoryExpression{
-									{
-										Expression: "test",
-										LearnedLogs: []notebook.LearningRecord{
-											{Status: "misunderstood", LearnedAt: notebook.NewDate(time.Now())},
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-				learningHistoryPath := filepath.Join(learningNotesDir, "test-notebook.yml")
-				require.NoError(t, notebook.WriteYamlFile(learningHistoryPath, learningHistory))
-
+				testutil.CreateStoryNotebook(t, storiesDir, learningNotesDir, "test-notebook")
 				return storiesDir, learningNotesDir
 			},
 			notebookName:      "test-notebook",
 			expectedCardCount: 1,
 			validate: func(t *testing.T, cli *NotebookQuizCLI) {
 				assert.Equal(t, 1, len(cli.cards))
-				assert.Equal(t, "test", cli.cards[0].Definition.Expression)
+				assert.Equal(t, "eager", cli.cards[0].Definition.Expression)
 			},
 		},
 		{
@@ -327,45 +268,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			setupFunc: func(t *testing.T) (string, string) {
 				storiesDir := t.TempDir()
 				learningNotesDir := t.TempDir()
-
-				notebookDir := filepath.Join(storiesDir, "test-notebook")
-				require.NoError(t, os.MkdirAll(notebookDir, 0755))
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "index.yml"), notebook.Index{
-					Kind: "story", ID: "test-notebook", Name: "Test Notebook",
-					NotebookPaths: []string{"stories.yml"},
-				}))
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "stories.yml"), []notebook.StoryNotebook{
-					{
-						Event: "Story 1",
-						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						Scenes: []notebook.StoryScene{
-							{
-								Title:         "Scene 1",
-								Conversations: []notebook.Conversation{{Speaker: "A", Quote: "This is a test word"}},
-								Definitions:   []notebook.Note{{Expression: "test", Meaning: "test meaning"}},
-							},
-						},
-					},
-				}))
-
-				learningHistory := []notebook.LearningHistory{
-					{
-						Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-notebook", Title: "Story 1"},
-						Scenes: []notebook.LearningScene{
-							{
-								Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
-								Expressions: []notebook.LearningHistoryExpression{
-									{
-										Expression:  "test",
-										LearnedLogs: []notebook.LearningRecord{{Status: "misunderstood", LearnedAt: notebook.NewDate(time.Now())}},
-									},
-								},
-							},
-						},
-					},
-				}
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-notebook.yml"), learningHistory))
-
+				testutil.CreateStoryNotebook(t, storiesDir, learningNotesDir, "test-notebook")
 				return storiesDir, learningNotesDir
 			},
 			notebookName:      "",
@@ -417,42 +320,7 @@ func TestNewFlashcardQuizCLI(t *testing.T) {
 			setupFunc: func(t *testing.T) (string, string) {
 				flashcardsDir := t.TempDir()
 				learningNotesDir := t.TempDir()
-
-				flashcardDir := filepath.Join(flashcardsDir, "test-flashcard")
-				require.NoError(t, os.MkdirAll(flashcardDir, 0755))
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "index.yml"), notebook.FlashcardIndex{
-					ID: "test-flashcard", Name: "Test Flashcards",
-					NotebookPaths: []string{"cards.yml"},
-				}))
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "cards.yml"), []notebook.FlashcardNotebook{
-					{
-						Title: "Common Words",
-						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						Cards: []notebook.Note{
-							{Expression: "break the ice", Meaning: "to initiate social interaction"},
-						},
-					},
-				}))
-
-				learningHistory := []notebook.LearningHistory{
-					{
-						Metadata: notebook.LearningHistoryMetadata{
-							NotebookID: "test-flashcard",
-							Title:      "flashcards",
-							Type:       "flashcard",
-						},
-						Expressions: []notebook.LearningHistoryExpression{
-							{
-								Expression: "break the ice",
-								LearnedLogs: []notebook.LearningRecord{
-									{Status: "misunderstood", LearnedAt: notebook.NewDate(time.Now())},
-								},
-							},
-						},
-					},
-				}
-				require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-flashcard.yml"), learningHistory))
-
+				testutil.CreateFlashcardNotebook(t, flashcardsDir, learningNotesDir, "test-flashcard")
 				return flashcardsDir, learningNotesDir
 			},
 			notebookName:      "test-flashcard",
