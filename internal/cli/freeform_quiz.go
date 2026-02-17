@@ -60,6 +60,24 @@ func NewFreeformQuizCLI(
 	}, nil
 }
 
+// WordCount returns the total number of word definitions loaded across all stories and flashcards.
+func (r *FreeformQuizCLI) WordCount() int {
+	var count int
+	for _, stories := range r.allStories {
+		for _, story := range stories {
+			for _, scene := range story.Scenes {
+				count += len(scene.Definitions)
+			}
+		}
+	}
+	for _, flashcards := range r.allFlashcards {
+		for _, flashcard := range flashcards {
+			count += len(flashcard.Cards)
+		}
+	}
+	return count
+}
+
 func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	startTime := time.Now()
 

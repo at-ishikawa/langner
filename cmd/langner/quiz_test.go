@@ -17,12 +17,14 @@ import (
 
 func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 	tests := []struct {
-		name      string
-		setupFunc func(t *testing.T) config.NotebooksConfig
-		wantErr   bool
+		name          string
+		setupFunc     func(t *testing.T) config.NotebooksConfig
+		wantErr       bool
+		wantWordCount int
 	}{
 		{
-			name: "loads words from book with separate definitions directory",
+			name:          "loads words from book with separate definitions directory",
+			wantWordCount: 1,
 			setupFunc: func(t *testing.T) config.NotebooksConfig {
 				t.Helper()
 				booksDir := t.TempDir()
@@ -88,7 +90,8 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 			},
 		},
 		{
-			name: "loads words from story directory",
+			name:          "loads words from story directory",
+			wantWordCount: 1,
 			setupFunc: func(t *testing.T) config.NotebooksConfig {
 				t.Helper()
 				storiesDir := t.TempDir()
@@ -135,7 +138,8 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 			},
 		},
 		{
-			name: "loads words from flashcard directory",
+			name:          "loads words from flashcard directory",
+			wantWordCount: 1,
 			setupFunc: func(t *testing.T) config.NotebooksConfig {
 				t.Helper()
 				flashcardsDir := t.TempDir()
@@ -174,7 +178,8 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 			},
 		},
 		{
-			name: "loads words from all directory types combined",
+			name:          "loads words from all directory types combined",
+			wantWordCount: 3,
 			setupFunc: func(t *testing.T) config.NotebooksConfig {
 				t.Helper()
 				booksDir := t.TempDir()
@@ -283,6 +288,7 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 			dictionaryCacheDir := t.TempDir()
 
 			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
 			mockClient := mock_inference.NewMockClient(ctrl)
 
 			got, err := cli.NewFreeformQuizCLI(
@@ -297,7 +303,8 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 			}
 
 			require.NoError(t, err)
-			assert.NotNil(t, got)
+			require.NotNil(t, got)
+			assert.Equal(t, tt.wantWordCount, got.WordCount(), "loaded word count should match expected")
 		})
 	}
 }
