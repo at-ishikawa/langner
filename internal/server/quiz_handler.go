@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 
-	quizv1 "github.com/at-ishikawa/langner/gen/quiz/v1"
-	"github.com/at-ishikawa/langner/gen/quiz/v1/quizv1connect"
+	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
+	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -31,7 +31,7 @@ type quizNote struct {
 
 // QuizHandler implements the QuizServiceHandler interface.
 type QuizHandler struct {
-	quizv1connect.UnimplementedQuizServiceHandler
+	apiv1connect.UnimplementedQuizServiceHandler
 
 	cfg           *config.Config
 	openaiClient  inference.Client
@@ -56,8 +56,8 @@ func NewQuizHandler(cfg *config.Config, openaiClient inference.Client, dictionar
 // GetQuizOptions returns available notebooks with review counts.
 func (h *QuizHandler) GetQuizOptions(
 	ctx context.Context,
-	req *connect.Request[quizv1.GetQuizOptionsRequest],
-) (*connect.Response[quizv1.GetQuizOptionsResponse], error) {
+	req *connect.Request[apiv1.GetQuizOptionsRequest],
+) (*connect.Response[apiv1.GetQuizOptionsResponse], error) {
 	reader, err := h.newReader()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("newReader() > %w", err))
@@ -68,7 +68,7 @@ func (h *QuizHandler) GetQuizOptions(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("NewLearningHistories() > %w", err))
 	}
 
-	var summaries []*quizv1.NotebookSummary
+	var summaries []*apiv1.NotebookSummary
 
 	for id, index := range reader.GetStoryIndexes() {
 		stories, err := reader.ReadStoryNotebooks(id)
@@ -84,7 +84,7 @@ func (h *QuizHandler) GetQuizOptions(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("FilterStoryNotebooks(%s) > %w", id, err))
 		}
 
-		summaries = append(summaries, &quizv1.NotebookSummary{
+		summaries = append(summaries, &apiv1.NotebookSummary{
 			NotebookId:  id,
 			Name:        index.Name,
 			ReviewCount: int32(countStoryDefinitions(filtered)),
@@ -104,14 +104,14 @@ func (h *QuizHandler) GetQuizOptions(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("FilterFlashcardNotebooks(%s) > %w", id, err))
 		}
 
-		summaries = append(summaries, &quizv1.NotebookSummary{
+		summaries = append(summaries, &apiv1.NotebookSummary{
 			NotebookId:  id,
 			Name:        index.Name,
 			ReviewCount: int32(countFlashcardCards(filtered)),
 		})
 	}
 
-	return connect.NewResponse(&quizv1.GetQuizOptionsResponse{
+	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{
 		Notebooks: summaries,
 	}), nil
 }
@@ -119,8 +119,8 @@ func (h *QuizHandler) GetQuizOptions(
 // StartQuiz starts a quiz session and returns flashcards for the selected notebooks.
 func (h *QuizHandler) StartQuiz(
 	ctx context.Context,
-	req *connect.Request[quizv1.StartQuizRequest],
-) (*connect.Response[quizv1.StartQuizResponse], error) {
+	req *connect.Request[apiv1.StartQuizRequest],
+) (*connect.Response[apiv1.StartQuizResponse], error) {
 	if len(req.Msg.GetNotebookIds()) == 0 {
 		return nil, newInvalidArgumentError("notebook_ids", "at least one notebook ID is required")
 	}
@@ -144,7 +144,7 @@ func (h *QuizHandler) StartQuiz(
 	h.noteStore = make(map[int64]*quizNote)
 	h.mu.Unlock()
 
-	var flashcards []*quizv1.Flashcard
+	var flashcards []*apiv1.Flashcard
 
 	for _, notebookID := range req.Msg.GetNotebookIds() {
 		_, isStory := storyIndexes[notebookID]
@@ -171,7 +171,7 @@ func (h *QuizHandler) StartQuiz(
 		}
 	}
 
-	return connect.NewResponse(&quizv1.StartQuizResponse{
+	return connect.NewResponse(&apiv1.StartQuizResponse{
 		Flashcards: flashcards,
 	}), nil
 }
@@ -179,8 +179,8 @@ func (h *QuizHandler) StartQuiz(
 // SubmitAnswer grades a user's answer and updates learning history.
 func (h *QuizHandler) SubmitAnswer(
 	ctx context.Context,
-	req *connect.Request[quizv1.SubmitAnswerRequest],
-) (*connect.Response[quizv1.SubmitAnswerResponse], error) {
+	req *connect.Request[apiv1.SubmitAnswerRequest],
+) (*connect.Response[apiv1.SubmitAnswerResponse], error) {
 	noteID := req.Msg.GetNoteId()
 	answer := req.Msg.GetAnswer()
 
@@ -229,7 +229,7 @@ func (h *QuizHandler) SubmitAnswer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("updateLearningHistory() > %w", err))
 	}
 
-	return connect.NewResponse(&quizv1.SubmitAnswerResponse{
+	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
 		Correct: isCorrect,
 		Meaning: note.meaning,
 		Reason:  reason,
@@ -251,7 +251,7 @@ func (h *QuizHandler) loadStoryCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
-) ([]*quizv1.Flashcard, error) {
+) ([]*apiv1.Flashcard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
@@ -265,7 +265,7 @@ func (h *QuizHandler) loadStoryCards(
 		return nil, fmt.Errorf("FilterStoryNotebooks(%s) > %w", notebookID, err)
 	}
 
-	var flashcards []*quizv1.Flashcard
+	var flashcards []*apiv1.Flashcard
 	for _, story := range filtered {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
@@ -290,7 +290,7 @@ func (h *QuizHandler) loadStoryCards(
 				}
 				h.mu.Unlock()
 
-				flashcards = append(flashcards, &quizv1.Flashcard{
+				flashcards = append(flashcards, &apiv1.Flashcard{
 					NoteId:   noteID,
 					Entry:    expression,
 					Examples: examples,
@@ -306,7 +306,7 @@ func (h *QuizHandler) loadFlashcardCards(
 	reader *notebook.Reader,
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
-) ([]*quizv1.Flashcard, error) {
+) ([]*apiv1.Flashcard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		return nil, fmt.Errorf("ReadFlashcardNotebooks(%s) > %w", notebookID, err)
@@ -319,7 +319,7 @@ func (h *QuizHandler) loadFlashcardCards(
 		return nil, fmt.Errorf("FilterFlashcardNotebooks(%s) > %w", notebookID, err)
 	}
 
-	var flashcards []*quizv1.Flashcard
+	var flashcards []*apiv1.Flashcard
 	for _, nb := range filtered {
 		for _, card := range nb.Cards {
 			expression := card.Definition
@@ -327,9 +327,9 @@ func (h *QuizHandler) loadFlashcardCards(
 				expression = card.Expression
 			}
 
-			var examples []*quizv1.Example
+			var examples []*apiv1.Example
 			for _, example := range card.Examples {
-				examples = append(examples, &quizv1.Example{
+				examples = append(examples, &apiv1.Example{
 					Text: example,
 				})
 			}
@@ -346,7 +346,7 @@ func (h *QuizHandler) loadFlashcardCards(
 			}
 			h.mu.Unlock()
 
-			flashcards = append(flashcards, &quizv1.Flashcard{
+			flashcards = append(flashcards, &apiv1.Flashcard{
 				NoteId:   noteID,
 				Entry:    expression,
 				Examples: examples,
@@ -402,8 +402,8 @@ func countFlashcardCards(notebooks []notebook.FlashcardNotebook) int {
 	return count
 }
 
-func buildExamplesFromConversations(scene *notebook.StoryScene, expression, definition string) []*quizv1.Example {
-	var examples []*quizv1.Example
+func buildExamplesFromConversations(scene *notebook.StoryScene, expression, definition string) []*apiv1.Example {
+	var examples []*apiv1.Example
 	for _, conv := range scene.Conversations {
 		if conv.Quote == "" {
 			continue
@@ -415,7 +415,7 @@ func buildExamplesFromConversations(scene *notebook.StoryScene, expression, defi
 		}
 
 		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
-		examples = append(examples, &quizv1.Example{
+		examples = append(examples, &apiv1.Example{
 			Text:    cleaned,
 			Speaker: conv.Speaker,
 		})
