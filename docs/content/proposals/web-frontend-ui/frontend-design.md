@@ -87,7 +87,7 @@ The UI feels responsive because the card layout transitions instantly — the us
 
 Tests live next to their source files:
 ```
-components/
+src/components/
   QuizCard.tsx
   QuizCard.test.tsx
 ```

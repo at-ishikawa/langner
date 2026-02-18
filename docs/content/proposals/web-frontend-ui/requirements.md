@@ -7,7 +7,7 @@ weight: 1
 
 ## Overview
 
-Add a web UI for the notebook recognition quiz. This is the same flow as `langner quiz notebook` in recognition mode, with the ability to take actions on previous results during the session.
+Add a web UI for the notebook recognition quiz. This is the same flow as `langner quiz notebook` in recognition mode.
 
 ## Problem
 
@@ -24,7 +24,7 @@ In the CLI quiz, once a word is answered, the result scrolls away and the user c
 
 As a learner, I want to start a notebook recognition quiz from the web UI.
 
-- Select a notebook (or "All notebooks") from a list
+- Select one or more notebooks from a list
 - Optionally toggle "Include unstudied words"
 - See how many words are due for review
 
