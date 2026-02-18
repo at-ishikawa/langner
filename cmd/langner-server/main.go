@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/at-ishikawa/langner/gen/quiz/v1/quizv1connect"
+	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -45,7 +45,7 @@ func run() error {
 	}
 
 	handler := server.NewQuizHandler(cfg, openaiClient, dictionaryMap)
-	path, h := quizv1connect.NewQuizServiceHandler(handler)
+	path, h := apiv1connect.NewQuizServiceHandler(handler)
 
 	mux := http.NewServeMux()
 	mux.Handle(path, h)

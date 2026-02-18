@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
-	quizv1 "github.com/at-ishikawa/langner/gen/quiz/v1"
+	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
@@ -55,7 +55,7 @@ func TestQuizHandler_GetQuizOptions(t *testing.T) {
 
 			resp, err := handler.GetQuizOptions(
 				context.Background(),
-				connect.NewRequest(&quizv1.GetQuizOptionsRequest{}),
+				connect.NewRequest(&apiv1.GetQuizOptionsRequest{}),
 			)
 
 			if tt.wantErr {
@@ -105,7 +105,7 @@ func TestQuizHandler_StartQuiz(t *testing.T) {
 
 			resp, err := handler.StartQuiz(
 				context.Background(),
-				connect.NewRequest(&quizv1.StartQuizRequest{
+				connect.NewRequest(&apiv1.StartQuizRequest{
 					NotebookIds: tt.notebookIDs,
 				}),
 			)
@@ -276,7 +276,7 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 
 			resp, err := handler.SubmitAnswer(
 				context.Background(),
-				connect.NewRequest(&quizv1.SubmitAnswerRequest{
+				connect.NewRequest(&apiv1.SubmitAnswerRequest{
 					NoteId:         tt.noteID,
 					Answer:         tt.answer,
 					ResponseTimeMs: 1000,
