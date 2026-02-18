@@ -27,7 +27,7 @@ export interface StartQuizResponse {
 
 async function rpc<Req, Res>(method: string, request: Req): Promise<Res> {
   const response = await fetch(
-    `${BASE_URL}/quiz.v1.QuizService/${method}`,
+    `${BASE_URL}/api.v1.QuizService/${method}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
