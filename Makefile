@@ -4,8 +4,12 @@ OPENAI_API_KEY ?=
 pre-commit: generate validate test
 
 .PHONY: generate
-generate:
+generate: proto
 	go generate ./...
+
+.PHONY: proto
+proto:
+	go run github.com/bufbuild/buf/cmd/buf@latest generate
 
 .PHONY: fix
 fix:

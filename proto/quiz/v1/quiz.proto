@@ -1,0 +1,55 @@
+syntax = "proto3";
+
+package quiz.v1;
+
+option go_package = "github.com/at-ishikawa/langner/gen/quiz/v1;quizv1";
+
+service QuizService {
+  rpc GetQuizOptions(GetQuizOptionsRequest) returns (GetQuizOptionsResponse);
+  rpc StartQuiz(StartQuizRequest) returns (StartQuizResponse);
+  rpc SubmitAnswer(SubmitAnswerRequest) returns (SubmitAnswerResponse);
+}
+
+message GetQuizOptionsRequest {}
+
+message GetQuizOptionsResponse {
+  repeated NotebookSummary notebooks = 1;
+}
+
+message NotebookSummary {
+  string notebook_id = 1;
+  string name = 2;
+  int32 review_count = 3;
+}
+
+message StartQuizRequest {
+  repeated string notebook_ids = 1;
+  bool include_unstudied = 2;
+}
+
+message StartQuizResponse {
+  repeated Flashcard flashcards = 1;
+}
+
+message Flashcard {
+  int64 note_id = 1;
+  string entry = 2;
+  repeated Example examples = 3;
+}
+
+message Example {
+  string text = 1;
+  string speaker = 2;
+}
+
+message SubmitAnswerRequest {
+  int64 note_id = 1;
+  string answer = 2;
+  int64 response_time_ms = 3;
+}
+
+message SubmitAnswerResponse {
+  bool correct = 1;
+  string meaning = 2;
+  string reason = 3;
+}
