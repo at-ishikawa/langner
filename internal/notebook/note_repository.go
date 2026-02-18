@@ -112,7 +112,7 @@ func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	if err != nil {
 		return fmt.Errorf("db.BeginTxx() > %w", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 
 	result, err := tx.ExecContext(ctx,
 		"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number) VALUES (?, ?, ?, ?, ?)",

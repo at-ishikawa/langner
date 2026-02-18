@@ -151,7 +151,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 	if existing != nil {
 		noteID = existing.ID
 		if !opts.UpdateExisting {
-			fmt.Fprintf(imp.writer, "  [SKIP]  %q (%s)\n", usage, entry)
+			_, _ = fmt.Fprintf(imp.writer, "  [SKIP]  %q (%s)\n", usage, entry)
 			result.NotesSkipped++
 		} else {
 			existing.Meaning = def.Meaning
@@ -162,7 +162,7 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 					return fmt.Errorf("Update() > %w", err)
 				}
 			}
-			fmt.Fprintf(imp.writer, "  [UPDATE]  %q (%s)\n", usage, entry)
+			_, _ = fmt.Fprintf(imp.writer, "  [UPDATE]  %q (%s)\n", usage, entry)
 			result.NotesUpdated++
 		}
 	} else {
@@ -187,10 +187,9 @@ func (imp *Importer) importNote(ctx context.Context, def notebook.Note, notebook
 			if err := imp.noteRepo.Create(ctx, n); err != nil {
 				return fmt.Errorf("Create() > %w", err)
 			}
-			noteID = n.ID
 		}
 		noteCache[noteKey{usage, entry}] = n
-		fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", usage, entry)
+		_, _ = fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", usage, entry)
 		result.NotesNew++
 
 		// Notebook note was created inline with the note
@@ -275,7 +274,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 				Entry: he.expr.Expression,
 			}
 			newNotes = append(newNotes, n)
-			fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", he.expr.Expression, he.expr.Expression)
+			_, _ = fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", he.expr.Expression, he.expr.Expression)
 			result.NotesNew++
 		}
 	}
