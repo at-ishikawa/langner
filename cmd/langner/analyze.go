@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/at-ishikawa/langner/internal/cli"
-	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -31,13 +30,9 @@ func newAnalyzeReportCommand() *cobra.Command {
 				return fmt.Errorf("--month must be between 1 and 12")
 			}
 
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			return cli.RunAnalyzeReport(cfg.Notebooks.LearningNotesDirectory, year, month)

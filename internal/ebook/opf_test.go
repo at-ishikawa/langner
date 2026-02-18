@@ -40,3 +40,41 @@ func TestParseOPF_FileNotFound(t *testing.T) {
 	_, _, err := parseOPF(tempDir)
 	require.Error(t, err)
 }
+
+func TestParseOPF_InvalidXML(t *testing.T) {
+	tempDir := t.TempDir()
+	opfDir := filepath.Join(tempDir, "src", "epub")
+	require.NoError(t, os.MkdirAll(opfDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(opfDir, "content.opf"), []byte("not valid xml <<<"), 0644))
+
+	_, _, err := parseOPF(tempDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal content.opf")
+}
+
+func TestParseSpineOrder_FileNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_, err := parseSpineOrder(tempDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "read content.opf")
+}
+
+func TestParseSpineOrder_InvalidXML(t *testing.T) {
+	tempDir := t.TempDir()
+	opfDir := filepath.Join(tempDir, "src", "epub")
+	require.NoError(t, os.MkdirAll(opfDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(opfDir, "content.opf"), []byte("not valid xml <<<"), 0644))
+
+	_, err := parseSpineOrder(tempDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unmarshal content.opf")
+}
+
+func TestParseToc_FileNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+
+	_, err := parseToc(tempDir)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "open toc.xhtml")
+}

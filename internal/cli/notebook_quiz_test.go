@@ -14,6 +14,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -179,74 +180,14 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			setupFunc: func(t *testing.T) (string, string) {
 				storiesDir := t.TempDir()
 				learningNotesDir := t.TempDir()
-
-				// Create notebook directory structure
-				notebookDir := filepath.Join(storiesDir, "test-notebook")
-				require.NoError(t, os.MkdirAll(notebookDir, 0755))
-
-				// Create index.yml
-				index := notebook.Index{
-					Kind:          "story",
-					ID:            "test-notebook",
-					Name:          "Test Notebook",
-					NotebookPaths: []string{"stories.yml"},
-				}
-				indexPath := filepath.Join(notebookDir, "index.yml")
-				require.NoError(t, notebook.WriteYamlFile(indexPath, index))
-
-				// Create stories.yml
-				stories := []notebook.StoryNotebook{
-					{
-						Event: "Story 1",
-						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-						Scenes: []notebook.StoryScene{
-							{
-								Title: "Scene 1",
-								Conversations: []notebook.Conversation{
-									{Speaker: "A", Quote: "This is a test word"},
-								},
-								Definitions: []notebook.Note{
-									{Expression: "test", Meaning: "test meaning"},
-								},
-							},
-						},
-					},
-				}
-				storiesPath := filepath.Join(notebookDir, "stories.yml")
-				require.NoError(t, notebook.WriteYamlFile(storiesPath, stories))
-
-				// Create learning history with misunderstood word
-				learningHistory := []notebook.LearningHistory{
-					{
-						Metadata: notebook.LearningHistoryMetadata{
-							NotebookID: "test-notebook",
-							Title:      "Story 1",
-						},
-						Scenes: []notebook.LearningScene{
-							{
-								Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
-								Expressions: []notebook.LearningHistoryExpression{
-									{
-										Expression: "test",
-										LearnedLogs: []notebook.LearningRecord{
-											{Status: "misunderstood", LearnedAt: notebook.NewDate(time.Now())},
-										},
-									},
-								},
-							},
-						},
-					},
-				}
-				learningHistoryPath := filepath.Join(learningNotesDir, "test-notebook.yml")
-				require.NoError(t, notebook.WriteYamlFile(learningHistoryPath, learningHistory))
-
+				testutil.CreateStoryNotebook(t, storiesDir, learningNotesDir, "test-notebook")
 				return storiesDir, learningNotesDir
 			},
 			notebookName:      "test-notebook",
 			expectedCardCount: 1,
 			validate: func(t *testing.T, cli *NotebookQuizCLI) {
 				assert.Equal(t, 1, len(cli.cards))
-				assert.Equal(t, "test", cli.cards[0].Definition.Expression)
+				assert.Equal(t, "eager", cli.cards[0].Definition.Expression)
 			},
 		},
 		{
@@ -322,6 +263,17 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 				assert.Equal(t, "test", cli.cards[0].Definition.Expression)
 			},
 		},
+		{
+			name: "All notebooks - empty notebookName loads all stories",
+			setupFunc: func(t *testing.T) (string, string) {
+				storiesDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+				testutil.CreateStoryNotebook(t, storiesDir, learningNotesDir, "test-notebook")
+				return storiesDir, learningNotesDir
+			},
+			notebookName:      "",
+			expectedCardCount: 1,
+		},
 	}
 
 	for _, tt := range tests {
@@ -351,6 +303,84 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			if tt.validate != nil {
 				tt.validate(t, cli)
 			}
+		})
+	}
+}
+
+func TestNewFlashcardQuizCLI(t *testing.T) {
+	tests := []struct {
+		name              string
+		setupFunc         func(t *testing.T) (flashcardsDir, learningNotesDir string)
+		notebookName      string
+		expectedCardCount int
+		wantErr           bool
+	}{
+		{
+			name: "loads flashcard with learning history - misunderstood word included",
+			setupFunc: func(t *testing.T) (string, string) {
+				flashcardsDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+				testutil.CreateFlashcardNotebook(t, flashcardsDir, learningNotesDir, "test-flashcard")
+				return flashcardsDir, learningNotesDir
+			},
+			notebookName:      "test-flashcard",
+			expectedCardCount: 1,
+		},
+		{
+			name: "no learning history returns error",
+			setupFunc: func(t *testing.T) (string, string) {
+				flashcardsDir := t.TempDir()
+				learningNotesDir := t.TempDir()
+
+				flashcardDir := filepath.Join(flashcardsDir, "test-flashcard")
+				require.NoError(t, os.MkdirAll(flashcardDir, 0755))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "index.yml"), notebook.FlashcardIndex{
+					ID: "test-flashcard", Name: "Test Flashcards",
+					NotebookPaths: []string{"cards.yml"},
+				}))
+				require.NoError(t, notebook.WriteYamlFile(filepath.Join(flashcardDir, "cards.yml"), []notebook.FlashcardNotebook{
+					{
+						Title: "Common Words",
+						Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+						Cards: []notebook.Note{
+							{Expression: "test", Meaning: "test meaning"},
+						},
+					},
+				}))
+
+				return flashcardsDir, learningNotesDir
+			},
+			notebookName: "test-flashcard",
+			wantErr:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			flashcardsDir, learningNotesDir := tt.setupFunc(t)
+			dictionaryCacheDir := t.TempDir()
+
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockClient := mock_inference.NewMockClient(ctrl)
+
+			cli, err := NewFlashcardQuizCLI(
+				tt.notebookName,
+				config.NotebooksConfig{
+					FlashcardsDirectories:  []string{flashcardsDir},
+					LearningNotesDirectory: learningNotesDir,
+				},
+				dictionaryCacheDir,
+				mockClient,
+			)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedCardCount, cli.GetCardCount())
 		})
 	}
 }
@@ -553,6 +583,29 @@ func TestFormatQuestion(t *testing.T) {
 				Contexts:   []WordOccurrenceContext{{Context: "First example", Usage: "test"}, {Context: "Second example", Usage: "test"}},
 			},
 			expected: "What does 'test' mean in the following context?\n  1. First example\n  2. Second example\n",
+		},
+		{
+			name: "Flashcard with contexts (Scene is nil)",
+			card: WordOccurrence{
+				Scene:      nil,
+				Definition: &notebook.Note{Expression: "hello"},
+				Contexts:   []WordOccurrenceContext{{Context: "Hello there!", Usage: "hello"}},
+			},
+			expected: "What does 'hello' mean?\nExamples:\n  1. {Hello there! hello}\n",
+		},
+		{
+			name: "Scene with definitions - converts markers",
+			card: WordOccurrence{
+				Scene: &notebook.StoryScene{
+					Title: "Scene 1",
+					Definitions: []notebook.Note{
+						{Expression: "excited", Meaning: "feeling enthusiasm"},
+					},
+				},
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{{Context: "I am so {{ excited }} about the trip!", Usage: "excited"}},
+			},
+			expected: "What does 'excited' mean in the following context?\n  1. I am so \x1b[1mexcited\x1b[22m about the trip!\n",
 		},
 	}
 
@@ -1127,6 +1180,65 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 						Meaning:    "a person who has the responsibility of watching for something, especially danger, etc.",
 						AnswersForContext: []inference.AnswersForContext{
 							{Correct: true, Context: "", Reason: "partial match covers main sense"},
+						},
+					},
+				},
+			},
+			wantCardsAfter: 0,
+		},
+		{
+			name:  "Flashcard card (Story is nil) - uses flashcards as story title",
+			input: "to initiate social interaction\n",
+			cards: []*WordOccurrence{
+				{
+					NotebookName: "test-flashcard",
+					Story:        nil,
+					Scene:        nil,
+					Definition: &notebook.Note{
+						Expression: "break the ice",
+						Meaning:    "to initiate social interaction",
+					},
+					Contexts: []WordOccurrenceContext{{Context: "She told a joke to break the ice.", Usage: "break the ice"}},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "break the ice",
+						Meaning:    "to initiate social interaction",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: "", Reason: "exact match"},
+						},
+					},
+				},
+			},
+			wantCardsAfter: 0,
+		},
+		{
+			name:  "Card with images - displays images",
+			input: "test meaning\n",
+			cards: []*WordOccurrence{
+				{
+					NotebookName: "test-notebook",
+					Story:        &notebook.StoryNotebook{Event: "Story 1"},
+					Scene:        &notebook.StoryScene{Title: "Scene 1"},
+					Definition: &notebook.Note{
+						Expression: "test",
+						Meaning:    "test meaning",
+						Images:     []string{"image1.jpg"},
+					},
+					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
+				},
+			},
+			learningHistories: map[string][]notebook.LearningHistory{},
+			mockOpenAIResponse: inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{
+					{
+						Expression: "test",
+						Meaning:    "test meaning",
+						AnswersForContext: []inference.AnswersForContext{
+							{Correct: true, Context: "", Reason: "exact match"},
 						},
 					},
 				},

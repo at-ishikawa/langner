@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/spf13/cobra"
@@ -55,13 +54,9 @@ func newDictionaryCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			word := args[0]
 
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			ctx := cmd.Context()

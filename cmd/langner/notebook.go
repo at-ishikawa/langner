@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/spf13/cobra"
@@ -60,13 +59,9 @@ func newNotebookCommand() *cobra.Command {
 		Use:  "stories <notebook id>",
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			storyID := args[0]
@@ -103,13 +98,9 @@ func newNotebookCommand() *cobra.Command {
 		Short: "Generate markdown/PDF output from flashcard notebooks",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			flashcardID := args[0]

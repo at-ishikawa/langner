@@ -46,6 +46,28 @@ func TestOpen(t *testing.T) {
 				ConnMaxLifetime: 300,
 			},
 		},
+		{
+			name: "creates connection with TLS enabled",
+			cfg: config.DatabaseConfig{
+				Host:     "localhost",
+				Port:     3306,
+				Database: "testdb",
+				Username: "testuser",
+				Password: "testpass",
+				TLS:      true,
+			},
+		},
+		{
+			name: "creates connection with custom params",
+			cfg: config.DatabaseConfig{
+				Host:     "localhost",
+				Port:     3306,
+				Database: "testdb",
+				Username: "testuser",
+				Password: "testpass",
+				Params:   map[string]string{"charset": "utf8mb4", "loc": "UTC"},
+			},
+		},
 	}
 
 	for _, tt := range tests {

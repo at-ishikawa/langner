@@ -3,6 +3,7 @@ package notebook
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -518,6 +519,510 @@ func TestLearningHistoryExpression_NeedsReverseReview(t *testing.T) {
 			assert.Equal(t, tt.want, got, "NeedsReverseReview() = %v, want %v", got, tt.want)
 		})
 	}
+}
+
+func TestLearningHistoryExpression_GetLatestStatus(t *testing.T) {
+	tests := []struct {
+		name       string
+		expression LearningHistoryExpression
+		want       LearnedStatus
+	}{
+		{
+			name: "no logs returns learning status",
+			expression: LearningHistoryExpression{
+				LearnedLogs: []LearningRecord{},
+			},
+			want: learnedStatusLearning,
+		},
+		{
+			name: "returns first log status",
+			expression: LearningHistoryExpression{
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusUnderstood},
+					{Status: LearnedStatusMisunderstood},
+				},
+			},
+			want: learnedStatusUnderstood,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.expression.GetLatestStatus()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLearningHistoryExpression_GetLogsForQuizType(t *testing.T) {
+	reverseLogs := []LearningRecord{{Status: LearnedStatusMisunderstood, Quality: 1}}
+	learnedLogs := []LearningRecord{{Status: learnedStatusUnderstood, Quality: 4}}
+
+	expr := LearningHistoryExpression{
+		LearnedLogs: learnedLogs,
+		ReverseLogs: reverseLogs,
+	}
+
+	t.Run("reverse quiz type returns reverse logs", func(t *testing.T) {
+		got := expr.GetLogsForQuizType(QuizTypeReverse)
+		assert.Equal(t, reverseLogs, got)
+	})
+
+	t.Run("freeform quiz type returns learned logs", func(t *testing.T) {
+		got := expr.GetLogsForQuizType(QuizTypeFreeform)
+		assert.Equal(t, learnedLogs, got)
+	})
+
+	t.Run("notebook quiz type returns learned logs", func(t *testing.T) {
+		got := expr.GetLogsForQuizType(QuizTypeNotebook)
+		assert.Equal(t, learnedLogs, got)
+	})
+}
+
+func TestLearningHistoryExpression_GetEasinessFactorForQuizType(t *testing.T) {
+	tests := []struct {
+		name       string
+		expression LearningHistoryExpression
+		quizType   QuizType
+		want       float64
+	}{
+		{
+			name: "reverse with set factor",
+			expression: LearningHistoryExpression{
+				ReverseEasinessFactor: 2.1,
+				EasinessFactor:        2.3,
+			},
+			quizType: QuizTypeReverse,
+			want:     2.1,
+		},
+		{
+			name: "reverse with zero factor returns default",
+			expression: LearningHistoryExpression{
+				ReverseEasinessFactor: 0,
+				EasinessFactor:        2.3,
+			},
+			quizType: QuizTypeReverse,
+			want:     DefaultEasinessFactor,
+		},
+		{
+			name: "freeform with set factor",
+			expression: LearningHistoryExpression{
+				EasinessFactor:        2.3,
+				ReverseEasinessFactor: 2.1,
+			},
+			quizType: QuizTypeFreeform,
+			want:     2.3,
+		},
+		{
+			name: "freeform with zero factor returns default",
+			expression: LearningHistoryExpression{
+				EasinessFactor: 0,
+			},
+			quizType: QuizTypeFreeform,
+			want:     DefaultEasinessFactor,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.expression.GetEasinessFactorForQuizType(tt.quizType)
+			assert.InDelta(t, tt.want, got, 0.001)
+		})
+	}
+}
+
+func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) {
+	tests := []struct {
+		name           string
+		expression     LearningHistoryExpression
+		isCorrect      bool
+		isKnownWord    bool
+		quality        int
+		responseTimeMs int64
+		wantStatus     LearnedStatus
+	}{
+		{
+			name: "correct known word",
+			expression: LearningHistoryExpression{
+				Expression:            "hello",
+				ReverseEasinessFactor: DefaultEasinessFactor,
+			},
+			isCorrect:      true,
+			isKnownWord:    true,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 3000,
+			wantStatus:     learnedStatusUnderstood,
+		},
+		{
+			name: "correct unknown word",
+			expression: LearningHistoryExpression{
+				Expression:            "hello",
+				ReverseEasinessFactor: DefaultEasinessFactor,
+			},
+			isCorrect:      true,
+			isKnownWord:    false,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 5000,
+			wantStatus:     learnedStatusCanBeUsed,
+		},
+		{
+			name: "incorrect",
+			expression: LearningHistoryExpression{
+				Expression:            "hello",
+				ReverseEasinessFactor: DefaultEasinessFactor,
+			},
+			isCorrect:      false,
+			isKnownWord:    false,
+			quality:        int(QualityWrong),
+			responseTimeMs: 10000,
+			wantStatus:     LearnedStatusMisunderstood,
+		},
+		{
+			name: "zero easiness factor gets set to default",
+			expression: LearningHistoryExpression{
+				Expression:            "hello",
+				ReverseEasinessFactor: 0,
+			},
+			isCorrect:      true,
+			isKnownWord:    true,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 3000,
+			wantStatus:     learnedStatusUnderstood,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exp := tt.expression
+			exp.AddRecordWithQualityForReverse(tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs)
+
+			assert.Len(t, exp.ReverseLogs, 1)
+			assert.Equal(t, tt.wantStatus, exp.ReverseLogs[0].Status)
+			assert.Equal(t, tt.quality, exp.ReverseLogs[0].Quality)
+			assert.Equal(t, tt.responseTimeMs, exp.ReverseLogs[0].ResponseTimeMs)
+			assert.Equal(t, string(QuizTypeReverse), exp.ReverseLogs[0].QuizType)
+			assert.NotZero(t, exp.ReverseEasinessFactor)
+		})
+	}
+}
+
+func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
+	tests := []struct {
+		name           string
+		expression     LearningHistoryExpression
+		isCorrect      bool
+		isKnownWord    bool
+		quality        int
+		responseTimeMs int64
+		quizType       QuizType
+		wantStatus     LearnedStatus
+	}{
+		{
+			name: "correct known word",
+			expression: LearningHistoryExpression{
+				Expression:     "hello",
+				EasinessFactor: DefaultEasinessFactor,
+			},
+			isCorrect:      true,
+			isKnownWord:    true,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 3000,
+			quizType:       QuizTypeFreeform,
+			wantStatus:     learnedStatusUnderstood,
+		},
+		{
+			name: "correct unknown word",
+			expression: LearningHistoryExpression{
+				Expression:     "hello",
+				EasinessFactor: DefaultEasinessFactor,
+			},
+			isCorrect:      true,
+			isKnownWord:    false,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 5000,
+			quizType:       QuizTypeNotebook,
+			wantStatus:     learnedStatusCanBeUsed,
+		},
+		{
+			name: "incorrect",
+			expression: LearningHistoryExpression{
+				Expression:     "hello",
+				EasinessFactor: DefaultEasinessFactor,
+			},
+			isCorrect:      false,
+			isKnownWord:    false,
+			quality:        int(QualityWrong),
+			responseTimeMs: 10000,
+			quizType:       QuizTypeFreeform,
+			wantStatus:     LearnedStatusMisunderstood,
+		},
+		{
+			name: "zero easiness factor gets set to default",
+			expression: LearningHistoryExpression{
+				Expression:     "hello",
+				EasinessFactor: 0,
+			},
+			isCorrect:      true,
+			isKnownWord:    true,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 3000,
+			quizType:       QuizTypeFreeform,
+			wantStatus:     learnedStatusUnderstood,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exp := tt.expression
+			exp.AddRecordWithQuality(tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs, tt.quizType)
+
+			assert.Len(t, exp.LearnedLogs, 1)
+			assert.Equal(t, tt.wantStatus, exp.LearnedLogs[0].Status)
+			assert.Equal(t, tt.quality, exp.LearnedLogs[0].Quality)
+			assert.Equal(t, string(tt.quizType), exp.LearnedLogs[0].QuizType)
+			assert.NotZero(t, exp.EasinessFactor)
+		})
+	}
+}
+
+func TestLearningHistoryExpression_Validate(t *testing.T) {
+	fixedTime := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+	olderTime := time.Date(2025, 5, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		expr       LearningHistoryExpression
+		wantErrors int
+		wantMsg    string
+	}{
+		{
+			name: "valid expression with logs",
+			expr: LearningHistoryExpression{
+				Expression: "hello",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(olderTime)},
+				},
+			},
+			wantErrors: 0,
+		},
+		{
+			name: "empty expression",
+			expr: LearningHistoryExpression{
+				Expression: "",
+			},
+			wantErrors: 1,
+			wantMsg:    "expression field is empty",
+		},
+		{
+			name: "no learned logs is valid",
+			expr: LearningHistoryExpression{
+				Expression:  "hello",
+				LearnedLogs: []LearningRecord{},
+			},
+			wantErrors: 0,
+		},
+		{
+			name: "invalid status",
+			expr: LearningHistoryExpression{
+				Expression: "hello",
+				LearnedLogs: []LearningRecord{
+					{Status: "invalid_status", LearnedAt: NewDate(fixedTime)},
+				},
+			},
+			wantErrors: 1,
+			wantMsg:    "invalid status",
+		},
+		{
+			name: "missing learned_at",
+			expr: LearningHistoryExpression{
+				Expression: "hello",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusUnderstood},
+				},
+			},
+			wantErrors: 1,
+			wantMsg:    "learned_at is required",
+		},
+		{
+			name: "logs not in chronological order",
+			expr: LearningHistoryExpression{
+				Expression: "hello",
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(olderTime)},
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(fixedTime)},
+				},
+			},
+			wantErrors: 1,
+			wantMsg:    "not in chronological order",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errors := tt.expr.Validate("test-location")
+			assert.Len(t, errors, tt.wantErrors)
+			if tt.wantMsg != "" && len(errors) > 0 {
+				assert.Contains(t, errors[0].Message, tt.wantMsg)
+			}
+		})
+	}
+}
+
+func TestLearningScene_Validate(t *testing.T) {
+	fixedTime := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		scene      LearningScene
+		wantErrors int
+	}{
+		{
+			name: "valid scene",
+			scene: LearningScene{
+				Metadata: LearningSceneMetadata{Title: "Scene 1"},
+				Expressions: []LearningHistoryExpression{
+					{Expression: "hello", LearnedLogs: []LearningRecord{
+						{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+					}},
+				},
+			},
+			wantErrors: 0,
+		},
+		{
+			name: "scene with invalid expression",
+			scene: LearningScene{
+				Metadata: LearningSceneMetadata{Title: "Scene 1"},
+				Expressions: []LearningHistoryExpression{
+					{Expression: ""},
+				},
+			},
+			wantErrors: 1,
+		},
+		{
+			name: "empty scene is valid",
+			scene: LearningScene{
+				Metadata:    LearningSceneMetadata{Title: "Scene 1"},
+				Expressions: []LearningHistoryExpression{},
+			},
+			wantErrors: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errors := tt.scene.Validate("test-location")
+			assert.Len(t, errors, tt.wantErrors)
+		})
+	}
+}
+
+func TestLearningHistory_Validate(t *testing.T) {
+	fixedTime := time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name       string
+		history    LearningHistory
+		wantErrors int
+		wantMsg    string
+	}{
+		{
+			name: "valid story type",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{Title: "Story 1"},
+				Scenes: []LearningScene{
+					{
+						Metadata: LearningSceneMetadata{Title: "Scene 1"},
+						Expressions: []LearningHistoryExpression{
+							{Expression: "hello", LearnedLogs: []LearningRecord{
+								{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+							}},
+						},
+					},
+				},
+			},
+			wantErrors: 0,
+		},
+		{
+			name: "valid flashcard type",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{Title: "Flashcards", Type: "flashcard"},
+				Expressions: []LearningHistoryExpression{
+					{Expression: "hello", LearnedLogs: []LearningRecord{
+						{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+					}},
+				},
+			},
+			wantErrors: 0,
+		},
+		{
+			name: "flashcard with duplicate expressions",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{Title: "Flashcards", Type: "flashcard"},
+				Expressions: []LearningHistoryExpression{
+					{Expression: "hello"},
+					{Expression: "hello"},
+				},
+			},
+			wantErrors: 1,
+			wantMsg:    "duplicate expression",
+		},
+		{
+			name: "story with duplicate expressions across scenes",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{Title: "Story 1"},
+				Scenes: []LearningScene{
+					{
+						Metadata:    LearningSceneMetadata{Title: "Scene 1"},
+						Expressions: []LearningHistoryExpression{{Expression: "hello"}},
+					},
+					{
+						Metadata:    LearningSceneMetadata{Title: "Scene 2"},
+						Expressions: []LearningHistoryExpression{{Expression: "hello"}},
+					},
+				},
+			},
+			wantErrors: 1,
+			wantMsg:    "appears in multiple scenes",
+		},
+		{
+			name: "flashcard with invalid expression",
+			history: LearningHistory{
+				Metadata: LearningHistoryMetadata{Title: "Flashcards", Type: "flashcard"},
+				Expressions: []LearningHistoryExpression{
+					{Expression: ""},
+				},
+			},
+			wantErrors: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := tt.history
+			errors := h.Validate("test-location")
+			assert.Len(t, errors, tt.wantErrors)
+			if tt.wantMsg != "" && len(errors) > 0 {
+				found := false
+				for _, e := range errors {
+					if assert.ObjectsAreEqual(true, true) {
+						if len(e.Message) > 0 {
+							if containsStr(e.Message, tt.wantMsg) {
+								found = true
+								break
+							}
+						}
+					}
+				}
+				assert.True(t, found, "expected error containing %q", tt.wantMsg)
+			}
+		})
+	}
+}
+
+// containsStr is a simple helper for string contains check
+func containsStr(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || len(s) > 0 && strings.Contains(s, substr))
 }
 
 func TestLearningHistoryExpression_HasAnyCorrectAnswer(t *testing.T) {

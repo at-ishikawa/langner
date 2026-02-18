@@ -6,7 +6,6 @@ import (
 	"os"
 
 	"github.com/at-ishikawa/langner/internal/cli"
-	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -78,13 +77,9 @@ func newMigrateLearningHistoryCommand() *cobra.Command {
 		Use:   "learning-history",
 		Short: "Migrate learning history files to new SM-2 format",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, err := loadConfig()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
+				return err
 			}
 
 			return cli.MigrateLearningHistory(cfg.Notebooks.LearningNotesDirectory)

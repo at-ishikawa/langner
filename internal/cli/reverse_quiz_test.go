@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -524,6 +526,225 @@ func TestExtractReverseQuizCards(t *testing.T) {
 	}
 }
 
+func TestExtractReverseQuizCardsFromFlashcards(t *testing.T) {
+	tests := []struct {
+		name               string
+		notebookName       string
+		flashcards         []notebook.FlashcardNotebook
+		learningHistory    []notebook.LearningHistory
+		listMissingContext bool
+		wantCount          int
+	}{
+		{
+			name:         "empty flashcards",
+			notebookName: "test",
+			flashcards:   []notebook.FlashcardNotebook{},
+			wantCount:    0,
+		},
+		{
+			name:         "card with correct forward answer needs reverse review",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting", Examples: []string{"Hello there!"}},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "hello",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+						},
+					},
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name:         "card without forward correct answer is skipped",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting"},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{},
+			wantCount:       0,
+		},
+		{
+			name:         "list missing context mode - shows cards without matching example",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting", Examples: []string{"Hello there!"}}, // has context
+						{Expression: "world", Meaning: "the earth", Examples: []string{"big universe"}},  // no matching context
+					},
+				},
+			},
+			listMissingContext: true,
+			wantCount:          1, // only "world" since "hello" example contains "hello"
+		},
+		{
+			name:         "card with recent reverse review is skipped",
+			notebookName: "test",
+			flashcards: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting"},
+					},
+				},
+			},
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "hello",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+							ReverseLogs: []notebook.LearningRecord{
+								{Status: "usable", LearnedAt: notebook.NewDate(time.Now()), IntervalDays: 7},
+							},
+						},
+					},
+				},
+			},
+			wantCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractReverseQuizCardsFromFlashcards(tt.notebookName, tt.flashcards, tt.learningHistory, tt.listMissingContext)
+			assert.Len(t, result, tt.wantCount)
+		})
+	}
+}
+
+func TestNeedsReverseReviewForFlashcard(t *testing.T) {
+	tests := []struct {
+		name            string
+		learningHistory []notebook.LearningHistory
+		flashcardTitle  string
+		card            *notebook.Note
+		want            bool
+	}{
+		{
+			name:            "no matching history - no review needed",
+			learningHistory: []notebook.LearningHistory{},
+			flashcardTitle:  "Unit 1",
+			card:            &notebook.Note{Expression: "hello"},
+			want:            false,
+		},
+		{
+			name: "matching expression with correct forward answer - needs review",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "hello",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+						},
+					},
+				},
+			},
+			flashcardTitle: "Unit 1",
+			card:           &notebook.Note{Expression: "hello"},
+			want:           true,
+		},
+		{
+			name: "matching via definition field",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []notebook.LearningHistoryExpression{
+						{
+							Expression:  "greet",
+							LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+						},
+					},
+				},
+			},
+			flashcardTitle: "Unit 1",
+			card:           &notebook.Note{Expression: "hello", Definition: "greet"},
+			want:           true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := needsReverseReviewForFlashcard(tt.learningHistory, tt.flashcardTitle, tt.card)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestReverseQuizCLI_ShuffleCards(t *testing.T) {
+	cardWithContext := &WordOccurrence{
+		Definition: &notebook.Note{Expression: "hello"},
+		Contexts:   []WordOccurrenceContext{{Context: "Hello there!", Usage: "hello"}},
+	}
+	cardWithoutContext := &WordOccurrence{
+		Definition: &notebook.Note{Expression: "world"},
+		Contexts:   []WordOccurrenceContext{},
+	}
+
+	cli := &ReverseQuizCLI{
+		cards: []*WordOccurrence{cardWithoutContext, cardWithContext},
+	}
+
+	// ShuffleCards should preserve the partition: no-context first, with-context last
+	cli.ShuffleCards()
+
+	// With only 1 card in each group, the partition should be maintained
+	assert.Equal(t, 0, len(cli.cards[0].Contexts))
+	assert.Greater(t, len(cli.cards[1].Contexts), 0)
+}
+
+func TestReverseQuizCLI_ListMissingContext(t *testing.T) {
+	t.Run("empty cards", func(t *testing.T) {
+		cli := &ReverseQuizCLI{
+			InteractiveQuizCLI: &InteractiveQuizCLI{
+				bold: color.New(color.Bold),
+			},
+			cards: []*WordOccurrence{},
+		}
+		// Should not panic
+		cli.ListMissingContext()
+	})
+
+	t.Run("cards with missing context", func(t *testing.T) {
+		cli := &ReverseQuizCLI{
+			InteractiveQuizCLI: &InteractiveQuizCLI{
+				bold: color.New(color.Bold),
+			},
+			cards: []*WordOccurrence{
+				{
+					NotebookName: "test-notebook",
+					Definition: &notebook.Note{
+						Expression: "hello",
+						Meaning:    "a greeting",
+					},
+					Contexts: []WordOccurrenceContext{},
+				},
+			},
+		}
+		// Should not panic
+		cli.ListMissingContext()
+	})
+}
+
 func TestSortCardsByContextAvailability(t *testing.T) {
 	// Create cards with and without context
 	cardWithContext := &WordOccurrence{
@@ -631,192 +852,184 @@ func TestReverseQuizCLI_CalculateQuality(t *testing.T) {
 	}
 }
 
-func TestReverseQuizCLI_ValidateAnswer_ExactMatch(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
+func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
+	tests := []struct {
+		name               string
+		card               *WordOccurrence
+		answer             string
+		responseTimeMs     int64
+		mockResponse       *inference.ValidateWordFormResponse // nil = no mock expected
+		mockError          error
+		wantCorrect        bool
+		wantQuality        int
+		wantReason         string
+		wantReasonContains string // for partial matching (ValidationError case)
+	}{
+		{
+			name: "exact match",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "excited",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "exact match",
+		},
+		{
+			name: "case insensitive",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "EXCITED",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "exact match",
+		},
+		{
+			name: "definition match via GetExpression",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "remove", Definition: "take off", Meaning: "to remove something"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "take off",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "exact match",
+		},
+		{
+			name: "definition match via Expression field",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "remove", Definition: "take off", Meaning: "to remove something"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "remove",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "matches expression",
+		},
+		{
+			name: "same word classification",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "run", Meaning: "to move quickly on foot"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "ran",
+			responseTimeMs: 2000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "different tense of the same word"},
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "different tense of the same word",
+		},
+		{
+			name: "wrong classification",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "apple",
+			responseTimeMs: 2000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "unrelated word"},
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "unrelated word",
+		},
+		{
+			name: "empty answer",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "",
+			responseTimeMs: 2000,
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "empty answer",
+		},
+		{
+			name: "wrong answer different word",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "correct-word", Meaning: "the right word"},
+			},
+			answer:         "wrong-word",
+			responseTimeMs: 5000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "different word"},
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "different word",
+		},
+		{
+			name: "matches expression field",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "ran away", Definition: "run away", Meaning: "to flee"},
+			},
+			answer:         "ran away",
+			responseTimeMs: 2000,
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectFast),
+			wantReason:     "matches expression",
+		},
+		{
+			name: "validation error",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "correct-word", Meaning: "the right word"},
+			},
+			answer:             "some-word",
+			responseTimeMs:     5000,
+			mockResponse:       &inference.ValidateWordFormResponse{},
+			mockError:          fmt.Errorf("API error"),
+			wantCorrect:        false,
+			wantQuality:        int(notebook.QualityWrong),
+			wantReasonContains: "validation error",
+		},
+		{
+			name: "unknown classification",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "word", Meaning: "meaning"},
+			},
+			answer:         "answer",
+			responseTimeMs: 5000,
+			mockResponse:   &inference.ValidateWordFormResponse{Classification: "unknown_type", Reason: "unexpected"},
+			wantCorrect:    false,
+			wantQuality:    int(notebook.QualityWrong),
+			wantReason:     "unknown classification",
 		},
 	}
 
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockClient := mock_inference.NewMockClient(ctrl)
+			if tt.mockResponse != nil {
+				mockClient.EXPECT().
+					ValidateWordForm(gomock.Any(), gomock.Any()).
+					Return(*tt.mockResponse, tt.mockError)
+			}
+
+			cli := &ReverseQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{
+					openaiClient: mockClient,
+				},
+			}
+
+			isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), tt.card, tt.answer, tt.responseTimeMs, false)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantCorrect, isCorrect)
+			assert.Equal(t, tt.wantQuality, quality)
+			if tt.wantReasonContains != "" {
+				assert.Contains(t, reason, tt.wantReasonContains)
+			} else {
+				assert.Equal(t, tt.wantReason, reason)
+			}
+		})
 	}
-
-	// Exact match should not call OpenAI
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "excited", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "exact match", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_CaseInsensitive(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// Case insensitive match should not call OpenAI
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "EXCITED", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "exact match", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_DefinitionMatch(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "remove",
-			Definition: "take off",
-			Meaning:    "to remove something",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// When Definition is set, GetExpression() returns Definition ("take off")
-	// So typing "take off" is an exact match, not a definition match
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "take off", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "exact match", reason)
-
-	// Typing the Expression ("remove") should also work via the expression field check
-	isCorrect, quality, reason, err = cli.validateAnswer(context.Background(), card, "remove", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "matches expression", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_SameWord(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-	mockClient.EXPECT().
-		ValidateWordForm(gomock.Any(), gomock.Any()).
-		Return(inference.ValidateWordFormResponse{
-			Classification: inference.ClassificationSameWord,
-			Reason:         "different tense of the same word",
-		}, nil)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "run",
-			Meaning:    "to move quickly on foot",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// "ran" is a different form of "run"
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "ran", 2000, false)
-	require.NoError(t, err)
-	assert.True(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityCorrectFast), quality)
-	assert.Equal(t, "different tense of the same word", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_Wrong(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-	mockClient.EXPECT().
-		ValidateWordForm(gomock.Any(), gomock.Any()).
-		Return(inference.ValidateWordFormResponse{
-			Classification: inference.ClassificationWrong,
-			Reason:         "unrelated word",
-		}, nil)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "apple", 2000, false)
-	require.NoError(t, err)
-	assert.False(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityWrong), quality)
-	assert.Equal(t, "unrelated word", reason)
-}
-
-func TestReverseQuizCLI_ValidateAnswer_EmptyAnswer(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockClient := mock_inference.NewMockClient(ctrl)
-
-	cli := &ReverseQuizCLI{
-		InteractiveQuizCLI: &InteractiveQuizCLI{
-			openaiClient: mockClient,
-		},
-	}
-
-	card := &WordOccurrence{
-		Definition: &notebook.Note{
-			Expression: "excited",
-			Meaning:    "feeling enthusiasm",
-		},
-		Contexts: []WordOccurrenceContext{},
-	}
-
-	// Empty answer should not call OpenAI
-	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "", 2000, false)
-	require.NoError(t, err)
-	assert.False(t, isCorrect)
-	assert.Equal(t, int(notebook.QualityWrong), quality)
-	assert.Equal(t, "empty answer", reason)
 }
 
 func TestReverseQuizCLI_Session(t *testing.T) {
@@ -1480,6 +1693,403 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 	assert.Equal(t, 0, cli2.GetCardCount(), "Second quiz should have 0 cards - word was answered today")
 }
 
+func TestDeduplicateCardsByExpression(t *testing.T) {
+	tests := []struct {
+		name      string
+		cards     []*WordOccurrence
+		wantCount int
+		validate  func(t *testing.T, result []*WordOccurrence)
+	}{
+		{
+			name:      "empty input",
+			cards:     []*WordOccurrence{},
+			wantCount: 0,
+		},
+		{
+			name: "no duplicates",
+			cards: []*WordOccurrence{
+				{Definition: &notebook.Note{Expression: "hello", Meaning: "a greeting"}, Contexts: []WordOccurrenceContext{}},
+				{Definition: &notebook.Note{Expression: "world", Meaning: "the earth"}, Contexts: []WordOccurrenceContext{}},
+			},
+			wantCount: 2,
+		},
+		{
+			name: "duplicates - keeps one with more contexts",
+			cards: []*WordOccurrence{
+				{Definition: &notebook.Note{Expression: "hello", Meaning: "a greeting"}, Contexts: []WordOccurrenceContext{{Context: "Hello!", Usage: "hello"}}},
+				{Definition: &notebook.Note{Expression: "hello", Meaning: "a greeting"}, Contexts: []WordOccurrenceContext{}},
+			},
+			wantCount: 1,
+			validate: func(t *testing.T, result []*WordOccurrence) {
+				assert.Equal(t, 1, len(result[0].Contexts), "should keep the card with more contexts")
+			},
+		},
+		{
+			name: "case insensitive dedup",
+			cards: []*WordOccurrence{
+				{Definition: &notebook.Note{Expression: "Hello", Meaning: "a greeting"}, Contexts: []WordOccurrenceContext{}},
+				{Definition: &notebook.Note{Expression: "hello", Meaning: "a greeting"}, Contexts: []WordOccurrenceContext{{Context: "Hello!", Usage: "hello"}}},
+			},
+			wantCount: 1,
+			validate: func(t *testing.T, result []*WordOccurrence) {
+				assert.Equal(t, 1, len(result[0].Contexts), "should keep the card with more contexts")
+			},
+		},
+		{
+			name: "duplicate with definition field - deduped by GetExpression()",
+			cards: []*WordOccurrence{
+				{
+					Definition: &notebook.Note{Expression: "lost his temper", Definition: "lose one's temper", Meaning: "to become angry"},
+					Contexts:   []WordOccurrenceContext{{Context: "He lost his temper.", Usage: "lost his temper"}},
+				},
+				{
+					Definition: &notebook.Note{Expression: "lost her temper", Definition: "lose one's temper", Meaning: "to become angry"},
+					Contexts:   []WordOccurrenceContext{},
+				},
+			},
+			wantCount: 1, // Same Definition field → same GetExpression() → deduped
+			validate: func(t *testing.T, result []*WordOccurrence) {
+				assert.Equal(t, 1, len(result[0].Contexts), "should keep the card with more contexts")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := deduplicateCardsByExpression(tt.cards)
+			assert.Equal(t, tt.wantCount, len(result))
+			if tt.validate != nil {
+				tt.validate(t, result)
+			}
+		})
+	}
+}
+
+func TestEvaluateReverseReviewNeed(t *testing.T) {
+	tests := []struct {
+		name                string
+		matchingExpressions []notebook.LearningHistoryExpression
+		want                bool
+	}{
+		{
+			name:                "empty expressions - no review needed",
+			matchingExpressions: []notebook.LearningHistoryExpression{},
+			want:                false,
+		},
+		{
+			name: "no correct answers - no review needed",
+			matchingExpressions: []notebook.LearningHistoryExpression{
+				{
+					Expression:  "test",
+					LearnedLogs: []notebook.LearningRecord{{Status: "misunderstood"}},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "correct answer without reverse logs - needs review",
+			matchingExpressions: []notebook.LearningHistoryExpression{
+				{
+					Expression:  "test",
+					LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "correct answer with recent reverse review - no review needed",
+			matchingExpressions: []notebook.LearningHistoryExpression{
+				{
+					Expression:  "test",
+					LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+					ReverseLogs: []notebook.LearningRecord{
+						{Status: "usable", LearnedAt: notebook.NewDate(time.Now()), IntervalDays: 7},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "multiple expressions - one has correct answers, another has recent reverse - no review",
+			matchingExpressions: []notebook.LearningHistoryExpression{
+				{
+					Expression:  "lose one's temper",
+					LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+				},
+				{
+					Expression:  "lost his temper",
+					LearnedLogs: []notebook.LearningRecord{},
+					ReverseLogs: []notebook.LearningRecord{
+						{Status: "understood", LearnedAt: notebook.NewDate(time.Now()), IntervalDays: 14},
+					},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "empty learned_logs only - no review needed",
+			matchingExpressions: []notebook.LearningHistoryExpression{
+				{
+					Expression:  "test",
+					LearnedLogs: []notebook.LearningRecord{},
+				},
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := evaluateReverseReviewNeed(tt.matchingExpressions)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestNeedsReverseReviewForStory(t *testing.T) {
+	tests := []struct {
+		name            string
+		learningHistory []notebook.LearningHistory
+		storyTitle      string
+		sceneTitle      string
+		definition      *notebook.Note
+		want            bool
+	}{
+		{
+			name:            "no matching history",
+			learningHistory: []notebook.LearningHistory{},
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene 1",
+			definition:      &notebook.Note{Expression: "hello"},
+			want:            false,
+		},
+		{
+			name: "matching expression with correct forward answer - needs review",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Story 1"},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression:  "hello",
+									LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			storyTitle: "Story 1",
+			sceneTitle: "Scene 1",
+			definition: &notebook.Note{Expression: "hello"},
+			want:       true,
+		},
+		{
+			name: "matching via definition field",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Story 1"},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression:  "lose one's temper",
+									LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			storyTitle: "Story 1",
+			sceneTitle: "Scene 1",
+			definition: &notebook.Note{Expression: "lost his temper", Definition: "lose one's temper"},
+			want:       true,
+		},
+		{
+			name: "wrong story title - no match",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Story 2"},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression:  "hello",
+									LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			storyTitle: "Story 1",
+			sceneTitle: "Scene 1",
+			definition: &notebook.Note{Expression: "hello"},
+			want:       false,
+		},
+		{
+			name: "wrong scene title - no match",
+			learningHistory: []notebook.LearningHistory{
+				{
+					Metadata: notebook.LearningHistoryMetadata{Title: "Story 1"},
+					Scenes: []notebook.LearningScene{
+						{
+							Metadata: notebook.LearningSceneMetadata{Title: "Scene 2"},
+							Expressions: []notebook.LearningHistoryExpression{
+								{
+									Expression:  "hello",
+									LearnedLogs: []notebook.LearningRecord{{Status: "understood"}},
+								},
+							},
+						},
+					},
+				},
+			},
+			storyTitle: "Story 1",
+			sceneTitle: "Scene 1",
+			definition: &notebook.Note{Expression: "hello"},
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := needsReverseReviewForStory(tt.learningHistory, tt.storyTitle, tt.sceneTitle, tt.definition)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestReverseQuizCLI_DisplayResult(t *testing.T) {
+	// Disable color for testing
+	color.NoColor = true
+	defer func() { color.NoColor = false }()
+
+	tests := []struct {
+		name            string
+		card            *WordOccurrence
+		userAnswer      string
+		isCorrect       bool
+		reason          string
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			name: "correct answer",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "excited",
+					Meaning:    "feeling enthusiasm",
+				},
+				Contexts: []WordOccurrenceContext{},
+			},
+			userAnswer: "excited",
+			isCorrect:  true,
+			reason:     "exact match",
+			wantContains: []string{
+				"Correct!",
+				"excited",
+				"feeling enthusiasm",
+				"Reason: exact match",
+			},
+		},
+		{
+			name: "incorrect answer",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "excited",
+					Meaning:    "feeling enthusiasm",
+				},
+				Contexts: []WordOccurrenceContext{},
+			},
+			userAnswer: "apple",
+			isCorrect:  false,
+			reason:     "unrelated word",
+			wantContains: []string{
+				"Incorrect",
+				"excited",
+				"feeling enthusiasm",
+				"You answered: apple",
+				"Reason: unrelated word",
+			},
+		},
+		{
+			name: "correct answer with context",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "excited",
+					Meaning:    "feeling enthusiasm",
+				},
+				Contexts: []WordOccurrenceContext{
+					{Context: "I am so excited about the trip!", Usage: "excited"},
+				},
+			},
+			userAnswer: "excited",
+			isCorrect:  true,
+			reason:     "",
+			wantContains: []string{
+				"Correct!",
+				"Context:",
+				"I am so excited about the trip!",
+			},
+		},
+		{
+			name: "correct answer without reason",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{
+					Expression: "hello",
+					Meaning:    "a greeting",
+				},
+				Contexts: []WordOccurrenceContext{},
+			},
+			userAnswer:      "hello",
+			isCorrect:       true,
+			reason:          "",
+			wantNotContains: []string{"Reason:"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cli := &ReverseQuizCLI{
+				InteractiveQuizCLI: &InteractiveQuizCLI{
+					bold:   color.New(color.Bold),
+					italic: color.New(color.Italic),
+				},
+			}
+
+			// Capture stdout and color.Output
+			old := os.Stdout
+			oldColorOutput := color.Output
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+			color.Output = w
+
+			cli.displayResult(tt.card, tt.userAnswer, tt.isCorrect, tt.reason)
+
+			w.Close()
+			os.Stdout = old
+			color.Output = oldColorOutput
+
+			var buf strings.Builder
+			_, _ = io.Copy(&buf, r)
+			output := buf.String()
+
+			for _, want := range tt.wantContains {
+				assert.Contains(t, output, want)
+			}
+			for _, notWant := range tt.wantNotContains {
+				assert.NotContains(t, output, notWant)
+			}
+		})
+	}
+}
+
 func TestNormalizeTitle(t *testing.T) {
 	tests := []struct {
 		name  string
@@ -1520,3 +2130,210 @@ func TestNormalizeTitle(t *testing.T) {
 		})
 	}
 }
+
+func TestNewReverseQuizCLI_AllNotebooks(t *testing.T) {
+	storiesDir := t.TempDir()
+	flashcardsDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	testutil.CreateStoryNotebook(t, storiesDir, learningNotesDir, "test-story", testutil.WithStoryLearningStatus("usable"))
+	testutil.CreateFlashcardNotebook(t, flashcardsDir, learningNotesDir, "test-fc", testutil.WithFlashcardLearningStatus("usable"))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	cli, err := NewReverseQuizCLI(
+		"", // empty = all notebooks
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			FlashcardsDirectories:  []string{flashcardsDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	require.NoError(t, err)
+	assert.GreaterOrEqual(t, cli.GetCardCount(), 1)
+}
+
+func TestNewReverseQuizCLI_FlashcardNotebook(t *testing.T) {
+	flashcardsDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	testutil.CreateFlashcardNotebook(t, flashcardsDir, learningNotesDir, "my-fc", testutil.WithFlashcardLearningStatus("usable"))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	cli, err := NewReverseQuizCLI(
+		"my-fc",
+		config.NotebooksConfig{
+			FlashcardsDirectories:  []string{flashcardsDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, 1, cli.GetCardCount())
+}
+
+func TestNewReverseQuizCLI_NotebookNotFound(t *testing.T) {
+	storiesDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	_, err := NewReverseQuizCLI(
+		"nonexistent",
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "not found")
+}
+
+func TestNewReverseQuizCLI_NoLearningNote(t *testing.T) {
+	storiesDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	notebookDir := filepath.Join(storiesDir, "test-story")
+	require.NoError(t, os.MkdirAll(notebookDir, 0755))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "index.yml"), notebook.Index{
+		Kind: "story", ID: "test-story", Name: "Test Story",
+		NotebookPaths: []string{"stories.yml"},
+	}))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(notebookDir, "stories.yml"), []notebook.StoryNotebook{
+		{
+			Event: "Story 1",
+			Scenes: []notebook.StoryScene{
+				{Title: "Scene 1", Definitions: []notebook.Note{{Expression: "eager", Meaning: "wanting to do something"}}},
+			},
+		},
+	}))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	_, err := NewReverseQuizCLI(
+		"test-story",
+		config.NotebooksConfig{
+			StoriesDirectories:     []string{storiesDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		false,
+	)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "learning note")
+}
+
+func TestNewReverseQuizCLI_ListMissingContext(t *testing.T) {
+	flashcardsDir := t.TempDir()
+	learningNotesDir := t.TempDir()
+	dictionaryCacheDir := t.TempDir()
+
+	fcDir := filepath.Join(flashcardsDir, "test-fc")
+	require.NoError(t, os.MkdirAll(fcDir, 0755))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "index.yml"), notebook.FlashcardIndex{
+		ID: "test-fc", Name: "Test FC",
+		NotebookPaths: []string{"cards.yml"},
+	}))
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(fcDir, "cards.yml"), []notebook.FlashcardNotebook{
+		{
+			Title: "Unit 1",
+			Cards: []notebook.Note{
+				{Expression: "abstruse", Meaning: "difficult to understand"},      // no examples
+				{Expression: "break the ice", Meaning: "to initiate interaction", Examples: []string{"She told a joke to break the ice."}},
+			},
+		},
+	}))
+
+	require.NoError(t, notebook.WriteYamlFile(filepath.Join(learningNotesDir, "test-fc.yml"), []notebook.LearningHistory{
+		{
+			Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-fc", Title: "Unit 1", Type: "flashcard"},
+			Expressions: []notebook.LearningHistoryExpression{
+				{Expression: "abstruse", LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}}},
+				{Expression: "break the ice", LearnedLogs: []notebook.LearningRecord{{Status: "usable", LearnedAt: notebook.NewDate(time.Now())}}},
+			},
+		},
+	}))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	cli, err := NewReverseQuizCLI(
+		"test-fc",
+		config.NotebooksConfig{
+			FlashcardsDirectories:  []string{flashcardsDir},
+			LearningNotesDirectory: learningNotesDir,
+		},
+		dictionaryCacheDir,
+		mockClient,
+		true, // listMissingContext
+	)
+	require.NoError(t, err)
+	// Should have 1 card (abstruse without context)
+	assert.Equal(t, 1, cli.GetCardCount())
+	cli.ListMissingContext()
+}
+
+func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	mockClient := mock_inference.NewMockClient(ctrl)
+
+	// First call: classify as synonym
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
+		Classification: inference.ClassificationSynonym,
+		Reason:         "similar meaning",
+	}, nil)
+
+	// Create a reader that provides retry input (exact match with expression)
+	retryInput := "correct-word\n"
+	stdinReader := bufio.NewReader(strings.NewReader(retryInput))
+
+	cli := &ReverseQuizCLI{
+		InteractiveQuizCLI: &InteractiveQuizCLI{
+			openaiClient: mockClient,
+			stdinReader:  stdinReader,
+			bold:         color.New(color.Bold),
+			italic:       color.New(color.Italic),
+		},
+	}
+
+	card := &WordOccurrence{
+		Definition: &notebook.Note{
+			Expression: "correct-word",
+			Meaning:    "the right word",
+		},
+		Contexts: []WordOccurrenceContext{
+			{Context: "This is the context.", Usage: "correct-word"},
+		},
+	}
+
+	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "synonym-word", 5000, false)
+	assert.NoError(t, err)
+	assert.True(t, isCorrect)
+	assert.Greater(t, quality, 0)
+	assert.Equal(t, "exact match", reason)
+}
+

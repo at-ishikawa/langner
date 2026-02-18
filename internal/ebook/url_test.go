@@ -61,6 +61,11 @@ func TestDeriveURLs(t *testing.T) {
 			inputURL: "https://standardebooks.org/ebooks/only-author",
 			wantErr:  true,
 		},
+		{
+			name:     "Invalid GitHub URL with subpath",
+			inputURL: "https://github.com/standardebooks/org/extra-path",
+			wantErr:  true,
+		},
 	}
 
 	for _, tt := range tests {

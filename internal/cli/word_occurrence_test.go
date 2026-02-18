@@ -132,6 +132,86 @@ func TestWordOccurrence_GetExpression(t *testing.T) {
 	}
 }
 
+func TestExtractWordOccurrencesFromFlashcards(t *testing.T) {
+	tests := []struct {
+		name         string
+		notebookName string
+		notebooks    []notebook.FlashcardNotebook
+		wantCount    int
+	}{
+		{
+			name:         "empty notebooks",
+			notebookName: "test",
+			notebooks:    []notebook.FlashcardNotebook{},
+			wantCount:    0,
+		},
+		{
+			name:         "single card without examples",
+			notebookName: "test",
+			notebooks: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting"},
+					},
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name:         "single card with examples",
+			notebookName: "test",
+			notebooks: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{
+							Expression: "hello",
+							Meaning:    "a greeting",
+							Examples:   []string{"Hello there!", "Hello world!"},
+						},
+					},
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name:         "multiple notebooks with multiple cards",
+			notebookName: "test",
+			notebooks: []notebook.FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Cards: []notebook.Note{
+						{Expression: "hello", Meaning: "a greeting"},
+						{Expression: "world", Meaning: "the earth"},
+					},
+				},
+				{
+					Title: "Unit 2",
+					Cards: []notebook.Note{
+						{Expression: "apple", Meaning: "a fruit"},
+					},
+				},
+			},
+			wantCount: 3,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractWordOccurrencesFromFlashcards(tt.notebookName, tt.notebooks)
+			assert.Len(t, result, tt.wantCount)
+
+			for _, occ := range result {
+				assert.Equal(t, tt.notebookName, occ.NotebookName)
+				assert.Nil(t, occ.Story)
+				assert.Nil(t, occ.Scene)
+				assert.NotNil(t, occ.Definition)
+			}
+		})
+	}
+}
+
 func TestWordOccurrence_GetCleanContexts(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -169,6 +249,81 @@ func TestWordOccurrence_GetCleanContexts(t *testing.T) {
 				Contexts: tt.contexts,
 			}
 			got := occurrence.GetCleanContexts()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestWordOccurrence_GetMeaning(t *testing.T) {
+	tests := []struct {
+		name       string
+		definition *notebook.Note
+		want       string
+	}{
+		{
+			name: "returns meaning",
+			definition: &notebook.Note{
+				Expression: "break the ice",
+				Meaning:    "to initiate social interaction",
+			},
+			want: "to initiate social interaction",
+		},
+		{
+			name: "empty meaning",
+			definition: &notebook.Note{
+				Expression: "hello",
+				Meaning:    "",
+			},
+			want: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			occurrence := &WordOccurrence{Definition: tt.definition}
+			got := occurrence.GetMeaning()
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestWordOccurrence_GetImages(t *testing.T) {
+	tests := []struct {
+		name       string
+		definition *notebook.Note
+		want       []string
+	}{
+		{
+			name: "returns images",
+			definition: &notebook.Note{
+				Expression: "castle",
+				Meaning:    "a large building",
+				Images:     []string{"castle1.jpg", "castle2.jpg"},
+			},
+			want: []string{"castle1.jpg", "castle2.jpg"},
+		},
+		{
+			name: "no images",
+			definition: &notebook.Note{
+				Expression: "hello",
+				Meaning:    "a greeting",
+			},
+			want: nil,
+		},
+		{
+			name: "empty images",
+			definition: &notebook.Note{
+				Expression: "hello",
+				Images:     []string{},
+			},
+			want: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			occurrence := &WordOccurrence{Definition: tt.definition}
+			got := occurrence.GetImages()
 			assert.Equal(t, tt.want, got)
 		})
 	}

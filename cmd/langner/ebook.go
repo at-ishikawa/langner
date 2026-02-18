@@ -5,7 +5,6 @@ import (
 	"os"
 	"text/tabwriter"
 
-	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/ebook"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +22,18 @@ func newEbookCommand() *cobra.Command {
 	return ebookCmd
 }
 
+func newEbookManager() (*ebook.Manager, error) {
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	var booksDir string
+	if len(cfg.Notebooks.BooksDirectories) > 0 {
+		booksDir = cfg.Notebooks.BooksDirectories[0]
+	}
+	return ebook.NewManager(cfg.Books.RepoDirectory, cfg.Books.RepositoriesFile, booksDir), nil
+}
+
 func newEbookCloneCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "clone <url>",
@@ -30,20 +41,10 @@ func newEbookCloneCommand() *cobra.Command {
 		Long:  "Clone a Standard Ebooks repository from GitHub or standardebooks.org URL",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			manager, err := newEbookManager()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
+				return err
 			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
-			}
-
-			var booksDir string
-			if len(cfg.Notebooks.BooksDirectories) > 0 {
-				booksDir = cfg.Notebooks.BooksDirectories[0]
-			}
-			manager := ebook.NewManager(cfg.Books.RepoDirectory, cfg.Books.RepositoriesFile, booksDir)
 			if err := manager.Clone(args[0]); err != nil {
 				return fmt.Errorf("failed to clone ebook: %w", err)
 			}
@@ -58,20 +59,10 @@ func newEbookListCommand() *cobra.Command {
 		Use:   "list",
 		Short: "List cloned ebook repositories",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			manager, err := newEbookManager()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
+				return err
 			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
-			}
-
-			var booksDir string
-			if len(cfg.Notebooks.BooksDirectories) > 0 {
-				booksDir = cfg.Notebooks.BooksDirectories[0]
-			}
-			manager := ebook.NewManager(cfg.Books.RepoDirectory, cfg.Books.RepositoriesFile, booksDir)
 			repos, err := manager.List()
 			if err != nil {
 				return fmt.Errorf("failed to list ebooks: %w", err)
@@ -100,20 +91,10 @@ func newEbookRemoveCommand() *cobra.Command {
 		Short: "Remove a cloned ebook repository",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			loader, err := config.NewConfigLoader(configFile)
+			manager, err := newEbookManager()
 			if err != nil {
-				return fmt.Errorf("failed to create config loader: %w", err)
+				return err
 			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("failed to load configuration: %w", err)
-			}
-
-			var booksDir string
-			if len(cfg.Notebooks.BooksDirectories) > 0 {
-				booksDir = cfg.Notebooks.BooksDirectories[0]
-			}
-			manager := ebook.NewManager(cfg.Books.RepoDirectory, cfg.Books.RepositoriesFile, booksDir)
 			if err := manager.Remove(args[0]); err != nil {
 				return fmt.Errorf("failed to remove ebook: %w", err)
 			}

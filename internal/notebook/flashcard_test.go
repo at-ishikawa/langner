@@ -463,6 +463,124 @@ func TestGetFlashcardIndexes(t *testing.T) {
 	assert.Equal(t, []string{"./cards.yml"}, indexes["vocab"].NotebookPaths)
 }
 
+func TestReader_GetStoryIndexes(t *testing.T) {
+	env := newTestFlashcardEnv(t)
+
+	// Create story directory with index.yml
+	storyDir := env.createStoryIndex("my-stories", "My Stories", []string{"./notebook.yml"})
+
+	reader, err := NewReader([]string{storyDir}, []string{}, nil, nil, nil)
+	require.NoError(t, err)
+
+	indexes := reader.GetStoryIndexes()
+	assert.Len(t, indexes, 1)
+	assert.Contains(t, indexes, "my-stories")
+	assert.Equal(t, "My Stories", indexes["my-stories"].Name)
+}
+
+func TestReader_GetStoryIndexes_Empty(t *testing.T) {
+	reader, err := NewReader([]string{}, []string{}, nil, nil, nil)
+	require.NoError(t, err)
+
+	indexes := reader.GetStoryIndexes()
+	assert.Len(t, indexes, 0)
+}
+
+func TestReader_ReadAllStoryNotebooks(t *testing.T) {
+	env := newTestFlashcardEnv(t)
+
+	// Create story directory
+	storyDir := env.createStoryIndex("test-story", "Test Story", []string{"./episodes.yml"})
+
+	// Create episode YAML
+	episodesContent := `- event: "Episode 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "Opening"
+      conversations:
+        - speaker: "A"
+          quote: "Hello there"
+      definitions:
+        - expression: "greeting"
+          meaning: "a word of welcome"
+`
+	env.createCardFile(storyDir, "episodes.yml", episodesContent)
+
+	reader, err := NewReader([]string{env.tempDir}, []string{}, nil, nil, nil)
+	require.NoError(t, err)
+
+	result, err := reader.ReadAllStoryNotebooks()
+	require.NoError(t, err)
+	assert.Len(t, result, 1)
+	assert.Contains(t, result, "test-story")
+}
+
+func TestReader_ReadAllNotes(t *testing.T) {
+	env := newTestFlashcardEnv(t)
+
+	// Create story directory
+	storyDir := env.createStoryIndex("test-story", "Test Story", []string{"./episodes.yml"})
+
+	// Create episode YAML with a definition that needs to learn
+	episodesContent := `- event: "Episode 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "Opening"
+      conversations:
+        - speaker: "A"
+          quote: "The {{ arduous }} task continued"
+      definitions:
+        - expression: "arduous"
+          meaning: "involving great effort"
+`
+	env.createCardFile(storyDir, "episodes.yml", episodesContent)
+
+	reader, err := NewReader([]string{env.tempDir}, []string{}, nil, nil, nil)
+	require.NoError(t, err)
+
+	// Test with learning history that marks expression as needing learn
+	learningHistories := map[string][]LearningHistory{
+		"test-story": {
+			{
+				Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+				Scenes: []LearningScene{
+					{
+						Metadata: LearningSceneMetadata{Title: "Opening"},
+						Expressions: []LearningHistoryExpression{
+							{
+								Expression: "arduous",
+								LearnedLogs: []LearningRecord{
+									{
+										Status:    LearnedStatusMisunderstood,
+										LearnedAt: NewDate(time.Now().Add(-24 * time.Hour)),
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	notes, err := reader.ReadAllNotes("test-story", learningHistories)
+	require.NoError(t, err)
+	assert.Greater(t, len(notes), 0)
+}
+
+func TestIndex_GetNotebookPath(t *testing.T) {
+	index := Index{
+		path:          "/base/path",
+		NotebookPaths: []string{"chapter1.yml", "chapter2.yml"},
+	}
+
+	got := index.GetNotebookPath(0)
+	assert.Equal(t, "/base/path/chapter1.yml", got)
+
+	got = index.GetNotebookPath(1)
+	assert.Equal(t, "/base/path/chapter2.yml", got)
+}
+
 func TestReader_IsBook(t *testing.T) {
 	env := newTestFlashcardEnv(t)
 
