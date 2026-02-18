@@ -25,7 +25,7 @@ In the CLI quiz, once a word is answered, the result scrolls away and the user c
 As a learner, I want to start a notebook recognition quiz from the web UI.
 
 - Select a notebook (or "All notebooks") from a list
-- Optionally toggle "Include words with no correct answers"
+- Optionally toggle "Include unstudied words"
 - See how many words are due for review
 
 ### Answer a Question

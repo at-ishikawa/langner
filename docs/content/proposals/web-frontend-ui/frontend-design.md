@@ -63,7 +63,7 @@ Chakra UI provides interactive component primitives needed across screens: check
 - Pre-built accessible components — checkbox groups, inputs, buttons, cards, progress bars
 - Style props (`p={4}`, `bg="gray.100"`) without learning Tailwind CSS class conventions
 - Easy theming for consistent look across 10-20 screens as the app grows
-- Regular npm package — updates and bug fixes via `npm update`
+- Regular package — updates and bug fixes via `pnpm update`
 
 ## Connect RPC Client
 
