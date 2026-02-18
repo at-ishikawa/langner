@@ -29,7 +29,7 @@ COVERAGE_THRESHOLD ?= 90
 
 .PHONY: test-coverage
 test-coverage:
-	@go test -coverprofile=coverage.out ./...
+	@go test -coverprofile=coverage.out $$(go list ./... | grep -v /gen-protos/ | grep -v /cmd/langner-server)
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	COVERAGE_INT=$${COVERAGE%.*}; \
 	echo "Total coverage: $${COVERAGE}%"; \

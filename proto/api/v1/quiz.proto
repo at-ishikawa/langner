@@ -1,8 +1,8 @@
 syntax = "proto3";
 
-package quiz.v1;
+package api.v1;
 
-option go_package = "github.com/at-ishikawa/langner/gen/quiz/v1;quizv1";
+option go_package = "github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1";
 
 service QuizService {
   rpc GetQuizOptions(GetQuizOptionsRequest) returns (GetQuizOptionsResponse);

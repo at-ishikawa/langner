@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: quiz/v1/quiz.proto
+// source: api/v1/quiz.proto
 
-package quizv1
+package apiv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -29,7 +29,7 @@ type GetQuizOptionsRequest struct {
 
 func (x *GetQuizOptionsRequest) Reset() {
 	*x = GetQuizOptionsRequest{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[0]
+	mi := &file_api_v1_quiz_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -41,7 +41,7 @@ func (x *GetQuizOptionsRequest) String() string {
 func (*GetQuizOptionsRequest) ProtoMessage() {}
 
 func (x *GetQuizOptionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[0]
+	mi := &file_api_v1_quiz_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -54,7 +54,7 @@ func (x *GetQuizOptionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetQuizOptionsRequest.ProtoReflect.Descriptor instead.
 func (*GetQuizOptionsRequest) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{0}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{0}
 }
 
 type GetQuizOptionsResponse struct {
@@ -66,7 +66,7 @@ type GetQuizOptionsResponse struct {
 
 func (x *GetQuizOptionsResponse) Reset() {
 	*x = GetQuizOptionsResponse{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[1]
+	mi := &file_api_v1_quiz_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -78,7 +78,7 @@ func (x *GetQuizOptionsResponse) String() string {
 func (*GetQuizOptionsResponse) ProtoMessage() {}
 
 func (x *GetQuizOptionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[1]
+	mi := &file_api_v1_quiz_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -91,7 +91,7 @@ func (x *GetQuizOptionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetQuizOptionsResponse.ProtoReflect.Descriptor instead.
 func (*GetQuizOptionsResponse) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{1}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *GetQuizOptionsResponse) GetNotebooks() []*NotebookSummary {
@@ -112,7 +112,7 @@ type NotebookSummary struct {
 
 func (x *NotebookSummary) Reset() {
 	*x = NotebookSummary{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[2]
+	mi := &file_api_v1_quiz_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -124,7 +124,7 @@ func (x *NotebookSummary) String() string {
 func (*NotebookSummary) ProtoMessage() {}
 
 func (x *NotebookSummary) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[2]
+	mi := &file_api_v1_quiz_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -137,7 +137,7 @@ func (x *NotebookSummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NotebookSummary.ProtoReflect.Descriptor instead.
 func (*NotebookSummary) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{2}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *NotebookSummary) GetNotebookId() string {
@@ -171,7 +171,7 @@ type StartQuizRequest struct {
 
 func (x *StartQuizRequest) Reset() {
 	*x = StartQuizRequest{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[3]
+	mi := &file_api_v1_quiz_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -183,7 +183,7 @@ func (x *StartQuizRequest) String() string {
 func (*StartQuizRequest) ProtoMessage() {}
 
 func (x *StartQuizRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[3]
+	mi := &file_api_v1_quiz_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -196,7 +196,7 @@ func (x *StartQuizRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartQuizRequest.ProtoReflect.Descriptor instead.
 func (*StartQuizRequest) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{3}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StartQuizRequest) GetNotebookIds() []string {
@@ -222,7 +222,7 @@ type StartQuizResponse struct {
 
 func (x *StartQuizResponse) Reset() {
 	*x = StartQuizResponse{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[4]
+	mi := &file_api_v1_quiz_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +234,7 @@ func (x *StartQuizResponse) String() string {
 func (*StartQuizResponse) ProtoMessage() {}
 
 func (x *StartQuizResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[4]
+	mi := &file_api_v1_quiz_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,7 +247,7 @@ func (x *StartQuizResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartQuizResponse.ProtoReflect.Descriptor instead.
 func (*StartQuizResponse) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{4}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StartQuizResponse) GetFlashcards() []*Flashcard {
@@ -268,7 +268,7 @@ type Flashcard struct {
 
 func (x *Flashcard) Reset() {
 	*x = Flashcard{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[5]
+	mi := &file_api_v1_quiz_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +280,7 @@ func (x *Flashcard) String() string {
 func (*Flashcard) ProtoMessage() {}
 
 func (x *Flashcard) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[5]
+	mi := &file_api_v1_quiz_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +293,7 @@ func (x *Flashcard) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Flashcard.ProtoReflect.Descriptor instead.
 func (*Flashcard) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{5}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Flashcard) GetNoteId() int64 {
@@ -327,7 +327,7 @@ type Example struct {
 
 func (x *Example) Reset() {
 	*x = Example{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[6]
+	mi := &file_api_v1_quiz_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -339,7 +339,7 @@ func (x *Example) String() string {
 func (*Example) ProtoMessage() {}
 
 func (x *Example) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[6]
+	mi := &file_api_v1_quiz_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -352,7 +352,7 @@ func (x *Example) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Example.ProtoReflect.Descriptor instead.
 func (*Example) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{6}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *Example) GetText() string {
@@ -380,7 +380,7 @@ type SubmitAnswerRequest struct {
 
 func (x *SubmitAnswerRequest) Reset() {
 	*x = SubmitAnswerRequest{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[7]
+	mi := &file_api_v1_quiz_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -392,7 +392,7 @@ func (x *SubmitAnswerRequest) String() string {
 func (*SubmitAnswerRequest) ProtoMessage() {}
 
 func (x *SubmitAnswerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[7]
+	mi := &file_api_v1_quiz_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -405,7 +405,7 @@ func (x *SubmitAnswerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitAnswerRequest.ProtoReflect.Descriptor instead.
 func (*SubmitAnswerRequest) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{7}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SubmitAnswerRequest) GetNoteId() int64 {
@@ -440,7 +440,7 @@ type SubmitAnswerResponse struct {
 
 func (x *SubmitAnswerResponse) Reset() {
 	*x = SubmitAnswerResponse{}
-	mi := &file_quiz_v1_quiz_proto_msgTypes[8]
+	mi := &file_api_v1_quiz_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +452,7 @@ func (x *SubmitAnswerResponse) String() string {
 func (*SubmitAnswerResponse) ProtoMessage() {}
 
 func (x *SubmitAnswerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_quiz_v1_quiz_proto_msgTypes[8]
+	mi := &file_api_v1_quiz_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +465,7 @@ func (x *SubmitAnswerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitAnswerResponse.ProtoReflect.Descriptor instead.
 func (*SubmitAnswerResponse) Descriptor() ([]byte, []int) {
-	return file_quiz_v1_quiz_proto_rawDescGZIP(), []int{8}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SubmitAnswerResponse) GetCorrect() bool {
@@ -489,14 +489,14 @@ func (x *SubmitAnswerResponse) GetReason() string {
 	return ""
 }
 
-var File_quiz_v1_quiz_proto protoreflect.FileDescriptor
+var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
-const file_quiz_v1_quiz_proto_rawDesc = "" +
+const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
-	"\x12quiz/v1/quiz.proto\x12\aquiz.v1\"\x17\n" +
-	"\x15GetQuizOptionsRequest\"P\n" +
-	"\x16GetQuizOptionsResponse\x126\n" +
-	"\tnotebooks\x18\x01 \x03(\v2\x18.quiz.v1.NotebookSummaryR\tnotebooks\"i\n" +
+	"\x11api/v1/quiz.proto\x12\x06api.v1\"\x17\n" +
+	"\x15GetQuizOptionsRequest\"O\n" +
+	"\x16GetQuizOptionsResponse\x125\n" +
+	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"i\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
@@ -504,15 +504,15 @@ const file_quiz_v1_quiz_proto_rawDesc = "" +
 	"\freview_count\x18\x03 \x01(\x05R\vreviewCount\"b\n" +
 	"\x10StartQuizRequest\x12!\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tR\vnotebookIds\x12+\n" +
-	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"G\n" +
-	"\x11StartQuizResponse\x122\n" +
+	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"F\n" +
+	"\x11StartQuizResponse\x121\n" +
 	"\n" +
-	"flashcards\x18\x01 \x03(\v2\x12.quiz.v1.FlashcardR\n" +
-	"flashcards\"h\n" +
+	"flashcards\x18\x01 \x03(\v2\x11.api.v1.FlashcardR\n" +
+	"flashcards\"g\n" +
 	"\tFlashcard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
-	"\x05entry\x18\x02 \x01(\tR\x05entry\x12,\n" +
-	"\bexamples\x18\x03 \x03(\v2\x10.quiz.v1.ExampleR\bexamples\"7\n" +
+	"\x05entry\x18\x02 \x01(\tR\x05entry\x12+\n" +
+	"\bexamples\x18\x03 \x03(\v2\x0f.api.v1.ExampleR\bexamples\"7\n" +
 	"\aExample\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x18\n" +
 	"\aspeaker\x18\x02 \x01(\tR\aspeaker\"p\n" +
@@ -523,46 +523,46 @@ const file_quiz_v1_quiz_proto_rawDesc = "" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason2\xf1\x01\n" +
-	"\vQuizService\x12Q\n" +
-	"\x0eGetQuizOptions\x12\x1e.quiz.v1.GetQuizOptionsRequest\x1a\x1f.quiz.v1.GetQuizOptionsResponse\x12B\n" +
-	"\tStartQuiz\x12\x19.quiz.v1.StartQuizRequest\x1a\x1a.quiz.v1.StartQuizResponse\x12K\n" +
-	"\fSubmitAnswer\x12\x1c.quiz.v1.SubmitAnswerRequest\x1a\x1d.quiz.v1.SubmitAnswerResponseB3Z1github.com/at-ishikawa/langner/gen/quiz/v1;quizv1b\x06proto3"
+	"\x06reason\x18\x03 \x01(\tR\x06reason2\xeb\x01\n" +
+	"\vQuizService\x12O\n" +
+	"\x0eGetQuizOptions\x12\x1d.api.v1.GetQuizOptionsRequest\x1a\x1e.api.v1.GetQuizOptionsResponse\x12@\n" +
+	"\tStartQuiz\x12\x18.api.v1.StartQuizRequest\x1a\x19.api.v1.StartQuizResponse\x12I\n" +
+	"\fSubmitAnswer\x12\x1b.api.v1.SubmitAnswerRequest\x1a\x1c.api.v1.SubmitAnswerResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
-	file_quiz_v1_quiz_proto_rawDescOnce sync.Once
-	file_quiz_v1_quiz_proto_rawDescData []byte
+	file_api_v1_quiz_proto_rawDescOnce sync.Once
+	file_api_v1_quiz_proto_rawDescData []byte
 )
 
-func file_quiz_v1_quiz_proto_rawDescGZIP() []byte {
-	file_quiz_v1_quiz_proto_rawDescOnce.Do(func() {
-		file_quiz_v1_quiz_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_quiz_v1_quiz_proto_rawDesc), len(file_quiz_v1_quiz_proto_rawDesc)))
+func file_api_v1_quiz_proto_rawDescGZIP() []byte {
+	file_api_v1_quiz_proto_rawDescOnce.Do(func() {
+		file_api_v1_quiz_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)))
 	})
-	return file_quiz_v1_quiz_proto_rawDescData
+	return file_api_v1_quiz_proto_rawDescData
 }
 
-var file_quiz_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
-var file_quiz_v1_quiz_proto_goTypes = []any{
-	(*GetQuizOptionsRequest)(nil),  // 0: quiz.v1.GetQuizOptionsRequest
-	(*GetQuizOptionsResponse)(nil), // 1: quiz.v1.GetQuizOptionsResponse
-	(*NotebookSummary)(nil),        // 2: quiz.v1.NotebookSummary
-	(*StartQuizRequest)(nil),       // 3: quiz.v1.StartQuizRequest
-	(*StartQuizResponse)(nil),      // 4: quiz.v1.StartQuizResponse
-	(*Flashcard)(nil),              // 5: quiz.v1.Flashcard
-	(*Example)(nil),                // 6: quiz.v1.Example
-	(*SubmitAnswerRequest)(nil),    // 7: quiz.v1.SubmitAnswerRequest
-	(*SubmitAnswerResponse)(nil),   // 8: quiz.v1.SubmitAnswerResponse
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_api_v1_quiz_proto_goTypes = []any{
+	(*GetQuizOptionsRequest)(nil),  // 0: api.v1.GetQuizOptionsRequest
+	(*GetQuizOptionsResponse)(nil), // 1: api.v1.GetQuizOptionsResponse
+	(*NotebookSummary)(nil),        // 2: api.v1.NotebookSummary
+	(*StartQuizRequest)(nil),       // 3: api.v1.StartQuizRequest
+	(*StartQuizResponse)(nil),      // 4: api.v1.StartQuizResponse
+	(*Flashcard)(nil),              // 5: api.v1.Flashcard
+	(*Example)(nil),                // 6: api.v1.Example
+	(*SubmitAnswerRequest)(nil),    // 7: api.v1.SubmitAnswerRequest
+	(*SubmitAnswerResponse)(nil),   // 8: api.v1.SubmitAnswerResponse
 }
-var file_quiz_v1_quiz_proto_depIdxs = []int32{
-	2, // 0: quiz.v1.GetQuizOptionsResponse.notebooks:type_name -> quiz.v1.NotebookSummary
-	5, // 1: quiz.v1.StartQuizResponse.flashcards:type_name -> quiz.v1.Flashcard
-	6, // 2: quiz.v1.Flashcard.examples:type_name -> quiz.v1.Example
-	0, // 3: quiz.v1.QuizService.GetQuizOptions:input_type -> quiz.v1.GetQuizOptionsRequest
-	3, // 4: quiz.v1.QuizService.StartQuiz:input_type -> quiz.v1.StartQuizRequest
-	7, // 5: quiz.v1.QuizService.SubmitAnswer:input_type -> quiz.v1.SubmitAnswerRequest
-	1, // 6: quiz.v1.QuizService.GetQuizOptions:output_type -> quiz.v1.GetQuizOptionsResponse
-	4, // 7: quiz.v1.QuizService.StartQuiz:output_type -> quiz.v1.StartQuizResponse
-	8, // 8: quiz.v1.QuizService.SubmitAnswer:output_type -> quiz.v1.SubmitAnswerResponse
+var file_api_v1_quiz_proto_depIdxs = []int32{
+	2, // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
+	5, // 1: api.v1.StartQuizResponse.flashcards:type_name -> api.v1.Flashcard
+	6, // 2: api.v1.Flashcard.examples:type_name -> api.v1.Example
+	0, // 3: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	3, // 4: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	7, // 5: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	1, // 6: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	4, // 7: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	8, // 8: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
 	6, // [6:9] is the sub-list for method output_type
 	3, // [3:6] is the sub-list for method input_type
 	3, // [3:3] is the sub-list for extension type_name
@@ -570,26 +570,26 @@ var file_quiz_v1_quiz_proto_depIdxs = []int32{
 	0, // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_quiz_v1_quiz_proto_init() }
-func file_quiz_v1_quiz_proto_init() {
-	if File_quiz_v1_quiz_proto != nil {
+func init() { file_api_v1_quiz_proto_init() }
+func file_api_v1_quiz_proto_init() {
+	if File_api_v1_quiz_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_quiz_v1_quiz_proto_rawDesc), len(file_quiz_v1_quiz_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_quiz_v1_quiz_proto_goTypes,
-		DependencyIndexes: file_quiz_v1_quiz_proto_depIdxs,
-		MessageInfos:      file_quiz_v1_quiz_proto_msgTypes,
+		GoTypes:           file_api_v1_quiz_proto_goTypes,
+		DependencyIndexes: file_api_v1_quiz_proto_depIdxs,
+		MessageInfos:      file_api_v1_quiz_proto_msgTypes,
 	}.Build()
-	File_quiz_v1_quiz_proto = out.File
-	file_quiz_v1_quiz_proto_goTypes = nil
-	file_quiz_v1_quiz_proto_depIdxs = nil
+	File_api_v1_quiz_proto = out.File
+	file_api_v1_quiz_proto_goTypes = nil
+	file_api_v1_quiz_proto_depIdxs = nil
 }
