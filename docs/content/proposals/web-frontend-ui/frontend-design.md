@@ -50,6 +50,10 @@ The quiz page reads flashcards and advances the index on each answer. The comple
 - With 100-200 flashcards per session, avoids unnecessary re-renders that Context would cause on every state update
 - ~1KB, minimal API
 
+## Package Manager: pnpm
+
+pnpm for fast installs and disk-efficient dependency management via a content-addressable store. Strict dependency resolution prevents accessing undeclared dependencies.
+
 ## Component Library: Chakra UI
 
 Chakra UI provides interactive component primitives needed across screens: checkbox, button, input, card, progress bar, spinner, and layout utilities.
