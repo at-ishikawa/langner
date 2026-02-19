@@ -46,6 +46,10 @@ test-integration:
 	@OPENAI_API_KEY=$(OPENAI_API_KEY) \
 		go test -v ./internal/inference/openai -run Integration -timeout 60s
 
+.PHONY: frontend-install
+frontend-install:
+	cd frontend && pnpm install
+
 .PHONY: docs-setup
 docs-setup:
 	git submodule update --init --recursive
