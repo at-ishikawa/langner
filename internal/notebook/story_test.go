@@ -77,6 +77,13 @@ func TestConvertMarkersInText(t *testing.T) {
 			targetExpression: "test phrase",
 			expected:         "I have **TEST PHRASE** here.",
 		},
+		{
+			name:             "Unknown conversion style returns plain text",
+			text:             "I have {{ test phrase }} here.",
+			conversionStyle:  ConversionStyle(99),
+			targetExpression: "",
+			expected:         "I have test phrase here.",
+		},
 	}
 
 	for _, tc := range tests {
@@ -157,6 +164,166 @@ func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
 			assert.Equal(t, tt.want, result)
 		})
 	}
+}
+
+func TestFilterStoryNotebooks_ErrorPaths(t *testing.T) {
+	t.Run("empty expression returns error", func(t *testing.T) {
+		notebooks := []StoryNotebook{
+			{
+				Event: "Story 1",
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 1",
+						Conversations: []Conversation{{Speaker: "A", Quote: "test"}},
+						Definitions:   []Note{{Expression: "   ", Meaning: "test"}},
+					},
+				},
+			},
+		}
+		_, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, false, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty definition.Expression")
+	})
+
+	t.Run("empty conversations and statements returns error", func(t *testing.T) {
+		notebooks := []StoryNotebook{
+			{
+				Event: "Story 1",
+				Scenes: []StoryScene{
+					{
+						Title:       "Scene 1",
+						Definitions: []Note{{Expression: "test", Meaning: "a trial"}},
+					},
+				},
+			},
+		}
+		_, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, true, false)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "empty scene.Conversations and Statements")
+	})
+
+	t.Run("notebook with no scenes is skipped", func(t *testing.T) {
+		notebooks := []StoryNotebook{
+			{Event: "Empty", Scenes: []StoryScene{}},
+		}
+		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, false, false)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("includeNoCorrectAnswers false filters words without correct answers", func(t *testing.T) {
+		notebooks := []StoryNotebook{
+			{
+				Event: "Story 1",
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 1",
+						Conversations: []Conversation{{Speaker: "A", Quote: "test word"}},
+						Definitions:   []Note{{Expression: "test", Meaning: "a trial"}},
+					},
+				},
+			},
+		}
+		// No learning history means no correct answers
+		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, false, false, false)
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("sort descending with multiple notebooks", func(t *testing.T) {
+		notebooks := []StoryNotebook{
+			{
+				Event: "Story 1",
+				Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 1",
+						Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+						Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+					},
+				},
+			},
+			{
+				Event: "Story 2",
+				Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 2",
+						Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+						Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+					},
+				},
+			},
+		}
+		result, err := FilterStoryNotebooks(notebooks, nil, nil, true, true, true, false)
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		assert.True(t, result[0].Date.After(result[1].Date))
+	})
+
+	t.Run("sort ascending with multiple notebooks", func(t *testing.T) {
+		notebooks := []StoryNotebook{
+			{
+				Event: "Story 2",
+				Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 2",
+						Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+						Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+					},
+				},
+			},
+			{
+				Event: "Story 1",
+				Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 1",
+						Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+						Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+					},
+				},
+			},
+		}
+		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, true, false)
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		assert.True(t, result[0].Date.Before(result[1].Date))
+	})
+
+	t.Run("preserveOrder skips sorting", func(t *testing.T) {
+		notebooks := []StoryNotebook{
+			{
+				Event: "Story 2",
+				Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 2",
+						Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+						Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+					},
+				},
+			},
+			{
+				Event: "Story 1",
+				Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+				Scenes: []StoryScene{
+					{
+						Title:         "Scene 1",
+						Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+						Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+					},
+				},
+			},
+		}
+		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, true, true)
+		require.NoError(t, err)
+		require.Len(t, result, 2)
+		// preserveOrder=true, so order should remain as input: Story 2 first
+		assert.Equal(t, "Story 2", result[0].Event)
+		assert.Equal(t, "Story 1", result[1].Event)
+	})
 }
 
 func TestFilterStoryNotebooks(t *testing.T) {
@@ -515,7 +682,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 				tt.sortDesc,
 				tt.includeNoCorrectAnswers,
 				tt.useSpacedRepetition,
-				false,
+				false, // preserveOrder
 			)
 			require.NoError(t, err)
 
@@ -786,6 +953,36 @@ func TestOutputStoryNotebooks(t *testing.T) {
 		// No error - it just writes a notebook with no definitions
 		assert.NoError(t, err)
 	})
+}
+
+func TestFilterStoryNotebooks_SetDetailsError(t *testing.T) {
+	notebooks := []StoryNotebook{
+		{
+			Event: "Story 1",
+			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+			Scenes: []StoryScene{
+				{
+					Title:         "Scene 1",
+					Conversations: []Conversation{{Speaker: "A", Quote: "This is a test word"}},
+					Definitions: []Note{
+						{Expression: "test", Meaning: "test meaning", DictionaryNumber: 5},
+					},
+				},
+			},
+		},
+	}
+	dictionaryMap := map[string]rapidapi.Response{
+		"test": {
+			Word: "test",
+			Results: []rapidapi.Result{
+				{Definition: "a trial"},
+			},
+		},
+	}
+	// DictionaryNumber 5 is out of range (only 1 result), should trigger setDetails error
+	_, err := FilterStoryNotebooks(notebooks, nil, dictionaryMap, false, true, true, false)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "definition.setDetails()")
 }
 
 func TestStoryScene_Validate(t *testing.T) {

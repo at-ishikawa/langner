@@ -118,3 +118,83 @@ func TestGenerateNotebooks(t *testing.T) {
 		})
 	}
 }
+
+func TestGenerateNotebooks_MkdirAllError(t *testing.T) {
+	// Use a path that cannot be created (file as parent)
+	tempDir := t.TempDir()
+	// Create a file where the directory should be
+	filePath := filepath.Join(tempDir, "blocker")
+	require.NoError(t, os.WriteFile(filePath, []byte("data"), 0644))
+
+	repo := Repository{
+		ID:     "test-book",
+		Title:  "Test Book",
+		Author: "Test Author",
+	}
+	chapters := []Chapter{
+		{
+			Filename: "ch1.xhtml",
+			Title:    "Chapter 1",
+			Paragraphs: []Paragraph{
+				{Sentences: []string{"Hello world."}},
+			},
+		},
+	}
+
+	// booksDir points to a file, so MkdirAll for bookDir should fail
+	err := GenerateNotebooks(repo, chapters, filePath)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "create book directory")
+}
+
+func TestGenerateNotebooks_WriteNotebookError(t *testing.T) {
+	// Create the book directory as a file to block writing
+	tempDir := t.TempDir()
+	bookDir := filepath.Join(tempDir, "test-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	// Create a directory where the notebook file should be written
+	notebookPath := filepath.Join(bookDir, "001-ch1.yml")
+	require.NoError(t, os.MkdirAll(notebookPath, 0755))
+
+	repo := Repository{
+		ID:     "test-book",
+		Title:  "Test Book",
+		Author: "Test Author",
+	}
+	chapters := []Chapter{
+		{
+			Filename: "ch1.xhtml",
+			Title:    "Chapter 1",
+			Paragraphs: []Paragraph{
+				{Sentences: []string{"Hello world."}},
+			},
+		},
+	}
+
+	err := GenerateNotebooks(repo, chapters, tempDir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "write notebook")
+}
+
+func TestGenerateNotebooks_WriteIndexError(t *testing.T) {
+	// Create the index.yml as a directory to block writing
+	tempDir := t.TempDir()
+	bookDir := filepath.Join(tempDir, "test-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+
+	indexPath := filepath.Join(bookDir, "index.yml")
+	require.NoError(t, os.MkdirAll(indexPath, 0755))
+
+	repo := Repository{
+		ID:     "test-book",
+		Title:  "Test Book",
+		Author: "Test Author",
+	}
+	// No chapters - so no notebook files to write, goes straight to index
+	chapters := []Chapter{}
+
+	err := GenerateNotebooks(repo, chapters, tempDir)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "write index")
+}
