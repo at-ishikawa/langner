@@ -5,7 +5,6 @@ import path from "path";
 export default defineConfig({
   plugins: [react()],
   test: {
-    passWithNoTests: true,
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     coverage: {
