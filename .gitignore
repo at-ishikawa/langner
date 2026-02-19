@@ -7,3 +7,8 @@ config.yml
 /langner
 
 ebooks/
+
+# Frontend
+frontend/node_modules/
+frontend/.next/
+frontend/next-env.d.ts
