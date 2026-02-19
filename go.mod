@@ -3,6 +3,7 @@ module github.com/at-ishikawa/langner
 go 1.25
 
 require (
+	connectrpc.com/connect v1.19.1
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/fatih/color v1.18.0
 	github.com/go-playground/locales v0.14.1
@@ -16,6 +17,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
 	go.uber.org/mock v0.6.0
+	google.golang.org/protobuf v1.36.11
 	resty.dev/v3 v3.0.0-beta.3
 )
 

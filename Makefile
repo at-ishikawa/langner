@@ -4,8 +4,12 @@ OPENAI_API_KEY ?=
 pre-commit: generate validate test
 
 .PHONY: generate
-generate:
+generate: proto
 	go generate ./...
+
+.PHONY: proto
+proto:
+	go run github.com/bufbuild/buf/cmd/buf@latest generate
 
 .PHONY: fix
 fix:
@@ -25,7 +29,7 @@ COVERAGE_THRESHOLD ?= 90
 
 .PHONY: test-coverage
 test-coverage:
-	@go test -coverprofile=coverage.out ./...
+	@go test -coverprofile=coverage.out $$(go list ./... | grep -v /gen-protos/)
 	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	COVERAGE_INT=$${COVERAGE%.*}; \
 	echo "Total coverage: $${COVERAGE}%"; \
