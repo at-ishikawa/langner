@@ -6,9 +6,6 @@ plugins:
   - local: protoc-gen-connect-go
     out: gen-protos
     opt: paths=source_relative
-  - remote: buf.build/bufbuild/es
-    out: frontend/src/gen
-    opt: target=ts
-  - remote: buf.build/connectrpc/es
-    out: frontend/src/gen
+  - local: frontend/node_modules/.bin/protoc-gen-es
+    out: frontend/src/gen-protos
     opt: target=ts
