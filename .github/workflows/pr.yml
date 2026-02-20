@@ -46,8 +46,11 @@ jobs:
         with:
           go-version-file: 'backend/go.mod'
 
+      - name: Build langner
+        run: cd backend && go build -o ../langner ./cmd/langner
+
       - name: Run langner validate
-        run: cd backend && go run ./cmd/langner validate --config ../config.example.yml
+        run: ./langner validate --config config.example.yml
 
       - name: Output markdown and PDF files
-        run: cd backend && go run ./cmd/langner --config ../config.example.yml notebooks stories friends --pdf
+        run: ./langner --config config.example.yml notebooks stories friends --pdf
