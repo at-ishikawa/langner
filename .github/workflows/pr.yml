@@ -14,12 +14,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'backend/go.mod'
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.6.1
+          working-directory: backend
 
   test:
     name: Test
@@ -30,7 +31,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'backend/go.mod'
       - name: Run tests with coverage check
         run: make test-coverage
 
@@ -43,10 +44,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: 'backend/go.mod'
 
       - name: Run langner validate
-        run: go run ./cmd/langner validate --config config.example.yml
+        run: cd backend && go run ./cmd/langner validate --config ../config.example.yml
 
       - name: Output markdown and PDF files
-        run: go run ./cmd/langner --config config.example.yml notebooks stories friends --pdf
+        run: cd backend && go run ./cmd/langner --config ../config.example.yml notebooks stories friends --pdf

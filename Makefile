@@ -5,7 +5,7 @@ pre-commit: generate validate test
 
 .PHONY: generate
 generate: proto
-	go generate ./...
+	cd backend && go generate ./...
 
 .PHONY: proto
 proto:
@@ -13,24 +13,24 @@ proto:
 
 .PHONY: fix
 fix:
-	golangci-lint run --fix
-	go run ./cmd/langner validate --fix
+	cd backend && golangci-lint run --fix
+	cd backend && go run ./cmd/langner validate --fix
 
 .PHONY: validate
 validate:
-	golangci-lint run
-	go run ./cmd/langner validate
+	cd backend && golangci-lint run
+	cd backend && go run ./cmd/langner validate
 
 .PHONY: test
 test:
-	go test ./...
+	cd backend && go test ./...
 
 COVERAGE_THRESHOLD ?= 90
 
 .PHONY: test-coverage
 test-coverage:
-	@go test -coverprofile=coverage.out $$(go list ./... | grep -v /gen-protos/)
-	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	@cd backend && go test -coverprofile=coverage.out $$(go list ./... | grep -v /gen-protos/)
+	@cd backend && COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	COVERAGE_INT=$${COVERAGE%.*}; \
 	echo "Total coverage: $${COVERAGE}%"; \
 	echo "Threshold: $(COVERAGE_THRESHOLD)%"; \
@@ -43,7 +43,7 @@ test-coverage:
 .PHONY: test-integration
 test-integration:
 	@echo "Running OpenAI integration tests..."
-	@OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	@cd backend && OPENAI_API_KEY=$(OPENAI_API_KEY) \
 		go test -v ./internal/inference/openai -run Integration -timeout 60s
 
 .PHONY: frontend-install
@@ -62,4 +62,4 @@ DATABASE_URL ?= mysql://user:password@tcp(localhost:3306)/local?multiStatements=
 
 .PHONY: db-migrate
 db-migrate:
-	migrate -source file://schemas/migrations -database "$(DATABASE_URL)" up
+	cd backend && migrate -source file://schemas/migrations -database "$(DATABASE_URL)" up

@@ -4,7 +4,7 @@ config.yml
 !.claude/docs
 
 .vscode
-/langner
+/backend/langner
 
 ebooks/
 
