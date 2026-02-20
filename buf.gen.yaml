@@ -1,10 +1,10 @@
 version: v2
 plugins:
   - local: protoc-gen-go
-    out: gen-protos
+    out: backend/gen-protos
     opt: paths=source_relative
   - local: protoc-gen-connect-go
-    out: gen-protos
+    out: backend/gen-protos
     opt: paths=source_relative
   - local: frontend/node_modules/.bin/protoc-gen-es
     out: frontend/src/gen-protos
