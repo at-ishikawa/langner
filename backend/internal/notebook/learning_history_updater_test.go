@@ -51,17 +51,20 @@ func TestNormalizeTitle(t *testing.T) {
 
 func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t *testing.T) {
 	tests := []struct {
-		name            string
-		initialHistory  []LearningHistory
-		notebookID      string
-		storyTitle      string
-		sceneTitle      string
-		expression      string
-		isCorrect       bool
-		isKnownWord     bool
-		quality         int
-		responseTimeMs  int64
-		wantFound       bool
+		name                    string
+		initialHistory          []LearningHistory
+		notebookID              string
+		storyTitle              string
+		sceneTitle              string
+		expression              string
+		isCorrect               bool
+		isKnownWord             bool
+		quality                 int
+		responseTimeMs          int64
+		wantFound               bool
+		wantExpressionsLen      int // if > 0, assert flashcard expressions len
+		wantScenesLen           int // if > 0, assert scenes len
+		wantSceneExpressionsLen int // if > 0, assert first scene's expressions len
 	}{
 		{
 			name:            "Create new reverse expression in empty history",
@@ -149,6 +152,101 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 			responseTimeMs:  6000,
 			wantFound:       false,
 		},
+		{
+			name: "flashcard type matches but expression not found creates new expression",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "flashcards",
+						Type:       "flashcard",
+					},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:            "existing-word",
+							LearnedLogs:           []LearningRecord{},
+							ReverseEasinessFactor: DefaultEasinessFactor,
+						},
+					},
+				},
+			},
+			notebookID:         "test-notebook",
+			storyTitle:         "flashcards",
+			sceneTitle:         "",
+			expression:         "new-word",
+			isCorrect:          true,
+			isKnownWord:        true,
+			quality:            int(QualityCorrect),
+			responseTimeMs:     5000,
+			wantFound:          false,
+			wantExpressionsLen: 2,
+		},
+		{
+			name: "scene not found creates new scene",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene A"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression:            "word-a",
+									LearnedLogs:           []LearningRecord{},
+									ReverseEasinessFactor: DefaultEasinessFactor,
+								},
+							},
+						},
+					},
+				},
+			},
+			notebookID:     "test-notebook",
+			storyTitle:     "Story 1",
+			sceneTitle:     "Scene B",
+			expression:     "word-b",
+			isCorrect:      true,
+			isKnownWord:    false,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 5000,
+			wantFound:      false,
+			wantScenesLen:  2,
+		},
+		{
+			name: "expression not found in existing scene creates new expression",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene A"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression:            "word-a",
+									LearnedLogs:           []LearningRecord{},
+									ReverseEasinessFactor: DefaultEasinessFactor,
+								},
+							},
+						},
+					},
+				},
+			},
+			notebookID:              "test-notebook",
+			storyTitle:              "Story 1",
+			sceneTitle:              "Scene A",
+			expression:              "word-b",
+			isCorrect:               true,
+			isKnownWord:             true,
+			quality:                 int(QualityCorrect),
+			responseTimeMs:          5000,
+			wantFound:               false,
+			wantSceneExpressionsLen: 2,
+		},
 	}
 
 	for _, tc := range tests {
@@ -197,6 +295,29 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 
 			require.NotNil(t, gotExpression)
 			assert.NotEmpty(t, gotExpression.ReverseLogs)
+
+			if tc.wantExpressionsLen > 0 {
+				for _, story := range history {
+					if story.Metadata.Title == tc.storyTitle {
+						assert.Len(t, story.Expressions, tc.wantExpressionsLen)
+					}
+				}
+			}
+			if tc.wantScenesLen > 0 {
+				for _, story := range history {
+					if story.Metadata.Title == tc.storyTitle {
+						assert.Len(t, story.Scenes, tc.wantScenesLen)
+					}
+				}
+			}
+			if tc.wantSceneExpressionsLen > 0 {
+				for _, story := range history {
+					if story.Metadata.Title == tc.storyTitle {
+						require.NotEmpty(t, story.Scenes)
+						assert.Len(t, story.Scenes[0].Expressions, tc.wantSceneExpressionsLen)
+					}
+				}
+			}
 		})
 	}
 }
@@ -218,6 +339,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 		wantExpressions int
 		wantStatus      LearnedStatus
 		wantLogs        int
+		wantScenesLen   int // if > 0, assert the number of scenes
 	}{
 		{
 			name:            "Create new expression in empty history",
@@ -547,6 +669,68 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			wantExpressions: 1,
 			wantStatus:      learnedStatusUnderstood,
 		},
+		{
+			name: "flashcard type matches but expression not found creates new expression",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "flashcards",
+						Type:       "flashcard",
+					},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:  "existing-word",
+							LearnedLogs: []LearningRecord{},
+						},
+					},
+				},
+			},
+			notebookID:      "test-notebook",
+			storyTitle:      "flashcards",
+			sceneTitle:      "",
+			expression:      "new-word",
+			isCorrect:       true,
+			isKnownWord:     true,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  5000,
+			quizType:        QuizTypeFreeform,
+			wantFound:       false,
+			wantExpressions: 2,
+			wantStatus:      learnedStatusUnderstood,
+		},
+		{
+			name: "story matches but scene not found creates new scene",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene A"},
+							Expressions: []LearningHistoryExpression{
+								{Expression: "word-a", LearnedLogs: []LearningRecord{}},
+							},
+						},
+					},
+				},
+			},
+			notebookID:      "test-notebook",
+			storyTitle:      "Story 1",
+			sceneTitle:      "Scene B",
+			expression:      "word-b",
+			isCorrect:       true,
+			isKnownWord:     false,
+			quality:         int(QualityCorrect),
+			responseTimeMs:  5000,
+			quizType:        QuizTypeFreeform,
+			wantFound:       false,
+			wantExpressions: 1,
+			wantStatus:      learnedStatusCanBeUsed,
+			wantScenesLen:   2,
+		},
 	}
 
 	for _, tc := range tests {
@@ -609,6 +793,13 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 
 			if tc.wantLogs > 0 {
 				assert.Len(t, gotExpression.LearnedLogs, tc.wantLogs)
+			}
+			if tc.wantScenesLen > 0 {
+				for _, story := range history {
+					if story.Metadata.Title == tc.storyTitle {
+						assert.Len(t, story.Scenes, tc.wantScenesLen)
+					}
+				}
 			}
 		})
 	}

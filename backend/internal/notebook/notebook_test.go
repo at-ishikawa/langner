@@ -256,61 +256,88 @@ func TestGetThresholdDaysFromCount(t *testing.T) {
 }
 
 func TestNote_getLearnScore(t *testing.T) {
-	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now()
 
 	tests := []struct {
-		name     string
-		note     Note
-		expected int // This is relative, we'll test the concept
+		name           string
+		note           Note
+		wantUpperLimit int
+		wantLowerLimit int
 	}{
 		{
 			name: "no learning logs - returns negative score based on time",
 			note: Note{
 				Expression:   "hello",
 				Definition:   "greeting",
-				notebookDate: baseTime.Add(-30 * 24 * time.Hour),
+				notebookDate: now.Add(-30 * 24 * time.Hour),
 			},
-			expected: -30, // roughly -30 days from notebook date
+			// lastLearnedAt returns time.Time{} (year 0001), so days penalty is enormous
+			wantUpperLimit: -10_000,
+			wantLowerLimit: -1_000_000_000,
 		},
 		{
-			name: "with understood logs - higher score",
+			name: "with understood logs - higher than no logs but still negative",
 			note: Note{
 				Expression:   "hello",
 				Definition:   "greeting",
-				notebookDate: baseTime.Add(-30 * 24 * time.Hour),
+				notebookDate: now.Add(-30 * 24 * time.Hour),
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
+					{Status: learnedStatusUnderstood, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
 				},
 			},
-			expected: 10, // 10 from understood status minus time factors
+			// score=10, days≈0, notebookDays≈30 → ~-20
+			wantUpperLimit: 0,
+			wantLowerLimit: -100,
 		},
 		{
-			name: "with usable logs - much higher score",
+			name: "with usable logs - positive score",
 			note: Note{
 				Expression:   "hello",
 				Definition:   "greeting",
-				notebookDate: baseTime.Add(-10 * 24 * time.Hour),
+				notebookDate: now.Add(-10 * 24 * time.Hour),
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(baseTime.Add(-5 * 24 * time.Hour))},
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-5 * 24 * time.Hour))},
 				},
 			},
-			expected: 1000, // 1000 from usable status minus time factors
+			// score=1000, days≈5, notebookDays≈10 → ~985
+			wantUpperLimit: 1000,
+			wantLowerLimit: 900,
+		},
+		{
+			name: "with misunderstood logs - negative score",
+			note: Note{
+				Expression:   "hello",
+				Definition:   "greeting",
+				notebookDate: now.Add(-10 * 24 * time.Hour),
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
+				},
+			},
+			// score=-5, days≈0, notebookDays≈10 → ~-15
+			wantUpperLimit: 0,
+			wantLowerLimit: -100,
+		},
+		{
+			name: "with intuitively used logs - very high positive score",
+			note: Note{
+				Expression:   "hello",
+				Definition:   "greeting",
+				notebookDate: now.Add(-10 * 24 * time.Hour),
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
+				},
+			},
+			// score=100000, days≈0, notebookDays≈10 → ~99990
+			wantUpperLimit: 100_000,
+			wantLowerLimit: 99_000,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := tt.note.getLearnScore()
-			// We test the relative ordering rather than exact values
-			// since the function uses current time
-			switch tt.name {
-			case "with usable logs - much higher score":
-				assert.Greater(t, result, 0) // Should be positive due to high usable status score
-			case "with understood logs - higher score":
-				assert.Greater(t, result, -1000) // Should be negative but better than no logs
-			default:
-				assert.Less(t, result, 0) // Should be negative for no logs
-			}
+			got := tt.note.getLearnScore()
+			assert.Less(t, got, tt.wantUpperLimit)
+			assert.Greater(t, got, tt.wantLowerLimit)
 		})
 	}
 }

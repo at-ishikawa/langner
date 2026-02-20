@@ -77,6 +77,13 @@ func TestConvertMarkersInText(t *testing.T) {
 			targetExpression: "test phrase",
 			expected:         "I have **TEST PHRASE** here.",
 		},
+		{
+			name:             "Unknown conversion style returns plain text",
+			text:             "I have {{ test phrase }} here.",
+			conversionStyle:  ConversionStyle(99),
+			targetExpression: "",
+			expected:         "I have test phrase here.",
+		},
 	}
 
 	for _, tc := range tests {
@@ -164,12 +171,206 @@ func TestFilterStoryNotebooks(t *testing.T) {
 		name                    string
 		storyNotebooks          []StoryNotebook
 		learningHistory         []LearningHistory
+		dictionaryMap           map[string]rapidapi.Response
 		sortDesc                bool
 		includeNoCorrectAnswers bool
 		useSpacedRepetition     bool
+		preserveOrder           bool
 		expectedWordCount       int
 		expectedWords           []string
+		expectedEventOrder      []string // if non-nil, verify notebook event order
+		wantErr                 bool
+		wantErrMsg              string
 	}{
+		{
+			name: "empty expression returns error",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "test"}},
+							Definitions:   []Note{{Expression: "   ", Meaning: "test"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			wantErr:                 true,
+			wantErrMsg:              "empty definition.Expression",
+		},
+		{
+			name: "empty conversations and statements returns error",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []StoryScene{
+						{
+							Title:       "Scene 1",
+							Definitions: []Note{{Expression: "test", Meaning: "a trial"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			wantErr:                 true,
+			wantErrMsg:              "empty scene.Conversations and Statements",
+		},
+		{
+			name: "notebook with no scenes is skipped",
+			storyNotebooks: []StoryNotebook{
+				{Event: "Empty", Scenes: []StoryScene{}},
+			},
+			includeNoCorrectAnswers: true,
+			expectedWordCount:       0,
+		},
+		{
+			name: "includeNoCorrectAnswers false filters words without correct answers",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "test word"}},
+							Definitions:   []Note{{Expression: "test", Meaning: "a trial"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: false,
+			expectedWordCount:       0,
+		},
+		{
+			name: "sort descending with multiple notebooks",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+							Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+						},
+					},
+				},
+				{
+					Event: "Story 2",
+					Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 2",
+							Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+							Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+						},
+					},
+				},
+			},
+			sortDesc:                true,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       2,
+			expectedWords:           []string{"second", "first"},
+			expectedEventOrder:      []string{"Story 2", "Story 1"},
+		},
+		{
+			name: "sort ascending with multiple notebooks",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 2",
+					Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 2",
+							Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+							Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+						},
+					},
+				},
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+							Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       2,
+			expectedWords:           []string{"first", "second"},
+			expectedEventOrder:      []string{"Story 1", "Story 2"},
+		},
+		{
+			name: "preserveOrder skips sorting",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 2",
+					Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 2",
+							Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+							Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+						},
+					},
+				},
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+							Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			preserveOrder:           true,
+			expectedWordCount:       2,
+			expectedWords:           []string{"second", "first"},
+			expectedEventOrder:      []string{"Story 2", "Story 1"},
+		},
+		{
+			name: "setDetails error with out-of-range dictionary number",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "This is a test word"}},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning", DictionaryNumber: 5},
+							},
+						},
+					},
+				},
+			},
+			dictionaryMap: map[string]rapidapi.Response{
+				"test": {
+					Word: "test",
+					Results: []rapidapi.Result{
+						{Definition: "a trial"},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			wantErr:                 true,
+			wantErrMsg:              "definition.setDetails()",
+		},
 		{
 			name: "useSpacedRepetition=false, usable status - word NOT included",
 			storyNotebooks: []StoryNotebook{
@@ -508,19 +709,38 @@ func TestFilterStoryNotebooks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			dictionaryMap := tt.dictionaryMap
+			if dictionaryMap == nil {
+				dictionaryMap = map[string]rapidapi.Response{}
+			}
+
 			result, err := FilterStoryNotebooks(
 				tt.storyNotebooks,
 				tt.learningHistory,
-				map[string]rapidapi.Response{},
+				dictionaryMap,
 				tt.sortDesc,
 				tt.includeNoCorrectAnswers,
 				tt.useSpacedRepetition,
-				false,
+				tt.preserveOrder,
 			)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
 			require.NoError(t, err)
 
+			if tt.expectedEventOrder != nil {
+				require.Len(t, result, len(tt.expectedEventOrder))
+				for i, expectedEvent := range tt.expectedEventOrder {
+					assert.Equal(t, expectedEvent, result[i].Event)
+				}
+			}
+
 			// Count total words
-			wordCount := 0
+			var wordCount int
 			var words []string
 			for _, notebook := range result {
 				for _, scene := range notebook.Scenes {
