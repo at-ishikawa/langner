@@ -166,177 +166,211 @@ func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
 	}
 }
 
-func TestFilterStoryNotebooks_ErrorPaths(t *testing.T) {
-	t.Run("empty expression returns error", func(t *testing.T) {
-		notebooks := []StoryNotebook{
-			{
-				Event: "Story 1",
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 1",
-						Conversations: []Conversation{{Speaker: "A", Quote: "test"}},
-						Definitions:   []Note{{Expression: "   ", Meaning: "test"}},
-					},
-				},
-			},
-		}
-		_, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, false, false)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "empty definition.Expression")
-	})
-
-	t.Run("empty conversations and statements returns error", func(t *testing.T) {
-		notebooks := []StoryNotebook{
-			{
-				Event: "Story 1",
-				Scenes: []StoryScene{
-					{
-						Title:       "Scene 1",
-						Definitions: []Note{{Expression: "test", Meaning: "a trial"}},
-					},
-				},
-			},
-		}
-		_, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, true, false)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "empty scene.Conversations and Statements")
-	})
-
-	t.Run("notebook with no scenes is skipped", func(t *testing.T) {
-		notebooks := []StoryNotebook{
-			{Event: "Empty", Scenes: []StoryScene{}},
-		}
-		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, false, false)
-		require.NoError(t, err)
-		assert.Empty(t, result)
-	})
-
-	t.Run("includeNoCorrectAnswers false filters words without correct answers", func(t *testing.T) {
-		notebooks := []StoryNotebook{
-			{
-				Event: "Story 1",
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 1",
-						Conversations: []Conversation{{Speaker: "A", Quote: "test word"}},
-						Definitions:   []Note{{Expression: "test", Meaning: "a trial"}},
-					},
-				},
-			},
-		}
-		// No learning history means no correct answers
-		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, false, false, false)
-		require.NoError(t, err)
-		assert.Empty(t, result)
-	})
-
-	t.Run("sort descending with multiple notebooks", func(t *testing.T) {
-		notebooks := []StoryNotebook{
-			{
-				Event: "Story 1",
-				Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 1",
-						Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
-						Definitions:   []Note{{Expression: "first", Meaning: "first"}},
-					},
-				},
-			},
-			{
-				Event: "Story 2",
-				Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 2",
-						Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
-						Definitions:   []Note{{Expression: "second", Meaning: "second"}},
-					},
-				},
-			},
-		}
-		result, err := FilterStoryNotebooks(notebooks, nil, nil, true, true, true, false)
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-		assert.True(t, result[0].Date.After(result[1].Date))
-	})
-
-	t.Run("sort ascending with multiple notebooks", func(t *testing.T) {
-		notebooks := []StoryNotebook{
-			{
-				Event: "Story 2",
-				Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 2",
-						Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
-						Definitions:   []Note{{Expression: "second", Meaning: "second"}},
-					},
-				},
-			},
-			{
-				Event: "Story 1",
-				Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 1",
-						Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
-						Definitions:   []Note{{Expression: "first", Meaning: "first"}},
-					},
-				},
-			},
-		}
-		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, true, false)
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-		assert.True(t, result[0].Date.Before(result[1].Date))
-	})
-
-	t.Run("preserveOrder skips sorting", func(t *testing.T) {
-		notebooks := []StoryNotebook{
-			{
-				Event: "Story 2",
-				Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 2",
-						Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
-						Definitions:   []Note{{Expression: "second", Meaning: "second"}},
-					},
-				},
-			},
-			{
-				Event: "Story 1",
-				Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-				Scenes: []StoryScene{
-					{
-						Title:         "Scene 1",
-						Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
-						Definitions:   []Note{{Expression: "first", Meaning: "first"}},
-					},
-				},
-			},
-		}
-		result, err := FilterStoryNotebooks(notebooks, nil, nil, false, true, true, true)
-		require.NoError(t, err)
-		require.Len(t, result, 2)
-		// preserveOrder=true, so order should remain as input: Story 2 first
-		assert.Equal(t, "Story 2", result[0].Event)
-		assert.Equal(t, "Story 1", result[1].Event)
-	})
-}
-
 func TestFilterStoryNotebooks(t *testing.T) {
 	tests := []struct {
 		name                    string
 		storyNotebooks          []StoryNotebook
 		learningHistory         []LearningHistory
+		dictionaryMap           map[string]rapidapi.Response
 		sortDesc                bool
 		includeNoCorrectAnswers bool
 		useSpacedRepetition     bool
+		preserveOrder           bool
 		expectedWordCount       int
 		expectedWords           []string
+		expectedEventOrder      []string // if non-nil, verify notebook event order
+		wantErr                 bool
+		wantErrMsg              string
 	}{
+		{
+			name: "empty expression returns error",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "test"}},
+							Definitions:   []Note{{Expression: "   ", Meaning: "test"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			wantErr:                 true,
+			wantErrMsg:              "empty definition.Expression",
+		},
+		{
+			name: "empty conversations and statements returns error",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []StoryScene{
+						{
+							Title:       "Scene 1",
+							Definitions: []Note{{Expression: "test", Meaning: "a trial"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			wantErr:                 true,
+			wantErrMsg:              "empty scene.Conversations and Statements",
+		},
+		{
+			name: "notebook with no scenes is skipped",
+			storyNotebooks: []StoryNotebook{
+				{Event: "Empty", Scenes: []StoryScene{}},
+			},
+			includeNoCorrectAnswers: true,
+			expectedWordCount:       0,
+		},
+		{
+			name: "includeNoCorrectAnswers false filters words without correct answers",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "test word"}},
+							Definitions:   []Note{{Expression: "test", Meaning: "a trial"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: false,
+			expectedWordCount:       0,
+		},
+		{
+			name: "sort descending with multiple notebooks",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+							Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+						},
+					},
+				},
+				{
+					Event: "Story 2",
+					Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 2",
+							Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+							Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+						},
+					},
+				},
+			},
+			sortDesc:                true,
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       2,
+			expectedWords:           []string{"second", "first"},
+			expectedEventOrder:      []string{"Story 2", "Story 1"},
+		},
+		{
+			name: "sort ascending with multiple notebooks",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 2",
+					Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 2",
+							Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+							Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+						},
+					},
+				},
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+							Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			expectedWordCount:       2,
+			expectedWords:           []string{"first", "second"},
+			expectedEventOrder:      []string{"Story 1", "Story 2"},
+		},
+		{
+			name: "preserveOrder skips sorting",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 2",
+					Date:  time.Date(2025, 6, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 2",
+							Conversations: []Conversation{{Speaker: "B", Quote: "second test word"}},
+							Definitions:   []Note{{Expression: "second", Meaning: "second"}},
+						},
+					},
+				},
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "first test word"}},
+							Definitions:   []Note{{Expression: "first", Meaning: "first"}},
+						},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			preserveOrder:           true,
+			expectedWordCount:       2,
+			expectedWords:           []string{"second", "first"},
+			expectedEventOrder:      []string{"Story 2", "Story 1"},
+		},
+		{
+			name: "setDetails error with out-of-range dictionary number",
+			storyNotebooks: []StoryNotebook{
+				{
+					Event: "Story 1",
+					Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+					Scenes: []StoryScene{
+						{
+							Title:         "Scene 1",
+							Conversations: []Conversation{{Speaker: "A", Quote: "This is a test word"}},
+							Definitions: []Note{
+								{Expression: "test", Meaning: "test meaning", DictionaryNumber: 5},
+							},
+						},
+					},
+				},
+			},
+			dictionaryMap: map[string]rapidapi.Response{
+				"test": {
+					Word: "test",
+					Results: []rapidapi.Result{
+						{Definition: "a trial"},
+					},
+				},
+			},
+			includeNoCorrectAnswers: true,
+			useSpacedRepetition:     true,
+			wantErr:                 true,
+			wantErrMsg:              "definition.setDetails()",
+		},
 		{
 			name: "useSpacedRepetition=false, usable status - word NOT included",
 			storyNotebooks: []StoryNotebook{
@@ -675,19 +709,38 @@ func TestFilterStoryNotebooks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			dictionaryMap := tt.dictionaryMap
+			if dictionaryMap == nil {
+				dictionaryMap = map[string]rapidapi.Response{}
+			}
+
 			result, err := FilterStoryNotebooks(
 				tt.storyNotebooks,
 				tt.learningHistory,
-				map[string]rapidapi.Response{},
+				dictionaryMap,
 				tt.sortDesc,
 				tt.includeNoCorrectAnswers,
 				tt.useSpacedRepetition,
-				false, // preserveOrder
+				tt.preserveOrder,
 			)
+			if tt.wantErr {
+				assert.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
+				return
+			}
 			require.NoError(t, err)
 
+			if tt.expectedEventOrder != nil {
+				require.Len(t, result, len(tt.expectedEventOrder))
+				for i, expectedEvent := range tt.expectedEventOrder {
+					assert.Equal(t, expectedEvent, result[i].Event)
+				}
+			}
+
 			// Count total words
-			wordCount := 0
+			var wordCount int
 			var words []string
 			for _, notebook := range result {
 				for _, scene := range notebook.Scenes {
@@ -953,36 +1006,6 @@ func TestOutputStoryNotebooks(t *testing.T) {
 		// No error - it just writes a notebook with no definitions
 		assert.NoError(t, err)
 	})
-}
-
-func TestFilterStoryNotebooks_SetDetailsError(t *testing.T) {
-	notebooks := []StoryNotebook{
-		{
-			Event: "Story 1",
-			Date:  time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
-			Scenes: []StoryScene{
-				{
-					Title:         "Scene 1",
-					Conversations: []Conversation{{Speaker: "A", Quote: "This is a test word"}},
-					Definitions: []Note{
-						{Expression: "test", Meaning: "test meaning", DictionaryNumber: 5},
-					},
-				},
-			},
-		},
-	}
-	dictionaryMap := map[string]rapidapi.Response{
-		"test": {
-			Word: "test",
-			Results: []rapidapi.Result{
-				{Definition: "a trial"},
-			},
-		},
-	}
-	// DictionaryNumber 5 is out of range (only 1 result), should trigger setDetails error
-	_, err := FilterStoryNotebooks(notebooks, nil, dictionaryMap, false, true, true, false)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "definition.setDetails()")
 }
 
 func TestStoryScene_Validate(t *testing.T) {

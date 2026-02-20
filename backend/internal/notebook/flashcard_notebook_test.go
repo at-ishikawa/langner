@@ -116,12 +116,14 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 	longAgo := now.Add(-365 * 24 * time.Hour)
 
 	tests := []struct {
-		name      string
-		notebooks []FlashcardNotebook
-		history   []LearningHistory
-		sortDesc  bool
-		wantLen   int
-		wantErr   bool
+		name          string
+		notebooks     []FlashcardNotebook
+		history       []LearningHistory
+		dictionaryMap map[string]rapidapi.Response
+		sortDesc      bool
+		wantLen       int
+		wantErr       bool
+		wantErrMsg    string
 	}{
 		{
 			name: "empty notebooks",
@@ -269,13 +271,41 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 			sortDesc: true,
 			wantLen:  2,
 		},
+		{
+			name: "setDetails error with out of range dictionary number",
+			notebooks: []FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Date:  now,
+					Cards: []Note{
+						{
+							Expression:       "hello",
+							DictionaryNumber: 5, // out of range
+						},
+					},
+				},
+			},
+			dictionaryMap: map[string]rapidapi.Response{
+				"hello": {
+					Word: "hello",
+					Results: []rapidapi.Result{
+						{Definition: "a greeting"},
+					},
+				},
+			},
+			wantErr:    true,
+			wantErrMsg: "card.setDetails()",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, nil, tt.sortDesc)
+			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc)
 			if tt.wantErr {
 				assert.Error(t, err)
+				if tt.wantErrMsg != "" {
+					assert.Contains(t, err.Error(), tt.wantErrMsg)
+				}
 				return
 			}
 			require.NoError(t, err)
@@ -289,33 +319,4 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestFilterFlashcardNotebooks_SetDetailsError(t *testing.T) {
-	// Tests the setDetails error path (line 127-129 in flashcard_notebook.go).
-	// A card with DictionaryNumber pointing beyond available results triggers error.
-	notebooks := []FlashcardNotebook{
-		{
-			Title: "Unit 1",
-			Date:  time.Now(),
-			Cards: []Note{
-				{
-					Expression:       "hello",
-					DictionaryNumber: 5, // out of range
-				},
-			},
-		},
-	}
-	dictionaryMap := map[string]rapidapi.Response{
-		"hello": {
-			Word: "hello",
-			Results: []rapidapi.Result{
-				{Definition: "a greeting"},
-			},
-		},
-	}
-
-	_, err := FilterFlashcardNotebooks(notebooks, nil, dictionaryMap, false)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "card.setDetails()")
 }

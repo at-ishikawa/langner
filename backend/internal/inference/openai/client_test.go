@@ -14,6 +14,8 @@ import (
 	"resty.dev/v3"
 )
 
+func uintPtr(v uint) *uint { return &v }
+
 func TestIsRetryableError(t *testing.T) {
 	tests := []struct {
 		name string
@@ -183,6 +185,7 @@ func TestClient_AnswerMeanings(t *testing.T) {
 		name              string
 		request           inference.AnswerMeaningsRequest
 		mockServerHandler func(t *testing.T, w http.ResponseWriter, r *http.Request)
+		maxRetryAttempts  *uint // nil means default (1)
 
 		wantResponse    inference.AnswerMeaningsResponse
 		wantError       bool
@@ -412,6 +415,76 @@ func TestClient_AnswerMeanings(t *testing.T) {
 			wantError:       true,
 			wantErrorString: "json.Unmarshal",
 		},
+		{
+			name: "non-retryable HTTP 400 error",
+			request: inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{
+					{
+						Expression: "test",
+						Meaning:    "a trial",
+						Contexts:   []inference.Context{{Context: "This is a test.", Usage: "test"}},
+					},
+				},
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error": {"message": "bad request"}}`))
+			},
+			maxRetryAttempts: uintPtr(2),
+			wantError:        true,
+			wantErrorString:  "response error 400",
+		},
+		{
+			name: "empty choices in response",
+			request: inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{
+					{
+						Expression: "test",
+						Meaning:    "a trial",
+						Contexts:   []inference.Context{{Context: "This is a test.", Usage: "test"}},
+					},
+				},
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			maxRetryAttempts: uintPtr(0),
+			wantError:        true,
+			wantErrorString:  "empty response body or choices",
+		},
+		{
+			name: "empty content in response",
+			request: inference.AnswerMeaningsRequest{
+				Expressions: []inference.Expression{
+					{
+						Expression: "test",
+						Meaning:    "a trial",
+						Contexts:   []inference.Context{{Context: "This is a test.", Usage: "test"}},
+					},
+				},
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				mockResponse := ChatCompletionResponse{
+					Choices: []Choice{
+						{
+							Message: ChoiceMessage{
+								Role:    RoleAssistant,
+								Content: "",
+							},
+						},
+					},
+				}
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(mockResponse)
+			},
+			maxRetryAttempts: uintPtr(0),
+			wantError:        true,
+			wantErrorString:  "empty response content",
+		},
 	}
 
 	for _, tt := range tests {
@@ -422,11 +495,16 @@ func TestClient_AnswerMeanings(t *testing.T) {
 			}))
 			defer server.Close()
 
+			retryAttempts := uint(1)
+			if tt.maxRetryAttempts != nil {
+				retryAttempts = *tt.maxRetryAttempts
+			}
+
 			// Create client with mock server
 			client := &Client{
 				httpClient:       resty.New().SetBaseURL(server.URL),
 				model:            "gpt-4",
-				maxRetryAttempts: 1,
+				maxRetryAttempts: retryAttempts,
 			}
 
 			// Execute test
@@ -453,6 +531,7 @@ func TestClient_ValidateWordForm(t *testing.T) {
 		name              string
 		request           inference.ValidateWordFormRequest
 		mockServerHandler func(t *testing.T, w http.ResponseWriter, r *http.Request)
+		maxRetryAttempts  *uint // nil means default (0)
 		wantResponse      inference.ValidateWordFormResponse
 		wantError         bool
 		wantErrorString   string
@@ -617,6 +696,21 @@ func TestClient_ValidateWordForm(t *testing.T) {
 			wantError:       true,
 			wantErrorString: "json.Unmarshal",
 		},
+		{
+			name: "non-retryable HTTP 400 error",
+			request: inference.ValidateWordFormRequest{
+				Expected:   "test",
+				UserAnswer: "test",
+				Meaning:    "a trial",
+			},
+			mockServerHandler: func(t *testing.T, w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(http.StatusBadRequest)
+				w.Write([]byte(`{"error": "bad request"}`))
+			},
+			maxRetryAttempts: uintPtr(2),
+			wantError:        true,
+			wantErrorString:  "response error 400",
+		},
 	}
 
 	for _, tt := range tests {
@@ -626,10 +720,15 @@ func TestClient_ValidateWordForm(t *testing.T) {
 			}))
 			defer server.Close()
 
+			var retryAttempts uint
+			if tt.maxRetryAttempts != nil {
+				retryAttempts = *tt.maxRetryAttempts
+			}
+
 			client := &Client{
 				httpClient:       resty.New().SetBaseURL(server.URL),
 				model:            "gpt-4",
-				maxRetryAttempts: 0,
+				maxRetryAttempts: retryAttempts,
 			}
 
 			ctx := context.Background()
@@ -665,123 +764,4 @@ func TestClient_Close(t *testing.T) {
 	client := NewClient("test-key", "gpt-4", 3)
 	err := client.Close()
 	assert.NoError(t, err)
-}
-
-func TestClient_AnswerMeanings_NonRetryableError(t *testing.T) {
-	// HTTP 400 errors are NOT retryable, so they trigger retry.Unrecoverable path
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": {"message": "bad request"}}`))
-	}))
-	defer server.Close()
-
-	client := &Client{
-		httpClient:       resty.New().SetBaseURL(server.URL),
-		model:            "gpt-4",
-		maxRetryAttempts: 2,
-	}
-
-	ctx := context.Background()
-	_, err := client.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
-		Expressions: []inference.Expression{
-			{
-				Expression: "test",
-				Meaning:    "a trial",
-				Contexts:   []inference.Context{{Context: "This is a test.", Usage: "test"}},
-			},
-		},
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "response error 400")
-}
-
-func TestClient_AnswerMeanings_EmptyChoices(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mockResponse := ChatCompletionResponse{
-			Choices: []Choice{},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
-	}))
-	defer server.Close()
-
-	client := &Client{
-		httpClient:       resty.New().SetBaseURL(server.URL),
-		model:            "gpt-4",
-		maxRetryAttempts: 0,
-	}
-
-	ctx := context.Background()
-	_, err := client.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
-		Expressions: []inference.Expression{
-			{
-				Expression: "test",
-				Meaning:    "a trial",
-				Contexts:   []inference.Context{{Context: "This is a test.", Usage: "test"}},
-			},
-		},
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "empty response body or choices")
-}
-
-func TestClient_AnswerMeanings_EmptyContent(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mockResponse := ChatCompletionResponse{
-			Choices: []Choice{
-				{
-					Message: ChoiceMessage{
-						Role:    RoleAssistant,
-						Content: "",
-					},
-				},
-			},
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(mockResponse)
-	}))
-	defer server.Close()
-
-	client := &Client{
-		httpClient:       resty.New().SetBaseURL(server.URL),
-		model:            "gpt-4",
-		maxRetryAttempts: 0,
-	}
-
-	ctx := context.Background()
-	_, err := client.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
-		Expressions: []inference.Expression{
-			{
-				Expression: "test",
-				Meaning:    "a trial",
-				Contexts:   []inference.Context{{Context: "This is a test.", Usage: "test"}},
-			},
-		},
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "empty response content")
-}
-
-func TestClient_ValidateWordForm_NonRetryableError(t *testing.T) {
-	// HTTP 400 errors are NOT retryable
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(`{"error": "bad request"}`))
-	}))
-	defer server.Close()
-
-	client := &Client{
-		httpClient:       resty.New().SetBaseURL(server.URL),
-		model:            "gpt-4",
-		maxRetryAttempts: 2,
-	}
-
-	ctx := context.Background()
-	_, err := client.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
-		Expected:   "test",
-		UserAnswer: "test",
-		Meaning:    "a trial",
-	})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "response error 400")
 }

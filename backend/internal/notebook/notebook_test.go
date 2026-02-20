@@ -296,14 +296,6 @@ func TestNote_getLearnScore(t *testing.T) {
 			},
 			expected: 1000, // 1000 from usable status minus time factors
 		},
-	}
-
-	// Add additional test cases for misunderstood and intuitively used status branches
-	extraTests := []struct {
-		name     string
-		note     Note
-		expected int
-	}{
 		{
 			name: "with misunderstood logs - negative contribution",
 			note: Note{
@@ -329,7 +321,6 @@ func TestNote_getLearnScore(t *testing.T) {
 			expected: 100_000, // 100000 from intuitively used status minus time factors
 		},
 	}
-	tests = append(tests, extraTests...)
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
