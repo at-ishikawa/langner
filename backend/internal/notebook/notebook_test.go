@@ -298,6 +298,39 @@ func TestNote_getLearnScore(t *testing.T) {
 		},
 	}
 
+	// Add additional test cases for misunderstood and intuitively used status branches
+	extraTests := []struct {
+		name     string
+		note     Note
+		expected int
+	}{
+		{
+			name: "with misunderstood logs - negative contribution",
+			note: Note{
+				Expression:   "hello",
+				Definition:   "greeting",
+				notebookDate: baseTime.Add(-10 * 24 * time.Hour),
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
+				},
+			},
+			expected: -100, // -100 from misunderstood status minus time factors
+		},
+		{
+			name: "with intuitively used logs - very high score",
+			note: Note{
+				Expression:   "hello",
+				Definition:   "greeting",
+				notebookDate: baseTime.Add(-10 * 24 * time.Hour),
+				LearnedLogs: []LearningRecord{
+					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
+				},
+			},
+			expected: 100_000, // 100000 from intuitively used status minus time factors
+		},
+	}
+	tests = append(tests, extraTests...)
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := tt.note.getLearnScore()
@@ -308,8 +341,10 @@ func TestNote_getLearnScore(t *testing.T) {
 				assert.Greater(t, result, 0) // Should be positive due to high usable status score
 			case "with understood logs - higher score":
 				assert.Greater(t, result, -1000) // Should be negative but better than no logs
+			case "with intuitively used logs - very high score":
+				assert.Greater(t, result, 0) // Should be very positive due to 100_000 score
 			default:
-				assert.Less(t, result, 0) // Should be negative for no logs
+				assert.Less(t, result, 0) // Should be negative for no logs or misunderstood
 			}
 		})
 	}

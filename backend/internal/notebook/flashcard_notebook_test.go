@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -187,6 +188,66 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 			wantLen:  2,
 		},
 		{
+			name: "card with learning logs that does not need learning is filtered",
+			notebooks: []FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Date:  now,
+					Cards: []Note{
+						{Expression: "hello", Meaning: "a greeting"},
+					},
+				},
+			},
+			history: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test",
+						Title:      "Unit 1",
+						Type:       "flashcard",
+					},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression: "hello",
+							LearnedLogs: []LearningRecord{
+								// Recent correct answer - should NOT need learning
+								{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
+							},
+						},
+					},
+				},
+			},
+			wantLen: 0,
+		},
+		{
+			name: "all cards filtered results in notebook being excluded",
+			notebooks: []FlashcardNotebook{
+				{
+					Title: "Unit 1",
+					Date:  now,
+					Cards: []Note{
+						{Expression: "hello", Meaning: "a greeting"},
+					},
+				},
+			},
+			history: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						Title: "Unit 1",
+						Type:  "flashcard",
+					},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression: "hello",
+							LearnedLogs: []LearningRecord{
+								{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
+							},
+						},
+					},
+				},
+			},
+			wantLen: 0,
+		},
+		{
 			name: "sort descending by date",
 			notebooks: []FlashcardNotebook{
 				{
@@ -228,4 +289,33 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFilterFlashcardNotebooks_SetDetailsError(t *testing.T) {
+	// Tests the setDetails error path (line 127-129 in flashcard_notebook.go).
+	// A card with DictionaryNumber pointing beyond available results triggers error.
+	notebooks := []FlashcardNotebook{
+		{
+			Title: "Unit 1",
+			Date:  time.Now(),
+			Cards: []Note{
+				{
+					Expression:       "hello",
+					DictionaryNumber: 5, // out of range
+				},
+			},
+		},
+	}
+	dictionaryMap := map[string]rapidapi.Response{
+		"hello": {
+			Word: "hello",
+			Results: []rapidapi.Result{
+				{Definition: "a greeting"},
+			},
+		},
+	}
+
+	_, err := FilterFlashcardNotebooks(notebooks, nil, dictionaryMap, false)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "card.setDetails()")
 }

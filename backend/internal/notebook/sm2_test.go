@@ -153,6 +153,14 @@ func TestCalculateNextInterval(t *testing.T) {
 			expected:      126, // 180 * 0.7
 		},
 		{
+			name:          "wrong answer with zero last interval returns 1",
+			lastInterval:  0,
+			ef:            2.5,
+			quality:       1,
+			correctStreak: 5,
+			expected:      1, // 0 * 0.5 = 0, clamped to 1
+		},
+		{
 			name:          "default EF when zero",
 			lastInterval:  6,
 			ef:            0,

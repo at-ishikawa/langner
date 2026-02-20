@@ -613,3 +613,170 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 		})
 	}
 }
+
+func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality_FlashcardNotFound(t *testing.T) {
+	// Tests the path where the flashcard type matches but expression doesn't match,
+	// triggering the continue on line 97 and eventually creating new expression.
+	initialHistory := []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{
+				NotebookID: "test-notebook",
+				Title:      "flashcards",
+				Type:       "flashcard",
+			},
+			Expressions: []LearningHistoryExpression{
+				{
+					Expression:  "existing-word",
+					LearnedLogs: []LearningRecord{},
+				},
+			},
+		},
+	}
+	updater := NewLearningHistoryUpdater(initialHistory)
+
+	found := updater.UpdateOrCreateExpressionWithQuality(
+		"test-notebook", "flashcards", "", "new-word",
+		true, true, int(QualityCorrect), 5000, QuizTypeFreeform,
+	)
+
+	assert.False(t, found)
+	history := updater.GetHistory()
+	require.Len(t, history, 1)
+	assert.Len(t, history[0].Expressions, 2)
+}
+
+func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality_SceneNotFound(t *testing.T) {
+	// Tests the path where the story matches but scene doesn't match (line 101 continue),
+	// creating a new expression in a new scene.
+	initialHistory := []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{
+				NotebookID: "test-notebook",
+				Title:      "Story 1",
+			},
+			Scenes: []LearningScene{
+				{
+					Metadata: LearningSceneMetadata{Title: "Scene A"},
+					Expressions: []LearningHistoryExpression{
+						{Expression: "word-a", LearnedLogs: []LearningRecord{}},
+					},
+				},
+			},
+		},
+	}
+	updater := NewLearningHistoryUpdater(initialHistory)
+
+	found := updater.UpdateOrCreateExpressionWithQuality(
+		"test-notebook", "Story 1", "Scene B", "word-b",
+		true, false, int(QualityCorrect), 5000, QuizTypeFreeform,
+	)
+
+	assert.False(t, found)
+	history := updater.GetHistory()
+	require.Len(t, history, 1)
+	assert.Len(t, history[0].Scenes, 2)
+}
+
+func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse_FlashcardNotFound(t *testing.T) {
+	// Tests the path in UpdateOrCreateExpressionWithQualityForReverse where the flashcard
+	// type matches but expression doesn't match, triggering the continue on line 144.
+	initialHistory := []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{
+				NotebookID: "test-notebook",
+				Title:      "flashcards",
+				Type:       "flashcard",
+			},
+			Expressions: []LearningHistoryExpression{
+				{
+					Expression:            "existing-word",
+					LearnedLogs:           []LearningRecord{},
+					ReverseEasinessFactor: DefaultEasinessFactor,
+				},
+			},
+		},
+	}
+	updater := NewLearningHistoryUpdater(initialHistory)
+
+	found := updater.UpdateOrCreateExpressionWithQualityForReverse(
+		"test-notebook", "flashcards", "", "new-word",
+		true, true, int(QualityCorrect), 5000,
+	)
+
+	assert.False(t, found)
+	history := updater.GetHistory()
+	require.Len(t, history, 1)
+	// The new word should be appended as a flashcard expression
+	assert.Len(t, history[0].Expressions, 2)
+}
+
+func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse_SceneNotFound(t *testing.T) {
+	// Tests the path in UpdateOrCreateExpressionWithQualityForReverse where the scene
+	// doesn't match (line 148 normalizeTitle comparison), creating new expression in new scene.
+	initialHistory := []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{
+				NotebookID: "test-notebook",
+				Title:      "Story 1",
+			},
+			Scenes: []LearningScene{
+				{
+					Metadata: LearningSceneMetadata{Title: "Scene A"},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:            "word-a",
+							LearnedLogs:           []LearningRecord{},
+							ReverseEasinessFactor: DefaultEasinessFactor,
+						},
+					},
+				},
+			},
+		},
+	}
+	updater := NewLearningHistoryUpdater(initialHistory)
+
+	found := updater.UpdateOrCreateExpressionWithQualityForReverse(
+		"test-notebook", "Story 1", "Scene B", "word-b",
+		true, false, int(QualityCorrect), 5000,
+	)
+
+	assert.False(t, found)
+	history := updater.GetHistory()
+	require.Len(t, history, 1)
+	assert.Len(t, history[0].Scenes, 2)
+}
+
+func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse_ExpressionNotFoundInScene(t *testing.T) {
+	// Tests the path where a scene is found but expression doesn't match (line 153 continue).
+	initialHistory := []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{
+				NotebookID: "test-notebook",
+				Title:      "Story 1",
+			},
+			Scenes: []LearningScene{
+				{
+					Metadata: LearningSceneMetadata{Title: "Scene A"},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:            "word-a",
+							LearnedLogs:           []LearningRecord{},
+							ReverseEasinessFactor: DefaultEasinessFactor,
+						},
+					},
+				},
+			},
+		},
+	}
+	updater := NewLearningHistoryUpdater(initialHistory)
+
+	found := updater.UpdateOrCreateExpressionWithQualityForReverse(
+		"test-notebook", "Story 1", "Scene A", "word-b",
+		true, true, int(QualityCorrect), 5000,
+	)
+
+	assert.False(t, found)
+	history := updater.GetHistory()
+	require.Len(t, history, 1)
+	assert.Len(t, history[0].Scenes[0].Expressions, 2)
+}
