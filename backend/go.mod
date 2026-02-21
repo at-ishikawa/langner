@@ -4,6 +4,7 @@ go 1.25
 
 require (
 	connectrpc.com/connect v1.19.1
+	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/fatih/color v1.18.0
 	github.com/go-playground/locales v0.14.1

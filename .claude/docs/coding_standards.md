@@ -239,12 +239,12 @@ Always wrap errors with context using `fmt.Errorf` with `%w`:
 func ReadStoryNotebooks(id string) ([]StoryNotebook, error) {
     files, err := os.ReadDir(dir)
     if err != nil {
-        return nil, fmt.Errorf("os.ReadDir() > %w", err)
+        return nil, fmt.Errorf("read story directory: %w", err)
     }
 
     data, err := os.ReadFile(path)
     if err != nil {
-        return nil, fmt.Errorf("os.ReadFile(%s) > %w", path, err)
+        return nil, fmt.Errorf("read notebook file %s: %w", path, err)
     }
 
     return notebooks, nil
@@ -252,9 +252,10 @@ func ReadStoryNotebooks(id string) ([]StoryNotebook, error) {
 ```
 
 **Error wrapping format:**
-- Use `>` to show call chain: `"FunctionName() > %w"`
-- Include relevant parameters when helpful: `"functionName(%s) > %w", param, err`
-- Keep error messages lowercase (except for function names)
+- Use descriptive, user-friendly messages: `"create note: %w"`
+- Include relevant parameters when helpful: `"read notebook file %s: %w", path, err`
+- Keep error messages lowercase
+- Do not include function names in error messages
 
 #### Error Types
 

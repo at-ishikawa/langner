@@ -1,11 +1,16 @@
 package database
 
 import (
+	"context"
+	"fmt"
 	"testing"
 
-	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/at-ishikawa/langner/internal/config"
 )
 
 func TestOpen(t *testing.T) {
@@ -78,6 +83,82 @@ func TestOpen(t *testing.T) {
 			defer got.Close()
 
 			assert.Equal(t, "mysql", got.DriverName())
+		})
+	}
+}
+
+func TestRunInTx(t *testing.T) {
+	tests := []struct {
+		name      string
+		fn        func(ctx context.Context, tx *sqlx.Tx) error
+		setupMock func(mock sqlmock.Sqlmock)
+		wantErr   bool
+		errMsg    string
+	}{
+		{
+			name: "commits on success",
+			fn: func(ctx context.Context, tx *sqlx.Tx) error {
+				return nil
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectCommit()
+			},
+		},
+		{
+			name: "rolls back on error",
+			fn: func(ctx context.Context, tx *sqlx.Tx) error {
+				return fmt.Errorf("something failed")
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectRollback()
+			},
+			wantErr: true,
+			errMsg:  "something failed",
+		},
+		{
+			name: "begin error",
+			fn: func(ctx context.Context, tx *sqlx.Tx) error {
+				return nil
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin().WillReturnError(fmt.Errorf("begin failed"))
+			},
+			wantErr: true,
+			errMsg:  "begin transaction",
+		},
+		{
+			name: "commit error",
+			fn: func(ctx context.Context, tx *sqlx.Tx) error {
+				return nil
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectCommit().WillReturnError(fmt.Errorf("commit failed"))
+			},
+			wantErr: true,
+			errMsg:  "commit transaction",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+
+			sqlxDB := sqlx.NewDb(db, "mysql")
+			tt.setupMock(mock)
+
+			err = RunInTx(context.Background(), sqlxDB, tt.fn)
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errMsg)
+			} else {
+				require.NoError(t, err)
+			}
+			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
 }
