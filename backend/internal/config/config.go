@@ -10,7 +10,17 @@ import (
 	"github.com/spf13/viper"
 )
 
+type ServerConfig struct {
+	Port int        `mapstructure:"port"`
+	CORS CORSConfig `mapstructure:"cors"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `mapstructure:"allowed_origins"`
+}
+
 type Config struct {
+	Server       ServerConfig       `mapstructure:"server"`
 	Notebooks    NotebooksConfig    `mapstructure:"notebooks"`
 	Dictionaries DictionariesConfig `mapstructure:"dictionaries"`
 	Templates    TemplatesConfig    `mapstructure:"templates"`
@@ -121,6 +131,8 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("database.port", 3306)
 	v.SetDefault("database.database", "local")
 	v.SetDefault("database.username", "user")
+	v.SetDefault("server.port", 8080)
+	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000"})
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {

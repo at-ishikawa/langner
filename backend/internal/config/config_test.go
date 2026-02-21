@@ -43,6 +43,12 @@ func TestConfigLoader_Load(t *testing.T) {
 			name:          "empty config uses defaults",
 			configContent: "# Empty config\n",
 			want: &Config{
+				Server: ServerConfig{
+					Port: 8080,
+					CORS: CORSConfig{
+						AllowedOrigins: []string{"http://localhost:3000"},
+					},
+				},
 				Notebooks: NotebooksConfig{
 					StoriesDirectories:      []string{filepath.Join("notebooks", "stories")},
 					LearningNotesDirectory:  filepath.Join("notebooks", "learning_notes"),
@@ -87,6 +93,12 @@ outputs:
   story_directory: custom/outputs
 `,
 			want: &Config{
+				Server: ServerConfig{
+					Port: 8080,
+					CORS: CORSConfig{
+						AllowedOrigins: []string{"http://localhost:3000"},
+					},
+				},
 				Notebooks: NotebooksConfig{
 					StoriesDirectories:      []string{"custom/stories"},
 					LearningNotesDirectory:  "custom/learning",
@@ -125,6 +137,12 @@ outputs:
   stories_directories: [partial/stories]
 `,
 			want: &Config{
+				Server: ServerConfig{
+					Port: 8080,
+					CORS: CORSConfig{
+						AllowedOrigins: []string{"http://localhost:3000"},
+					},
+				},
 				Notebooks: NotebooksConfig{
 					StoriesDirectories:      []string{"partial/stories"},
 					LearningNotesDirectory:  filepath.Join("notebooks", "learning_notes"),
