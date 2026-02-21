@@ -9,6 +9,8 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/datasync"
+	"github.com/at-ishikawa/langner/internal/dictionary"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
@@ -39,6 +41,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 			defer func() { _ = db.Close() }()
 			noteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo := learning.NewDBLearningRepository(db)
+			dictRepo := dictionary.NewDBDictionaryRepository(db)
 
 			reader, err := notebook.NewReader(
 				cfg.Notebooks.StoriesDirectories,
@@ -59,7 +62,12 @@ func newMigrateImportDBCommand() *cobra.Command {
 
 			yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
 
-			importer := datasync.NewImporter(noteRepo, learningRepo, yamlLearningRepo, os.Stdout)
+			dictResponses, err := rapidapi.NewReader().Read(cfg.Dictionaries.RapidAPI.CacheDirectory)
+			if err != nil {
+				return fmt.Errorf("read dictionary cache: %w", err)
+			}
+
+			importer := datasync.NewImporter(noteRepo, learningRepo, yamlLearningRepo, dictRepo, os.Stdout)
 			opts := datasync.ImportOptions{
 				DryRun:         dryRun,
 				UpdateExisting: updateExisting,
@@ -75,6 +83,11 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return fmt.Errorf("import learning logs: %w", err)
 			}
 
+			dictResult, err := importer.ImportDictionary(ctx, dictResponses, opts)
+			if err != nil {
+				return fmt.Errorf("import dictionary: %w", err)
+			}
+
 			fmt.Println("\nImport Summary:")
 			if opts.DryRun {
 				fmt.Println("  (dry-run mode — no changes made)")
@@ -82,6 +95,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 			fmt.Printf("  Notes:              %d new, %d skipped, %d updated\n", noteResult.NotesNew, noteResult.NotesSkipped, noteResult.NotesUpdated)
 			fmt.Printf("  Notebook notes:     %d new, %d skipped\n", noteResult.NotebookNew, noteResult.NotebookSkipped)
 			fmt.Printf("  Learning logs:      %d new, %d skipped\n", learningResult.LearningNew, learningResult.LearningSkipped)
+			fmt.Printf("  Dictionary entries: %d new, %d skipped, %d updated\n", dictResult.DictionaryNew, dictResult.DictionarySkipped, dictResult.DictionaryUpdated)
 
 			return nil
 		},

@@ -3,6 +3,7 @@ package datasync
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -11,7 +12,10 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
+	"github.com/at-ishikawa/langner/internal/dictionary"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/learning"
+	mock_dictionary "github.com/at-ishikawa/langner/internal/mocks/dictionary"
 	mock_learning "github.com/at-ishikawa/langner/internal/mocks/learning"
 	mock_notebook "github.com/at-ishikawa/langner/internal/mocks/notebook"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -318,11 +322,12 @@ func TestImporter_ImportNotes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 
 			tt.setup(noteRepo)
 
 			var buf bytes.Buffer
-			imp := NewImporter(noteRepo, learningRepo, nil, &buf)
+			imp := NewImporter(noteRepo, learningRepo, nil, dictRepo, &buf)
 
 			got, err := imp.ImportNotes(context.Background(), tt.sourceNotes, tt.opts)
 			if tt.wantErr {
@@ -684,13 +689,135 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 
 			tt.setup(noteRepo, learningRepo)
 
 			var buf bytes.Buffer
-			imp := NewImporter(noteRepo, learningRepo, tt.source, &buf)
+			imp := NewImporter(noteRepo, learningRepo, tt.source, dictRepo, &buf)
 
 			got, err := imp.ImportLearningLogs(context.Background(), tt.opts)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestImporter_ImportDictionary(t *testing.T) {
+	tests := []struct {
+		name      string
+		responses []rapidapi.Response
+		opts      ImportOptions
+		setup     func(dictRepo *mock_dictionary.MockDictionaryRepository)
+		want      *ImportResult
+		wantErr   bool
+	}{
+		{
+			name: "new dictionary entry is created",
+			responses: []rapidapi.Response{
+				{Word: "resilient", Results: []rapidapi.Result{{Definition: "able to recover"}}},
+			},
+			opts: ImportOptions{},
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{}, nil)
+				dictRepo.EXPECT().BatchUpsert(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, entries []*dictionary.DictionaryEntry) error {
+						require.Len(t, entries, 1)
+						assert.Equal(t, "resilient", entries[0].Word)
+						assert.Equal(t, "rapidapi", entries[0].SourceType)
+						assert.NotEmpty(t, entries[0].Response)
+						return nil
+					})
+			},
+			want: &ImportResult{
+				DictionaryNew: 1,
+			},
+		},
+		{
+			name: "existing entry is skipped when UpdateExisting is false",
+			responses: []rapidapi.Response{
+				{Word: "resilient"},
+			},
+			opts: ImportOptions{},
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
+					{Word: "resilient"},
+				}, nil)
+				dictRepo.EXPECT().BatchUpsert(gomock.Any(), gomock.Any()).Return(nil)
+			},
+			want: &ImportResult{
+				DictionarySkipped: 1,
+			},
+		},
+		{
+			name: "existing entry is updated when UpdateExisting is true",
+			responses: []rapidapi.Response{
+				{Word: "resilient", Results: []rapidapi.Result{{Definition: "updated"}}},
+			},
+			opts: ImportOptions{UpdateExisting: true},
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
+					{Word: "resilient", Response: json.RawMessage(`{}`)},
+				}, nil)
+				dictRepo.EXPECT().BatchUpsert(gomock.Any(), gomock.Any()).Return(nil)
+			},
+			want: &ImportResult{
+				DictionaryUpdated: 1,
+			},
+		},
+		{
+			name: "dry run does not upsert",
+			responses: []rapidapi.Response{
+				{Word: "resilient"},
+			},
+			opts: ImportOptions{DryRun: true},
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{}, nil)
+			},
+			want: &ImportResult{
+				DictionaryNew: 1,
+			},
+		},
+		{
+			name:      "FindAll error",
+			responses: []rapidapi.Response{},
+			opts:      ImportOptions{},
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "BatchUpsert error",
+			responses: []rapidapi.Response{
+				{Word: "resilient"},
+			},
+			opts: ImportOptions{},
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{}, nil)
+				dictRepo.EXPECT().BatchUpsert(gomock.Any(), gomock.Any()).Return(fmt.Errorf("insert failed"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
+
+			tt.setup(dictRepo)
+
+			var buf bytes.Buffer
+			imp := NewImporter(noteRepo, learningRepo, nil, dictRepo, &buf)
+
+			got, err := imp.ImportDictionary(context.Background(), tt.responses, tt.opts)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
