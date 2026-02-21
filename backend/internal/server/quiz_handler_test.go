@@ -27,9 +27,6 @@ func newTestHandler(t *testing.T, openaiClient inference.Client) *QuizHandler {
 	cfg := &config.Config{
 		Notebooks: config.NotebooksConfig{
 			StoriesDirectories:     []string{storiesDir},
-			FlashcardsDirectories:  []string{},
-			BooksDirectories:       []string{},
-			DefinitionsDirectories: []string{},
 			LearningNotesDirectory: learningNotesDir,
 		},
 	}
@@ -38,37 +35,18 @@ func newTestHandler(t *testing.T, openaiClient inference.Client) *QuizHandler {
 }
 
 func TestQuizHandler_GetQuizOptions(t *testing.T) {
-	tests := []struct {
-		name    string
-		wantErr bool
-	}{
-		{
-			name:    "returns empty notebooks when no data exists",
-			wantErr: false,
-		},
-	}
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler := newTestHandler(t, mockClient)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			mockClient := mock_inference.NewMockClient(ctrl)
-			handler := newTestHandler(t, mockClient)
+	resp, err := handler.GetQuizOptions(
+		context.Background(),
+		connect.NewRequest(&apiv1.GetQuizOptionsRequest{}),
+	)
 
-			resp, err := handler.GetQuizOptions(
-				context.Background(),
-				connect.NewRequest(&apiv1.GetQuizOptionsRequest{}),
-			)
-
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-
-			require.NoError(t, err)
-			assert.NotNil(t, resp)
-			assert.Empty(t, resp.Msg.GetNotebooks())
-		})
-	}
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+	assert.Empty(t, resp.Msg.GetNotebooks())
 }
 
 func TestQuizHandler_StartQuiz(t *testing.T) {
@@ -175,7 +153,6 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 				h.noteStore[1] = &quizNote{
 					notebookName: "test-notebook",
 					storyTitle:   "flashcards",
-					sceneTitle:   "",
 					expression:   "comprehend",
 					meaning:      "to understand completely",
 				}
@@ -211,7 +188,6 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 				h.noteStore[1] = &quizNote{
 					notebookName: "test-notebook",
 					storyTitle:   "flashcards",
-					sceneTitle:   "",
 					expression:   "comprehend",
 					meaning:      "to understand completely",
 				}
@@ -247,7 +223,6 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 				h.noteStore[1] = &quizNote{
 					notebookName: "test-notebook",
 					storyTitle:   "flashcards",
-					sceneTitle:   "",
 					expression:   "comprehend",
 					meaning:      "to understand completely",
 				}
