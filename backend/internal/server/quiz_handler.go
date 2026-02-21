@@ -143,8 +143,8 @@ func (h *QuizHandler) StartQuiz(
 	includeUnstudied := req.Msg.GetIncludeUnstudied()
 
 	h.mu.Lock()
-	// Clear previous session
 	h.noteStore = make(map[int64]*quizNote)
+	h.nextID = 1
 	h.mu.Unlock()
 
 	var flashcards []*apiv1.Flashcard
@@ -199,7 +199,6 @@ func (h *QuizHandler) SubmitAnswer(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
 	}
 
-	// Grade the answer using inference
 	results, err := h.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
 		Expressions: []inference.Expression{
 			{
@@ -221,7 +220,6 @@ func (h *QuizHandler) SubmitAnswer(
 	result := results.Answers[0]
 	isCorrect, reason, quality := extractAnswerResult(result)
 
-	// Update learning history (mutex protects concurrent file writes)
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -274,8 +272,7 @@ func (h *QuizHandler) loadStoryCards(
 					expression = definition.Expression
 				}
 
-				examples := buildExamplesFromConversations(&scene, definition.Expression, definition.Definition)
-				contexts := buildContextsFromConversations(&scene, &definition)
+				examples, contexts := buildFromConversations(&scene, &definition)
 
 				h.mu.Lock()
 				noteID := h.nextID
@@ -340,7 +337,6 @@ func (h *QuizHandler) loadFlashcardCards(
 			h.noteStore[noteID] = &quizNote{
 				notebookName: notebookID,
 				storyTitle:   "flashcards",
-				sceneTitle:   "",
 				expression:   expression,
 				meaning:      card.Meaning,
 			}
@@ -402,28 +398,8 @@ func countFlashcardCards(notebooks []notebook.FlashcardNotebook) int {
 	return count
 }
 
-func buildExamplesFromConversations(scene *notebook.StoryScene, expression, definition string) []*apiv1.Example {
+func buildFromConversations(scene *notebook.StoryScene, definition *notebook.Note) ([]*apiv1.Example, []inference.Context) {
 	var examples []*apiv1.Example
-	for _, conv := range scene.Conversations {
-		if conv.Quote == "" {
-			continue
-		}
-
-		quoteLower := strings.ToLower(conv.Quote)
-		if !containsExpression(quoteLower, expression, definition) {
-			continue
-		}
-
-		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
-		examples = append(examples, &apiv1.Example{
-			Text:    cleaned,
-			Speaker: conv.Speaker,
-		})
-	}
-	return examples
-}
-
-func buildContextsFromConversations(scene *notebook.StoryScene, definition *notebook.Note) []inference.Context {
 	var contexts []inference.Context
 	for _, conv := range scene.Conversations {
 		if conv.Quote == "" {
@@ -436,12 +412,16 @@ func buildContextsFromConversations(scene *notebook.StoryScene, definition *note
 		}
 
 		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
+		examples = append(examples, &apiv1.Example{
+			Text:    cleaned,
+			Speaker: conv.Speaker,
+		})
 		contexts = append(contexts, inference.Context{
 			Context:             cleaned,
 			ReferenceDefinition: definition.Meaning,
 		})
 	}
-	return contexts
+	return examples, contexts
 }
 
 func containsExpression(textLower, expression, definition string) bool {
