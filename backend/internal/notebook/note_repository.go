@@ -3,6 +3,7 @@ package notebook
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 
@@ -12,9 +13,8 @@ import (
 // NoteRepository defines operations for managing notes.
 type NoteRepository interface {
 	FindAll(ctx context.Context) ([]NoteRecord, error)
-	Create(ctx context.Context, note *NoteRecord) error
-	CreateNotebookNote(ctx context.Context, nn *NotebookNote) error
-	Update(ctx context.Context, note *NoteRecord) error
+	BatchCreate(ctx context.Context, notes []*NoteRecord) error
+	BatchUpdate(ctx context.Context, notes []*NoteRecord) error
 }
 
 // DBNoteRepository implements NoteRepository using MySQL.
@@ -39,64 +39,83 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 	return notes, nil
 }
 
-// CreateNotebookNote inserts a single notebook_note record.
-func (r *DBNoteRepository) CreateNotebookNote(ctx context.Context, nn *NotebookNote) error {
-	result, err := r.db.NamedExecContext(ctx,
-		"INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, `group`, subgroup) VALUES (:note_id, :notebook_type, :notebook_id, :group, :subgroup)",
-		nn)
-	if err != nil {
-		return fmt.Errorf("insert notebook note: %w", err)
+// BatchCreate inserts multiple notes with their images, references, and notebook notes in a single transaction.
+func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord) error {
+	if len(notes) == 0 {
+		return nil
 	}
-	id, err := result.LastInsertId()
-	if err != nil {
-		return fmt.Errorf("get notebook note insert ID: %w", err)
-	}
-	nn.ID = id
-	return nil
-}
 
-// Create inserts a note with its images, references, and notebook notes in a transaction.
-func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		result, err := tx.NamedExecContext(ctx,
-			"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number) VALUES (:usage, :entry, :meaning, :level, :dictionary_number)",
-			note)
-		if err != nil {
-			return fmt.Errorf("insert note: %w", err)
+		// Build multi-row INSERT for notes
+		query, args := buildMultiRowInsert(
+			"notes",
+			[]string{"`usage`", "entry", "meaning", "level", "dictionary_number"},
+			len(notes),
+		)
+		for _, n := range notes {
+			args = append(args, n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber)
 		}
-		noteID, err := result.LastInsertId()
+		result, err := tx.ExecContext(ctx, query, args...)
 		if err != nil {
-			return fmt.Errorf("get note insert ID: %w", err)
+			return fmt.Errorf("insert notes: %w", err)
 		}
-		note.ID = noteID
+		firstID, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("get notes insert ID: %w", err)
+		}
+		for i := range notes {
+			notes[i].ID = firstID + int64(i)
+		}
 
-		for i := range note.Images {
-			note.Images[i].NoteID = noteID
-			_, err := tx.NamedExecContext(ctx,
-				"INSERT INTO note_images (note_id, url, sort_order) VALUES (:note_id, :url, :sort_order)",
-				note.Images[i])
-			if err != nil {
-				return fmt.Errorf("insert note image: %w", err)
+		// Collect all images
+		var imgArgs []interface{}
+		var imgCount int
+		for _, n := range notes {
+			for i := range n.Images {
+				n.Images[i].NoteID = n.ID
+				imgArgs = append(imgArgs, n.Images[i].NoteID, n.Images[i].URL, n.Images[i].SortOrder)
+				imgCount++
+			}
+		}
+		if imgCount > 0 {
+			q, _ := buildMultiRowInsert("note_images", []string{"note_id", "url", "sort_order"}, imgCount)
+			if _, err := tx.ExecContext(ctx, q, imgArgs...); err != nil {
+				return fmt.Errorf("insert note images: %w", err)
 			}
 		}
 
-		for i := range note.References {
-			note.References[i].NoteID = noteID
-			_, err := tx.NamedExecContext(ctx,
-				"INSERT INTO note_references (note_id, link, description, sort_order) VALUES (:note_id, :link, :description, :sort_order)",
-				note.References[i])
-			if err != nil {
-				return fmt.Errorf("insert note reference: %w", err)
+		// Collect all references
+		var refArgs []interface{}
+		var refCount int
+		for _, n := range notes {
+			for i := range n.References {
+				n.References[i].NoteID = n.ID
+				refArgs = append(refArgs, n.References[i].NoteID, n.References[i].Link, n.References[i].Description, n.References[i].SortOrder)
+				refCount++
+			}
+		}
+		if refCount > 0 {
+			q, _ := buildMultiRowInsert("note_references", []string{"note_id", "link", "description", "sort_order"}, refCount)
+			if _, err := tx.ExecContext(ctx, q, refArgs...); err != nil {
+				return fmt.Errorf("insert note references: %w", err)
 			}
 		}
 
-		for i := range note.NotebookNotes {
-			note.NotebookNotes[i].NoteID = noteID
-			_, err := tx.NamedExecContext(ctx,
-				"INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, `group`, subgroup) VALUES (:note_id, :notebook_type, :notebook_id, :group, :subgroup)",
-				note.NotebookNotes[i])
-			if err != nil {
-				return fmt.Errorf("insert notebook note: %w", err)
+		// Collect all notebook_notes
+		var nnArgs []interface{}
+		var nnCount int
+		for _, n := range notes {
+			for i := range n.NotebookNotes {
+				n.NotebookNotes[i].NoteID = n.ID
+				nn := n.NotebookNotes[i]
+				nnArgs = append(nnArgs, nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup)
+				nnCount++
+			}
+		}
+		if nnCount > 0 {
+			q, _ := buildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, nnCount)
+			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
+				return fmt.Errorf("insert notebook notes: %w", err)
 			}
 		}
 
@@ -104,15 +123,49 @@ func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	})
 }
 
-// Update updates a note's fields (not related records).
-func (r *DBNoteRepository) Update(ctx context.Context, note *NoteRecord) error {
-	_, err := r.db.NamedExecContext(ctx,
-		"UPDATE notes SET `usage` = :usage, entry = :entry, meaning = :meaning, level = :level, dictionary_number = :dictionary_number WHERE id = :id",
-		note)
-	if err != nil {
-		return fmt.Errorf("update note: %w", err)
+// BatchUpdate updates multiple notes and inserts their new notebook notes in a single transaction.
+func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord) error {
+	if len(notes) == 0 {
+		return nil
 	}
-	return nil
+
+	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		for _, n := range notes {
+			_, err := tx.ExecContext(ctx,
+				"UPDATE notes SET `usage` = ?, entry = ?, meaning = ?, level = ?, dictionary_number = ? WHERE id = ?",
+				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ID)
+			if err != nil {
+				return fmt.Errorf("update note: %w", err)
+			}
+		}
+
+		// Collect all new notebook_notes
+		var nnArgs []interface{}
+		var nnCount int
+		for _, n := range notes {
+			for _, nn := range n.NotebookNotes {
+				nnArgs = append(nnArgs, nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup)
+				nnCount++
+			}
+		}
+		if nnCount > 0 {
+			q, _ := buildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, nnCount)
+			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
+				return fmt.Errorf("insert notebook notes: %w", err)
+			}
+		}
+
+		return nil
+	})
+}
+
+// buildMultiRowInsert builds a multi-row INSERT query.
+// Returns the SQL string and an empty args slice (caller appends values).
+func buildMultiRowInsert(table string, columns []string, rowCount int) (string, []interface{}) {
+	placeholder := "(" + strings.Repeat("?, ", len(columns)-1) + "?)"
+	values := strings.Repeat(placeholder+", ", rowCount-1) + placeholder
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", table, strings.Join(columns, ", "), values)
+	return query, nil
 }
 
 func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord) error {

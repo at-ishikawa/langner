@@ -54,17 +54,17 @@ func TestImporter_ImportNotes(t *testing.T) {
 			opts:       ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
-				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
-						n.ID = 1
-						assert.Equal(t, "break the ice", n.Usage)
-						assert.Equal(t, "start a conversation", n.Entry)
-						assert.Equal(t, "to initiate social interaction", n.Meaning)
-						assert.Len(t, n.NotebookNotes, 1)
-						assert.Equal(t, "story", n.NotebookNotes[0].NotebookType)
-						assert.Equal(t, "test-story", n.NotebookNotes[0].NotebookID)
-						assert.Equal(t, "Episode 1", n.NotebookNotes[0].Group)
-						assert.Equal(t, "Opening", n.NotebookNotes[0].Subgroup)
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "break the ice", notes[0].Usage)
+						assert.Equal(t, "start a conversation", notes[0].Entry)
+						assert.Equal(t, "to initiate social interaction", notes[0].Meaning)
+						require.Len(t, notes[0].NotebookNotes, 1)
+						assert.Equal(t, "story", notes[0].NotebookNotes[0].NotebookType)
+						assert.Equal(t, "test-story", notes[0].NotebookNotes[0].NotebookID)
+						assert.Equal(t, "Episode 1", notes[0].NotebookNotes[0].Group)
+						assert.Equal(t, "Opening", notes[0].NotebookNotes[0].Subgroup)
 						return nil
 					})
 			},
@@ -144,12 +144,15 @@ func TestImporter_ImportNotes(t *testing.T) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Usage: "break the ice", Entry: "start a conversation"},
 				}, nil)
-				noteRepo.EXPECT().Update(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
-						assert.Equal(t, "updated meaning", n.Meaning)
+				noteRepo.EXPECT().BatchUpdate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "updated meaning", notes[0].Meaning)
+						require.Len(t, notes[0].NotebookNotes, 1)
+						assert.Equal(t, "story", notes[0].NotebookNotes[0].NotebookType)
+						assert.Equal(t, "test-story", notes[0].NotebookNotes[0].NotebookID)
 						return nil
 					})
-				noteRepo.EXPECT().CreateNotebookNote(gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: &ImportResult{
 				NotesUpdated: 1,
@@ -179,13 +182,13 @@ func TestImporter_ImportNotes(t *testing.T) {
 			opts: ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
-				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
-						n.ID = 2
-						assert.Equal(t, "flashcard", n.NotebookNotes[0].NotebookType)
-						assert.Equal(t, "vocab-cards", n.NotebookNotes[0].NotebookID)
-						assert.Equal(t, "Common Idioms", n.NotebookNotes[0].Group)
-						assert.Equal(t, "", n.NotebookNotes[0].Subgroup)
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "flashcard", notes[0].NotebookNotes[0].NotebookType)
+						assert.Equal(t, "vocab-cards", notes[0].NotebookNotes[0].NotebookID)
+						assert.Equal(t, "Common Idioms", notes[0].NotebookNotes[0].Group)
+						assert.Equal(t, "", notes[0].NotebookNotes[0].Subgroup)
 						return nil
 					})
 			},
@@ -223,7 +226,7 @@ func TestImporter_ImportNotes(t *testing.T) {
 			opts:       ImportOptions{DryRun: true},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
-				// No Create or CreateNotebookNote calls expected
+				// No BatchCreate or BatchUpdate calls expected
 			},
 			want: &ImportResult{
 				NotesNew:    1,
@@ -259,11 +262,11 @@ func TestImporter_ImportNotes(t *testing.T) {
 			opts:       ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
-				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
-						n.ID = 3
-						assert.Equal(t, "resilient", n.Usage)
-						assert.Equal(t, "resilient", n.Entry)
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "resilient", notes[0].Usage)
+						assert.Equal(t, "resilient", notes[0].Entry)
 						return nil
 					})
 			},
@@ -305,18 +308,18 @@ func TestImporter_ImportNotes(t *testing.T) {
 			opts:       ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
-				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
-						n.ID = 1
-						require.Len(t, n.Images, 2)
-						assert.Equal(t, "https://example.com/img1.png", n.Images[0].URL)
-						assert.Equal(t, 0, n.Images[0].SortOrder)
-						assert.Equal(t, "https://example.com/img2.png", n.Images[1].URL)
-						assert.Equal(t, 1, n.Images[1].SortOrder)
-						require.Len(t, n.References, 1)
-						assert.Equal(t, "https://example.com/ref1", n.References[0].Link)
-						assert.Equal(t, "Reference 1", n.References[0].Description)
-						assert.Equal(t, 0, n.References[0].SortOrder)
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
+						require.Len(t, notes, 1)
+						require.Len(t, notes[0].Images, 2)
+						assert.Equal(t, "https://example.com/img1.png", notes[0].Images[0].URL)
+						assert.Equal(t, 0, notes[0].Images[0].SortOrder)
+						assert.Equal(t, "https://example.com/img2.png", notes[0].Images[1].URL)
+						assert.Equal(t, 1, notes[0].Images[1].SortOrder)
+						require.Len(t, notes[0].References, 1)
+						assert.Equal(t, "https://example.com/ref1", notes[0].References[0].Link)
+						assert.Equal(t, "Reference 1", notes[0].References[0].Description)
+						assert.Equal(t, 0, notes[0].References[0].SortOrder)
 						return nil
 					})
 			},
@@ -336,7 +339,7 @@ func TestImporter_ImportNotes(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "Create error propagates",
+			name: "BatchCreate error propagates",
 			stories: map[string]notebook.Index{
 				"test-story": {
 					ID: "test-story",
@@ -364,12 +367,12 @@ func TestImporter_ImportNotes(t *testing.T) {
 			opts:       ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
-				noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).Return(fmt.Errorf("insert failed"))
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).Return(fmt.Errorf("insert failed"))
 			},
 			wantErr: true,
 		},
 		{
-			name: "Update error propagates",
+			name: "BatchUpdate error propagates",
 			stories: map[string]notebook.Index{
 				"test-story": {
 					ID: "test-story",
@@ -400,12 +403,12 @@ func TestImporter_ImportNotes(t *testing.T) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Usage: "break the ice", Entry: "start a conversation"},
 				}, nil)
-				noteRepo.EXPECT().Update(gomock.Any(), gomock.Any()).Return(fmt.Errorf("update failed"))
+				noteRepo.EXPECT().BatchUpdate(gomock.Any(), gomock.Any()).Return(fmt.Errorf("update failed"))
 			},
 			wantErr: true,
 		},
 		{
-			name:    "CreateNotebookNote error propagates",
+			name:    "BatchUpdate error propagates for new notebook_note on existing note",
 			stories: map[string]notebook.Index{},
 			flashcards: map[string]notebook.FlashcardIndex{
 				"vocab-cards": {
@@ -430,7 +433,7 @@ func TestImporter_ImportNotes(t *testing.T) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Usage: "break the ice", Entry: "start a conversation"},
 				}, nil)
-				noteRepo.EXPECT().CreateNotebookNote(gomock.Any(), gomock.Any()).Return(fmt.Errorf("insert failed"))
+				noteRepo.EXPECT().BatchUpdate(gomock.Any(), gomock.Any()).Return(fmt.Errorf("insert failed"))
 			},
 			wantErr: true,
 		},

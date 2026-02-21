@@ -163,153 +163,133 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 	}
 }
 
-func TestDBNoteRepository_Create(t *testing.T) {
+func TestDBNoteRepository_BatchCreate(t *testing.T) {
 	tests := []struct {
 		name      string
-		note      *NoteRecord
+		notes     []*NoteRecord
 		setupMock func(mock sqlmock.Sqlmock)
-		wantID    int64
+		wantIDs   []int64
 		wantErr   bool
 	}{
 		{
-			name: "creates note with relations",
-			note: &NoteRecord{
-				Usage:            "idiom",
-				Entry:            "lose one's temper",
-				Meaning:          "to become angry",
-				Level:            "B1",
-				DictionaryNumber: 1,
-				Images: []NoteImage{
-					{URL: "https://example.com/img.png", SortOrder: 0},
+			name: "creates multiple notes with relations",
+			notes: []*NoteRecord{
+				{
+					Usage:            "idiom",
+					Entry:            "break the ice",
+					Meaning:          "to initiate conversation",
+					Level:            "B2",
+					DictionaryNumber: 1,
+					Images: []NoteImage{
+						{URL: "https://example.com/img.png", SortOrder: 0},
+					},
+					References: []NoteReference{
+						{Link: "https://example.com/ref", Description: "reference", SortOrder: 0},
+					},
+					NotebookNotes: []NotebookNote{
+						{NotebookType: "story", NotebookID: "book-1", Group: "ch1", Subgroup: "scene1"},
+					},
 				},
-				References: []NoteReference{
-					{Link: "https://example.com/ref", Description: "reference", SortOrder: 0},
-				},
-				NotebookNotes: []NotebookNote{
-					{NotebookType: "story", NotebookID: "book-1", Group: "ch1", Subgroup: ""},
+				{
+					Usage:            "phrasal_verb",
+					Entry:            "give up",
+					Meaning:          "to stop trying",
+					Level:            "A2",
+					DictionaryNumber: 2,
+					NotebookNotes: []NotebookNote{
+						{NotebookType: "flashcard", NotebookID: "vocab-1", Group: "unit1"},
+					},
 				},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("idiom", "lose one's temper", "to become angry", "B1", 1).
-					WillReturnResult(sqlmock.NewResult(10, 1))
-				mock.ExpectExec("INSERT INTO note_images").
+				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1,
+						"phrasal_verb", "give up", "to stop trying", "A2", 2).
+					WillReturnResult(sqlmock.NewResult(10, 2))
+				mock.ExpectExec("INSERT INTO note_images \\(note_id, url, sort_order\\) VALUES \\(\\?, \\?, \\?\\)").
 					WithArgs(int64(10), "https://example.com/img.png", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("INSERT INTO note_references").
+				mock.ExpectExec("INSERT INTO note_references \\(note_id, link, description, sort_order\\) VALUES \\(\\?, \\?, \\?, \\?\\)").
 					WithArgs(int64(10), "https://example.com/ref", "reference", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("INSERT INTO notebook_notes").
-					WithArgs(int64(10), "story", "book-1", "ch1", "").
-					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectExec("INSERT INTO notebook_notes \\(note_id, notebook_type, notebook_id, `group`, subgroup\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs(int64(10), "story", "book-1", "ch1", "scene1",
+						int64(11), "flashcard", "vocab-1", "unit1", "").
+					WillReturnResult(sqlmock.NewResult(1, 2))
 				mock.ExpectCommit()
 			},
-			wantID: 10,
+			wantIDs: []int64{10, 11},
 		},
 		{
-			name: "insert note db error",
-			note: &NoteRecord{
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to initiate conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
+			name:  "empty slice returns nil",
+			notes: []*NoteRecord{},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				// No expectations
+			},
+		},
+		{
+			name: "insert notes db error",
+			notes: []*NoteRecord{
+				{Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
 					WillReturnError(fmt.Errorf("duplicate entry"))
 				mock.ExpectRollback()
 			},
 			wantErr: true,
 		},
 		{
-			name: "last insert id error",
-			note: &NoteRecord{
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to initiate conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
-			},
-			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
-					WillReturnResult(sqlmock.NewErrorResult(fmt.Errorf("last insert id error")))
-				mock.ExpectRollback()
-			},
-			wantErr: true,
-		},
-		{
-			name: "insert image db error",
-			note: &NoteRecord{
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to initiate conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
-				Images: []NoteImage{
-					{URL: "https://example.com/img.png", SortOrder: 0},
+			name: "insert images db error",
+			notes: []*NoteRecord{
+				{
+					Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1,
+					Images: []NoteImage{{URL: "https://example.com/img.png", SortOrder: 0}},
 				},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
 					WillReturnResult(sqlmock.NewResult(10, 1))
 				mock.ExpectExec("INSERT INTO note_images").
-					WithArgs(int64(10), "https://example.com/img.png", 0).
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
 			},
 			wantErr: true,
 		},
 		{
-			name: "insert reference db error",
-			note: &NoteRecord{
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to initiate conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
-				References: []NoteReference{
-					{Link: "https://example.com/ref", Description: "reference", SortOrder: 0},
+			name: "insert references db error",
+			notes: []*NoteRecord{
+				{
+					Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1,
+					References: []NoteReference{{Link: "https://example.com/ref", Description: "reference", SortOrder: 0}},
 				},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
 					WillReturnResult(sqlmock.NewResult(10, 1))
 				mock.ExpectExec("INSERT INTO note_references").
-					WithArgs(int64(10), "https://example.com/ref", "reference", 0).
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
 			},
 			wantErr: true,
 		},
 		{
-			name: "insert notebook_note db error",
-			note: &NoteRecord{
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to initiate conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
-				NotebookNotes: []NotebookNote{
-					{NotebookType: "story", NotebookID: "book-1", Group: "ch1", Subgroup: ""},
+			name: "insert notebook_notes db error",
+			notes: []*NoteRecord{
+				{
+					Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1,
+					NotebookNotes: []NotebookNote{{NotebookType: "story", NotebookID: "book-1", Group: "ch1"}},
 				},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
 					WillReturnResult(sqlmock.NewResult(10, 1))
 				mock.ExpectExec("INSERT INTO notebook_notes").
-					WithArgs(int64(10), "story", "book-1", "ch1", "").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
 			},
@@ -317,17 +297,12 @@ func TestDBNoteRepository_Create(t *testing.T) {
 		},
 		{
 			name: "commit error",
-			note: &NoteRecord{
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to initiate conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
+			notes: []*NoteRecord{
+				{Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
 					WillReturnResult(sqlmock.NewResult(10, 1))
 				mock.ExpectCommit().WillReturnError(fmt.Errorf("commit failed"))
 			},
@@ -345,137 +320,114 @@ func TestDBNoteRepository_Create(t *testing.T) {
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 
-			err = repo.Create(context.Background(), tt.note)
+			err = repo.BatchCreate(context.Background(), tt.notes)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, tt.note.ID)
+
+			for i, wantID := range tt.wantIDs {
+				assert.Equal(t, wantID, tt.notes[i].ID)
+			}
 
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
 }
 
-func TestDBNoteRepository_CreateNotebookNote(t *testing.T) {
+func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 	tests := []struct {
 		name      string
-		nn        *NotebookNote
-		setupMock func(mock sqlmock.Sqlmock)
-		wantID    int64
-		wantErr   bool
-	}{
-		{
-			name: "inserts a notebook note",
-			nn: &NotebookNote{
-				NoteID:       1,
-				NotebookType: "story",
-				NotebookID:   "book-1",
-				Group:        "chapter-1",
-				Subgroup:     "section-1",
-			},
-			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO notebook_notes").
-					WithArgs(int64(1), "story", "book-1", "chapter-1", "section-1").
-					WillReturnResult(sqlmock.NewResult(20, 1))
-			},
-			wantID: 20,
-		},
-		{
-			name: "db error",
-			nn: &NotebookNote{
-				NoteID:       1,
-				NotebookType: "story",
-				NotebookID:   "book-1",
-				Group:        "chapter-1",
-				Subgroup:     "section-1",
-			},
-			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO notebook_notes").
-					WithArgs(int64(1), "story", "book-1", "chapter-1", "section-1").
-					WillReturnError(fmt.Errorf("duplicate entry"))
-			},
-			wantErr: true,
-		},
-		{
-			name: "last insert id error",
-			nn: &NotebookNote{
-				NoteID:       1,
-				NotebookType: "story",
-				NotebookID:   "book-1",
-				Group:        "chapter-1",
-				Subgroup:     "section-1",
-			},
-			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectExec("INSERT INTO notebook_notes").
-					WithArgs(int64(1), "story", "book-1", "chapter-1", "section-1").
-					WillReturnResult(sqlmock.NewErrorResult(fmt.Errorf("last insert id error")))
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			db, mock, err := sqlmock.New()
-			require.NoError(t, err)
-			defer db.Close()
-
-			sqlxDB := sqlx.NewDb(db, "mysql")
-			repo := NewDBNoteRepository(sqlxDB)
-			tt.setupMock(mock)
-
-			err = repo.CreateNotebookNote(context.Background(), tt.nn)
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.wantID, tt.nn.ID)
-
-			assert.NoError(t, mock.ExpectationsWereMet())
-		})
-	}
-}
-
-func TestDBNoteRepository_Update(t *testing.T) {
-	tests := []struct {
-		name      string
-		note      *NoteRecord
+		notes     []*NoteRecord
 		setupMock func(mock sqlmock.Sqlmock)
 		wantErr   bool
 	}{
 		{
-			name: "updates a note",
-			note: &NoteRecord{
-				ID:               1,
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to start a conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
+			name: "updates multiple notes with new notebook_notes",
+			notes: []*NoteRecord{
+				{
+					ID: 1, Usage: "idiom", Entry: "break the ice", Meaning: "updated meaning", Level: "B2", DictionaryNumber: 1,
+					NotebookNotes: []NotebookNote{
+						{NoteID: 1, NotebookType: "story", NotebookID: "book-2", Group: "ch1"},
+					},
+				},
+				{
+					ID: 2, Usage: "phrasal_verb", Entry: "give up", Meaning: "to stop trying", Level: "A2", DictionaryNumber: 2,
+					NotebookNotes: []NotebookNote{
+						{NoteID: 2, NotebookType: "flashcard", NotebookID: "vocab-1", Group: "unit1"},
+					},
+				},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec("UPDATE notes SET").
-					WithArgs("idiom", "break the ice", "to start a conversation", "B2", 1, int64(1)).
+					WithArgs("idiom", "break the ice", "updated meaning", "B2", 1, int64(1)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec("UPDATE notes SET").
+					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, int64(2)).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec("INSERT INTO notebook_notes \\(note_id, notebook_type, notebook_id, `group`, subgroup\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs(int64(1), "story", "book-2", "ch1", "",
+						int64(2), "flashcard", "vocab-1", "unit1", "").
+					WillReturnResult(sqlmock.NewResult(1, 2))
+				mock.ExpectCommit()
 			},
 		},
 		{
-			name: "db error",
-			note: &NoteRecord{
-				ID:               1,
-				Usage:            "idiom",
-				Entry:            "break the ice",
-				Meaning:          "to start a conversation",
-				Level:            "B2",
-				DictionaryNumber: 1,
+			name:  "empty slice returns nil",
+			notes: []*NoteRecord{},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				// No expectations
+			},
+		},
+		{
+			name: "updates notes without new notebook_notes",
+			notes: []*NoteRecord{
+				{ID: 1, Usage: "idiom", Entry: "break the ice", Meaning: "updated", Level: "B2", DictionaryNumber: 1},
+				{ID: 2, Usage: "phrasal_verb", Entry: "give up", Meaning: "to stop", Level: "A2", DictionaryNumber: 2},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
 				mock.ExpectExec("UPDATE notes SET").
-					WithArgs("idiom", "break the ice", "to start a conversation", "B2", 1, int64(1)).
+					WithArgs("idiom", "break the ice", "updated", "B2", 1, int64(1)).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec("UPDATE notes SET").
+					WithArgs("phrasal_verb", "give up", "to stop", "A2", 2, int64(2)).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			},
+		},
+		{
+			name: "update db error",
+			notes: []*NoteRecord{
+				{ID: 1, Usage: "idiom", Entry: "break the ice", Meaning: "updated", Level: "B2", DictionaryNumber: 1},
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("UPDATE notes SET").
 					WillReturnError(fmt.Errorf("connection refused"))
+				mock.ExpectRollback()
+			},
+			wantErr: true,
+		},
+		{
+			name: "insert notebook_notes db error",
+			notes: []*NoteRecord{
+				{
+					ID: 1, Usage: "idiom", Entry: "break the ice", Meaning: "updated", Level: "B2", DictionaryNumber: 1,
+					NotebookNotes: []NotebookNote{
+						{NoteID: 1, NotebookType: "story", NotebookID: "book-2", Group: "ch1"},
+					},
+				},
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("UPDATE notes SET").
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec("INSERT INTO notebook_notes").
+					WillReturnError(fmt.Errorf("connection refused"))
+				mock.ExpectRollback()
 			},
 			wantErr: true,
 		},
@@ -491,7 +443,7 @@ func TestDBNoteRepository_Update(t *testing.T) {
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 
-			err = repo.Update(context.Background(), tt.note)
+			err = repo.BatchUpdate(context.Background(), tt.notes)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
