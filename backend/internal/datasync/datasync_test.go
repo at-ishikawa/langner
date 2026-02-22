@@ -882,14 +882,121 @@ func TestExporter_ExportNotes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
 			noteSink := mock_datasync.NewMockNoteSink(ctrl)
+			learningSink := mock_datasync.NewMockLearningSink(ctrl)
 
 			tt.setup(noteRepo, noteSink)
 
 			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, noteSink, &buf)
+			exp := NewExporter(noteRepo, learningRepo, noteSink, learningSink, &buf)
 
 			got, err := exp.ExportNotes(context.Background())
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExporter_ExportLearningLogs(t *testing.T) {
+	baseTime := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name    string
+		setup   func(learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink)
+		want    *ExportLearningLogsResult
+		wantErr bool
+	}{
+		{
+			name: "learning logs are exported",
+			setup: func(learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{
+					{
+						ID:             1,
+						NoteID:         10,
+						Status:         "understood",
+						LearnedAt:      baseTime,
+						Quality:        4,
+						ResponseTimeMs: 1500,
+						QuizType:       "notebook",
+						IntervalDays:   7,
+						EasinessFactor: 2.5,
+					},
+					{
+						ID:             2,
+						NoteID:         20,
+						Status:         "misunderstood",
+						LearnedAt:      baseTime.Add(24 * time.Hour),
+						Quality:        2,
+						ResponseTimeMs: 3000,
+						QuizType:       "reverse",
+						IntervalDays:   1,
+						EasinessFactor: 2.1,
+					},
+				}, nil)
+				learningSink.EXPECT().WriteAll(gomock.Any()).
+					DoAndReturn(func(logs []learning.LearningLog) error {
+						require.Len(t, logs, 2)
+						assert.Equal(t, int64(10), logs[0].NoteID)
+						assert.Equal(t, "understood", logs[0].Status)
+						assert.Equal(t, int64(20), logs[1].NoteID)
+						assert.Equal(t, "misunderstood", logs[1].Status)
+						return nil
+					})
+			},
+			want: &ExportLearningLogsResult{
+				LearningLogsExported: 2,
+			},
+		},
+		{
+			name: "empty database exports zero",
+			setup: func(learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
+				learningSink.EXPECT().WriteAll(gomock.Any()).
+					DoAndReturn(func(logs []learning.LearningLog) error {
+						assert.Empty(t, logs)
+						return nil
+					})
+			},
+			want: &ExportLearningLogsResult{},
+		},
+		{
+			name: "learningRepo.FindAll error propagates",
+			setup: func(learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "learningSink.WriteAll error propagates",
+			setup: func(learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{
+					{ID: 1, NoteID: 10, Status: "understood"},
+				}, nil)
+				learningSink.EXPECT().WriteAll(gomock.Any()).Return(fmt.Errorf("write failed"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			noteSink := mock_datasync.NewMockNoteSink(ctrl)
+			learningSink := mock_datasync.NewMockLearningSink(ctrl)
+
+			tt.setup(learningRepo, learningSink)
+
+			var buf bytes.Buffer
+			exp := NewExporter(noteRepo, learningRepo, noteSink, learningSink, &buf)
+
+			got, err := exp.ExportLearningLogs(context.Background())
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
