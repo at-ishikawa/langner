@@ -4,6 +4,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -65,5 +66,12 @@ func RunInTx(ctx context.Context, db *sqlx.DB, fn func(ctx context.Context, tx *
 		return fmt.Errorf("commit transaction: %w", err)
 	}
 	return nil
+}
+
+// BuildMultiRowInsert builds a multi-row INSERT query.
+func BuildMultiRowInsert(table string, columns []string, rowCount int) string {
+	placeholder := "(" + strings.Repeat("?, ", len(columns)-1) + "?)"
+	values := strings.Repeat(placeholder+", ", rowCount-1) + placeholder
+	return fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", table, strings.Join(columns, ", "), values)
 }
 
