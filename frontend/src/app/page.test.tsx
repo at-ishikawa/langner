@@ -59,10 +59,10 @@ describe("QuizStartPage", () => {
       expect(screen.getByText("Vocabulary A (10)")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Vocabulary A (10)"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Vocabulary A/ }));
     expect(screen.getByText("10 words due")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("Vocabulary B (5)"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /Vocabulary B/ }));
     expect(screen.getByText("15 words due")).toBeInTheDocument();
   });
 
@@ -77,10 +77,10 @@ describe("QuizStartPage", () => {
       expect(screen.getByText("Vocabulary A (10)")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("All notebooks"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /All notebooks/ }));
     expect(screen.getByText("15 words due")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByText("All notebooks"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /All notebooks/ }));
     expect(screen.getByText("0 words due")).toBeInTheDocument();
   });
 
@@ -118,7 +118,7 @@ describe("QuizStartPage", () => {
       expect(screen.getByText("Vocabulary A (10)")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("All notebooks"));
+    fireEvent.click(screen.getByRole("checkbox", { name: /All notebooks/ }));
     fireEvent.click(screen.getByText("Start"));
 
     await waitFor(() => {
