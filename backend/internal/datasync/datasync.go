@@ -55,6 +55,11 @@ type DictionarySource interface {
 	ReadAll() ([]rapidapi.Response, error)
 }
 
+// NoteSink writes exported note records.
+type NoteSink interface {
+	WriteAll(notes []notebook.NoteRecord) error
+}
+
 // ImportNotesResult tracks counts for note import.
 type ImportNotesResult struct {
 	NotesNew, NotesSkipped, NotesUpdated int
@@ -391,4 +396,45 @@ func (imp *Importer) ImportDictionary(ctx context.Context, opts ImportOptions) (
 	}
 
 	return &result, nil
+}
+
+// ExportNotesResult tracks counts for note export.
+type ExportNotesResult struct {
+	NotesExported, NotebookNotesExported int
+}
+
+// Exporter reads DB data and writes to YAML files.
+type Exporter struct {
+	noteRepo notebook.NoteRepository
+	noteSink NoteSink
+}
+
+// NewExporter creates a new Exporter.
+func NewExporter(noteRepo notebook.NoteRepository, noteSink NoteSink) *Exporter {
+	return &Exporter{
+		noteRepo: noteRepo,
+		noteSink: noteSink,
+	}
+}
+
+// ExportNotes reads notes from the database and writes them to YAML.
+func (exp *Exporter) ExportNotes(ctx context.Context) (*ExportNotesResult, error) {
+	notes, err := exp.noteRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load notes: %w", err)
+	}
+
+	if err := exp.noteSink.WriteAll(notes); err != nil {
+		return nil, fmt.Errorf("write notes: %w", err)
+	}
+
+	var nnCount int
+	for _, n := range notes {
+		nnCount += len(n.NotebookNotes)
+	}
+
+	return &ExportNotesResult{
+		NotesExported:         len(notes),
+		NotebookNotesExported: nnCount,
+	}, nil
 }
