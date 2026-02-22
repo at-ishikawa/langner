@@ -4,6 +4,7 @@ go 1.25.0
 
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20260209202127-80ab13bee0bf.1
+	buf.build/go/protovalidate v1.1.3
 	connectrpc.com/connect v1.19.1
 	github.com/DATA-DOG/go-sqlmock v1.5.2
 	github.com/avast/retry-go v3.0.0+incompatible
@@ -25,7 +26,6 @@ require (
 )
 
 require (
-	buf.build/go/protovalidate v1.1.3 // indirect
 	cel.dev/expr v0.25.1 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect

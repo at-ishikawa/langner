@@ -12,6 +12,9 @@ import (
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/inference/openai"
 	"github.com/at-ishikawa/langner/internal/server"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -45,7 +48,22 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("loadConfig() > %w", err)
 	}
 
-	handler := server.NewQuizHandler()
+	if cfg.OpenAI.APIKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+	}
+
+	openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+	defer func() {
+		_ = openaiClient.Close()
+	}()
+
+	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
+	if err != nil {
+		log.Printf("Warning: failed to load dictionary cache: %v", err)
+		dictionaryMap = make(map[string]rapidapi.Response)
+	}
+
+	handler := server.NewQuizHandler(cfg, openaiClient, dictionaryMap)
 	path, h := apiv1connect.NewQuizServiceHandler(handler)
 
 	mux := http.NewServeMux()
@@ -72,6 +90,14 @@ func loadConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("config.NewConfigLoader() > %w", err)
 	}
 	return loader.Load()
+}
+
+func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
+	responses, err := rapidapi.NewReader().Read(cacheDir)
+	if err != nil {
+		return nil, fmt.Errorf("rapidapi.NewReader().Read() > %w", err)
+	}
+	return rapidapi.FromResponsesToMap(responses), nil
 }
 
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
