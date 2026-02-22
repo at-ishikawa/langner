@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	dictionary "github.com/at-ishikawa/langner/internal/dictionary"
 	rapidapi "github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	learning "github.com/at-ishikawa/langner/internal/learning"
 	notebook "github.com/at-ishikawa/langner/internal/notebook"
@@ -210,4 +211,42 @@ func (m *MockLearningSink) WriteAll(logs []learning.LearningLog) error {
 func (mr *MockLearningSinkMockRecorder) WriteAll(logs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockLearningSink)(nil).WriteAll), logs)
+}
+
+// MockDictionarySink is a mock of DictionarySink interface.
+type MockDictionarySink struct {
+	ctrl     *gomock.Controller
+	recorder *MockDictionarySinkMockRecorder
+	isgomock struct{}
+}
+
+// MockDictionarySinkMockRecorder is the mock recorder for MockDictionarySink.
+type MockDictionarySinkMockRecorder struct {
+	mock *MockDictionarySink
+}
+
+// NewMockDictionarySink creates a new mock instance.
+func NewMockDictionarySink(ctrl *gomock.Controller) *MockDictionarySink {
+	mock := &MockDictionarySink{ctrl: ctrl}
+	mock.recorder = &MockDictionarySinkMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDictionarySink) EXPECT() *MockDictionarySinkMockRecorder {
+	return m.recorder
+}
+
+// WriteAll mocks base method.
+func (m *MockDictionarySink) WriteAll(entries []dictionary.DictionaryEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteAll", entries)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteAll indicates an expected call of WriteAll.
+func (mr *MockDictionarySinkMockRecorder) WriteAll(entries any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockDictionarySink)(nil).WriteAll), entries)
 }
