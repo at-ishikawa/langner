@@ -431,11 +431,10 @@ type Exporter struct {
 	noteSink       NoteSink
 	learningSink   LearningSink
 	dictionarySink DictionarySink
-	writer         io.Writer
 }
 
 // NewExporter creates a new Exporter.
-func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, dictionaryRepo dictionary.DictionaryRepository, noteSink NoteSink, learningSink LearningSink, dictionarySink DictionarySink, writer io.Writer) *Exporter {
+func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, dictionaryRepo dictionary.DictionaryRepository, noteSink NoteSink, learningSink LearningSink, dictionarySink DictionarySink) *Exporter {
 	return &Exporter{
 		noteRepo:       noteRepo,
 		learningRepo:   learningRepo,
@@ -443,7 +442,6 @@ func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.Learnin
 		noteSink:       noteSink,
 		learningSink:   learningSink,
 		dictionarySink: dictionarySink,
-		writer:         writer,
 	}
 }
 
@@ -463,7 +461,6 @@ func (exp *Exporter) ExportNotes(ctx context.Context) (*ExportNotesResult, error
 		nnCount += len(n.NotebookNotes)
 	}
 
-	_, _ = fmt.Fprintf(exp.writer, "  Exported %d notes, %d notebook_notes\n", len(notes), nnCount)
 	return &ExportNotesResult{
 		NotesExported:         len(notes),
 		NotebookNotesExported: nnCount,
@@ -481,7 +478,6 @@ func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLog
 		return nil, fmt.Errorf("write learning logs: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(exp.writer, "  Exported %d learning logs\n", len(logs))
 	return &ExportLearningLogsResult{
 		LearningLogsExported: len(logs),
 	}, nil
@@ -498,7 +494,6 @@ func (exp *Exporter) ExportDictionary(ctx context.Context) (*ExportDictionaryRes
 		return nil, fmt.Errorf("write dictionary entries: %w", err)
 	}
 
-	_, _ = fmt.Fprintf(exp.writer, "  Exported %d dictionary entries\n", len(entries))
 	return &ExportDictionaryResult{
 		DictionaryExported: len(entries),
 	}, nil

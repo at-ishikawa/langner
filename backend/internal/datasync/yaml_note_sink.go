@@ -10,6 +10,23 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
+type exportNote struct {
+	ID               int64  `yaml:"id"`
+	Usage            string `yaml:"usage"`
+	Entry            string `yaml:"entry"`
+	Meaning          string `yaml:"meaning"`
+	Level            string `yaml:"level,omitempty"`
+	DictionaryNumber int    `yaml:"dictionary_number,omitempty"`
+}
+
+type exportNotebookNote struct {
+	NoteID       int64  `yaml:"note_id"`
+	NotebookType string `yaml:"notebook_type"`
+	NotebookID   string `yaml:"notebook_id"`
+	Group        string `yaml:"group"`
+	Subgroup     string `yaml:"subgroup,omitempty"`
+}
+
 // YAMLNoteSink writes note records to YAML files.
 type YAMLNoteSink struct {
 	outputDir string
@@ -26,14 +43,32 @@ func (s *YAMLNoteSink) WriteAll(notes []notebook.NoteRecord) error {
 		return fmt.Errorf("create output directory: %w", err)
 	}
 
-	if err := writeYAML(filepath.Join(s.outputDir, "notes.yml"), notes); err != nil {
+	exportNotes := make([]exportNote, len(notes))
+	var allNNs []exportNotebookNote
+	for i, n := range notes {
+		exportNotes[i] = exportNote{
+			ID:               n.ID,
+			Usage:            n.Usage,
+			Entry:            n.Entry,
+			Meaning:          n.Meaning,
+			Level:            n.Level,
+			DictionaryNumber: n.DictionaryNumber,
+		}
+		for _, nn := range n.NotebookNotes {
+			allNNs = append(allNNs, exportNotebookNote{
+				NoteID:       nn.NoteID,
+				NotebookType: nn.NotebookType,
+				NotebookID:   nn.NotebookID,
+				Group:        nn.Group,
+				Subgroup:     nn.Subgroup,
+			})
+		}
+	}
+
+	if err := writeYAML(filepath.Join(s.outputDir, "notes.yml"), exportNotes); err != nil {
 		return fmt.Errorf("write notes.yml: %w", err)
 	}
 
-	var allNNs []notebook.NotebookNote
-	for _, n := range notes {
-		allNNs = append(allNNs, n.NotebookNotes...)
-	}
 	if err := writeYAML(filepath.Join(s.outputDir, "notebook_notes.yml"), allNNs); err != nil {
 		return fmt.Errorf("write notebook_notes.yml: %w", err)
 	}

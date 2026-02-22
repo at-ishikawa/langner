@@ -128,7 +128,7 @@ func newMigrateExportDBCommand() *cobra.Command {
 			learningSink := datasync.NewYAMLLearningSink(outputDir)
 			dictSink := datasync.NewYAMLDictionarySink(outputDir)
 
-			exporter := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, os.Stdout)
+			exporter := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
 
 			noteResult, err := exporter.ExportNotes(ctx)
 			if err != nil {

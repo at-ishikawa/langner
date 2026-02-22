@@ -890,8 +890,7 @@ func TestExporter_ExportNotes(t *testing.T) {
 
 			tt.setup(noteRepo, noteSink)
 
-			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, &buf)
+			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
 
 			got, err := exp.ExportNotes(context.Background())
 			if tt.wantErr {
@@ -997,8 +996,7 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 
 			tt.setup(learningRepo, learningSink)
 
-			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, &buf)
+			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
 
 			got, err := exp.ExportLearningLogs(context.Background())
 			if tt.wantErr {
@@ -1080,8 +1078,7 @@ func TestExporter_ExportDictionary(t *testing.T) {
 
 			tt.setup(dictRepo, dictSink)
 
-			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, &buf)
+			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
 
 			got, err := exp.ExportDictionary(context.Background())
 			if tt.wantErr {
