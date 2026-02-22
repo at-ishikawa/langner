@@ -23,6 +23,12 @@ function renderPage() {
   );
 }
 
+function clickCheckbox(name: RegExp) {
+  const checkbox = screen.getByRole("checkbox", { name });
+  fireEvent.click(checkbox);
+  fireEvent.change(checkbox, { target: { checked: !checkbox.hasAttribute("checked") } });
+}
+
 const mockNotebooks: client.NotebookSummary[] = [
   { notebookId: "nb-1", name: "Vocabulary A", reviewCount: 10 },
   { notebookId: "nb-2", name: "Vocabulary B", reviewCount: 5 },
@@ -59,11 +65,15 @@ describe("QuizStartPage", () => {
       expect(screen.getByText("Vocabulary A (10)")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /Vocabulary A/ }));
-    expect(screen.getByText("10 words due")).toBeInTheDocument();
+    clickCheckbox(/Vocabulary A/);
+    await waitFor(() => {
+      expect(screen.getByText("10 words due")).toBeInTheDocument();
+    });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /Vocabulary B/ }));
-    expect(screen.getByText("15 words due")).toBeInTheDocument();
+    clickCheckbox(/Vocabulary B/);
+    await waitFor(() => {
+      expect(screen.getByText("15 words due")).toBeInTheDocument();
+    });
   });
 
   it("toggles all notebooks with the all checkbox", async () => {
@@ -77,11 +87,15 @@ describe("QuizStartPage", () => {
       expect(screen.getByText("Vocabulary A (10)")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /All notebooks/ }));
-    expect(screen.getByText("15 words due")).toBeInTheDocument();
+    clickCheckbox(/All notebooks/);
+    await waitFor(() => {
+      expect(screen.getByText("15 words due")).toBeInTheDocument();
+    });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /All notebooks/ }));
-    expect(screen.getByText("0 words due")).toBeInTheDocument();
+    clickCheckbox(/All notebooks/);
+    await waitFor(() => {
+      expect(screen.getByText("0 words due")).toBeInTheDocument();
+    });
   });
 
   it("toggles include unstudied words", async () => {
@@ -118,7 +132,11 @@ describe("QuizStartPage", () => {
       expect(screen.getByText("Vocabulary A (10)")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: /All notebooks/ }));
+    clickCheckbox(/All notebooks/);
+    await waitFor(() => {
+      expect(screen.getByText("15 words due")).toBeInTheDocument();
+    });
+
     fireEvent.click(screen.getByText("Start"));
 
     await waitFor(() => {
