@@ -60,6 +60,11 @@ type NoteSink interface {
 	WriteAll(notes []notebook.NoteRecord) error
 }
 
+// LearningSink writes exported learning log records.
+type LearningSink interface {
+	WriteAll(logs []learning.LearningLog) error
+}
+
 // ImportNotesResult tracks counts for note import.
 type ImportNotesResult struct {
 	NotesNew, NotesSkipped, NotesUpdated int
@@ -403,17 +408,26 @@ type ExportNotesResult struct {
 	NotesExported, NotebookNotesExported int
 }
 
+// ExportLearningLogsResult tracks counts for learning log export.
+type ExportLearningLogsResult struct {
+	LearningLogsExported int
+}
+
 // Exporter reads DB data and writes to YAML files.
 type Exporter struct {
-	noteRepo notebook.NoteRepository
-	noteSink NoteSink
+	noteRepo     notebook.NoteRepository
+	learningRepo learning.LearningRepository
+	noteSink     NoteSink
+	learningSink LearningSink
 }
 
 // NewExporter creates a new Exporter.
-func NewExporter(noteRepo notebook.NoteRepository, noteSink NoteSink) *Exporter {
+func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, noteSink NoteSink, learningSink LearningSink) *Exporter {
 	return &Exporter{
-		noteRepo: noteRepo,
-		noteSink: noteSink,
+		noteRepo:     noteRepo,
+		learningRepo: learningRepo,
+		noteSink:     noteSink,
+		learningSink: learningSink,
 	}
 }
 
@@ -436,5 +450,21 @@ func (exp *Exporter) ExportNotes(ctx context.Context) (*ExportNotesResult, error
 	return &ExportNotesResult{
 		NotesExported:         len(notes),
 		NotebookNotesExported: nnCount,
+	}, nil
+}
+
+// ExportLearningLogs reads learning logs from the database and writes them to YAML.
+func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLogsResult, error) {
+	logs, err := exp.learningRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load learning logs: %w", err)
+	}
+
+	if err := exp.learningSink.WriteAll(logs); err != nil {
+		return nil, fmt.Errorf("write learning logs: %w", err)
+	}
+
+	return &ExportLearningLogsResult{
+		LearningLogsExported: len(logs),
 	}, nil
 }

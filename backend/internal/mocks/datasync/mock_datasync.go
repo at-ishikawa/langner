@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 
 	rapidapi "github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	learning "github.com/at-ishikawa/langner/internal/learning"
 	notebook "github.com/at-ishikawa/langner/internal/notebook"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -171,4 +172,42 @@ func (m *MockNoteSink) WriteAll(notes []notebook.NoteRecord) error {
 func (mr *MockNoteSinkMockRecorder) WriteAll(notes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockNoteSink)(nil).WriteAll), notes)
+}
+
+// MockLearningSink is a mock of LearningSink interface.
+type MockLearningSink struct {
+	ctrl     *gomock.Controller
+	recorder *MockLearningSinkMockRecorder
+	isgomock struct{}
+}
+
+// MockLearningSinkMockRecorder is the mock recorder for MockLearningSink.
+type MockLearningSinkMockRecorder struct {
+	mock *MockLearningSink
+}
+
+// NewMockLearningSink creates a new mock instance.
+func NewMockLearningSink(ctrl *gomock.Controller) *MockLearningSink {
+	mock := &MockLearningSink{ctrl: ctrl}
+	mock.recorder = &MockLearningSinkMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockLearningSink) EXPECT() *MockLearningSinkMockRecorder {
+	return m.recorder
+}
+
+// WriteAll mocks base method.
+func (m *MockLearningSink) WriteAll(logs []learning.LearningLog) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteAll", logs)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteAll indicates an expected call of WriteAll.
+func (mr *MockLearningSinkMockRecorder) WriteAll(logs any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockLearningSink)(nil).WriteAll), logs)
 }
