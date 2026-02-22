@@ -55,25 +55,16 @@ func newMigrateImportDBCommand() *cobra.Command {
 			}
 
 			yamlRepo := notebook.NewYAMLNoteRepository(reader)
-			sourceNotes, err := yamlRepo.FindAll(ctx)
-			if err != nil {
-				return fmt.Errorf("read notebook data: %w", err)
-			}
-
 			yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
+			jsonDictRepo := rapidapi.NewJSONDictionaryRepository(cfg.Dictionaries.RapidAPI.CacheDirectory)
 
-			dictResponses, err := rapidapi.NewReader().Read(cfg.Dictionaries.RapidAPI.CacheDirectory)
-			if err != nil {
-				return fmt.Errorf("read dictionary cache: %w", err)
-			}
-
-			importer := datasync.NewImporter(noteRepo, learningRepo, yamlLearningRepo, dictRepo, os.Stdout)
+			importer := datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, os.Stdout)
 			opts := datasync.ImportOptions{
 				DryRun:         dryRun,
 				UpdateExisting: updateExisting,
 			}
 
-			noteResult, err := importer.ImportNotes(ctx, sourceNotes, opts)
+			noteResult, err := importer.ImportNotes(ctx, opts)
 			if err != nil {
 				return fmt.Errorf("import notes: %w", err)
 			}
@@ -83,7 +74,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return fmt.Errorf("import learning logs: %w", err)
 			}
 
-			dictResult, err := importer.ImportDictionary(ctx, dictResponses, opts)
+			dictResult, err := importer.ImportDictionary(ctx, opts)
 			if err != nil {
 				return fmt.Errorf("import dictionary: %w", err)
 			}

@@ -1,6 +1,8 @@
 // Package datasync provides import/export orchestration between YAML files and database.
 package datasync
 
+//go:generate mockgen -source=datasync.go -destination=../mocks/datasync/mock_datasync.go -package=mock_datasync
+
 import (
 	"context"
 	"encoding/json"
@@ -24,13 +26,13 @@ type logKey struct {
 }
 
 type nnKey struct {
-	noteID                                          int64
+	noteID                                    int64
 	notebookType, notebookID, group, subgroup string
 }
 
 // classifyState holds mutable state passed through the classification loop.
 type classifyState struct {
-	result      *ImportResult
+	result      *ImportNotesResult
 	noteCache   map[noteKey]*notebook.NoteRecord
 	nnCache     map[nnKey]bool
 	newNotes    []*notebook.NoteRecord
@@ -38,23 +40,37 @@ type classifyState struct {
 	newNNs      []notebook.NotebookNote
 }
 
+// NoteSource provides source note records for import.
+type NoteSource interface {
+	FindAll(ctx context.Context) ([]notebook.NoteRecord, error)
+}
+
 // LearningSource provides learning history expressions by notebook.
 type LearningSource interface {
 	FindByNotebookID(notebookID string) ([]notebook.LearningHistoryExpression, error)
 }
 
-// ImportResult tracks counts for each import operation.
-type ImportResult struct {
+// DictionarySource provides cached dictionary API responses.
+type DictionarySource interface {
+	ReadAll() ([]rapidapi.Response, error)
+}
+
+// ImportNotesResult tracks counts for note import.
+type ImportNotesResult struct {
+	NotesNew, NotesSkipped, NotesUpdated int
+	NotebookNew, NotebookSkipped         int
+}
+
+// ImportLearningLogsResult tracks counts for learning log import.
+type ImportLearningLogsResult struct {
 	NotesNew        int
-	NotesSkipped    int
-	NotesUpdated    int
-	NotebookNew       int
-	NotebookSkipped   int
-	LearningNew       int
-	LearningSkipped   int
-	DictionaryNew     int
-	DictionarySkipped int
-	DictionaryUpdated int
+	LearningNew     int
+	LearningSkipped int
+}
+
+// ImportDictionaryResult tracks counts for dictionary import.
+type ImportDictionaryResult struct {
+	DictionaryNew, DictionarySkipped, DictionaryUpdated int
 }
 
 // ImportOptions controls import behavior.
@@ -65,33 +81,42 @@ type ImportOptions struct {
 
 // Importer reads YAML notebook data and writes to DB.
 type Importer struct {
-	noteRepo       notebook.NoteRepository
-	learningRepo   learning.LearningRepository
-	learningSource LearningSource
-	dictionaryRepo dictionary.DictionaryRepository
-	writer         io.Writer
+	noteRepo         notebook.NoteRepository
+	learningRepo     learning.LearningRepository
+	noteSource       NoteSource
+	learningSource   LearningSource
+	dictionarySource DictionarySource
+	dictionaryRepo   dictionary.DictionaryRepository
+	writer           io.Writer
 }
 
 // NewImporter creates a new Importer.
-func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, learningSource LearningSource, dictionaryRepo dictionary.DictionaryRepository, writer io.Writer) *Importer {
+func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, noteSource NoteSource, learningSource LearningSource, dictionarySource DictionarySource, dictionaryRepo dictionary.DictionaryRepository, writer io.Writer) *Importer {
 	return &Importer{
-		noteRepo:       noteRepo,
-		learningRepo:   learningRepo,
-		learningSource: learningSource,
-		dictionaryRepo: dictionaryRepo,
-		writer:         writer,
+		noteRepo:         noteRepo,
+		learningRepo:     learningRepo,
+		noteSource:       noteSource,
+		learningSource:   learningSource,
+		dictionarySource: dictionarySource,
+		dictionaryRepo:   dictionaryRepo,
+		writer:           writer,
 	}
 }
 
-// ImportNotes imports pre-converted source NoteRecords into the database.
-func (imp *Importer) ImportNotes(ctx context.Context, sourceNotes []notebook.NoteRecord, opts ImportOptions) (*ImportResult, error) {
+// ImportNotes reads source notes and imports them into the database.
+func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*ImportNotesResult, error) {
+	sourceNotes, err := imp.noteSource.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read source notes: %w", err)
+	}
+
 	allNotes, err := imp.noteRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load existing notes: %w", err)
 	}
 
 	state := &classifyState{
-		result:      &ImportResult{},
+		result:      &ImportNotesResult{},
 		noteCache:   make(map[noteKey]*notebook.NoteRecord, len(allNotes)),
 		nnCache:     make(map[nnKey]bool),
 		updateNotes: make(map[noteKey]*notebook.NoteRecord),
@@ -177,8 +202,8 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 }
 
 // ImportLearningLogs imports learning history YAML data into the database.
-func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions) (*ImportResult, error) {
-	var result ImportResult
+func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions) (*ImportLearningLogsResult, error) {
+	var result ImportLearningLogsResult
 
 	allNotes, err := imp.noteRepo.FindAll(ctx)
 	if err != nil {
@@ -313,9 +338,14 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 	return &result, nil
 }
 
-// ImportDictionary imports dictionary API responses into the database.
-func (imp *Importer) ImportDictionary(ctx context.Context, responses []rapidapi.Response, opts ImportOptions) (*ImportResult, error) {
-	var result ImportResult
+// ImportDictionary reads dictionary responses and imports them into the database.
+func (imp *Importer) ImportDictionary(ctx context.Context, opts ImportOptions) (*ImportDictionaryResult, error) {
+	responses, err := imp.dictionarySource.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("read dictionary source: %w", err)
+	}
+
+	var result ImportDictionaryResult
 
 	allEntries, err := imp.dictionaryRepo.FindAll(ctx)
 	if err != nil {
