@@ -7,6 +7,7 @@
 package apiv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -493,7 +494,7 @@ var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
-	"\x11api/v1/quiz.proto\x12\x06api.v1\"\x17\n" +
+	"\x11api/v1/quiz.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"\x17\n" +
 	"\x15GetQuizOptionsRequest\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
 	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"i\n" +
@@ -501,9 +502,9 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
-	"\freview_count\x18\x03 \x01(\x05R\vreviewCount\"b\n" +
-	"\x10StartQuizRequest\x12!\n" +
-	"\fnotebook_ids\x18\x01 \x03(\tR\vnotebookIds\x12+\n" +
+	"\freview_count\x18\x03 \x01(\x05R\vreviewCount\"l\n" +
+	"\x10StartQuizRequest\x12+\n" +
+	"\fnotebook_ids\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\vnotebookIds\x12+\n" +
 	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"F\n" +
 	"\x11StartQuizResponse\x121\n" +
 	"\n" +
@@ -515,10 +516,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\bexamples\x18\x03 \x03(\v2\x0f.api.v1.ExampleR\bexamples\"7\n" +
 	"\aExample\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x18\n" +
-	"\aspeaker\x18\x02 \x01(\tR\aspeaker\"p\n" +
-	"\x13SubmitAnswerRequest\x12\x17\n" +
-	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x16\n" +
-	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\aspeaker\x18\x02 \x01(\tR\aspeaker\"\x86\x01\n" +
+	"\x13SubmitAnswerRequest\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
+	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"b\n" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +

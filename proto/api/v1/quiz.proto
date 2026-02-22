@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package api.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1";
 
 service QuizService {
@@ -23,7 +25,9 @@ message NotebookSummary {
 }
 
 message StartQuizRequest {
-  repeated string notebook_ids = 1;
+  repeated string notebook_ids = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
   bool include_unstudied = 2;
 }
 
@@ -43,8 +47,15 @@ message Example {
 }
 
 message SubmitAnswerRequest {
-  int64 note_id = 1;
-  string answer = 2;
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  string answer = 2 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      pattern: "\\S"
+    }
+  ];
   int64 response_time_ms = 3;
 }
 
