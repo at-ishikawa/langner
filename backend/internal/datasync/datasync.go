@@ -59,17 +59,19 @@ type ImportOptions struct {
 
 // Importer reads YAML notebook data and writes to DB.
 type Importer struct {
-	noteRepo     notebook.NoteRepository
-	learningRepo learning.LearningRepository
-	writer       io.Writer
+	noteRepo       notebook.NoteRepository
+	learningRepo   learning.LearningRepository
+	learningSource LearningSource
+	writer         io.Writer
 }
 
 // NewImporter creates a new Importer.
-func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, writer io.Writer) *Importer {
+func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, learningSource LearningSource, writer io.Writer) *Importer {
 	return &Importer{
-		noteRepo:     noteRepo,
-		learningRepo: learningRepo,
-		writer:       writer,
+		noteRepo:       noteRepo,
+		learningRepo:   learningRepo,
+		learningSource: learningSource,
+		writer:         writer,
 	}
 }
 
@@ -167,7 +169,7 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 }
 
 // ImportLearningLogs imports learning history YAML data into the database.
-func (imp *Importer) ImportLearningLogs(ctx context.Context, source LearningSource, opts ImportOptions) (*ImportResult, error) {
+func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions) (*ImportResult, error) {
 	var result ImportResult
 
 	allNotes, err := imp.noteRepo.FindAll(ctx)
@@ -204,7 +206,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, source LearningSour
 	// Collect all expressions from the source
 	var allExpressions []notebook.LearningHistoryExpression
 	for _, id := range sortedIDs {
-		exprs, err := source.FindByNotebookID(id)
+		exprs, err := imp.learningSource.FindByNotebookID(id)
 		if err != nil {
 			return nil, fmt.Errorf("find expressions for notebook %s: %w", id, err)
 		}

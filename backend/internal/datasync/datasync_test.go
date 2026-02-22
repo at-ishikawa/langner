@@ -322,7 +322,7 @@ func TestImporter_ImportNotes(t *testing.T) {
 			tt.setup(noteRepo)
 
 			var buf bytes.Buffer
-			imp := NewImporter(noteRepo, learningRepo, &buf)
+			imp := NewImporter(noteRepo, learningRepo, nil, &buf)
 
 			got, err := imp.ImportNotes(context.Background(), tt.sourceNotes, tt.opts)
 			if tt.wantErr {
@@ -688,9 +688,9 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 			tt.setup(noteRepo, learningRepo)
 
 			var buf bytes.Buffer
-			imp := NewImporter(noteRepo, learningRepo, &buf)
+			imp := NewImporter(noteRepo, learningRepo, tt.source, &buf)
 
-			got, err := imp.ImportLearningLogs(context.Background(), tt.source, tt.opts)
+			got, err := imp.ImportLearningLogs(context.Background(), tt.opts)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
