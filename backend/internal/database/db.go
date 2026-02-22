@@ -2,6 +2,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -30,7 +31,7 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 
 	db, err := sqlx.Open("mysql", mysqlCfg.FormatDSN())
 	if err != nil {
-		return nil, fmt.Errorf("sqlx.Open() > %w", err)
+		return nil, fmt.Errorf("open database connection: %w", err)
 	}
 
 	if cfg.MaxOpenConns > 0 {
@@ -44,5 +45,25 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 	}
 
 	return db, nil
+}
+
+// RunInTx runs fn within a database transaction.
+// If fn returns an error, the transaction is rolled back; otherwise, it is committed.
+func RunInTx(ctx context.Context, db *sqlx.DB, fn func(ctx context.Context, tx *sqlx.Tx) error) error {
+	tx, err := db.BeginTxx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin transaction: %w", err)
+	}
+
+	if err := fn(ctx, tx); err != nil {
+		if rbErr := tx.Rollback(); rbErr != nil {
+			return fmt.Errorf("rollback transaction: %w (original error: %v)", rbErr, err)
+		}
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
 }
 
