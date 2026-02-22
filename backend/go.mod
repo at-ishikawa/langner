@@ -25,13 +25,17 @@ require (
 )
 
 require (
+	buf.build/go/protovalidate v1.1.3 // indirect
+	cel.dev/expr v0.25.1 // indirect
 	filippo.io/edwards25519 v1.1.0 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/canhlinh/svg2png v0.0.0-20201124065332-6ba87c82371f // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.11 // indirect
 	github.com/go-pdf/fpdf v0.9.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
+	github.com/google/cel-go v0.27.0 // indirect
 	github.com/jessp01/gohighlight v0.21.4 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -47,9 +51,11 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.45.0 // indirect
+	golang.org/x/exp v0.0.0-20250813145105-42675adae3e6 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.12.0 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250811230008-5f3141c8851a // indirect
 	gopkg.in/check.v1 v1.0.0-20190902080502-41f04d3bba15 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

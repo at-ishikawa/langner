@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 )
@@ -132,10 +133,65 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 	}
 }
 
-func TestNewInvalidArgumentError(t *testing.T) {
-	got := newInvalidArgumentError("field_name", "field is required")
+func TestValidateRequest(t *testing.T) {
+	tests := []struct {
+		name          string
+		msg           proto.Message
+		wantErr       bool
+		wantDetailLen int
+	}{
+		{
+			name:    "valid StartQuizRequest passes",
+			msg:     &apiv1.StartQuizRequest{NotebookIds: []string{"nb-1"}},
+			wantErr: false,
+		},
+		{
+			name:          "empty notebook_ids returns error with detail",
+			msg:           &apiv1.StartQuizRequest{},
+			wantErr:       true,
+			wantDetailLen: 1,
+		},
+		{
+			name:    "valid SubmitAnswerRequest passes",
+			msg:     &apiv1.SubmitAnswerRequest{NoteId: 1, Answer: "hello"},
+			wantErr: false,
+		},
+		{
+			name:          "zero note_id returns error with detail",
+			msg:           &apiv1.SubmitAnswerRequest{NoteId: 0, Answer: "hello"},
+			wantErr:       true,
+			wantDetailLen: 1,
+		},
+		{
+			name:          "empty answer returns error with detail",
+			msg:           &apiv1.SubmitAnswerRequest{NoteId: 1, Answer: ""},
+			wantErr:       true,
+			wantDetailLen: 1,
+		},
+		{
+			name:          "whitespace-only answer returns error with detail",
+			msg:           &apiv1.SubmitAnswerRequest{NoteId: 1, Answer: "   "},
+			wantErr:       true,
+			wantDetailLen: 1,
+		},
+		{
+			name:          "multiple violations returns error with detail",
+			msg:           &apiv1.SubmitAnswerRequest{NoteId: 0, Answer: ""},
+			wantErr:       true,
+			wantDetailLen: 1,
+		},
+	}
 
-	assert.Equal(t, connect.CodeInvalidArgument, got.Code())
-	assert.Contains(t, got.Message(), "field_name")
-	assert.Greater(t, len(got.Details()), 0)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := validateRequest(tt.msg)
+			if !tt.wantErr {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, connect.CodeInvalidArgument, got.Code())
+			assert.Len(t, got.Details(), tt.wantDetailLen)
+		})
+	}
 }

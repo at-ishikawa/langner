@@ -3,11 +3,13 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"strings"
 
+	"buf.build/go/protovalidate"
 	"connectrpc.com/connect"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/protobuf/proto"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
@@ -36,8 +38,8 @@ func (h *QuizHandler) StartQuiz(
 	ctx context.Context,
 	req *connect.Request[apiv1.StartQuizRequest],
 ) (*connect.Response[apiv1.StartQuizResponse], error) {
-	if len(req.Msg.GetNotebookIds()) == 0 {
-		return nil, newInvalidArgumentError("notebook_ids", "at least one notebook ID is required")
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
 	}
 
 	return connect.NewResponse(&apiv1.StartQuizResponse{}), nil
@@ -48,29 +50,35 @@ func (h *QuizHandler) SubmitAnswer(
 	ctx context.Context,
 	req *connect.Request[apiv1.SubmitAnswerRequest],
 ) (*connect.Response[apiv1.SubmitAnswerResponse], error) {
-	noteID := req.Msg.GetNoteId()
-	answer := req.Msg.GetAnswer()
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 
-	if noteID == 0 {
-		return nil, newInvalidArgumentError("note_id", "note_id is required")
-	}
-	if strings.TrimSpace(answer) == "" {
-		return nil, newInvalidArgumentError("answer", "answer is required")
-	}
+	noteID := req.Msg.GetNoteId()
 
 	// No active session in stub -- always return not found
 	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
 }
 
-func newInvalidArgumentError(field, description string) *connect.Error {
-	err := connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s: %s", field, description))
-	detail, detailErr := connect.NewErrorDetail(&errdetails.BadRequest{
-		FieldViolations: []*errdetails.BadRequest_FieldViolation{
-			{Field: field, Description: description},
-		},
-	})
-	if detailErr == nil {
-		err.AddDetail(detail)
+func validateRequest(msg proto.Message) *connect.Error {
+	if err := protovalidate.Validate(msg); err != nil {
+		connectErr := connect.NewError(connect.CodeInvalidArgument, err)
+		var valErr *protovalidate.ValidationError
+		if errors.As(err, &valErr) {
+			var fieldViolations []*errdetails.BadRequest_FieldViolation
+			for _, v := range valErr.Violations {
+				fieldViolations = append(fieldViolations, &errdetails.BadRequest_FieldViolation{
+					Field:       protovalidate.FieldPathString(v.Proto.GetField()),
+					Description: v.Proto.GetMessage(),
+				})
+			}
+			if detail, detailErr := connect.NewErrorDetail(&errdetails.BadRequest{
+				FieldViolations: fieldViolations,
+			}); detailErr == nil {
+				connectErr.AddDetail(detail)
+			}
+		}
+		return connectErr
 	}
-	return err
+	return nil
 }
