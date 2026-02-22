@@ -49,14 +49,10 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return fmt.Errorf("create notebook reader: %w", err)
 			}
 
-			storyIndexes, err := reader.ReadAllStoryNotebooks()
+			yamlRepo := notebook.NewYAMLNoteRepository(reader)
+			sourceNotes, err := yamlRepo.FindAll(ctx)
 			if err != nil {
-				return fmt.Errorf("read story notebooks: %w", err)
-			}
-
-			flashcardIndexes, err := reader.ReadAllFlashcardNotebooks()
-			if err != nil {
-				return fmt.Errorf("read flashcard notebooks: %w", err)
+				return fmt.Errorf("read notebook data: %w", err)
 			}
 
 			importer := datasync.NewImporter(noteRepo, os.Stdout)
@@ -65,7 +61,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 				UpdateExisting: updateExisting,
 			}
 
-			noteResult, err := importer.ImportNotes(ctx, storyIndexes, flashcardIndexes, opts)
+			noteResult, err := importer.ImportNotes(ctx, sourceNotes, opts)
 			if err != nil {
 				return fmt.Errorf("import notes: %w", err)
 			}

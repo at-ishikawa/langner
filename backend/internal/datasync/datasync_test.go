@@ -16,42 +16,26 @@ import (
 
 func TestImporter_ImportNotes(t *testing.T) {
 	tests := []struct {
-		name       string
-		stories    map[string]notebook.Index
-		flashcards map[string]notebook.FlashcardIndex
-		opts       ImportOptions
-		setup      func(noteRepo *mock_notebook.MockNoteRepository)
-		want       *ImportResult
-		wantErr    bool
+		name        string
+		sourceNotes []notebook.NoteRecord
+		opts        ImportOptions
+		setup       func(noteRepo *mock_notebook.MockNoteRepository)
+		want        *ImportResult
+		wantErr     bool
 	}{
 		{
-			name: "new story note is created",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "break the ice",
-												Definition: "start a conversation",
-												Meaning:    "to initiate social interaction",
-											},
-										},
-									},
-								},
-							},
-						},
+			name: "new note is created",
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "break the ice",
+					Entry:   "start a conversation",
+					Meaning: "to initiate social interaction",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Opening"},
 					},
 				},
 			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{},
+			opts: ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
@@ -75,31 +59,16 @@ func TestImporter_ImportNotes(t *testing.T) {
 		},
 		{
 			name: "existing note is skipped when UpdateExisting is false",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "break the ice",
-												Definition: "start a conversation",
-											},
-										},
-									},
-								},
-							},
-						},
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage: "break the ice",
+					Entry: "start a conversation",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Opening"},
 					},
 				},
 			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{},
+			opts: ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Usage: "break the ice", Entry: "start a conversation", NotebookNotes: []notebook.NotebookNote{
@@ -114,32 +83,17 @@ func TestImporter_ImportNotes(t *testing.T) {
 		},
 		{
 			name: "existing note is updated when UpdateExisting is true",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "break the ice",
-												Definition: "start a conversation",
-												Meaning:    "updated meaning",
-											},
-										},
-									},
-								},
-							},
-						},
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "break the ice",
+					Entry:   "start a conversation",
+					Meaning: "updated meaning",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Opening"},
 					},
 				},
 			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{UpdateExisting: true},
+			opts: ImportOptions{UpdateExisting: true},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Usage: "break the ice", Entry: "start a conversation"},
@@ -161,22 +115,13 @@ func TestImporter_ImportNotes(t *testing.T) {
 		},
 		{
 			name: "skipped note with new notebook_note only inserts notebook_note",
-			stories: map[string]notebook.Index{},
-			flashcards: map[string]notebook.FlashcardIndex{
-				"vocab-cards": {
-					ID:   "vocab-cards",
-					Name: "Vocabulary Cards",
-					Notebooks: []notebook.FlashcardNotebook{
-						{
-							Title: "Common Idioms",
-							Cards: []notebook.Note{
-								{
-									Expression: "break the ice",
-									Definition: "start a conversation",
-									Meaning:    "to initiate social interaction",
-								},
-							},
-						},
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "break the ice",
+					Entry:   "start a conversation",
+					Meaning: "to initiate social interaction",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "flashcard", NotebookID: "vocab-cards", Group: "Common Idioms"},
 					},
 				},
 			},
@@ -201,22 +146,14 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 		},
 		{
-			name:    "flashcard note is created with correct notebook type",
-			stories: map[string]notebook.Index{},
-			flashcards: map[string]notebook.FlashcardIndex{
-				"vocab-cards": {
-					ID:   "vocab-cards",
-					Name: "Vocabulary Cards",
-					Notebooks: []notebook.FlashcardNotebook{
-						{
-							Title: "Common Idioms",
-							Cards: []notebook.Note{
-								{
-									Expression: "lose one's temper",
-									Meaning:    "to become angry",
-								},
-							},
-						},
+			name: "flashcard note is created with correct notebook type",
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "lose one's temper",
+					Entry:   "lose one's temper",
+					Meaning: "to become angry",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "flashcard", NotebookID: "vocab-cards", Group: "Common Idioms"},
 					},
 				},
 			},
@@ -240,31 +177,16 @@ func TestImporter_ImportNotes(t *testing.T) {
 		},
 		{
 			name: "dry run does not create or update",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "break the ice",
-												Definition: "start a conversation",
-											},
-										},
-									},
-								},
-							},
-						},
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage: "break the ice",
+					Entry: "start a conversation",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Opening"},
 					},
 				},
 			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{DryRun: true},
+			opts: ImportOptions{DryRun: true},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				// No BatchCreate or BatchUpdate calls expected
@@ -275,78 +197,25 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 		},
 		{
-			name: "note with empty definition uses expression as entry",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "resilient",
-												Meaning:    "able to recover quickly",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{},
-			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
-				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
-				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
-						require.Len(t, notes, 1)
-						assert.Equal(t, "resilient", notes[0].Usage)
-						assert.Equal(t, "resilient", notes[0].Entry)
-						return nil
-					})
-			},
-			want: &ImportResult{
-				NotesNew:    1,
-				NotebookNew: 1,
-			},
-		},
-		{
 			name: "note with images and references",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "resilient",
-												Meaning:    "able to recover",
-												Images:     []string{"https://example.com/img1.png", "https://example.com/img2.png"},
-												References: []notebook.Reference{
-													{URL: "https://example.com/ref1", Description: "Reference 1"},
-												},
-											},
-										},
-									},
-								},
-							},
-						},
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "resilient",
+					Entry:   "resilient",
+					Meaning: "able to recover",
+					Images: []notebook.NoteImage{
+						{URL: "https://example.com/img1.png", SortOrder: 0},
+						{URL: "https://example.com/img2.png", SortOrder: 1},
+					},
+					References: []notebook.NoteReference{
+						{Link: "https://example.com/ref1", Description: "Reference 1", SortOrder: 0},
+					},
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Opening"},
 					},
 				},
 			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{},
+			opts: ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
@@ -370,10 +239,9 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 		},
 		{
-			name:       "FindAll error",
-			stories:    map[string]notebook.Index{},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{},
+			name:        "FindAll error",
+			sourceNotes: []notebook.NoteRecord{},
+			opts:        ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
 			},
@@ -381,31 +249,17 @@ func TestImporter_ImportNotes(t *testing.T) {
 		},
 		{
 			name: "BatchCreate error propagates",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "resilient",
-												Meaning:    "able to recover quickly",
-											},
-										},
-									},
-								},
-							},
-						},
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "resilient",
+					Entry:   "resilient",
+					Meaning: "able to recover quickly",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Opening"},
 					},
 				},
 			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{},
+			opts: ImportOptions{},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).Return(fmt.Errorf("insert failed"))
@@ -414,32 +268,17 @@ func TestImporter_ImportNotes(t *testing.T) {
 		},
 		{
 			name: "BatchUpdate error propagates",
-			stories: map[string]notebook.Index{
-				"test-story": {
-					ID: "test-story",
-					Notebooks: [][]notebook.StoryNotebook{
-						{
-							{
-								Event: "Episode 1",
-								Scenes: []notebook.StoryScene{
-									{
-										Title: "Opening",
-										Definitions: []notebook.Note{
-											{
-												Expression: "break the ice",
-												Definition: "start a conversation",
-												Meaning:    "updated meaning",
-											},
-										},
-									},
-								},
-							},
-						},
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "break the ice",
+					Entry:   "start a conversation",
+					Meaning: "updated meaning",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Opening"},
 					},
 				},
 			},
-			flashcards: map[string]notebook.FlashcardIndex{},
-			opts:       ImportOptions{UpdateExisting: true},
+			opts: ImportOptions{UpdateExisting: true},
 			setup: func(noteRepo *mock_notebook.MockNoteRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Usage: "break the ice", Entry: "start a conversation"},
@@ -449,23 +288,14 @@ func TestImporter_ImportNotes(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name:    "BatchUpdate error propagates for new notebook_note on existing note",
-			stories: map[string]notebook.Index{},
-			flashcards: map[string]notebook.FlashcardIndex{
-				"vocab-cards": {
-					ID:   "vocab-cards",
-					Name: "Vocabulary Cards",
-					Notebooks: []notebook.FlashcardNotebook{
-						{
-							Title: "Common Idioms",
-							Cards: []notebook.Note{
-								{
-									Expression: "break the ice",
-									Definition: "start a conversation",
-									Meaning:    "to initiate social interaction",
-								},
-							},
-						},
+			name: "BatchUpdate error propagates for new notebook_note on existing note",
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "break the ice",
+					Entry:   "start a conversation",
+					Meaning: "to initiate social interaction",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "flashcard", NotebookID: "vocab-cards", Group: "Common Idioms"},
 					},
 				},
 			},
@@ -490,7 +320,7 @@ func TestImporter_ImportNotes(t *testing.T) {
 			var buf bytes.Buffer
 			imp := NewImporter(noteRepo, &buf)
 
-			got, err := imp.ImportNotes(context.Background(), tt.stories, tt.flashcards, tt.opts)
+			got, err := imp.ImportNotes(context.Background(), tt.sourceNotes, tt.opts)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
