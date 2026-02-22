@@ -4,21 +4,20 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/at-ishikawa/langner/internal/learning"
 )
 
 type exportLearningLog struct {
-	ID             int64     `yaml:"id"`
-	NoteID         int64     `yaml:"note_id"`
-	Status         string    `yaml:"status"`
-	LearnedAt      time.Time `yaml:"learned_at"`
-	Quality        int       `yaml:"quality"`
-	ResponseTimeMs int       `yaml:"response_time_ms"`
-	QuizType       string    `yaml:"quiz_type"`
-	IntervalDays   int       `yaml:"interval_days"`
-	EasinessFactor float64   `yaml:"easiness_factor"`
+	ID             int64   `yaml:"id"`
+	NoteID         int64   `yaml:"note_id"`
+	Status         string  `yaml:"status"`
+	LearnedAt      string  `yaml:"learned_at"`
+	Quality        int     `yaml:"quality"`
+	ResponseTimeMs int     `yaml:"response_time_ms"`
+	QuizType       string  `yaml:"quiz_type"`
+	IntervalDays   int     `yaml:"interval_days"`
+	EasinessFactor float64 `yaml:"easiness_factor"`
 }
 
 // YAMLLearningSink writes learning log records to a YAML file.
@@ -37,13 +36,13 @@ func (s *YAMLLearningSink) WriteAll(logs []learning.LearningLog) error {
 		return fmt.Errorf("create output directory: %w", err)
 	}
 
-	exportLogs := make([]exportLearningLog, len(logs))
+	out := make([]exportLearningLog, len(logs))
 	for i, l := range logs {
-		exportLogs[i] = exportLearningLog{
+		out[i] = exportLearningLog{
 			ID:             l.ID,
 			NoteID:         l.NoteID,
 			Status:         l.Status,
-			LearnedAt:      l.LearnedAt,
+			LearnedAt:      l.LearnedAt.Format("2006-01-02"),
 			Quality:        l.Quality,
 			ResponseTimeMs: l.ResponseTimeMs,
 			QuizType:       l.QuizType,
@@ -52,7 +51,7 @@ func (s *YAMLLearningSink) WriteAll(logs []learning.LearningLog) error {
 		}
 	}
 
-	if err := writeYAML(filepath.Join(s.outputDir, "learning_logs.yml"), exportLogs); err != nil {
+	if err := writeYAML(filepath.Join(s.outputDir, "learning_logs.yml"), out); err != nil {
 		return fmt.Errorf("write learning_logs.yml: %w", err)
 	}
 	return nil

@@ -883,12 +883,13 @@ func TestExporter_ExportNotes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
-			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 			noteSink := mock_datasync.NewMockNoteSink(ctrl)
 			learningSink := mock_datasync.NewMockLearningSink(ctrl)
-			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
 
 			tt.setup(noteRepo, noteSink)
+
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
+			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
 
 			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
 
@@ -989,98 +990,17 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
-			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 			noteSink := mock_datasync.NewMockNoteSink(ctrl)
 			learningSink := mock_datasync.NewMockLearningSink(ctrl)
-			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
 
 			tt.setup(learningRepo, learningSink)
+
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
+			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
 
 			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
 
 			got, err := exp.ExportLearningLogs(context.Background())
-			if tt.wantErr {
-				assert.Error(t, err)
-				return
-			}
-			require.NoError(t, err)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestExporter_ExportDictionary(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink)
-		want    *ExportDictionaryResult
-		wantErr bool
-	}{
-		{
-			name: "dictionary entries are exported",
-			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
-				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
-					{Word: "resilient", SourceType: "rapidapi", Response: json.RawMessage(`{"word":"resilient"}`)},
-					{Word: "tenacious", SourceType: "rapidapi", Response: json.RawMessage(`{"word":"tenacious"}`)},
-				}, nil)
-				dictSink.EXPECT().WriteAll(gomock.Any()).
-					DoAndReturn(func(entries []dictionary.DictionaryEntry) error {
-						require.Len(t, entries, 2)
-						assert.Equal(t, "resilient", entries[0].Word)
-						assert.Equal(t, "tenacious", entries[1].Word)
-						return nil
-					})
-			},
-			want: &ExportDictionaryResult{
-				DictionaryExported: 2,
-			},
-		},
-		{
-			name: "empty database exports zero",
-			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
-				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{}, nil)
-				dictSink.EXPECT().WriteAll(gomock.Any()).
-					DoAndReturn(func(entries []dictionary.DictionaryEntry) error {
-						assert.Empty(t, entries)
-						return nil
-					})
-			},
-			want: &ExportDictionaryResult{},
-		},
-		{
-			name: "dictionaryRepo.FindAll error propagates",
-			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
-				dictRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
-			},
-			wantErr: true,
-		},
-		{
-			name: "dictionarySink.WriteAll error propagates",
-			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
-				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
-					{Word: "resilient", SourceType: "rapidapi"},
-				}, nil)
-				dictSink.EXPECT().WriteAll(gomock.Any()).Return(fmt.Errorf("write failed"))
-			},
-			wantErr: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
-			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
-			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
-			noteSink := mock_datasync.NewMockNoteSink(ctrl)
-			learningSink := mock_datasync.NewMockLearningSink(ctrl)
-			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
-
-			tt.setup(dictRepo, dictSink)
-
-			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
-
-			got, err := exp.ExportDictionary(context.Background())
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -1212,6 +1132,96 @@ func TestImporter_ImportDictionary(t *testing.T) {
 			imp := NewImporter(noteRepo, learningRepo, noteSource, learningSource, dictSource, dictRepo, &buf)
 
 			got, err := imp.ImportDictionary(context.Background(), tt.opts)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExporter_ExportDictionary(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink)
+		want    *ExportDictionaryResult
+		wantErr bool
+	}{
+		{
+			name: "dictionary entries are exported",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
+					{
+						Word:       "resilient",
+						SourceType: "rapidapi",
+						Response:   json.RawMessage(`{"word":"resilient"}`),
+					},
+					{
+						Word:       "tenacious",
+						SourceType: "rapidapi",
+						Response:   json.RawMessage(`{"word":"tenacious"}`),
+					},
+				}, nil)
+				dictSink.EXPECT().WriteAll(gomock.Any()).
+					DoAndReturn(func(entries []dictionary.DictionaryEntry) error {
+						require.Len(t, entries, 2)
+						assert.Equal(t, "resilient", entries[0].Word)
+						assert.Equal(t, "tenacious", entries[1].Word)
+						return nil
+					})
+			},
+			want: &ExportDictionaryResult{
+				DictionaryExported: 2,
+			},
+		},
+		{
+			name: "empty database exports zero",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{}, nil)
+				dictSink.EXPECT().WriteAll(gomock.Any()).
+					DoAndReturn(func(entries []dictionary.DictionaryEntry) error {
+						assert.Empty(t, entries)
+						return nil
+					})
+			},
+			want: &ExportDictionaryResult{},
+		},
+		{
+			name: "dictRepo.FindAll error propagates",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "dictSink.WriteAll error propagates",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
+					{Word: "resilient", SourceType: "rapidapi"},
+				}, nil)
+				dictSink.EXPECT().WriteAll(gomock.Any()).Return(fmt.Errorf("write failed"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
+			noteSink := mock_datasync.NewMockNoteSink(ctrl)
+			learningSink := mock_datasync.NewMockLearningSink(ctrl)
+			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
+
+			tt.setup(dictRepo, dictSink)
+
+			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink)
+
+			got, err := exp.ExportDictionary(context.Background())
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

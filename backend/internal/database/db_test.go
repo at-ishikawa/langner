@@ -87,45 +87,6 @@ func TestOpen(t *testing.T) {
 	}
 }
 
-func TestBuildMultiRowInsert(t *testing.T) {
-	tests := []struct {
-		name     string
-		table    string
-		columns  []string
-		rowCount int
-		want     string
-	}{
-		{
-			name:     "single row single column",
-			table:    "notes",
-			columns:  []string{"word"},
-			rowCount: 1,
-			want:     "INSERT INTO notes (word) VALUES (?)",
-		},
-		{
-			name:     "single row multiple columns",
-			table:    "notes",
-			columns:  []string{"word", "meaning", "level"},
-			rowCount: 1,
-			want:     "INSERT INTO notes (word, meaning, level) VALUES (?, ?, ?)",
-		},
-		{
-			name:     "multiple rows multiple columns",
-			table:    "learning_logs",
-			columns:  []string{"note_id", "status"},
-			rowCount: 3,
-			want:     "INSERT INTO learning_logs (note_id, status) VALUES (?, ?), (?, ?), (?, ?)",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := BuildMultiRowInsert(tt.table, tt.columns, tt.rowCount)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestRunInTx(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -198,6 +159,45 @@ func TestRunInTx(t *testing.T) {
 				require.NoError(t, err)
 			}
 			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestBuildMultiRowInsert(t *testing.T) {
+	tests := []struct {
+		name     string
+		table    string
+		columns  []string
+		rowCount int
+		want     string
+	}{
+		{
+			name:     "single row single column",
+			table:    "notes",
+			columns:  []string{"entry"},
+			rowCount: 1,
+			want:     "INSERT INTO notes (entry) VALUES (?)",
+		},
+		{
+			name:     "single row multiple columns",
+			table:    "notes",
+			columns:  []string{"entry", "usage", "meaning"},
+			rowCount: 1,
+			want:     "INSERT INTO notes (entry, usage, meaning) VALUES (?, ?, ?)",
+		},
+		{
+			name:     "multiple rows multiple columns",
+			table:    "learning_logs",
+			columns:  []string{"note_id", "status", "learned_at"},
+			rowCount: 3,
+			want:     "INSERT INTO learning_logs (note_id, status, learned_at) VALUES (?, ?, ?), (?, ?, ?), (?, ?, ?)",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := BuildMultiRowInsert(tt.table, tt.columns, tt.rowCount)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

@@ -49,7 +49,7 @@ func TestYAMLLearningSink_WriteAll(t *testing.T) {
 			wantYAML: `- id: 1
   note_id: 10
   status: understood
-  learned_at: 2025-01-15T10:00:00Z
+  learned_at: "2025-01-15"
   quality: 4
   response_time_ms: 1500
   quiz_type: notebook
@@ -58,7 +58,7 @@ func TestYAMLLearningSink_WriteAll(t *testing.T) {
 - id: 2
   note_id: 20
   status: misunderstood
-  learned_at: 2025-01-16T10:00:00Z
+  learned_at: "2025-01-16"
   quality: 2
   response_time_ms: 3000
   quiz_type: reverse
@@ -101,11 +101,25 @@ func TestYAMLLearningSink_WriteAll(t *testing.T) {
 
 	t.Run("writeYAML error returns error", func(t *testing.T) {
 		dir := t.TempDir()
+		// Create learning_logs.yml as a directory to cause os.Create to fail
 		require.NoError(t, os.MkdirAll(filepath.Join(dir, "learning_logs.yml"), 0o755))
 
 		sink := NewYAMLLearningSink(dir)
 		err := sink.WriteAll([]learning.LearningLog{{ID: 1, NoteID: 10, Status: "understood"}})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "write learning_logs.yml")
+	})
+
+	t.Run("creates output directory if it does not exist", func(t *testing.T) {
+		dir := t.TempDir()
+		subDir := filepath.Join(dir, "nested", "output")
+		sink := NewYAMLLearningSink(subDir)
+
+		err := sink.WriteAll([]learning.LearningLog{})
+		require.NoError(t, err)
+
+		info, err := os.Stat(subDir)
+		require.NoError(t, err)
+		assert.True(t, info.IsDir())
 	})
 }
