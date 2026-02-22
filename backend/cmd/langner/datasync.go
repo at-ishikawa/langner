@@ -124,7 +124,7 @@ func newMigrateExportDBCommand() *cobra.Command {
 			noteRepo := notebook.NewDBNoteRepository(db)
 			noteSink := datasync.NewYAMLNoteSink(outputDir)
 
-			exporter := datasync.NewExporter(noteRepo, noteSink, os.Stdout)
+			exporter := datasync.NewExporter(noteRepo, noteSink)
 
 			noteResult, err := exporter.ExportNotes(ctx)
 			if err != nil {

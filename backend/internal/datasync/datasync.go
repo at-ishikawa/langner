@@ -407,15 +407,13 @@ type ExportNotesResult struct {
 type Exporter struct {
 	noteRepo notebook.NoteRepository
 	noteSink NoteSink
-	writer   io.Writer
 }
 
 // NewExporter creates a new Exporter.
-func NewExporter(noteRepo notebook.NoteRepository, noteSink NoteSink, writer io.Writer) *Exporter {
+func NewExporter(noteRepo notebook.NoteRepository, noteSink NoteSink) *Exporter {
 	return &Exporter{
 		noteRepo: noteRepo,
 		noteSink: noteSink,
-		writer:   writer,
 	}
 }
 
@@ -435,7 +433,6 @@ func (exp *Exporter) ExportNotes(ctx context.Context) (*ExportNotesResult, error
 		nnCount += len(n.NotebookNotes)
 	}
 
-	_, _ = fmt.Fprintf(exp.writer, "  Exported %d notes, %d notebook_notes\n", len(notes), nnCount)
 	return &ExportNotesResult{
 		NotesExported:         len(notes),
 		NotebookNotesExported: nnCount,

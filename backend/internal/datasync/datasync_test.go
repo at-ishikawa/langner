@@ -886,8 +886,7 @@ func TestExporter_ExportNotes(t *testing.T) {
 
 			tt.setup(noteRepo, noteSink)
 
-			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, noteSink, &buf)
+			exp := NewExporter(noteRepo, noteSink)
 
 			got, err := exp.ExportNotes(context.Background())
 			if tt.wantErr {
