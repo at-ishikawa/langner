@@ -3,7 +3,6 @@ package notebook
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/jmoiron/sqlx"
 
@@ -74,7 +73,7 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 		if imgCount > 0 {
-			q := buildMultiRowInsert("note_images", []string{"note_id", "url", "sort_order"}, imgCount)
+			q := database.BuildMultiRowInsert("note_images", []string{"note_id", "url", "sort_order"}, imgCount)
 			if _, err := tx.ExecContext(ctx, q, imgArgs...); err != nil {
 				return fmt.Errorf("insert note images: %w", err)
 			}
@@ -91,7 +90,7 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 		if refCount > 0 {
-			q := buildMultiRowInsert("note_references", []string{"note_id", "link", "description", "sort_order"}, refCount)
+			q := database.BuildMultiRowInsert("note_references", []string{"note_id", "link", "description", "sort_order"}, refCount)
 			if _, err := tx.ExecContext(ctx, q, refArgs...); err != nil {
 				return fmt.Errorf("insert note references: %w", err)
 			}
@@ -109,7 +108,7 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 		if nnCount > 0 {
-			q := buildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, nnCount)
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, nnCount)
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
@@ -140,7 +139,7 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 			for _, nn := range newNotebookNotes {
 				nnArgs = append(nnArgs, nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup)
 			}
-			q := buildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, len(newNotebookNotes))
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, len(newNotebookNotes))
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
@@ -148,13 +147,6 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 
 		return nil
 	})
-}
-
-// buildMultiRowInsert builds a multi-row INSERT query.
-func buildMultiRowInsert(table string, columns []string, rowCount int) string {
-	placeholder := "(" + strings.Repeat("?, ", len(columns)-1) + "?)"
-	values := strings.Repeat(placeholder+", ", rowCount-1) + placeholder
-	return fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", table, strings.Join(columns, ", "), values)
 }
 
 func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord) error {

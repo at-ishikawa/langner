@@ -5,11 +5,20 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
+	"time"
 
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 type noteKey struct{ usage, entry string }
+
+type logKey struct {
+	noteID    int64
+	quizType  string
+	learnedAt time.Time
+}
 
 type nnKey struct {
 	noteID                                          int64
@@ -33,6 +42,8 @@ type ImportResult struct {
 	NotesUpdated    int
 	NotebookNew     int
 	NotebookSkipped int
+	LearningNew     int
+	LearningSkipped int
 }
 
 // ImportOptions controls import behavior.
@@ -43,15 +54,17 @@ type ImportOptions struct {
 
 // Importer reads YAML notebook data and writes to DB.
 type Importer struct {
-	noteRepo notebook.NoteRepository
-	writer   io.Writer
+	noteRepo     notebook.NoteRepository
+	learningRepo learning.LearningRepository
+	writer       io.Writer
 }
 
 // NewImporter creates a new Importer.
-func NewImporter(noteRepo notebook.NoteRepository, writer io.Writer) *Importer {
+func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, writer io.Writer) *Importer {
 	return &Importer{
-		noteRepo: noteRepo,
-		writer:   writer,
+		noteRepo:     noteRepo,
+		learningRepo: learningRepo,
+		writer:       writer,
 	}
 }
 
@@ -146,4 +159,138 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 		state.nnCache[nnk] = true
 		state.result.NotebookNew++
 	}
+}
+
+// ImportLearningLogs imports learning history YAML data into the database.
+func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories map[string][]notebook.LearningHistory, opts ImportOptions) (*ImportResult, error) {
+	var result ImportResult
+
+	allNotes, err := imp.noteRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load existing notes: %w", err)
+	}
+	noteMap := make(map[string]*notebook.NoteRecord, len(allNotes))
+	for i := range allNotes {
+		noteMap[allNotes[i].Entry] = &allNotes[i]
+	}
+
+	allLogs, err := imp.learningRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load existing learning logs: %w", err)
+	}
+	logCache := make(map[logKey]bool, len(allLogs))
+	for _, l := range allLogs {
+		logCache[logKey{l.NoteID, l.QuizType, l.LearnedAt}] = true
+	}
+
+	// Collect all expressions across all histories
+	var allExpressions []notebook.LearningHistoryExpression
+	keys := make([]string, 0, len(learningHistories))
+	for k := range learningHistories {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		histories := learningHistories[k]
+		for _, h := range histories {
+			if h.Metadata.Type == "flashcard" {
+				allExpressions = append(allExpressions, h.Expressions...)
+				continue
+			}
+			for _, scene := range h.Scenes {
+				allExpressions = append(allExpressions, scene.Expressions...)
+			}
+		}
+	}
+
+	// First pass: batch-create auto notes for unknown expressions
+	newNoteEntries := make(map[string]bool)
+	var newNotes []*notebook.NoteRecord
+	for _, expr := range allExpressions {
+		if _, ok := noteMap[expr.Expression]; !ok && !newNoteEntries[expr.Expression] {
+			newNoteEntries[expr.Expression] = true
+			n := &notebook.NoteRecord{
+				Usage: expr.Expression,
+				Entry: expr.Expression,
+			}
+			newNotes = append(newNotes, n)
+			_, _ = fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", expr.Expression, expr.Expression)
+			result.NotesNew++
+		}
+	}
+
+	if !opts.DryRun && len(newNotes) > 0 {
+		if err := imp.noteRepo.BatchCreate(ctx, newNotes); err != nil {
+			return nil, fmt.Errorf("batch create notes: %w", err)
+		}
+		// Re-fetch all notes to get the auto-generated IDs
+		allNotes, err = imp.noteRepo.FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("reload notes after batch create: %w", err)
+		}
+		noteMap = make(map[string]*notebook.NoteRecord, len(allNotes))
+		for i := range allNotes {
+			noteMap[allNotes[i].Entry] = &allNotes[i]
+		}
+	}
+
+	// Second pass: collect learning logs with correct note IDs
+	var newLogs []*learning.LearningLog
+	for _, expr := range allExpressions {
+		n, ok := noteMap[expr.Expression]
+		if !ok {
+			continue
+		}
+
+		for _, rec := range expr.LearnedLogs {
+			quizType := rec.QuizType
+			if quizType == "" {
+				quizType = "notebook"
+			}
+			if logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] {
+				result.LearningSkipped++
+				continue
+			}
+			newLogs = append(newLogs, &learning.LearningLog{
+				NoteID:         n.ID,
+				Status:         string(rec.Status),
+				LearnedAt:      rec.LearnedAt.Time,
+				Quality:        rec.Quality,
+				ResponseTimeMs: int(rec.ResponseTimeMs),
+				QuizType:       quizType,
+				IntervalDays:   rec.IntervalDays,
+				EasinessFactor: expr.EasinessFactor,
+			})
+			logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] = true
+			result.LearningNew++
+		}
+
+		for _, rec := range expr.ReverseLogs {
+			quizType := "reverse"
+			if logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] {
+				result.LearningSkipped++
+				continue
+			}
+			newLogs = append(newLogs, &learning.LearningLog{
+				NoteID:         n.ID,
+				Status:         string(rec.Status),
+				LearnedAt:      rec.LearnedAt.Time,
+				Quality:        rec.Quality,
+				ResponseTimeMs: int(rec.ResponseTimeMs),
+				QuizType:       quizType,
+				IntervalDays:   rec.IntervalDays,
+				EasinessFactor: expr.ReverseEasinessFactor,
+			})
+			logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] = true
+			result.LearningNew++
+		}
+	}
+
+	if !opts.DryRun && len(newLogs) > 0 {
+		if err := imp.learningRepo.BatchCreate(ctx, newLogs); err != nil {
+			return nil, fmt.Errorf("batch create learning logs: %w", err)
+		}
+	}
+
+	return &result, nil
 }

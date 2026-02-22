@@ -9,6 +9,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/datasync"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -37,6 +38,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 			}
 			defer func() { _ = db.Close() }()
 			noteRepo := notebook.NewDBNoteRepository(db)
+			learningRepo := learning.NewDBLearningRepository(db)
 
 			reader, err := notebook.NewReader(
 				cfg.Notebooks.StoriesDirectories,
@@ -55,7 +57,12 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return fmt.Errorf("read notebook data: %w", err)
 			}
 
-			importer := datasync.NewImporter(noteRepo, os.Stdout)
+			learningHistories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
+			if err != nil {
+				return fmt.Errorf("read learning histories: %w", err)
+			}
+
+			importer := datasync.NewImporter(noteRepo, learningRepo, os.Stdout)
 			opts := datasync.ImportOptions{
 				DryRun:         dryRun,
 				UpdateExisting: updateExisting,
@@ -66,12 +73,18 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return fmt.Errorf("import notes: %w", err)
 			}
 
+			learningResult, err := importer.ImportLearningLogs(ctx, learningHistories, opts)
+			if err != nil {
+				return fmt.Errorf("import learning logs: %w", err)
+			}
+
 			fmt.Println("\nImport Summary:")
 			if opts.DryRun {
 				fmt.Println("  (dry-run mode — no changes made)")
 			}
 			fmt.Printf("  Notes:              %d new, %d skipped, %d updated\n", noteResult.NotesNew, noteResult.NotesSkipped, noteResult.NotesUpdated)
 			fmt.Printf("  Notebook notes:     %d new, %d skipped\n", noteResult.NotebookNew, noteResult.NotebookSkipped)
+			fmt.Printf("  Learning logs:      %d new, %d skipped\n", learningResult.LearningNew, learningResult.LearningSkipped)
 
 			return nil
 		},
