@@ -7,153 +7,135 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 func TestYAMLLearningRepository_FindByNotebookID(t *testing.T) {
 	tests := []struct {
 		name       string
-		setupFiles map[string]string
+		setupDir   func(t *testing.T) string
 		notebookID string
-		wantLen    int
-		wantExprs  []string
+		want       []notebook.LearningHistoryExpression
 		wantErr    bool
 	}{
 		{
-			name: "story type returns expressions from scenes",
-			setupFiles: map[string]string{
-				"vocab.yml": `- metadata:
-    id: vocab-101
-    title: Vocabulary Unit 1
-  scenes:
-    - metadata:
-        title: Greetings
-      expressions:
-        - expression: break the ice
-          learned_logs: []
-        - expression: lose one's temper
-          learned_logs: []`,
-			},
-			notebookID: "vocab-101",
-			wantLen:    2,
-			wantExprs:  []string{"break the ice", "lose one's temper"},
-		},
-		{
 			name: "flashcard type returns top-level expressions",
-			setupFiles: map[string]string{
-				"flashcards.yml": `- metadata:
-    id: flashcard-set-1
-    title: Common Idioms
-    type: flashcard
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				content := `- metadata:
+    id: "notebook-1"
+    title: "Common Idioms"
+    type: "flashcard"
   expressions:
-    - expression: hit the nail on the head
+    - expression: "break the ice"
       learned_logs: []
-    - expression: a piece of cake
-      learned_logs: []`,
+    - expression: "lose one's temper"
+      learned_logs: []
+`
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "idioms.yml"), []byte(content), 0644))
+				return dir
 			},
-			notebookID: "flashcard-set-1",
-			wantLen:    2,
-			wantExprs:  []string{"hit the nail on the head", "a piece of cake"},
+			notebookID: "notebook-1",
+			want: []notebook.LearningHistoryExpression{
+				{Expression: "break the ice", LearnedLogs: []notebook.LearningRecord{}},
+				{Expression: "lose one's temper", LearnedLogs: []notebook.LearningRecord{}},
+			},
 		},
 		{
-			name: "non-matching notebook ID returns empty",
-			setupFiles: map[string]string{
-				"vocab.yml": `- metadata:
-    id: vocab-101
-    title: Vocabulary Unit 1
+			name: "story type returns expressions from all scenes",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				content := `- metadata:
+    id: "notebook-2"
+    title: "Story Notebook"
   scenes:
     - metadata:
-        title: Greetings
+        title: "Scene 1"
       expressions:
-        - expression: break the ice
-          learned_logs: []`,
+        - expression: "take a break"
+          learned_logs: []
+    - metadata:
+        title: "Scene 2"
+      expressions:
+        - expression: "hit the road"
+          learned_logs: []
+`
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "stories.yml"), []byte(content), 0644))
+				return dir
+			},
+			notebookID: "notebook-2",
+			want: []notebook.LearningHistoryExpression{
+				{Expression: "take a break", LearnedLogs: []notebook.LearningRecord{}},
+				{Expression: "hit the road", LearnedLogs: []notebook.LearningRecord{}},
+			},
+		},
+		{
+			name: "no matching notebook returns nil",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				content := `- metadata:
+    id: "notebook-1"
+    title: "Common Idioms"
+    type: "flashcard"
+  expressions:
+    - expression: "break the ice"
+      learned_logs: []
+`
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "idioms.yml"), []byte(content), 0644))
+				return dir
 			},
 			notebookID: "nonexistent-id",
-			wantLen:    0,
 		},
 		{
-			name: "multiple scenes in story type",
-			setupFiles: map[string]string{
-				"vocab.yml": `- metadata:
-    id: vocab-201
-    title: Vocabulary Unit 2
-  scenes:
-    - metadata:
-        title: At the store
-      expressions:
-        - expression: window shopping
-          learned_logs: []
-    - metadata:
-        title: At the park
-      expressions:
-        - expression: take a stroll
-          learned_logs: []`,
+			name: "invalid directory returns error",
+			setupDir: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "nonexistent")
 			},
-			notebookID: "vocab-201",
-			wantLen:    2,
-			wantExprs:  []string{"window shopping", "take a stroll"},
-		},
-		{
-			name: "multiple files only returns matching notebook",
-			setupFiles: map[string]string{
-				"unit1.yml": `- metadata:
-    id: unit-1
-    title: Unit 1
-  scenes:
-    - metadata:
-        title: Lesson 1
-      expressions:
-        - expression: once in a blue moon
-          learned_logs: []`,
-				"unit2.yml": `- metadata:
-    id: unit-2
-    title: Unit 2
-  scenes:
-    - metadata:
-        title: Lesson 2
-      expressions:
-        - expression: under the weather
-          learned_logs: []`,
-			},
-			notebookID: "unit-1",
-			wantLen:    1,
-			wantExprs:  []string{"once in a blue moon"},
-		},
-		{
-			name:       "nonexistent directory returns error",
-			setupFiles: nil,
-			notebookID: "any-id",
+			notebookID: "notebook-1",
 			wantErr:    true,
+		},
+		{
+			name: "multiple entries only matching returned",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				content := `- metadata:
+    id: "notebook-1"
+    title: "Common Idioms"
+    type: "flashcard"
+  expressions:
+    - expression: "break the ice"
+      learned_logs: []
+- metadata:
+    id: "notebook-2"
+    title: "Advanced Phrases"
+    type: "flashcard"
+  expressions:
+    - expression: "hit the nail on the head"
+      learned_logs: []
+`
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "mixed.yml"), []byte(content), 0644))
+				return dir
+			},
+			notebookID: "notebook-1",
+			want: []notebook.LearningHistoryExpression{
+				{Expression: "break the ice", LearnedLogs: []notebook.LearningRecord{}},
+			},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var dir string
-			if tt.setupFiles == nil {
-				dir = "/nonexistent/directory/for/test"
-			} else {
-				tempDir := t.TempDir()
-				for filename, content := range tt.setupFiles {
-					filePath := filepath.Join(tempDir, filename)
-					err := os.WriteFile(filePath, []byte(content), 0644)
-					require.NoError(t, err)
-				}
-				dir = tempDir
-			}
-
+			dir := tt.setupDir(t)
 			repo := NewYAMLLearningRepository(dir)
-			got, err := repo.FindByNotebookID(tt.notebookID)
 
+			got, err := repo.FindByNotebookID(tt.notebookID)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
 			}
 			require.NoError(t, err)
-			assert.Len(t, got, tt.wantLen)
-
-			for i, wantExpr := range tt.wantExprs {
-				assert.Equal(t, wantExpr, got[i].Expression)
-			}
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }
