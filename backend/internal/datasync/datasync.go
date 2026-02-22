@@ -1,13 +1,18 @@
 // Package datasync provides import/export orchestration between YAML files and database.
 package datasync
 
+//go:generate mockgen -source=datasync.go -destination=../mocks/datasync/mock_datasync.go -package=mock_datasync
+
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/dictionary"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
@@ -21,13 +26,13 @@ type logKey struct {
 }
 
 type nnKey struct {
-	noteID                                          int64
+	noteID                                    int64
 	notebookType, notebookID, group, subgroup string
 }
 
 // classifyState holds mutable state passed through the classification loop.
 type classifyState struct {
-	result      *ImportResult
+	result      *ImportNotesResult
 	noteCache   map[noteKey]*notebook.NoteRecord
 	nnCache     map[nnKey]bool
 	newNotes    []*notebook.NoteRecord
@@ -35,20 +40,37 @@ type classifyState struct {
 	newNNs      []notebook.NotebookNote
 }
 
+// NoteSource provides source note records for import.
+type NoteSource interface {
+	FindAll(ctx context.Context) ([]notebook.NoteRecord, error)
+}
+
 // LearningSource provides learning history expressions by notebook.
 type LearningSource interface {
 	FindByNotebookID(notebookID string) ([]notebook.LearningHistoryExpression, error)
 }
 
-// ImportResult tracks counts for each import operation.
-type ImportResult struct {
+// DictionarySource provides cached dictionary API responses.
+type DictionarySource interface {
+	ReadAll() ([]rapidapi.Response, error)
+}
+
+// ImportNotesResult tracks counts for note import.
+type ImportNotesResult struct {
+	NotesNew, NotesSkipped, NotesUpdated int
+	NotebookNew, NotebookSkipped         int
+}
+
+// ImportLearningLogsResult tracks counts for learning log import.
+type ImportLearningLogsResult struct {
 	NotesNew        int
-	NotesSkipped    int
-	NotesUpdated    int
-	NotebookNew     int
-	NotebookSkipped int
 	LearningNew     int
 	LearningSkipped int
+}
+
+// ImportDictionaryResult tracks counts for dictionary import.
+type ImportDictionaryResult struct {
+	DictionaryNew, DictionarySkipped, DictionaryUpdated int
 }
 
 // ImportOptions controls import behavior.
@@ -59,31 +81,42 @@ type ImportOptions struct {
 
 // Importer reads YAML notebook data and writes to DB.
 type Importer struct {
-	noteRepo       notebook.NoteRepository
-	learningRepo   learning.LearningRepository
-	learningSource LearningSource
-	writer         io.Writer
+	noteRepo         notebook.NoteRepository
+	learningRepo     learning.LearningRepository
+	noteSource       NoteSource
+	learningSource   LearningSource
+	dictionarySource DictionarySource
+	dictionaryRepo   dictionary.DictionaryRepository
+	writer           io.Writer
 }
 
 // NewImporter creates a new Importer.
-func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, learningSource LearningSource, writer io.Writer) *Importer {
+func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, noteSource NoteSource, learningSource LearningSource, dictionarySource DictionarySource, dictionaryRepo dictionary.DictionaryRepository, writer io.Writer) *Importer {
 	return &Importer{
-		noteRepo:       noteRepo,
-		learningRepo:   learningRepo,
-		learningSource: learningSource,
-		writer:         writer,
+		noteRepo:         noteRepo,
+		learningRepo:     learningRepo,
+		noteSource:       noteSource,
+		learningSource:   learningSource,
+		dictionarySource: dictionarySource,
+		dictionaryRepo:   dictionaryRepo,
+		writer:           writer,
 	}
 }
 
-// ImportNotes imports pre-converted source NoteRecords into the database.
-func (imp *Importer) ImportNotes(ctx context.Context, sourceNotes []notebook.NoteRecord, opts ImportOptions) (*ImportResult, error) {
+// ImportNotes reads source notes and imports them into the database.
+func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*ImportNotesResult, error) {
+	sourceNotes, err := imp.noteSource.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("read source notes: %w", err)
+	}
+
 	allNotes, err := imp.noteRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load existing notes: %w", err)
 	}
 
 	state := &classifyState{
-		result:      &ImportResult{},
+		result:      &ImportNotesResult{},
 		noteCache:   make(map[noteKey]*notebook.NoteRecord, len(allNotes)),
 		nnCache:     make(map[nnKey]bool),
 		updateNotes: make(map[noteKey]*notebook.NoteRecord),
@@ -169,8 +202,8 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 }
 
 // ImportLearningLogs imports learning history YAML data into the database.
-func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions) (*ImportResult, error) {
-	var result ImportResult
+func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions) (*ImportLearningLogsResult, error) {
+	var result ImportLearningLogsResult
 
 	allNotes, err := imp.noteRepo.FindAll(ctx)
 	if err != nil {
@@ -299,6 +332,61 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 	if !opts.DryRun && len(newLogs) > 0 {
 		if err := imp.learningRepo.BatchCreate(ctx, newLogs); err != nil {
 			return nil, fmt.Errorf("batch create learning logs: %w", err)
+		}
+	}
+
+	return &result, nil
+}
+
+// ImportDictionary reads dictionary responses and imports them into the database.
+func (imp *Importer) ImportDictionary(ctx context.Context, opts ImportOptions) (*ImportDictionaryResult, error) {
+	responses, err := imp.dictionarySource.ReadAll()
+	if err != nil {
+		return nil, fmt.Errorf("read dictionary source: %w", err)
+	}
+
+	var result ImportDictionaryResult
+
+	allEntries, err := imp.dictionaryRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load existing dictionary entries: %w", err)
+	}
+	entryCache := make(map[string]*dictionary.DictionaryEntry, len(allEntries))
+	for i := range allEntries {
+		entryCache[allEntries[i].Word] = &allEntries[i]
+	}
+
+	var batch []*dictionary.DictionaryEntry
+	for _, resp := range responses {
+		data, err := json.Marshal(resp)
+		if err != nil {
+			return nil, fmt.Errorf("marshal dictionary response: %w", err)
+		}
+
+		existing := entryCache[resp.Word]
+		if existing == nil {
+			batch = append(batch, &dictionary.DictionaryEntry{
+				Word:       resp.Word,
+				SourceType: "rapidapi",
+				Response:   data,
+			})
+			result.DictionaryNew++
+			continue
+		}
+
+		if !opts.UpdateExisting {
+			result.DictionarySkipped++
+			continue
+		}
+
+		existing.Response = data
+		batch = append(batch, existing)
+		result.DictionaryUpdated++
+	}
+
+	if !opts.DryRun {
+		if err := imp.dictionaryRepo.BatchUpsert(ctx, batch); err != nil {
+			return nil, fmt.Errorf("upsert dictionary entries: %w", err)
 		}
 	}
 

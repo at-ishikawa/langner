@@ -16,6 +16,21 @@ func NewReader() *Reader {
 	return &Reader{}
 }
 
+// JSONDictionaryRepository binds a cache directory and exposes ReadAll.
+type JSONDictionaryRepository struct {
+	cacheDir string
+}
+
+// NewJSONDictionaryRepository creates a new JSONDictionaryRepository.
+func NewJSONDictionaryRepository(cacheDir string) *JSONDictionaryRepository {
+	return &JSONDictionaryRepository{cacheDir: cacheDir}
+}
+
+// ReadAll reads all cached dictionary responses from the directory.
+func (r *JSONDictionaryRepository) ReadAll() ([]Response, error) {
+	return NewReader().Read(r.cacheDir)
+}
+
 func (r *Reader) Read(dir string) ([]Response, error) {
 	lookedUpWords, err := os.ReadDir(dir)
 	if err != nil {
