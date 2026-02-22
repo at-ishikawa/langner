@@ -123,10 +123,12 @@ func newMigrateExportDBCommand() *cobra.Command {
 
 			noteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo := learning.NewDBLearningRepository(db)
+			dictRepo := dictionary.NewDBDictionaryRepository(db)
 			noteSink := datasync.NewYAMLNoteSink(outputDir)
 			learningSink := datasync.NewYAMLLearningSink(outputDir)
+			dictSink := datasync.NewYAMLDictionarySink(outputDir)
 
-			exporter := datasync.NewExporter(noteRepo, learningRepo, noteSink, learningSink, os.Stdout)
+			exporter := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, os.Stdout)
 
 			noteResult, err := exporter.ExportNotes(ctx)
 			if err != nil {
@@ -138,10 +140,16 @@ func newMigrateExportDBCommand() *cobra.Command {
 				return fmt.Errorf("export learning logs: %w", err)
 			}
 
+			dictResult, err := exporter.ExportDictionary(ctx)
+			if err != nil {
+				return fmt.Errorf("export dictionary: %w", err)
+			}
+
 			fmt.Println("\nExport Summary:")
-			fmt.Printf("  Notes:          %d exported\n", noteResult.NotesExported)
-			fmt.Printf("  Notebook notes: %d exported\n", noteResult.NotebookNotesExported)
-			fmt.Printf("  Learning logs:  %d exported\n", learningResult.LearningLogsExported)
+			fmt.Printf("  Notes:              %d exported\n", noteResult.NotesExported)
+			fmt.Printf("  Notebook notes:     %d exported\n", noteResult.NotebookNotesExported)
+			fmt.Printf("  Learning logs:      %d exported\n", learningResult.LearningLogsExported)
+			fmt.Printf("  Dictionary entries: %d exported\n", dictResult.DictionaryExported)
 
 			return nil
 		},
