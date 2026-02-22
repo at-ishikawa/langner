@@ -134,3 +134,41 @@ func (mr *MockDictionarySourceMockRecorder) ReadAll() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadAll", reflect.TypeOf((*MockDictionarySource)(nil).ReadAll))
 }
+
+// MockNoteSink is a mock of NoteSink interface.
+type MockNoteSink struct {
+	ctrl     *gomock.Controller
+	recorder *MockNoteSinkMockRecorder
+	isgomock struct{}
+}
+
+// MockNoteSinkMockRecorder is the mock recorder for MockNoteSink.
+type MockNoteSinkMockRecorder struct {
+	mock *MockNoteSink
+}
+
+// NewMockNoteSink creates a new mock instance.
+func NewMockNoteSink(ctrl *gomock.Controller) *MockNoteSink {
+	mock := &MockNoteSink{ctrl: ctrl}
+	mock.recorder = &MockNoteSinkMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockNoteSink) EXPECT() *MockNoteSinkMockRecorder {
+	return m.recorder
+}
+
+// WriteAll mocks base method.
+func (m *MockNoteSink) WriteAll(notes []notebook.NoteRecord) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteAll", notes)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteAll indicates an expected call of WriteAll.
+func (mr *MockNoteSinkMockRecorder) WriteAll(notes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockNoteSink)(nil).WriteAll), notes)
+}
