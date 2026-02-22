@@ -203,10 +203,12 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?\\)").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1,
-						"phrasal_verb", "give up", "to stop trying", "A2", 2).
-					WillReturnResult(sqlmock.NewResult(10, 2))
+				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
+					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2).
+					WillReturnResult(sqlmock.NewResult(11, 1))
 				mock.ExpectExec("INSERT INTO note_images \\(note_id, url, sort_order\\) VALUES \\(\\?, \\?, \\?\\)").
 					WithArgs(int64(10), "https://example.com/img.png", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
@@ -229,7 +231,7 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 		},
 		{
-			name: "insert notes db error",
+			name: "insert note db error",
 			notes: []*NoteRecord{
 				{Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1},
 			},
@@ -237,6 +239,19 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
 					WillReturnError(fmt.Errorf("duplicate entry"))
+				mock.ExpectRollback()
+			},
+			wantErr: true,
+		},
+		{
+			name: "last insert id error",
+			notes: []*NoteRecord{
+				{Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1},
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("INSERT INTO notes").
+					WillReturnResult(sqlmock.NewErrorResult(fmt.Errorf("last insert id error")))
 				mock.ExpectRollback()
 			},
 			wantErr: true,

@@ -46,29 +46,21 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Build multi-row INSERT for notes
-		query := buildMultiRowInsert(
-			"notes",
-			[]string{"`usage`", "entry", "meaning", "level", "dictionary_number"},
-			len(notes),
-		)
-		var args []interface{}
+		// Insert notes one at a time to safely get each auto-increment ID.
+		// A multi-row INSERT with LastInsertId+offset is unsafe under
+		// innodb_autoinc_lock_mode=2 (MySQL 8.0+ default) with concurrent inserts.
 		for _, n := range notes {
-			args = append(args, n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber)
-		}
-		result, err := tx.ExecContext(ctx, query, args...)
-		if err != nil {
-			return fmt.Errorf("insert notes: %w", err)
-		}
-		// MySQL guarantees consecutive auto-increment IDs for multi-row INSERT
-		// when innodb_autoinc_lock_mode <= 1 (consecutive or traditional mode).
-		// This is the default for MySQL 5.x and common for MySQL 8.0+.
-		firstID, err := result.LastInsertId()
-		if err != nil {
-			return fmt.Errorf("get notes insert ID: %w", err)
-		}
-		for i := range notes {
-			notes[i].ID = firstID + int64(i)
+			result, err := tx.ExecContext(ctx,
+				"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number) VALUES (?, ?, ?, ?, ?)",
+				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber)
+			if err != nil {
+				return fmt.Errorf("insert note: %w", err)
+			}
+			id, err := result.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("get note insert ID: %w", err)
+			}
+			n.ID = id
 		}
 
 		// Collect all images
