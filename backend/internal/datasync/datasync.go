@@ -35,6 +35,11 @@ type classifyState struct {
 	newNNs      []notebook.NotebookNote
 }
 
+// LearningSource provides learning history expressions by notebook.
+type LearningSource interface {
+	FindByNotebookID(notebookID string) ([]notebook.LearningHistoryExpression, error)
+}
+
 // ImportResult tracks counts for each import operation.
 type ImportResult struct {
 	NotesNew        int
@@ -162,7 +167,7 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 }
 
 // ImportLearningLogs imports learning history YAML data into the database.
-func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories map[string][]notebook.LearningHistory, opts ImportOptions) (*ImportResult, error) {
+func (imp *Importer) ImportLearningLogs(ctx context.Context, source LearningSource, opts ImportOptions) (*ImportResult, error) {
 	var result ImportResult
 
 	allNotes, err := imp.noteRepo.FindAll(ctx)
@@ -183,24 +188,27 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, learningHistories m
 		logCache[logKey{l.NoteID, l.QuizType, l.LearnedAt}] = true
 	}
 
-	// Collect all expressions across all histories
-	var allExpressions []notebook.LearningHistoryExpression
-	keys := make([]string, 0, len(learningHistories))
-	for k := range learningHistories {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		histories := learningHistories[k]
-		for _, h := range histories {
-			if h.Metadata.Type == "flashcard" {
-				allExpressions = append(allExpressions, h.Expressions...)
-				continue
-			}
-			for _, scene := range h.Scenes {
-				allExpressions = append(allExpressions, scene.Expressions...)
-			}
+	// Extract unique notebook IDs from notes
+	notebookIDs := make(map[string]bool)
+	for _, n := range allNotes {
+		for _, nn := range n.NotebookNotes {
+			notebookIDs[nn.NotebookID] = true
 		}
+	}
+	sortedIDs := make([]string, 0, len(notebookIDs))
+	for id := range notebookIDs {
+		sortedIDs = append(sortedIDs, id)
+	}
+	sort.Strings(sortedIDs)
+
+	// Collect all expressions from the source
+	var allExpressions []notebook.LearningHistoryExpression
+	for _, id := range sortedIDs {
+		exprs, err := source.FindByNotebookID(id)
+		if err != nil {
+			return nil, fmt.Errorf("find expressions for notebook %s: %w", id, err)
+		}
+		allExpressions = append(allExpressions, exprs...)
 	}
 
 	// First pass: batch-create auto notes for unknown expressions

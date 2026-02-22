@@ -57,10 +57,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return fmt.Errorf("read notebook data: %w", err)
 			}
 
-			learningHistories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
-			if err != nil {
-				return fmt.Errorf("read learning histories: %w", err)
-			}
+			yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
 
 			importer := datasync.NewImporter(noteRepo, learningRepo, os.Stdout)
 			opts := datasync.ImportOptions{
@@ -73,7 +70,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return fmt.Errorf("import notes: %w", err)
 			}
 
-			learningResult, err := importer.ImportLearningLogs(ctx, learningHistories, opts)
+			learningResult, err := importer.ImportLearningLogs(ctx, yamlLearningRepo, opts)
 			if err != nil {
 				return fmt.Errorf("import learning logs: %w", err)
 			}
