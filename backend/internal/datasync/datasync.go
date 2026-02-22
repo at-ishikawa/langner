@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"sort"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
@@ -12,8 +13,18 @@ import (
 type noteKey struct{ usage, entry string }
 
 type nnKey struct {
-	noteID                                 int64
-	notebookType, notebookID, group string
+	noteID                                          int64
+	notebookType, notebookID, group, subgroup string
+}
+
+// classifyState holds mutable state passed through the classification loop.
+type classifyState struct {
+	result      *ImportResult
+	noteCache   map[noteKey]*notebook.NoteRecord
+	nnCache     map[nnKey]bool
+	newNotes    []*notebook.NoteRecord
+	updateNotes map[noteKey]*notebook.NoteRecord
+	newNNs      []notebook.NotebookNote
 }
 
 // ImportResult tracks counts for each import operation.
@@ -47,30 +58,38 @@ func NewImporter(noteRepo notebook.NoteRepository, writer io.Writer) *Importer {
 
 // ImportNotes imports notes and notebook_note links from story and flashcard indexes.
 func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]notebook.Index, flashcardIndexes map[string]notebook.FlashcardIndex, opts ImportOptions) (*ImportResult, error) {
-	var result ImportResult
-
 	allNotes, err := imp.noteRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load existing notes: %w", err)
 	}
 
+	state := &classifyState{
+		result:      &ImportResult{},
+		noteCache:   make(map[noteKey]*notebook.NoteRecord, len(allNotes)),
+		nnCache:     make(map[nnKey]bool),
+		updateNotes: make(map[noteKey]*notebook.NoteRecord),
+	}
+
 	// Build caches
-	noteCache := make(map[noteKey]*notebook.NoteRecord, len(allNotes))
-	nnCache := make(map[nnKey]bool)
 	for i := range allNotes {
-		noteCache[noteKey{allNotes[i].Usage, allNotes[i].Entry}] = &allNotes[i]
+		state.noteCache[noteKey{allNotes[i].Usage, allNotes[i].Entry}] = &allNotes[i]
 		for _, nn := range allNotes[i].NotebookNotes {
-			nnCache[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}] = true
+			state.nnCache[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
 		}
 		// Clear so we only track NEW notebook_notes during classification
 		allNotes[i].NotebookNotes = nil
 	}
 
-	var newNotes []*notebook.NoteRecord
-	updateMap := make(map[noteKey]*notebook.NoteRecord)
+	// Sort story index keys for deterministic ordering
+	storyKeys := make([]string, 0, len(storyIndexes))
+	for k := range storyIndexes {
+		storyKeys = append(storyKeys, k)
+	}
+	sort.Strings(storyKeys)
 
 	// Walk story/book notebooks
-	for indexID, index := range storyIndexes {
+	for _, indexID := range storyKeys {
+		index := storyIndexes[indexID]
 		notebookType := "story"
 		if index.IsBook() {
 			notebookType = "book"
@@ -79,42 +98,51 @@ func (imp *Importer) ImportNotes(ctx context.Context, storyIndexes map[string]no
 			for _, sn := range storyNotebooks {
 				for _, scene := range sn.Scenes {
 					for _, def := range scene.Definitions {
-						imp.classifyNote(def, indexID, notebookType, sn.Event, scene.Title, opts, &result, noteCache, nnCache, &newNotes, updateMap)
+						imp.classifyNote(def, indexID, notebookType, sn.Event, scene.Title, opts, state)
 					}
 				}
 			}
 		}
 	}
 
+	// Sort flashcard index keys for deterministic ordering
+	flashcardKeys := make([]string, 0, len(flashcardIndexes))
+	for k := range flashcardIndexes {
+		flashcardKeys = append(flashcardKeys, k)
+	}
+	sort.Strings(flashcardKeys)
+
 	// Walk flashcard notebooks
-	for flashcardID, flashcardIndex := range flashcardIndexes {
+	for _, flashcardID := range flashcardKeys {
+		flashcardIndex := flashcardIndexes[flashcardID]
 		for _, fn := range flashcardIndex.Notebooks {
 			for _, card := range fn.Cards {
-				imp.classifyNote(card, flashcardID, "flashcard", fn.Title, "", opts, &result, noteCache, nnCache, &newNotes, updateMap)
+				imp.classifyNote(card, flashcardID, "flashcard", fn.Title, "", opts, state)
 			}
 		}
 	}
 
 	// Flush batches
-	if !opts.DryRun && len(newNotes) > 0 {
-		if err := imp.noteRepo.BatchCreate(ctx, newNotes); err != nil {
+	if !opts.DryRun && len(state.newNotes) > 0 {
+		if err := imp.noteRepo.BatchCreate(ctx, state.newNotes); err != nil {
 			return nil, fmt.Errorf("batch create notes: %w", err)
 		}
 	}
-	if !opts.DryRun && len(updateMap) > 0 {
-		updates := make([]*notebook.NoteRecord, 0, len(updateMap))
-		for _, n := range updateMap {
-			updates = append(updates, n)
-		}
-		if err := imp.noteRepo.BatchUpdate(ctx, updates); err != nil {
+
+	updates := make([]*notebook.NoteRecord, 0, len(state.updateNotes))
+	for _, n := range state.updateNotes {
+		updates = append(updates, n)
+	}
+	if !opts.DryRun && (len(updates) > 0 || len(state.newNNs) > 0) {
+		if err := imp.noteRepo.BatchUpdate(ctx, updates, state.newNNs); err != nil {
 			return nil, fmt.Errorf("batch update notes: %w", err)
 		}
 	}
 
-	return &result, nil
+	return state.result, nil
 }
 
-func (imp *Importer) classifyNote(def notebook.Note, notebookID, notebookType, group, subgroup string, opts ImportOptions, result *ImportResult, noteCache map[noteKey]*notebook.NoteRecord, nnCache map[nnKey]bool, newNotes *[]*notebook.NoteRecord, updateMap map[noteKey]*notebook.NoteRecord) {
+func (imp *Importer) classifyNote(def notebook.Note, notebookID, notebookType, group, subgroup string, opts ImportOptions, state *classifyState) {
 	usage := def.Expression
 	entry := def.Definition
 	if entry == "" {
@@ -122,7 +150,7 @@ func (imp *Importer) classifyNote(def notebook.Note, notebookID, notebookType, g
 	}
 
 	key := noteKey{usage, entry}
-	existing := noteCache[key]
+	existing := state.noteCache[key]
 
 	if existing == nil {
 		// Brand new note
@@ -147,11 +175,11 @@ func (imp *Importer) classifyNote(def notebook.Note, notebookID, notebookType, g
 				{NotebookType: notebookType, NotebookID: notebookID, Group: group, Subgroup: subgroup},
 			},
 		}
-		*newNotes = append(*newNotes, n)
-		noteCache[key] = n
+		state.newNotes = append(state.newNotes, n)
+		state.noteCache[key] = n
 		_, _ = fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", usage, entry)
-		result.NotesNew++
-		result.NotebookNew++
+		state.result.NotesNew++
+		state.result.NotebookNew++
 		return
 	}
 
@@ -161,7 +189,7 @@ func (imp *Importer) classifyNote(def notebook.Note, notebookID, notebookType, g
 		existing.NotebookNotes = append(existing.NotebookNotes, notebook.NotebookNote{
 			NotebookType: notebookType, NotebookID: notebookID, Group: group, Subgroup: subgroup,
 		})
-		result.NotebookNew++
+		state.result.NotebookNew++
 		return
 	}
 
@@ -170,25 +198,26 @@ func (imp *Importer) classifyNote(def notebook.Note, notebookID, notebookType, g
 		existing.Meaning = def.Meaning
 		existing.Level = string(def.Level)
 		existing.DictionaryNumber = def.DictionaryNumber
-		updateMap[key] = existing
+		if _, alreadyCounted := state.updateNotes[key]; !alreadyCounted {
+			state.result.NotesUpdated++
+		}
+		state.updateNotes[key] = existing
 		_, _ = fmt.Fprintf(imp.writer, "  [UPDATE]  %q (%s)\n", usage, entry)
-		result.NotesUpdated++
 	} else {
 		_, _ = fmt.Fprintf(imp.writer, "  [SKIP]  %q (%s)\n", usage, entry)
-		result.NotesSkipped++
+		state.result.NotesSkipped++
 	}
 
 	// Check notebook_note link
-	nnk := nnKey{existing.ID, notebookType, notebookID, group}
-	if nnCache[nnk] {
-		result.NotebookSkipped++
+	nnk := nnKey{existing.ID, notebookType, notebookID, group, subgroup}
+	if state.nnCache[nnk] {
+		state.result.NotebookSkipped++
 		return
 	}
 
-	existing.NotebookNotes = append(existing.NotebookNotes, notebook.NotebookNote{
+	state.newNNs = append(state.newNNs, notebook.NotebookNote{
 		NoteID: existing.ID, NotebookType: notebookType, NotebookID: notebookID, Group: group, Subgroup: subgroup,
 	})
-	nnCache[nnk] = true
-	updateMap[key] = existing
-	result.NotebookNew++
+	state.nnCache[nnk] = true
+	state.result.NotebookNew++
 }

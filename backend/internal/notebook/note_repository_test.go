@@ -338,26 +338,25 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 
 func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 	tests := []struct {
-		name      string
-		notes     []*NoteRecord
-		setupMock func(mock sqlmock.Sqlmock)
-		wantErr   bool
+		name             string
+		notes            []*NoteRecord
+		newNotebookNotes []NotebookNote
+		setupMock        func(mock sqlmock.Sqlmock)
+		wantErr          bool
 	}{
 		{
 			name: "updates multiple notes with new notebook_notes",
 			notes: []*NoteRecord{
 				{
 					ID: 1, Usage: "idiom", Entry: "break the ice", Meaning: "updated meaning", Level: "B2", DictionaryNumber: 1,
-					NotebookNotes: []NotebookNote{
-						{NoteID: 1, NotebookType: "story", NotebookID: "book-2", Group: "ch1"},
-					},
 				},
 				{
 					ID: 2, Usage: "phrasal_verb", Entry: "give up", Meaning: "to stop trying", Level: "A2", DictionaryNumber: 2,
-					NotebookNotes: []NotebookNote{
-						{NoteID: 2, NotebookType: "flashcard", NotebookID: "vocab-1", Group: "unit1"},
-					},
 				},
+			},
+			newNotebookNotes: []NotebookNote{
+				{NoteID: 1, NotebookType: "story", NotebookID: "book-2", Group: "ch1"},
+				{NoteID: 2, NotebookType: "flashcard", NotebookID: "vocab-1", Group: "unit1"},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
@@ -375,8 +374,7 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			},
 		},
 		{
-			name:  "empty slice returns nil",
-			notes: []*NoteRecord{},
+			name: "empty slices returns nil",
 			setupMock: func(mock sqlmock.Sqlmock) {
 				// No expectations
 			},
@@ -399,6 +397,19 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			},
 		},
 		{
+			name: "inserts only notebook_notes without note updates",
+			newNotebookNotes: []NotebookNote{
+				{NoteID: 1, NotebookType: "story", NotebookID: "book-2", Group: "ch1"},
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("INSERT INTO notebook_notes \\(note_id, notebook_type, notebook_id, `group`, subgroup\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs(int64(1), "story", "book-2", "ch1", "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			},
+		},
+		{
 			name: "update db error",
 			notes: []*NoteRecord{
 				{ID: 1, Usage: "idiom", Entry: "break the ice", Meaning: "updated", Level: "B2", DictionaryNumber: 1},
@@ -413,18 +424,11 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 		},
 		{
 			name: "insert notebook_notes db error",
-			notes: []*NoteRecord{
-				{
-					ID: 1, Usage: "idiom", Entry: "break the ice", Meaning: "updated", Level: "B2", DictionaryNumber: 1,
-					NotebookNotes: []NotebookNote{
-						{NoteID: 1, NotebookType: "story", NotebookID: "book-2", Group: "ch1"},
-					},
-				},
+			newNotebookNotes: []NotebookNote{
+				{NoteID: 1, NotebookType: "story", NotebookID: "book-2", Group: "ch1"},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("UPDATE notes SET").
-					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec("INSERT INTO notebook_notes").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
@@ -443,7 +447,7 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 
-			err = repo.BatchUpdate(context.Background(), tt.notes)
+			err = repo.BatchUpdate(context.Background(), tt.notes, tt.newNotebookNotes)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

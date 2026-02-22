@@ -56,17 +56,17 @@ func (mr *MockNoteRepositoryMockRecorder) BatchCreate(ctx, notes any) *gomock.Ca
 }
 
 // BatchUpdate mocks base method.
-func (m *MockNoteRepository) BatchUpdate(ctx context.Context, notes []*notebook.NoteRecord) error {
+func (m *MockNoteRepository) BatchUpdate(ctx context.Context, notes []*notebook.NoteRecord, newNotebookNotes []notebook.NotebookNote) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "BatchUpdate", ctx, notes)
+	ret := m.ctrl.Call(m, "BatchUpdate", ctx, notes, newNotebookNotes)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // BatchUpdate indicates an expected call of BatchUpdate.
-func (mr *MockNoteRepositoryMockRecorder) BatchUpdate(ctx, notes any) *gomock.Call {
+func (mr *MockNoteRepositoryMockRecorder) BatchUpdate(ctx, notes, newNotebookNotes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchUpdate", reflect.TypeOf((*MockNoteRepository)(nil).BatchUpdate), ctx, notes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchUpdate", reflect.TypeOf((*MockNoteRepository)(nil).BatchUpdate), ctx, notes, newNotebookNotes)
 }
 
 // FindAll mocks base method.

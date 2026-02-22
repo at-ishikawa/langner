@@ -3,6 +3,7 @@ package notebook
 import (
 	"context"
 	"fmt"
+	"sort"
 )
 
 // YAMLNoteRepository reads notes from YAML files via a Reader.
@@ -48,8 +49,16 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		existing.NotebookNotes = append(existing.NotebookNotes, rec.NotebookNotes...)
 	}
 
+	// Sort story index keys for deterministic ordering
+	storyKeys := make([]string, 0, len(storyIndexes))
+	for k := range storyIndexes {
+		storyKeys = append(storyKeys, k)
+	}
+	sort.Strings(storyKeys)
+
 	// Walk story/book indexes
-	for indexID, index := range storyIndexes {
+	for _, indexID := range storyKeys {
+		index := storyIndexes[indexID]
 		notebookType := "story"
 		if index.IsBook() {
 			notebookType = "book"
@@ -66,8 +75,16 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		}
 	}
 
+	// Sort flashcard index keys for deterministic ordering
+	flashcardKeys := make([]string, 0, len(flashcardIndexes))
+	for k := range flashcardIndexes {
+		flashcardKeys = append(flashcardKeys, k)
+	}
+	sort.Strings(flashcardKeys)
+
 	// Walk flashcard indexes
-	for flashcardID, flashcardIndex := range flashcardIndexes {
+	for _, flashcardID := range flashcardKeys {
+		flashcardIndex := flashcardIndexes[flashcardID]
 		for _, fn := range flashcardIndex.Notebooks {
 			for _, card := range fn.Cards {
 				addNote(card, "flashcard", flashcardID, fn.Title, "")

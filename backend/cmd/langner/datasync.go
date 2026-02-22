@@ -35,6 +35,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}
+			defer func() { _ = db.Close() }()
 			noteRepo := notebook.NewDBNoteRepository(db)
 
 			reader, err := notebook.NewReader(
