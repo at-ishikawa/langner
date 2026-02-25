@@ -12,11 +12,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import {
-  getQuizOptions,
-  startQuiz,
-  type NotebookSummary,
-} from "@/lib/client";
+import { quizClient, type NotebookSummary } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 
 export default function QuizStartPage() {
@@ -28,12 +24,15 @@ export default function QuizStartPage() {
   const [includeUnstudied, setIncludeUnstudied] = useState(false);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getQuizOptions()
+    quizClient
+      .getQuizOptions({})
       .then((res) => {
         setNotebooks(res.notebooks ?? []);
       })
+      .catch(() => setError("Failed to load notebooks"))
       .finally(() => setLoading(false));
   }, []);
 
@@ -67,14 +66,14 @@ export default function QuizStartPage() {
   const handleStart = async () => {
     setStarting(true);
     try {
-      const res = await startQuiz({
+      const res = await quizClient.startQuiz({
         notebookIds: Array.from(selectedIds),
         includeUnstudied,
       });
       const flashcards = (res.flashcards ?? []).map((f) => ({
-        noteId: BigInt(f.noteId),
+        noteId: f.noteId,
         entry: f.entry,
-        examples: f.examples ?? [],
+        examples: f.examples,
       }));
       setFlashcards(flashcards);
       router.push("/quiz");
@@ -91,11 +90,23 @@ export default function QuizStartPage() {
     );
   }
 
+  if (error) {
+    return (
+      <Box p={4} maxW="md" mx="auto">
+        <Text color="red.500">{error}</Text>
+      </Box>
+    );
+  }
+
   return (
     <Box p={4} maxW="md" mx="auto">
       <Heading size="lg" mb={4}>
-        Langner Quiz
+        Quiz
       </Heading>
+
+      <Text fontWeight="medium" mb={2}>
+        Select notebooks
+      </Text>
 
       <VStack align="stretch" gap={3}>
         <Checkbox.Root
@@ -116,7 +127,10 @@ export default function QuizStartPage() {
             <Checkbox.HiddenInput />
             <Checkbox.Control />
             <Checkbox.Label>
-              {notebook.name} ({notebook.reviewCount})
+              <Box display="flex" justifyContent="space-between" w="full">
+                <Text>{notebook.name}</Text>
+                <Text>{notebook.reviewCount}</Text>
+              </Box>
             </Checkbox.Label>
           </Checkbox.Root>
         ))}
@@ -134,7 +148,7 @@ export default function QuizStartPage() {
       </Box>
 
       <Text mt={4} fontWeight="bold">
-        {totalDue} words due
+        {totalDue} words due for review
       </Text>
 
       <Button
