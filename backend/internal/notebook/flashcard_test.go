@@ -570,7 +570,7 @@ func TestReader_ReadAllNotes(t *testing.T) {
 
 func TestIndex_GetNotebookPath(t *testing.T) {
 	index := Index{
-		path:          "/base/path",
+		Path:          "/base/path",
 		NotebookPaths: []string{"chapter1.yml", "chapter2.yml"},
 	}
 

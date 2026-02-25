@@ -3,8 +3,8 @@ package notebook
 import "path/filepath"
 
 type Index struct {
-	path          string   `yaml:"-"`
-	isBook        bool     `yaml:"-"`
+	Path          string   `yaml:"-"`
+	IsBook        bool     `yaml:"-"`
 	Kind          string   `yaml:"kind"`
 	ID            string   `yaml:"id"`
 	Name          string   `yaml:"name"`
@@ -13,11 +13,7 @@ type Index struct {
 	Notebooks [][]StoryNotebook `yaml:"-"`
 }
 
-func (index Index) IsBook() bool {
-	return index.isBook
-}
-
 func (index Index) GetNotebookPath(i int) string {
 	path := index.NotebookPaths[i]
-	return filepath.Join(index.path, path)
+	return filepath.Join(index.Path, path)
 }

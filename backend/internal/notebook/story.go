@@ -50,7 +50,7 @@ func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error
 	result := make([]StoryNotebook, 0)
 	notebookPaths := make([]string, 0)
 	for _, notebookPath := range index.NotebookPaths {
-		path := filepath.Join(index.path, notebookPath)
+		path := filepath.Join(index.Path, notebookPath)
 
 		notebooks, err := readYamlFile[[]StoryNotebook](path)
 		if err != nil {

@@ -8,16 +8,6 @@ import (
 	"sort"
 )
 
-// exportIndex is a local struct for writing index.yml files.
-// Index and FlashcardIndex have unexported fields (path, isBook)
-// that prevent direct serialization, so we use this struct instead.
-type exportIndex struct {
-	ID            string   `yaml:"id"`
-	Kind          string   `yaml:"kind,omitempty"`
-	Name          string   `yaml:"name"`
-	NotebookPaths []string `yaml:"notebooks"`
-}
-
 // notebookKey groups notes by (NotebookType, NotebookID).
 type notebookKey struct {
 	notebookType string
@@ -89,7 +79,7 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 	for _, indexID := range storyKeys {
 		index := storyIndexes[indexID]
 		notebookType := "story"
-		if index.IsBook() {
+		if index.IsBook {
 			notebookType = "book"
 		}
 
@@ -280,7 +270,7 @@ func (r *YAMLNoteRepository) writeStoryNotebook(key notebookKey, entries []noteW
 	}
 
 	// Write index.yml
-	index := exportIndex{
+	index := Index{
 		ID:            key.notebookID,
 		Kind:          key.notebookType,
 		Name:          key.notebookID,
@@ -336,7 +326,7 @@ func (r *YAMLNoteRepository) writeFlashcardNotebook(key notebookKey, entries []n
 	}
 
 	// Write index.yml
-	index := exportIndex{
+	index := FlashcardIndex{
 		ID:            key.notebookID,
 		Name:          key.notebookID,
 		NotebookPaths: []string{"./cards.yml"},

@@ -396,7 +396,7 @@ func TestYAMLNoteRepository_WriteAll(t *testing.T) {
 			verify: func(t *testing.T, outputDir string) {
 				// Verify index.yml
 				indexPath := filepath.Join(outputDir, "stories", "test-series", "index.yml")
-				var index exportIndex
+				var index Index
 				readYAMLHelper(t, indexPath, &index)
 				assert.Equal(t, "test-series", index.ID)
 				assert.Equal(t, "story", index.Kind)
@@ -442,10 +442,9 @@ func TestYAMLNoteRepository_WriteAll(t *testing.T) {
 			verify: func(t *testing.T, outputDir string) {
 				// Verify index.yml
 				indexPath := filepath.Join(outputDir, "flashcards", "vocab-cards", "index.yml")
-				var index exportIndex
+				var index FlashcardIndex
 				readYAMLHelper(t, indexPath, &index)
 				assert.Equal(t, "vocab-cards", index.ID)
-				assert.Equal(t, "", index.Kind)
 				assert.Equal(t, "vocab-cards", index.Name)
 				assert.Equal(t, []string{"./cards.yml"}, index.NotebookPaths)
 
@@ -475,7 +474,7 @@ func TestYAMLNoteRepository_WriteAll(t *testing.T) {
 			verify: func(t *testing.T, outputDir string) {
 				// Verify books directory is used
 				indexPath := filepath.Join(outputDir, "books", "test-book", "index.yml")
-				var index exportIndex
+				var index Index
 				readYAMLHelper(t, indexPath, &index)
 				assert.Equal(t, "test-book", index.ID)
 				assert.Equal(t, "book", index.Kind)

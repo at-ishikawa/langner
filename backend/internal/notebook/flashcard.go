@@ -48,11 +48,11 @@ func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[strin
 		// This works because both Index and FlashcardIndex have a path field
 		switch v := any(&index).(type) {
 		case *Index:
-			v.path = filepath.Dir(path)
-			v.isBook = isBook
+			v.Path = filepath.Dir(path)
+			v.IsBook = isBook
 			indexMap[v.ID] = any(*v).(T)
 		case *FlashcardIndex:
-			v.path = filepath.Dir(path)
+			v.Path = filepath.Dir(path)
 			indexMap[v.ID] = any(*v).(T)
 		}
 		return nil
@@ -115,7 +115,7 @@ func (f Reader) IsBook(id string) bool {
 	if !ok {
 		return false
 	}
-	return index.IsBook()
+	return index.IsBook
 }
 func (f Reader) ReadAllNotes(storyID string, learningHistories map[string][]LearningHistory) ([]Note, error) {
 	notebooks, err := f.ReadStoryNotebooks(storyID)
@@ -171,7 +171,7 @@ func (f Reader) ReadFlashcardNotebooks(flashcardID string) ([]FlashcardNotebook,
 
 	result := make([]FlashcardNotebook, 0)
 	for _, notebookPath := range index.NotebookPaths {
-		path := filepath.Join(index.path, notebookPath)
+		path := filepath.Join(index.Path, notebookPath)
 
 		notebooks, err := readYamlFile[[]FlashcardNotebook](path)
 		if err != nil {
