@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -114,6 +115,10 @@ func (h *QuizHandler) GetQuizOptions(
 		})
 	}
 
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].GetNotebookId() < summaries[j].GetNotebookId()
+	})
+
 	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{
 		Notebooks: summaries,
 	}), nil
@@ -142,10 +147,8 @@ func (h *QuizHandler) StartQuiz(
 	flashcardIndexes := reader.GetFlashcardIndexes()
 	includeUnstudied := req.Msg.GetIncludeUnstudied()
 
-	h.mu.Lock()
-	h.noteStore = make(map[int64]*quizNote)
-	h.nextID = 1
-	h.mu.Unlock()
+	localStore := make(map[int64]*quizNote)
+	var nextID int64 = 1
 
 	var flashcards []*apiv1.Flashcard
 
@@ -158,7 +161,7 @@ func (h *QuizHandler) StartQuiz(
 		}
 
 		if isStory {
-			cards, err := h.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied)
+			cards, err := h.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied, localStore, &nextID)
 			if err != nil {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load story cards(%s): %w", notebookID, err))
 			}
@@ -166,13 +169,18 @@ func (h *QuizHandler) StartQuiz(
 		}
 
 		if isFlashcard {
-			cards, err := h.loadFlashcardCards(reader, notebookID, learningHistories)
+			cards, err := h.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied, localStore, &nextID)
 			if err != nil {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load flashcard cards(%s): %w", notebookID, err))
 			}
 			flashcards = append(flashcards, cards...)
 		}
 	}
+
+	h.mu.Lock()
+	h.noteStore = localStore
+	h.nextID = nextID
+	h.mu.Unlock()
 
 	return connect.NewResponse(&apiv1.StartQuizResponse{
 		Flashcards: flashcards,
@@ -220,9 +228,6 @@ func (h *QuizHandler) SubmitAnswer(
 	result := results.Answers[0]
 	isCorrect, reason, quality := extractAnswerResult(result)
 
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
 	if err := h.updateLearningHistory(note, isCorrect, quality, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
@@ -249,6 +254,8 @@ func (h *QuizHandler) loadStoryCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
+	localStore map[int64]*quizNote,
+	nextID *int64,
 ) ([]*apiv1.Flashcard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
@@ -274,10 +281,9 @@ func (h *QuizHandler) loadStoryCards(
 
 				examples, contexts := buildFromConversations(&scene, &definition)
 
-				h.mu.Lock()
-				noteID := h.nextID
-				h.nextID++
-				h.noteStore[noteID] = &quizNote{
+				noteID := *nextID
+				*nextID++
+				localStore[noteID] = &quizNote{
 					notebookName: notebookID,
 					storyTitle:   story.Event,
 					sceneTitle:   scene.Title,
@@ -285,7 +291,6 @@ func (h *QuizHandler) loadStoryCards(
 					meaning:      definition.Meaning,
 					contexts:     contexts,
 				}
-				h.mu.Unlock()
 
 				flashcards = append(flashcards, &apiv1.Flashcard{
 					NoteId:   noteID,
@@ -303,6 +308,9 @@ func (h *QuizHandler) loadFlashcardCards(
 	reader *notebook.Reader,
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
+	includeUnstudied bool,
+	localStore map[int64]*quizNote,
+	nextID *int64,
 ) ([]*apiv1.Flashcard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
@@ -310,7 +318,7 @@ func (h *QuizHandler) loadFlashcardCards(
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], h.dictionaryMap, false,
+		notebooks, learningHistories[notebookID], h.dictionaryMap, includeUnstudied,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("filter flashcard notebooks(%s): %w", notebookID, err)
@@ -331,16 +339,14 @@ func (h *QuizHandler) loadFlashcardCards(
 				})
 			}
 
-			h.mu.Lock()
-			noteID := h.nextID
-			h.nextID++
-			h.noteStore[noteID] = &quizNote{
+			noteID := *nextID
+			*nextID++
+			localStore[noteID] = &quizNote{
 				notebookName: notebookID,
 				storyTitle:   "flashcards",
 				expression:   expression,
 				meaning:      card.Meaning,
 			}
-			h.mu.Unlock()
 
 			flashcards = append(flashcards, &apiv1.Flashcard{
 				NoteId:   noteID,
