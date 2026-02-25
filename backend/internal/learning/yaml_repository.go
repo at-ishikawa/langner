@@ -2,18 +2,28 @@ package learning
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// YAMLLearningRepository reads learning history from YAML files.
+// YAMLLearningRepository reads learning history from YAML files and writes
+// learning logs as LearningHistory YAML files.
 type YAMLLearningRepository struct {
 	directory string
+	outputDir string
 }
 
-// NewYAMLLearningRepository creates a new YAMLLearningRepository.
+// NewYAMLLearningRepository creates a new YAMLLearningRepository for reading.
 func NewYAMLLearningRepository(directory string) *YAMLLearningRepository {
 	return &YAMLLearningRepository{directory: directory}
+}
+
+// NewYAMLLearningRepositoryWriter creates a new YAMLLearningRepository for writing.
+func NewYAMLLearningRepositoryWriter(outputDir string) *YAMLLearningRepository {
+	return &YAMLLearningRepository{outputDir: outputDir}
 }
 
 // FindByNotebookID reads learning YAML files, filters by notebook ID, and
@@ -41,4 +51,308 @@ func (r *YAMLLearningRepository) FindByNotebookID(notebookID string) ([]notebook
 	}
 
 	return result, nil
+}
+
+// WriteAll converts learning logs to LearningHistory YAML files grouped by notebook.
+func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []LearningLog) error {
+	noteByID := make(map[int64]*notebook.NoteRecord, len(notes))
+	for i := range notes {
+		noteByID[notes[i].ID] = &notes[i]
+	}
+
+	logsByNoteID := make(map[int64][]LearningLog)
+	for _, log := range logs {
+		logsByNoteID[log.NoteID] = append(logsByNoteID[log.NoteID], log)
+	}
+
+	// Group notes by NotebookID and detect notebook type per notebook
+	type notebookInfo struct {
+		noteIDs     []int64
+		isFlashcard bool
+	}
+	notebookMap := make(map[string]*notebookInfo)
+	var notebookIDs []string
+
+	for _, note := range notes {
+		for _, nn := range note.NotebookNotes {
+			info := notebookMap[nn.NotebookID]
+			if info == nil {
+				info = &notebookInfo{}
+				notebookMap[nn.NotebookID] = info
+				notebookIDs = append(notebookIDs, nn.NotebookID)
+			}
+			info.noteIDs = append(info.noteIDs, note.ID)
+			if nn.NotebookType == "flashcard" {
+				info.isFlashcard = true
+			}
+		}
+	}
+
+	sort.Strings(notebookIDs)
+
+	for _, nbID := range notebookIDs {
+		info := notebookMap[nbID]
+
+		// Deduplicate note IDs preserving order
+		seen := make(map[int64]bool)
+		var uniqueNoteIDs []int64
+		for _, id := range info.noteIDs {
+			if !seen[id] {
+				seen[id] = true
+				uniqueNoteIDs = append(uniqueNoteIDs, id)
+			}
+		}
+
+		var histories []notebook.LearningHistory
+		if info.isFlashcard {
+			histories = r.buildFlashcardHistories(nbID, uniqueNoteIDs, noteByID, logsByNoteID)
+		} else {
+			histories = r.buildStoryHistories(nbID, uniqueNoteIDs, noteByID, logsByNoteID)
+		}
+
+		if len(histories) == 0 {
+			continue
+		}
+
+		dir := filepath.Join(r.outputDir, "learning_notes")
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("create directory %s: %w", dir, err)
+		}
+
+		filePath := filepath.Join(dir, nbID+".yml")
+		if err := notebook.WriteYamlFile(filePath, histories); err != nil {
+			return fmt.Errorf("write learning history %s: %w", nbID, err)
+		}
+	}
+
+	return nil
+}
+
+func (r *YAMLLearningRepository) buildFlashcardHistories(
+	nbID string,
+	noteIDs []int64,
+	noteByID map[int64]*notebook.NoteRecord,
+	logsByNoteID map[int64][]LearningLog,
+) []notebook.LearningHistory {
+	// Group notes by Group (title) for this notebook
+	groupOrder := make(map[string]int)
+	groupEntries := make(map[string][]int64)
+	var counter int
+
+	for _, noteID := range noteIDs {
+		note := noteByID[noteID]
+		if note == nil {
+			continue
+		}
+		for _, nn := range note.NotebookNotes {
+			if nn.NotebookID != nbID {
+				continue
+			}
+			group := nn.Group
+			if _, ok := groupOrder[group]; !ok {
+				groupOrder[group] = counter
+				counter++
+			}
+			groupEntries[group] = append(groupEntries[group], noteID)
+		}
+	}
+
+	// Sort groups by insertion order
+	groups := make([]string, 0, len(groupEntries))
+	for g := range groupEntries {
+		groups = append(groups, g)
+	}
+	sort.Slice(groups, func(i, j int) bool {
+		return groupOrder[groups[i]] < groupOrder[groups[j]]
+	})
+
+	var histories []notebook.LearningHistory
+	for _, group := range groups {
+		// Deduplicate note IDs within group
+		seen := make(map[int64]bool)
+		var expressions []notebook.LearningHistoryExpression
+		for _, noteID := range groupEntries[group] {
+			if seen[noteID] {
+				continue
+			}
+			seen[noteID] = true
+			note := noteByID[noteID]
+			if note == nil {
+				continue
+			}
+			expr := buildExpression(note.Entry, logsByNoteID[noteID])
+			expressions = append(expressions, expr)
+		}
+
+		histories = append(histories, notebook.LearningHistory{
+			Metadata: notebook.LearningHistoryMetadata{
+				NotebookID: nbID,
+				Title:      group,
+				Type:       "flashcard",
+			},
+			Expressions: expressions,
+		})
+	}
+
+	return histories
+}
+
+func (r *YAMLLearningRepository) buildStoryHistories(
+	nbID string,
+	noteIDs []int64,
+	noteByID map[int64]*notebook.NoteRecord,
+	logsByNoteID map[int64][]LearningLog,
+) []notebook.LearningHistory {
+	// Group notes by Group (event) then Subgroup (scene)
+	type eventScene struct {
+		event string
+		scene string
+	}
+
+	eventOrder := make(map[string]int)
+	sceneOrder := make(map[eventScene]int)
+	sceneEntries := make(map[eventScene][]int64)
+	var eventCounter, sceneCounter int
+	eventScenes := make(map[string][]string)
+
+	for _, noteID := range noteIDs {
+		note := noteByID[noteID]
+		if note == nil {
+			continue
+		}
+		for _, nn := range note.NotebookNotes {
+			if nn.NotebookID != nbID {
+				continue
+			}
+			event := nn.Group
+			scene := nn.Subgroup
+
+			if _, ok := eventOrder[event]; !ok {
+				eventOrder[event] = eventCounter
+				eventCounter++
+			}
+
+			es := eventScene{event, scene}
+			if _, ok := sceneOrder[es]; !ok {
+				sceneOrder[es] = sceneCounter
+				sceneCounter++
+				eventScenes[event] = append(eventScenes[event], scene)
+			}
+
+			sceneEntries[es] = append(sceneEntries[es], noteID)
+		}
+	}
+
+	// Sort events by insertion order
+	events := make([]string, 0, len(eventOrder))
+	for e := range eventOrder {
+		events = append(events, e)
+	}
+	sort.Slice(events, func(i, j int) bool {
+		return eventOrder[events[i]] < eventOrder[events[j]]
+	})
+
+	var histories []notebook.LearningHistory
+	for _, event := range events {
+		scenes := eventScenes[event]
+		// Sort scenes by insertion order
+		sort.Slice(scenes, func(i, j int) bool {
+			return sceneOrder[eventScene{event, scenes[i]}] < sceneOrder[eventScene{event, scenes[j]}]
+		})
+
+		var learningScenes []notebook.LearningScene
+		for _, scene := range scenes {
+			es := eventScene{event, scene}
+			// Deduplicate note IDs within scene
+			seen := make(map[int64]bool)
+			var expressions []notebook.LearningHistoryExpression
+			for _, noteID := range sceneEntries[es] {
+				if seen[noteID] {
+					continue
+				}
+				seen[noteID] = true
+				note := noteByID[noteID]
+				if note == nil {
+					continue
+				}
+				expr := buildExpression(note.Entry, logsByNoteID[noteID])
+				expressions = append(expressions, expr)
+			}
+
+			learningScenes = append(learningScenes, notebook.LearningScene{
+				Metadata: notebook.LearningSceneMetadata{
+					Title: scene,
+				},
+				Expressions: expressions,
+			})
+		}
+
+		histories = append(histories, notebook.LearningHistory{
+			Metadata: notebook.LearningHistoryMetadata{
+				NotebookID: nbID,
+				Title:      event,
+			},
+			Scenes: learningScenes,
+		})
+	}
+
+	return histories
+}
+
+func buildExpression(
+	entry string,
+	logs []LearningLog,
+) notebook.LearningHistoryExpression {
+	var learnedLogs, reverseLogs []LearningLog
+	for _, log := range logs {
+		if log.QuizType == "reverse" {
+			reverseLogs = append(reverseLogs, log)
+		} else {
+			learnedLogs = append(learnedLogs, log)
+		}
+	}
+
+	// Sort both descending by LearnedAt (newest first)
+	sort.Slice(learnedLogs, func(i, j int) bool {
+		return learnedLogs[i].LearnedAt.After(learnedLogs[j].LearnedAt)
+	})
+	sort.Slice(reverseLogs, func(i, j int) bool {
+		return reverseLogs[i].LearnedAt.After(reverseLogs[j].LearnedAt)
+	})
+
+	expr := notebook.LearningHistoryExpression{
+		Expression: entry,
+	}
+
+	// Extract easiness factor from the latest log for each quiz type
+	if len(learnedLogs) > 0 {
+		expr.EasinessFactor = learnedLogs[0].EasinessFactor
+	}
+	if len(reverseLogs) > 0 {
+		expr.ReverseEasinessFactor = reverseLogs[0].EasinessFactor
+	}
+
+	// Convert to LearningRecord
+	expr.LearnedLogs = convertToRecords(learnedLogs)
+	expr.ReverseLogs = convertToRecords(reverseLogs)
+
+	return expr
+}
+
+func convertToRecords(logs []LearningLog) []notebook.LearningRecord {
+	if len(logs) == 0 {
+		return nil
+	}
+	records := make([]notebook.LearningRecord, len(logs))
+	for i, log := range logs {
+		records[i] = notebook.LearningRecord{
+			Status:         notebook.LearnedStatus(log.Status),
+			LearnedAt:      notebook.NewDate(log.LearnedAt),
+			Quality:        log.Quality,
+			ResponseTimeMs: int64(log.ResponseTimeMs),
+			QuizType:       log.QuizType,
+			IntervalDays:   log.IntervalDays,
+		}
+	}
+	return records
 }
