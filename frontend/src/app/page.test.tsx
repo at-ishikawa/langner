@@ -139,6 +139,10 @@ describe("QuizStartPage", () => {
     fireEvent.click(screen.getByText("Include unstudied words"));
 
     clickCheckbox(/All notebooks/);
+    await waitFor(() => {
+      expect(screen.getByText("15 words due for review")).toBeInTheDocument();
+    });
+
     fireEvent.click(screen.getByText("Start"));
 
     await waitFor(() => {
