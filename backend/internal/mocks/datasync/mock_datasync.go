@@ -211,3 +211,41 @@ func (mr *MockLearningSinkMockRecorder) WriteAll(notes, logs any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockLearningSink)(nil).WriteAll), notes, logs)
 }
+
+// MockDictionarySink is a mock of DictionarySink interface.
+type MockDictionarySink struct {
+	ctrl     *gomock.Controller
+	recorder *MockDictionarySinkMockRecorder
+	isgomock struct{}
+}
+
+// MockDictionarySinkMockRecorder is the mock recorder for MockDictionarySink.
+type MockDictionarySinkMockRecorder struct {
+	mock *MockDictionarySink
+}
+
+// NewMockDictionarySink creates a new mock instance.
+func NewMockDictionarySink(ctrl *gomock.Controller) *MockDictionarySink {
+	mock := &MockDictionarySink{ctrl: ctrl}
+	mock.recorder = &MockDictionarySinkMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDictionarySink) EXPECT() *MockDictionarySinkMockRecorder {
+	return m.recorder
+}
+
+// WriteAll mocks base method.
+func (m *MockDictionarySink) WriteAll(entries []rapidapi.DictionaryExportEntry) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteAll", entries)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteAll indicates an expected call of WriteAll.
+func (mr *MockDictionarySinkMockRecorder) WriteAll(entries any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockDictionarySink)(nil).WriteAll), entries)
+}

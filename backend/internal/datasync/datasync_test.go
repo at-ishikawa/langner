@@ -994,13 +994,15 @@ func TestExporter_ExportNotes(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 			noteSink := mock_datasync.NewMockNoteSink(ctrl)
 			learningSink := mock_datasync.NewMockLearningSink(ctrl)
+			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
 
 			tt.setup(noteRepo, noteSink)
 
 			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, learningRepo, noteSink, learningSink, &buf)
+			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, &buf)
 
 			got, err := exp.ExportNotes(context.Background())
 			if tt.wantErr {
@@ -1081,15 +1083,96 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
 			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
 			noteSink := mock_datasync.NewMockNoteSink(ctrl)
 			learningSink := mock_datasync.NewMockLearningSink(ctrl)
+			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
 
 			tt.setup(noteRepo, learningRepo, learningSink)
 
 			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, learningRepo, noteSink, learningSink, &buf)
+			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, &buf)
 
 			got, err := exp.ExportLearningLogs(context.Background())
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExporter_ExportDictionary(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink)
+		want    *ExportDictionaryResult
+		wantErr bool
+	}{
+		{
+			name: "successful export",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
+					{Word: "hello", SourceType: "rapidapi", Response: json.RawMessage(`{"word":"hello"}`)},
+					{Word: "world", SourceType: "rapidapi", Response: json.RawMessage(`{"word":"world"}`)},
+				}, nil)
+				dictSink.EXPECT().WriteAll(gomock.Any()).
+					DoAndReturn(func(entries []rapidapi.DictionaryExportEntry) error {
+						require.Len(t, entries, 2)
+						assert.Equal(t, "hello", entries[0].Word)
+						assert.Equal(t, json.RawMessage(`{"word":"hello"}`), entries[0].Response)
+						assert.Equal(t, "world", entries[1].Word)
+						assert.Equal(t, json.RawMessage(`{"word":"world"}`), entries[1].Response)
+						return nil
+					})
+			},
+			want: &ExportDictionaryResult{EntriesExported: 2},
+		},
+		{
+			name: "empty entries",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{}, nil)
+				dictSink.EXPECT().WriteAll(gomock.Any()).Return(nil)
+			},
+			want: &ExportDictionaryResult{},
+		},
+		{
+			name: "FindAll error propagates",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "WriteAll error propagates",
+			setup: func(dictRepo *mock_dictionary.MockDictionaryRepository, dictSink *mock_datasync.MockDictionarySink) {
+				dictRepo.EXPECT().FindAll(gomock.Any()).Return([]dictionary.DictionaryEntry{
+					{Word: "hello", SourceType: "rapidapi", Response: json.RawMessage(`{"word":"hello"}`)},
+				}, nil)
+				dictSink.EXPECT().WriteAll(gomock.Any()).Return(fmt.Errorf("write failed"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			dictRepo := mock_dictionary.NewMockDictionaryRepository(ctrl)
+			noteSink := mock_datasync.NewMockNoteSink(ctrl)
+			learningSink := mock_datasync.NewMockLearningSink(ctrl)
+			dictSink := mock_datasync.NewMockDictionarySink(ctrl)
+
+			tt.setup(dictRepo, dictSink)
+
+			var buf bytes.Buffer
+			exp := NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, &buf)
+
+			got, err := exp.ExportDictionary(context.Background())
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

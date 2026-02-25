@@ -123,9 +123,11 @@ func newExportDBCommand() *cobra.Command {
 
 			noteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo := learning.NewDBLearningRepository(db)
+			dictRepo := dictionary.NewDBDictionaryRepository(db)
 			noteSink := notebook.NewYAMLNoteRepositoryWriter(outputDir)
 			learningSink := learning.NewYAMLLearningRepositoryWriter(outputDir)
-			exporter := datasync.NewExporter(noteRepo, learningRepo, noteSink, learningSink, os.Stdout)
+			dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(outputDir)
+			exporter := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, os.Stdout)
 
 			noteResult, err := exporter.ExportNotes(ctx)
 			if err != nil {
@@ -137,9 +139,15 @@ func newExportDBCommand() *cobra.Command {
 				return fmt.Errorf("export learning logs: %w", err)
 			}
 
+			dictResult, err := exporter.ExportDictionary(ctx)
+			if err != nil {
+				return fmt.Errorf("export dictionary: %w", err)
+			}
+
 			fmt.Println("\nExport Summary:")
 			fmt.Printf("  Notes exported:              %d\n", noteResult.NotesExported)
 			fmt.Printf("  Learning logs exported:      %d\n", learningResult.LogsExported)
+			fmt.Printf("  Dictionary entries exported: %d\n", dictResult.EntriesExported)
 
 			return nil
 		},

@@ -403,6 +403,11 @@ type LearningSink interface {
 	WriteAll(notes []notebook.NoteRecord, logs []learning.LearningLog) error
 }
 
+// DictionarySink writes exported dictionary entries.
+type DictionarySink interface {
+	WriteAll(entries []rapidapi.DictionaryExportEntry) error
+}
+
 // ExportNotesResult tracks counts for note export.
 type ExportNotesResult struct {
 	NotesExported int
@@ -413,23 +418,32 @@ type ExportLearningLogsResult struct {
 	LogsExported int
 }
 
+// ExportDictionaryResult tracks counts for dictionary export.
+type ExportDictionaryResult struct {
+	EntriesExported int
+}
+
 // Exporter reads DB data and writes to YAML files.
 type Exporter struct {
-	noteRepo     notebook.NoteRepository
-	learningRepo learning.LearningRepository
-	noteSink     NoteSink
-	learningSink LearningSink
-	writer       io.Writer
+	noteRepo       notebook.NoteRepository
+	learningRepo   learning.LearningRepository
+	dictionaryRepo dictionary.DictionaryRepository
+	noteSink       NoteSink
+	learningSink   LearningSink
+	dictionarySink DictionarySink
+	writer         io.Writer
 }
 
 // NewExporter creates a new Exporter.
-func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, noteSink NoteSink, learningSink LearningSink, writer io.Writer) *Exporter {
+func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, dictionaryRepo dictionary.DictionaryRepository, noteSink NoteSink, learningSink LearningSink, dictionarySink DictionarySink, writer io.Writer) *Exporter {
 	return &Exporter{
-		noteRepo:     noteRepo,
-		learningRepo: learningRepo,
-		noteSink:     noteSink,
-		learningSink: learningSink,
-		writer:       writer,
+		noteRepo:       noteRepo,
+		learningRepo:   learningRepo,
+		dictionaryRepo: dictionaryRepo,
+		noteSink:       noteSink,
+		learningSink:   learningSink,
+		dictionarySink: dictionarySink,
+		writer:         writer,
 	}
 }
 
@@ -469,5 +483,30 @@ func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLog
 	_, _ = fmt.Fprintf(exp.writer, "  Exported %d learning logs\n", len(logs))
 	return &ExportLearningLogsResult{
 		LogsExported: len(logs),
+	}, nil
+}
+
+// ExportDictionary reads dictionary entries from the database and writes them via the sink.
+func (exp *Exporter) ExportDictionary(ctx context.Context) (*ExportDictionaryResult, error) {
+	entries, err := exp.dictionaryRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load dictionary entries: %w", err)
+	}
+
+	exportEntries := make([]rapidapi.DictionaryExportEntry, len(entries))
+	for i, entry := range entries {
+		exportEntries[i] = rapidapi.DictionaryExportEntry{
+			Word:     entry.Word,
+			Response: entry.Response,
+		}
+	}
+
+	if err := exp.dictionarySink.WriteAll(exportEntries); err != nil {
+		return nil, fmt.Errorf("write dictionary entries: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(exp.writer, "  Exported %d dictionary entries\n", len(exportEntries))
+	return &ExportDictionaryResult{
+		EntriesExported: len(exportEntries),
 	}, nil
 }
