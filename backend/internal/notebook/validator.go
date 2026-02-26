@@ -444,7 +444,14 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 
 					if existingIdx, found := expressionMap[exprKey]; found {
 						// Merge learning logs into the existing expression
-						mergedExpressions[existingIdx].LearnedLogs = append(mergedExpressions[existingIdx].LearnedLogs, expr.LearnedLogs...)
+						if len(expr.LearnedLogs) > 0 {
+							mergedExpressions[existingIdx].LearnedLogs = append(mergedExpressions[existingIdx].LearnedLogs, expr.LearnedLogs...)
+							mergedExpressions[existingIdx].EasinessFactor, mergedExpressions[existingIdx].LearnedLogs = recalculateLearningLogs(mergedExpressions[existingIdx].LearnedLogs)
+						}
+						if len(expr.ReverseLogs) > 0 {
+							mergedExpressions[existingIdx].ReverseLogs = append(mergedExpressions[existingIdx].ReverseLogs, expr.ReverseLogs...)
+							mergedExpressions[existingIdx].ReverseEasinessFactor, mergedExpressions[existingIdx].ReverseLogs = recalculateLearningLogs(mergedExpressions[existingIdx].ReverseLogs)
+						}
 						result.AddWarning(ValidationError{
 							File:    file.path,
 							Message: fmt.Sprintf("Merged duplicate expression %q in scene %s::%s", exprKey, file.contents[histIdx].Metadata.Title, scene.Metadata.Title),
@@ -494,10 +501,20 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						for firstExprIdx := range firstScene.Expressions {
 							if strings.TrimSpace(firstScene.Expressions[firstExprIdx].Expression) == exprKey {
 								// Merge learning logs
-								firstScene.Expressions[firstExprIdx].LearnedLogs = append(
-									firstScene.Expressions[firstExprIdx].LearnedLogs,
-									expr.LearnedLogs...,
-								)
+								if len(expr.LearnedLogs) > 0 {
+									firstScene.Expressions[firstExprIdx].LearnedLogs = append(
+										firstScene.Expressions[firstExprIdx].LearnedLogs,
+										expr.LearnedLogs...,
+									)
+									firstScene.Expressions[firstExprIdx].EasinessFactor, firstScene.Expressions[firstExprIdx].LearnedLogs = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs)
+								}
+								if len(expr.ReverseLogs) > 0 {
+									firstScene.Expressions[firstExprIdx].ReverseLogs = append(
+										firstScene.Expressions[firstExprIdx].ReverseLogs,
+										expr.ReverseLogs...,
+									)
+									firstScene.Expressions[firstExprIdx].ReverseEasinessFactor, firstScene.Expressions[firstExprIdx].ReverseLogs = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs)
+								}
 
 								// Mark this duplicate for removal
 								expressionsToRemove[exprIdx] = true
@@ -605,12 +622,12 @@ func (v *Validator) fixConsistency(
 					}
 
 					// Only keep expressions that either:
-					// 1. Have learned_logs, OR
-					// 2. Exist in the story (even with empty learned_logs)
-					if len(expr.LearnedLogs) > 0 || existsInStory {
+					// 1. Have learned_logs or reverse_logs, OR
+					// 2. Exist in the story (even with empty logs)
+					if len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || existsInStory {
 						validExpressions = append(validExpressions, expr)
 					} else {
-						// Remove orphaned expressions with no learned_logs
+						// Remove orphaned expressions with no logs
 						result.AddWarning(ValidationError{
 							File:    file.path,
 							Message: fmt.Sprintf("Removed orphaned expression %q with no learned_logs from scene %s", expression, sceneKey),
@@ -1085,6 +1102,35 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 			}
 		}
 	}
+}
+
+// recalculateLearningLogs sorts logs newest-first and replays the SM-2 algorithm
+// to compute the correct easiness factor from the merged logs.
+func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord) {
+	// Sort by date ascending (oldest first) for replay
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].LearnedAt.Before(logs[j].LearnedAt.Time)
+	})
+
+	// Replay SM-2 to recalculate easiness factor
+	ef := DefaultEasinessFactor
+	correctStreak := 0
+	for _, log := range logs {
+		quality := log.Quality
+		if quality >= 3 {
+			correctStreak++
+		} else {
+			correctStreak = 0
+		}
+		ef = UpdateEasinessFactor(ef, quality, correctStreak)
+	}
+
+	// Re-sort by date descending (newest first) for storage
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
+	})
+
+	return ef, logs
 }
 
 // validateFlashcardNotebooks validates all flashcard notebook files

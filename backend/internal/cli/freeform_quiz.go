@@ -496,6 +496,7 @@ func (r *FreeformQuizCLI) updateLearningHistory(
 		storyTitle,
 		sceneTitle,
 		expressionToRecord,
+		occurrence.Definition.Expression,
 		answer.Correct,
 		false, // isKnownWord=false to get "usable" status when correct
 		quality,

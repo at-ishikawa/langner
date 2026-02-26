@@ -111,11 +111,13 @@ func (cli *InteractiveQuizCLI) Run(ctx context.Context, session Session) error {
 	return nil
 }
 
-// updateLearningHistoryWithQuality updates or creates an expression with SM-2 quality data
+// updateLearningHistoryWithQuality updates or creates an expression with SM-2 quality data.
+// originalExpression is the original expression form (e.g., Note.Expression) which may differ from
+// expression when a definition is used as the lookup key. Pass empty string if not applicable.
 func (cli *InteractiveQuizCLI) updateLearningHistoryWithQuality(
 	notebookName string,
 	learningHistory []notebook.LearningHistory,
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -127,6 +129,7 @@ func (cli *InteractiveQuizCLI) updateLearningHistoryWithQuality(
 		storyTitle,
 		sceneTitle,
 		expression,
+		originalExpression,
 		isCorrect,
 		isKnownWord,
 		quality,

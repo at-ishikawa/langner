@@ -287,6 +287,7 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 		storyTitle,
 		sceneTitle,
 		wordToRecord,
+		currentCard.Definition.Expression,
 		answer.Correct,
 		true, // qa command always marks correct answers as known words
 		quality,

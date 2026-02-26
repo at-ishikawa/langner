@@ -1972,3 +1972,312 @@ func TestValidator_Fix_WithMismatchedScenes(t *testing.T) {
 	}
 	assert.True(t, hasMovedWarning, "should have warning about moving brave to correct scene")
 }
+
+func TestValidator_FixConsistency_KeepsEntriesWithOnlyReverseLogs(t *testing.T) {
+	v := &Validator{}
+
+	t.Run("keeps orphaned expressions with only reverse_logs", func(t *testing.T) {
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{Title: "Scene A", Definitions: []Note{{Expression: "eager"}}},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{Expression: "eager", LearnedLogs: []LearningRecord{}},
+									{
+										Expression:  "orphaned_word",
+										LearnedLogs: []LearningRecord{},
+										ReverseLogs: []LearningRecord{{Status: "usable", LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))}},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixConsistency(learningFiles, storyFiles, result)
+
+		// Should keep both: "eager" (exists in story) and "orphaned_word" (has reverse_logs)
+		assert.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 2)
+		assert.Equal(t, "eager", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+		assert.Equal(t, "orphaned_word", fixed[0].contents[0].Scenes[0].Expressions[1].Expression)
+		assert.Len(t, result.Warnings, 0)
+	})
+}
+
+func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testing.T) {
+	validator := &Validator{}
+
+	t.Run("preserves EasinessFactor when duplicate has only ReverseLogs", func(t *testing.T) {
+		files := []learningHistoryFile{
+			{
+				path: "test.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{
+										Expression:     "break the ice",
+										EasinessFactor: 2.7,
+										LearnedLogs: []LearningRecord{
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
+										},
+									},
+									{
+										Expression: "break the ice",
+										ReverseLogs: []LearningRecord{
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := validator.fixLearningNotesStructure(files, result)
+
+		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
+		// EasinessFactor should be preserved (not recalculated) since no new LearnedLogs were added
+		assert.Equal(t, 2.7, expr.EasinessFactor)
+		assert.Len(t, expr.LearnedLogs, 1)
+		// ReverseLogs should be merged and ReverseEasinessFactor recalculated
+		assert.Len(t, expr.ReverseLogs, 1)
+		assert.NotZero(t, expr.ReverseEasinessFactor)
+	})
+
+	t.Run("preserves ReverseEasinessFactor when duplicate has only LearnedLogs", func(t *testing.T) {
+		files := []learningHistoryFile{
+			{
+				path: "test.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{
+										Expression:            "lose one's temper",
+										ReverseEasinessFactor: 2.8,
+										ReverseLogs: []LearningRecord{
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
+										},
+									},
+									{
+										Expression: "lose one's temper",
+										LearnedLogs: []LearningRecord{
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := validator.fixLearningNotesStructure(files, result)
+
+		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
+		// ReverseEasinessFactor should be preserved since no new ReverseLogs were added
+		assert.Equal(t, 2.8, expr.ReverseEasinessFactor)
+		assert.Len(t, expr.ReverseLogs, 1)
+		// LearnedLogs should be merged and EasinessFactor recalculated
+		assert.Len(t, expr.LearnedLogs, 1)
+		assert.NotZero(t, expr.EasinessFactor)
+	})
+
+	t.Run("merges both ReverseLogs and LearnedLogs", func(t *testing.T) {
+		files := []learningHistoryFile{
+			{
+				path: "test.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{
+										Expression: "hit the road",
+										LearnedLogs: []LearningRecord{
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
+										},
+										ReverseLogs: []LearningRecord{
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
+										},
+									},
+									{
+										Expression: "hit the road",
+										LearnedLogs: []LearningRecord{
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+										},
+										ReverseLogs: []LearningRecord{
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := validator.fixLearningNotesStructure(files, result)
+
+		require.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
+		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
+		assert.Equal(t, "hit the road", expr.Expression)
+		assert.Len(t, expr.LearnedLogs, 2)
+		assert.Len(t, expr.ReverseLogs, 2)
+		assert.NotZero(t, expr.EasinessFactor)
+		assert.NotZero(t, expr.ReverseEasinessFactor)
+
+		// Both logs should be sorted newest first
+		assert.True(t, expr.LearnedLogs[0].LearnedAt.After(expr.LearnedLogs[1].LearnedAt.Time) || expr.LearnedLogs[0].LearnedAt.Equal(expr.LearnedLogs[1].LearnedAt.Time))
+		assert.True(t, expr.ReverseLogs[0].LearnedAt.After(expr.ReverseLogs[1].LearnedAt.Time) || expr.ReverseLogs[0].LearnedAt.Equal(expr.ReverseLogs[1].LearnedAt.Time))
+	})
+}
+
+func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testing.T) {
+	validator := &Validator{}
+
+	t.Run("preserves EasinessFactor when duplicate has only ReverseLogs", func(t *testing.T) {
+		files := []learningHistoryFile{
+			{
+				path: "test.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{
+										Expression:     "break the ice",
+										EasinessFactor: 2.7,
+										LearnedLogs: []LearningRecord{
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
+										},
+									},
+								},
+							},
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene B"},
+								Expressions: []LearningHistoryExpression{
+									{
+										Expression: "break the ice",
+										ReverseLogs: []LearningRecord{
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := validator.fixLearningNotesStructure(files, result)
+
+		// Expression should be merged into Scene A
+		require.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
+		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
+		// EasinessFactor should be preserved since no new LearnedLogs were added from the duplicate
+		assert.Equal(t, 2.7, expr.EasinessFactor)
+		assert.Len(t, expr.LearnedLogs, 1)
+		// ReverseLogs should be merged
+		assert.Len(t, expr.ReverseLogs, 1)
+		assert.NotZero(t, expr.ReverseEasinessFactor)
+
+		// Scene B should be empty
+		assert.Len(t, fixed[0].contents[0].Scenes[1].Expressions, 0)
+	})
+
+	t.Run("preserves ReverseEasinessFactor when duplicate has only LearnedLogs", func(t *testing.T) {
+		files := []learningHistoryFile{
+			{
+				path: "test.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									{
+										Expression:            "lose one's temper",
+										ReverseEasinessFactor: 2.8,
+										ReverseLogs: []LearningRecord{
+											{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
+										},
+									},
+								},
+							},
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene B"},
+								Expressions: []LearningHistoryExpression{
+									{
+										Expression: "lose one's temper",
+										LearnedLogs: []LearningRecord{
+											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := validator.fixLearningNotesStructure(files, result)
+
+		// Expression should be merged into Scene A
+		require.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
+		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
+		// ReverseEasinessFactor should be preserved since no new ReverseLogs were added
+		assert.Equal(t, 2.8, expr.ReverseEasinessFactor)
+		assert.Len(t, expr.ReverseLogs, 1)
+		// LearnedLogs should be merged and EasinessFactor recalculated
+		assert.Len(t, expr.LearnedLogs, 1)
+		assert.NotZero(t, expr.EasinessFactor)
+
+		// Scene B should be empty
+		assert.Len(t, fixed[0].contents[0].Scenes[1].Expressions, 0)
+	})
+}

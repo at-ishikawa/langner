@@ -396,6 +396,7 @@ func (r *ReverseQuizCLI) updateReverseHistory(card *WordOccurrence, isCorrect bo
 		storyTitle,
 		sceneTitle,
 		wordToRecord,
+		card.Definition.Expression,
 		isCorrect,
 		true, // always mark as known word for reverse quiz
 		quality,

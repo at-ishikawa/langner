@@ -586,6 +586,7 @@ func TestFreeformQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 				tt.storyTitle,
 				tt.sceneTitle,
 				tt.expression,
+				"",
 				tt.isCorrect,
 				tt.isKnownWord,
 				4,

@@ -57,6 +57,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 		storyTitle              string
 		sceneTitle              string
 		expression              string
+		originalExpression      string
 		isCorrect               bool
 		isKnownWord             bool
 		quality                 int
@@ -247,6 +248,70 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 			wantFound:               false,
 			wantSceneExpressionsLen: 2,
 		},
+		{
+			name: "finds existing entry by original expression when definition is used as lookup key",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression:            "break the ice",
+									LearnedLogs:           []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+									EasinessFactor:        2.5,
+									ReverseEasinessFactor: DefaultEasinessFactor,
+								},
+							},
+						},
+					},
+				},
+			},
+			notebookID:         "test-notebook",
+			storyTitle:         "Story 1",
+			sceneTitle:         "Scene 1",
+			expression:         "ease the tension",
+			originalExpression: "break the ice",
+			isCorrect:          true,
+			isKnownWord:        true,
+			quality:            int(QualityCorrect),
+			responseTimeMs:     5000,
+			wantFound:          true,
+		},
+		{
+			name: "finds existing flashcard entry by original expression when definition is used as lookup key",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "flashcards",
+						Type:       "flashcard",
+					},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:            "lose one's temper",
+							LearnedLogs:           []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+							EasinessFactor:        2.5,
+							ReverseEasinessFactor: DefaultEasinessFactor,
+						},
+					},
+				},
+			},
+			notebookID:         "test-notebook",
+			storyTitle:         "flashcards",
+			sceneTitle:         "",
+			expression:         "become very angry",
+			originalExpression: "lose one's temper",
+			isCorrect:          true,
+			isKnownWord:        true,
+			quality:            int(QualityCorrect),
+			responseTimeMs:     3000,
+			wantFound:          true,
+		},
 	}
 
 	for _, tc := range tests {
@@ -258,6 +323,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 				tc.storyTitle,
 				tc.sceneTitle,
 				tc.expression,
+				tc.originalExpression,
 				tc.isCorrect,
 				tc.isKnownWord,
 				tc.quality,
@@ -271,11 +337,20 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 
 			// Find the expression and verify reverse logs exist
 			var gotExpression *LearningHistoryExpression
+			matchExpression := func(expName string) bool {
+				if expName == tc.expression {
+					return true
+				}
+				if tc.originalExpression != "" && expName == tc.originalExpression {
+					return true
+				}
+				return false
+			}
 			for _, story := range history {
 				if story.Metadata.Title == tc.storyTitle {
 					if story.Metadata.Type == "flashcard" || (tc.storyTitle == "flashcards" && tc.sceneTitle == "") {
 						for _, exp := range story.Expressions {
-							if exp.Expression == tc.expression {
+							if matchExpression(exp.Expression) {
 								gotExpression = &exp
 								break
 							}
@@ -283,7 +358,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 					} else {
 						for _, scene := range story.Scenes {
 							for _, exp := range scene.Expressions {
-								if exp.Expression == tc.expression {
+								if matchExpression(exp.Expression) {
 									gotExpression = &exp
 									break
 								}
@@ -324,22 +399,23 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 
 func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T) {
 	tests := []struct {
-		name            string
-		initialHistory  []LearningHistory
-		notebookID      string
-		storyTitle      string
-		sceneTitle      string
-		expression      string
-		isCorrect       bool
-		isKnownWord     bool
-		quality         int
-		responseTimeMs  int64
-		quizType        QuizType
-		wantFound       bool
-		wantExpressions int
-		wantStatus      LearnedStatus
-		wantLogs        int
-		wantScenesLen   int // if > 0, assert the number of scenes
+		name               string
+		initialHistory     []LearningHistory
+		notebookID         string
+		storyTitle         string
+		sceneTitle         string
+		expression         string
+		originalExpression string
+		isCorrect          bool
+		isKnownWord        bool
+		quality            int
+		responseTimeMs     int64
+		quizType           QuizType
+		wantFound          bool
+		wantExpressions    int
+		wantStatus         LearnedStatus
+		wantLogs           int
+		wantScenesLen      int // if > 0, assert the number of scenes
 	}{
 		{
 			name:            "Create new expression in empty history",
@@ -731,6 +807,76 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			wantStatus:      learnedStatusCanBeUsed,
 			wantScenesLen:   2,
 		},
+		{
+			name: "finds existing entry by original expression when definition is used as lookup key",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "Story 1",
+					},
+					Scenes: []LearningScene{
+						{
+							Metadata: LearningSceneMetadata{Title: "Scene 1"},
+							Expressions: []LearningHistoryExpression{
+								{
+									Expression:     "break the ice",
+									LearnedLogs:    []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+									EasinessFactor: 2.5,
+								},
+							},
+						},
+					},
+				},
+			},
+			notebookID:         "test-notebook",
+			storyTitle:         "Story 1",
+			sceneTitle:         "Scene 1",
+			expression:         "ease the tension",
+			originalExpression: "break the ice",
+			isCorrect:          true,
+			isKnownWord:        true,
+			quality:            int(QualityCorrect),
+			responseTimeMs:     5000,
+			quizType:           QuizTypeNotebook,
+			wantFound:          true,
+			wantExpressions:    1,
+			wantStatus:         learnedStatusUnderstood,
+			wantLogs:           2,
+		},
+		{
+			name: "finds existing flashcard entry by original expression when definition is used as lookup key",
+			initialHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{
+						NotebookID: "test-notebook",
+						Title:      "flashcards",
+						Type:       "flashcard",
+					},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:     "lose one's temper",
+							LearnedLogs:    []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+							EasinessFactor: 2.5,
+						},
+					},
+				},
+			},
+			notebookID:         "test-notebook",
+			storyTitle:         "flashcards",
+			sceneTitle:         "",
+			expression:         "become very angry",
+			originalExpression: "lose one's temper",
+			isCorrect:          true,
+			isKnownWord:        true,
+			quality:            int(QualityCorrect),
+			responseTimeMs:     3000,
+			quizType:           QuizTypeNotebook,
+			wantFound:          true,
+			wantExpressions:    1,
+			wantStatus:         learnedStatusUnderstood,
+			wantLogs:           2,
+		},
 	}
 
 	for _, tc := range tests {
@@ -742,6 +888,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 				tc.storyTitle,
 				tc.sceneTitle,
 				tc.expression,
+				tc.originalExpression,
 				tc.isCorrect,
 				tc.isKnownWord,
 				tc.quality,
@@ -759,13 +906,23 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			var gotExpression *LearningHistoryExpression
 			var gotExpressions int
 
+			matchExpression := func(expName string) bool {
+				if expName == tc.expression {
+					return true
+				}
+				if tc.originalExpression != "" && expName == tc.originalExpression {
+					return true
+				}
+				return false
+			}
+
 			for _, story := range history {
 				if story.Metadata.Title == tc.storyTitle {
 					// For flashcard type, check expressions directly
 					if story.Metadata.Type == "flashcard" || (tc.storyTitle == "flashcards" && tc.sceneTitle == "") {
 						gotExpressions = len(story.Expressions)
 						for _, exp := range story.Expressions {
-							if exp.Expression == tc.expression {
+							if matchExpression(exp.Expression) {
 								gotExpression = &exp
 								break
 							}
@@ -776,7 +933,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 							if scene.Metadata.Title == tc.sceneTitle {
 								gotExpressions = len(scene.Expressions)
 								for _, exp := range scene.Expressions {
-									if exp.Expression == tc.expression {
+									if matchExpression(exp.Expression) {
 										gotExpression = &exp
 										break
 									}
