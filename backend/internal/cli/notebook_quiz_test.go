@@ -817,6 +817,7 @@ func TestNotebookQuizCLI_UpdateLearningHistoryRecord(t *testing.T) {
 				"Test Story",
 				"Test Scene",
 				tt.expression,
+				"",
 				tt.isCorrect,
 				tt.isKnownWord,
 				4,

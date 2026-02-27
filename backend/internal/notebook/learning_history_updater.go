@@ -70,9 +70,12 @@ func (u *LearningHistoryUpdater) GetHistory() []LearningHistory {
 	return u.history
 }
 
-// UpdateOrCreateExpressionWithQuality updates or creates an expression with SM-2 quality assessment
+// UpdateOrCreateExpressionWithQuality updates or creates an expression with SM-2 quality assessment.
+// originalExpression is the original expression form (e.g., Note.Expression) which may differ from
+// expression (e.g., Note.Definition) when a definition is used as the lookup key. If originalExpression
+// is non-empty, both forms are checked when matching existing entries to avoid duplicates.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -87,7 +90,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 
 		if isFlashcard || h.Metadata.Type == "flashcard" {
 			for ei, exp := range h.Expressions {
-				if exp.Expression != expression {
+				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
 				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
@@ -103,7 +106,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 			}
 
 			for ei, exp := range s.Expressions {
-				if exp.Expression != expression {
+				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
 				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
@@ -117,9 +120,12 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 	return false
 }
 
-// UpdateOrCreateExpressionWithQualityForReverse updates or creates an expression with SM-2 quality assessment for reverse quiz
+// UpdateOrCreateExpressionWithQualityForReverse updates or creates an expression with SM-2 quality assessment for reverse quiz.
+// originalExpression is the original expression form (e.g., Note.Expression) which may differ from
+// expression (e.g., Note.Definition) when a definition is used as the lookup key. If originalExpression
+// is non-empty, both forms are checked when matching existing entries to avoid duplicates.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -134,7 +140,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 
 		if isFlashcard || h.Metadata.Type == "flashcard" {
 			for ei, exp := range h.Expressions {
-				if exp.Expression != expression {
+				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
 				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
@@ -150,7 +156,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 			}
 
 			for ei, exp := range s.Expressions {
-				if exp.Expression != expression {
+				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
 				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
