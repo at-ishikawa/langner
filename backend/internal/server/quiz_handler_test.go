@@ -17,7 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
-	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
 func newTestHandler(t *testing.T, openaiClient inference.Client) *QuizHandler {
@@ -26,17 +26,15 @@ func newTestHandler(t *testing.T, openaiClient inference.Client) *QuizHandler {
 	storiesDir := t.TempDir()
 	learningNotesDir := t.TempDir()
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			StoriesDirectories:     []string{storiesDir},
-			LearningNotesDirectory: learningNotesDir,
-		},
-	}
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		LearningNotesDirectory: learningNotesDir,
+	}, openaiClient, make(map[string]rapidapi.Response))
 
-	return NewQuizHandler(cfg, openaiClient, make(map[string]rapidapi.Response))
+	return NewQuizHandler(svc)
 }
 
-func newTestHandlerWithFixtures(t *testing.T, openaiClient inference.Client) *QuizHandler {
+func newTestHandlerWithFixtures(t *testing.T, openaiClient inference.Client) (*QuizHandler, string) {
 	t.Helper()
 
 	storiesDir := t.TempDir()
@@ -80,15 +78,13 @@ notebooks:
         - "It was pure serendipity that they met."
 `), 0644))
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			StoriesDirectories:     []string{storiesDir},
-			FlashcardsDirectories:  []string{flashcardsDir},
-			LearningNotesDirectory: learningDir,
-		},
-	}
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		FlashcardsDirectories:  []string{flashcardsDir},
+		LearningNotesDirectory: learningDir,
+	}, openaiClient, make(map[string]rapidapi.Response))
 
-	return NewQuizHandler(cfg, openaiClient, make(map[string]rapidapi.Response))
+	return NewQuizHandler(svc), learningDir
 }
 
 func TestQuizHandler_GetQuizOptions(t *testing.T) {
@@ -164,7 +160,7 @@ func TestQuizHandler_StartQuiz(t *testing.T) {
 func TestQuizHandler_GetQuizOptions_WithFixtures(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler := newTestHandlerWithFixtures(t, mockClient)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
 
 	resp, err := handler.GetQuizOptions(
 		context.Background(),
@@ -196,7 +192,7 @@ func TestQuizHandler_GetQuizOptions_WithFixtures(t *testing.T) {
 func TestQuizHandler_StartQuiz_WithStoryNotebook(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler := newTestHandlerWithFixtures(t, mockClient)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
 
 	resp, err := handler.StartQuiz(
 		context.Background(),
@@ -220,7 +216,7 @@ func TestQuizHandler_StartQuiz_WithStoryNotebook(t *testing.T) {
 func TestQuizHandler_StartQuiz_WithFlashcardNotebook(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler := newTestHandlerWithFixtures(t, mockClient)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
 
 	resp, err := handler.StartQuiz(
 		context.Background(),
@@ -244,7 +240,7 @@ func TestQuizHandler_StartQuiz_WithFlashcardNotebook(t *testing.T) {
 func TestQuizHandler_StartQuiz_WithMultipleNotebooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler := newTestHandlerWithFixtures(t, mockClient)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
 
 	resp, err := handler.StartQuiz(
 		context.Background(),
@@ -306,14 +302,12 @@ notebooks:
         - "She went to the store."
 `), 0644))
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			StoriesDirectories:     []string{storiesDir},
-			FlashcardsDirectories:  []string{flashcardsDir},
-			LearningNotesDirectory: learningDir,
-		},
-	}
-	handler := NewQuizHandler(cfg, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		FlashcardsDirectories:  []string{flashcardsDir},
+		LearningNotesDirectory: learningDir,
+	}, mockClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
 
 	// Test story with definition field
 	t.Run("story uses definition field as entry", func(t *testing.T) {
@@ -353,7 +347,7 @@ notebooks:
 func TestQuizHandler_SubmitAnswer_UpdatesLearningHistory(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler := newTestHandlerWithFixtures(t, mockClient)
+	handler, learningDir := newTestHandlerWithFixtures(t, mockClient)
 
 	// Start a quiz to populate the note store
 	_, err := handler.StartQuiz(
@@ -369,7 +363,7 @@ func TestQuizHandler_SubmitAnswer_UpdatesLearningHistory(t *testing.T) {
 	var noteID int64
 	handler.mu.Lock()
 	for id, note := range handler.noteStore {
-		if note.expression == "serendipity" {
+		if note.Entry == "serendipity" {
 			noteID = id
 			break
 		}
@@ -410,7 +404,6 @@ func TestQuizHandler_SubmitAnswer_UpdatesLearningHistory(t *testing.T) {
 	assert.Equal(t, "a fortunate discovery by accident", resp.Msg.GetMeaning())
 
 	// Verify learning history file was created
-	learningDir := handler.cfg.Notebooks.LearningNotesDirectory
 	historyPath := filepath.Join(learningDir, "test-vocab.yml")
 	_, err = os.Stat(historyPath)
 	assert.NoError(t, err)
@@ -422,22 +415,20 @@ func TestQuizHandler_SubmitAnswer_UpdateLearningHistoryError(t *testing.T) {
 
 	learningDir := t.TempDir()
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			LearningNotesDirectory: learningDir,
-		},
-	}
-	handler := NewQuizHandler(cfg, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{
+		LearningNotesDirectory: learningDir,
+	}, mockClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
 
-	// Place a malformed YAML file in the learning directory to trigger error in updateLearningHistory
+	// Place a malformed YAML file in the learning directory to trigger error in SaveResult
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-notebook.yml"), []byte("{{invalid yaml"), 0644))
 
 	// Manually populate the note store
-	handler.noteStore[1] = &quizNote{
-		notebookName: "test-notebook",
-		storyTitle:   "flashcards",
-		expression:   "comprehend",
-		meaning:      "to understand completely",
+	handler.noteStore[1] = quiz.Card{
+		NotebookName: "test-notebook",
+		StoryTitle:   "flashcards",
+		Entry:        "comprehend",
+		Meaning:      "to understand completely",
 	}
 
 	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
@@ -480,12 +471,10 @@ func TestQuizHandler_GetQuizOptions_LearningHistoryError(t *testing.T) {
 
 	learningDir := t.TempDir()
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			LearningNotesDirectory: learningDir,
-		},
-	}
-	handler := NewQuizHandler(cfg, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{
+		LearningNotesDirectory: learningDir,
+	}, mockClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "broken.yml"), []byte("{{invalid yaml"), 0644))
@@ -529,13 +518,11 @@ notebooks:
           meaning: "should fail validation"
 `), 0644))
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			StoriesDirectories:     []string{storiesDir},
-			LearningNotesDirectory: learningDir,
-		},
-	}
-	handler := NewQuizHandler(cfg, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		LearningNotesDirectory: learningDir,
+	}, mockClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
 
 	resp, err := handler.GetQuizOptions(
 		context.Background(),
@@ -571,13 +558,11 @@ notebooks:
       meaning: "should fail validation"
 `), 0644))
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			FlashcardsDirectories:  []string{flashcardsDir},
-			LearningNotesDirectory: learningDir,
-		},
-	}
-	handler := NewQuizHandler(cfg, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{
+		FlashcardsDirectories:  []string{flashcardsDir},
+		LearningNotesDirectory: learningDir,
+	}, mockClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
 
 	resp, err := handler.StartQuiz(
 		context.Background(),
@@ -621,13 +606,11 @@ notebooks:
           meaning: "should fail validation"
 `), 0644))
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			StoriesDirectories:     []string{storiesDir},
-			LearningNotesDirectory: learningDir,
-		},
-	}
-	handler := NewQuizHandler(cfg, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		LearningNotesDirectory: learningDir,
+	}, mockClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
 
 	resp, err := handler.StartQuiz(
 		context.Background(),
@@ -671,13 +654,11 @@ notebooks:
           meaning: "a greeting"
 `), 0644))
 
-	cfg := &config.Config{
-		Notebooks: config.NotebooksConfig{
-			StoriesDirectories:     []string{storiesDir},
-			LearningNotesDirectory: learningDir,
-		},
-	}
-	handler := NewQuizHandler(cfg, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		LearningNotesDirectory: learningDir,
+	}, mockClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "broken.yml"), []byte("{{invalid yaml"), 0644))
@@ -743,11 +724,11 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 			noteID: 1,
 			answer: "to understand",
 			setupNoteStore: func(h *QuizHandler) {
-				h.noteStore[1] = &quizNote{
-					notebookName: "test-notebook",
-					storyTitle:   "flashcards",
-					expression:   "comprehend",
-					meaning:      "to understand completely",
+				h.noteStore[1] = quiz.Card{
+					NotebookName: "test-notebook",
+					StoryTitle:   "flashcards",
+					Entry:        "comprehend",
+					Meaning:      "to understand completely",
 				}
 			},
 			setupMock: func(m *mock_inference.MockClient) {
@@ -778,11 +759,11 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 			noteID: 1,
 			answer: "to eat",
 			setupNoteStore: func(h *QuizHandler) {
-				h.noteStore[1] = &quizNote{
-					notebookName: "test-notebook",
-					storyTitle:   "flashcards",
-					expression:   "comprehend",
-					meaning:      "to understand completely",
+				h.noteStore[1] = quiz.Card{
+					NotebookName: "test-notebook",
+					StoryTitle:   "flashcards",
+					Entry:        "comprehend",
+					Meaning:      "to understand completely",
 				}
 			},
 			setupMock: func(m *mock_inference.MockClient) {
@@ -813,11 +794,11 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 			noteID: 1,
 			answer: "some answer",
 			setupNoteStore: func(h *QuizHandler) {
-				h.noteStore[1] = &quizNote{
-					notebookName: "test-notebook",
-					storyTitle:   "flashcards",
-					expression:   "comprehend",
-					meaning:      "to understand completely",
+				h.noteStore[1] = quiz.Card{
+					NotebookName: "test-notebook",
+					StoryTitle:   "flashcards",
+					Entry:        "comprehend",
+					Meaning:      "to understand completely",
 				}
 			},
 			setupMock: func(m *mock_inference.MockClient) {
@@ -833,11 +814,11 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 			noteID: 1,
 			answer: "some answer",
 			setupNoteStore: func(h *QuizHandler) {
-				h.noteStore[1] = &quizNote{
-					notebookName: "test-notebook",
-					storyTitle:   "flashcards",
-					expression:   "comprehend",
-					meaning:      "to understand completely",
+				h.noteStore[1] = quiz.Card{
+					NotebookName: "test-notebook",
+					StoryTitle:   "flashcards",
+					Entry:        "comprehend",
+					Meaning:      "to understand completely",
 				}
 			},
 			setupMock: func(m *mock_inference.MockClient) {
@@ -949,234 +930,6 @@ func TestValidateRequest(t *testing.T) {
 			require.NotNil(t, got)
 			assert.Equal(t, connect.CodeInvalidArgument, got.Code())
 			assert.Len(t, got.Details(), tt.wantDetailLen)
-		})
-	}
-}
-
-func TestExtractAnswerResult(t *testing.T) {
-	tests := []struct {
-		name        string
-		result      inference.AnswerMeaning
-		wantCorrect bool
-		wantReason  string
-		wantQuality int
-	}{
-		{
-			name: "empty answers returns incorrect with quality 1",
-			result: inference.AnswerMeaning{
-				AnswersForContext: nil,
-			},
-			wantCorrect: false,
-			wantReason:  "",
-			wantQuality: 1,
-		},
-		{
-			name: "correct answer extracts fields",
-			result: inference.AnswerMeaning{
-				AnswersForContext: []inference.AnswersForContext{
-					{Correct: true, Reason: "Good answer", Quality: 5},
-				},
-			},
-			wantCorrect: true,
-			wantReason:  "Good answer",
-			wantQuality: 5,
-		},
-		{
-			name: "quality zero defaults to 4 for correct",
-			result: inference.AnswerMeaning{
-				AnswersForContext: []inference.AnswersForContext{
-					{Correct: true, Reason: "OK", Quality: 0},
-				},
-			},
-			wantCorrect: true,
-			wantReason:  "OK",
-			wantQuality: 4,
-		},
-		{
-			name: "quality zero defaults to 1 for incorrect",
-			result: inference.AnswerMeaning{
-				AnswersForContext: []inference.AnswersForContext{
-					{Correct: false, Reason: "Wrong", Quality: 0},
-				},
-			},
-			wantCorrect: false,
-			wantReason:  "Wrong",
-			wantQuality: 1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			gotCorrect, gotReason, gotQuality := extractAnswerResult(tt.result)
-			assert.Equal(t, tt.wantCorrect, gotCorrect)
-			assert.Equal(t, tt.wantReason, gotReason)
-			assert.Equal(t, tt.wantQuality, gotQuality)
-		})
-	}
-}
-
-func TestCountStoryDefinitions(t *testing.T) {
-	tests := []struct {
-		name    string
-		stories []notebook.StoryNotebook
-		want    int
-	}{
-		{
-			name:    "empty stories",
-			stories: nil,
-			want:    0,
-		},
-		{
-			name: "counts definitions across stories and scenes",
-			stories: []notebook.StoryNotebook{
-				{
-					Scenes: []notebook.StoryScene{
-						{Definitions: []notebook.Note{{Expression: "a"}, {Expression: "b"}}},
-						{Definitions: []notebook.Note{{Expression: "c"}}},
-					},
-				},
-				{
-					Scenes: []notebook.StoryScene{
-						{Definitions: []notebook.Note{{Expression: "d"}}},
-					},
-				},
-			},
-			want: 4,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := countStoryDefinitions(tt.stories)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestCountFlashcardCards(t *testing.T) {
-	tests := []struct {
-		name      string
-		notebooks []notebook.FlashcardNotebook
-		want      int
-	}{
-		{
-			name:      "empty notebooks",
-			notebooks: nil,
-			want:      0,
-		},
-		{
-			name: "counts cards across notebooks",
-			notebooks: []notebook.FlashcardNotebook{
-				{Cards: []notebook.Note{{Expression: "a"}, {Expression: "b"}}},
-				{Cards: []notebook.Note{{Expression: "c"}}},
-			},
-			want: 3,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := countFlashcardCards(tt.notebooks)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
-func TestBuildFromConversations(t *testing.T) {
-	tests := []struct {
-		name         string
-		scene        notebook.StoryScene
-		definition   notebook.Note
-		wantExamples int
-	}{
-		{
-			name: "skips empty quotes",
-			scene: notebook.StoryScene{
-				Conversations: []notebook.Conversation{
-					{Speaker: "Alice", Quote: ""},
-					{Speaker: "Bob", Quote: "This is absolutely preposterous."},
-				},
-			},
-			definition: notebook.Note{
-				Expression: "preposterous",
-				Meaning:    "absurd",
-			},
-			wantExamples: 1,
-		},
-		{
-			name: "skips non-matching quotes",
-			scene: notebook.StoryScene{
-				Conversations: []notebook.Conversation{
-					{Speaker: "Alice", Quote: "Hello there."},
-					{Speaker: "Bob", Quote: "Good morning."},
-				},
-			},
-			definition: notebook.Note{
-				Expression: "preposterous",
-				Meaning:    "absurd",
-			},
-			wantExamples: 0,
-		},
-		{
-			name: "matches multiple quotes containing expression",
-			scene: notebook.StoryScene{
-				Conversations: []notebook.Conversation{
-					{Speaker: "Alice", Quote: "That is preposterous!"},
-					{Speaker: "Bob", Quote: "I agree, totally preposterous."},
-				},
-			},
-			definition: notebook.Note{
-				Expression: "preposterous",
-				Meaning:    "absurd",
-			},
-			wantExamples: 2,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			examples, contexts := buildFromConversations(&tt.scene, &tt.definition)
-			assert.Len(t, examples, tt.wantExamples)
-			assert.Len(t, contexts, tt.wantExamples)
-		})
-	}
-}
-
-func TestContainsExpression(t *testing.T) {
-	tests := []struct {
-		name       string
-		textLower  string
-		expression string
-		definition string
-		want       bool
-	}{
-		{
-			name:       "matches expression",
-			textLower:  "i need to comprehend this",
-			expression: "comprehend",
-			definition: "",
-			want:       true,
-		},
-		{
-			name:       "matches definition",
-			textLower:  "he ran away quickly",
-			expression: "run",
-			definition: "ran",
-			want:       true,
-		},
-		{
-			name:       "no match",
-			textLower:  "hello world",
-			expression: "comprehend",
-			definition: "",
-			want:       false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := containsExpression(tt.textLower, tt.expression, tt.definition)
-			assert.Equal(t, tt.want, got)
 		})
 	}
 }

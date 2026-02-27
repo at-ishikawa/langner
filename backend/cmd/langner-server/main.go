@@ -15,6 +15,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
+	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/internal/server"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
@@ -63,7 +64,8 @@ func run(ctx context.Context) error {
 		dictionaryMap = make(map[string]rapidapi.Response)
 	}
 
-	handler := server.NewQuizHandler(cfg, openaiClient, dictionaryMap)
+	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap)
+	handler := server.NewQuizHandler(svc)
 	path, h := apiv1connect.NewQuizServiceHandler(handler)
 
 	mux := http.NewServeMux()

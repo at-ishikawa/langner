@@ -5,9 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"sort"
-	"strings"
 	"sync"
 
 	"buf.build/go/protovalidate"
@@ -17,43 +15,25 @@ import (
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
-	"github.com/at-ishikawa/langner/internal/config"
-	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
-	"github.com/at-ishikawa/langner/internal/inference"
-	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/quiz"
 )
-
-// quizNote holds data needed to grade an answer and update learning history.
-type quizNote struct {
-	notebookName string
-	storyTitle   string
-	sceneTitle   string
-	expression   string
-	meaning      string
-	contexts     []inference.Context
-}
 
 // QuizHandler implements the QuizServiceHandler interface.
 type QuizHandler struct {
 	apiv1connect.UnimplementedQuizServiceHandler
 
-	cfg           *config.Config
-	openaiClient  inference.Client
-	dictionaryMap map[string]rapidapi.Response
-
+	svc       *quiz.Service
 	mu        sync.Mutex
-	noteStore map[int64]*quizNote
+	noteStore map[int64]quiz.Card
 	nextID    int64
 }
 
 // NewQuizHandler creates a new QuizHandler.
-func NewQuizHandler(cfg *config.Config, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response) *QuizHandler {
+func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 	return &QuizHandler{
-		cfg:           cfg,
-		openaiClient:  openaiClient,
-		dictionaryMap: dictionaryMap,
-		noteStore:     make(map[int64]*quizNote),
-		nextID:        1,
+		svc:       svc,
+		noteStore: make(map[int64]quiz.Card),
+		nextID:    1,
 	}
 }
 
@@ -62,65 +42,26 @@ func (h *QuizHandler) GetQuizOptions(
 	ctx context.Context,
 	req *connect.Request[apiv1.GetQuizOptionsRequest],
 ) (*connect.Response[apiv1.GetQuizOptionsResponse], error) {
-	reader, err := h.newReader()
+	summaries, err := h.svc.LoadNotebookSummaries()
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader: %w", err))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load notebook summaries: %w", err))
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(h.cfg.Notebooks.LearningNotesDirectory)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
-	}
-
-	var summaries []*apiv1.NotebookSummary
-
-	for id, index := range reader.GetStoryIndexes() {
-		stories, err := reader.ReadStoryNotebooks(id)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read story notebooks(%s): %w", id, err))
-		}
-
-		filtered, err := notebook.FilterStoryNotebooks(
-			stories, learningHistories[id], h.dictionaryMap,
-			false, true, true, false,
-		)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("filter story notebooks(%s): %w", id, err))
-		}
-
-		summaries = append(summaries, &apiv1.NotebookSummary{
-			NotebookId:  id,
-			Name:        index.Name,
-			ReviewCount: int32(countStoryDefinitions(filtered)),
+	var protoSummaries []*apiv1.NotebookSummary
+	for _, s := range summaries {
+		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{
+			NotebookId:  s.NotebookID,
+			Name:        s.Name,
+			ReviewCount: int32(s.ReviewCount),
 		})
 	}
 
-	for id, index := range reader.GetFlashcardIndexes() {
-		notebooks, err := reader.ReadFlashcardNotebooks(id)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read flashcard notebooks(%s): %w", id, err))
-		}
-
-		filtered, err := notebook.FilterFlashcardNotebooks(
-			notebooks, learningHistories[id], h.dictionaryMap, false,
-		)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("filter flashcard notebooks(%s): %w", id, err))
-		}
-
-		summaries = append(summaries, &apiv1.NotebookSummary{
-			NotebookId:  id,
-			Name:        index.Name,
-			ReviewCount: int32(countFlashcardCards(filtered)),
-		})
-	}
-
-	sort.Slice(summaries, func(i, j int) bool {
-		return summaries[i].GetNotebookId() < summaries[j].GetNotebookId()
+	sort.Slice(protoSummaries, func(i, j int) bool {
+		return protoSummaries[i].GetNotebookId() < protoSummaries[j].GetNotebookId()
 	})
 
 	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{
-		Notebooks: summaries,
+		Notebooks: protoSummaries,
 	}), nil
 }
 
@@ -133,48 +74,37 @@ func (h *QuizHandler) StartQuiz(
 		return nil, err
 	}
 
-	reader, err := h.newReader()
+	cards, err := h.svc.LoadCards(req.Msg.GetNotebookIds(), req.Msg.GetIncludeUnstudied())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader: %w", err))
+		var notFoundErr *quiz.NotFoundError
+		if errors.As(err, &notFoundErr) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load cards: %w", err))
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(h.cfg.Notebooks.LearningNotesDirectory)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
-	}
-
-	storyIndexes := reader.GetStoryIndexes()
-	flashcardIndexes := reader.GetFlashcardIndexes()
-	includeUnstudied := req.Msg.GetIncludeUnstudied()
-
-	localStore := make(map[int64]*quizNote)
+	localStore := make(map[int64]quiz.Card)
 	var nextID int64 = 1
 
 	var flashcards []*apiv1.Flashcard
+	for _, card := range cards {
+		noteID := nextID
+		nextID++
+		localStore[noteID] = card
 
-	for _, notebookID := range req.Msg.GetNotebookIds() {
-		_, isStory := storyIndexes[notebookID]
-		_, isFlashcard := flashcardIndexes[notebookID]
-
-		if !isStory && !isFlashcard {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %q not found", notebookID))
+		var examples []*apiv1.Example
+		for _, ex := range card.Examples {
+			examples = append(examples, &apiv1.Example{
+				Text:    ex.Text,
+				Speaker: ex.Speaker,
+			})
 		}
 
-		if isStory {
-			cards, err := h.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied, localStore, &nextID)
-			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load story cards(%s): %w", notebookID, err))
-			}
-			flashcards = append(flashcards, cards...)
-		}
-
-		if isFlashcard {
-			cards, err := h.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied, localStore, &nextID)
-			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load flashcard cards(%s): %w", notebookID, err))
-			}
-			flashcards = append(flashcards, cards...)
-		}
+		flashcards = append(flashcards, &apiv1.Flashcard{
+			NoteId:   noteID,
+			Entry:    card.Entry,
+			Examples: examples,
+		})
 	}
 
 	h.mu.Lock()
@@ -200,265 +130,27 @@ func (h *QuizHandler) SubmitAnswer(
 	answer := req.Msg.GetAnswer()
 
 	h.mu.Lock()
-	note, ok := h.noteStore[noteID]
+	card, ok := h.noteStore[noteID]
 	h.mu.Unlock()
 
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
 	}
 
-	results, err := h.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
-		Expressions: []inference.Expression{
-			{
-				Expression:        note.expression,
-				Meaning:           answer,
-				Contexts:          note.contexts,
-				IsExpressionInput: false,
-				ResponseTimeMs:    req.Msg.GetResponseTimeMs(),
-			},
-		},
-	})
+	grade, err := h.svc.GradeNotebookAnswer(ctx, card, answer, req.Msg.GetResponseTimeMs())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
 	}
-	if len(results.Answers) == 0 {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("no results returned from inference"))
-	}
 
-	result := results.Answers[0]
-	isCorrect, reason, quality := extractAnswerResult(result)
-
-	if err := h.updateLearningHistory(note, isCorrect, quality, req.Msg.GetResponseTimeMs()); err != nil {
+	if err := h.svc.SaveResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
 
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
-		Correct: isCorrect,
-		Meaning: note.meaning,
-		Reason:  reason,
+		Correct: grade.Correct,
+		Meaning: card.Meaning,
+		Reason:  grade.Reason,
 	}), nil
-}
-
-func (h *QuizHandler) newReader() (*notebook.Reader, error) {
-	return notebook.NewReader(
-		h.cfg.Notebooks.StoriesDirectories,
-		h.cfg.Notebooks.FlashcardsDirectories,
-		h.cfg.Notebooks.BooksDirectories,
-		h.cfg.Notebooks.DefinitionsDirectories,
-		h.dictionaryMap,
-	)
-}
-
-func (h *QuizHandler) loadStoryCards(
-	reader *notebook.Reader,
-	notebookID string,
-	learningHistories map[string][]notebook.LearningHistory,
-	includeUnstudied bool,
-	localStore map[int64]*quizNote,
-	nextID *int64,
-) ([]*apiv1.Flashcard, error) {
-	stories, err := reader.ReadStoryNotebooks(notebookID)
-	if err != nil {
-		return nil, fmt.Errorf("read story notebooks(%s): %w", notebookID, err)
-	}
-
-	filtered, err := notebook.FilterStoryNotebooks(
-		stories, learningHistories[notebookID], h.dictionaryMap,
-		false, includeUnstudied, true, false,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("filter story notebooks(%s): %w", notebookID, err)
-	}
-
-	var flashcards []*apiv1.Flashcard
-	for _, story := range filtered {
-		for _, scene := range story.Scenes {
-			for _, definition := range scene.Definitions {
-				expression := definition.Definition
-				if expression == "" {
-					expression = definition.Expression
-				}
-
-				examples, contexts := buildFromConversations(&scene, &definition)
-
-				noteID := *nextID
-				*nextID++
-				localStore[noteID] = &quizNote{
-					notebookName: notebookID,
-					storyTitle:   story.Event,
-					sceneTitle:   scene.Title,
-					expression:   expression,
-					meaning:      definition.Meaning,
-					contexts:     contexts,
-				}
-
-				flashcards = append(flashcards, &apiv1.Flashcard{
-					NoteId:   noteID,
-					Entry:    expression,
-					Examples: examples,
-				})
-			}
-		}
-	}
-
-	return flashcards, nil
-}
-
-func (h *QuizHandler) loadFlashcardCards(
-	reader *notebook.Reader,
-	notebookID string,
-	learningHistories map[string][]notebook.LearningHistory,
-	includeUnstudied bool,
-	localStore map[int64]*quizNote,
-	nextID *int64,
-) ([]*apiv1.Flashcard, error) {
-	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
-	if err != nil {
-		return nil, fmt.Errorf("read flashcard notebooks(%s): %w", notebookID, err)
-	}
-
-	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], h.dictionaryMap, includeUnstudied,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("filter flashcard notebooks(%s): %w", notebookID, err)
-	}
-
-	var flashcards []*apiv1.Flashcard
-	for _, nb := range filtered {
-		for _, card := range nb.Cards {
-			expression := card.Definition
-			if expression == "" {
-				expression = card.Expression
-			}
-
-			var examples []*apiv1.Example
-			for _, example := range card.Examples {
-				examples = append(examples, &apiv1.Example{
-					Text: example,
-				})
-			}
-
-			noteID := *nextID
-			*nextID++
-			localStore[noteID] = &quizNote{
-				notebookName: notebookID,
-				storyTitle:   "flashcards",
-				expression:   expression,
-				meaning:      card.Meaning,
-			}
-
-			flashcards = append(flashcards, &apiv1.Flashcard{
-				NoteId:   noteID,
-				Entry:    expression,
-				Examples: examples,
-			})
-		}
-	}
-
-	return flashcards, nil
-}
-
-func (h *QuizHandler) updateLearningHistory(note *quizNote, isCorrect bool, quality int, responseTimeMs int64) error {
-	learningHistories, err := notebook.NewLearningHistories(h.cfg.Notebooks.LearningNotesDirectory)
-	if err != nil {
-		return fmt.Errorf("load learning histories: %w", err)
-	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[note.notebookName])
-	updater.UpdateOrCreateExpressionWithQuality(
-		note.notebookName,
-		note.storyTitle,
-		note.sceneTitle,
-		note.expression,
-		isCorrect,
-		true,
-		quality,
-		responseTimeMs,
-		notebook.QuizTypeNotebook,
-	)
-
-	notePath := filepath.Join(h.cfg.Notebooks.LearningNotesDirectory, note.notebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return fmt.Errorf("write learning history(%s): %w", notePath, err)
-	}
-
-	return nil
-}
-
-func countStoryDefinitions(stories []notebook.StoryNotebook) int {
-	var count int
-	for _, story := range stories {
-		for _, scene := range story.Scenes {
-			count += len(scene.Definitions)
-		}
-	}
-	return count
-}
-
-func countFlashcardCards(notebooks []notebook.FlashcardNotebook) int {
-	var count int
-	for _, nb := range notebooks {
-		count += len(nb.Cards)
-	}
-	return count
-}
-
-func buildFromConversations(scene *notebook.StoryScene, definition *notebook.Note) ([]*apiv1.Example, []inference.Context) {
-	var examples []*apiv1.Example
-	var contexts []inference.Context
-	for _, conv := range scene.Conversations {
-		if conv.Quote == "" {
-			continue
-		}
-
-		quoteLower := strings.ToLower(conv.Quote)
-		if !containsExpression(quoteLower, definition.Expression, definition.Definition) {
-			continue
-		}
-
-		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
-		examples = append(examples, &apiv1.Example{
-			Text:    cleaned,
-			Speaker: conv.Speaker,
-		})
-		contexts = append(contexts, inference.Context{
-			Context:             cleaned,
-			ReferenceDefinition: definition.Meaning,
-		})
-	}
-	return examples, contexts
-}
-
-func containsExpression(textLower, expression, definition string) bool {
-	if strings.Contains(textLower, strings.ToLower(expression)) {
-		return true
-	}
-	if definition != "" && strings.Contains(textLower, strings.ToLower(definition)) {
-		return true
-	}
-	return false
-}
-
-func extractAnswerResult(result inference.AnswerMeaning) (isCorrect bool, reason string, quality int) {
-	if len(result.AnswersForContext) == 0 {
-		return false, "", 1
-	}
-
-	first := result.AnswersForContext[0]
-	isCorrect = first.Correct
-	reason = first.Reason
-	quality = first.Quality
-
-	if quality == 0 {
-		if isCorrect {
-			quality = 4
-		} else {
-			quality = 1
-		}
-	}
-
-	return isCorrect, reason, quality
 }
 
 func validateRequest(msg proto.Message) *connect.Error {
