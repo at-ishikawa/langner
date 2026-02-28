@@ -76,6 +76,11 @@ jobs:
           version: 10
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Install buf
+        uses: bufbuild/buf-action@v1
+      - name: Generate TypeScript protos
+        working-directory: .
+        run: buf generate --template buf.gen.frontend.yaml
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
       - name: Run e2e tests
