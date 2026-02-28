@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-const GET_QUIZ_OPTIONS_URL = "**/langner.api.v1.QuizService/GetQuizOptions";
-const START_QUIZ_URL = "**/langner.api.v1.QuizService/StartQuiz";
-const SUBMIT_ANSWER_URL = "**/langner.api.v1.QuizService/SubmitAnswer";
+const GET_QUIZ_OPTIONS_URL = "**/api.v1.QuizService/GetQuizOptions";
+const START_QUIZ_URL = "**/api.v1.QuizService/StartQuiz";
+const SUBMIT_ANSWER_URL = "**/api.v1.QuizService/SubmitAnswer";
 
 const CONNECT_JSON_CONTENT_TYPE = "application/connect+json";
 
