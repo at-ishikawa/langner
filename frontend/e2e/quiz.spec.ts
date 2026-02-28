@@ -4,7 +4,7 @@ const GET_QUIZ_OPTIONS_URL = /GetQuizOptions/;
 const START_QUIZ_URL = /StartQuiz/;
 const SUBMIT_ANSWER_URL = /SubmitAnswer/;
 
-const CONNECT_JSON_CONTENT_TYPE = "application/connect+json";
+const CONNECT_JSON_CONTENT_TYPE = "application/json";
 
 const mockNotebooks = [
   { notebookId: "english-phrases", name: "English Phrases", reviewCount: 2 },
