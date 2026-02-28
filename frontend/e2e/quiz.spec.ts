@@ -1,8 +1,8 @@
 import { test, expect } from "@playwright/test";
 
-const GET_QUIZ_OPTIONS_URL = (url: URL) => url.pathname.includes("GetQuizOptions");
-const START_QUIZ_URL = (url: URL) => url.pathname.includes("StartQuiz");
-const SUBMIT_ANSWER_URL = (url: URL) => url.pathname.includes("SubmitAnswer");
+const GET_QUIZ_OPTIONS_URL = /GetQuizOptions/;
+const START_QUIZ_URL = /StartQuiz/;
+const SUBMIT_ANSWER_URL = /SubmitAnswer/;
 
 const CONNECT_JSON_CONTENT_TYPE = "application/connect+json";
 
@@ -44,6 +44,9 @@ test("shows notebooks and starts quiz", async ({ page }) => {
   });
 
   await page.goto("/");
+
+  // Wait for the GetQuizOptions response to be intercepted
+  await page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
 
   await expect(page.getByText("English Phrases")).toBeVisible();
 
@@ -102,6 +105,9 @@ test("completes full quiz flow", async ({ page }) => {
   });
 
   await page.goto("/");
+
+  // Wait for the GetQuizOptions response to be intercepted
+  await page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
 
   await expect(page.getByText("English Phrases")).toBeVisible();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click();
