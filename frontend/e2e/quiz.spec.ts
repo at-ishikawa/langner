@@ -55,10 +55,11 @@ test("shows notebooks and starts quiz", async ({ page }) => {
     });
   });
 
+  const getOptionsPromise = page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
   await page.goto("/");
 
   // Wait for the GetQuizOptions response to be intercepted
-  await page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
+  await getOptionsPromise;
 
   // Diagnostic: log what the page renders after GetQuizOptions response
   const bodyText = await page.locator("body").innerText().catch(() => "failed to get text");
@@ -107,23 +108,24 @@ test("completes full quiz flow", async ({ page }) => {
       body: JSON.stringify(
         isFirstCard
           ? {
-              correct: true,
-              meaning: "to initiate social interaction",
-              reason: "The answer captures the core meaning",
-            }
+            correct: true,
+            meaning: "to initiate social interaction",
+            reason: "The answer captures the core meaning",
+          }
           : {
-              correct: false,
-              meaning: "to initiate social interaction",
-              reason: "The answer does not match",
-            }
+            correct: false,
+            meaning: "to initiate social interaction",
+            reason: "The answer does not match",
+          }
       ),
     });
   });
 
+  const getOptionsPromise = page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
   await page.goto("/");
 
   // Wait for the GetQuizOptions response to be intercepted
-  await page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
+  await getOptionsPromise;
 
   await expect(page.getByText("English Phrases")).toBeVisible();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
@@ -136,9 +138,8 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("start a conversation");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  expect(submitAnswerCallCount).toBe(1);
-
   await expect(page.getByText(/Correct|Incorrect/)).toBeVisible();
+  expect(submitAnswerCallCount).toBe(1);
 
   await page.getByRole("button", { name: "Next" }).click();
 
@@ -147,9 +148,8 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("get angry");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  expect(submitAnswerCallCount).toBe(2);
-
   await expect(page.getByText(/Correct|Incorrect/)).toBeVisible();
+  expect(submitAnswerCallCount).toBe(2);
 
   await page.getByRole("button", { name: "See Results" }).click();
 

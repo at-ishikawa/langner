@@ -1,0 +1,8 @@
+LICENSE
+README.md
+pyproject.toml
+src/langner_video_notebook.egg-info/PKG-INFO
+src/langner_video_notebook.egg-info/SOURCES.txt
+src/langner_video_notebook.egg-info/dependency_links.txt
+src/langner_video_notebook.egg-info/requires.txt
+src/langner_video_notebook.egg-info/top_level.txt

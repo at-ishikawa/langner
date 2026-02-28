@@ -1,0 +1,17 @@
+[project]
+name = "langner-video-notebook"
+version = "0.1.0"
+description = "A script to generate langner notebooks from video files."
+requires-python = ">=3.9"
+dependencies = [
+    "moviepy",
+    "faster_whisper",
+    "pyyaml",
+    "torch",
+    "pyannote-audio>=3.4.0",
+    "yt-dlp-transcripts>=0.1.1",
+    "yt-dlp>=2025.10.14",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]

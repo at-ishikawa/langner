@@ -19,3 +19,7 @@
           meaning: To move or travel
         - expression: him
           level: unusable
+    - scene: In the Monica's apartment
+      conversations:
+        - speaker: Monica
+          quote: Blah blah blah
