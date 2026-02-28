@@ -78,6 +78,8 @@ jobs:
         run: pnpm install --frozen-lockfile
       - name: Install buf
         uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
       - name: Generate TypeScript protos
         working-directory: .
         run: buf generate --template buf.gen.frontend.yaml
