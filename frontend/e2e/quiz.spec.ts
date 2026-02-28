@@ -26,7 +26,19 @@ const mockFlashcards = [
 test("shows notebooks and starts quiz", async ({ page }) => {
   let startQuizBody: unknown;
 
+  // Capture browser console errors for diagnostics
+  page.on("console", (msg) => {
+    if (msg.type() === "error") {
+      console.log("BROWSER ERROR:", msg.text());
+    }
+  });
+  page.on("pageerror", (err) => {
+    console.log("PAGE ERROR:", err.message);
+  });
+
   await page.route(GET_QUIZ_OPTIONS_URL, async (route) => {
+    const reqContentType = route.request().headers()["content-type"] ?? "none";
+    console.log("GetQuizOptions request Content-Type:", reqContentType);
     await route.fulfill({
       status: 200,
       headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
