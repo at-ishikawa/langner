@@ -48,6 +48,10 @@ test("shows notebooks and starts quiz", async ({ page }) => {
   // Wait for the GetQuizOptions response to be intercepted
   await page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
 
+  // Diagnostic: log what the page renders after GetQuizOptions response
+  const bodyText = await page.locator("body").innerText().catch(() => "failed to get text");
+  console.log("Page body text after GetQuizOptions:", bodyText.substring(0, 1000));
+
   await expect(page.getByText("English Phrases")).toBeVisible();
 
   await page.getByRole("checkbox", { name: /English Phrases/ }).click();
