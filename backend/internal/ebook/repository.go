@@ -184,6 +184,40 @@ func (m *Manager) saveRepositoriesConfig(config *RepositoriesConfig) error {
 	return nil
 }
 
+// GetBookNotebooks returns all notebook entries for a book, in index order
+func (m *Manager) GetBookNotebooks(bookID string) ([]BookNotebook, error) {
+	indexPath := filepath.Join(m.booksDirectory, bookID, "index.yml")
+	indexData, err := os.ReadFile(indexPath)
+	if err != nil {
+		return nil, fmt.Errorf("read index file: %w", err)
+	}
+
+	var index NotebookIndex
+	if err := yaml.Unmarshal(indexData, &index); err != nil {
+		return nil, fmt.Errorf("parse index file: %w", err)
+	}
+
+	result := make([]BookNotebook, 0, len(index.NotebookPaths))
+	for _, nbPath := range index.NotebookPaths {
+		fullPath := filepath.Join(m.booksDirectory, bookID, nbPath)
+		data, err := os.ReadFile(fullPath)
+		if err != nil {
+			return nil, fmt.Errorf("read notebook %s: %w", nbPath, err)
+		}
+
+		var entries []NotebookEntry
+		if err := yaml.Unmarshal(data, &entries); err != nil {
+			return nil, fmt.Errorf("parse notebook %s: %w", nbPath, err)
+		}
+
+		result = append(result, BookNotebook{
+			Path:    nbPath,
+			Entries: entries,
+		})
+	}
+	return result, nil
+}
+
 func (m *Manager) addRepository(repo Repository) error {
 	config, err := m.loadRepositoriesConfig()
 	if err != nil {

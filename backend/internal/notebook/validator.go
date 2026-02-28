@@ -57,19 +57,23 @@ func (r *ValidationResult) AddWarning(err ValidationError) {
 
 // Validator performs validation of learning notes and story notebooks
 type Validator struct {
-	learningNotesDir   string
-	storyNotebooksDirs []string
-	flashcardsDirs     []string
-	dictionaryDir      string
+	learningNotesDir       string
+	storyNotebooksDirs     []string
+	flashcardsDirs         []string
+	dictionaryDir          string
+	booksDirectories       []string
+	definitionsDirectories []string
 }
 
 // NewValidator creates a new validator
-func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, dictionaryDir string) *Validator {
+func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, dictionaryDir string, booksDirectories []string, definitionsDirectories []string) *Validator {
 	return &Validator{
-		learningNotesDir:   learningNotesDir,
-		storyNotebooksDirs: storyNotebooksDirs,
-		flashcardsDirs:     flashcardsDirs,
-		dictionaryDir:      dictionaryDir,
+		learningNotesDir:       learningNotesDir,
+		storyNotebooksDirs:     storyNotebooksDirs,
+		flashcardsDirs:         flashcardsDirs,
+		dictionaryDir:          dictionaryDir,
+		booksDirectories:       booksDirectories,
+		definitionsDirectories: definitionsDirectories,
 	}
 }
 
@@ -161,6 +165,11 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 		if err := WriteYamlFile(file.path, file.contents); err != nil {
 			return nil, fmt.Errorf("WriteYamlFile(%s) > %w", file.path, err)
 		}
+	}
+
+	// Fix definitions scene indices
+	if err := v.fixDefinitionsSceneIndices(result); err != nil {
+		return nil, fmt.Errorf("fixDefinitionsSceneIndices() > %w", err)
 	}
 
 	return result, nil
@@ -1074,6 +1083,114 @@ func (v *Validator) eventsRelated(event1, event2 string) bool {
 	}
 
 	return false
+}
+
+func (v *Validator) fixDefinitionsSceneIndices(result *ValidationResult) error {
+	for _, defDir := range v.definitionsDirectories {
+		if defDir == "" {
+			continue
+		}
+		if _, err := os.Stat(defDir); os.IsNotExist(err) {
+			continue
+		}
+
+		err := filepath.Walk(defDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() || filepath.Ext(path) != ".yml" {
+				return nil
+			}
+
+			base := filepath.Base(path)
+			bookID := base[:len(base)-len(filepath.Ext(base))]
+
+			defs, err := readYamlFile[[]Definitions](path)
+			if err != nil {
+				return fmt.Errorf("readYamlFile(%s): %w", path, err)
+			}
+
+			bookDir := ""
+			for _, booksDir := range v.booksDirectories {
+				candidate := filepath.Join(booksDir, bookID)
+				if _, statErr := os.Stat(candidate); statErr == nil {
+					bookDir = candidate
+					break
+				}
+			}
+			if bookDir == "" {
+				return nil
+			}
+
+			changed := false
+			for di := range defs {
+				notebookPath := defs[di].Metadata.Notebook
+				if notebookPath == "" {
+					continue
+				}
+
+				notebookFullPath := filepath.Join(bookDir, notebookPath)
+				notebooks, err := readYamlFile[[]StoryNotebook](notebookFullPath)
+				if err != nil {
+					continue
+				}
+				if len(notebooks) == 0 {
+					continue
+				}
+
+				scenes := notebooks[0].Scenes
+				for si := range defs[di].Scenes {
+					defScene := &defs[di].Scenes[si]
+					if len(defScene.Expressions) == 0 {
+						continue
+					}
+
+					expression := strings.ToLower(strings.TrimSpace(defScene.Expressions[0].Expression))
+					foundIndex := -1
+					for sceneIdx, scene := range scenes {
+						for _, stmt := range scene.Statements {
+							if strings.Contains(strings.ToLower(stmt), expression) {
+								foundIndex = sceneIdx
+								break
+							}
+						}
+						if foundIndex >= 0 {
+							break
+						}
+					}
+
+					if foundIndex < 0 {
+						continue
+					}
+
+					currentIndex := defScene.Metadata.GetIndex()
+					if currentIndex == foundIndex {
+						continue
+					}
+
+					defScene.Metadata.Index = foundIndex
+					defScene.Metadata.Scene = nil
+					changed = true
+					result.AddWarning(ValidationError{
+						File:    path,
+						Message: fmt.Sprintf("Updated scene index for %q in %q: %d -> %d", defScene.Expressions[0].Expression, notebookPath, currentIndex, foundIndex),
+					})
+				}
+			}
+
+			if changed {
+				if err := WriteYamlFile(path, defs); err != nil {
+					return fmt.Errorf("WriteYamlFile(%s): %w", path, err)
+				}
+			}
+			return nil
+		})
+
+		if err != nil {
+			return fmt.Errorf("walk definitions dir %s: %w", defDir, err)
+		}
+	}
+	return nil
 }
 
 // extractSeriesName extracts the series name from an event title

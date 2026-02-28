@@ -1059,7 +1059,7 @@ func TestValidator_Fix(t *testing.T) {
 			require.NoError(t, WriteYamlFile(storyPath, tt.storyNotebook))
 
 			// Create validator
-			validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir)
+			validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir, []string{}, []string{})
 
 			// Run Fix
 			result, err := validator.Fix()
@@ -1346,7 +1346,7 @@ func TestValidator_Validate(t *testing.T) {
 	}
 	require.NoError(t, WriteYamlFile(filepath.Join(flashcardsDir, "idioms.yml"), flashcardContent))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{flashcardsDir}, dictionaryDir)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{flashcardsDir}, dictionaryDir, []string{}, []string{})
 
 	result, err := v.Validate()
 	require.NoError(t, err)
@@ -1899,7 +1899,7 @@ func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {
 	// Create dictionary file for "eager" only
 	require.NoError(t, os.WriteFile(filepath.Join(dictionaryDir, "eager.json"), []byte(`{}`), 0644))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir, []string{}, []string{})
 	result, err := v.Fix()
 	require.NoError(t, err)
 
@@ -1959,7 +1959,7 @@ func TestValidator_Fix_WithMismatchedScenes(t *testing.T) {
 		},
 	}))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, dictionaryDir, []string{}, []string{})
 	result, err := v.Fix()
 	require.NoError(t, err)
 
