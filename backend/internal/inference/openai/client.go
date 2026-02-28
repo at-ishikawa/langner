@@ -836,62 +836,100 @@ func (client *Client) validateWordForm(
 	params inference.ValidateWordFormRequest,
 ) (inference.ValidateWordFormResponse, error) {
 	systemPrompt := `You are a vocabulary quiz validator for a reverse quiz (meaning → word production).
+Classify the user's answer as "same_word", "synonym", or "wrong".
 
-The user was shown a MEANING and asked to produce a SPECIFIC word/expression.
-You must classify their answer into one of three categories.
+MANDATORY RULES - YOU MUST FOLLOW THESE WITHOUT EXCEPTION:
 
-CLASSIFICATION RULES:
+RULE A: Singular↔plural NEVER makes an answer "wrong". Treat singular and plural as identical.
+"word"="words", "bullet"="bullets", "stop"="stops", "cat"="cats" — these are ALL "same_word".
 
-1. "same_word" - The user's answer IS the expected word/expression, just in a different form:
-   - Different tense: "ran" for "run", "swimming" for "swim"
-   - Different number: "boxes" for "box", "children" for "child"
-   - Different case: "Hello" for "hello"
-   - With/without articles: "a book" for "book", missing "a" or "the" within expressions
-   - Spelling variants: "colour" for "color"
-   - Pronoun variants in expressions: "lost his way" for "lose one's way"
-   - Optional parenthetical parts omitted: if expected has "(word)" meaning optional, omitting it is OK
-   - Minor word omissions: missing small words (articles, prepositions) that don't change the core meaning
-   - Preposition variants in fixed expressions: "in" vs "on" when the core phrase is identical
-   - Minor typos: transposed letters, missing/extra letter, or small spelling errors that clearly show the user knows the word
-   - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
+RULE B: Articles (a/an/the) are INVISIBLE. Ignore them completely when comparing.
+Adding, removing, or swapping any article NEVER affects the classification.
 
-2. "synonym" - For SINGLE WORDS only: a different word with the same core meaning:
-   - "joyful" when expected "happy" (different single words, same meaning)
-   - "big" when expected "large" (different single words, same meaning)
-   - This applies when BOTH the expected word AND user's answer are single words
-   - If they genuinely mean the same thing, classify as "synonym"
+RULE C: TEMPLATE EXPRESSIONS — when the expected expression literally contains "(something)" or "(someone)", it is a template. ONLY for templates:
+- The user fills in the parenthetical: "(something)"→"it"/"that"/specific noun = "same_word"
+- The user conjugates the verb to ANY form: "getting" IS "get", "running" IS "run", "losing" IS "lose". A verb in -ing/-ed/-s/past form is the SAME verb, NOT a missing verb. = "same_word"
+- Combining verb conjugation + article change + fill-in = still "same_word"
+THIS RULE ONLY APPLIES WHEN "(something)" or "(someone)" appears in the expected expression.
 
-3. "wrong" - The user's answer is incorrect:
-   - Wrong definition entirely
-   - Antonym (opposite meaning)
-   - Unrelated word
-   - Gibberish or empty
-   - A DIFFERENT multi-word expression/phrase/idiom even if it has similar meaning
+RULE C2: VERB TENSE IN FIXED EXPRESSIONS — when the expected expression does NOT contain "(something)" or "(someone)", it is a FIXED expression. For fixed multi-word expressions, ANY verb tense change = "wrong". User must produce the base/dictionary form.
 
-CRITICAL RULE FOR MULTI-WORD EXPRESSIONS:
-- For phrasal verbs, idioms, and multi-word expressions, ONLY accept morphological variants of the SAME expression
-- A completely different expression with similar meaning is "wrong", NOT "synonym"
-- The goal is to learn the SPECIFIC expression, not just any expression with similar meaning
-- However, minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should still be classified as "same_word"
+RULE D: Case differences never matter. "Mum"="mum", "Hello"="hello".
 
-OUTPUT FORMAT (JSON only):
-{
-  "classification": "same_word" | "synonym" | "wrong",
-  "reason": "<brief explanation>"
-}
+RULE E: Pronoun substitution is always OK. "one's"→"my"/"his"/"her"/"our" = "same_word".
 
-Do NOT include any text outside the JSON.`
+RULE F: Single-word tense changes are OK. "run"→"ran", "swim"→"swimming" = "same_word".
+
+RULE G: Typos and spelling variants are OK. "colour"="color" = "same_word".
+
+=== "wrong" - ALWAYS check these even if some Rules A-G apply ===
+
+An answer can have acceptable changes (like pronoun substitution) AND still be "wrong" if it also has any of these problems:
+
+1. MISSING PREPOSITION/PARTICLE: User drops a preposition or particle (on, out, with, back, up, off, over, into, in, etc.) that is part of the expression. These are essential.
+   NOTE: "a", "an", "the" are articles, NOT prepositions. Never treat a missing article as a missing preposition.
+2. MISSING OTHER CONTENT WORD: A verb, noun, adverb, or adjective from the expected expression is completely absent (not just changed in form — remember get=getting=got are the same word).
+3. VERB TENSE IN FIXED EXPRESSIONS: See Rule C2 above — for expressions without "(something)"/"(someone)", verb tense change = "wrong".
+4. RESTRUCTURED WORD ORDER: The core structure of the expression is rearranged beyond just Rules A-G changes. If the word order differs significantly after removing articles and applying pronoun/form substitutions, it is restructured.
+5. DIFFERENT EXPRESSION: A completely different expression with similar meaning = "wrong".
+
+=== "synonym" - Single words only ===
+Both expected and answer are single words with the same meaning.
+
+OUTPUT (JSON only, no other text):
+{"classification": "same_word" | "synonym" | "wrong", "reason": "<brief explanation>"}`
 
 	contextInfo := ""
 	if params.Context != "" {
 		contextInfo = fmt.Sprintf("\nContext sentence: %s", params.Context)
 	}
 
+	templateNote := ""
+	if strings.Contains(params.Expected, "(") {
+		templateNote = "\nThis is a TEMPLATE expression (has parenthetical). Per Rule C, verb conjugation (getting=get), article changes, and fill-ins are acceptable."
+	}
+
+	// Normalize for comparison: strip articles and parenthetical markers
+	normalize := func(s string) string {
+		result := s
+		// Remove parenthetical parts like (something), (someone)
+		for {
+			start := strings.Index(result, "(")
+			end := strings.Index(result, ")")
+			if start == -1 || end == -1 || end < start {
+				break
+			}
+			result = result[:start] + result[end+1:]
+		}
+		// Remove articles
+		result = strings.ReplaceAll(result, " the ", " ")
+		result = strings.ReplaceAll(result, " a ", " ")
+		result = strings.ReplaceAll(result, " an ", " ")
+		if strings.HasPrefix(result, "the ") {
+			result = result[4:]
+		}
+		if strings.HasPrefix(result, "a ") {
+			result = result[2:]
+		}
+		if strings.HasPrefix(result, "an ") {
+			result = result[3:]
+		}
+		// Clean up spaces
+		for strings.Contains(result, "  ") {
+			result = strings.ReplaceAll(result, "  ", " ")
+		}
+		return strings.TrimSpace(result)
+	}
+
 	userMessage := fmt.Sprintf(`Expected word: %s
 Meaning shown: %s%s
-User's answer: %s
+User's answer: %s%s
 
-Classify this answer.`, params.Expected, params.Meaning, contextInfo, params.UserAnswer)
+For comparison (articles and parentheticals removed): expected="%s" vs answer="%s"
+Remember: singular↔plural is always same_word (Rule A). Verb forms are the same word: getting=get, ran=run (Rules C, F).
+Classify this answer.`,
+		params.Expected, params.Meaning, contextInfo, params.UserAnswer, templateNote,
+		normalize(params.Expected), normalize(params.UserAnswer))
 
 	requestBody := ChatCompletionRequest{
 		Model:       client.model,
