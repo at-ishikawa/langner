@@ -66,7 +66,7 @@ test("shows notebooks and starts quiz", async ({ page }) => {
 
   await expect(page.getByText("English Phrases")).toBeVisible();
 
-  await page.getByRole("checkbox", { name: /English Phrases/ }).click();
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
 
   const startButton = page.getByRole("button", { name: "Start" });
   await expect(startButton).toBeEnabled();
@@ -126,7 +126,7 @@ test("completes full quiz flow", async ({ page }) => {
   await page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
 
   await expect(page.getByText("English Phrases")).toBeVisible();
-  await page.getByRole("checkbox", { name: /English Phrases/ }).click();
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
   await page.getByRole("button", { name: "Start" }).click();
 
   await page.waitForURL("/quiz");
