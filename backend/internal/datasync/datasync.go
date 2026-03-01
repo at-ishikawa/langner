@@ -392,3 +392,46 @@ func (imp *Importer) ImportDictionary(ctx context.Context, opts ImportOptions) (
 
 	return &result, nil
 }
+
+// NoteSink writes exported note records.
+type NoteSink interface {
+	WriteAll(notes []notebook.NoteRecord) error
+}
+
+// ExportNotesResult tracks counts for note export.
+type ExportNotesResult struct {
+	NotesExported int
+}
+
+// Exporter reads DB data and writes to YAML files.
+type Exporter struct {
+	noteRepo notebook.NoteRepository
+	noteSink NoteSink
+	writer   io.Writer
+}
+
+// NewExporter creates a new Exporter.
+func NewExporter(noteRepo notebook.NoteRepository, noteSink NoteSink, writer io.Writer) *Exporter {
+	return &Exporter{
+		noteRepo: noteRepo,
+		noteSink: noteSink,
+		writer:   writer,
+	}
+}
+
+// ExportNotes reads notes from the database and writes them via the sink.
+func (exp *Exporter) ExportNotes(ctx context.Context) (*ExportNotesResult, error) {
+	notes, err := exp.noteRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load notes: %w", err)
+	}
+
+	if err := exp.noteSink.WriteAll(notes); err != nil {
+		return nil, fmt.Errorf("write notes: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(exp.writer, "  Exported %d notes\n", len(notes))
+	return &ExportNotesResult{
+		NotesExported: len(notes),
+	}, nil
+}

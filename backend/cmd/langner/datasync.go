@@ -96,3 +96,48 @@ func newMigrateImportDBCommand() *cobra.Command {
 	cmd.Flags().BoolVar(&updateExisting, "update-existing", false, "Update existing records with new data")
 	return cmd
 }
+
+func newExportDBCommand() *cobra.Command {
+	var outputDir string
+
+	cmd := &cobra.Command{
+		Use:   "export-db",
+		Short: "Export database to YAML files",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			loader, err := config.NewConfigLoader(configFile)
+			if err != nil {
+				return fmt.Errorf("load config loader: %w", err)
+			}
+			cfg, err := loader.Load()
+			if err != nil {
+				return fmt.Errorf("load config: %w", err)
+			}
+
+			db, err := database.Open(cfg.Database)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer func() { _ = db.Close() }()
+
+			noteRepo := notebook.NewDBNoteRepository(db)
+			noteSink := notebook.NewYAMLNoteRepositoryWriter(outputDir)
+			exporter := datasync.NewExporter(noteRepo, noteSink, os.Stdout)
+
+			noteResult, err := exporter.ExportNotes(ctx)
+			if err != nil {
+				return fmt.Errorf("export notes: %w", err)
+			}
+
+			fmt.Println("\nExport Summary:")
+			fmt.Printf("  Notes exported:              %d\n", noteResult.NotesExported)
+
+			return nil
+		},
+	}
+
+	cmd.Flags().StringVar(&outputDir, "output", "", "Output directory for exported files")
+	_ = cmd.MarkFlagRequired("output")
+	return cmd
+}

@@ -27,7 +27,7 @@ type FlashcardIndex struct {
 	NotebookPaths []string `yaml:"notebooks"`
 
 	// internal fields (not loaded from YAML)
-	path      string                `yaml:"-"` // directory containing this index
+	Path      string                `yaml:"-"` // directory containing this index
 	Notebooks []FlashcardNotebook   `yaml:"-"` // loaded notebooks (populated by reader)
 }
 

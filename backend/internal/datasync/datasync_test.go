@@ -935,3 +935,78 @@ func TestImporter_ImportDictionary(t *testing.T) {
 		})
 	}
 }
+
+func TestExporter_ExportNotes(t *testing.T) {
+	tests := []struct {
+		name    string
+		setup   func(noteRepo *mock_notebook.MockNoteRepository, noteSink *mock_datasync.MockNoteSink)
+		want    *ExportNotesResult
+		wantErr bool
+	}{
+		{
+			name: "successful export",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, noteSink *mock_datasync.MockNoteSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Usage: "break the ice", Entry: "start a conversation", Meaning: "to initiate social interaction"},
+					{ID: 2, Usage: "lose one's temper", Entry: "lose one's temper", Meaning: "to become angry"},
+				}, nil)
+				noteSink.EXPECT().WriteAll(gomock.Any()).
+					DoAndReturn(func(notes []notebook.NoteRecord) error {
+						require.Len(t, notes, 2)
+						assert.Equal(t, "break the ice", notes[0].Usage)
+						assert.Equal(t, "lose one's temper", notes[1].Usage)
+						return nil
+					})
+			},
+			want: &ExportNotesResult{
+				NotesExported: 2,
+			},
+		},
+		{
+			name: "empty notes",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, noteSink *mock_datasync.MockNoteSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
+				noteSink.EXPECT().WriteAll(gomock.Any()).Return(nil)
+			},
+			want: &ExportNotesResult{},
+		},
+		{
+			name: "FindAll error propagates",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, noteSink *mock_datasync.MockNoteSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "WriteAll error propagates",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, noteSink *mock_datasync.MockNoteSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Usage: "break the ice", Entry: "start a conversation"},
+				}, nil)
+				noteSink.EXPECT().WriteAll(gomock.Any()).Return(fmt.Errorf("write failed"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			noteSink := mock_datasync.NewMockNoteSink(ctrl)
+
+			tt.setup(noteRepo, noteSink)
+
+			var buf bytes.Buffer
+			exp := NewExporter(noteRepo, noteSink, &buf)
+
+			got, err := exp.ExportNotes(context.Background())
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
