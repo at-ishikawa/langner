@@ -1,6 +1,7 @@
 package rapidapi
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -99,4 +100,58 @@ func TestReader_Read_NonexistentDirectory(t *testing.T) {
 	reader := NewReader()
 	_, err := reader.Read("/nonexistent/directory")
 	assert.Error(t, err)
+}
+
+func TestJSONDictionaryRepository_WriteAll(t *testing.T) {
+	tests := []struct {
+		name      string
+		entries   []DictionaryExportEntry
+		wantFiles map[string]string // relative path -> content
+		wantErr   bool
+	}{
+		{
+			name: "writes single entry",
+			entries: []DictionaryExportEntry{
+				{Word: "hello", Response: json.RawMessage(`{"word":"hello","results":[]}`)},
+			},
+			wantFiles: map[string]string{
+				"dictionaries/rapidapi/hello.json": `{"word":"hello","results":[]}`,
+			},
+		},
+		{
+			name: "writes multiple entries",
+			entries: []DictionaryExportEntry{
+				{Word: "apple", Response: json.RawMessage(`{"word":"apple"}`)},
+				{Word: "banana", Response: json.RawMessage(`{"word":"banana"}`)},
+			},
+			wantFiles: map[string]string{
+				"dictionaries/rapidapi/apple.json":  `{"word":"apple"}`,
+				"dictionaries/rapidapi/banana.json": `{"word":"banana"}`,
+			},
+		},
+		{
+			name:    "empty entries writes nothing",
+			entries: []DictionaryExportEntry{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			repo := NewJSONDictionaryRepositoryWriter(tempDir)
+
+			err := repo.WriteAll(tt.entries)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			for relPath, wantContent := range tt.wantFiles {
+				got, err := os.ReadFile(filepath.Join(tempDir, relPath))
+				require.NoError(t, err, "expected file %s to exist", relPath)
+				assert.Equal(t, wantContent, string(got))
+			}
+		})
+	}
 }

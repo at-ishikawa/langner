@@ -9,6 +9,12 @@ import (
 	"sort"
 )
 
+// DictionaryExportEntry holds a word and its raw JSON response for export.
+type DictionaryExportEntry struct {
+	Word     string
+	Response json.RawMessage
+}
+
 type Reader struct {
 }
 
@@ -16,19 +22,42 @@ func NewReader() *Reader {
 	return &Reader{}
 }
 
-// JSONDictionaryRepository binds a cache directory and exposes ReadAll.
+// JSONDictionaryRepository binds a cache directory and exposes ReadAll and WriteAll.
 type JSONDictionaryRepository struct {
-	cacheDir string
+	cacheDir  string
+	outputDir string
 }
 
-// NewJSONDictionaryRepository creates a new JSONDictionaryRepository.
+// NewJSONDictionaryRepository creates a new JSONDictionaryRepository for reading.
 func NewJSONDictionaryRepository(cacheDir string) *JSONDictionaryRepository {
 	return &JSONDictionaryRepository{cacheDir: cacheDir}
+}
+
+// NewJSONDictionaryRepositoryWriter creates a new JSONDictionaryRepository for writing.
+func NewJSONDictionaryRepositoryWriter(outputDir string) *JSONDictionaryRepository {
+	return &JSONDictionaryRepository{outputDir: outputDir}
 }
 
 // ReadAll reads all cached dictionary responses from the directory.
 func (r *JSONDictionaryRepository) ReadAll() ([]Response, error) {
 	return NewReader().Read(r.cacheDir)
+}
+
+// WriteAll writes each DictionaryExportEntry as a JSON file under {outputDir}/dictionaries/rapidapi/{word}.json.
+func (r *JSONDictionaryRepository) WriteAll(entries []DictionaryExportEntry) error {
+	dir := filepath.Join(r.outputDir, "dictionaries", "rapidapi")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return fmt.Errorf("create directory %s: %w", dir, err)
+	}
+
+	for _, entry := range entries {
+		path := filepath.Join(dir, entry.Word+".json")
+		if err := os.WriteFile(path, entry.Response, 0644); err != nil {
+			return fmt.Errorf("write dictionary file %s: %w", path, err)
+		}
+	}
+
+	return nil
 }
 
 func (r *Reader) Read(dir string) ([]Response, error) {
