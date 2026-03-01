@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.0.0",
@@ -23,6 +25,7 @@
   },
   "devDependencies": {
     "@bufbuild/protoc-gen-es": "^2.0.0",
+    "@playwright/test": "^1.50.0",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^16.0.0",
 

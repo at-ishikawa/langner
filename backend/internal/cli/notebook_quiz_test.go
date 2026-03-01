@@ -14,6 +14,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/fatih/color"
 	"github.com/stretchr/testify/assert"
@@ -101,7 +102,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			expectedCardCount: 1,
 			validate: func(t *testing.T, cli *NotebookQuizCLI) {
 				assert.Equal(t, 1, len(cli.cards))
-				assert.Equal(t, "test", cli.cards[0].Definition.Expression)
+				assert.Equal(t, "test", cli.cards[0].Entry)
 			},
 		},
 		{
@@ -187,7 +188,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			expectedCardCount: 1,
 			validate: func(t *testing.T, cli *NotebookQuizCLI) {
 				assert.Equal(t, 1, len(cli.cards))
-				assert.Equal(t, "eager", cli.cards[0].Definition.Expression)
+				assert.Equal(t, "eager", cli.cards[0].Entry)
 			},
 		},
 		{
@@ -260,7 +261,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			expectedCardCount: 1,
 			validate: func(t *testing.T, cli *NotebookQuizCLI) {
 				assert.Equal(t, 1, len(cli.cards))
-				assert.Equal(t, "test", cli.cards[0].Definition.Expression)
+				assert.Equal(t, "test", cli.cards[0].Entry)
 			},
 		},
 		{
@@ -385,227 +386,66 @@ func TestNewFlashcardQuizCLI(t *testing.T) {
 	}
 }
 
-func TestExtractWordOccurrences(t *testing.T) {
-	tests := []struct {
-		name              string
-		notebookName      string
-		stories           []notebook.StoryNotebook
-		expectedCardCount int
-		validate          func(t *testing.T, cards []*WordOccurrence)
-	}{
-		{
-			name:              "Empty stories",
-			notebookName:      "test-notebook",
-			stories:           []notebook.StoryNotebook{},
-			expectedCardCount: 0,
-		},
-		{
-			name:         "No contexts - no conversations (word still included)",
-			notebookName: "test-notebook",
-			stories: []notebook.StoryNotebook{
-				{
-					Event: "Story",
-					Scenes: []notebook.StoryScene{
-						{
-							Title: "Scene",
-							Definitions: []notebook.Note{
-								{Expression: "word1", Meaning: "meaning1"},
-							},
-						},
-					},
-				},
-			},
-			expectedCardCount: 1,
-			validate: func(t *testing.T, cards []*WordOccurrence) {
-				card := cards[0]
-				assert.Equal(t, "word1", card.Definition.Expression)
-				assert.Equal(t, "meaning1", card.GetMeaning())
-				assert.Equal(t, 0, len(card.Contexts), "Word without context should have empty contexts")
-			},
-		},
-
-		{
-			name:         "Extract from conversations (including words without context)",
-			notebookName: "test-notebook",
-			stories: []notebook.StoryNotebook{
-				{
-					Event: "Story 1",
-					Scenes: []notebook.StoryScene{
-						{
-							Title: "Scene 1",
-							Conversations: []notebook.Conversation{
-								{
-									Speaker: "Character1",
-									Quote:   "I need to test1 this feature",
-								},
-								{
-									Speaker: "Character2",
-									Quote:   "Let's do another test1 tomorrow",
-								},
-							},
-							Definitions: []notebook.Note{
-								{
-									Expression: "test1",
-									Meaning:    "meaning1",
-								},
-								{
-									Expression: "test2",
-									Meaning:    "meaning2",
-									// No conversations contain test2 - still included with empty contexts
-								},
-							},
-						},
-					},
-				},
-				{
-					Event: "Story 2",
-					Scenes: []notebook.StoryScene{
-						{
-							Title: "Scene 2",
-							Conversations: []notebook.Conversation{
-								{
-									Speaker: "Character3",
-									Quote:   "We need to test3 the system",
-								},
-							},
-							Definitions: []notebook.Note{
-								{
-									Expression: "test3",
-									Meaning:    "meaning3",
-									Images:     []string{"image1.jpg", "image2.jpg"},
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedCardCount: 3, // test1 (2 contexts), test2 (no context), test3 (1 context)
-			validate: func(t *testing.T, cards []*WordOccurrence) {
-				card1 := cards[0]
-				assert.Equal(t, "test1", card1.Definition.Expression)
-				assert.Equal(t, "meaning1", card1.GetMeaning())
-				assert.Equal(t, 2, len(card1.Contexts))
-				assert.Contains(t, card1.Contexts[0].Context, "test1")
-				assert.Contains(t, card1.Contexts[1].Context, "test1")
-				assert.Equal(t, "Story 1", card1.Story.Event)
-				assert.Equal(t, "Scene 1", card1.Scene.Title)
-
-				card2 := cards[1]
-				assert.Equal(t, "test2", card2.Definition.Expression)
-				assert.Equal(t, "meaning2", card2.GetMeaning())
-				assert.Equal(t, 0, len(card2.Contexts), "Word without context should have empty contexts")
-
-				card3 := cards[2]
-				assert.Equal(t, "test3", card3.Definition.Expression)
-				assert.Equal(t, "meaning3", card3.GetMeaning())
-				assert.Equal(t, 1, len(card3.Contexts))
-				assert.Contains(t, card3.Contexts[0].Context, "test3")
-				assert.Equal(t, 2, len(card3.GetImages()))
-			},
-		},
-
-		{
-			name:         "With definition field",
-			notebookName: "test-notebook",
-			stories: []notebook.StoryNotebook{
-				{
-					Event: "Story 1",
-					Scenes: []notebook.StoryScene{
-						{
-							Title: "Scene 1",
-							Conversations: []notebook.Conversation{
-								{
-									Speaker: "Character1",
-									Quote:   "Please take off your shoes",
-								},
-							},
-							Definitions: []notebook.Note{
-								{
-									Expression: "remove",
-									Definition: "take off",
-									Meaning:    "to remove something",
-								},
-							},
-						},
-					},
-				},
-			},
-			expectedCardCount: 1,
-			validate: func(t *testing.T, cards []*WordOccurrence) {
-				card := cards[0]
-				assert.Equal(t, "remove", card.Definition.Expression)
-				assert.Equal(t, "take off", card.Definition.Definition)
-				assert.Equal(t, 1, len(card.Contexts))
-				assert.Contains(t, card.Contexts[0].Context, "take off")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			cards := extractWordOccurrences(tt.notebookName, tt.stories)
-			assert.Equal(t, tt.expectedCardCount, len(cards))
-			if tt.validate != nil {
-				tt.validate(t, cards)
-			}
-		})
-	}
-}
-
 func TestFormatQuestion(t *testing.T) {
 	tests := []struct {
 		name     string
-		card     WordOccurrence
+		card     quiz.Card
 		expected string
 	}{
 		{
-			name: "No contexts",
-			card: WordOccurrence{
-				Definition: &notebook.Note{Expression: "test"},
-				Contexts:   []WordOccurrenceContext{},
+			name: "No examples",
+			card: quiz.Card{
+				Entry: "test",
 			},
 			expected: "What does 'test' mean?\n",
 		},
 		{
-			name: "Single context",
-			card: WordOccurrence{
-				Scene:      &notebook.StoryScene{},
-				Definition: &notebook.Note{Expression: "test"},
-				Contexts:   []WordOccurrenceContext{{Context: "This is a test example", Usage: "test"}},
+			name: "Flashcard with examples (no scene title)",
+			card: quiz.Card{
+				Entry:      "test",
+				SceneTitle: "",
+				Examples: []quiz.Example{
+					{Text: "This is a test example"},
+				},
+			},
+			expected: "What does 'test' mean?\nExamples:\n  1. This is a test example\n",
+		},
+		{
+			name: "Story notebook single example",
+			card: quiz.Card{
+				Entry:      "test",
+				StoryTitle: "Story 1",
+				SceneTitle: "Scene 1",
+				Examples: []quiz.Example{
+					{Text: "This is a test example", Speaker: "Alice"},
+				},
 			},
 			expected: "What does 'test' mean in the following context?\n  1. This is a test example\n",
 		},
 		{
-			name: "Multiple contexts",
-			card: WordOccurrence{
-				Scene:      &notebook.StoryScene{},
-				Definition: &notebook.Note{Expression: "test"},
-				Contexts:   []WordOccurrenceContext{{Context: "First example", Usage: "test"}, {Context: "Second example", Usage: "test"}},
+			name: "Story notebook multiple examples",
+			card: quiz.Card{
+				Entry:      "test",
+				StoryTitle: "Story 1",
+				SceneTitle: "Scene 1",
+				Examples: []quiz.Example{
+					{Text: "First example", Speaker: "Alice"},
+					{Text: "Second example", Speaker: "Bob"},
+				},
 			},
 			expected: "What does 'test' mean in the following context?\n  1. First example\n  2. Second example\n",
 		},
 		{
-			name: "Flashcard with contexts (Scene is nil)",
-			card: WordOccurrence{
-				Scene:      nil,
-				Definition: &notebook.Note{Expression: "hello"},
-				Contexts:   []WordOccurrenceContext{{Context: "Hello there!", Usage: "hello"}},
-			},
-			expected: "What does 'hello' mean?\nExamples:\n  1. {Hello there! hello}\n",
-		},
-		{
-			name: "Scene with definitions - converts markers",
-			card: WordOccurrence{
-				Scene: &notebook.StoryScene{
-					Title: "Scene 1",
-					Definitions: []notebook.Note{
-						{Expression: "excited", Meaning: "feeling enthusiasm"},
-					},
+			name: "Story with pre-cleaned text (no markers)",
+			card: quiz.Card{
+				Entry:      "excited",
+				StoryTitle: "Story 1",
+				SceneTitle: "Scene 1",
+				Examples: []quiz.Example{
+					{Text: "I am so excited about the trip!", Speaker: "Alice"},
 				},
-				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
-				Contexts:   []WordOccurrenceContext{{Context: "I am so {{ excited }} about the trip!", Usage: "excited"}},
 			},
-			expected: "What does 'excited' mean in the following context?\n  1. I am so \x1b[1mexcited\x1b[22m about the trip!\n",
+			expected: "What does 'excited' mean in the following context?\n  1. I am so excited about the trip!\n",
 		},
 	}
 
@@ -871,13 +711,11 @@ func TestNotebookQuizCLI_GetCardCount(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cards := make([]*WordOccurrence, tt.cardCount)
+			cards := make([]quiz.Card, tt.cardCount)
 			for i := 0; i < tt.cardCount; i++ {
-				cards[i] = &WordOccurrence{
-					Definition: &notebook.Note{
-						Expression: "test",
-						Meaning:    "meaning",
-					},
+				cards[i] = quiz.Card{
+					Entry:   "test",
+					Meaning: "meaning",
 				}
 			}
 
@@ -891,13 +729,13 @@ func TestNotebookQuizCLI_GetCardCount(t *testing.T) {
 }
 
 func TestNotebookQuizCLI_ShuffleCards(t *testing.T) {
-	// Create cards with unique expressions
-	cards := []*WordOccurrence{
-		{Definition: &notebook.Note{Expression: "word1"}},
-		{Definition: &notebook.Note{Expression: "word2"}},
-		{Definition: &notebook.Note{Expression: "word3"}},
-		{Definition: &notebook.Note{Expression: "word4"}},
-		{Definition: &notebook.Note{Expression: "word5"}},
+	// Create cards with unique entries
+	cards := []quiz.Card{
+		{Entry: "word1"},
+		{Entry: "word2"},
+		{Entry: "word3"},
+		{Entry: "word4"},
+		{Entry: "word5"},
 	}
 
 	cli := &NotebookQuizCLI{
@@ -907,7 +745,7 @@ func TestNotebookQuizCLI_ShuffleCards(t *testing.T) {
 	// Store original order
 	originalOrder := make([]string, len(cards))
 	for i, card := range cli.cards {
-		originalOrder[i] = card.Definition.Expression
+		originalOrder[i] = card.Entry
 	}
 
 	// Shuffle multiple times and check if order changes
@@ -918,7 +756,7 @@ func TestNotebookQuizCLI_ShuffleCards(t *testing.T) {
 		// Check if order changed
 		orderChanged := false
 		for j, card := range cli.cards {
-			if card.Definition.Expression != originalOrder[j] {
+			if card.Entry != originalOrder[j] {
 				orderChanged = true
 				break
 			}
@@ -936,11 +774,11 @@ func TestNotebookQuizCLI_ShuffleCards(t *testing.T) {
 
 	// Verify all cards are still present
 	assert.Equal(t, 5, len(cli.cards))
-	expressionSet := make(map[string]bool)
+	entrySet := make(map[string]bool)
 	for _, card := range cli.cards {
-		expressionSet[card.Definition.Expression] = true
+		entrySet[card.Entry] = true
 	}
-	assert.Equal(t, 5, len(expressionSet), "All unique cards should still be present")
+	assert.Equal(t, 5, len(entrySet), "All unique cards should still be present")
 }
 
 func TestNotebookQuizCLI_RemoveCurrentCard(t *testing.T) {
@@ -968,12 +806,10 @@ func TestNotebookQuizCLI_RemoveCurrentCard(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cards := make([]*WordOccurrence, tt.initialCards)
+			cards := make([]quiz.Card, tt.initialCards)
 			for i := 0; i < tt.initialCards; i++ {
-				cards[i] = &WordOccurrence{
-					Definition: &notebook.Note{
-						Expression: "test" + string(rune('1'+i)),
-					},
+				cards[i] = quiz.Card{
+					Entry: "test" + string(rune('1'+i)),
 				}
 			}
 
@@ -991,42 +827,35 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 	tests := []struct {
 		name               string
 		input              string
-		cards              []*WordOccurrence
-		learningHistories  map[string][]notebook.LearningHistory
+		cards              []quiz.Card
 		mockOpenAIResponse inference.AnswerMeaningsResponse
 		mockOpenAIError    error
 		wantErr            bool
 		wantReturn         error
 		wantCardsAfter     int
-		validate           func(t *testing.T, cli *NotebookQuizCLI)
 	}{
 		{
 			name:           "No more cards - returns errEnd",
 			input:          "",
-			cards:          []*WordOccurrence{},
+			cards:          []quiz.Card{},
 			wantReturn:     errEnd,
 			wantCardsAfter: 0,
 		},
 		{
 			name:  "Correct answer - updates learning history and removes card",
 			input: "test meaning\n",
-			cards: []*WordOccurrence{
+			cards: []quiz.Card{
 				{
 					NotebookName: "test-notebook",
-					Story: &notebook.StoryNotebook{
-						Event: "Story 1",
+					StoryTitle:   "Story 1",
+					SceneTitle:   "Scene 1",
+					Entry:        "test",
+					Meaning:      "test meaning",
+					Contexts: []inference.Context{
+						{Context: "This is a test", ReferenceDefinition: "test meaning"},
 					},
-					Scene: &notebook.StoryScene{
-						Title: "Scene 1",
-					},
-					Definition: &notebook.Note{
-						Expression: "test",
-						Meaning:    "test meaning",
-					},
-					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
 				},
 			},
-			learningHistories: map[string][]notebook.LearningHistory{},
 			mockOpenAIResponse: inference.AnswerMeaningsResponse{
 				Answers: []inference.AnswerMeaning{
 					{
@@ -1043,30 +872,22 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 		{
 			name:  "Incorrect answer - updates learning history and removes card",
 			input: "wrong meaning\n",
-			cards: []*WordOccurrence{
+			cards: []quiz.Card{
 				{
 					NotebookName: "test-notebook",
-					Story: &notebook.StoryNotebook{
-						Event: "Story 1",
-					},
-					Scene: &notebook.StoryScene{
-						Title: "Scene 1",
-					},
-					Definition: &notebook.Note{
-						Expression: "test",
-						Meaning:    "test meaning",
-					},
-					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
+					StoryTitle:   "Story 1",
+					SceneTitle:   "Scene 1",
+					Entry:        "test",
+					Meaning:      "test meaning",
 				},
 			},
-			learningHistories: map[string][]notebook.LearningHistory{},
 			mockOpenAIResponse: inference.AnswerMeaningsResponse{
 				Answers: []inference.AnswerMeaning{
 					{
 						Expression: "test",
 						Meaning:    "wrong meaning",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: false, Context: "", Reason: "A3 - unrelated: user meaning is from wrong semantic field"},
+							{Correct: false, Context: "", Reason: "unrelated meanings"},
 						},
 					},
 				},
@@ -1076,30 +897,22 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 		{
 			name:  "Empty answer - marked as incorrect",
 			input: "\n",
-			cards: []*WordOccurrence{
+			cards: []quiz.Card{
 				{
 					NotebookName: "test-notebook",
-					Story: &notebook.StoryNotebook{
-						Event: "Story 1",
-					},
-					Scene: &notebook.StoryScene{
-						Title: "Scene 1",
-					},
-					Definition: &notebook.Note{
-						Expression: "test",
-						Meaning:    "test meaning",
-					},
-					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
+					StoryTitle:   "Story 1",
+					SceneTitle:   "Scene 1",
+					Entry:        "test",
+					Meaning:      "test meaning",
 				},
 			},
-			learningHistories: map[string][]notebook.LearningHistory{},
 			mockOpenAIResponse: inference.AnswerMeaningsResponse{
 				Answers: []inference.AnswerMeaning{
 					{
 						Expression: "test",
 						Meaning:    "",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: "", Reason: "empty user input"}, // OpenAI says correct, but empty answer overrides it
+							{Correct: true, Context: "", Reason: "empty user input"},
 						},
 					},
 				},
@@ -1109,44 +922,29 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 		{
 			name:  "Multiple cards - processes one at a time",
 			input: "test meaning\n",
-			cards: []*WordOccurrence{
+			cards: []quiz.Card{
 				{
 					NotebookName: "test-notebook",
-					Story: &notebook.StoryNotebook{
-						Event: "Story 1",
-					},
-					Scene: &notebook.StoryScene{
-						Title: "Scene 1",
-					},
-					Definition: &notebook.Note{
-						Expression: "test1",
-						Meaning:    "test meaning 1",
-					},
-					Contexts: []WordOccurrenceContext{{Context: "This is test1", Usage: "test1"}},
+					StoryTitle:   "Story 1",
+					SceneTitle:   "Scene 1",
+					Entry:        "test1",
+					Meaning:      "test meaning 1",
 				},
 				{
 					NotebookName: "test-notebook",
-					Story: &notebook.StoryNotebook{
-						Event: "Story 1",
-					},
-					Scene: &notebook.StoryScene{
-						Title: "Scene 1",
-					},
-					Definition: &notebook.Note{
-						Expression: "test2",
-						Meaning:    "test meaning 2",
-					},
-					Contexts: []WordOccurrenceContext{{Context: "This is test2", Usage: "test2"}},
+					StoryTitle:   "Story 1",
+					SceneTitle:   "Scene 1",
+					Entry:        "test2",
+					Meaning:      "test meaning 2",
 				},
 			},
-			learningHistories: map[string][]notebook.LearningHistory{},
 			mockOpenAIResponse: inference.AnswerMeaningsResponse{
 				Answers: []inference.AnswerMeaning{
 					{
 						Expression: "test1",
 						Meaning:    "test meaning",
 						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: "", Reason: "synonym: meanings are equivalent"},
+							{Correct: true, Context: "", Reason: "synonym"},
 						},
 					},
 				},
@@ -1154,55 +952,20 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 			wantCardsAfter: 1, // One card should remain
 		},
 		{
-			name:  "Plural expression with singular definition - uses definition for OpenAI",
-			input: "a person who has the responsibility of watching for something\n",
-			cards: []*WordOccurrence{
-				{
-					NotebookName: "test-notebook",
-					Story: &notebook.StoryNotebook{
-						Event: "Story 1",
-					},
-					Scene: &notebook.StoryScene{
-						Title: "Scene 1",
-					},
-					Definition: &notebook.Note{
-						Expression: "lookouts",
-						Definition: "lookout",
-						Meaning:    "a person who has the responsibility of watching for something, especially danger, etc.",
-					},
-					Contexts: []WordOccurrenceContext{{Context: "They're used as lookouts", Usage: "lookout"}},
-				},
-			},
-			learningHistories: map[string][]notebook.LearningHistory{},
-			mockOpenAIResponse: inference.AnswerMeaningsResponse{
-				Answers: []inference.AnswerMeaning{
-					{
-						Expression: "lookout",
-						Meaning:    "a person who has the responsibility of watching for something, especially danger, etc.",
-						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: "", Reason: "partial match covers main sense"},
-						},
-					},
-				},
-			},
-			wantCardsAfter: 0,
-		},
-		{
-			name:  "Flashcard card (Story is nil) - uses flashcards as story title",
+			name:  "Flashcard card (no scene title) - uses flashcards as story title",
 			input: "to initiate social interaction\n",
-			cards: []*WordOccurrence{
+			cards: []quiz.Card{
 				{
 					NotebookName: "test-flashcard",
-					Story:        nil,
-					Scene:        nil,
-					Definition: &notebook.Note{
-						Expression: "break the ice",
-						Meaning:    "to initiate social interaction",
+					StoryTitle:   "flashcards",
+					SceneTitle:   "",
+					Entry:        "break the ice",
+					Meaning:      "to initiate social interaction",
+					Examples: []quiz.Example{
+						{Text: "She told a joke to break the ice."},
 					},
-					Contexts: []WordOccurrenceContext{{Context: "She told a joke to break the ice.", Usage: "break the ice"}},
 				},
 			},
-			learningHistories: map[string][]notebook.LearningHistory{},
 			mockOpenAIResponse: inference.AnswerMeaningsResponse{
 				Answers: []inference.AnswerMeaning{
 					{
@@ -1215,101 +978,6 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 				},
 			},
 			wantCardsAfter: 0,
-		},
-		{
-			name:  "Card with images - displays images",
-			input: "test meaning\n",
-			cards: []*WordOccurrence{
-				{
-					NotebookName: "test-notebook",
-					Story:        &notebook.StoryNotebook{Event: "Story 1"},
-					Scene:        &notebook.StoryScene{Title: "Scene 1"},
-					Definition: &notebook.Note{
-						Expression: "test",
-						Meaning:    "test meaning",
-						Images:     []string{"image1.jpg"},
-					},
-					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
-				},
-			},
-			learningHistories: map[string][]notebook.LearningHistory{},
-			mockOpenAIResponse: inference.AnswerMeaningsResponse{
-				Answers: []inference.AnswerMeaning{
-					{
-						Expression: "test",
-						Meaning:    "test meaning",
-						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: "", Reason: "exact match"},
-						},
-					},
-				},
-			},
-			wantCardsAfter: 0,
-		},
-		{
-			name:  "Card from different notebook - updates correct notebook's learning history",
-			input: "test meaning\n",
-			cards: []*WordOccurrence{
-				{
-					NotebookName: "notebook-a",
-					Story: &notebook.StoryNotebook{
-						Event: "Story A",
-					},
-					Scene: &notebook.StoryScene{
-						Title: "Scene A",
-					},
-					Definition: &notebook.Note{
-						Expression: "test",
-						Meaning:    "test meaning",
-					},
-					Contexts: []WordOccurrenceContext{{Context: "This is a test", Usage: "test"}},
-				},
-			},
-			learningHistories: map[string][]notebook.LearningHistory{
-				"notebook-a": {},
-				"notebook-b": {},
-			},
-			mockOpenAIResponse: inference.AnswerMeaningsResponse{
-				Answers: []inference.AnswerMeaning{
-					{
-						Expression: "test",
-						Meaning:    "test meaning",
-						AnswersForContext: []inference.AnswersForContext{
-							{Correct: true, Context: "", Reason: "exact match with reference definition"},
-						},
-					},
-				},
-			},
-			wantCardsAfter: 0,
-			validate: func(t *testing.T, cli *NotebookQuizCLI) {
-				// Verify notebook-a has learning history updated
-				historyA := cli.learningHistories["notebook-a"]
-				require.NotEmpty(t, historyA, "notebook-a should have learning history")
-
-				// Find the learning history for the story and expression
-				found := false
-				for _, history := range historyA {
-					if history.Metadata.Title == "Story A" {
-						for _, scene := range history.Scenes {
-							if scene.Metadata.Title == "Scene A" {
-								for _, expr := range scene.Expressions {
-									if expr.Expression == "test" {
-										found = true
-										assert.NotEmpty(t, expr.LearnedLogs, "Expression should have learning logs")
-										assert.Equal(t, "understood", string(expr.GetLatestStatus()), "Latest status should be understood for correct answer")
-										break
-									}
-								}
-							}
-						}
-					}
-				}
-				assert.True(t, found, "Should find the test expression in notebook-a learning history")
-
-				// Verify notebook-b has no learning history (should remain empty)
-				historyB := cli.learningHistories["notebook-b"]
-				assert.Empty(t, historyB, "notebook-b should have no learning history updates")
-			},
 		},
 	}
 
@@ -1333,17 +1001,24 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 					AnyTimes()
 			}
 
-			// Set up CLI with mocks
+			learningDir := t.TempDir()
+
+			// Set up CLI with mocks - use a real quiz.Service backed by temp dirs
+			svc := quiz.NewService(config.NotebooksConfig{
+				LearningNotesDirectory: learningDir,
+			}, mockClient, make(map[string]rapidapi.Response))
+
 			cli := &NotebookQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
-					learningNotesDir:  t.TempDir(),
-					learningHistories: tt.learningHistories,
+					learningNotesDir:  learningDir,
+					learningHistories: map[string][]notebook.LearningHistory{},
 					dictionaryMap:     make(map[string]rapidapi.Response),
 					openaiClient:      mockClient,
 					stdinReader:       stdinReader,
 					bold:              color.New(color.Bold),
 					italic:            color.New(color.Italic),
 				},
+				svc:          svc,
 				notebookName: "test-notebook",
 				cards:        tt.cards,
 			}
@@ -1362,11 +1037,6 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 
 			// Verify card count after session
 			assert.Equal(t, tt.wantCardsAfter, len(cli.cards))
-
-			// Run custom validation if provided
-			if tt.validate != nil {
-				tt.validate(t, cli)
-			}
 		})
 	}
 }

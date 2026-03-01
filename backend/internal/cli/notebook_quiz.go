@@ -10,7 +10,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
-	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/fatih/color"
 )
 
@@ -18,8 +18,9 @@ import (
 // Handles both story notebooks and flashcard notebooks
 type NotebookQuizCLI struct {
 	*InteractiveQuizCLI
+	svc          *quiz.Service
 	notebookName string
-	cards        []*WordOccurrence
+	cards        []quiz.Card
 }
 
 // NewNotebookQuizCLI creates a new notebook quiz interactive CLI for story notebooks
@@ -36,54 +37,46 @@ func NewNotebookQuizCLI(
 		return nil, err
 	}
 
-	var cards []*WordOccurrence
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
 
-	// If notebookName is empty, load all notebooks
+	var cards []quiz.Card
+
+	// If notebookName is empty, load all notebooks with learning history
 	if notebookName == "" {
 		allNotebooks, err := reader.ReadAllStoryNotebooksMap()
 		if err != nil {
-			return nil, fmt.Errorf("ReadAllStoryNotebooksMap() > %w", err)
+			return nil, fmt.Errorf("failed to load story notebooks: %w", err)
 		}
 
-		for notebookID, stories := range allNotebooks {
-			learningHistory, ok := baseCLI.learningHistories[notebookID]
-			if !ok {
-				// Skip notebooks without learning history
-				continue
+		var notebookIDs []string
+		for notebookID := range allNotebooks {
+			if _, ok := baseCLI.learningHistories[notebookID]; ok {
+				notebookIDs = append(notebookIDs, notebookID)
 			}
+		}
 
-			filteredStories, err := notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, includeNoCorrectAnswers, true, false)
+		if len(notebookIDs) > 0 {
+			cards, err = svc.LoadCards(notebookIDs, includeNoCorrectAnswers)
 			if err != nil {
-				return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
+				return nil, fmt.Errorf("failed to load quiz cards: %w", err)
 			}
-
-			notebookCards := extractWordOccurrences(notebookID, filteredStories)
-			cards = append(cards, notebookCards...)
 		}
 	} else {
-		// Load stories for the specific notebook
-		stories, err := reader.ReadStoryNotebooks(notebookName)
-		if err != nil {
-			return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookName, err)
-		}
-
-		// Get learning history for this notebook
-		learningHistory, ok := baseCLI.learningHistories[notebookName]
+		// Keep the "no learning note" check for backwards compatibility
+		_, ok := baseCLI.learningHistories[notebookName]
 		if !ok {
 			return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
 		}
 
-		// Filter stories based on learning history (without conversion)
-		stories, err = notebook.FilterStoryNotebooks(stories, learningHistory, baseCLI.dictionaryMap, false, includeNoCorrectAnswers, true, false)
+		cards, err = svc.LoadCards([]string{notebookName}, includeNoCorrectAnswers)
 		if err != nil {
-			return nil, fmt.Errorf("notebook.FilterStoryNotebooks > %w", err)
+			return nil, fmt.Errorf("failed to load quiz cards: %w", err)
 		}
-
-		cards = extractWordOccurrences(notebookName, stories)
 	}
 
 	return &NotebookQuizCLI{
 		InteractiveQuizCLI: baseCLI,
+		svc:                svc,
 		notebookName:       notebookName,
 		cards:              cards,
 	}, nil
@@ -97,32 +90,27 @@ func NewFlashcardQuizCLI(
 	openaiClient inference.Client,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI for flashcards
-	baseCLI, reader, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
+	baseCLI, _, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}
 
-	// Load flashcard notebooks for the specific notebook
-	notebooks, err := reader.ReadFlashcardNotebooks(notebookName)
-	if err != nil {
-		return nil, fmt.Errorf("ReadFlashcardNotebooks(%s) > %w", notebookName, err)
-	}
-
-	// Get learning history for this notebook
-	learningHistory, ok := baseCLI.learningHistories[notebookName]
+	// Keep the "no learning note" check for backwards compatibility
+	_, ok := baseCLI.learningHistories[notebookName]
 	if !ok {
 		return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
 	}
 
-	// Filter notebooks based on learning history
-	notebooks, err = notebook.FilterFlashcardNotebooks(notebooks, learningHistory, baseCLI.dictionaryMap, false)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
+
+	cards, err := svc.LoadCards([]string{notebookName}, false)
 	if err != nil {
-		return nil, fmt.Errorf("notebook.FilterFlashcardNotebooks > %w", err)
+		return nil, fmt.Errorf("failed to load quiz cards: %w", err)
 	}
 
-	cards := extractWordOccurrencesFromFlashcards(notebookName, notebooks)
 	return &NotebookQuizCLI{
 		InteractiveQuizCLI: baseCLI,
+		svc:                svc,
 		notebookName:       notebookName,
 		cards:              cards,
 	}, nil
@@ -136,11 +124,11 @@ func (r *NotebookQuizCLI) ShuffleCards() {
 }
 
 // getNextCard returns the next card or nil if no more cards
-func (r *NotebookQuizCLI) getNextCard() *WordOccurrence {
+func (r *NotebookQuizCLI) getNextCard() *quiz.Card {
 	if len(r.cards) == 0 {
 		return nil
 	}
-	return r.cards[0]
+	return &r.cards[0]
 }
 
 // removeCurrentCard removes the current card from the session
@@ -170,7 +158,7 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 
 	question := FormatQuestion(currentCard)
 	fmt.Print(question)
-	_, _ = r.bold.Printf("%s: ", currentCard.GetExpression())
+	_, _ = r.bold.Printf("%s: ", currentCard.Entry)
 
 	userAnswer, err := r.stdinReader.ReadString('\n')
 	if err != nil {
@@ -178,68 +166,27 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	}
 
 	responseTimeMs := time.Since(startTime).Milliseconds()
-	cleanContexts := currentCard.GetCleanContexts()
-	var contexts []inference.Context
-	for i, ctx := range currentCard.Contexts {
-		contexts = append(contexts, inference.Context{
-			Context:             cleanContexts[i],                // Use cleaned context without markers
-			ReferenceDefinition: currentCard.Definition.Meaning, // Include meaning from notebook as hint
-			Usage:               ctx.Usage,                      // Include the actual form used in context
-		})
-	}
 
-	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
-		Expressions: []inference.Expression{
-			{
-				Expression:        currentCard.GetExpression(),
-				Meaning:           userAnswer,
-				Contexts:          contexts,
-				IsExpressionInput: false,          // NotebookQuiz: user inputs the meaning
-				ResponseTimeMs:    responseTimeMs, // For quality assessment
-			},
-		},
-	})
+	grade, err := r.svc.GradeNotebookAnswer(ctx, *currentCard, strings.TrimSpace(userAnswer), responseTimeMs)
 	if err != nil {
-		return fmt.Errorf("openaiClient.AnswerQuestions() > %w", err)
-	}
-	if len(results.Answers) == 0 {
-		return fmt.Errorf("no results returned from OpenAI")
-	}
-	result := results.Answers[0]
-
-	isCorrect := len(result.AnswersForContext) > 0 && result.AnswersForContext[0].Correct
-	reason := ""
-	if len(result.AnswersForContext) > 0 {
-		reason = result.AnswersForContext[0].Reason
+		return fmt.Errorf("failed to grade answer: %w", err)
 	}
 
-	quality := 1
-	if len(result.AnswersForContext) > 0 {
-		quality = result.AnswersForContext[0].Quality
-		if quality == 0 {
-			// Fallback if OpenAI didn't return quality
-			if isCorrect {
-				quality = 4
-			} else {
-				quality = 1
-			}
-		}
+	// Override correct flag for empty input
+	if strings.TrimSpace(userAnswer) == "" {
+		grade.Correct = false
 	}
 
 	answer := AnswerResponse{
-		Correct:    isCorrect,
-		Expression: result.Expression,
-		Meaning:    result.Meaning,
-		Reason:     reason,
-	}
-
-	if strings.TrimSpace(userAnswer) == "" {
-		answer.Correct = false
+		Correct:    grade.Correct,
+		Expression: currentCard.Entry,
+		Meaning:    currentCard.Meaning,
+		Reason:     grade.Reason,
 	}
 
 	fmt.Printf(`Answer for %s is "%s"`,
-		r.bold.Sprintf("%s", currentCard.GetExpression()),
-		r.italic.Sprintf("%s", currentCard.GetMeaning()),
+		r.bold.Sprintf("%s", currentCard.Entry),
+		r.italic.Sprintf("%s", currentCard.Meaning),
 	)
 	fmt.Println()
 
@@ -259,124 +206,39 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	if answer.Reason != "" {
 		fmt.Printf("   Reason: %s\n", answer.Reason)
 	}
-
-	if len(currentCard.GetImages()) > 0 {
-		fmt.Printf("\nImages: %+v\n", currentCard.GetImages())
-	}
 	fmt.Println()
 
-	// Update learning history - QA always records even if status doesn't change
-	// Use definition if available, otherwise use expression
-	wordToRecord := currentCard.GetExpression()
-
-	// Use the card's notebook name (important when loading all notebooks)
-	cardNotebookName := currentCard.NotebookName
-
-	// For flashcards (Story is nil), use generic story/scene titles
-	storyTitle := "flashcards"
-	sceneTitle := ""
-	if currentCard.Story != nil {
-		storyTitle = currentCard.Story.Event
-		sceneTitle = currentCard.Scene.Title
-	}
-
-	learningHistory, err := r.updateLearningHistoryWithQuality(
-		cardNotebookName,
-		r.learningHistories[cardNotebookName],
-		cardNotebookName,
-		storyTitle,
-		sceneTitle,
-		wordToRecord,
-		currentCard.Definition.Expression,
-		answer.Correct,
-		true, // qa command always marks correct answers as known words
-		quality,
-		responseTimeMs,
-		notebook.QuizTypeNotebook,
-	)
-	if err != nil {
+	if err := r.svc.SaveResult(*currentCard, grade, responseTimeMs); err != nil {
 		return err
 	}
-
-	r.learningHistories[cardNotebookName] = learningHistory
 
 	// Remove the card from the session
 	r.removeCurrentCard()
 	return nil
 }
 
-// extractWordOccurrences extracts all word occurrences from stories
-func extractWordOccurrences(notebookName string, stories []notebook.StoryNotebook) []*WordOccurrence {
-	var occurrences []*WordOccurrence
-
-	for i := range stories {
-		story := &stories[i]
-		for j := range story.Scenes {
-			scene := &story.Scenes[j]
-			for k := range scene.Definitions {
-				definition := &scene.Definitions[k]
-				// Extract contexts from conversations that contain the expression
-				// Words without contexts are still included for learning
-				contexts := extractContextsFromConversations(scene, definition.Expression, definition.Definition)
-
-				occurrence := &WordOccurrence{
-					NotebookName: notebookName,
-					Story:        story,
-					Scene:        scene,
-					Definition:   definition,
-					Contexts:     contexts,
-				}
-
-				occurrences = append(occurrences, occurrence)
-			}
-		}
-	}
-
-	return occurrences
-}
-
 // FormatQuestion formats a question for display
-// It converts {{ }} markers for the specific expression being asked
-// For flashcards (when occurrence.Scene is nil), it shows a simpler question without scene context
-func FormatQuestion(occurrence *WordOccurrence) string {
-	expression := occurrence.GetExpression()
-	if len(occurrence.Contexts) == 0 {
+// For flashcards (when card.SceneTitle is empty), it shows a simpler question without scene context
+func FormatQuestion(card *quiz.Card) string {
+	expression := card.Entry
+	if len(card.Examples) == 0 {
 		return fmt.Sprintf("What does '%s' mean?\n", expression)
 	}
 
-	// For flashcards (no scene), show a simpler question with examples
-	if occurrence.Scene == nil {
+	// Flashcard: no scene title
+	if card.SceneTitle == "" {
 		question := fmt.Sprintf("What does '%s' mean?\n", expression)
-		if len(occurrence.Contexts) > 0 {
-			question += "Examples:\n"
-			for i, context := range occurrence.Contexts {
-				question += fmt.Sprintf("  %d. %s\n", i+1, context)
-			}
+		question += "Examples:\n"
+		for i, ex := range card.Examples {
+			question += fmt.Sprintf("  %d. %s\n", i+1, ex.Text)
 		}
 		return question
 	}
 
-	// For story notebooks, show context-based question
+	// Story notebook: show context
 	question := fmt.Sprintf("What does '%s' mean in the following context?\n", expression)
-
-	// Only convert markers if we have scene definitions
-	if occurrence.Scene != nil && len(occurrence.Scene.Definitions) > 0 {
-		for i, ctx := range occurrence.Contexts {
-			// Convert only the specific expression to bold terminal text
-			convertedContext := notebook.ConvertMarkersInText(
-				ctx.Context,
-				occurrence.Scene.Definitions,
-				notebook.ConversionStyleTerminal,
-				occurrence.Definition.Expression,
-			)
-			question += fmt.Sprintf("  %d. %s\n", i+1, convertedContext)
-		}
-	} else {
-		// No scene definitions, just output contexts as-is
-		for i, ctx := range occurrence.Contexts {
-			question += fmt.Sprintf("  %d. %s\n", i+1, ctx.Context)
-		}
+	for i, ex := range card.Examples {
+		question += fmt.Sprintf("  %d. %s\n", i+1, ex.Text)
 	}
-
 	return question
 }

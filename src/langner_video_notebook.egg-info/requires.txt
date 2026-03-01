@@ -1,0 +1,7 @@
+moviepy
+faster_whisper
+pyyaml
+torch
+pyannote-audio>=3.4.0
+yt-dlp-transcripts>=0.1.1
+yt-dlp>=2025.10.14

@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: langner-video-notebook
+Version: 0.1.0
+Summary: A script to generate langner notebooks from video files.
+Requires-Python: >=3.9
+License-File: LICENSE
+Requires-Dist: moviepy
+Requires-Dist: faster_whisper
+Requires-Dist: pyyaml
+Requires-Dist: torch
+Requires-Dist: pyannote-audio>=3.4.0
+Requires-Dist: yt-dlp-transcripts>=0.1.1
+Requires-Dist: yt-dlp>=2025.10.14
+Dynamic: license-file
