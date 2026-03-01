@@ -398,24 +398,38 @@ type NoteSink interface {
 	WriteAll(notes []notebook.NoteRecord) error
 }
 
+// LearningSink writes exported learning logs.
+type LearningSink interface {
+	WriteAll(notes []notebook.NoteRecord, logs []learning.LearningLog) error
+}
+
 // ExportNotesResult tracks counts for note export.
 type ExportNotesResult struct {
 	NotesExported int
 }
 
+// ExportLearningLogsResult tracks counts for learning log export.
+type ExportLearningLogsResult struct {
+	LogsExported int
+}
+
 // Exporter reads DB data and writes to YAML files.
 type Exporter struct {
-	noteRepo notebook.NoteRepository
-	noteSink NoteSink
-	writer   io.Writer
+	noteRepo     notebook.NoteRepository
+	learningRepo learning.LearningRepository
+	noteSink     NoteSink
+	learningSink LearningSink
+	writer       io.Writer
 }
 
 // NewExporter creates a new Exporter.
-func NewExporter(noteRepo notebook.NoteRepository, noteSink NoteSink, writer io.Writer) *Exporter {
+func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.LearningRepository, noteSink NoteSink, learningSink LearningSink, writer io.Writer) *Exporter {
 	return &Exporter{
-		noteRepo: noteRepo,
-		noteSink: noteSink,
-		writer:   writer,
+		noteRepo:     noteRepo,
+		learningRepo: learningRepo,
+		noteSink:     noteSink,
+		learningSink: learningSink,
+		writer:       writer,
 	}
 }
 
@@ -433,5 +447,27 @@ func (exp *Exporter) ExportNotes(ctx context.Context) (*ExportNotesResult, error
 	_, _ = fmt.Fprintf(exp.writer, "  Exported %d notes\n", len(notes))
 	return &ExportNotesResult{
 		NotesExported: len(notes),
+	}, nil
+}
+
+// ExportLearningLogs reads learning logs from the database and writes them via the sink.
+func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLogsResult, error) {
+	notes, err := exp.noteRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load notes: %w", err)
+	}
+
+	logs, err := exp.learningRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load learning logs: %w", err)
+	}
+
+	if err := exp.learningSink.WriteAll(notes, logs); err != nil {
+		return nil, fmt.Errorf("write learning logs: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(exp.writer, "  Exported %d learning logs\n", len(logs))
+	return &ExportLearningLogsResult{
+		LogsExported: len(logs),
 	}, nil
 }

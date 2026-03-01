@@ -13,7 +13,6 @@ type notebookKey struct {
 	notebookType string
 	notebookID   string
 }
-
 // noteWithNN pairs a converted Note with its NotebookNote metadata.
 type noteWithNN struct {
 	note Note

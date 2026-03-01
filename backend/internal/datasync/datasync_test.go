@@ -993,14 +993,103 @@ func TestExporter_ExportNotes(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
 			noteSink := mock_datasync.NewMockNoteSink(ctrl)
+			learningSink := mock_datasync.NewMockLearningSink(ctrl)
 
 			tt.setup(noteRepo, noteSink)
 
 			var buf bytes.Buffer
-			exp := NewExporter(noteRepo, noteSink, &buf)
+			exp := NewExporter(noteRepo, learningRepo, noteSink, learningSink, &buf)
 
 			got, err := exp.ExportNotes(context.Background())
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestExporter_ExportLearningLogs(t *testing.T) {
+	baseTime := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name    string
+		setup   func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink)
+		want    *ExportLearningLogsResult
+		wantErr bool
+	}{
+		{
+			name: "successful export",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Entry: "break the ice"},
+				}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{
+					{ID: 1, NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook"},
+					{ID: 2, NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 5, QuizType: "reverse"},
+				}, nil)
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(notes []notebook.NoteRecord, logs []learning.LearningLog) error {
+						require.Len(t, notes, 1)
+						require.Len(t, logs, 2)
+						return nil
+					})
+			},
+			want: &ExportLearningLogsResult{LogsExported: 2},
+		},
+		{
+			name: "empty logs",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).Return(nil)
+			},
+			want: &ExportLearningLogsResult{},
+		},
+		{
+			name: "noteRepo.FindAll error propagates",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "learningRepo.FindAll error propagates",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return(nil, fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+		{
+			name: "learningSink.WriteAll error propagates",
+			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).Return(fmt.Errorf("write failed"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+			learningRepo := mock_learning.NewMockLearningRepository(ctrl)
+			noteSink := mock_datasync.NewMockNoteSink(ctrl)
+			learningSink := mock_datasync.NewMockLearningSink(ctrl)
+
+			tt.setup(noteRepo, learningRepo, learningSink)
+
+			var buf bytes.Buffer
+			exp := NewExporter(noteRepo, learningRepo, noteSink, learningSink, &buf)
+
+			got, err := exp.ExportLearningLogs(context.Background())
 			if tt.wantErr {
 				assert.Error(t, err)
 				return

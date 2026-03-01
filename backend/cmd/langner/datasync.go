@@ -122,16 +122,24 @@ func newExportDBCommand() *cobra.Command {
 			defer func() { _ = db.Close() }()
 
 			noteRepo := notebook.NewDBNoteRepository(db)
+			learningRepo := learning.NewDBLearningRepository(db)
 			noteSink := notebook.NewYAMLNoteRepositoryWriter(outputDir)
-			exporter := datasync.NewExporter(noteRepo, noteSink, os.Stdout)
+			learningSink := learning.NewYAMLLearningRepositoryWriter(outputDir)
+			exporter := datasync.NewExporter(noteRepo, learningRepo, noteSink, learningSink, os.Stdout)
 
 			noteResult, err := exporter.ExportNotes(ctx)
 			if err != nil {
 				return fmt.Errorf("export notes: %w", err)
 			}
 
+			learningResult, err := exporter.ExportLearningLogs(ctx)
+			if err != nil {
+				return fmt.Errorf("export learning logs: %w", err)
+			}
+
 			fmt.Println("\nExport Summary:")
 			fmt.Printf("  Notes exported:              %d\n", noteResult.NotesExported)
+			fmt.Printf("  Learning logs exported:      %d\n", learningResult.LogsExported)
 
 			return nil
 		},
