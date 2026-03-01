@@ -141,7 +141,7 @@ test("completes full quiz flow", async ({ page }) => {
   await expect(page.getByText(/Correct|Incorrect/)).toBeVisible();
   expect(submitAnswerCallCount).toBe(1);
 
-  await page.getByRole("button", { name: "Next" }).click();
+  await page.getByRole("button", { name: "Next", exact: true }).click();
 
   await expect(page.getByRole("heading", { name: "lose one's temper" })).toBeVisible();
 
