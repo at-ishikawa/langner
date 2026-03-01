@@ -26,6 +26,8 @@ func newValidateCommand() *cobra.Command {
 				cfg.Notebooks.StoriesDirectories,
 				cfg.Notebooks.FlashcardsDirectories,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
+				cfg.Notebooks.BooksDirectories,
+				cfg.Notebooks.DefinitionsDirectories,
 			)
 
 			var result *notebook.ValidationResult

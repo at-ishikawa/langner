@@ -31,6 +31,12 @@ type NotebookScene struct {
 	Statements []string `yaml:"statements,omitempty"`
 }
 
+// BookNotebook holds a notebook file path and its loaded entries
+type BookNotebook struct {
+	Path    string
+	Entries []NotebookEntry
+}
+
 // GenerateNotebooks creates notebook files from parsed chapters
 func GenerateNotebooks(repo Repository, chapters []Chapter, booksDir string) error {
 	// Create book directory
