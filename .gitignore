@@ -1,5 +1,7 @@
 .venv
 config.yml
+/langner-server
+/langner
 .claude/*
 !.claude/docs
 
