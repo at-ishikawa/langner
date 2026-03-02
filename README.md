@@ -155,6 +155,31 @@ Your `config.yml` file controls:
 | `langner validate` | Check notebooks for errors | None |
 | `langner validate --fix` | Auto-fix validation errors | None |
 
+## Local Development
+
+You can run the interactive quiz application (backend and frontend) locally for development.
+
+### 1. Prerequisites
+- [Docker](https://docs.docker.com/get-docker/)
+- [Go](https://golang.org/doc/install) (1.25+)
+- [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/installation)
+
+### 2. Initial Setup
+Run the setup command to start the database, install dependencies, and run migrations:
+```bash
+cp config.example.yml config.yml
+make setup
+```
+
+### 3. Running the Application
+Start both the backend and frontend concurrently:
+```bash
+export OPENAI_API_KEY="your-api-key-here"
+make dev
+```
+- **Backend**: http://localhost:8080
+- **Frontend**: http://localhost:3000
+
 ## Tips for Success
 
 1. **Create notebooks regularly**: The more you practice, the better you learn
