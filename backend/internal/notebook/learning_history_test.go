@@ -532,7 +532,7 @@ func TestLearningHistoryExpression_GetLatestStatus(t *testing.T) {
 			expression: LearningHistoryExpression{
 				LearnedLogs: []LearningRecord{},
 			},
-			want: learnedStatusLearning,
+			want: LearnedStatusLearning,
 		},
 		{
 			name: "returns first log status",

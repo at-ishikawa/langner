@@ -144,7 +144,7 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 											Expression: "test word",
 											LearnedLogs: []LearningRecord{
 												{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
-												{Status: learnedStatusLearning, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+												{Status: LearnedStatusLearning, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 											},
 										},
 									},
@@ -251,7 +251,7 @@ func TestValidator_validateLearningNotesStructure(t *testing.T) {
 										{
 											Expression: "test",
 											LearnedLogs: []LearningRecord{
-												{Status: learnedStatusLearning, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
+												{Status: LearnedStatusLearning, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))},
 												{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
 											},
 										},

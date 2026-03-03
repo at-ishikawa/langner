@@ -20,46 +20,53 @@ func TestUpdateEasinessFactor(t *testing.T) {
 			expected:              2.6,
 		},
 		{
-			name:                  "quality 4 maintains EF",
+			name:                  "quality 4 increases EF (shifted up from 4)",
 			ef:                    2.5,
 			quality:               4,
+			previousCorrectStreak: 1,
+			expected:              2.6,
+		},
+		{
+			name:                  "quality 3 maintains EF (shifted up from 3)",
+			ef:                    2.5,
+			quality:               3,
 			previousCorrectStreak: 1,
 			expected:              2.5,
 		},
 		{
-			name:                  "quality 3 decreases EF slightly",
+			name:                  "quality 2 decreases EF by 0.14 (shifted up from 2)",
 			ef:                    2.5,
-			quality:               3,
+			quality:               2,
 			previousCorrectStreak: 1,
-			expected:              2.36,
+			expected:              2.36, // 2.5 - 0.14
 		},
 		{
 			name:                  "quality 1 full penalty for new word",
 			ef:                    2.5,
 			quality:               1,
 			previousCorrectStreak: 2,
-			expected:              1.96, // 2.5 - 0.54
+			expected:              2.18, // 2.5 + (-0.32)
 		},
 		{
 			name:                  "quality 1 scaled penalty for streak 3-5",
 			ef:                    2.5,
 			quality:               1,
 			previousCorrectStreak: 5,
-			expected:              2.1004, // 2.5 + (-0.54 * 0.74)
+			expected:              2.2632, // 2.5 + (-0.32 * 0.74)
 		},
 		{
 			name:                  "quality 1 scaled penalty for streak 6-9",
 			ef:                    2.5,
 			quality:               1,
 			previousCorrectStreak: 8,
-			expected:              2.1976, // 2.5 + (-0.54 * 0.56)
+			expected:              2.3208, // 2.5 + (-0.32 * 0.56)
 		},
 		{
 			name:                  "quality 1 scaled penalty for streak 10+",
 			ef:                    2.5,
 			quality:               1,
 			previousCorrectStreak: 12,
-			expected:              2.3002, // 2.5 + (-0.54 * 0.37)
+			expected:              2.3816, // 2.5 + (-0.32 * 0.37)
 		},
 		{
 			name:                  "never goes below MinEasinessFactor",
@@ -102,32 +109,47 @@ func TestCalculateNextInterval(t *testing.T) {
 			ef:            2.5,
 			quality:       4,
 			correctStreak: 1,
-			expected:      1,
+			expected:      3,
 		},
 		{
 			name:          "second correct answer",
-			lastInterval:  1,
+			lastInterval:  3,
 			ef:            2.5,
 			quality:       4,
 			correctStreak: 2,
-			expected:      6,
+			expected:      8, // 3 * 2.5 = 7.5 -> 8 (now uses lastInterval * EF instead of hardcoded 10)
 		},
 		{
 			name:          "third correct answer",
-			lastInterval:  6,
+			lastInterval:  10,
 			ef:            2.5,
 			quality:       4,
 			correctStreak: 3,
-			expected:      15, // 6 * 2.5 = 15
+			expected:      25, // 10 * 2.5 = 25
 		},
-		{
-			name:          "wrong answer resets for new word",
-			lastInterval:  6,
-			ef:            2.5,
-			quality:       1,
-			correctStreak: 2,
-			expected:      1,
-		},
+			{
+				name:          "first correct answer after lapse with small lastInterval",
+				lastInterval:  5, // e.g., after a lapse where previous was 10, then reduced to 5
+				ef:            2.6,
+				quality:       4,
+				correctStreak: 1, // First correct answer after a lapse
+				expected:      13, // 5 * 2.6 = 13
+			},
+			{
+				name:          "correct answer after lapse on well-learned card",
+				lastInterval:  14, // e.g., after a lapse from a 28-day interval
+				ef:            2.6,
+				quality:       4,
+				correctStreak: 1, // First correct answer after a lapse
+				expected:      37, // 14 * 2.6 = 36.4 -> 37
+			},			{
+				name:          "wrong answer proportional reduction for new word",
+				lastInterval:  10,
+				ef:            2.5,
+				quality:       1,
+				correctStreak: 2,
+				expected:      5, // 10 * 0.5
+			},
 		{
 			name:          "wrong answer proportional for streak 3-5",
 			lastInterval:  30,
@@ -162,11 +184,11 @@ func TestCalculateNextInterval(t *testing.T) {
 		},
 		{
 			name:          "default EF when zero",
-			lastInterval:  6,
+			lastInterval:  10,
 			ef:            0,
 			quality:       4,
 			correctStreak: 3,
-			expected:      15, // 6 * 2.5 (default EF)
+			expected:      25, // 10 * 2.5 (default EF)
 		},
 		{
 			name:          "fallback lastInterval when zero on high streak",
@@ -174,7 +196,7 @@ func TestCalculateNextInterval(t *testing.T) {
 			ef:            2.5,
 			quality:       4,
 			correctStreak: 3,
-			expected:      15, // fallback to 6 * 2.5
+			expected:      25, // fallback to 10 * 2.5
 		},
 	}
 

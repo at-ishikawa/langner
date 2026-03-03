@@ -326,13 +326,13 @@ func (r *ReverseQuizCLI) calculateQuality(responseTimeMs int64, isRetry bool) in
 	}
 
 	// Quality based on response time:
-	// < 3 seconds: Q5 (instant recall)
-	// 3-10 seconds: Q4 (normal)
-	// > 10 seconds: Q3 (struggled)
+	// < 5 seconds: Q5 (instant recall)
+	// 5-15 seconds: Q4 (normal)
+	// > 15 seconds: Q3 (struggled)
 	switch {
-	case responseTimeMs < 3000:
+	case responseTimeMs < 5000:
 		return int(notebook.QualityCorrectFast)
-	case responseTimeMs < 10000:
+	case responseTimeMs < 15000:
 		return int(notebook.QualityCorrect)
 	default:
 		return int(notebook.QualityCorrectSlow)
