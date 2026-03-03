@@ -30,7 +30,7 @@ type Notebook struct {
 type LearnedStatus string
 
 const (
-	learnedStatusLearning        LearnedStatus = ""
+	LearnedStatusLearning        LearnedStatus = ""
 	LearnedStatusMisunderstood   LearnedStatus = "misunderstood"
 	learnedStatusUnderstood      LearnedStatus = "understood"
 	learnedStatusCanBeUsed       LearnedStatus = "usable"
@@ -132,7 +132,7 @@ func (note Note) getLearnScore() int {
 	score := 0
 	for _, learnedLog := range note.LearnedLogs {
 		switch learnedLog.Status {
-		case learnedStatusLearning:
+		case LearnedStatusLearning:
 		case LearnedStatusMisunderstood:
 			// Misunderstood has negative impact on score
 			score -= 5
@@ -296,7 +296,7 @@ func (note Note) getNextLearningThresholdDays() int {
 
 	count := 0
 	for _, learnedLog := range learnedLogs {
-		if learnedLog.Status == learnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
+		if learnedLog.Status == LearnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
 			continue
 		}
 		count++

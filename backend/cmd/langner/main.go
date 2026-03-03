@@ -75,7 +75,8 @@ func newMigrateCommand() *cobra.Command {
 }
 
 func newMigrateLearningHistoryCommand() *cobra.Command {
-	return &cobra.Command{
+	var recalculateSM2 bool
+	cmd := &cobra.Command{
 		Use:   "learning-history",
 		Short: "Migrate learning history files to new SM-2 format",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -84,7 +85,9 @@ func newMigrateLearningHistoryCommand() *cobra.Command {
 				return err
 			}
 
-			return cli.MigrateLearningHistory(cfg.Notebooks.LearningNotesDirectory)
+			return cli.MigrateLearningHistory(cfg.Notebooks.LearningNotesDirectory, recalculateSM2)
 		},
 	}
+	cmd.Flags().BoolVar(&recalculateSM2, "recalculate-sm2", false, "Force recalculation of SM-2 metrics (EF and intervals) for all learning history entries")
+	return cmd
 }

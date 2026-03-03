@@ -546,7 +546,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusLearning, LearnedAt: NewDate(baseTime)},
+					{Status: LearnedStatusLearning, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: false,
@@ -591,7 +591,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime.Add(-3 * time.Hour))},
-					{Status: learnedStatusLearning, LearnedAt: NewDate(baseTime.Add(-2 * time.Hour))},
+					{Status: LearnedStatusLearning, LearnedAt: NewDate(baseTime.Add(-2 * time.Hour))},
 					{Status: learnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
 				},
 			},
@@ -604,7 +604,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime.Add(-2 * time.Hour))},
-					{Status: learnedStatusLearning, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
+					{Status: LearnedStatusLearning, LearnedAt: NewDate(baseTime.Add(-1 * time.Hour))},
 				},
 			},
 			expected: false,

@@ -96,7 +96,7 @@ type LearningHistoryExpression struct {
 
 func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	if len(exp.LearnedLogs) == 0 {
-		return learnedStatusLearning
+		return LearnedStatusLearning
 	}
 	// Get the first element since new logs are prepended
 	lastLog := exp.LearnedLogs[0]
@@ -197,7 +197,7 @@ func (exp LearningHistoryExpression) NeedsReverseReview() bool {
 		// Fallback: calculate based on correct streak
 		correctCount := 0
 		for _, log := range exp.ReverseLogs {
-			if log.Status != LearnedStatusMisunderstood && log.Status != learnedStatusLearning {
+			if log.Status != LearnedStatusMisunderstood && log.Status != LearnedStatusLearning {
 				correctCount++
 			}
 		}
@@ -273,7 +273,7 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 
 	// Validate learned logs
 	validStatuses := map[LearnedStatus]bool{
-		learnedStatusLearning:        true,
+		LearnedStatusLearning:        true,
 		LearnedStatusMisunderstood:   true,
 		learnedStatusUnderstood:      true,
 		learnedStatusCanBeUsed:       true,

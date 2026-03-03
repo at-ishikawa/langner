@@ -15,6 +15,12 @@ func UpdateEasinessFactor(ef float64, quality int, previousCorrectStreak int) fl
 	}
 
 	q := float64(quality)
+	// Shift quality up for a more aggressive interval growth and less penalty for lower qualities.
+	// This applies to all qualities, not just those >=3.
+	q = q + 1
+	if q > 5 {
+		q = 5
+	}
 
 	// Standard SM-2 delta for correct answers
 	delta := 0.1 - (5-q)*(0.08+(5-q)*0.02)
@@ -38,9 +44,8 @@ func UpdateEasinessFactor(ef float64, quality int, previousCorrectStreak int) fl
 	newEF := ef + delta
 	return math.Max(newEF, MinEasinessFactor)
 }
-
 // CalculateNextInterval calculates the next review interval
-// On correct: interval = lastInterval * EF (or 1/6 for first reviews)
+// On correct: interval = lastInterval * EF (or 3/10 for first reviews)
 // On wrong: interval = lastInterval * reduction factor (proportional)
 func CalculateNextInterval(lastInterval int, ef float64, quality int, correctStreak int) int {
 	if ef == 0 {
@@ -53,15 +58,21 @@ func CalculateNextInterval(lastInterval int, ef float64, quality int, correctStr
 	}
 
 	// Correct answer: grow interval
+	// If the card has already had a non-zero interval, it's considered past its "initial learning" phase.
+	// In this case, even if correctStreak is 1 or 2 after a lapse, we should use multiplicative growth.
+	if lastInterval > 0 && (correctStreak == 1 || correctStreak == 2) {
+		return int(math.Ceil(float64(lastInterval) * ef))
+	}
+
 	switch correctStreak {
 	case 1:
-		return 1
+		return 3
 	case 2:
-		return 6
+		return 10
 	default:
 		// Use last interval * EF
 		if lastInterval == 0 {
-			lastInterval = 6 // fallback for migration
+			lastInterval = 10 // fallback for migration
 		}
 		return int(math.Ceil(float64(lastInterval) * ef))
 	}
@@ -70,19 +81,14 @@ func CalculateNextInterval(lastInterval int, ef float64, quality int, correctStr
 // calculateLapseInterval returns interval after wrong answer
 // Proportional reduction based on previous progress
 func calculateLapseInterval(lastInterval int, previousCorrectStreak int) int {
-	if previousCorrectStreak <= 2 {
-		return 1 // Still learning: full reset
-	}
-
 	var multiplier float64
 	switch {
 	case previousCorrectStreak >= 10:
 		multiplier = 0.7
 	case previousCorrectStreak >= 6:
 		multiplier = 0.6
-	case previousCorrectStreak >= 3:
-		multiplier = 0.5
 	default:
+		// Covers all cases including streaks < 3
 		multiplier = 0.5
 	}
 
@@ -104,7 +110,7 @@ func GetCorrectStreak(logs []LearningRecord) int {
 			if log.Status == LearnedStatusMisunderstood {
 				break // Hit a wrong answer, stop counting
 			}
-			if log.Status != "" && log.Status != learnedStatusLearning {
+			if log.Status != "" && log.Status != LearnedStatusLearning {
 				count++
 			}
 			continue

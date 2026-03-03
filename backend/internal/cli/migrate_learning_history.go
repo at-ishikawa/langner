@@ -8,7 +8,7 @@ import (
 )
 
 // MigrateLearningHistory migrates all learning history files to the new SM-2 format
-func MigrateLearningHistory(learningNotesDir string) error {
+func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error {
 	histories, err := notebook.NewLearningHistories(learningNotesDir)
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
@@ -21,7 +21,7 @@ func MigrateLearningHistory(learningNotesDir string) error {
 
 			if hist.Metadata.Type == "flashcard" {
 				for exprIdx := range hist.Expressions {
-					if migrateExpression(&hist.Expressions[exprIdx]) {
+					if migrateExpression(&hist.Expressions[exprIdx], recalculateSM2) {
 						modified = true
 					}
 				}
@@ -30,7 +30,7 @@ func MigrateLearningHistory(learningNotesDir string) error {
 
 			for sceneIdx := range hist.Scenes {
 				for exprIdx := range hist.Scenes[sceneIdx].Expressions {
-					if migrateExpression(&hist.Scenes[sceneIdx].Expressions[exprIdx]) {
+					if migrateExpression(&hist.Scenes[sceneIdx].Expressions[exprIdx], recalculateSM2) {
 						modified = true
 					}
 				}
@@ -51,8 +51,14 @@ func MigrateLearningHistory(learningNotesDir string) error {
 }
 
 // migrateExpression migrates a single expression to the new format
-func migrateExpression(exp *notebook.LearningHistoryExpression) bool {
+func migrateExpression(exp *notebook.LearningHistoryExpression, recalculateSM2 bool) bool {
 	modified := false
+
+	if recalculateSM2 {
+		recalculateSM2Metrics(exp)
+		modified = true
+		return modified
+	}
 
 	if exp.EasinessFactor == 0 {
 		exp.EasinessFactor = calculateEasinessFactor(exp.LearnedLogs)
@@ -78,6 +84,51 @@ func migrateExpression(exp *notebook.LearningHistoryExpression) bool {
 	}
 
 	return modified
+}
+
+// recalculateSM2Metrics forces a full recalculation of EF and IntervalDays for all logs
+func recalculateSM2Metrics(exp *notebook.LearningHistoryExpression) {
+	recalculateLogs := func(logs []notebook.LearningRecord) (float64, []notebook.LearningRecord) {
+		if len(logs) == 0 {
+			return notebook.DefaultEasinessFactor, logs
+		}
+
+		newLogs := make([]notebook.LearningRecord, len(logs))
+		copy(newLogs, logs)
+
+		currentEF := notebook.DefaultEasinessFactor
+		lastInterval := 0
+		correctStreak := 0
+
+		// Logs are stored newest first, so we process them in reverse (oldest to newest)
+		for i := len(newLogs) - 1; i >= 0; i-- {
+			log := &newLogs[i]
+
+			if log.Quality == 0 {
+				if log.Status == notebook.LearnedStatusMisunderstood {
+					log.Quality = int(notebook.QualityWrong)
+				} else {
+					log.Quality = int(notebook.QualityCorrect)
+				}
+			}
+
+			streakForEF := correctStreak
+			if log.Quality >= int(notebook.QualityCorrectSlow) {
+				correctStreak++
+			} else {
+				correctStreak = 0
+			}
+
+			currentEF = notebook.UpdateEasinessFactor(currentEF, log.Quality, streakForEF)
+			intervalForThisLog := notebook.CalculateNextInterval(lastInterval, currentEF, log.Quality, correctStreak)
+			log.IntervalDays = intervalForThisLog
+			lastInterval = intervalForThisLog
+		}
+		return currentEF, newLogs
+	}
+
+	exp.EasinessFactor, exp.LearnedLogs = recalculateLogs(exp.LearnedLogs)
+	exp.ReverseEasinessFactor, exp.ReverseLogs = recalculateLogs(exp.ReverseLogs)
 }
 
 // calculateEasinessFactor calculates EF from learning history pattern
@@ -115,7 +166,7 @@ func countCorrectFromIndex(logs []notebook.LearningRecord, fromIndex int) int {
 		if logs[j].Status == notebook.LearnedStatusMisunderstood {
 			break
 		}
-		if logs[j].Status != "" {
+		if logs[j].Status != "" && logs[j].Status != notebook.LearnedStatusLearning { // Fix typo: LearnedStatusLearning
 			count++
 		}
 	}

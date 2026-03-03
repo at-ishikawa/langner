@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/stretchr/testify/assert"
@@ -83,7 +84,7 @@ func TestMigrateLearningHistory(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			err := MigrateLearningHistory(tempDir)
+			err := MigrateLearningHistory(tempDir, false)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -94,7 +95,7 @@ func TestMigrateLearningHistory(t *testing.T) {
 }
 
 func TestMigrateLearningHistory_NonexistentDirectory(t *testing.T) {
-	err := MigrateLearningHistory("/nonexistent/directory")
+	err := MigrateLearningHistory("/nonexistent/directory", false)
 	assert.Error(t, err)
 }
 
@@ -353,7 +354,7 @@ func TestMigrateExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exp := tt.exp
-			got := migrateExpression(&exp)
+			got := migrateExpression(&exp, false)
 			assert.Equal(t, tt.want, got)
 
 			if tt.want {
@@ -367,5 +368,35 @@ func TestMigrateExpression(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRecalculateSM2Metrics(t *testing.T) {
+	exp := &notebook.LearningHistoryExpression{
+		Expression: "curl up",
+		LearnedLogs: []notebook.LearningRecord{
+			{LearnedAt: notebook.NewDate(time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC)), Quality: 4, Status: "understood"},
+			{LearnedAt: notebook.NewDate(time.Date(2025, 12, 21, 0, 0, 0, 0, time.UTC)), Quality: 4, Status: "understood"},
+			{LearnedAt: notebook.NewDate(time.Date(2025, 6, 13, 0, 0, 0, 0, time.UTC)), Quality: 1, Status: "misunderstood"},
+			{LearnedAt: notebook.NewDate(time.Date(2025, 3, 11, 0, 0, 0, 0, time.UTC)), Quality: 4, Status: "usable"},
+			{LearnedAt: notebook.NewDate(time.Date(2025, 3, 3, 0, 0, 0, 0, time.UTC)), Quality: 4, Status: "usable"},
+		},
+	}
+
+	recalculateSM2Metrics(exp)
+
+	// Expected EF:
+	// 1. Start: 2.5
+	// 2. q=4, streak=0 -> 2.5 + 0.1 = 2.6
+	// 3. q=4, streak=1 -> 2.6 + 0.1 = 2.7
+	// 4. q=1, streak=2 -> 2.7 + (-0.32) = 2.38
+	// 5. q=4, streak=0 -> 2.38 + 0.1 = 2.48
+	// 6. q=4, streak=1 -> 2.48 + 0.1 = 2.58
+	assert.InDelta(t, 2.58, exp.EasinessFactor, 0.001)
+
+	// Expected Intervals (newest to oldest):
+	expectedIntervals := []int{34, 13, 5, 9, 3}
+	for i, log := range exp.LearnedLogs {
+		assert.Equal(t, expectedIntervals[i], log.IntervalDays, "Interval for log %d is incorrect", i)
 	}
 }
