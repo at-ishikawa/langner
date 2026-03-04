@@ -857,14 +857,6 @@ func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string,
 		}
 	}
 
-	quality := 1
-	if isCorrect && len(result.AnswersForContext) > 0 {
-		quality = result.AnswersForContext[0].Quality
-		if quality == 0 {
-			quality = 4
-		}
-	}
-
 	reason := ""
 	if len(result.AnswersForContext) > 0 {
 		reason = result.AnswersForContext[0].Reason
