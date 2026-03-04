@@ -22,6 +22,58 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+type QuizType int32
+
+const (
+	QuizType_QUIZ_TYPE_UNSPECIFIED QuizType = 0
+	QuizType_QUIZ_TYPE_STANDARD    QuizType = 1
+	QuizType_QUIZ_TYPE_REVERSE     QuizType = 2
+	QuizType_QUIZ_TYPE_FREEFORM    QuizType = 3
+)
+
+// Enum value maps for QuizType.
+var (
+	QuizType_name = map[int32]string{
+		0: "QUIZ_TYPE_UNSPECIFIED",
+		1: "QUIZ_TYPE_STANDARD",
+		2: "QUIZ_TYPE_REVERSE",
+		3: "QUIZ_TYPE_FREEFORM",
+	}
+	QuizType_value = map[string]int32{
+		"QUIZ_TYPE_UNSPECIFIED": 0,
+		"QUIZ_TYPE_STANDARD":    1,
+		"QUIZ_TYPE_REVERSE":     2,
+		"QUIZ_TYPE_FREEFORM":    3,
+	}
+)
+
+func (x QuizType) Enum() *QuizType {
+	p := new(QuizType)
+	*p = x
+	return p
+}
+
+func (x QuizType) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (QuizType) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_v1_quiz_proto_enumTypes[0].Descriptor()
+}
+
+func (QuizType) Type() protoreflect.EnumType {
+	return &file_api_v1_quiz_proto_enumTypes[0]
+}
+
+func (x QuizType) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use QuizType.Descriptor instead.
+func (QuizType) EnumDescriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{0}
+}
+
 type GetQuizOptionsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -490,6 +542,598 @@ func (x *SubmitAnswerResponse) GetReason() string {
 	return ""
 }
 
+type StartReverseQuizRequest struct {
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	NotebookIds        []string               `protobuf:"bytes,1,rep,name=notebook_ids,json=notebookIds,proto3" json:"notebook_ids,omitempty"`
+	ListMissingContext bool                   `protobuf:"varint,2,opt,name=list_missing_context,json=listMissingContext,proto3" json:"list_missing_context,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *StartReverseQuizRequest) Reset() {
+	*x = StartReverseQuizRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartReverseQuizRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartReverseQuizRequest) ProtoMessage() {}
+
+func (x *StartReverseQuizRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartReverseQuizRequest.ProtoReflect.Descriptor instead.
+func (*StartReverseQuizRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *StartReverseQuizRequest) GetNotebookIds() []string {
+	if x != nil {
+		return x.NotebookIds
+	}
+	return nil
+}
+
+func (x *StartReverseQuizRequest) GetListMissingContext() bool {
+	if x != nil {
+		return x.ListMissingContext
+	}
+	return false
+}
+
+type StartReverseQuizResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Flashcards    []*ReverseFlashcard    `protobuf:"bytes,1,rep,name=flashcards,proto3" json:"flashcards,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartReverseQuizResponse) Reset() {
+	*x = StartReverseQuizResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartReverseQuizResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartReverseQuizResponse) ProtoMessage() {}
+
+func (x *StartReverseQuizResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartReverseQuizResponse.ProtoReflect.Descriptor instead.
+func (*StartReverseQuizResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *StartReverseQuizResponse) GetFlashcards() []*ReverseFlashcard {
+	if x != nil {
+		return x.Flashcards
+	}
+	return nil
+}
+
+type ReverseFlashcard struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Meaning       string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Contexts      []*ContextSentence     `protobuf:"bytes,3,rep,name=contexts,proto3" json:"contexts,omitempty"`
+	NotebookName  string                 `protobuf:"bytes,4,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	StoryTitle    string                 `protobuf:"bytes,5,opt,name=story_title,json=storyTitle,proto3" json:"story_title,omitempty"`
+	SceneTitle    string                 `protobuf:"bytes,6,opt,name=scene_title,json=sceneTitle,proto3" json:"scene_title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ReverseFlashcard) Reset() {
+	*x = ReverseFlashcard{}
+	mi := &file_api_v1_quiz_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ReverseFlashcard) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ReverseFlashcard) ProtoMessage() {}
+
+func (x *ReverseFlashcard) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ReverseFlashcard.ProtoReflect.Descriptor instead.
+func (*ReverseFlashcard) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ReverseFlashcard) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *ReverseFlashcard) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *ReverseFlashcard) GetContexts() []*ContextSentence {
+	if x != nil {
+		return x.Contexts
+	}
+	return nil
+}
+
+func (x *ReverseFlashcard) GetNotebookName() string {
+	if x != nil {
+		return x.NotebookName
+	}
+	return ""
+}
+
+func (x *ReverseFlashcard) GetStoryTitle() string {
+	if x != nil {
+		return x.StoryTitle
+	}
+	return ""
+}
+
+func (x *ReverseFlashcard) GetSceneTitle() string {
+	if x != nil {
+		return x.SceneTitle
+	}
+	return ""
+}
+
+type ContextSentence struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
+	MaskedContext string                 `protobuf:"bytes,2,opt,name=masked_context,json=maskedContext,proto3" json:"masked_context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ContextSentence) Reset() {
+	*x = ContextSentence{}
+	mi := &file_api_v1_quiz_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ContextSentence) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ContextSentence) ProtoMessage() {}
+
+func (x *ContextSentence) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ContextSentence.ProtoReflect.Descriptor instead.
+func (*ContextSentence) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *ContextSentence) GetContext() string {
+	if x != nil {
+		return x.Context
+	}
+	return ""
+}
+
+func (x *ContextSentence) GetMaskedContext() string {
+	if x != nil {
+		return x.MaskedContext
+	}
+	return ""
+}
+
+type SubmitReverseAnswerRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SubmitReverseAnswerRequest) Reset() {
+	*x = SubmitReverseAnswerRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitReverseAnswerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitReverseAnswerRequest) ProtoMessage() {}
+
+func (x *SubmitReverseAnswerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitReverseAnswerRequest.ProtoReflect.Descriptor instead.
+func (*SubmitReverseAnswerRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SubmitReverseAnswerRequest) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *SubmitReverseAnswerRequest) GetAnswer() string {
+	if x != nil {
+		return x.Answer
+	}
+	return ""
+}
+
+func (x *SubmitReverseAnswerRequest) GetResponseTimeMs() int64 {
+	if x != nil {
+		return x.ResponseTimeMs
+	}
+	return 0
+}
+
+type SubmitReverseAnswerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Correct       bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
+	Expression    string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
+	Meaning       string                 `protobuf:"bytes,3,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Contexts      []string               `protobuf:"bytes,5,rep,name=contexts,proto3" json:"contexts,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitReverseAnswerResponse) Reset() {
+	*x = SubmitReverseAnswerResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitReverseAnswerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitReverseAnswerResponse) ProtoMessage() {}
+
+func (x *SubmitReverseAnswerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitReverseAnswerResponse.ProtoReflect.Descriptor instead.
+func (*SubmitReverseAnswerResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SubmitReverseAnswerResponse) GetCorrect() bool {
+	if x != nil {
+		return x.Correct
+	}
+	return false
+}
+
+func (x *SubmitReverseAnswerResponse) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
+func (x *SubmitReverseAnswerResponse) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *SubmitReverseAnswerResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *SubmitReverseAnswerResponse) GetContexts() []string {
+	if x != nil {
+		return x.Contexts
+	}
+	return nil
+}
+
+type StartFreeformQuizRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartFreeformQuizRequest) Reset() {
+	*x = StartFreeformQuizRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartFreeformQuizRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartFreeformQuizRequest) ProtoMessage() {}
+
+func (x *StartFreeformQuizRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartFreeformQuizRequest.ProtoReflect.Descriptor instead.
+func (*StartFreeformQuizRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{15}
+}
+
+type StartFreeformQuizResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	WordCount     int32                  `protobuf:"varint,1,opt,name=word_count,json=wordCount,proto3" json:"word_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartFreeformQuizResponse) Reset() {
+	*x = StartFreeformQuizResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartFreeformQuizResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartFreeformQuizResponse) ProtoMessage() {}
+
+func (x *StartFreeformQuizResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartFreeformQuizResponse.ProtoReflect.Descriptor instead.
+func (*StartFreeformQuizResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *StartFreeformQuizResponse) GetWordCount() int32 {
+	if x != nil {
+		return x.WordCount
+	}
+	return 0
+}
+
+type SubmitFreeformAnswerRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Word           string                 `protobuf:"bytes,1,opt,name=word,proto3" json:"word,omitempty"`
+	Meaning        string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SubmitFreeformAnswerRequest) Reset() {
+	*x = SubmitFreeformAnswerRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitFreeformAnswerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitFreeformAnswerRequest) ProtoMessage() {}
+
+func (x *SubmitFreeformAnswerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitFreeformAnswerRequest.ProtoReflect.Descriptor instead.
+func (*SubmitFreeformAnswerRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *SubmitFreeformAnswerRequest) GetWord() string {
+	if x != nil {
+		return x.Word
+	}
+	return ""
+}
+
+func (x *SubmitFreeformAnswerRequest) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *SubmitFreeformAnswerRequest) GetResponseTimeMs() int64 {
+	if x != nil {
+		return x.ResponseTimeMs
+	}
+	return 0
+}
+
+type SubmitFreeformAnswerResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Correct       bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
+	Word          string                 `protobuf:"bytes,2,opt,name=word,proto3" json:"word,omitempty"`
+	Meaning       string                 `protobuf:"bytes,3,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Context       string                 `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
+	NotebookName  string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitFreeformAnswerResponse) Reset() {
+	*x = SubmitFreeformAnswerResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitFreeformAnswerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitFreeformAnswerResponse) ProtoMessage() {}
+
+func (x *SubmitFreeformAnswerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitFreeformAnswerResponse.ProtoReflect.Descriptor instead.
+func (*SubmitFreeformAnswerResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *SubmitFreeformAnswerResponse) GetCorrect() bool {
+	if x != nil {
+		return x.Correct
+	}
+	return false
+}
+
+func (x *SubmitFreeformAnswerResponse) GetWord() string {
+	if x != nil {
+		return x.Word
+	}
+	return ""
+}
+
+func (x *SubmitFreeformAnswerResponse) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *SubmitFreeformAnswerResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *SubmitFreeformAnswerResponse) GetContext() string {
+	if x != nil {
+		return x.Context
+	}
+	return ""
+}
+
+func (x *SubmitFreeformAnswerResponse) GetNotebookName() string {
+	if x != nil {
+		return x.NotebookName
+	}
+	return ""
+}
+
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
@@ -524,11 +1168,66 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason2\xeb\x01\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"x\n" +
+	"\x17StartReverseQuizRequest\x12+\n" +
+	"\fnotebook_ids\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\vnotebookIds\x120\n" +
+	"\x14list_missing_context\x18\x02 \x01(\bR\x12listMissingContext\"T\n" +
+	"\x18StartReverseQuizResponse\x128\n" +
+	"\n" +
+	"flashcards\x18\x01 \x03(\v2\x18.api.v1.ReverseFlashcardR\n" +
+	"flashcards\"\xe1\x01\n" +
+	"\x10ReverseFlashcard\x12\x17\n" +
+	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x18\n" +
+	"\ameaning\x18\x02 \x01(\tR\ameaning\x123\n" +
+	"\bcontexts\x18\x03 \x03(\v2\x17.api.v1.ContextSentenceR\bcontexts\x12#\n" +
+	"\rnotebook_name\x18\x04 \x01(\tR\fnotebookName\x12\x1f\n" +
+	"\vstory_title\x18\x05 \x01(\tR\n" +
+	"storyTitle\x12\x1f\n" +
+	"\vscene_title\x18\x06 \x01(\tR\n" +
+	"sceneTitle\"R\n" +
+	"\x0fContextSentence\x12\x18\n" +
+	"\acontext\x18\x01 \x01(\tR\acontext\x12%\n" +
+	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\x8d\x01\n" +
+	"\x1aSubmitReverseAnswerRequest\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
+	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xa5\x01\n" +
+	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
+	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
+	"\n" +
+	"expression\x18\x02 \x01(\tR\n" +
+	"expression\x12\x18\n" +
+	"\ameaning\x18\x03 \x01(\tR\ameaning\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x1a\n" +
+	"\bcontexts\x18\x05 \x03(\tR\bcontexts\"\x1a\n" +
+	"\x18StartFreeformQuizRequest\":\n" +
+	"\x19StartFreeformQuizResponse\x12\x1d\n" +
+	"\n" +
+	"word_count\x18\x01 \x01(\x05R\twordCount\"\x8f\x01\n" +
+	"\x1bSubmitFreeformAnswerRequest\x12\x1f\n" +
+	"\x04word\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x04word\x12%\n" +
+	"\ameaning\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\ameaning\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xbd\x01\n" +
+	"\x1cSubmitFreeformAnswerResponse\x12\x18\n" +
+	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x12\n" +
+	"\x04word\x18\x02 \x01(\tR\x04word\x12\x18\n" +
+	"\ameaning\x18\x03 \x01(\tR\ameaning\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x18\n" +
+	"\acontext\x18\x05 \x01(\tR\acontext\x12#\n" +
+	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName*l\n" +
+	"\bQuizType\x12\x19\n" +
+	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +
+	"\x11QUIZ_TYPE_REVERSE\x10\x02\x12\x16\n" +
+	"\x12QUIZ_TYPE_FREEFORM\x10\x032\xdf\x04\n" +
 	"\vQuizService\x12O\n" +
 	"\x0eGetQuizOptions\x12\x1d.api.v1.GetQuizOptionsRequest\x1a\x1e.api.v1.GetQuizOptionsResponse\x12@\n" +
 	"\tStartQuiz\x12\x18.api.v1.StartQuizRequest\x1a\x19.api.v1.StartQuizResponse\x12I\n" +
-	"\fSubmitAnswer\x12\x1b.api.v1.SubmitAnswerRequest\x1a\x1c.api.v1.SubmitAnswerResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\fSubmitAnswer\x12\x1b.api.v1.SubmitAnswerRequest\x1a\x1c.api.v1.SubmitAnswerResponse\x12U\n" +
+	"\x10StartReverseQuiz\x12\x1f.api.v1.StartReverseQuizRequest\x1a .api.v1.StartReverseQuizResponse\x12^\n" +
+	"\x13SubmitReverseAnswer\x12\".api.v1.SubmitReverseAnswerRequest\x1a#.api.v1.SubmitReverseAnswerResponse\x12X\n" +
+	"\x11StartFreeformQuiz\x12 .api.v1.StartFreeformQuizRequest\x1a!.api.v1.StartFreeformQuizResponse\x12a\n" +
+	"\x14SubmitFreeformAnswer\x12#.api.v1.SubmitFreeformAnswerRequest\x1a$.api.v1.SubmitFreeformAnswerResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_quiz_proto_rawDescOnce sync.Once
@@ -542,33 +1241,55 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 	return file_api_v1_quiz_proto_rawDescData
 }
 
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_api_v1_quiz_proto_goTypes = []any{
-	(*GetQuizOptionsRequest)(nil),  // 0: api.v1.GetQuizOptionsRequest
-	(*GetQuizOptionsResponse)(nil), // 1: api.v1.GetQuizOptionsResponse
-	(*NotebookSummary)(nil),        // 2: api.v1.NotebookSummary
-	(*StartQuizRequest)(nil),       // 3: api.v1.StartQuizRequest
-	(*StartQuizResponse)(nil),      // 4: api.v1.StartQuizResponse
-	(*Flashcard)(nil),              // 5: api.v1.Flashcard
-	(*Example)(nil),                // 6: api.v1.Example
-	(*SubmitAnswerRequest)(nil),    // 7: api.v1.SubmitAnswerRequest
-	(*SubmitAnswerResponse)(nil),   // 8: api.v1.SubmitAnswerResponse
+	(QuizType)(0),                        // 0: api.v1.QuizType
+	(*GetQuizOptionsRequest)(nil),        // 1: api.v1.GetQuizOptionsRequest
+	(*GetQuizOptionsResponse)(nil),       // 2: api.v1.GetQuizOptionsResponse
+	(*NotebookSummary)(nil),              // 3: api.v1.NotebookSummary
+	(*StartQuizRequest)(nil),             // 4: api.v1.StartQuizRequest
+	(*StartQuizResponse)(nil),            // 5: api.v1.StartQuizResponse
+	(*Flashcard)(nil),                    // 6: api.v1.Flashcard
+	(*Example)(nil),                      // 7: api.v1.Example
+	(*SubmitAnswerRequest)(nil),          // 8: api.v1.SubmitAnswerRequest
+	(*SubmitAnswerResponse)(nil),         // 9: api.v1.SubmitAnswerResponse
+	(*StartReverseQuizRequest)(nil),      // 10: api.v1.StartReverseQuizRequest
+	(*StartReverseQuizResponse)(nil),     // 11: api.v1.StartReverseQuizResponse
+	(*ReverseFlashcard)(nil),             // 12: api.v1.ReverseFlashcard
+	(*ContextSentence)(nil),              // 13: api.v1.ContextSentence
+	(*SubmitReverseAnswerRequest)(nil),   // 14: api.v1.SubmitReverseAnswerRequest
+	(*SubmitReverseAnswerResponse)(nil),  // 15: api.v1.SubmitReverseAnswerResponse
+	(*StartFreeformQuizRequest)(nil),     // 16: api.v1.StartFreeformQuizRequest
+	(*StartFreeformQuizResponse)(nil),    // 17: api.v1.StartFreeformQuizResponse
+	(*SubmitFreeformAnswerRequest)(nil),  // 18: api.v1.SubmitFreeformAnswerRequest
+	(*SubmitFreeformAnswerResponse)(nil), // 19: api.v1.SubmitFreeformAnswerResponse
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
-	2, // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
-	5, // 1: api.v1.StartQuizResponse.flashcards:type_name -> api.v1.Flashcard
-	6, // 2: api.v1.Flashcard.examples:type_name -> api.v1.Example
-	0, // 3: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	3, // 4: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	7, // 5: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	1, // 6: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	4, // 7: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	8, // 8: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	6, // [6:9] is the sub-list for method output_type
-	3, // [3:6] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
+	6,  // 1: api.v1.StartQuizResponse.flashcards:type_name -> api.v1.Flashcard
+	7,  // 2: api.v1.Flashcard.examples:type_name -> api.v1.Example
+	12, // 3: api.v1.StartReverseQuizResponse.flashcards:type_name -> api.v1.ReverseFlashcard
+	13, // 4: api.v1.ReverseFlashcard.contexts:type_name -> api.v1.ContextSentence
+	1,  // 5: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	4,  // 6: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	8,  // 7: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	10, // 8: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	14, // 9: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	16, // 10: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	18, // 11: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	2,  // 12: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	5,  // 13: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	9,  // 14: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	11, // 15: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	15, // 16: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	17, // 17: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	19, // 18: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	12, // [12:19] is the sub-list for method output_type
+	5,  // [5:12] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -581,13 +1302,14 @@ func file_api_v1_quiz_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   9,
+			NumEnums:      1,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_api_v1_quiz_proto_goTypes,
 		DependencyIndexes: file_api_v1_quiz_proto_depIdxs,
+		EnumInfos:         file_api_v1_quiz_proto_enumTypes,
 		MessageInfos:      file_api_v1_quiz_proto_msgTypes,
 	}.Build()
 	File_api_v1_quiz_proto = out.File

@@ -41,6 +41,18 @@ const (
 	// QuizServiceSubmitAnswerProcedure is the fully-qualified name of the QuizService's SubmitAnswer
 	// RPC.
 	QuizServiceSubmitAnswerProcedure = "/api.v1.QuizService/SubmitAnswer"
+	// QuizServiceStartReverseQuizProcedure is the fully-qualified name of the QuizService's
+	// StartReverseQuiz RPC.
+	QuizServiceStartReverseQuizProcedure = "/api.v1.QuizService/StartReverseQuiz"
+	// QuizServiceSubmitReverseAnswerProcedure is the fully-qualified name of the QuizService's
+	// SubmitReverseAnswer RPC.
+	QuizServiceSubmitReverseAnswerProcedure = "/api.v1.QuizService/SubmitReverseAnswer"
+	// QuizServiceStartFreeformQuizProcedure is the fully-qualified name of the QuizService's
+	// StartFreeformQuiz RPC.
+	QuizServiceStartFreeformQuizProcedure = "/api.v1.QuizService/StartFreeformQuiz"
+	// QuizServiceSubmitFreeformAnswerProcedure is the fully-qualified name of the QuizService's
+	// SubmitFreeformAnswer RPC.
+	QuizServiceSubmitFreeformAnswerProcedure = "/api.v1.QuizService/SubmitFreeformAnswer"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -48,6 +60,10 @@ type QuizServiceClient interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
 	StartQuiz(context.Context, *connect.Request[v1.StartQuizRequest]) (*connect.Response[v1.StartQuizResponse], error)
 	SubmitAnswer(context.Context, *connect.Request[v1.SubmitAnswerRequest]) (*connect.Response[v1.SubmitAnswerResponse], error)
+	StartReverseQuiz(context.Context, *connect.Request[v1.StartReverseQuizRequest]) (*connect.Response[v1.StartReverseQuizResponse], error)
+	SubmitReverseAnswer(context.Context, *connect.Request[v1.SubmitReverseAnswerRequest]) (*connect.Response[v1.SubmitReverseAnswerResponse], error)
+	StartFreeformQuiz(context.Context, *connect.Request[v1.StartFreeformQuizRequest]) (*connect.Response[v1.StartFreeformQuizResponse], error)
+	SubmitFreeformAnswer(context.Context, *connect.Request[v1.SubmitFreeformAnswerRequest]) (*connect.Response[v1.SubmitFreeformAnswerResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -79,14 +95,42 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("SubmitAnswer")),
 			connect.WithClientOptions(opts...),
 		),
+		startReverseQuiz: connect.NewClient[v1.StartReverseQuizRequest, v1.StartReverseQuizResponse](
+			httpClient,
+			baseURL+QuizServiceStartReverseQuizProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("StartReverseQuiz")),
+			connect.WithClientOptions(opts...),
+		),
+		submitReverseAnswer: connect.NewClient[v1.SubmitReverseAnswerRequest, v1.SubmitReverseAnswerResponse](
+			httpClient,
+			baseURL+QuizServiceSubmitReverseAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SubmitReverseAnswer")),
+			connect.WithClientOptions(opts...),
+		),
+		startFreeformQuiz: connect.NewClient[v1.StartFreeformQuizRequest, v1.StartFreeformQuizResponse](
+			httpClient,
+			baseURL+QuizServiceStartFreeformQuizProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("StartFreeformQuiz")),
+			connect.WithClientOptions(opts...),
+		),
+		submitFreeformAnswer: connect.NewClient[v1.SubmitFreeformAnswerRequest, v1.SubmitFreeformAnswerResponse](
+			httpClient,
+			baseURL+QuizServiceSubmitFreeformAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SubmitFreeformAnswer")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // quizServiceClient implements QuizServiceClient.
 type quizServiceClient struct {
-	getQuizOptions *connect.Client[v1.GetQuizOptionsRequest, v1.GetQuizOptionsResponse]
-	startQuiz      *connect.Client[v1.StartQuizRequest, v1.StartQuizResponse]
-	submitAnswer   *connect.Client[v1.SubmitAnswerRequest, v1.SubmitAnswerResponse]
+	getQuizOptions       *connect.Client[v1.GetQuizOptionsRequest, v1.GetQuizOptionsResponse]
+	startQuiz            *connect.Client[v1.StartQuizRequest, v1.StartQuizResponse]
+	submitAnswer         *connect.Client[v1.SubmitAnswerRequest, v1.SubmitAnswerResponse]
+	startReverseQuiz     *connect.Client[v1.StartReverseQuizRequest, v1.StartReverseQuizResponse]
+	submitReverseAnswer  *connect.Client[v1.SubmitReverseAnswerRequest, v1.SubmitReverseAnswerResponse]
+	startFreeformQuiz    *connect.Client[v1.StartFreeformQuizRequest, v1.StartFreeformQuizResponse]
+	submitFreeformAnswer *connect.Client[v1.SubmitFreeformAnswerRequest, v1.SubmitFreeformAnswerResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -104,11 +148,35 @@ func (c *quizServiceClient) SubmitAnswer(ctx context.Context, req *connect.Reque
 	return c.submitAnswer.CallUnary(ctx, req)
 }
 
+// StartReverseQuiz calls api.v1.QuizService.StartReverseQuiz.
+func (c *quizServiceClient) StartReverseQuiz(ctx context.Context, req *connect.Request[v1.StartReverseQuizRequest]) (*connect.Response[v1.StartReverseQuizResponse], error) {
+	return c.startReverseQuiz.CallUnary(ctx, req)
+}
+
+// SubmitReverseAnswer calls api.v1.QuizService.SubmitReverseAnswer.
+func (c *quizServiceClient) SubmitReverseAnswer(ctx context.Context, req *connect.Request[v1.SubmitReverseAnswerRequest]) (*connect.Response[v1.SubmitReverseAnswerResponse], error) {
+	return c.submitReverseAnswer.CallUnary(ctx, req)
+}
+
+// StartFreeformQuiz calls api.v1.QuizService.StartFreeformQuiz.
+func (c *quizServiceClient) StartFreeformQuiz(ctx context.Context, req *connect.Request[v1.StartFreeformQuizRequest]) (*connect.Response[v1.StartFreeformQuizResponse], error) {
+	return c.startFreeformQuiz.CallUnary(ctx, req)
+}
+
+// SubmitFreeformAnswer calls api.v1.QuizService.SubmitFreeformAnswer.
+func (c *quizServiceClient) SubmitFreeformAnswer(ctx context.Context, req *connect.Request[v1.SubmitFreeformAnswerRequest]) (*connect.Response[v1.SubmitFreeformAnswerResponse], error) {
+	return c.submitFreeformAnswer.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
 	StartQuiz(context.Context, *connect.Request[v1.StartQuizRequest]) (*connect.Response[v1.StartQuizResponse], error)
 	SubmitAnswer(context.Context, *connect.Request[v1.SubmitAnswerRequest]) (*connect.Response[v1.SubmitAnswerResponse], error)
+	StartReverseQuiz(context.Context, *connect.Request[v1.StartReverseQuizRequest]) (*connect.Response[v1.StartReverseQuizResponse], error)
+	SubmitReverseAnswer(context.Context, *connect.Request[v1.SubmitReverseAnswerRequest]) (*connect.Response[v1.SubmitReverseAnswerResponse], error)
+	StartFreeformQuiz(context.Context, *connect.Request[v1.StartFreeformQuizRequest]) (*connect.Response[v1.StartFreeformQuizResponse], error)
+	SubmitFreeformAnswer(context.Context, *connect.Request[v1.SubmitFreeformAnswerRequest]) (*connect.Response[v1.SubmitFreeformAnswerResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -136,6 +204,30 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("SubmitAnswer")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceStartReverseQuizHandler := connect.NewUnaryHandler(
+		QuizServiceStartReverseQuizProcedure,
+		svc.StartReverseQuiz,
+		connect.WithSchema(quizServiceMethods.ByName("StartReverseQuiz")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceSubmitReverseAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceSubmitReverseAnswerProcedure,
+		svc.SubmitReverseAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("SubmitReverseAnswer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceStartFreeformQuizHandler := connect.NewUnaryHandler(
+		QuizServiceStartFreeformQuizProcedure,
+		svc.StartFreeformQuiz,
+		connect.WithSchema(quizServiceMethods.ByName("StartFreeformQuiz")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceSubmitFreeformAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceSubmitFreeformAnswerProcedure,
+		svc.SubmitFreeformAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("SubmitFreeformAnswer")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -144,6 +236,14 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceStartQuizHandler.ServeHTTP(w, r)
 		case QuizServiceSubmitAnswerProcedure:
 			quizServiceSubmitAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceStartReverseQuizProcedure:
+			quizServiceStartReverseQuizHandler.ServeHTTP(w, r)
+		case QuizServiceSubmitReverseAnswerProcedure:
+			quizServiceSubmitReverseAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceStartFreeformQuizProcedure:
+			quizServiceStartFreeformQuizHandler.ServeHTTP(w, r)
+		case QuizServiceSubmitFreeformAnswerProcedure:
+			quizServiceSubmitFreeformAnswerHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -163,4 +263,20 @@ func (UnimplementedQuizServiceHandler) StartQuiz(context.Context, *connect.Reque
 
 func (UnimplementedQuizServiceHandler) SubmitAnswer(context.Context, *connect.Request[v1.SubmitAnswerRequest]) (*connect.Response[v1.SubmitAnswerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) StartReverseQuiz(context.Context, *connect.Request[v1.StartReverseQuizRequest]) (*connect.Response[v1.StartReverseQuizResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartReverseQuiz is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) SubmitReverseAnswer(context.Context, *connect.Request[v1.SubmitReverseAnswerRequest]) (*connect.Response[v1.SubmitReverseAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitReverseAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) StartFreeformQuiz(context.Context, *connect.Request[v1.StartFreeformQuizRequest]) (*connect.Response[v1.StartFreeformQuizResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartFreeformQuiz is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) SubmitFreeformAnswer(context.Context, *connect.Request[v1.SubmitFreeformAnswerRequest]) (*connect.Response[v1.SubmitFreeformAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitFreeformAnswer is not implemented"))
 }
