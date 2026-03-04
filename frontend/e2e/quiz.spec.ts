@@ -73,7 +73,7 @@ test("shows notebooks and starts quiz", async ({ page }) => {
   await expect(startButton).toBeEnabled();
   await startButton.click();
 
-  await page.waitForURL("/quiz");
+  await page.waitForURL("/quiz/standard");
 
   expect(startQuizBody).toMatchObject({
     notebookIds: ["english-phrases"],
@@ -131,7 +131,7 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
   await page.getByRole("button", { name: "Start" }).click();
 
-  await page.waitForURL("/quiz");
+  await page.waitForURL("/quiz/standard");
 
   await expect(page.getByRole("heading", { name: "break the ice" })).toBeVisible();
 

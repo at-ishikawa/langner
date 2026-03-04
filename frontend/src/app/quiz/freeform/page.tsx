@@ -108,7 +108,7 @@ export default function FreeformQuizPage() {
       </Heading>
 
       <Text mb={4} color="gray.600">
-        Type any word you're learning and its meaning
+        Type any word you&apos;re learning and its meaning
       </Text>
 
       {loading ? (
