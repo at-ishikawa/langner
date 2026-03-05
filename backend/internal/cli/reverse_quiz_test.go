@@ -517,7 +517,7 @@ func TestExtractReverseQuizCards(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cards := extractReverseQuizCards(tt.notebookName, tt.stories, tt.learningHistory, tt.listMissingContext)
+			cards := extractReverseQuizCards(tt.notebookName, tt.stories, tt.learningHistory, tt.listMissingContext, make(map[string]rapidapi.Response))
 			assert.Equal(t, tt.wantCount, len(cards))
 			if tt.validate != nil {
 				tt.validate(t, cards)
@@ -625,7 +625,7 @@ func TestExtractReverseQuizCardsFromFlashcards(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := extractReverseQuizCardsFromFlashcards(tt.notebookName, tt.flashcards, tt.learningHistory, tt.listMissingContext)
+			result := extractReverseQuizCardsFromFlashcards(tt.notebookName, tt.flashcards, tt.learningHistory, tt.listMissingContext, make(map[string]rapidapi.Response))
 			assert.Len(t, result, tt.wantCount)
 		})
 	}
@@ -772,8 +772,8 @@ func TestSortCardsByContextAvailability(t *testing.T) {
 	}
 
 	tests := []struct {
-		name     string
-		input    []*WordOccurrence
+		name      string
+		input     []*WordOccurrence
 		wantOrder []string
 	}{
 		{
@@ -2260,7 +2260,7 @@ func TestNewReverseQuizCLI_ListMissingContext(t *testing.T) {
 		{
 			Title: "Unit 1",
 			Cards: []notebook.Note{
-				{Expression: "abstruse", Meaning: "difficult to understand"},      // no examples
+				{Expression: "abstruse", Meaning: "difficult to understand"}, // no examples
 				{Expression: "break the ice", Meaning: "to initiate interaction", Examples: []string{"She told a joke to break the ice."}},
 			},
 		},
@@ -2336,4 +2336,3 @@ func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
 	assert.Greater(t, quality, 0)
 	assert.Equal(t, "exact match", reason)
 }
-
