@@ -47,3 +47,20 @@ func TestNewMigrateImportDBCommand_RunE_ConfigError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "load config")
 }
+
+func TestNewValidateDatasyncCommand(t *testing.T) {
+	cmd := newValidateDatasyncCommand()
+
+	assert.Equal(t, "validate-datasync", cmd.Use)
+	assert.NotNil(t, cmd.RunE)
+}
+
+func TestNewValidateDatasyncCommand_RunE_ConfigError(t *testing.T) {
+	cfgPath := setupBrokenConfigFile(t)
+	setConfigFile(t, cfgPath)
+
+	cmd := newValidateDatasyncCommand()
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "load config")
+}

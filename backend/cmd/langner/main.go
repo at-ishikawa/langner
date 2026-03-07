@@ -70,6 +70,7 @@ func newMigrateCommand() *cobra.Command {
 	migrateCmd.AddCommand(newMigrateLearningHistoryCommand())
 	migrateCmd.AddCommand(newMigrateImportDBCommand())
 	migrateCmd.AddCommand(newExportDBCommand())
+	migrateCmd.AddCommand(newValidateDatasyncCommand())
 
 	return migrateCmd
 }
