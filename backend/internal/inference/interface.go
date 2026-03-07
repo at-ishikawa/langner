@@ -60,10 +60,11 @@ const (
 
 // ValidateWordFormRequest holds parameters for validating a word form in reverse quiz
 type ValidateWordFormRequest struct {
-	Expected   string `json:"expected"`    // The expected word
-	UserAnswer string `json:"user_answer"` // The user's answer
-	Meaning    string `json:"meaning"`     // The meaning that was shown to the user
-	Context    string `json:"context"`     // Optional context sentence
+	Expected       string `json:"expected"`                  // The expected word
+	UserAnswer     string `json:"user_answer"`               // The user's answer
+	Meaning        string `json:"meaning"`                   // The meaning that was shown to the user
+	Context        string `json:"context"`                   // Optional context sentence
+	ResponseTimeMs int64  `json:"response_time_ms,omitempty"` // Response time for quality assessment
 }
 
 // ValidateWordFormClassification represents the classification of a user's answer
@@ -82,4 +83,5 @@ const (
 type ValidateWordFormResponse struct {
 	Classification ValidateWordFormClassification `json:"classification"` // same_word, synonym, or wrong
 	Reason         string                         `json:"reason"`         // Explanation of the classification
+	Quality        int                            `json:"quality"`        // 1-5 quality assessment based on response time and expression complexity
 }

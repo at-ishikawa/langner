@@ -243,7 +243,7 @@ func (r *ReverseQuizCLI) Session(ctx context.Context) error {
 	return nil
 }
 
-// validateAnswer validates the user's answer using three-tier validation
+// validateAnswer validates the user's answer using OpenAI classification with quality assessment
 func (r *ReverseQuizCLI) validateAnswer(
 	ctx context.Context,
 	card *WordOccurrence,
@@ -259,39 +259,44 @@ func (r *ReverseQuizCLI) validateAnswer(
 		return false, int(notebook.QualityWrong), "empty answer", nil
 	}
 
-	// Tier 1: Exact match (case-insensitive) with the displayed expression
-	if strings.EqualFold(userAnswer, expectedWord) {
-		quality = r.calculateQuality(responseTimeMs, isRetry)
-		return true, quality, "exact match", nil
-	}
-
-	// Tier 1b: Check if matches the Expression field (when Definition is different)
-	// GetExpression() returns Definition if set, so we also accept the original Expression
-	if card.Definition.Definition != "" && strings.EqualFold(userAnswer, card.Definition.Expression) {
-		quality = r.calculateQuality(responseTimeMs, isRetry)
-		return true, quality, "matches expression", nil
-	}
-
-	// Tier 2: OpenAI classification
 	contextStr := ""
 	if len(card.Contexts) > 0 {
 		contextStr = card.Contexts[0].Context
 	}
 
 	validation, err := r.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
-		Expected:   expectedWord,
-		UserAnswer: userAnswer,
-		Meaning:    meaning,
-		Context:    contextStr,
+		Expected:       expectedWord,
+		UserAnswer:     userAnswer,
+		Meaning:        meaning,
+		Context:        contextStr,
+		ResponseTimeMs: responseTimeMs,
 	})
 	if err != nil {
 		return false, int(notebook.QualityWrong), fmt.Sprintf("validation error: %v", err), nil
 	}
 
+	// Extract quality from response, with fallback
+	qualityFromResponse := func(isCorrect bool) int {
+		if isRetry {
+			return int(notebook.QualityCorrectSlow)
+		}
+		q := validation.Quality
+		if q == 0 {
+			if isCorrect {
+				return int(notebook.QualityCorrect)
+			}
+			return int(notebook.QualityWrong)
+		}
+		// Clamp quality for correct answers to 3-5 range
+		if isCorrect && q < int(notebook.QualityCorrectSlow) {
+			return int(notebook.QualityCorrectSlow)
+		}
+		return q
+	}
+
 	switch validation.Classification {
 	case inference.ClassificationSameWord:
-		quality = r.calculateQuality(responseTimeMs, isRetry)
-		return true, quality, validation.Reason, nil
+		return true, qualityFromResponse(true), validation.Reason, nil
 
 	case inference.ClassificationSynonym:
 		if !isRetry {
@@ -318,26 +323,6 @@ func (r *ReverseQuizCLI) validateAnswer(
 
 	default:
 		return false, int(notebook.QualityWrong), "unknown classification", nil
-	}
-}
-
-// calculateQuality determines quality based on response time
-func (r *ReverseQuizCLI) calculateQuality(responseTimeMs int64, isRetry bool) int {
-	if isRetry {
-		return int(notebook.QualityCorrectSlow)
-	}
-
-	// Quality based on response time:
-	// < 5 seconds: Q5 (instant recall)
-	// 5-15 seconds: Q4 (normal)
-	// > 15 seconds: Q3 (struggled)
-	switch {
-	case responseTimeMs < 5000:
-		return int(notebook.QualityCorrectFast)
-	case responseTimeMs < 15000:
-		return int(notebook.QualityCorrect)
-	default:
-		return int(notebook.QualityCorrectSlow)
 	}
 }
 

@@ -874,10 +874,20 @@ CRITICAL RULE FOR MULTI-WORD EXPRESSIONS:
 - The goal is to learn the SPECIFIC expression, not just any expression with similar meaning
 - However, minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should still be classified as "same_word"
 
+QUALITY ASSESSMENT:
+Also assess response speed quality (1-5) based on response time and expression complexity:
+- If wrong: quality = 1
+- If correct (same_word or synonym), evaluate response time relative to expression complexity:
+  - Fast (quick recall for this expression's length/complexity): quality = 5
+  - Normal (reasonable time for this expression): quality = 4
+  - Slow (took long relative to expression complexity): quality = 3
+- Consider that longer/more complex expressions (idioms, phrasal verbs) naturally take more time than single words.
+
 OUTPUT FORMAT (JSON only):
 {
   "classification": "same_word" | "synonym" | "wrong",
-  "reason": "<brief explanation>"
+  "reason": "<brief explanation>",
+  "quality": <1-5>
 }
 
 Do NOT include any text outside the JSON.`
@@ -887,11 +897,16 @@ Do NOT include any text outside the JSON.`
 		contextInfo = fmt.Sprintf("\nContext sentence: %s", params.Context)
 	}
 
+	responseTimeInfo := ""
+	if params.ResponseTimeMs > 0 {
+		responseTimeInfo = fmt.Sprintf("\nResponse time: %dms", params.ResponseTimeMs)
+	}
+
 	userMessage := fmt.Sprintf(`Expected word: %s
-Meaning shown: %s%s
+Meaning shown: %s%s%s
 User's answer: %s
 
-Classify this answer.`, params.Expected, params.Meaning, contextInfo, params.UserAnswer)
+Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTimeInfo, params.UserAnswer)
 
 	requestBody := ChatCompletionRequest{
 		Model:       client.model,

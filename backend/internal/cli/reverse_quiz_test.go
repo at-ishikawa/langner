@@ -809,56 +809,13 @@ func TestSortCardsByContextAvailability(t *testing.T) {
 	}
 }
 
-func TestReverseQuizCLI_CalculateQuality(t *testing.T) {
-	cli := &ReverseQuizCLI{}
-
-	tests := []struct {
-		name           string
-		responseTimeMs int64
-		isRetry        bool
-		want           int
-	}{
-		{
-			name:           "Fast response - Q5",
-			responseTimeMs: 2000,
-			isRetry:        false,
-			want:           int(notebook.QualityCorrectFast),
-		},
-		{
-			name:           "Normal response - Q4",
-			responseTimeMs: 5000,
-			isRetry:        false,
-			want:           int(notebook.QualityCorrect),
-		},
-		{
-			name:           "Slow response - Q3",
-			responseTimeMs: 15000,
-			isRetry:        false,
-			want:           int(notebook.QualityCorrectSlow),
-		},
-		{
-			name:           "Retry always Q3",
-			responseTimeMs: 1000,
-			isRetry:        true,
-			want:           int(notebook.QualityCorrectSlow),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := cli.calculateQuality(tt.responseTimeMs, tt.isRetry)
-			assert.Equal(t, tt.want, got)
-		})
-	}
-}
-
 func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 	tests := []struct {
 		name               string
 		card               *WordOccurrence
 		answer             string
 		responseTimeMs     int64
-		mockResponse       *inference.ValidateWordFormResponse // nil = no mock expected
+		mockResponse       inference.ValidateWordFormResponse
 		mockError          error
 		wantCorrect        bool
 		wantQuality        int
@@ -866,65 +823,82 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 		wantReasonContains string // for partial matching (ValidationError case)
 	}{
 		{
-			name: "exact match",
+			name: "same word - exact match",
 			card: &WordOccurrence{
 				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
 				Contexts:   []WordOccurrenceContext{},
 			},
 			answer:         "excited",
 			responseTimeMs: 2000,
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "exact match", Quality: int(notebook.QualityCorrectFast)},
 			wantCorrect:    true,
 			wantQuality:    int(notebook.QualityCorrectFast),
 			wantReason:     "exact match",
 		},
 		{
-			name: "case insensitive",
+			name: "same word - case insensitive",
 			card: &WordOccurrence{
 				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
 				Contexts:   []WordOccurrenceContext{},
 			},
 			answer:         "EXCITED",
 			responseTimeMs: 2000,
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "same word different case", Quality: int(notebook.QualityCorrectFast)},
 			wantCorrect:    true,
 			wantQuality:    int(notebook.QualityCorrectFast),
-			wantReason:     "exact match",
+			wantReason:     "same word different case",
 		},
 		{
-			name: "definition match via GetExpression",
-			card: &WordOccurrence{
-				Definition: &notebook.Note{Expression: "remove", Definition: "take off", Meaning: "to remove something"},
-				Contexts:   []WordOccurrenceContext{},
-			},
-			answer:         "take off",
-			responseTimeMs: 2000,
-			wantCorrect:    true,
-			wantQuality:    int(notebook.QualityCorrectFast),
-			wantReason:     "exact match",
-		},
-		{
-			name: "definition match via Expression field",
-			card: &WordOccurrence{
-				Definition: &notebook.Note{Expression: "remove", Definition: "take off", Meaning: "to remove something"},
-				Contexts:   []WordOccurrenceContext{},
-			},
-			answer:         "remove",
-			responseTimeMs: 2000,
-			wantCorrect:    true,
-			wantQuality:    int(notebook.QualityCorrectFast),
-			wantReason:     "matches expression",
-		},
-		{
-			name: "same word classification",
+			name: "same word - different tense",
 			card: &WordOccurrence{
 				Definition: &notebook.Note{Expression: "run", Meaning: "to move quickly on foot"},
 				Contexts:   []WordOccurrenceContext{},
 			},
 			answer:         "ran",
 			responseTimeMs: 2000,
-			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "different tense of the same word"},
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "different tense of the same word", Quality: int(notebook.QualityCorrectFast)},
 			wantCorrect:    true,
 			wantQuality:    int(notebook.QualityCorrectFast),
 			wantReason:     "different tense of the same word",
+		},
+		{
+			name: "same word - slow response gets lower quality",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "excited",
+			responseTimeMs: 15000,
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "exact match", Quality: int(notebook.QualityCorrectSlow)},
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectSlow),
+			wantReason:     "exact match",
+		},
+		{
+			name: "same word - zero quality falls back to Q4",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "excited",
+			responseTimeMs: 2000,
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "exact match", Quality: 0},
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrect),
+			wantReason:     "exact match",
+		},
+		{
+			name: "same word - quality below 3 clamped to Q3",
+			card: &WordOccurrence{
+				Definition: &notebook.Note{Expression: "excited", Meaning: "feeling enthusiasm"},
+				Contexts:   []WordOccurrenceContext{},
+			},
+			answer:         "excited",
+			responseTimeMs: 2000,
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "exact match", Quality: 1},
+			wantCorrect:    true,
+			wantQuality:    int(notebook.QualityCorrectSlow),
+			wantReason:     "exact match",
 		},
 		{
 			name: "wrong classification",
@@ -934,7 +908,7 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 			},
 			answer:         "apple",
 			responseTimeMs: 2000,
-			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "unrelated word"},
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "unrelated word", Quality: 1},
 			wantCorrect:    false,
 			wantQuality:    int(notebook.QualityWrong),
 			wantReason:     "unrelated word",
@@ -958,21 +932,10 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 			},
 			answer:         "wrong-word",
 			responseTimeMs: 5000,
-			mockResponse:   &inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "different word"},
+			mockResponse:   inference.ValidateWordFormResponse{Classification: inference.ClassificationWrong, Reason: "different word", Quality: 1},
 			wantCorrect:    false,
 			wantQuality:    int(notebook.QualityWrong),
 			wantReason:     "different word",
-		},
-		{
-			name: "matches expression field",
-			card: &WordOccurrence{
-				Definition: &notebook.Note{Expression: "ran away", Definition: "run away", Meaning: "to flee"},
-			},
-			answer:         "ran away",
-			responseTimeMs: 2000,
-			wantCorrect:    true,
-			wantQuality:    int(notebook.QualityCorrectFast),
-			wantReason:     "matches expression",
 		},
 		{
 			name: "validation error",
@@ -981,7 +944,7 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 			},
 			answer:             "some-word",
 			responseTimeMs:     5000,
-			mockResponse:       &inference.ValidateWordFormResponse{},
+			mockResponse:       inference.ValidateWordFormResponse{},
 			mockError:          fmt.Errorf("API error"),
 			wantCorrect:        false,
 			wantQuality:        int(notebook.QualityWrong),
@@ -994,7 +957,7 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 			},
 			answer:         "answer",
 			responseTimeMs: 5000,
-			mockResponse:   &inference.ValidateWordFormResponse{Classification: "unknown_type", Reason: "unexpected"},
+			mockResponse:   inference.ValidateWordFormResponse{Classification: "unknown_type", Reason: "unexpected", Quality: 1},
 			wantCorrect:    false,
 			wantQuality:    int(notebook.QualityWrong),
 			wantReason:     "unknown classification",
@@ -1007,10 +970,11 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 			defer ctrl.Finish()
 
 			mockClient := mock_inference.NewMockClient(ctrl)
-			if tt.mockResponse != nil {
+			// Empty answer skips the API call
+			if tt.answer != "" {
 				mockClient.EXPECT().
 					ValidateWordForm(gomock.Any(), gomock.Any()).
-					Return(*tt.mockResponse, tt.mockError)
+					Return(tt.mockResponse, tt.mockError)
 			}
 
 			cli := &ReverseQuizCLI{
@@ -1071,7 +1035,12 @@ func TestReverseQuizCLI_Session(t *testing.T) {
 				},
 			},
 			learningHistories: map[string][]notebook.LearningHistory{},
-			wantCardsAfter:    0,
+			mockOpenAIResponse: inference.ValidateWordFormResponse{
+				Classification: inference.ClassificationSameWord,
+				Reason:         "exact match",
+				Quality:        int(notebook.QualityCorrect),
+			},
+			wantCardsAfter: 0,
 		},
 		{
 			name:  "Wrong answer - updates history and removes card",
@@ -1096,6 +1065,7 @@ func TestReverseQuizCLI_Session(t *testing.T) {
 			mockOpenAIResponse: inference.ValidateWordFormResponse{
 				Classification: inference.ClassificationWrong,
 				Reason:         "unrelated word",
+				Quality:        int(notebook.QualityWrong),
 			},
 			wantCardsAfter: 0,
 		},
@@ -1109,16 +1079,12 @@ func TestReverseQuizCLI_Session(t *testing.T) {
 			stdinReader := bufio.NewReader(strings.NewReader(tt.input))
 			mockClient := mock_inference.NewMockClient(ctrl)
 
-			// Set expectation only if we have cards and need OpenAI validation
-			if len(tt.cards) > 0 {
-				// Check if exact match - if not, OpenAI will be called
-				userAnswer := strings.TrimSpace(tt.input)
-				if len(tt.cards) > 0 && !strings.EqualFold(userAnswer, tt.cards[0].Definition.Expression) {
-					mockClient.EXPECT().
-						ValidateWordForm(gomock.Any(), gomock.Any()).
-						Return(tt.mockOpenAIResponse, tt.mockOpenAIError).
-						AnyTimes()
-				}
+			// All non-empty answers go through ValidateWordForm
+			if len(tt.cards) > 0 && strings.TrimSpace(tt.input) != "" {
+				mockClient.EXPECT().
+					ValidateWordForm(gomock.Any(), gomock.Any()).
+					Return(tt.mockOpenAIResponse, tt.mockOpenAIError).
+					AnyTimes()
 			}
 
 			cli := &ReverseQuizCLI{
@@ -2302,10 +2268,18 @@ func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
 	mockClient := mock_inference.NewMockClient(ctrl)
 
 	// First call: classify as synonym
-	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
+	firstCall := mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
 		Classification: inference.ClassificationSynonym,
 		Reason:         "similar meaning",
+		Quality:        int(notebook.QualityCorrect),
 	}, nil)
+
+	// Second call (retry): classify as same_word with quality (isRetry=true forces Q3)
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(inference.ValidateWordFormResponse{
+		Classification: inference.ClassificationSameWord,
+		Reason:         "exact match",
+		Quality:        int(notebook.QualityCorrectFast),
+	}, nil).After(firstCall)
 
 	// Create a reader that provides retry input (exact match with expression)
 	retryInput := "correct-word\n"
@@ -2333,6 +2307,7 @@ func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
 	isCorrect, quality, reason, err := cli.validateAnswer(context.Background(), card, "synonym-word", 5000, false)
 	assert.NoError(t, err)
 	assert.True(t, isCorrect)
-	assert.Greater(t, quality, 0)
+	// Retry always returns QualityCorrectSlow regardless of OpenAI quality
+	assert.Equal(t, int(notebook.QualityCorrectSlow), quality)
 	assert.Equal(t, "exact match", reason)
 }
