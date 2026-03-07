@@ -243,7 +243,7 @@ func (r *ReverseQuizCLI) Session(ctx context.Context) error {
 	return nil
 }
 
-// validateAnswer validates the user's answer using three-tier validation
+// validateAnswer validates the user's answer using OpenAI classification with quality assessment
 func (r *ReverseQuizCLI) validateAnswer(
 	ctx context.Context,
 	card *WordOccurrence,
@@ -259,39 +259,44 @@ func (r *ReverseQuizCLI) validateAnswer(
 		return false, int(notebook.QualityWrong), "empty answer", nil
 	}
 
-	// Tier 1: Exact match (case-insensitive) with the displayed expression
-	if strings.EqualFold(userAnswer, expectedWord) {
-		quality = r.evaluateQuality(ctx, card, responseTimeMs, isRetry)
-		return true, quality, "exact match", nil
-	}
-
-	// Tier 1b: Check if matches the Expression field (when Definition is different)
-	// GetExpression() returns Definition if set, so we also accept the original Expression
-	if card.Definition.Definition != "" && strings.EqualFold(userAnswer, card.Definition.Expression) {
-		quality = r.evaluateQuality(ctx, card, responseTimeMs, isRetry)
-		return true, quality, "matches expression", nil
-	}
-
-	// Tier 2: OpenAI classification
 	contextStr := ""
 	if len(card.Contexts) > 0 {
 		contextStr = card.Contexts[0].Context
 	}
 
 	validation, err := r.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
-		Expected:   expectedWord,
-		UserAnswer: userAnswer,
-		Meaning:    meaning,
-		Context:    contextStr,
+		Expected:       expectedWord,
+		UserAnswer:     userAnswer,
+		Meaning:        meaning,
+		Context:        contextStr,
+		ResponseTimeMs: responseTimeMs,
 	})
 	if err != nil {
 		return false, int(notebook.QualityWrong), fmt.Sprintf("validation error: %v", err), nil
 	}
 
+	// Extract quality from response, with fallback
+	qualityFromResponse := func(isCorrect bool) int {
+		if isRetry {
+			return int(notebook.QualityCorrectSlow)
+		}
+		q := validation.Quality
+		if q == 0 {
+			if isCorrect {
+				return int(notebook.QualityCorrect)
+			}
+			return int(notebook.QualityWrong)
+		}
+		// Clamp quality for correct answers to 3-5 range
+		if isCorrect && q < int(notebook.QualityCorrectSlow) {
+			return int(notebook.QualityCorrectSlow)
+		}
+		return q
+	}
+
 	switch validation.Classification {
 	case inference.ClassificationSameWord:
-		quality = r.evaluateQuality(ctx, card, responseTimeMs, isRetry)
-		return true, quality, validation.Reason, nil
+		return true, qualityFromResponse(true), validation.Reason, nil
 
 	case inference.ClassificationSynonym:
 		if !isRetry {
@@ -319,69 +324,6 @@ func (r *ReverseQuizCLI) validateAnswer(
 	default:
 		return false, int(notebook.QualityWrong), "unknown classification", nil
 	}
-}
-
-// evaluateQuality uses OpenAI to assess quality based on expression complexity and response time
-func (r *ReverseQuizCLI) evaluateQuality(ctx context.Context, card *WordOccurrence, responseTimeMs int64, isRetry bool) int {
-	if isRetry {
-		return int(notebook.QualityCorrectSlow)
-	}
-
-	expression := card.GetExpression()
-	meaning := card.GetMeaning()
-
-	// Build contexts for OpenAI evaluation
-	var contexts []inference.Context
-	cleanContexts := card.GetCleanContexts()
-	for i, ctx := range card.Contexts {
-		contexts = append(contexts, inference.Context{
-			Context:             cleanContexts[i],
-			ReferenceDefinition: meaning,
-			Usage:               ctx.Usage,
-		})
-	}
-
-	// If no contexts, add one with empty context so OpenAI can still assess quality
-	if len(contexts) == 0 {
-		contexts = []inference.Context{
-			{
-				Context:             "",
-				ReferenceDefinition: meaning,
-			},
-		}
-	}
-
-	results, err := r.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
-		Expressions: []inference.Expression{
-			{
-				Expression:        expression,
-				Meaning:           meaning,
-				Contexts:          contexts,
-				IsExpressionInput: false,
-				ResponseTimeMs:    responseTimeMs,
-			},
-		},
-	})
-	if err != nil {
-		// Fallback to Q4 on error
-		return int(notebook.QualityCorrect)
-	}
-
-	if len(results.Answers) == 0 || len(results.Answers[0].AnswersForContext) == 0 {
-		return int(notebook.QualityCorrect)
-	}
-
-	quality := results.Answers[0].AnswersForContext[0].Quality
-	if quality == 0 {
-		return int(notebook.QualityCorrect)
-	}
-
-	// Ensure quality is within valid range for correct answers (3-5)
-	if quality < int(notebook.QualityCorrectSlow) {
-		return int(notebook.QualityCorrectSlow)
-	}
-
-	return quality
 }
 
 // displayResult shows the result of the quiz
