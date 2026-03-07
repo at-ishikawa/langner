@@ -13,21 +13,24 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { quizClient } from "@/lib/client";
-import { useQuizStore } from "@/store/quizStore";
+import { useQuizStore, type ReverseFlashcard } from "@/store/quizStore";
 
 type QuizPhase = "answering" | "feedback";
 
 interface FeedbackData {
   correct: boolean;
+  expression: string;
   meaning: string;
   reason: string;
+  contexts: string[];
 }
 
-export default function QuizCardPage() {
+export default function ReverseQuizPage() {
   const router = useRouter();
-  const flashcards = useQuizStore((s) => s.flashcards);
+  const reverseFlashcards = useQuizStore((s) => s.reverseFlashcards);
+  const quizType = useQuizStore((s) => s.quizType);
   const currentIndex = useQuizStore((s) => s.currentIndex);
-  const storeSubmitResult = useQuizStore((s) => s.submitResult);
+  const storeSubmitResult = useQuizStore((s) => s.submitReverseResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
@@ -37,23 +40,29 @@ export default function QuizCardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef(Date.now());
+  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (flashcards.length === 0) {
+    if (reverseFlashcards.length === 0 || quizType !== "reverse") {
       router.push("/");
     }
-  }, [flashcards, router]);
+  }, [reverseFlashcards, quizType, router]);
 
   useEffect(() => {
     startTimeRef.current = Date.now();
+    setPhase("answering");
+    setAnswer("");
+    setSubmittedAnswer("");
+    setFeedback(null);
+    setTimeout(() => inputRef.current?.focus(), 100);
   }, [currentIndex]);
 
-  if (flashcards.length === 0) {
+  if (reverseFlashcards.length === 0) {
     return null;
   }
 
-  const card = flashcards[currentIndex];
-  const total = flashcards.length;
+  const card = reverseFlashcards[currentIndex];
+  const total = reverseFlashcards.length;
   const progress = ((currentIndex + 1) / total) * 100;
 
   const handleSubmit = async () => {
@@ -69,18 +78,24 @@ export default function QuizCardPage() {
     setError(null);
 
     try {
-      const res = await quizClient.submitAnswer({
+      const res = await quizClient.submitReverseAnswer({
         noteId: card.noteId,
         answer: userAnswer,
         responseTimeMs: BigInt(responseTimeMs),
       });
 
-      setFeedback(res);
+      setFeedback({
+        correct: res.correct,
+        expression: res.expression,
+        meaning: res.meaning,
+        reason: res.reason,
+        contexts: res.contexts ?? [],
+      });
       storeSubmitResult({
         noteId: card.noteId,
-        entry: card.entry,
         answer: userAnswer,
         correct: res.correct,
+        expression: res.expression,
         meaning: res.meaning,
         reason: res.reason,
       });
@@ -96,9 +111,6 @@ export default function QuizCardPage() {
       router.push("/quiz/complete");
     } else {
       nextCard();
-      setPhase("answering");
-      setFeedback(null);
-      setSubmittedAnswer("");
     }
   };
 
@@ -121,7 +133,6 @@ export default function QuizCardPage() {
       flexDirection="column"
       minH="100dvh"
     >
-      {/* Progress */}
       <Box mb={4}>
         <Text fontSize="sm" mb={1}>
           {currentIndex + 1} / {total}
@@ -133,29 +144,40 @@ export default function QuizCardPage() {
         </Progress.Root>
       </Box>
 
-      {/* Content area - scrollable */}
       <Box flex="1" overflowY="auto" mb={4}>
         {phase === "answering" ? (
           <VStack align="stretch" gap={4}>
-            <Heading size="xl" textAlign="center">
-              {card.entry}
+            <Text fontWeight="medium" fontSize="sm" color="purple.600">
+              Meaning
+            </Text>
+            <Heading size="xl" textAlign="center" color="purple.700">
+              {card.meaning}
             </Heading>
-            {card.examples.length > 0 && (
-              <VStack align="stretch" gap={2}>
-                {card.examples.map((ex, i) => (
-                  <Text key={i} fontSize="md" color="fg.muted">
-                    {ex.speaker
-                      ? `${ex.speaker}: "${ex.text}"`
-                      : `"${ex.text}"`}
-                  </Text>
-                ))}
-              </VStack>
+
+            {card.contexts.length > 0 && (
+              <>
+                <Text fontWeight="medium" fontSize="sm" color="purple.600">
+                  Context (fill in the blank)
+                </Text>
+                <VStack align="stretch" gap={2}>
+                  {card.contexts.map((ctx, i) => (
+                    <Text
+                      key={i}
+                      fontSize="md"
+                      color="gray.600"
+                      fontStyle="italic"
+                    >
+                      {ctx.maskedContext}
+                    </Text>
+                  ))}
+                </VStack>
+              </>
             )}
           </VStack>
         ) : (
           <VStack align="stretch" gap={4}>
-            <Heading size="xl" textAlign="center">
-              {card.entry}
+            <Heading size="xl" textAlign="center" color="purple.700">
+              {card.meaning}
             </Heading>
 
             {loading ? (
@@ -177,22 +199,35 @@ export default function QuizCardPage() {
                 </Box>
 
                 <Text
-                  textDecoration={
-                    feedback.correct ? "none" : "line-through"
-                  }
+                  textDecoration={feedback.correct ? "none" : "line-through"}
                 >
                   Your answer: {submittedAnswer}
                 </Text>
 
                 <Box>
-                  <Text fontWeight="bold">Meaning</Text>
-                  <Text>{feedback.meaning}</Text>
+                  <Text fontWeight="bold">Word</Text>
+                  <Text fontStyle="italic">{feedback.expression}</Text>
                 </Box>
 
-                <Box>
-                  <Text fontWeight="bold">Reason</Text>
-                  <Text>{feedback.reason}</Text>
-                </Box>
+                {feedback.reason && (
+                  <Box>
+                    <Text fontWeight="bold">Reason</Text>
+                    <Text>{feedback.reason}</Text>
+                  </Box>
+                )}
+
+                {feedback.contexts.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold" mt={2}>
+                      Context:
+                    </Text>
+                    {feedback.contexts.map((ctx, i) => (
+                      <Text key={i} fontSize="sm" color="gray.600">
+                        {i + 1}. {ctx}
+                      </Text>
+                    ))}
+                  </Box>
+                )}
               </VStack>
             ) : error ? (
               <Text color="red.500">{error}</Text>
@@ -201,20 +236,21 @@ export default function QuizCardPage() {
         )}
       </Box>
 
-      {/* Input area - fixed at bottom */}
       <Box>
         {phase === "answering" ? (
           <Box display="flex" gap={2}>
             <Input
+              ref={inputRef}
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type your answer"
+              placeholder="Type the word"
               flex="1"
               autoFocus
+              borderColor="purple.500"
             />
             <Button
-              colorPalette="blue"
+              colorPalette="purple"
               onClick={handleSubmit}
               disabled={!answer.trim()}
             >
@@ -224,7 +260,7 @@ export default function QuizCardPage() {
         ) : (
           <Button
             w="full"
-            colorPalette="blue"
+            colorPalette="purple"
             onClick={handleNext}
             onKeyDown={handleKeyDown}
             disabled={loading}

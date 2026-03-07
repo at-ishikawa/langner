@@ -22,18 +22,22 @@ import (
 type QuizHandler struct {
 	apiv1connect.UnimplementedQuizServiceHandler
 
-	svc       *quiz.Service
-	mu        sync.Mutex
-	noteStore map[int64]quiz.Card
-	nextID    int64
+	svc           *quiz.Service
+	mu            sync.Mutex
+	noteStore     map[int64]quiz.Card
+	reverseStore  map[int64]quiz.ReverseCard
+	freeformCards []quiz.FreeformCard
+	nextID        int64
 }
 
 // NewQuizHandler creates a new QuizHandler.
 func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 	return &QuizHandler{
-		svc:       svc,
-		noteStore: make(map[int64]quiz.Card),
-		nextID:    1,
+		svc:           svc,
+		noteStore:     make(map[int64]quiz.Card),
+		reverseStore:  make(map[int64]quiz.ReverseCard),
+		freeformCards: nil,
+		nextID:        1,
 	}
 }
 
@@ -174,4 +178,149 @@ func validateRequest(msg proto.Message) *connect.Error {
 		return connectErr
 	}
 	return nil
+}
+
+// StartReverseQuiz starts a reverse quiz session.
+func (h *QuizHandler) StartReverseQuiz(
+	ctx context.Context,
+	req *connect.Request[apiv1.StartReverseQuizRequest],
+) (*connect.Response[apiv1.StartReverseQuizResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	cards, err := h.svc.LoadReverseCards(req.Msg.GetNotebookIds(), req.Msg.GetListMissingContext())
+	if err != nil {
+		var notFoundErr *quiz.NotFoundError
+		if errors.As(err, &notFoundErr) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load reverse cards: %w", err))
+	}
+
+	localStore := make(map[int64]quiz.ReverseCard)
+	var nextID int64 = 1
+
+	var flashcards []*apiv1.ReverseFlashcard
+	for _, card := range cards {
+		noteID := nextID
+		nextID++
+		localStore[noteID] = card
+
+		var contexts []*apiv1.ContextSentence
+		for _, ctx := range card.Contexts {
+			contexts = append(contexts, &apiv1.ContextSentence{
+				Context:       ctx.Context,
+				MaskedContext: ctx.MaskedContext,
+			})
+		}
+
+		flashcards = append(flashcards, &apiv1.ReverseFlashcard{
+			NoteId:       noteID,
+			Meaning:      card.Meaning,
+			Contexts:     contexts,
+			NotebookName: card.NotebookName,
+			StoryTitle:   card.StoryTitle,
+			SceneTitle:   card.SceneTitle,
+		})
+	}
+
+	h.mu.Lock()
+	h.reverseStore = localStore
+	h.nextID = nextID
+	h.mu.Unlock()
+
+	return connect.NewResponse(&apiv1.StartReverseQuizResponse{
+		Flashcards: flashcards,
+	}), nil
+}
+
+// SubmitReverseAnswer grades a reverse quiz answer.
+func (h *QuizHandler) SubmitReverseAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.SubmitReverseAnswerRequest],
+) (*connect.Response[apiv1.SubmitReverseAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	noteID := req.Msg.GetNoteId()
+	answer := req.Msg.GetAnswer()
+
+	h.mu.Lock()
+	card, ok := h.reverseStore[noteID]
+	h.mu.Unlock()
+
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active reverse quiz session", noteID))
+	}
+
+	grade, err := h.svc.GradeReverseAnswer(ctx, card, answer, req.Msg.GetResponseTimeMs())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+	}
+
+	if err := h.svc.SaveReverseResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
+	}
+
+	var contexts []string
+	for _, ctx := range card.Contexts {
+		contexts = append(contexts, ctx.Context)
+	}
+
+	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
+		Correct:    grade.Correct,
+		Expression: card.Expression,
+		Meaning:    card.Meaning,
+		Reason:     grade.Reason,
+		Contexts:   contexts,
+	}), nil
+}
+
+// StartFreeformQuiz starts a freeform quiz session.
+func (h *QuizHandler) StartFreeformQuiz(
+	ctx context.Context,
+	req *connect.Request[apiv1.StartFreeformQuizRequest],
+) (*connect.Response[apiv1.StartFreeformQuizResponse], error) {
+	cards, err := h.svc.LoadAllWords()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load all words: %w", err))
+	}
+
+	h.mu.Lock()
+	h.freeformCards = cards
+	h.mu.Unlock()
+
+	return connect.NewResponse(&apiv1.StartFreeformQuizResponse{
+		WordCount: int32(len(cards)),
+	}), nil
+}
+
+// SubmitFreeformAnswer grades a freeform quiz answer.
+func (h *QuizHandler) SubmitFreeformAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.SubmitFreeformAnswerRequest],
+) (*connect.Response[apiv1.SubmitFreeformAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	h.mu.Lock()
+	cards := h.freeformCards
+	h.mu.Unlock()
+
+	grade, err := h.svc.GradeFreeformAnswer(ctx, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.SubmitFreeformAnswerResponse{
+		Correct:      grade.Correct,
+		Word:         grade.Word,
+		Meaning:      grade.Meaning,
+		Reason:       grade.Reason,
+		Context:      grade.Context,
+		NotebookName: grade.NotebookName,
+	}), nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/at-ishikawa/langner/internal/config"
@@ -372,4 +373,531 @@ func extractAnswerResult(result inference.AnswerMeaning) (isCorrect bool, reason
 	}
 
 	return isCorrect, reason, quality
+}
+
+// ReverseCard represents a reverse quiz card.
+type ReverseCard struct {
+	NotebookName string
+	StoryTitle   string
+	SceneTitle   string
+	Meaning      string
+	Contexts     []ReverseContext
+	Expression   string // original expression to guess
+}
+
+// ReverseContext represents a context sentence with masking info.
+type ReverseContext struct {
+	Context       string
+	MaskedContext string
+}
+
+// LoadReverseCards loads reverse quiz cards for the given notebooks.
+func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool) ([]ReverseCard, error) {
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
+	}
+
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	storyIndexes := reader.GetStoryIndexes()
+	flashcardIndexes := reader.GetFlashcardIndexes()
+
+	var cards []ReverseCard
+
+	for _, notebookID := range notebookIDs {
+		_, isStory := storyIndexes[notebookID]
+		_, isFlashcard := flashcardIndexes[notebookID]
+
+		if !isStory && !isFlashcard {
+			return nil, &NotFoundError{NotebookID: notebookID}
+		}
+
+		if isStory {
+			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
+			}
+			cards = append(cards, reverseCards...)
+		}
+
+		if isFlashcard {
+			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext)
+			if err != nil {
+				return nil, fmt.Errorf("failed to load flashcard reverse cards for notebook %q: %w", notebookID, err)
+			}
+			cards = append(cards, reverseCards...)
+		}
+	}
+
+	return cards, nil
+}
+
+func (s *Service) loadStoryReverseCards(
+	reader *notebook.Reader,
+	notebookID string,
+	learningHistories map[string][]notebook.LearningHistory,
+	listMissingContext bool,
+) ([]ReverseCard, error) {
+	stories, err := reader.ReadStoryNotebooks(notebookID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read story notebook %q: %w", notebookID, err)
+	}
+
+	filtered, err := notebook.FilterStoryNotebooks(
+		stories, learningHistories[notebookID], s.dictionaryMap,
+		false, true, true, false,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter story notebook %q: %w", notebookID, err)
+	}
+
+	var cards []ReverseCard
+	for _, story := range filtered {
+		for _, scene := range story.Scenes {
+			for _, definition := range scene.Definitions {
+				expression := definition.Expression
+				if definition.Definition != "" {
+					expression = definition.Definition
+				}
+
+				contexts := buildReverseContexts(&scene, &definition)
+
+				if listMissingContext {
+					if len(contexts) > 0 {
+						continue
+					}
+				} else {
+					needsReview := needsReverseReview(learningHistories[notebookID], story.Event, scene.Title, &definition)
+					if !needsReview {
+						continue
+					}
+				}
+
+				cards = append(cards, ReverseCard{
+					NotebookName: notebookID,
+					StoryTitle:   story.Event,
+					SceneTitle:   scene.Title,
+					Meaning:      definition.Meaning,
+					Contexts:     contexts,
+					Expression:   expression,
+				})
+			}
+		}
+	}
+
+	return cards, nil
+}
+
+func (s *Service) loadFlashcardReverseCards(
+	reader *notebook.Reader,
+	notebookID string,
+	learningHistories map[string][]notebook.LearningHistory,
+	listMissingContext bool,
+) ([]ReverseCard, error) {
+	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", notebookID, err)
+	}
+
+	filtered, err := notebook.FilterFlashcardNotebooks(
+		notebooks, learningHistories[notebookID], s.dictionaryMap, false,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
+	}
+
+	var cards []ReverseCard
+	for _, nb := range filtered {
+		for _, card := range nb.Cards {
+			expression := card.Expression
+			if card.Definition != "" {
+				expression = card.Definition
+			}
+
+			var contexts []ReverseContext
+			for _, ex := range card.Examples {
+				if strings.Contains(strings.ToLower(ex), strings.ToLower(card.Expression)) {
+					masked := maskWord(ex, card.Expression, card.Definition)
+					contexts = append(contexts, ReverseContext{
+						Context:       ex,
+						MaskedContext: masked,
+					})
+				}
+			}
+
+			if listMissingContext {
+				if len(contexts) > 0 {
+					continue
+				}
+			} else {
+				needsReview := needsReverseFlashcardReview(learningHistories[notebookID], nb.Title, &card)
+				if !needsReview {
+					continue
+				}
+			}
+
+			cards = append(cards, ReverseCard{
+				NotebookName: notebookID,
+				StoryTitle:   "flashcards",
+				SceneTitle:   "",
+				Meaning:      card.Meaning,
+				Contexts:     contexts,
+				Expression:   expression,
+			})
+		}
+	}
+
+	return cards, nil
+}
+
+func maskWord(context, expression, definition string) string {
+	re := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(expression) + `\b`)
+	context = re.ReplaceAllString(context, "______")
+	if definition != "" {
+		re = regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(definition) + `\b`)
+		context = re.ReplaceAllString(context, "______")
+	}
+	return context
+}
+
+func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note) []ReverseContext {
+	var contexts []ReverseContext
+	for _, conv := range scene.Conversations {
+		if conv.Quote == "" {
+			continue
+		}
+
+		quoteLower := strings.ToLower(conv.Quote)
+		if !containsExpression(quoteLower, definition.Expression, definition.Definition) {
+			continue
+		}
+
+		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
+		masked := maskWord(cleaned, definition.Expression, definition.Definition)
+		contexts = append(contexts, ReverseContext{
+			Context:       cleaned,
+			MaskedContext: masked,
+		})
+	}
+	return contexts
+}
+
+func needsReverseReview(
+	learningHistories []notebook.LearningHistory,
+	storyTitle, sceneTitle string,
+	definition *notebook.Note,
+) bool {
+	for _, h := range learningHistories {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+
+			for _, expr := range scene.Expressions {
+				if expr.Expression != definition.Expression && expr.Expression != definition.Definition {
+					continue
+				}
+
+				if !expr.HasAnyCorrectAnswer() {
+					continue
+				}
+
+				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
+					return false
+				}
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func needsReverseFlashcardReview(
+	learningHistories []notebook.LearningHistory,
+	flashcardTitle string,
+	card *notebook.Note,
+) bool {
+	for _, h := range learningHistories {
+		if h.Metadata.Title != flashcardTitle {
+			continue
+		}
+
+		for _, expr := range h.Expressions {
+			if expr.Expression != card.Expression && expr.Expression != card.Definition {
+				continue
+			}
+
+			if !expr.HasAnyCorrectAnswer() {
+				continue
+			}
+
+			if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
+				return false
+			}
+			return true
+		}
+	}
+	return false
+}
+
+// GradeReverseAnswer grades a reverse quiz answer (user guesses the word from meaning/context).
+func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answer string, responseTimeMs int64) (GradeResult, error) {
+	validation, err := s.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
+		Expected:   card.Expression,
+		UserAnswer: answer,
+		Meaning:    card.Meaning,
+		Context:    "",
+	})
+	if err != nil {
+		return GradeResult{}, fmt.Errorf("failed to validate word: %w", err)
+	}
+
+	isCorrect := validation.Classification == inference.ClassificationSameWord
+	quality := 1
+	if isCorrect {
+		if responseTimeMs < 3000 {
+			quality = 5
+		} else if responseTimeMs < 10000 {
+			quality = 4
+		} else {
+			quality = 3
+		}
+	}
+
+	return GradeResult{
+		Correct: isCorrect,
+		Reason:  validation.Reason,
+		Quality: quality,
+	}, nil
+}
+
+// SaveReverseResult updates the learning history for a reverse quiz answer.
+func (s *Service) SaveReverseResult(card ReverseCard, result GradeResult, responseTimeMs int64) error {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName])
+	updater.UpdateOrCreateExpressionWithQualityForReverse(
+		card.NotebookName,
+		card.StoryTitle,
+		card.SceneTitle,
+		card.Expression,
+		card.Expression,
+		result.Correct,
+		true,
+		result.Quality,
+		responseTimeMs,
+	)
+
+	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
+	}
+
+	return nil
+}
+
+// FreeformCard represents a freeform quiz card (user inputs word + meaning).
+type FreeformCard struct {
+	NotebookName string
+	StoryTitle   string
+	SceneTitle   string
+	Expression   string
+	Meaning      string
+	Contexts     []inference.Context
+}
+
+// LoadAllWords loads all words from all notebooks for freeform quiz.
+func (s *Service) LoadAllWords() ([]FreeformCard, error) {
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
+	}
+
+	storyIndexes := reader.GetStoryIndexes()
+	flashcardIndexes := reader.GetFlashcardIndexes()
+
+	var cards []FreeformCard
+
+	for notebookID := range storyIndexes {
+		words, err := s.loadStoryWords(reader, notebookID)
+		if err != nil {
+			continue
+		}
+		cards = append(cards, words...)
+	}
+
+	for notebookID := range flashcardIndexes {
+		words, err := s.loadFlashcardWords(reader, notebookID)
+		if err != nil {
+			continue
+		}
+		cards = append(cards, words...)
+	}
+
+	return cards, nil
+}
+
+func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]FreeformCard, error) {
+	stories, err := reader.ReadStoryNotebooks(notebookID)
+	if err != nil {
+		return nil, err
+	}
+
+	var cards []FreeformCard
+	for _, story := range stories {
+		for _, scene := range story.Scenes {
+			for _, definition := range scene.Definitions {
+				expression := definition.Expression
+				if definition.Definition != "" {
+					expression = definition.Definition
+				}
+
+				_, contexts := buildFromConversations(&scene, &definition)
+
+				cards = append(cards, FreeformCard{
+					NotebookName: notebookID,
+					StoryTitle:   story.Event,
+					SceneTitle:   scene.Title,
+					Expression:   expression,
+					Meaning:      definition.Meaning,
+					Contexts:     contexts,
+				})
+			}
+		}
+	}
+
+	return cards, nil
+}
+
+func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string) ([]FreeformCard, error) {
+	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
+	if err != nil {
+		return nil, err
+	}
+
+	var cards []FreeformCard
+	for _, nb := range notebooks {
+		for _, card := range nb.Cards {
+			expression := card.Expression
+			if card.Definition != "" {
+				expression = card.Definition
+			}
+
+			var contexts []inference.Context
+			for _, ex := range card.Examples {
+				contexts = append(contexts, inference.Context{
+					Context:             ex,
+					ReferenceDefinition: card.Meaning,
+				})
+			}
+
+			cards = append(cards, FreeformCard{
+				NotebookName: notebookID,
+				StoryTitle:   "flashcards",
+				SceneTitle:   "",
+				Expression:   expression,
+				Meaning:      card.Meaning,
+				Contexts:     contexts,
+			})
+		}
+	}
+
+	return cards, nil
+}
+
+// GradeFreeformAnswer grades a freeform quiz answer (user provides word + meaning).
+func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string, responseTimeMs int64, cards []FreeformCard) (FreeformGradeResult, error) {
+	matchingCards := findMatchingCards(cards, word)
+
+	if len(matchingCards) == 0 {
+		return FreeformGradeResult{
+			Correct: false,
+			Word:    word,
+			Meaning: meaning,
+			Reason:  fmt.Sprintf("Word '%s' not found in any notebook", word),
+		}, nil
+	}
+
+	results, err := s.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+		Expressions: []inference.Expression{
+			{
+				Expression:        word,
+				Meaning:           meaning,
+				Contexts:          matchingCards[0].Contexts,
+				IsExpressionInput: true,
+				ResponseTimeMs:    responseTimeMs,
+			},
+		},
+	})
+	if err != nil {
+		return FreeformGradeResult{}, fmt.Errorf("failed to grade answer: %w", err)
+	}
+
+	if len(results.Answers) == 0 {
+		return FreeformGradeResult{}, fmt.Errorf("no results returned from inference")
+	}
+
+	result := results.Answers[0]
+	isCorrect := false
+	for _, ans := range result.AnswersForContext {
+		if ans.Correct {
+			isCorrect = true
+			break
+		}
+	}
+
+	reason := ""
+	if len(result.AnswersForContext) > 0 {
+		reason = result.AnswersForContext[0].Reason
+	}
+
+	var context string
+	var notebookName string
+	if len(matchingCards) > 0 {
+		if len(matchingCards[0].Contexts) > 0 {
+			context = matchingCards[0].Contexts[0].Context
+		}
+		notebookName = matchingCards[0].NotebookName
+	}
+
+	return FreeformGradeResult{
+		Correct:      isCorrect,
+		Word:         result.Expression,
+		Meaning:      result.Meaning,
+		Reason:       reason,
+		Context:      context,
+		NotebookName: notebookName,
+	}, nil
+}
+
+// FreeformGradeResult holds the outcome of grading a freeform answer.
+type FreeformGradeResult struct {
+	Correct      bool
+	Word         string
+	Meaning      string
+	Reason       string
+	Context      string
+	NotebookName string
+}
+
+func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
+	var matches []FreeformCard
+	wordLower := strings.ToLower(word)
+	for _, card := range cards {
+		if strings.EqualFold(card.Expression, wordLower) {
+			matches = append(matches, card)
+		}
+	}
+	return matches
 }

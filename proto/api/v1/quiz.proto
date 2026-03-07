@@ -6,10 +6,21 @@ import "buf/validate/validate.proto";
 
 option go_package = "github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1";
 
+enum QuizType {
+  QUIZ_TYPE_UNSPECIFIED = 0;
+  QUIZ_TYPE_STANDARD = 1;
+  QUIZ_TYPE_REVERSE = 2;
+  QUIZ_TYPE_FREEFORM = 3;
+}
+
 service QuizService {
   rpc GetQuizOptions(GetQuizOptionsRequest) returns (GetQuizOptionsResponse);
   rpc StartQuiz(StartQuizRequest) returns (StartQuizResponse);
   rpc SubmitAnswer(SubmitAnswerRequest) returns (SubmitAnswerResponse);
+  rpc StartReverseQuiz(StartReverseQuizRequest) returns (StartReverseQuizResponse);
+  rpc SubmitReverseAnswer(SubmitReverseAnswerRequest) returns (SubmitReverseAnswerResponse);
+  rpc StartFreeformQuiz(StartFreeformQuizRequest) returns (StartFreeformQuizResponse);
+  rpc SubmitFreeformAnswer(SubmitFreeformAnswerRequest) returns (SubmitFreeformAnswerResponse);
 }
 
 message GetQuizOptionsRequest {}
@@ -63,4 +74,81 @@ message SubmitAnswerResponse {
   bool correct = 1;
   string meaning = 2;
   string reason = 3;
+}
+
+message StartReverseQuizRequest {
+  repeated string notebook_ids = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+  bool list_missing_context = 2;
+}
+
+message StartReverseQuizResponse {
+  repeated ReverseFlashcard flashcards = 1;
+}
+
+message ReverseFlashcard {
+  int64 note_id = 1;
+  string meaning = 2;
+  repeated ContextSentence contexts = 3;
+  string notebook_name = 4;
+  string story_title = 5;
+  string scene_title = 6;
+}
+
+message ContextSentence {
+  string context = 1;
+  string masked_context = 2;
+}
+
+message SubmitReverseAnswerRequest {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  string answer = 2 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      pattern: "\\S"
+    }
+  ];
+  int64 response_time_ms = 3;
+}
+
+message SubmitReverseAnswerResponse {
+  bool correct = 1;
+  string expression = 2;
+  string meaning = 3;
+  string reason = 4;
+  repeated string contexts = 5;
+}
+
+message StartFreeformQuizRequest {}
+
+message StartFreeformQuizResponse {
+  int32 word_count = 1;
+}
+
+message SubmitFreeformAnswerRequest {
+  string word = 1 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      pattern: "\\S"
+    }
+  ];
+  string meaning = 2 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      pattern: "\\S"
+    }
+  ];
+  int64 response_time_ms = 3;
+}
+
+message SubmitFreeformAnswerResponse {
+  bool correct = 1;
+  string word = 2;
+  string meaning = 3;
+  string reason = 4;
+  string context = 5;
+  string notebook_name = 6;
 }

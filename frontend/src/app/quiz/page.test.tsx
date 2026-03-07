@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import QuizCardPage from "./page";
+import QuizCardPage from "./standard/page";
 import * as client from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import type { Flashcard } from "@/store/quizStore";
@@ -52,6 +52,7 @@ describe("QuizCardPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useQuizStore.getState().reset();
+    useQuizStore.getState().setQuizType("standard");
     pushMock.mockReset();
   });
 
