@@ -191,8 +191,8 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 						continue
 					}
 				}
-				if err := definition.setDetails(dictionaryMap, ""); err != nil {
-					return nil, fmt.Errorf("definition.setDetails() > %w", err)
+				if err := definition.SetDetails(dictionaryMap, ""); err != nil {
+					return nil, fmt.Errorf("definition.SetDetails() > %w", err)
 				}
 				definitions = append(definitions, definition)
 			}

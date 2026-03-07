@@ -96,7 +96,7 @@ func TestNote_setDetails(t *testing.T) {
 			},
 			dictionaryMap: map[string]rapidapi.Response{
 				"hello": {
-					Word: "hello",
+					Word:          "hello",
 					Pronunciation: rapidapi.Pronunciation{All: "heh-loh"},
 					Results: []rapidapi.Result{
 						{
@@ -219,7 +219,7 @@ func TestNote_setDetails(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			note := tt.note
-			err := note.setDetails(tt.dictionaryMap, tt.youTubeURL)
+			err := note.SetDetails(tt.dictionaryMap, tt.youTubeURL)
 
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -495,7 +495,7 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate()},                                           // counted (1)
+					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate()},                                   // counted (1)
 					{Status: learnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-time.Hour))},        // counted (2)
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now().Add(-2 * time.Hour))}, // not counted
 				},

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/fatih/color"
@@ -38,6 +39,7 @@ func NewReverseQuizCLI(
 	}
 
 	var cards []*WordOccurrence
+	dictionaryMap := baseCLI.dictionaryMap
 
 	if notebookName == "" {
 		// Load all notebooks
@@ -52,7 +54,7 @@ func NewReverseQuizCLI(
 				continue
 			}
 
-			notebookCards := extractReverseQuizCards(notebookID, stories, learningHistory, listMissingContext)
+			notebookCards := extractReverseQuizCards(notebookID, stories, learningHistory, listMissingContext, dictionaryMap)
 			cards = append(cards, notebookCards...)
 		}
 
@@ -68,7 +70,7 @@ func NewReverseQuizCLI(
 				continue
 			}
 
-			notebookCards := extractReverseQuizCardsFromFlashcards(flashcardID, flashcardNotebooks, learningHistory, listMissingContext)
+			notebookCards := extractReverseQuizCardsFromFlashcards(flashcardID, flashcardNotebooks, learningHistory, listMissingContext, dictionaryMap)
 			cards = append(cards, notebookCards...)
 		}
 	} else {
@@ -90,13 +92,13 @@ func NewReverseQuizCLI(
 			if err != nil {
 				return nil, fmt.Errorf("ReadFlashcardNotebooks(%s) > %w", notebookName, err)
 			}
-			cards = extractReverseQuizCardsFromFlashcards(notebookName, flashcardNotebooks, learningHistory, listMissingContext)
+			cards = extractReverseQuizCardsFromFlashcards(notebookName, flashcardNotebooks, learningHistory, listMissingContext, dictionaryMap)
 		} else {
 			stories, err := reader.ReadStoryNotebooks(notebookName)
 			if err != nil {
 				return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookName, err)
 			}
-			cards = extractReverseQuizCards(notebookName, stories, learningHistory, listMissingContext)
+			cards = extractReverseQuizCards(notebookName, stories, learningHistory, listMissingContext, dictionaryMap)
 		}
 	}
 
@@ -505,6 +507,7 @@ func extractReverseQuizCards(
 	stories []notebook.StoryNotebook,
 	learningHistory []notebook.LearningHistory,
 	listMissingContext bool,
+	dictionaryMap map[string]rapidapi.Response,
 ) []*WordOccurrence {
 	var occurrences []*WordOccurrence
 
@@ -514,6 +517,21 @@ func extractReverseQuizCards(
 			scene := &story.Scenes[j]
 			for k := range scene.Definitions {
 				definition := &scene.Definitions[k]
+
+				// Skip words marked as not_used
+				if definition.NotUsed {
+					continue
+				}
+
+				// Populate meaning from dictionary if dictionary_number is set
+				if err := definition.SetDetails(dictionaryMap, ""); err != nil {
+					continue
+				}
+
+				// Skip words with no meaning (neither user-defined nor from dictionary)
+				if definition.Meaning == "" {
+					continue
+				}
 
 				// Extract contexts first (needed for both regular quiz and listMissingContext)
 				contexts := extractContextsFromConversations(scene, definition.Expression, definition.Definition)
@@ -559,6 +577,7 @@ func extractReverseQuizCardsFromFlashcards(
 	flashcards []notebook.FlashcardNotebook,
 	learningHistory []notebook.LearningHistory,
 	listMissingContext bool,
+	dictionaryMap map[string]rapidapi.Response,
 ) []*WordOccurrence {
 	var occurrences []*WordOccurrence
 
@@ -566,6 +585,21 @@ func extractReverseQuizCardsFromFlashcards(
 		flashcard := &flashcards[i]
 		for j := range flashcard.Cards {
 			card := &flashcard.Cards[j]
+
+			// Skip cards marked as not_used
+			if card.NotUsed {
+				continue
+			}
+
+			// Populate meaning from dictionary if dictionary_number is set
+			if err := card.SetDetails(dictionaryMap, ""); err != nil {
+				continue
+			}
+
+			// Skip cards with no meaning (neither user-defined nor from dictionary)
+			if card.Meaning == "" && len(card.Images) == 0 {
+				continue
+			}
 
 			// Convert string examples to WordOccurrenceContext
 			contexts := make([]WordOccurrenceContext, 0, len(card.Examples))

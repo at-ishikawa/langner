@@ -145,8 +145,8 @@ func (f Reader) ReadAllNotes(storyID string, learningHistories map[string][]Lear
 				if !definition.needsToLearn() {
 					continue
 				}
-				if err := definition.setDetails(f.dictionaryMap, ""); err != nil {
-					return nil, fmt.Errorf("definition.setDetails() > %w", err)
+				if err := definition.SetDetails(f.dictionaryMap, ""); err != nil {
+					return nil, fmt.Errorf("definition.SetDetails() > %w", err)
 				}
 				if definition.Meaning == "" && len(definition.Images) == 0 {
 					continue

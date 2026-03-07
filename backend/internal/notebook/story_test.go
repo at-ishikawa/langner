@@ -369,7 +369,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     true,
 			wantErr:                 true,
-			wantErrMsg:              "definition.setDetails()",
+			wantErrMsg:              "definition.SetDetails()",
 		},
 		{
 			name: "useSpacedRepetition=false, usable status - word NOT included",

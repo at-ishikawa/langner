@@ -27,8 +27,8 @@ type FlashcardIndex struct {
 	NotebookPaths []string `yaml:"notebooks"`
 
 	// internal fields (not loaded from YAML)
-	Path      string                `yaml:"-"` // directory containing this index
-	Notebooks []FlashcardNotebook   `yaml:"-"` // loaded notebooks (populated by reader)
+	Path      string              `yaml:"-"` // directory containing this index
+	Notebooks []FlashcardNotebook `yaml:"-"` // loaded notebooks (populated by reader)
 }
 
 // Validate validates a FlashcardNotebook and returns any validation errors.
@@ -124,8 +124,8 @@ func FilterFlashcardNotebooks(
 			}
 
 			// Set details from dictionary
-			if err := card.setDetails(dictionaryMap, ""); err != nil {
-				return nil, fmt.Errorf("card.setDetails() > %w", err)
+			if err := card.SetDetails(dictionaryMap, ""); err != nil {
+				return nil, fmt.Errorf("card.SetDetails() > %w", err)
 			}
 
 			cards = append(cards, card)

@@ -126,7 +126,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 		wantErrMsg    string
 	}{
 		{
-			name: "empty notebooks",
+			name:      "empty notebooks",
 			notebooks: []FlashcardNotebook{},
 			history:   nil,
 			wantLen:   0,
@@ -294,7 +294,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 				},
 			},
 			wantErr:    true,
-			wantErrMsg: "card.setDetails()",
+			wantErrMsg: "card.SetDetails()",
 		},
 	}
 

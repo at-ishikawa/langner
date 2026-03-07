@@ -162,7 +162,7 @@ func (note Note) lastLearnedAt() time.Time {
 	return note.LearnedLogs[0].LearnedAt.Time
 }
 
-func (note *Note) setDetails(dictionaryMap map[string]rapidapi.Response, youTubeURL string) error {
+func (note *Note) SetDetails(dictionaryMap map[string]rapidapi.Response, youTubeURL string) error {
 	def := note.Definition
 	if def == "" {
 		def = note.Expression
