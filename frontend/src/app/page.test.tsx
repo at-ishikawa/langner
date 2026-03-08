@@ -197,7 +197,7 @@ describe("QuizStartPage", () => {
         notebookIds: ["nb-1", "nb-2"],
         includeUnstudied: false,
       });
-      expect(pushMock).toHaveBeenCalledWith("/quiz");
+      expect(pushMock).toHaveBeenCalledWith("/quiz/standard");
     });
 
     const state = useQuizStore.getState();

@@ -1,27 +1,64 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
 import { useQuizStore } from "@/store/quizStore";
 
+interface ResultItem {
+  key: string;
+  entry: string;
+  meaning: string;
+  correct: boolean;
+}
+
 export default function SessionCompletePage() {
   const router = useRouter();
   const results = useQuizStore((s) => s.results);
+  const reverseResults = useQuizStore((s) => s.reverseResults);
+  const freeformResults = useQuizStore((s) => s.freeformResults);
   const reset = useQuizStore((s) => s.reset);
 
+  const allResults = useMemo((): ResultItem[] => {
+    if (results.length > 0) {
+      return results.map((r) => ({
+        key: r.noteId.toString(),
+        entry: r.entry,
+        meaning: r.meaning,
+        correct: r.correct,
+      }));
+    }
+    if (reverseResults.length > 0) {
+      return reverseResults.map((r) => ({
+        key: r.noteId.toString(),
+        entry: r.expression,
+        meaning: r.meaning,
+        correct: r.correct,
+      }));
+    }
+    if (freeformResults.length > 0) {
+      return freeformResults.map((r, i) => ({
+        key: `freeform-${i}`,
+        entry: r.word,
+        meaning: r.meaning,
+        correct: r.correct,
+      }));
+    }
+    return [];
+  }, [results, reverseResults, freeformResults]);
+
   useEffect(() => {
-    if (results.length === 0) {
+    if (allResults.length === 0) {
       router.push("/");
     }
-  }, [results, router]);
+  }, [allResults, router]);
 
-  if (results.length === 0) {
+  if (allResults.length === 0) {
     return null;
   }
 
-  const correctResults = results.filter((r) => r.correct);
-  const incorrectResults = results.filter((r) => !r.correct);
+  const correctResults = allResults.filter((r) => r.correct);
+  const incorrectResults = allResults.filter((r) => !r.correct);
 
   const handleBackToStart = () => {
     reset();
@@ -35,7 +72,7 @@ export default function SessionCompletePage() {
       </Heading>
 
       <VStack align="stretch" gap={3} mb={6}>
-        <Text fontWeight="bold">Total: {results.length} words</Text>
+        <Text fontWeight="bold">Total: {allResults.length} words</Text>
         <Text color="green.600" fontWeight="bold">
           Correct: {correctResults.length}
         </Text>
@@ -51,7 +88,7 @@ export default function SessionCompletePage() {
           </Heading>
           <VStack align="stretch" gap={2}>
             {correctResults.map((r) => (
-              <Box key={r.noteId.toString()} p={2} borderWidth="1px" borderRadius="md">
+              <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
                 <Text fontWeight="bold">{r.entry}</Text>
                 <Text fontSize="sm">{r.meaning}</Text>
               </Box>
@@ -67,7 +104,7 @@ export default function SessionCompletePage() {
           </Heading>
           <VStack align="stretch" gap={2}>
             {incorrectResults.map((r) => (
-              <Box key={r.noteId.toString()} p={2} borderWidth="1px" borderRadius="md">
+              <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
                 <Text fontWeight="bold">{r.entry}</Text>
                 <Text fontSize="sm">{r.meaning}</Text>
               </Box>

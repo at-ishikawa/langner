@@ -1,8 +1,6 @@
 package cli
 
 import (
-	"strings"
-
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -52,37 +50,4 @@ func (w *WordOccurrence) GetCleanContexts() []string {
 		cleaned[i] = notebook.ConvertMarkersInText(ctx.Context, nil, notebook.ConversionStylePlain, "")
 	}
 	return cleaned
-}
-
-// extractContextsFromConversations finds conversations containing the expression or definition
-// and returns them with the actual word form used in each context
-func extractContextsFromConversations(scene *notebook.StoryScene, expression, definition string) []WordOccurrenceContext {
-	var contexts []WordOccurrenceContext
-
-	for _, conversation := range scene.Conversations {
-		if conversation.Quote == "" {
-			continue
-		}
-
-		quoteLower := strings.ToLower(conversation.Quote)
-
-		// Check if the conversation contains the expression
-		if strings.Contains(quoteLower, strings.ToLower(expression)) {
-			contexts = append(contexts, WordOccurrenceContext{
-				Context: conversation.Quote,
-				Usage:   expression, // The expression form is what's used in the context
-			})
-			continue
-		}
-
-		// Also check for the definition if it exists
-		if definition != "" && strings.Contains(quoteLower, strings.ToLower(definition)) {
-			contexts = append(contexts, WordOccurrenceContext{
-				Context: conversation.Quote,
-				Usage:   definition, // The definition form is what's used in the context
-			})
-		}
-	}
-
-	return contexts
 }

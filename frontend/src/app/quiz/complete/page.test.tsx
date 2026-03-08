@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import SessionCompletePage from "./page";
-import { useQuizStore, type QuizResult } from "@/store/quizStore";
+import { useQuizStore, type QuizResult, type FreeformResult } from "@/store/quizStore";
 
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -110,5 +110,43 @@ describe("SessionCompletePage", () => {
     renderPage();
     expect(screen.getByRole("heading", { name: visibleHeading })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: hiddenHeading })).not.toBeInTheDocument();
+  });
+
+  describe("freeform results", () => {
+    const mockFreeformResults: FreeformResult[] = [
+      {
+        word: "hit the hay",
+        answer: "to go to sleep",
+        correct: true,
+        meaning: "to go to bed",
+        reason: "close enough",
+        notebookName: "English Phrases",
+      },
+      {
+        word: "under the weather",
+        answer: "to be happy",
+        correct: false,
+        meaning: "to feel sick",
+        reason: "incorrect meaning",
+        notebookName: "English Phrases",
+      },
+    ];
+
+    it("displays freeform results with summary counts", () => {
+      useQuizStore.setState({ freeformResults: mockFreeformResults });
+      renderPage();
+
+      expect(screen.getByText("Total: 2 words")).toBeInTheDocument();
+      expect(screen.getByText("Correct: 1")).toBeInTheDocument();
+      expect(screen.getByText("Incorrect: 1")).toBeInTheDocument();
+    });
+
+    it("displays freeform correct and incorrect words", () => {
+      useQuizStore.setState({ freeformResults: mockFreeformResults });
+      renderPage();
+
+      expect(screen.getByText("hit the hay")).toBeInTheDocument();
+      expect(screen.getByText("under the weather")).toBeInTheDocument();
+    });
   });
 });

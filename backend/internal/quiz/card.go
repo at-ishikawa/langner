@@ -29,9 +29,10 @@ type NotebookSummary struct {
 
 // GradeResult holds the outcome of grading a user's answer.
 type GradeResult struct {
-	Correct bool
-	Reason  string
-	Quality int
+	Correct        bool
+	Reason         string
+	Quality        int
+	Classification string // inference classification (e.g., "same_word", "synonym", "wrong")
 }
 
 // NotFoundError is returned when a requested notebook does not exist.

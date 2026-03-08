@@ -2,8 +2,8 @@
 // @generated from file api/v1/quiz.proto (package api.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../buf/validate/validate_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/quiz.proto.
  */
 export const file_api_v1_quiz: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkiSgoPTm90ZWJvb2tTdW1tYXJ5EhMKC25vdGVib29rX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcmV2aWV3X2NvdW50GAMgASgFIk0KEFN0YXJ0UXVpelJlcXVlc3QSHgoMbm90ZWJvb2tfaWRzGAEgAygJQgi6SAWSAQIIARIZChFpbmNsdWRlX3Vuc3R1ZGllZBgCIAEoCCI6ChFTdGFydFF1aXpSZXNwb25zZRIlCgpmbGFzaGNhcmRzGAEgAygLMhEuYXBpLnYxLkZsYXNoY2FyZCJOCglGbGFzaGNhcmQSDwoHbm90ZV9pZBgBIAEoAxINCgVlbnRyeRgCIAEoCRIhCghleGFtcGxlcxgDIAMoCzIPLmFwaS52MS5FeGFtcGxlIigKB0V4YW1wbGUSDAoEdGV4dBgBIAEoCRIPCgdzcGVha2VyGAIgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMiSAoUU3VibWl0QW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIPCgdtZWFuaW5nGAIgASgJEg4KBnJlYXNvbhgDIAEoCTLrAQoLUXVpelNlcnZpY2USTwoOR2V0UXVpek9wdGlvbnMSHS5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXF1ZXN0Gh4uYXBpLnYxLkdldFF1aXpPcHRpb25zUmVzcG9uc2USQAoJU3RhcnRRdWl6EhguYXBpLnYxLlN0YXJ0UXVpelJlcXVlc3QaGS5hcGkudjEuU3RhcnRRdWl6UmVzcG9uc2USSQoMU3VibWl0QW5zd2VyEhsuYXBpLnYxLlN1Ym1pdEFuc3dlclJlcXVlc3QaHC5hcGkudjEuU3VibWl0QW5zd2VyUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkiSgoPTm90ZWJvb2tTdW1tYXJ5EhMKC25vdGVib29rX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcmV2aWV3X2NvdW50GAMgASgFIk0KEFN0YXJ0UXVpelJlcXVlc3QSHgoMbm90ZWJvb2tfaWRzGAEgAygJQgi6SAWSAQIIARIZChFpbmNsdWRlX3Vuc3R1ZGllZBgCIAEoCCI6ChFTdGFydFF1aXpSZXNwb25zZRIlCgpmbGFzaGNhcmRzGAEgAygLMhEuYXBpLnYxLkZsYXNoY2FyZCJOCglGbGFzaGNhcmQSDwoHbm90ZV9pZBgBIAEoAxINCgVlbnRyeRgCIAEoCRIhCghleGFtcGxlcxgDIAMoCzIPLmFwaS52MS5FeGFtcGxlIigKB0V4YW1wbGUSDAoEdGV4dBgBIAEoCRIPCgdzcGVha2VyGAIgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMiSAoUU3VibWl0QW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIPCgdtZWFuaW5nGAIgASgJEg4KBnJlYXNvbhgDIAEoCSJXChdTdGFydFJldmVyc2VRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhwKFGxpc3RfbWlzc2luZ19jb250ZXh0GAIgASgIIkgKGFN0YXJ0UmV2ZXJzZVF1aXpSZXNwb25zZRIsCgpmbGFzaGNhcmRzGAEgAygLMhguYXBpLnYxLlJldmVyc2VGbGFzaGNhcmQioAEKEFJldmVyc2VGbGFzaGNhcmQSDwoHbm90ZV9pZBgBIAEoAxIPCgdtZWFuaW5nGAIgASgJEikKCGNvbnRleHRzGAMgAygLMhcuYXBpLnYxLkNvbnRleHRTZW50ZW5jZRIVCg1ub3RlYm9va19uYW1lGAQgASgJEhMKC3N0b3J5X3RpdGxlGAUgASgJEhMKC3NjZW5lX3RpdGxlGAYgASgJIjoKD0NvbnRleHRTZW50ZW5jZRIPCgdjb250ZXh0GAEgASgJEhYKDm1hc2tlZF9jb250ZXh0GAIgASgJIm0KGlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASGwoGYW5zd2VyGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDInUKG1N1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhIKCmV4cHJlc3Npb24YAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSEAoIY29udGV4dHMYBSADKAkiGgoYU3RhcnRGcmVlZm9ybVF1aXpSZXF1ZXN0Ii8KGVN0YXJ0RnJlZWZvcm1RdWl6UmVzcG9uc2USEgoKd29yZF9jb3VudBgBIAEoBSJwChtTdWJtaXRGcmVlZm9ybUFuc3dlclJlcXVlc3QSGQoEd29yZBgBIAEoCUILukgIcgYQATICXFMSHAoHbWVhbmluZxgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyKGAQocU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEgwKBHdvcmQYAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSDwoHY29udGV4dBgFIAEoCRIVCg1ub3RlYm9va19uYW1lGAYgASgJKmwKCFF1aXpUeXBlEhkKFVFVSVpfVFlQRV9VTlNQRUNJRklFRBAAEhYKElFVSVpfVFlQRV9TVEFOREFSRBABEhUKEVFVSVpfVFlQRV9SRVZFUlNFEAISFgoSUVVJWl9UWVBFX0ZSRUVGT1JNEAMy3wQKC1F1aXpTZXJ2aWNlEk8KDkdldFF1aXpPcHRpb25zEh0uYXBpLnYxLkdldFF1aXpPcHRpb25zUmVxdWVzdBoeLmFwaS52MS5HZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEkAKCVN0YXJ0UXVpehIYLmFwaS52MS5TdGFydFF1aXpSZXF1ZXN0GhkuYXBpLnYxLlN0YXJ0UXVpelJlc3BvbnNlEkkKDFN1Ym1pdEFuc3dlchIbLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXF1ZXN0GhwuYXBpLnYxLlN1Ym1pdEFuc3dlclJlc3BvbnNlElUKEFN0YXJ0UmV2ZXJzZVF1aXoSHy5hcGkudjEuU3RhcnRSZXZlcnNlUXVpelJlcXVlc3QaIC5hcGkudjEuU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEl4KE1N1Ym1pdFJldmVyc2VBbnN3ZXISIi5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3QaIy5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlc3BvbnNlElgKEVN0YXJ0RnJlZWZvcm1RdWl6EiAuYXBpLnYxLlN0YXJ0RnJlZWZvcm1RdWl6UmVxdWVzdBohLmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlc3BvbnNlEmEKFFN1Ym1pdEZyZWVmb3JtQW5zd2VyEiMuYXBpLnYxLlN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVxdWVzdBokLmFwaS52MS5TdWJtaXRGcmVlZm9ybUFuc3dlclJlc3BvbnNlQjhaNmdpdGh1Yi5jb20vYXQtaXNoaWthd2EvbGFuZ25lci9nZW4tcHJvdG9zL2FwaS92MTthcGl2MWIGcHJvdG8z", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetQuizOptionsRequest
@@ -213,6 +213,303 @@ export const SubmitAnswerResponseSchema: GenMessage<SubmitAnswerResponse> = /*@_
   messageDesc(file_api_v1_quiz, 8);
 
 /**
+ * @generated from message api.v1.StartReverseQuizRequest
+ */
+export type StartReverseQuizRequest = Message<"api.v1.StartReverseQuizRequest"> & {
+  /**
+   * @generated from field: repeated string notebook_ids = 1;
+   */
+  notebookIds: string[];
+
+  /**
+   * @generated from field: bool list_missing_context = 2;
+   */
+  listMissingContext: boolean;
+};
+
+/**
+ * Describes the message api.v1.StartReverseQuizRequest.
+ * Use `create(StartReverseQuizRequestSchema)` to create a new message.
+ */
+export const StartReverseQuizRequestSchema: GenMessage<StartReverseQuizRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 9);
+
+/**
+ * @generated from message api.v1.StartReverseQuizResponse
+ */
+export type StartReverseQuizResponse = Message<"api.v1.StartReverseQuizResponse"> & {
+  /**
+   * @generated from field: repeated api.v1.ReverseFlashcard flashcards = 1;
+   */
+  flashcards: ReverseFlashcard[];
+};
+
+/**
+ * Describes the message api.v1.StartReverseQuizResponse.
+ * Use `create(StartReverseQuizResponseSchema)` to create a new message.
+ */
+export const StartReverseQuizResponseSchema: GenMessage<StartReverseQuizResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 10);
+
+/**
+ * @generated from message api.v1.ReverseFlashcard
+ */
+export type ReverseFlashcard = Message<"api.v1.ReverseFlashcard"> & {
+  /**
+   * @generated from field: int64 note_id = 1;
+   */
+  noteId: bigint;
+
+  /**
+   * @generated from field: string meaning = 2;
+   */
+  meaning: string;
+
+  /**
+   * @generated from field: repeated api.v1.ContextSentence contexts = 3;
+   */
+  contexts: ContextSentence[];
+
+  /**
+   * @generated from field: string notebook_name = 4;
+   */
+  notebookName: string;
+
+  /**
+   * @generated from field: string story_title = 5;
+   */
+  storyTitle: string;
+
+  /**
+   * @generated from field: string scene_title = 6;
+   */
+  sceneTitle: string;
+};
+
+/**
+ * Describes the message api.v1.ReverseFlashcard.
+ * Use `create(ReverseFlashcardSchema)` to create a new message.
+ */
+export const ReverseFlashcardSchema: GenMessage<ReverseFlashcard> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 11);
+
+/**
+ * @generated from message api.v1.ContextSentence
+ */
+export type ContextSentence = Message<"api.v1.ContextSentence"> & {
+  /**
+   * @generated from field: string context = 1;
+   */
+  context: string;
+
+  /**
+   * @generated from field: string masked_context = 2;
+   */
+  maskedContext: string;
+};
+
+/**
+ * Describes the message api.v1.ContextSentence.
+ * Use `create(ContextSentenceSchema)` to create a new message.
+ */
+export const ContextSentenceSchema: GenMessage<ContextSentence> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 12);
+
+/**
+ * @generated from message api.v1.SubmitReverseAnswerRequest
+ */
+export type SubmitReverseAnswerRequest = Message<"api.v1.SubmitReverseAnswerRequest"> & {
+  /**
+   * @generated from field: int64 note_id = 1;
+   */
+  noteId: bigint;
+
+  /**
+   * @generated from field: string answer = 2;
+   */
+  answer: string;
+
+  /**
+   * @generated from field: int64 response_time_ms = 3;
+   */
+  responseTimeMs: bigint;
+};
+
+/**
+ * Describes the message api.v1.SubmitReverseAnswerRequest.
+ * Use `create(SubmitReverseAnswerRequestSchema)` to create a new message.
+ */
+export const SubmitReverseAnswerRequestSchema: GenMessage<SubmitReverseAnswerRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 13);
+
+/**
+ * @generated from message api.v1.SubmitReverseAnswerResponse
+ */
+export type SubmitReverseAnswerResponse = Message<"api.v1.SubmitReverseAnswerResponse"> & {
+  /**
+   * @generated from field: bool correct = 1;
+   */
+  correct: boolean;
+
+  /**
+   * @generated from field: string expression = 2;
+   */
+  expression: string;
+
+  /**
+   * @generated from field: string meaning = 3;
+   */
+  meaning: string;
+
+  /**
+   * @generated from field: string reason = 4;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: repeated string contexts = 5;
+   */
+  contexts: string[];
+};
+
+/**
+ * Describes the message api.v1.SubmitReverseAnswerResponse.
+ * Use `create(SubmitReverseAnswerResponseSchema)` to create a new message.
+ */
+export const SubmitReverseAnswerResponseSchema: GenMessage<SubmitReverseAnswerResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 14);
+
+/**
+ * @generated from message api.v1.StartFreeformQuizRequest
+ */
+export type StartFreeformQuizRequest = Message<"api.v1.StartFreeformQuizRequest"> & {
+};
+
+/**
+ * Describes the message api.v1.StartFreeformQuizRequest.
+ * Use `create(StartFreeformQuizRequestSchema)` to create a new message.
+ */
+export const StartFreeformQuizRequestSchema: GenMessage<StartFreeformQuizRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 15);
+
+/**
+ * @generated from message api.v1.StartFreeformQuizResponse
+ */
+export type StartFreeformQuizResponse = Message<"api.v1.StartFreeformQuizResponse"> & {
+  /**
+   * @generated from field: int32 word_count = 1;
+   */
+  wordCount: number;
+};
+
+/**
+ * Describes the message api.v1.StartFreeformQuizResponse.
+ * Use `create(StartFreeformQuizResponseSchema)` to create a new message.
+ */
+export const StartFreeformQuizResponseSchema: GenMessage<StartFreeformQuizResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 16);
+
+/**
+ * @generated from message api.v1.SubmitFreeformAnswerRequest
+ */
+export type SubmitFreeformAnswerRequest = Message<"api.v1.SubmitFreeformAnswerRequest"> & {
+  /**
+   * @generated from field: string word = 1;
+   */
+  word: string;
+
+  /**
+   * @generated from field: string meaning = 2;
+   */
+  meaning: string;
+
+  /**
+   * @generated from field: int64 response_time_ms = 3;
+   */
+  responseTimeMs: bigint;
+};
+
+/**
+ * Describes the message api.v1.SubmitFreeformAnswerRequest.
+ * Use `create(SubmitFreeformAnswerRequestSchema)` to create a new message.
+ */
+export const SubmitFreeformAnswerRequestSchema: GenMessage<SubmitFreeformAnswerRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 17);
+
+/**
+ * @generated from message api.v1.SubmitFreeformAnswerResponse
+ */
+export type SubmitFreeformAnswerResponse = Message<"api.v1.SubmitFreeformAnswerResponse"> & {
+  /**
+   * @generated from field: bool correct = 1;
+   */
+  correct: boolean;
+
+  /**
+   * @generated from field: string word = 2;
+   */
+  word: string;
+
+  /**
+   * @generated from field: string meaning = 3;
+   */
+  meaning: string;
+
+  /**
+   * @generated from field: string reason = 4;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: string context = 5;
+   */
+  context: string;
+
+  /**
+   * @generated from field: string notebook_name = 6;
+   */
+  notebookName: string;
+};
+
+/**
+ * Describes the message api.v1.SubmitFreeformAnswerResponse.
+ * Use `create(SubmitFreeformAnswerResponseSchema)` to create a new message.
+ */
+export const SubmitFreeformAnswerResponseSchema: GenMessage<SubmitFreeformAnswerResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 18);
+
+/**
+ * @generated from enum api.v1.QuizType
+ */
+export enum QuizType {
+  /**
+   * @generated from enum value: QUIZ_TYPE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: QUIZ_TYPE_STANDARD = 1;
+   */
+  STANDARD = 1,
+
+  /**
+   * @generated from enum value: QUIZ_TYPE_REVERSE = 2;
+   */
+  REVERSE = 2,
+
+  /**
+   * @generated from enum value: QUIZ_TYPE_FREEFORM = 3;
+   */
+  FREEFORM = 3,
+}
+
+/**
+ * Describes the enum api.v1.QuizType.
+ */
+export const QuizTypeSchema: GenEnum<QuizType> = /*@__PURE__*/
+  enumDesc(file_api_v1_quiz, 0);
+
+/**
  * @generated from service api.v1.QuizService
  */
 export const QuizService: GenService<{
@@ -239,6 +536,38 @@ export const QuizService: GenService<{
     methodKind: "unary";
     input: typeof SubmitAnswerRequestSchema;
     output: typeof SubmitAnswerResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.StartReverseQuiz
+   */
+  startReverseQuiz: {
+    methodKind: "unary";
+    input: typeof StartReverseQuizRequestSchema;
+    output: typeof StartReverseQuizResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.SubmitReverseAnswer
+   */
+  submitReverseAnswer: {
+    methodKind: "unary";
+    input: typeof SubmitReverseAnswerRequestSchema;
+    output: typeof SubmitReverseAnswerResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.StartFreeformQuiz
+   */
+  startFreeformQuiz: {
+    methodKind: "unary";
+    input: typeof StartFreeformQuizRequestSchema;
+    output: typeof StartFreeformQuizResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.SubmitFreeformAnswer
+   */
+  submitFreeformAnswer: {
+    methodKind: "unary";
+    input: typeof SubmitFreeformAnswerRequestSchema;
+    output: typeof SubmitFreeformAnswerResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_quiz, 0);

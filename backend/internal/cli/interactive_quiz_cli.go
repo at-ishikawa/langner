@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"path/filepath"
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
@@ -109,39 +108,4 @@ func (cli *InteractiveQuizCLI) Run(ctx context.Context, session Session) error {
 		}
 	}
 	return nil
-}
-
-// updateLearningHistoryWithQuality updates or creates an expression with SM-2 quality data.
-// originalExpression is the original expression form (e.g., Note.Expression) which may differ from
-// expression when a definition is used as the lookup key. Pass empty string if not applicable.
-func (cli *InteractiveQuizCLI) updateLearningHistoryWithQuality(
-	notebookName string,
-	learningHistory []notebook.LearningHistory,
-	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
-	isCorrect, isKnownWord bool,
-	quality int,
-	responseTimeMs int64,
-	quizType notebook.QuizType,
-) ([]notebook.LearningHistory, error) {
-	updater := notebook.NewLearningHistoryUpdater(learningHistory)
-	updater.UpdateOrCreateExpressionWithQuality(
-		notebookID,
-		storyTitle,
-		sceneTitle,
-		expression,
-		originalExpression,
-		isCorrect,
-		isKnownWord,
-		quality,
-		responseTimeMs,
-		quizType,
-	)
-	learningHistory = updater.GetHistory()
-
-	// Save learning history
-	notePath := filepath.Join(cli.learningNotesDir, notebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, learningHistory); err != nil {
-		return learningHistory, fmt.Errorf("failed to write a file %s > %w", notePath, err)
-	}
-	return learningHistory, nil
 }
