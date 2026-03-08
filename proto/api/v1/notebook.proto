@@ -1,0 +1,84 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1";
+
+service NotebookService {
+  rpc GetNotebookDetail(GetNotebookDetailRequest) returns (GetNotebookDetailResponse);
+  rpc ExportNotebookPDF(ExportNotebookPDFRequest) returns (ExportNotebookPDFResponse);
+}
+
+message GetNotebookDetailRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message GetNotebookDetailResponse {
+  string notebook_id = 1;
+  string name = 2;
+  repeated StoryEntry stories = 3;
+  int32 total_word_count = 4;
+}
+
+message StoryEntry {
+  string event = 1;
+  StoryMetadata metadata = 2;
+  string date = 3;
+  repeated StoryScene scenes = 4;
+}
+
+message StoryMetadata {
+  string series = 1;
+  int32 season = 2;
+  int32 episode = 3;
+}
+
+message StoryScene {
+  string title = 1;
+  repeated Conversation conversations = 2;
+  repeated NotebookWord definitions = 3;
+}
+
+message Conversation {
+  string speaker = 1;
+  string quote = 2;
+}
+
+message NotebookWord {
+  string expression = 1;
+  string definition = 2;
+  string meaning = 3;
+  string part_of_speech = 4;
+  string pronunciation = 5;
+  repeated string examples = 6;
+  repeated string synonyms = 7;
+  repeated string antonyms = 8;
+  string learning_status = 9;
+  repeated LearningLogEntry learned_logs = 10;
+  double easiness_factor = 11;
+  string next_review_date = 12;
+}
+
+message LearningLogEntry {
+  string status = 1;
+  string learned_at = 2;
+  int32 quality = 3;
+  int64 response_time_ms = 4;
+  string quiz_type = 5;
+  int32 interval_days = 6;
+}
+
+message ExportNotebookPDFRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ExportNotebookPDFResponse {
+  bytes pdf_content = 1;
+  string filename = 2;
+}

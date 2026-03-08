@@ -58,7 +58,7 @@ test("shows notebooks and starts quiz", async ({ page }) => {
   });
 
   const getOptionsPromise = page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
-  await page.goto("/");
+  await page.goto("/quiz");
 
   // Wait for the GetQuizOptions response to be intercepted
   await getOptionsPromise;
@@ -124,7 +124,7 @@ test("completes full quiz flow", async ({ page }) => {
   });
 
   const getOptionsPromise = page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
-  await page.goto("/");
+  await page.goto("/quiz");
 
   // Wait for the GetQuizOptions response to be intercepted
   await getOptionsPromise;
@@ -205,7 +205,7 @@ test("completes freeform quiz flow and shows results", async ({ page }) => {
   });
 
   const getOptionsPromise = page.waitForResponse(/GetQuizOptions/, { timeout: 10000 });
-  await page.goto("/");
+  await page.goto("/quiz");
   await getOptionsPromise;
 
   // Select freeform quiz type

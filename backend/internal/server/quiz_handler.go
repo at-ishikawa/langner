@@ -51,7 +51,15 @@ func (h *QuizHandler) GetQuizOptions(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load notebook summaries: %w", err))
 	}
 
-	var protoSummaries []*apiv1.NotebookSummary
+	sort.Slice(summaries, func(i, j int) bool {
+		di, dj := summaries[i].LatestStoryDate, summaries[j].LatestStoryDate
+		if !di.Equal(dj) {
+			return di.After(dj)
+		}
+		return summaries[i].NotebookID < summaries[j].NotebookID
+	})
+
+	protoSummaries := make([]*apiv1.NotebookSummary, 0, len(summaries))
 	for _, s := range summaries {
 		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{
 			NotebookId:  s.NotebookID,
@@ -59,10 +67,6 @@ func (h *QuizHandler) GetQuizOptions(
 			ReviewCount: int32(s.ReviewCount),
 		})
 	}
-
-	sort.Slice(protoSummaries, func(i, j int) bool {
-		return protoSummaries[i].GetNotebookId() < protoSummaries[j].GetNotebookId()
-	})
 
 	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{
 		Notebooks: protoSummaries,

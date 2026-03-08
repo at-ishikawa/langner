@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
@@ -67,10 +68,17 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			return nil, fmt.Errorf("failed to filter story notebook %q: %w", id, err)
 		}
 
+		var latestDate time.Time
+		for _, s := range stories {
+			if s.Date.After(latestDate) {
+				latestDate = s.Date
+			}
+		}
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:  id,
-			Name:        index.Name,
-			ReviewCount: countStoryDefinitions(filtered),
+			NotebookID:      id,
+			Name:            index.Name,
+			ReviewCount:     countStoryDefinitions(filtered),
+			LatestStoryDate: latestDate,
 		})
 	}
 

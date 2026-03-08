@@ -399,6 +399,11 @@ func (notebook *StoryNotebook) Validate(location string) []ValidationError {
 	return errors
 }
 
+// ConvertToAssetsStoryTemplate converts notebook types to assets.StoryTemplate for template rendering.
+func ConvertToAssetsStoryTemplate(notebooks []StoryNotebook) assets.StoryTemplate {
+	return newAssetsStoryConverter().convertToAssetsStoryTemplate(notebooks)
+}
+
 type assetsStoryConverter struct {
 }
 

@@ -1,25 +1,68 @@
-- event: 'Example from a video ''The Opening Scene of Friends'': https://www.youtube.com/watch?v=sIZ91tq8Lr0'
+- event: 'Friends S01E01 - The Pilot'
   metadata:
     series: Friends
     season: 1
     episode: 1
   date: 2025-11-08T00:00:00Z
   scenes:
-    - scene: In the CENTRAL PERK
+    - scene: Central Perk - Morning Coffee
       conversations:
         - speaker: Monica
-          quote: There's {{ nothing }} to tell it's just some guy i work with
+          quote: I just want to {{ break the ice }} with this new coworker before our meeting tomorrow.
         - speaker: Joey
-          quote: come on you're {{ going }} out with the guy there's got to be something wrong with {{ him }}
+          quote: You should just {{ hang out }} with them after work, grab a coffee or something.
+        - speaker: Chandler
+          quote: Yeah, once you {{ get along }} with someone, everything at work gets easier.
       definitions:
-        - expression: nothing
-          dictionary_number: 1
-        - expression: going
-          definition: go
-          meaning: To move or travel
-        - expression: him
-          level: unusable
-    - scene: In the Monica's apartment
+        - expression: break the ice
+          meaning: To initiate conversation or relieve tension in a social situation
+        - expression: hang out
+          meaning: To spend time relaxing or socializing informally
+        - expression: get along
+          meaning: To have a friendly relationship with someone
+    - scene: Monica's Apartment - Dinner Plans
       conversations:
+        - speaker: Ross
+          quote: I need to {{ catch up }} with you guys, it feels like forever since we talked.
+        - speaker: Rachel
+          quote: I'm trying to {{ figure out }} what to do with my life now.
+        - speaker: Phoebe
+          quote: I always {{ look forward to }} our dinners together, they make my week.
+      definitions:
+        - expression: catch up
+          meaning: To exchange news or information after a period of not seeing someone
+        - expression: figure out
+          meaning: To understand or solve something after thinking about it
+        - expression: look forward to
+          meaning: To feel excited or happy about something that is going to happen
+    - scene: Central Perk - Afternoon
+      conversations:
+        - speaker: Joey
+          quote: I {{ ran into }} my old acting coach at the grocery store yesterday.
+        - speaker: Chandler
+          quote: Could you please {{ keep it down }}? I'm trying to concentrate over here.
         - speaker: Monica
-          quote: Blah blah blah
+          quote: Don't {{ put off }} calling him back, it could be a great opportunity.
+      definitions:
+        - expression: ran into
+          definition: run into
+          meaning: To meet someone unexpectedly by chance
+        - expression: keep it down
+          meaning: To be quieter or reduce the noise level
+        - expression: put off
+          meaning: To delay or postpone something
+    - scene: Ross's Apartment - Late Night
+      conversations:
+        - speaker: Ross
+          quote: I can't {{ get over }} the fact that she just left without saying anything.
+        - speaker: Monica
+          quote: You need to {{ move on }} and stop thinking about it all the time.
+        - speaker: Ross
+          quote: I know, but it's hard to {{ let go }} of something that meant so much.
+      definitions:
+        - expression: get over
+          meaning: To recover from something emotionally or physically
+        - expression: move on
+          meaning: To stop dwelling on the past and progress forward in life
+        - expression: let go
+          meaning: To stop holding on to something emotionally or physically

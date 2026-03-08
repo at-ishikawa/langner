@@ -24,7 +24,7 @@ dev-backend:
 		exit 1; \
 	fi
 	$(MAKE) -C backend build
-	./langner-server --config config.yml
+	./langner-server
 
 .PHONY: dev-frontend
 dev-frontend:

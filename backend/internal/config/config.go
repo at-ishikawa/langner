@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -100,7 +101,9 @@ func NewConfigLoader(configFile string) (*ConfigLoader, error) {
 	} else {
 		v.SetConfigName("config")
 		v.AddConfigPath(".")
-		v.AddConfigPath("$HOME/.config/langner")
+		if homeDir, err := os.UserHomeDir(); err == nil {
+			v.AddConfigPath(filepath.Join(homeDir, ".config", "langner"))
+		}
 	}
 
 	return &ConfigLoader{

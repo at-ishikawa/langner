@@ -1,6 +1,10 @@
 package quiz
 
-import "github.com/at-ishikawa/langner/internal/inference"
+import (
+	"time"
+
+	"github.com/at-ishikawa/langner/internal/inference"
+)
 
 // Card represents a single quiz card shared between CLI and RPC.
 type Card struct {
@@ -22,9 +26,10 @@ type Example struct {
 
 // NotebookSummary holds display info for one notebook.
 type NotebookSummary struct {
-	NotebookID  string
-	Name        string
-	ReviewCount int
+	NotebookID      string
+	Name            string
+	ReviewCount     int
+	LatestStoryDate time.Time
 }
 
 // GradeResult holds the outcome of grading a user's answer.

@@ -3,11 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"github.com/spf13/cobra"
+	"connectrpc.com/connect"
 
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
@@ -60,16 +61,30 @@ func run(ctx context.Context) error {
 
 	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
 	if err != nil {
-		log.Printf("Warning: failed to load dictionary cache: %v", err)
+		slog.Warn("failed to load dictionary cache", "error", err)
 		dictionaryMap = make(map[string]rapidapi.Response)
 	}
 
+	errorLogger := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			resp, err := next(ctx, req)
+			if err != nil {
+				slog.Error("rpc error", "procedure", req.Spec().Procedure, "error", err)
+			}
+			return resp, err
+		}
+	}))
+
 	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap)
 	handler := server.NewQuizHandler(svc)
-	path, h := apiv1connect.NewQuizServiceHandler(handler)
+	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
+
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap)
+	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
 
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
+	mux.Handle(notebookPath, notebookH)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
@@ -78,7 +93,7 @@ func run(ctx context.Context) error {
 	app.AddShutdownHook(srv.Shutdown)
 
 	return app.Run(ctx, func(ctx context.Context) error {
-		log.Printf("Starting server on %s", srv.Addr)
+		slog.Info("starting server", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			return err
 		}
@@ -103,13 +118,18 @@ func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
 }
 
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
+	allowAll := false
 	allowed := make(map[string]bool, len(allowedOrigins))
 	for _, o := range allowedOrigins {
+		if o == "*" {
+			allowAll = true
+			break
+		}
 		allowed[o] = true
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if allowed[origin] {
+		if origin != "" && (allowAll || allowed[origin]) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
