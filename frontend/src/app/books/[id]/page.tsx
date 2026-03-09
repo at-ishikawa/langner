@@ -175,7 +175,7 @@ export default function BookReaderPage() {
           sceneIndex,
           definitions: [],
           source: "",
-          loading: false,
+          loading: true,
           error: null,
           saved: false,
           saving: false,
@@ -183,6 +183,21 @@ export default function BookReaderPage() {
           deleting: false,
           deleted: false,
         });
+        // Also look up other definitions
+        notebookClient
+          .lookupWord({ word: selectedText, notebookId: id, context })
+          .then((res) => {
+            setLookup((prev) => {
+              if (!prev || prev.word !== selectedText) return prev;
+              return { ...prev, definitions: res.definitions, source: res.source, loading: false };
+            });
+          })
+          .catch(() => {
+            setLookup((prev) => {
+              if (!prev || prev.word !== selectedText) return prev;
+              return { ...prev, loading: false };
+            });
+          });
         return;
       }
 
@@ -427,67 +442,87 @@ export default function BookReaderPage() {
         >
           {lookup.savedDefinition && !lookup.deleted ? (
             <Box>
-              <Box
-                display="flex"
-                alignItems="center"
-                gap={2}
-                mb={3}
-                justifyContent="space-between"
-              >
+              {/* Header */}
+              <Box display="flex" alignItems="center" gap={2} mb={3} justifyContent="space-between">
                 <Box display="flex" alignItems="center" gap={2}>
                   <Heading size="sm">{lookup.word}</Heading>
-                  <Text
-                    fontSize="xs"
-                    px={2}
-                    py={0.5}
-                    bg="green.100"
-                    color="green.700"
-                    borderRadius="full"
-                    _dark={{ bg: "green.900", color: "green.200" }}
-                  >
+                  <Text fontSize="xs" px={2} py={0.5} bg="green.100" color="green.700" borderRadius="full" _dark={{ bg: "green.900", color: "green.200" }}>
                     Saved
                   </Text>
                 </Box>
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => setLookup(null)}
-                >
-                  Close
-                </Button>
+                <Button size="xs" variant="ghost" onClick={() => setLookup(null)}>Close</Button>
               </Box>
+
+              {/* Saved definition details */}
               {lookup.savedDefinition.partOfSpeech && (
-                <Text fontSize="xs" color="fg.muted" mb={1}>
-                  {lookup.savedDefinition.partOfSpeech}
-                </Text>
+                <Text fontSize="xs" color="fg.muted" mb={1}>{lookup.savedDefinition.partOfSpeech}</Text>
               )}
-              <Text fontSize="sm" mb={2}>
-                {lookup.savedDefinition.meaning ||
-                  lookup.savedDefinition.definition}
+              <Text fontSize="sm" fontWeight="medium" mb={1}>
+                {lookup.savedDefinition.meaning || lookup.savedDefinition.definition}
               </Text>
+              {lookup.savedDefinition.pronunciation && (
+                <Text fontSize="xs" color="fg.muted" mb={1}>/{lookup.savedDefinition.pronunciation}/</Text>
+              )}
+              {lookup.savedDefinition.origin && (
+                <Text fontSize="xs" color="fg.muted" mb={1}>Origin: {lookup.savedDefinition.origin}</Text>
+              )}
+              {lookup.savedDefinition.synonyms.length > 0 && (
+                <Text fontSize="xs" color="fg.muted" mb={1}>Synonyms: {lookup.savedDefinition.synonyms.join(", ")}</Text>
+              )}
+              {lookup.savedDefinition.antonyms.length > 0 && (
+                <Text fontSize="xs" color="fg.muted" mb={1}>Antonyms: {lookup.savedDefinition.antonyms.join(", ")}</Text>
+              )}
               {lookup.savedDefinition.examples.length > 0 && (
                 <Box mb={2}>
                   {lookup.savedDefinition.examples.map((ex, i) => (
-                    <Text key={i} fontSize="xs" color="fg.muted" pl={2}>
-                      {ex}
-                    </Text>
+                    <Text key={i} fontSize="xs" color="fg.muted" pl={2}>{ex}</Text>
                   ))}
                 </Box>
               )}
-              {lookup.error && (
-                <Text color="red.500" fontSize="sm" mb={2}>
-                  {lookup.error}
-                </Text>
-              )}
-              <Button
-                size="xs"
-                colorPalette="red"
-                variant="outline"
-                onClick={handleDelete}
-                disabled={lookup.deleting}
-              >
+
+              {lookup.error && <Text color="red.500" fontSize="sm" mb={2}>{lookup.error}</Text>}
+
+              <Button size="xs" colorPalette="red" variant="outline" onClick={handleDelete} disabled={lookup.deleting} mb={3}>
                 {lookup.deleting ? "Deleting..." : "Delete definition"}
               </Button>
+
+              {/* Other definitions from dictionary */}
+              {lookup.loading && (
+                <Box textAlign="center" py={2}>
+                  <Spinner size="xs" />
+                  <Text fontSize="xs" color="fg.muted" mt={1}>Loading other definitions...</Text>
+                </Box>
+              )}
+
+              {!lookup.loading && lookup.definitions.length > 0 && (
+                <Box borderTopWidth="1px" pt={3} mt={1}>
+                  <Text fontSize="xs" fontWeight="bold" color="fg.muted" mb={2}>Other definitions ({lookup.source}):</Text>
+                  <VStack align="stretch" gap={2}>
+                    {lookup.definitions.map((def, i) => (
+                      <Box key={i} p={2} borderWidth="1px" borderRadius="md" fontSize="sm">
+                        {def.partOfSpeech && <Text fontSize="xs" color="fg.muted">{def.partOfSpeech}</Text>}
+                        <Text fontSize="sm">{def.definition}</Text>
+                        {def.pronunciation && <Text fontSize="xs" color="fg.muted">/{def.pronunciation}/</Text>}
+                        {def.origin && <Text fontSize="xs" color="fg.muted">Origin: {def.origin}</Text>}
+                        {def.synonyms.length > 0 && <Text fontSize="xs" color="fg.muted">Synonyms: {def.synonyms.join(", ")}</Text>}
+                        {def.antonyms.length > 0 && <Text fontSize="xs" color="fg.muted">Antonyms: {def.antonyms.join(", ")}</Text>}
+                        {def.examples.length > 0 && (
+                          <Box>
+                            {def.examples.map((ex, j) => (
+                              <Text key={j} fontSize="xs" color="fg.muted" pl={2}>{ex}</Text>
+                            ))}
+                          </Box>
+                        )}
+                        {!lookup.saved && (
+                          <Button size="xs" colorPalette="blue" mt={1} onClick={() => handleSaveDefinition(i)} disabled={lookup.saving}>
+                            {lookup.saving ? "Saving..." : "Save instead"}
+                          </Button>
+                        )}
+                      </Box>
+                    ))}
+                  </VStack>
+                </Box>
+              )}
             </Box>
           ) : lookup.deleted ? (
             <Box>
@@ -592,9 +627,19 @@ export default function BookReaderPage() {
                         ))}
                       </Box>
                     )}
+                    {def.origin && (
+                      <Text fontSize="xs" color="fg.muted" mt={1}>
+                        Origin: {def.origin}
+                      </Text>
+                    )}
                     {def.synonyms.length > 0 && (
                       <Text fontSize="xs" color="fg.muted" mt={1}>
                         Synonyms: {def.synonyms.join(", ")}
+                      </Text>
+                    )}
+                    {def.antonyms.length > 0 && (
+                      <Text fontSize="xs" color="fg.muted" mt={1}>
+                        Antonyms: {def.antonyms.join(", ")}
                       </Text>
                     )}
                     {!lookup.saved && (

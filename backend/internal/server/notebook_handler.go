@@ -141,6 +141,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 					LearnedLogs:    convertLogsToProto(logs),
 					EasinessFactor: easinessFactor,
 					NextReviewDate: nextReviewDate,
+					Origin:         def.Origin,
 				})
 				totalWordCount++
 			}
@@ -228,6 +229,7 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 				LearnedLogs:    convertLogsToProto(logs),
 				EasinessFactor: easinessFactor,
 				NextReviewDate: nextReviewDate,
+				Origin:         card.Origin,
 			})
 			totalWordCount++
 		}
@@ -426,6 +428,7 @@ func rapidAPIToLookupResponse(word string, resp rapidapi.Response, source string
 			Examples:      r.Examples,
 			Synonyms:      r.Synonyms,
 			Pronunciation: resp.Pronunciation.All,
+			Origin:        strings.Join(r.Derivation, ", "),
 		})
 	}
 	return &apiv1.LookupWordResponse{

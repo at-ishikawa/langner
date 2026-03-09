@@ -65,6 +65,7 @@ message NotebookWord {
   repeated LearningLogEntry learned_logs = 10;
   double easiness_factor = 11;
   string next_review_date = 12;
+  string origin = 13;
 }
 
 message LearningLogEntry {
@@ -99,6 +100,8 @@ message WordDefinition {
   repeated string examples = 3;
   repeated string synonyms = 4;
   string pronunciation = 5;
+  repeated string antonyms = 6;
+  string origin = 7;
 }
 
 message LookupWordResponse {

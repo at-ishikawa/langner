@@ -396,6 +396,7 @@ type NotebookWord struct {
 	LearnedLogs    []*LearningLogEntry    `protobuf:"bytes,10,rep,name=learned_logs,json=learnedLogs,proto3" json:"learned_logs,omitempty"`
 	EasinessFactor float64                `protobuf:"fixed64,11,opt,name=easiness_factor,json=easinessFactor,proto3" json:"easiness_factor,omitempty"`
 	NextReviewDate string                 `protobuf:"bytes,12,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	Origin         string                 `protobuf:"bytes,13,opt,name=origin,proto3" json:"origin,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -510,6 +511,13 @@ func (x *NotebookWord) GetEasinessFactor() float64 {
 func (x *NotebookWord) GetNextReviewDate() string {
 	if x != nil {
 		return x.NextReviewDate
+	}
+	return ""
+}
+
+func (x *NotebookWord) GetOrigin() string {
+	if x != nil {
+		return x.Origin
 	}
 	return ""
 }
@@ -761,6 +769,8 @@ type WordDefinition struct {
 	Examples      []string               `protobuf:"bytes,3,rep,name=examples,proto3" json:"examples,omitempty"`
 	Synonyms      []string               `protobuf:"bytes,4,rep,name=synonyms,proto3" json:"synonyms,omitempty"`
 	Pronunciation string                 `protobuf:"bytes,5,opt,name=pronunciation,proto3" json:"pronunciation,omitempty"`
+	Antonyms      []string               `protobuf:"bytes,6,rep,name=antonyms,proto3" json:"antonyms,omitempty"`
+	Origin        string                 `protobuf:"bytes,7,opt,name=origin,proto3" json:"origin,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -826,6 +836,20 @@ func (x *WordDefinition) GetSynonyms() []string {
 func (x *WordDefinition) GetPronunciation() string {
 	if x != nil {
 		return x.Pronunciation
+	}
+	return ""
+}
+
+func (x *WordDefinition) GetAntonyms() []string {
+	if x != nil {
+		return x.Antonyms
+	}
+	return nil
+}
+
+func (x *WordDefinition) GetOrigin() string {
+	if x != nil {
+		return x.Origin
 	}
 	return ""
 }
@@ -1156,7 +1180,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"statements\">\n" +
 	"\fConversation\x12\x18\n" +
 	"\aspeaker\x18\x01 \x01(\tR\aspeaker\x12\x14\n" +
-	"\x05quote\x18\x02 \x01(\tR\x05quote\"\xc1\x03\n" +
+	"\x05quote\x18\x02 \x01(\tR\x05quote\"\xd9\x03\n" +
 	"\fNotebookWord\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -1174,7 +1198,8 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\flearned_logs\x18\n" +
 	" \x03(\v2\x18.api.v1.LearningLogEntryR\vlearnedLogs\x12'\n" +
 	"\x0feasiness_factor\x18\v \x01(\x01R\x0eeasinessFactor\x12(\n" +
-	"\x10next_review_date\x18\f \x01(\tR\x0enextReviewDate\"\xcf\x01\n" +
+	"\x10next_review_date\x18\f \x01(\tR\x0enextReviewDate\x12\x16\n" +
+	"\x06origin\x18\r \x01(\tR\x06origin\"\xcf\x01\n" +
 	"\x10LearningLogEntry\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1d\n" +
 	"\n" +
@@ -1194,7 +1219,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\x04word\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04word\x12\x1f\n" +
 	"\vnotebook_id\x18\x02 \x01(\tR\n" +
 	"notebookId\x12\x18\n" +
-	"\acontext\x18\x03 \x01(\tR\acontext\"\xb4\x01\n" +
+	"\acontext\x18\x03 \x01(\tR\acontext\"\xe8\x01\n" +
 	"\x0eWordDefinition\x12$\n" +
 	"\x0epart_of_speech\x18\x01 \x01(\tR\fpartOfSpeech\x12\x1e\n" +
 	"\n" +
@@ -1202,7 +1227,9 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"definition\x12\x1a\n" +
 	"\bexamples\x18\x03 \x03(\tR\bexamples\x12\x1a\n" +
 	"\bsynonyms\x18\x04 \x03(\tR\bsynonyms\x12$\n" +
-	"\rpronunciation\x18\x05 \x01(\tR\rpronunciation\"z\n" +
+	"\rpronunciation\x18\x05 \x01(\tR\rpronunciation\x12\x1a\n" +
+	"\bantonyms\x18\x06 \x03(\tR\bantonyms\x12\x16\n" +
+	"\x06origin\x18\a \x01(\tR\x06origin\"z\n" +
 	"\x12LookupWordResponse\x12\x12\n" +
 	"\x04word\x18\x01 \x01(\tR\x04word\x128\n" +
 	"\vdefinitions\x18\x02 \x03(\v2\x16.api.v1.WordDefinitionR\vdefinitions\x12\x16\n" +

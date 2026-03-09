@@ -501,6 +501,14 @@ function WordCard({ word }: { word: NotebookWord }) {
                 {word.pronunciation}
               </Text>
             )}
+            {word.origin && (
+              <Text>
+                <Text as="span" fontWeight="bold">
+                  Origin:
+                </Text>{" "}
+                {word.origin}
+              </Text>
+            )}
             {word.examples.length > 0 && (
               <Box>
                 <Text fontWeight="bold">Examples:</Text>
