@@ -41,4 +41,9 @@ export type {
   NotebookWord,
   LearningLogEntry,
   ExportNotebookPDFResponse,
+  LookupWordRequest,
+  LookupWordResponse,
+  WordDefinition,
+  RegisterDefinitionRequest,
+  RegisterDefinitionResponse,
 } from "@/gen-protos/api/v1/notebook_pb";

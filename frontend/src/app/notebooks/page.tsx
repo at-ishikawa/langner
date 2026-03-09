@@ -36,33 +36,71 @@ export default function NotebookListPage() {
     );
   }
 
+  const books = notebooks.filter((n) => n.kind === "Books");
+  const otherNotebooks = notebooks.filter((n) => n.kind !== "Books");
+
   return (
     <Box p={4} maxW="md" mx="auto">
       <Heading size="lg" mb={4}>
         Notebooks
       </Heading>
 
-      {notebooks.length === 0 ? (
-        <Text color="fg.muted">No notebooks found.</Text>
-      ) : (
-        <VStack align="stretch" gap={3}>
-          {notebooks.map((notebook) => (
-            <Link
-              key={notebook.notebookId}
-              href={`/notebooks/${notebook.notebookId}`}
-            >
-              <Box
-                p={4}
-                borderWidth="1px"
-                borderRadius="md"
-                _hover={{ bg: "bg.muted" }}
-                cursor="pointer"
+      {books.length > 0 && (
+        <Box mb={6}>
+          <Heading size="md" mb={3}>
+            Books
+          </Heading>
+          <VStack align="stretch" gap={3}>
+            {books.map((notebook) => (
+              <Link
+                key={notebook.notebookId}
+                href={`/books/${notebook.notebookId}`}
               >
-                <Text fontWeight="medium">{notebook.name}</Text>
-              </Box>
-            </Link>
-          ))}
-        </VStack>
+                <Box
+                  p={4}
+                  borderWidth="1px"
+                  borderRadius="md"
+                  _hover={{ bg: "bg.muted" }}
+                  cursor="pointer"
+                >
+                  <Text fontWeight="medium">{notebook.name}</Text>
+                </Box>
+              </Link>
+            ))}
+          </VStack>
+        </Box>
+      )}
+
+      {otherNotebooks.length > 0 && (
+        <Box>
+          {books.length > 0 && (
+            <Heading size="md" mb={3}>
+              Other Notebooks
+            </Heading>
+          )}
+          <VStack align="stretch" gap={3}>
+            {otherNotebooks.map((notebook) => (
+              <Link
+                key={notebook.notebookId}
+                href={`/notebooks/${notebook.notebookId}`}
+              >
+                <Box
+                  p={4}
+                  borderWidth="1px"
+                  borderRadius="md"
+                  _hover={{ bg: "bg.muted" }}
+                  cursor="pointer"
+                >
+                  <Text fontWeight="medium">{notebook.name}</Text>
+                </Box>
+              </Link>
+            ))}
+          </VStack>
+        </Box>
+      )}
+
+      {notebooks.length === 0 && (
+        <Text color="fg.muted">No notebooks found.</Text>
       )}
     </Box>
   );

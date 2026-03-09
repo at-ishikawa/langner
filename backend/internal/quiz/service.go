@@ -79,6 +79,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			Name:            index.Name,
 			ReviewCount:     countStoryDefinitions(filtered),
 			LatestStoryDate: latestDate,
+			Kind:            index.Kind,
 		})
 	}
 

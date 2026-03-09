@@ -33,6 +33,7 @@ message NotebookSummary {
   string notebook_id = 1;
   string name = 2;
   int32 review_count = 3;
+  string kind = 4;
 }
 
 message StartQuizRequest {

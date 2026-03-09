@@ -39,12 +39,20 @@ const (
 	// NotebookServiceExportNotebookPDFProcedure is the fully-qualified name of the NotebookService's
 	// ExportNotebookPDF RPC.
 	NotebookServiceExportNotebookPDFProcedure = "/api.v1.NotebookService/ExportNotebookPDF"
+	// NotebookServiceLookupWordProcedure is the fully-qualified name of the NotebookService's
+	// LookupWord RPC.
+	NotebookServiceLookupWordProcedure = "/api.v1.NotebookService/LookupWord"
+	// NotebookServiceRegisterDefinitionProcedure is the fully-qualified name of the NotebookService's
+	// RegisterDefinition RPC.
+	NotebookServiceRegisterDefinitionProcedure = "/api.v1.NotebookService/RegisterDefinition"
 )
 
 // NotebookServiceClient is a client for the api.v1.NotebookService service.
 type NotebookServiceClient interface {
 	GetNotebookDetail(context.Context, *connect.Request[v1.GetNotebookDetailRequest]) (*connect.Response[v1.GetNotebookDetailResponse], error)
 	ExportNotebookPDF(context.Context, *connect.Request[v1.ExportNotebookPDFRequest]) (*connect.Response[v1.ExportNotebookPDFResponse], error)
+	LookupWord(context.Context, *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error)
+	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
 }
 
 // NewNotebookServiceClient constructs a client for the api.v1.NotebookService service. By default,
@@ -70,13 +78,27 @@ func NewNotebookServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(notebookServiceMethods.ByName("ExportNotebookPDF")),
 			connect.WithClientOptions(opts...),
 		),
+		lookupWord: connect.NewClient[v1.LookupWordRequest, v1.LookupWordResponse](
+			httpClient,
+			baseURL+NotebookServiceLookupWordProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("LookupWord")),
+			connect.WithClientOptions(opts...),
+		),
+		registerDefinition: connect.NewClient[v1.RegisterDefinitionRequest, v1.RegisterDefinitionResponse](
+			httpClient,
+			baseURL+NotebookServiceRegisterDefinitionProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("RegisterDefinition")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // notebookServiceClient implements NotebookServiceClient.
 type notebookServiceClient struct {
-	getNotebookDetail *connect.Client[v1.GetNotebookDetailRequest, v1.GetNotebookDetailResponse]
-	exportNotebookPDF *connect.Client[v1.ExportNotebookPDFRequest, v1.ExportNotebookPDFResponse]
+	getNotebookDetail  *connect.Client[v1.GetNotebookDetailRequest, v1.GetNotebookDetailResponse]
+	exportNotebookPDF  *connect.Client[v1.ExportNotebookPDFRequest, v1.ExportNotebookPDFResponse]
+	lookupWord         *connect.Client[v1.LookupWordRequest, v1.LookupWordResponse]
+	registerDefinition *connect.Client[v1.RegisterDefinitionRequest, v1.RegisterDefinitionResponse]
 }
 
 // GetNotebookDetail calls api.v1.NotebookService.GetNotebookDetail.
@@ -89,10 +111,22 @@ func (c *notebookServiceClient) ExportNotebookPDF(ctx context.Context, req *conn
 	return c.exportNotebookPDF.CallUnary(ctx, req)
 }
 
+// LookupWord calls api.v1.NotebookService.LookupWord.
+func (c *notebookServiceClient) LookupWord(ctx context.Context, req *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error) {
+	return c.lookupWord.CallUnary(ctx, req)
+}
+
+// RegisterDefinition calls api.v1.NotebookService.RegisterDefinition.
+func (c *notebookServiceClient) RegisterDefinition(ctx context.Context, req *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error) {
+	return c.registerDefinition.CallUnary(ctx, req)
+}
+
 // NotebookServiceHandler is an implementation of the api.v1.NotebookService service.
 type NotebookServiceHandler interface {
 	GetNotebookDetail(context.Context, *connect.Request[v1.GetNotebookDetailRequest]) (*connect.Response[v1.GetNotebookDetailResponse], error)
 	ExportNotebookPDF(context.Context, *connect.Request[v1.ExportNotebookPDFRequest]) (*connect.Response[v1.ExportNotebookPDFResponse], error)
+	LookupWord(context.Context, *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error)
+	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
 }
 
 // NewNotebookServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -114,12 +148,28 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 		connect.WithSchema(notebookServiceMethods.ByName("ExportNotebookPDF")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notebookServiceLookupWordHandler := connect.NewUnaryHandler(
+		NotebookServiceLookupWordProcedure,
+		svc.LookupWord,
+		connect.WithSchema(notebookServiceMethods.ByName("LookupWord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	notebookServiceRegisterDefinitionHandler := connect.NewUnaryHandler(
+		NotebookServiceRegisterDefinitionProcedure,
+		svc.RegisterDefinition,
+		connect.WithSchema(notebookServiceMethods.ByName("RegisterDefinition")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.NotebookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotebookServiceGetNotebookDetailProcedure:
 			notebookServiceGetNotebookDetailHandler.ServeHTTP(w, r)
 		case NotebookServiceExportNotebookPDFProcedure:
 			notebookServiceExportNotebookPDFHandler.ServeHTTP(w, r)
+		case NotebookServiceLookupWordProcedure:
+			notebookServiceLookupWordHandler.ServeHTTP(w, r)
+		case NotebookServiceRegisterDefinitionProcedure:
+			notebookServiceRegisterDefinitionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -135,4 +185,12 @@ func (UnimplementedNotebookServiceHandler) GetNotebookDetail(context.Context, *c
 
 func (UnimplementedNotebookServiceHandler) ExportNotebookPDF(context.Context, *connect.Request[v1.ExportNotebookPDFRequest]) (*connect.Response[v1.ExportNotebookPDFResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.ExportNotebookPDF is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) LookupWord(context.Context, *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.LookupWord is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.RegisterDefinition is not implemented"))
 }

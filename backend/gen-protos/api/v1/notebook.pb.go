@@ -267,6 +267,7 @@ type StoryScene struct {
 	Title         string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
 	Conversations []*Conversation        `protobuf:"bytes,2,rep,name=conversations,proto3" json:"conversations,omitempty"`
 	Definitions   []*NotebookWord        `protobuf:"bytes,3,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	Statements    []string               `protobuf:"bytes,5,rep,name=statements,proto3" json:"statements,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -318,6 +319,13 @@ func (x *StoryScene) GetConversations() []*Conversation {
 func (x *StoryScene) GetDefinitions() []*NotebookWord {
 	if x != nil {
 		return x.Definitions
+	}
+	return nil
+}
+
+func (x *StoryScene) GetStatements() []string {
+	if x != nil {
+		return x.Statements
 	}
 	return nil
 }
@@ -686,6 +694,330 @@ func (x *ExportNotebookPDFResponse) GetFilename() string {
 	return ""
 }
 
+type LookupWordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Word          string                 `protobuf:"bytes,1,opt,name=word,proto3" json:"word,omitempty"`
+	NotebookId    string                 `protobuf:"bytes,2,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	Context       string                 `protobuf:"bytes,3,opt,name=context,proto3" json:"context,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LookupWordRequest) Reset() {
+	*x = LookupWordRequest{}
+	mi := &file_api_v1_notebook_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LookupWordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LookupWordRequest) ProtoMessage() {}
+
+func (x *LookupWordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LookupWordRequest.ProtoReflect.Descriptor instead.
+func (*LookupWordRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *LookupWordRequest) GetWord() string {
+	if x != nil {
+		return x.Word
+	}
+	return ""
+}
+
+func (x *LookupWordRequest) GetNotebookId() string {
+	if x != nil {
+		return x.NotebookId
+	}
+	return ""
+}
+
+func (x *LookupWordRequest) GetContext() string {
+	if x != nil {
+		return x.Context
+	}
+	return ""
+}
+
+type WordDefinition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	PartOfSpeech  string                 `protobuf:"bytes,1,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
+	Definition    string                 `protobuf:"bytes,2,opt,name=definition,proto3" json:"definition,omitempty"`
+	Examples      []string               `protobuf:"bytes,3,rep,name=examples,proto3" json:"examples,omitempty"`
+	Synonyms      []string               `protobuf:"bytes,4,rep,name=synonyms,proto3" json:"synonyms,omitempty"`
+	Pronunciation string                 `protobuf:"bytes,5,opt,name=pronunciation,proto3" json:"pronunciation,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WordDefinition) Reset() {
+	*x = WordDefinition{}
+	mi := &file_api_v1_notebook_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WordDefinition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WordDefinition) ProtoMessage() {}
+
+func (x *WordDefinition) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WordDefinition.ProtoReflect.Descriptor instead.
+func (*WordDefinition) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *WordDefinition) GetPartOfSpeech() string {
+	if x != nil {
+		return x.PartOfSpeech
+	}
+	return ""
+}
+
+func (x *WordDefinition) GetDefinition() string {
+	if x != nil {
+		return x.Definition
+	}
+	return ""
+}
+
+func (x *WordDefinition) GetExamples() []string {
+	if x != nil {
+		return x.Examples
+	}
+	return nil
+}
+
+func (x *WordDefinition) GetSynonyms() []string {
+	if x != nil {
+		return x.Synonyms
+	}
+	return nil
+}
+
+func (x *WordDefinition) GetPronunciation() string {
+	if x != nil {
+		return x.Pronunciation
+	}
+	return ""
+}
+
+type LookupWordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Word          string                 `protobuf:"bytes,1,opt,name=word,proto3" json:"word,omitempty"`
+	Definitions   []*WordDefinition      `protobuf:"bytes,2,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	Source        string                 `protobuf:"bytes,3,opt,name=source,proto3" json:"source,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *LookupWordResponse) Reset() {
+	*x = LookupWordResponse{}
+	mi := &file_api_v1_notebook_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *LookupWordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*LookupWordResponse) ProtoMessage() {}
+
+func (x *LookupWordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use LookupWordResponse.ProtoReflect.Descriptor instead.
+func (*LookupWordResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *LookupWordResponse) GetWord() string {
+	if x != nil {
+		return x.Word
+	}
+	return ""
+}
+
+func (x *LookupWordResponse) GetDefinitions() []*WordDefinition {
+	if x != nil {
+		return x.Definitions
+	}
+	return nil
+}
+
+func (x *LookupWordResponse) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
+type RegisterDefinitionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NotebookId    string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	NotebookFile  string                 `protobuf:"bytes,2,opt,name=notebook_file,json=notebookFile,proto3" json:"notebook_file,omitempty"`
+	SceneIndex    int32                  `protobuf:"varint,3,opt,name=scene_index,json=sceneIndex,proto3" json:"scene_index,omitempty"`
+	Expression    string                 `protobuf:"bytes,4,opt,name=expression,proto3" json:"expression,omitempty"`
+	Meaning       string                 `protobuf:"bytes,5,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	PartOfSpeech  string                 `protobuf:"bytes,6,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
+	Examples      []string               `protobuf:"bytes,7,rep,name=examples,proto3" json:"examples,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterDefinitionRequest) Reset() {
+	*x = RegisterDefinitionRequest{}
+	mi := &file_api_v1_notebook_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterDefinitionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterDefinitionRequest) ProtoMessage() {}
+
+func (x *RegisterDefinitionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterDefinitionRequest.ProtoReflect.Descriptor instead.
+func (*RegisterDefinitionRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *RegisterDefinitionRequest) GetNotebookId() string {
+	if x != nil {
+		return x.NotebookId
+	}
+	return ""
+}
+
+func (x *RegisterDefinitionRequest) GetNotebookFile() string {
+	if x != nil {
+		return x.NotebookFile
+	}
+	return ""
+}
+
+func (x *RegisterDefinitionRequest) GetSceneIndex() int32 {
+	if x != nil {
+		return x.SceneIndex
+	}
+	return 0
+}
+
+func (x *RegisterDefinitionRequest) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
+func (x *RegisterDefinitionRequest) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *RegisterDefinitionRequest) GetPartOfSpeech() string {
+	if x != nil {
+		return x.PartOfSpeech
+	}
+	return ""
+}
+
+func (x *RegisterDefinitionRequest) GetExamples() []string {
+	if x != nil {
+		return x.Examples
+	}
+	return nil
+}
+
+type RegisterDefinitionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RegisterDefinitionResponse) Reset() {
+	*x = RegisterDefinitionResponse{}
+	mi := &file_api_v1_notebook_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RegisterDefinitionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RegisterDefinitionResponse) ProtoMessage() {}
+
+func (x *RegisterDefinitionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RegisterDefinitionResponse.ProtoReflect.Descriptor instead.
+func (*RegisterDefinitionResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{14}
+}
+
 var File_api_v1_notebook_proto protoreflect.FileDescriptor
 
 const file_api_v1_notebook_proto_rawDesc = "" +
@@ -709,12 +1041,15 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\rStoryMetadata\x12\x16\n" +
 	"\x06series\x18\x01 \x01(\tR\x06series\x12\x16\n" +
 	"\x06season\x18\x02 \x01(\x05R\x06season\x12\x18\n" +
-	"\aepisode\x18\x03 \x01(\x05R\aepisode\"\x96\x01\n" +
+	"\aepisode\x18\x03 \x01(\x05R\aepisode\"\xb6\x01\n" +
 	"\n" +
 	"StoryScene\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12:\n" +
 	"\rconversations\x18\x02 \x03(\v2\x14.api.v1.ConversationR\rconversations\x126\n" +
-	"\vdefinitions\x18\x03 \x03(\v2\x14.api.v1.NotebookWordR\vdefinitions\">\n" +
+	"\vdefinitions\x18\x03 \x03(\v2\x14.api.v1.NotebookWordR\vdefinitions\x12\x1e\n" +
+	"\n" +
+	"statements\x18\x05 \x03(\tR\n" +
+	"statements\">\n" +
 	"\fConversation\x12\x18\n" +
 	"\aspeaker\x18\x01 \x01(\tR\aspeaker\x12\x14\n" +
 	"\x05quote\x18\x02 \x01(\tR\x05quote\"\xc1\x03\n" +
@@ -750,10 +1085,43 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\x19ExportNotebookPDFResponse\x12\x1f\n" +
 	"\vpdf_content\x18\x01 \x01(\fR\n" +
 	"pdfContent\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename2\xc5\x01\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"k\n" +
+	"\x11LookupWordRequest\x12\x1b\n" +
+	"\x04word\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04word\x12\x1f\n" +
+	"\vnotebook_id\x18\x02 \x01(\tR\n" +
+	"notebookId\x12\x18\n" +
+	"\acontext\x18\x03 \x01(\tR\acontext\"\xb4\x01\n" +
+	"\x0eWordDefinition\x12$\n" +
+	"\x0epart_of_speech\x18\x01 \x01(\tR\fpartOfSpeech\x12\x1e\n" +
+	"\n" +
+	"definition\x18\x02 \x01(\tR\n" +
+	"definition\x12\x1a\n" +
+	"\bexamples\x18\x03 \x03(\tR\bexamples\x12\x1a\n" +
+	"\bsynonyms\x18\x04 \x03(\tR\bsynonyms\x12$\n" +
+	"\rpronunciation\x18\x05 \x01(\tR\rpronunciation\"z\n" +
+	"\x12LookupWordResponse\x12\x12\n" +
+	"\x04word\x18\x01 \x01(\tR\x04word\x128\n" +
+	"\vdefinitions\x18\x02 \x03(\v2\x16.api.v1.WordDefinitionR\vdefinitions\x12\x16\n" +
+	"\x06source\x18\x03 \x01(\tR\x06source\"\x99\x02\n" +
+	"\x19RegisterDefinitionRequest\x12(\n" +
+	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"notebookId\x12#\n" +
+	"\rnotebook_file\x18\x02 \x01(\tR\fnotebookFile\x12\x1f\n" +
+	"\vscene_index\x18\x03 \x01(\x05R\n" +
+	"sceneIndex\x12'\n" +
+	"\n" +
+	"expression\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"expression\x12!\n" +
+	"\ameaning\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\ameaning\x12$\n" +
+	"\x0epart_of_speech\x18\x06 \x01(\tR\fpartOfSpeech\x12\x1a\n" +
+	"\bexamples\x18\a \x03(\tR\bexamples\"\x1c\n" +
+	"\x1aRegisterDefinitionResponse2\xe7\x02\n" +
 	"\x0fNotebookService\x12X\n" +
 	"\x11GetNotebookDetail\x12 .api.v1.GetNotebookDetailRequest\x1a!.api.v1.GetNotebookDetailResponse\x12X\n" +
-	"\x11ExportNotebookPDF\x12 .api.v1.ExportNotebookPDFRequest\x1a!.api.v1.ExportNotebookPDFResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x11ExportNotebookPDF\x12 .api.v1.ExportNotebookPDFRequest\x1a!.api.v1.ExportNotebookPDFResponse\x12C\n" +
+	"\n" +
+	"LookupWord\x12\x19.api.v1.LookupWordRequest\x1a\x1a.api.v1.LookupWordResponse\x12[\n" +
+	"\x12RegisterDefinition\x12!.api.v1.RegisterDefinitionRequest\x1a\".api.v1.RegisterDefinitionResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_notebook_proto_rawDescOnce sync.Once
@@ -767,35 +1135,45 @@ func file_api_v1_notebook_proto_rawDescGZIP() []byte {
 	return file_api_v1_notebook_proto_rawDescData
 }
 
-var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_api_v1_notebook_proto_goTypes = []any{
-	(*GetNotebookDetailRequest)(nil),  // 0: api.v1.GetNotebookDetailRequest
-	(*GetNotebookDetailResponse)(nil), // 1: api.v1.GetNotebookDetailResponse
-	(*StoryEntry)(nil),                // 2: api.v1.StoryEntry
-	(*StoryMetadata)(nil),             // 3: api.v1.StoryMetadata
-	(*StoryScene)(nil),                // 4: api.v1.StoryScene
-	(*Conversation)(nil),              // 5: api.v1.Conversation
-	(*NotebookWord)(nil),              // 6: api.v1.NotebookWord
-	(*LearningLogEntry)(nil),          // 7: api.v1.LearningLogEntry
-	(*ExportNotebookPDFRequest)(nil),  // 8: api.v1.ExportNotebookPDFRequest
-	(*ExportNotebookPDFResponse)(nil), // 9: api.v1.ExportNotebookPDFResponse
+	(*GetNotebookDetailRequest)(nil),   // 0: api.v1.GetNotebookDetailRequest
+	(*GetNotebookDetailResponse)(nil),  // 1: api.v1.GetNotebookDetailResponse
+	(*StoryEntry)(nil),                 // 2: api.v1.StoryEntry
+	(*StoryMetadata)(nil),              // 3: api.v1.StoryMetadata
+	(*StoryScene)(nil),                 // 4: api.v1.StoryScene
+	(*Conversation)(nil),               // 5: api.v1.Conversation
+	(*NotebookWord)(nil),               // 6: api.v1.NotebookWord
+	(*LearningLogEntry)(nil),           // 7: api.v1.LearningLogEntry
+	(*ExportNotebookPDFRequest)(nil),   // 8: api.v1.ExportNotebookPDFRequest
+	(*ExportNotebookPDFResponse)(nil),  // 9: api.v1.ExportNotebookPDFResponse
+	(*LookupWordRequest)(nil),          // 10: api.v1.LookupWordRequest
+	(*WordDefinition)(nil),             // 11: api.v1.WordDefinition
+	(*LookupWordResponse)(nil),         // 12: api.v1.LookupWordResponse
+	(*RegisterDefinitionRequest)(nil),  // 13: api.v1.RegisterDefinitionRequest
+	(*RegisterDefinitionResponse)(nil), // 14: api.v1.RegisterDefinitionResponse
 }
 var file_api_v1_notebook_proto_depIdxs = []int32{
-	2, // 0: api.v1.GetNotebookDetailResponse.stories:type_name -> api.v1.StoryEntry
-	3, // 1: api.v1.StoryEntry.metadata:type_name -> api.v1.StoryMetadata
-	4, // 2: api.v1.StoryEntry.scenes:type_name -> api.v1.StoryScene
-	5, // 3: api.v1.StoryScene.conversations:type_name -> api.v1.Conversation
-	6, // 4: api.v1.StoryScene.definitions:type_name -> api.v1.NotebookWord
-	7, // 5: api.v1.NotebookWord.learned_logs:type_name -> api.v1.LearningLogEntry
-	0, // 6: api.v1.NotebookService.GetNotebookDetail:input_type -> api.v1.GetNotebookDetailRequest
-	8, // 7: api.v1.NotebookService.ExportNotebookPDF:input_type -> api.v1.ExportNotebookPDFRequest
-	1, // 8: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
-	9, // 9: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
-	8, // [8:10] is the sub-list for method output_type
-	6, // [6:8] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	2,  // 0: api.v1.GetNotebookDetailResponse.stories:type_name -> api.v1.StoryEntry
+	3,  // 1: api.v1.StoryEntry.metadata:type_name -> api.v1.StoryMetadata
+	4,  // 2: api.v1.StoryEntry.scenes:type_name -> api.v1.StoryScene
+	5,  // 3: api.v1.StoryScene.conversations:type_name -> api.v1.Conversation
+	6,  // 4: api.v1.StoryScene.definitions:type_name -> api.v1.NotebookWord
+	7,  // 5: api.v1.NotebookWord.learned_logs:type_name -> api.v1.LearningLogEntry
+	11, // 6: api.v1.LookupWordResponse.definitions:type_name -> api.v1.WordDefinition
+	0,  // 7: api.v1.NotebookService.GetNotebookDetail:input_type -> api.v1.GetNotebookDetailRequest
+	8,  // 8: api.v1.NotebookService.ExportNotebookPDF:input_type -> api.v1.ExportNotebookPDFRequest
+	10, // 9: api.v1.NotebookService.LookupWord:input_type -> api.v1.LookupWordRequest
+	13, // 10: api.v1.NotebookService.RegisterDefinition:input_type -> api.v1.RegisterDefinitionRequest
+	1,  // 11: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
+	9,  // 12: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
+	12, // 13: api.v1.NotebookService.LookupWord:output_type -> api.v1.LookupWordResponse
+	14, // 14: api.v1.NotebookService.RegisterDefinition:output_type -> api.v1.RegisterDefinitionResponse
+	11, // [11:15] is the sub-list for method output_type
+	7,  // [7:11] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_notebook_proto_init() }
@@ -809,7 +1187,7 @@ func file_api_v1_notebook_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_notebook_proto_rawDesc), len(file_api_v1_notebook_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

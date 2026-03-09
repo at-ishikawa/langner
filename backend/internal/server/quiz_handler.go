@@ -33,11 +33,10 @@ type QuizHandler struct {
 // NewQuizHandler creates a new QuizHandler.
 func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 	return &QuizHandler{
-		svc:           svc,
-		noteStore:     make(map[int64]quiz.Card),
-		reverseStore:  make(map[int64]quiz.ReverseCard),
-		freeformCards: nil,
-		nextID:        1,
+		svc:          svc,
+		noteStore:    make(map[int64]quiz.Card),
+		reverseStore: make(map[int64]quiz.ReverseCard),
+		nextID:       1,
 	}
 }
 
@@ -65,6 +64,7 @@ func (h *QuizHandler) GetQuizOptions(
 			NotebookId:  s.NotebookID,
 			Name:        s.Name,
 			ReviewCount: int32(s.ReviewCount),
+			Kind:        s.Kind,
 		})
 	}
 

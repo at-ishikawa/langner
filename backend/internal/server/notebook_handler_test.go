@@ -28,6 +28,8 @@ func newTestNotebookHandler(t *testing.T) *NotebookHandler {
 		},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
+		nil,
+		nil,
 	)
 }
 
@@ -74,6 +76,8 @@ notebooks:
 		},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
+		nil,
+		nil,
 	), learningDir
 }
 
@@ -314,6 +318,8 @@ notebooks:
 		},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
+		nil,
+		nil,
 	)
 
 	resp, err := handler.GetNotebookDetail(
@@ -326,4 +332,118 @@ notebooks:
 	connectErr, ok := err.(*connect.Error)
 	require.True(t, ok)
 	assert.Equal(t, connect.CodeInternal, connectErr.Code())
+}
+
+func TestNotebookHandler_LookupWord_FromCache(t *testing.T) {
+	dictionaryMap := map[string]rapidapi.Response{
+		"break": {
+			Results: []rapidapi.Result{
+				{PartOfSpeech: "verb", Definition: "to separate into pieces", Examples: []string{"she broke the ice"}},
+			},
+		},
+	}
+
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{},
+		config.TemplatesConfig{},
+		dictionaryMap,
+		nil,
+		nil,
+	)
+
+	resp, err := handler.LookupWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.LookupWordRequest{Word: "break"}),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "break", resp.Msg.GetWord())
+	assert.Equal(t, "dictionary", resp.Msg.GetSource())
+	require.Len(t, resp.Msg.GetDefinitions(), 1)
+	assert.Equal(t, "verb", resp.Msg.GetDefinitions()[0].GetPartOfSpeech())
+}
+
+func TestNotebookHandler_LookupWord_NotFound(t *testing.T) {
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{},
+		config.TemplatesConfig{},
+		make(map[string]rapidapi.Response),
+		nil,
+		nil,
+	)
+
+	resp, err := handler.LookupWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.LookupWordRequest{Word: "unknownword"}),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, "unknownword", resp.Msg.GetWord())
+	assert.Empty(t, resp.Msg.GetDefinitions())
+}
+
+func TestNotebookHandler_RegisterDefinition(t *testing.T) {
+	defsDir := t.TempDir()
+
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{
+			DefinitionsDirectories: []string{defsDir},
+		},
+		config.TemplatesConfig{},
+		make(map[string]rapidapi.Response),
+		nil,
+		nil,
+	)
+
+	resp, err := handler.RegisterDefinition(
+		context.Background(),
+		connect.NewRequest(&apiv1.RegisterDefinitionRequest{
+			NotebookId:   "mybook",
+			NotebookFile: "001-chapter-1.yml",
+			SceneIndex:   0,
+			Expression:   "lose one's temper",
+			Meaning:      "to become very angry",
+			PartOfSpeech: "phrase",
+		}),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Verify the definitions file was written
+	data, err := os.ReadFile(filepath.Join(defsDir, "mybook.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "lose one's temper")
+	assert.Contains(t, string(data), "001-chapter-1.yml")
+}
+
+func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
+	defsDir := t.TempDir()
+
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{
+			DefinitionsDirectories: []string{defsDir},
+		},
+		config.TemplatesConfig{},
+		make(map[string]rapidapi.Response),
+		nil,
+		nil,
+	)
+
+	// Path traversal input is sanitized by filepath.Base; the write goes to defsDir/passwd.yml (safe)
+	_, err := handler.RegisterDefinition(
+		context.Background(),
+		connect.NewRequest(&apiv1.RegisterDefinitionRequest{
+			NotebookId: "../../etc/passwd",
+			Expression: "test",
+			Meaning:    "test meaning",
+		}),
+	)
+
+	require.NoError(t, err)
+	// Verify it wrote to defsDir/passwd.yml, not to /etc/passwd
+	_, statErr := os.Stat(filepath.Join(defsDir, "passwd.yml"))
+	assert.NoError(t, statErr, "file should be written inside defsDir, not the traversal path")
 }

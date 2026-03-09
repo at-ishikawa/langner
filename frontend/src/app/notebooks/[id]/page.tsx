@@ -70,6 +70,13 @@ function isFlatStory(story: StoryEntry): boolean {
   return story.scenes.length === 1 && !story.scenes[0].title;
 }
 
+// Check if notebook is a book (has scenes with statements)
+function isBookNotebook(data: GetNotebookDetailResponse): boolean {
+  return data.stories.some((story) =>
+    story.scenes.some((scene) => scene.statements.length > 0),
+  );
+}
+
 export default function NotebookDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -204,13 +211,22 @@ export default function NotebookDetailPage() {
               {data.totalWordCount} words
             </Text>
           </Box>
-          <Button
-            size="sm"
-            colorPalette="blue"
-            onClick={() => setPdfOpen(true)}
-          >
-            Export PDF
-          </Button>
+          <Box display="flex" gap={2}>
+            {isBookNotebook(data) && (
+              <Link href={`/books/${id}`}>
+                <Button size="sm" variant="outline">
+                  Read Book
+                </Button>
+              </Link>
+            )}
+            <Button
+              size="sm"
+              colorPalette="blue"
+              onClick={() => setPdfOpen(true)}
+            >
+              Export PDF
+            </Button>
+          </Box>
         </Box>
         <Box mt={3}>
           <select

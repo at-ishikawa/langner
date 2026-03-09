@@ -8,13 +8,17 @@ import (
 	"path/filepath"
 	"strings"
 
+	"log/slog"
+
 	"connectrpc.com/connect"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/assets"
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/pdf"
 )
@@ -22,17 +26,21 @@ import (
 // NotebookHandler implements the NotebookServiceHandler interface.
 type NotebookHandler struct {
 	apiv1connect.UnimplementedNotebookServiceHandler
-	notebooksConfig config.NotebooksConfig
-	templatesConfig config.TemplatesConfig
-	dictionaryMap   map[string]rapidapi.Response
+	notebooksConfig  config.NotebooksConfig
+	templatesConfig  config.TemplatesConfig
+	dictionaryMap    map[string]rapidapi.Response
+	dictionaryReader *dictionary.Reader
+	openaiClient     inference.Client
 }
 
 // NewNotebookHandler creates a new NotebookHandler.
-func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response) *NotebookHandler {
+func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client) *NotebookHandler {
 	return &NotebookHandler{
-		notebooksConfig: notebooksConfig,
-		templatesConfig: templatesConfig,
-		dictionaryMap:   dictionaryMap,
+		notebooksConfig:  notebooksConfig,
+		templatesConfig:  templatesConfig,
+		dictionaryMap:    dictionaryMap,
+		dictionaryReader: dictionaryReader,
+		openaiClient:     openaiClient,
 	}
 }
 
@@ -149,6 +157,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 				Title:         scene.Title,
 				Conversations: conversations,
 				Definitions:   definitions,
+				Statements:    scene.Statements,
 			})
 		}
 
@@ -356,4 +365,162 @@ func (h *NotebookHandler) ExportNotebookPDF(
 		PdfContent: pdfContent,
 		Filename:   notebookID + ".pdf",
 	}), nil
+}
+
+// LookupWord looks up a word definition using dictionary cache, RapidAPI, or OpenAI.
+func (h *NotebookHandler) LookupWord(
+	ctx context.Context,
+	req *connect.Request[apiv1.LookupWordRequest],
+) (*connect.Response[apiv1.LookupWordResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	word := req.Msg.GetWord()
+
+	if resp, ok := h.dictionaryMap[word]; ok {
+		return connect.NewResponse(rapidAPIToLookupResponse(word, resp, "dictionary")), nil
+	}
+
+	if h.dictionaryReader != nil {
+		resp, err := h.dictionaryReader.Lookup(ctx, word)
+		if err != nil {
+			slog.Warn("dictionary lookup failed", "word", word, "error", err)
+		} else if len(resp.Results) > 0 {
+			return connect.NewResponse(rapidAPIToLookupResponse(word, resp, "dictionary")), nil
+		}
+	}
+
+	if h.openaiClient != nil {
+		aiResp, err := h.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
+			Expressions: []inference.Expression{{
+				Expression: word,
+				Meaning:    "",
+				Contexts: []inference.Context{{
+					Context: req.Msg.GetContext(),
+				}},
+			}},
+		})
+		if err != nil {
+			slog.Warn("openai word lookup failed", "word", word, "error", err)
+		} else if len(aiResp.Answers) > 0 && aiResp.Answers[0].Meaning != "" {
+			return connect.NewResponse(&apiv1.LookupWordResponse{
+				Word: word,
+				Definitions: []*apiv1.WordDefinition{{
+					Definition: aiResp.Answers[0].Meaning,
+				}},
+				Source: "openai",
+			}), nil
+		}
+	}
+
+	return connect.NewResponse(&apiv1.LookupWordResponse{Word: word}), nil
+}
+
+func rapidAPIToLookupResponse(word string, resp rapidapi.Response, source string) *apiv1.LookupWordResponse {
+	var defs []*apiv1.WordDefinition
+	for _, r := range resp.Results {
+		defs = append(defs, &apiv1.WordDefinition{
+			PartOfSpeech:  r.PartOfSpeech,
+			Definition:    r.Definition,
+			Examples:      r.Examples,
+			Synonyms:      r.Synonyms,
+			Pronunciation: resp.Pronunciation.All,
+		})
+	}
+	return &apiv1.LookupWordResponse{
+		Word:        word,
+		Definitions: defs,
+		Source:      source,
+	}
+}
+
+// RegisterDefinition adds a definition to a book's definitions file.
+func (h *NotebookHandler) RegisterDefinition(
+	ctx context.Context,
+	req *connect.Request[apiv1.RegisterDefinitionRequest],
+) (*connect.Response[apiv1.RegisterDefinitionResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	notebookID := filepath.Base(req.Msg.GetNotebookId())
+	if notebookID == "." || notebookID == ".." || strings.ContainsAny(notebookID, "/\\") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	}
+	notebookFile := req.Msg.GetNotebookFile()
+	sceneIndex := int(req.Msg.GetSceneIndex())
+	expression := req.Msg.GetExpression()
+	meaning := req.Msg.GetMeaning()
+
+	defsDir := "notebooks/definitions"
+	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
+		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
+	}
+
+	if err := os.MkdirAll(defsDir, 0755); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create definitions directory: %w", err))
+	}
+
+	filePath := filepath.Join(defsDir, notebookID+".yml")
+
+	newNote := notebook.Note{
+		Expression:   expression,
+		Meaning:      meaning,
+		PartOfSpeech: req.Msg.GetPartOfSpeech(),
+		Examples:     req.Msg.GetExamples(),
+	}
+
+	var definitions []notebook.Definitions
+
+	if data, err := os.ReadFile(filePath); err == nil && len(data) > 0 {
+		existing, err := notebook.ReadDefinitionsFromBytes(data)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read existing definitions: %w", err))
+		}
+		definitions = existing
+	}
+
+	found := false
+	for i, def := range definitions {
+		key := def.Metadata.Notebook
+		if key == "" {
+			key = def.Metadata.Title
+		}
+		if key != notebookFile {
+			continue
+		}
+		found = true
+		sceneFound := false
+		for j, scene := range def.Scenes {
+			if scene.Metadata.GetIndex() == sceneIndex {
+				definitions[i].Scenes[j].Expressions = append(definitions[i].Scenes[j].Expressions, newNote)
+				sceneFound = true
+				break
+			}
+		}
+		if !sceneFound {
+			definitions[i].Scenes = append(definitions[i].Scenes, notebook.DefinitionsScene{
+				Metadata:    notebook.DefinitionsSceneMetadata{Index: sceneIndex},
+				Expressions: []notebook.Note{newNote},
+			})
+		}
+		break
+	}
+
+	if !found {
+		definitions = append(definitions, notebook.Definitions{
+			Metadata: notebook.DefinitionsMetadata{Notebook: notebookFile},
+			Scenes: []notebook.DefinitionsScene{{
+				Metadata:    notebook.DefinitionsSceneMetadata{Index: sceneIndex},
+				Expressions: []notebook.Note{newNote},
+			}},
+		})
+	}
+
+	if err := notebook.WriteYamlFile(filePath, definitions); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions file: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }

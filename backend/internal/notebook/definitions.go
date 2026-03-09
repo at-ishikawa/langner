@@ -1,11 +1,14 @@
 package notebook
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Definitions represents a definitions file for a book/story
@@ -39,6 +42,15 @@ func (m DefinitionsSceneMetadata) GetIndex() int {
 		return *m.Scene
 	}
 	return m.Index
+}
+
+// ReadDefinitionsFromBytes parses a YAML byte slice into a slice of Definitions.
+func ReadDefinitionsFromBytes(data []byte) ([]Definitions, error) {
+	var result []Definitions
+	if err := yaml.NewDecoder(bytes.NewReader(data)).Decode(&result); err != nil {
+		return nil, fmt.Errorf("yaml.Decode: %w", err)
+	}
+	return result, nil
 }
 
 // DefinitionsMap is a map of book ID -> notebook file -> scene index -> definitions
