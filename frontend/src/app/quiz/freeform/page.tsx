@@ -251,6 +251,16 @@ export default function FreeformQuizPage() {
             Check Answer
           </Button>
 
+          {freeformResults.length > 0 && (
+            <Button
+              colorPalette="green"
+              variant="outline"
+              onClick={() => router.push("/quiz/complete")}
+            >
+              See Results
+            </Button>
+          )}
+
           <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center">
             {wordCount} words available in your notebooks
           </Text>
