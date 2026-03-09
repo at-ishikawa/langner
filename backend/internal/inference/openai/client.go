@@ -61,6 +61,34 @@ const (
 	RoleAssistant Role = "assistant"
 )
 
+const lookupWordSystemPrompt = `You are a dictionary API. Given a word or expression and optional context, return a JSON array of definitions.
+
+Each definition object must have:
+- "part_of_speech": e.g. "noun", "verb", "adjective", "idiom", "phrasal verb"
+- "definition": clear, concise definition
+- "pronunciation": IPA pronunciation string (e.g. "/ˈwɜːrd/"), omit if uncertain
+- "examples": array of 1-2 example sentences using the word
+- "synonyms": array of synonyms (up to 5), empty array if none
+- "antonyms": array of antonyms (up to 3), empty array if none
+- "origin": brief etymology or origin note, omit if uncertain
+
+Return multiple definitions if the word has multiple senses or parts of speech.
+If context is provided, rank the most contextually relevant definition first.
+Return ONLY valid JSON. No text outside the JSON array.
+
+Example output format:
+[
+  {
+    "part_of_speech": "noun",
+    "definition": "a brief, comprehensive summary",
+    "pronunciation": "/ˈsɪnəpsɪs/",
+    "examples": ["She gave a synopsis of the film.", "The synopsis covered the main plot points."],
+    "synonyms": ["summary", "outline", "overview"],
+    "antonyms": [],
+    "origin": "from Greek synopsisthai, meaning 'to see together'"
+  }
+]`
+
 type ChatCompletionResponse struct {
 	ID      string   `json:"id"`
 	Object  string   `json:"object"`
@@ -835,34 +863,6 @@ func (client *Client) lookupWord(
 	ctx context.Context,
 	params inference.LookupWordRequest,
 ) (inference.LookupWordResponse, error) {
-	systemPrompt := `You are a dictionary API. Given a word or expression and optional context, return a JSON array of definitions.
-
-Each definition object must have:
-- "part_of_speech": e.g. "noun", "verb", "adjective", "idiom", "phrasal verb"
-- "definition": clear, concise definition
-- "pronunciation": IPA pronunciation string (e.g. "/ˈwɜːrd/"), omit if uncertain
-- "examples": array of 1-2 example sentences using the word
-- "synonyms": array of synonyms (up to 5), empty array if none
-- "antonyms": array of antonyms (up to 3), empty array if none
-- "origin": brief etymology or origin note, omit if uncertain
-
-Return multiple definitions if the word has multiple senses or parts of speech.
-If context is provided, rank the most contextually relevant definition first.
-Return ONLY valid JSON. No text outside the JSON array.
-
-Example output format:
-[
-  {
-    "part_of_speech": "noun",
-    "definition": "a brief, comprehensive summary",
-    "pronunciation": "/ˈsɪnəpsɪs/",
-    "examples": ["She gave a synopsis of the film.", "The synopsis covered the main plot points."],
-    "synonyms": ["summary", "outline", "overview"],
-    "antonyms": [],
-    "origin": "from Greek synopsisthai, meaning 'to see together'"
-  }
-]`
-
 	contextLine := ""
 	if params.Context != "" {
 		contextLine = fmt.Sprintf("\nContext: %s", params.Context)
@@ -873,7 +873,7 @@ Example output format:
 		Model:       client.model,
 		Temperature: 0.2,
 		Messages: []Message{
-			{Role: RoleSystem, Content: systemPrompt},
+			{Role: RoleSystem, Content: lookupWordSystemPrompt},
 			{Role: RoleUser, Content: userMessage},
 		},
 	}

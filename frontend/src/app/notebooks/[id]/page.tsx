@@ -106,8 +106,9 @@ function highlightExcerpt(
     "gi",
   );
   const parts = excerpt.split(regex);
+  // split() with a capturing group returns matched parts at odd indices
   return parts.map((part, i) =>
-    regex.test(part) ? (
+    i % 2 === 1 ? (
       <Text as="span" key={i} fontWeight="bold" color="blue.600">
         {part}
       </Text>
@@ -128,7 +129,7 @@ export default function NotebookDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const [manuallySelectedStory, setSelectedStory] = useState<StoryEntry | null>(null);
+  const [pickedStory, setPickedStory] = useState<StoryEntry | null>(null);
   const [pdfOpen, setPdfOpen] = useState(false);
 
   useEffect(() => {
@@ -142,7 +143,7 @@ export default function NotebookDetailPage() {
   // Deep-link to chapter from search params — derived without a setState effect
   const chapter = searchParams.get("chapter");
   const selectedStory =
-    manuallySelectedStory ??
+    pickedStory ??
     (data && chapter
       ? (data.stories.find((s) => s.event === chapter) ?? null)
       : null);
@@ -176,7 +177,7 @@ export default function NotebookDetailPage() {
             color="blue.600"
             fontSize="sm"
             cursor="pointer"
-            onClick={() => setSelectedStory(null)}
+            onClick={() => setPickedStory(null)}
           >
             &larr; {data.name}
           </Text>
@@ -312,7 +313,7 @@ export default function NotebookDetailPage() {
               borderRadius="md"
               cursor="pointer"
               _hover={{ bg: "bg.muted" }}
-              onClick={() => setSelectedStory(story)}
+              onClick={() => setPickedStory(story)}
               display="flex"
               justifyContent="space-between"
               alignItems="center"

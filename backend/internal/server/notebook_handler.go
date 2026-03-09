@@ -443,6 +443,19 @@ func rapidAPIToLookupResponse(word string, resp rapidapi.Response, source string
 	}
 }
 
+// resolveDefinitionsFilePath validates the notebookID and returns the path to its definitions YAML file.
+func (h *NotebookHandler) resolveDefinitionsFilePath(notebookIDRaw string) (string, error) {
+	notebookID := filepath.Base(notebookIDRaw)
+	if notebookID == "." || notebookID == ".." || strings.ContainsAny(notebookID, "/\\") {
+		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	}
+	defsDir := "notebooks/definitions"
+	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
+		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
+	}
+	return filepath.Join(defsDir, notebookID+".yml"), nil
+}
+
 // RegisterDefinition adds a definition to a book's definitions file.
 func (h *NotebookHandler) RegisterDefinition(
 	ctx context.Context,
@@ -452,25 +465,18 @@ func (h *NotebookHandler) RegisterDefinition(
 		return nil, err
 	}
 
-	notebookID := filepath.Base(req.Msg.GetNotebookId())
-	if notebookID == "." || notebookID == ".." || strings.ContainsAny(notebookID, "/\\") {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	filePath, err := h.resolveDefinitionsFilePath(req.Msg.GetNotebookId())
+	if err != nil {
+		return nil, err
 	}
 	notebookFile := req.Msg.GetNotebookFile()
 	sceneIndex := int(req.Msg.GetSceneIndex())
 	expression := req.Msg.GetExpression()
 	meaning := req.Msg.GetMeaning()
 
-	defsDir := "notebooks/definitions"
-	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
-		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
-	}
-
-	if err := os.MkdirAll(defsDir, 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create definitions directory: %w", err))
 	}
-
-	filePath := filepath.Join(defsDir, notebookID+".yml")
 
 	newNote := notebook.Note{
 		Expression:   expression,
@@ -542,20 +548,13 @@ func (h *NotebookHandler) DeleteDefinition(
 		return nil, err
 	}
 
-	notebookID := filepath.Base(req.Msg.GetNotebookId())
-	if notebookID == "." || notebookID == ".." || strings.ContainsAny(notebookID, "/\\") {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	filePath, err := h.resolveDefinitionsFilePath(req.Msg.GetNotebookId())
+	if err != nil {
+		return nil, err
 	}
 	notebookFile := req.Msg.GetNotebookFile()
 	sceneIndex := int(req.Msg.GetSceneIndex())
 	expression := req.Msg.GetExpression()
-
-	defsDir := "notebooks/definitions"
-	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
-		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
-	}
-
-	filePath := filepath.Join(defsDir, notebookID+".yml")
 
 	data, err := os.ReadFile(filePath)
 	if err != nil {

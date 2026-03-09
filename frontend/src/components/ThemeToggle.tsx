@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { Box, Text } from "@chakra-ui/react";
+import { Box } from "@chakra-ui/react";
 
 const options = [
   { value: "light", label: "☀️", title: "Light" },
@@ -31,7 +31,7 @@ export function ThemeToggle() {
           onClick={() => setTheme(opt.value)}
           title={opt.title}
         >
-          <Text>{opt.label}</Text>
+          {opt.label}
         </Box>
       ))}
     </Box>
