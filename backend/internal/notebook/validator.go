@@ -146,6 +146,9 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// Create missing learning note entries
 	fixedLearning = v.createMissingLearningNotes(fixedLearning, storyNotebooks, result)
 
+	// Recalculate interval_days for all expressions
+	fixedLearning = v.fixIntervalDays(fixedLearning, result)
+
 	// Fix dictionary reference issues
 	fixedStory := v.fixDictionaryReferences(storyNotebooks, result)
 
@@ -446,11 +449,11 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						// Merge learning logs into the existing expression
 						if len(expr.LearnedLogs) > 0 {
 							mergedExpressions[existingIdx].LearnedLogs = append(mergedExpressions[existingIdx].LearnedLogs, expr.LearnedLogs...)
-							mergedExpressions[existingIdx].EasinessFactor, mergedExpressions[existingIdx].LearnedLogs = recalculateLearningLogs(mergedExpressions[existingIdx].LearnedLogs)
+							mergedExpressions[existingIdx].EasinessFactor, mergedExpressions[existingIdx].LearnedLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].LearnedLogs)
 						}
 						if len(expr.ReverseLogs) > 0 {
 							mergedExpressions[existingIdx].ReverseLogs = append(mergedExpressions[existingIdx].ReverseLogs, expr.ReverseLogs...)
-							mergedExpressions[existingIdx].ReverseEasinessFactor, mergedExpressions[existingIdx].ReverseLogs = recalculateLearningLogs(mergedExpressions[existingIdx].ReverseLogs)
+							mergedExpressions[existingIdx].ReverseEasinessFactor, mergedExpressions[existingIdx].ReverseLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].ReverseLogs)
 						}
 						result.AddWarning(ValidationError{
 							File:    file.path,
@@ -506,14 +509,14 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 										firstScene.Expressions[firstExprIdx].LearnedLogs,
 										expr.LearnedLogs...,
 									)
-									firstScene.Expressions[firstExprIdx].EasinessFactor, firstScene.Expressions[firstExprIdx].LearnedLogs = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs)
+									firstScene.Expressions[firstExprIdx].EasinessFactor, firstScene.Expressions[firstExprIdx].LearnedLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs)
 								}
 								if len(expr.ReverseLogs) > 0 {
 									firstScene.Expressions[firstExprIdx].ReverseLogs = append(
 										firstScene.Expressions[firstExprIdx].ReverseLogs,
 										expr.ReverseLogs...,
 									)
-									firstScene.Expressions[firstExprIdx].ReverseEasinessFactor, firstScene.Expressions[firstExprIdx].ReverseLogs = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs)
+									firstScene.Expressions[firstExprIdx].ReverseEasinessFactor, firstScene.Expressions[firstExprIdx].ReverseLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs)
 								}
 
 								// Mark this duplicate for removal
@@ -1105,24 +1108,39 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 }
 
 // recalculateLearningLogs sorts logs newest-first and replays the SM-2 algorithm
-// to compute the correct easiness factor from the merged logs.
-func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord) {
+// to compute the correct easiness factor and interval_days from the merged logs.
+// Returns the new easiness factor, updated logs, and whether any values changed.
+func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord, bool) {
 	// Sort by date ascending (oldest first) for replay
 	sort.Slice(logs, func(i, j int) bool {
 		return logs[i].LearnedAt.Before(logs[j].LearnedAt.Time)
 	})
 
-	// Replay SM-2 to recalculate easiness factor
+	// Replay SM-2 to recalculate easiness factor and interval_days
 	ef := DefaultEasinessFactor
 	correctStreak := 0
-	for _, log := range logs {
+	lastInterval := 0
+	changed := false
+	for i, log := range logs {
 		quality := log.Quality
+		// Fix inconsistency: misunderstood status must have quality < 3
+		if log.Status == LearnedStatusMisunderstood && quality >= 3 {
+			quality = 2
+			logs[i].Quality = quality
+			changed = true
+		}
 		if quality >= 3 {
 			correctStreak++
 		} else {
 			correctStreak = 0
 		}
 		ef = UpdateEasinessFactor(ef, quality, correctStreak)
+		nextInterval := CalculateNextInterval(lastInterval, ef, quality, correctStreak)
+		if logs[i].IntervalDays != nextInterval {
+			logs[i].IntervalDays = nextInterval
+			changed = true
+		}
+		lastInterval = nextInterval
 	}
 
 	// Re-sort by date descending (newest first) for storage
@@ -1130,7 +1148,62 @@ func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord) 
 		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
 	})
 
-	return ef, logs
+	return ef, logs, changed
+}
+
+// fixIntervalDays recalculates interval_days for all expressions in all learning histories.
+func (v *Validator) fixIntervalDays(learningFiles []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	for fileIdx := range learningFiles {
+		file := &learningFiles[fileIdx]
+		changed := 0
+		for histIdx := range file.contents {
+			hist := &file.contents[histIdx]
+			for exprIdx := range hist.Expressions {
+				expr := &hist.Expressions[exprIdx]
+				if len(expr.LearnedLogs) > 0 {
+					newEF, newLogs, c := recalculateLearningLogs(expr.LearnedLogs)
+					if c || newEF != expr.EasinessFactor {
+						changed++
+					}
+					expr.EasinessFactor, expr.LearnedLogs = newEF, newLogs
+				}
+				if len(expr.ReverseLogs) > 0 {
+					newEF, newLogs, c := recalculateLearningLogs(expr.ReverseLogs)
+					if c || newEF != expr.ReverseEasinessFactor {
+						changed++
+					}
+					expr.ReverseEasinessFactor, expr.ReverseLogs = newEF, newLogs
+				}
+			}
+			for sceneIdx := range hist.Scenes {
+				scene := &hist.Scenes[sceneIdx]
+				for exprIdx := range scene.Expressions {
+					expr := &scene.Expressions[exprIdx]
+					if len(expr.LearnedLogs) > 0 {
+						newEF, newLogs, c := recalculateLearningLogs(expr.LearnedLogs)
+						if c || newEF != expr.EasinessFactor {
+							changed++
+						}
+						expr.EasinessFactor, expr.LearnedLogs = newEF, newLogs
+					}
+					if len(expr.ReverseLogs) > 0 {
+						newEF, newLogs, c := recalculateLearningLogs(expr.ReverseLogs)
+						if c || newEF != expr.ReverseEasinessFactor {
+							changed++
+						}
+						expr.ReverseEasinessFactor, expr.ReverseLogs = newEF, newLogs
+					}
+				}
+			}
+		}
+		if changed > 0 {
+			result.AddWarning(ValidationError{
+				File:    file.path,
+				Message: fmt.Sprintf("Recalculated interval_days for %d expression(s) in %s", changed, file.path),
+			})
+		}
+	}
+	return learningFiles
 }
 
 // validateFlashcardNotebooks validates all flashcard notebook files
