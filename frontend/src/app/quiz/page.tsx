@@ -27,6 +27,7 @@ export default function QuizStartPage() {
   const setFlashcards = useQuizStore((s) => s.setFlashcards);
   const setReverseFlashcards = useQuizStore((s) => s.setReverseFlashcards);
   const setWordCount = useQuizStore((s) => s.setWordCount);
+  const setFreeformExpressions = useQuizStore((s) => s.setFreeformExpressions);
   const setQuizType = useQuizStore((s) => s.setQuizType);
 
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
@@ -113,6 +114,7 @@ export default function QuizStartPage() {
       } else if (quizType === "freeform") {
         const res = await quizClient.startFreeformQuiz({});
         setWordCount(res.wordCount);
+        setFreeformExpressions(res.expressions ?? []);
         router.push("/quiz/freeform");
       }
     } finally {
@@ -142,7 +144,7 @@ export default function QuizStartPage() {
     <Box p={4} maxW="md" mx="auto">
       <Box mb={2}>
         <Link href="/">
-          <Text color="blue.600" fontSize="sm">← Back</Text>
+          <Text color="blue.600" fontSize="sm" _dark={{ color: "blue.300" }}>← Back</Text>
         </Link>
       </Box>
       <Heading size="lg" mb={4}>Quiz</Heading>
@@ -162,9 +164,13 @@ export default function QuizStartPage() {
             onClick={() => handleQuizTypeChange(type.value)}
             bg={quizType === type.value ? "blue.50" : "white"}
             borderColor={quizType === type.value ? "blue.500" : "gray.200"}
+            _dark={{
+              bg: quizType === type.value ? "blue.900" : "gray.800",
+              borderColor: quizType === type.value ? "blue.400" : "gray.600",
+            }}
           >
             <Text fontWeight="medium">{type.label}</Text>
-            <Text fontSize="sm" color="gray.600">
+            <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
               {type.description}
             </Text>
           </Box>

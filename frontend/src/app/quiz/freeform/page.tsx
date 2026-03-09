@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -21,6 +21,7 @@ export default function FreeformQuizPage() {
   const wordCount = useQuizStore((s) => s.wordCount);
   const storeSubmitResult = useQuizStore((s) => s.submitFreeformResult);
   const freeformResults = useQuizStore((s) => s.freeformResults);
+  const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
   const reset = useQuizStore((s) => s.reset);
 
   const [word, setWord] = useState("");
@@ -32,6 +33,7 @@ export default function FreeformQuizPage() {
     meaning: string;
     reason: string;
     notebookName: string;
+    context: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef(Date.now());
@@ -43,6 +45,12 @@ export default function FreeformQuizPage() {
     }
     wordInputRef.current?.focus();
   }, [quizType, router]);
+
+  const wordFound = useMemo(() => {
+    if (!word.trim() || freeformExpressions.length === 0) return null;
+    const lower = word.trim().toLowerCase();
+    return freeformExpressions.some((e) => e.toLowerCase() === lower);
+  }, [word, freeformExpressions]);
 
   const handleSubmit = async () => {
     if (!word.trim() || !meaning.trim()) return;
@@ -65,6 +73,7 @@ export default function FreeformQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         notebookName: res.notebookName,
+        context: res.context,
       });
       storeSubmitResult({
         word: res.word,
@@ -73,6 +82,7 @@ export default function FreeformQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         notebookName: res.notebookName,
+        context: res.context,
       });
     } catch {
       setError("Failed to submit answer");
@@ -102,7 +112,7 @@ export default function FreeformQuizPage() {
         Freeform Quiz
       </Heading>
 
-      <Text mb={4} color="gray.600">
+      <Text mb={4} color="gray.600" _dark={{ color: "gray.400" }}>
         Type any word you&apos;re learning and its meaning
       </Text>
 
@@ -117,6 +127,7 @@ export default function FreeformQuizPage() {
             p={4}
             borderRadius="md"
             bg={feedback.correct ? "green.100" : "red.100"}
+            _dark={{ bg: feedback.correct ? "green.900" : "red.900" }}
           >
             <Text fontWeight="bold" fontSize="lg">
               {feedback.correct ? "\u2713 Correct!" : "\u2717 Incorrect"}
@@ -141,9 +152,16 @@ export default function FreeformQuizPage() {
           )}
 
           {feedback.notebookName && (
-            <Text fontSize="sm" color="gray.500">
+            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
               Found in: {feedback.notebookName}
             </Text>
+          )}
+
+          {feedback.context && (
+            <Box>
+              <Text fontWeight="bold">Context</Text>
+              <Text fontStyle="italic">{feedback.context}</Text>
+            </Box>
           )}
 
           <Button colorPalette="blue" onClick={handleNext} mt={4}>
@@ -184,6 +202,16 @@ export default function FreeformQuizPage() {
               placeholder="e.g., hit the hay"
               size="lg"
             />
+            {wordFound === true && (
+              <Text fontSize="sm" color="green.500" mt={1}>
+                Found in notebooks
+              </Text>
+            )}
+            {wordFound === false && (
+              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+                Word not found in notebooks
+              </Text>
+            )}
           </Box>
 
           <Box>
@@ -211,7 +239,7 @@ export default function FreeformQuizPage() {
             Check Answer
           </Button>
 
-          <Text fontSize="sm" color="gray.500" textAlign="center">
+          <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center">
             {wordCount} words available in your notebooks
           </Text>
         </VStack>

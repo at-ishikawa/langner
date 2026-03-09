@@ -127,6 +127,7 @@ message StartFreeformQuizRequest {}
 
 message StartFreeformQuizResponse {
   int32 word_count = 1;
+  repeated string expressions = 2;
 }
 
 message SubmitFreeformAnswerRequest {

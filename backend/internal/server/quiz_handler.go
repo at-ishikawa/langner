@@ -296,8 +296,14 @@ func (h *QuizHandler) StartFreeformQuiz(
 	h.freeformCards = cards
 	h.mu.Unlock()
 
+	expressions := make([]string, 0, len(cards))
+	for _, card := range cards {
+		expressions = append(expressions, card.Expression)
+	}
+
 	return connect.NewResponse(&apiv1.StartFreeformQuizResponse{
-		WordCount: int32(len(cards)),
+		WordCount:   int32(len(cards)),
+		Expressions: expressions,
 	}), nil
 }
 

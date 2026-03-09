@@ -957,6 +957,7 @@ func (*StartFreeformQuizRequest) Descriptor() ([]byte, []int) {
 type StartFreeformQuizResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WordCount     int32                  `protobuf:"varint,1,opt,name=word_count,json=wordCount,proto3" json:"word_count,omitempty"`
+	Expressions   []string               `protobuf:"bytes,2,rep,name=expressions,proto3" json:"expressions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -996,6 +997,13 @@ func (x *StartFreeformQuizResponse) GetWordCount() int32 {
 		return x.WordCount
 	}
 	return 0
+}
+
+func (x *StartFreeformQuizResponse) GetExpressions() []string {
+	if x != nil {
+		return x.Expressions
+	}
+	return nil
 }
 
 type SubmitFreeformAnswerRequest struct {
@@ -1209,10 +1217,11 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\ameaning\x18\x03 \x01(\tR\ameaning\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x1a\n" +
 	"\bcontexts\x18\x05 \x03(\tR\bcontexts\"\x1a\n" +
-	"\x18StartFreeformQuizRequest\":\n" +
+	"\x18StartFreeformQuizRequest\"\\\n" +
 	"\x19StartFreeformQuizResponse\x12\x1d\n" +
 	"\n" +
-	"word_count\x18\x01 \x01(\x05R\twordCount\"\x8f\x01\n" +
+	"word_count\x18\x01 \x01(\x05R\twordCount\x12 \n" +
+	"\vexpressions\x18\x02 \x03(\tR\vexpressions\"\x8f\x01\n" +
 	"\x1bSubmitFreeformAnswerRequest\x12\x1f\n" +
 	"\x04word\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x04word\x12%\n" +
 	"\ameaning\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\ameaning\x12(\n" +

@@ -381,6 +381,10 @@ func extractAnswerResult(result inference.AnswerMeaning) (isCorrect bool, reason
 		}
 	}
 
+	if !isCorrect && quality >= 3 {
+		quality = 2
+	}
+
 	return isCorrect, reason, quality
 }
 

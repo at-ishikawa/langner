@@ -47,6 +47,7 @@ export interface FreeformResult {
   meaning: string;
   reason: string;
   notebookName: string;
+  context?: string;
 }
 
 interface QuizState {
@@ -58,10 +59,12 @@ interface QuizState {
   reverseResults: ReverseQuizResult[];
   freeformResults: FreeformResult[];
   wordCount: number;
+  freeformExpressions: string[];
   setQuizType: (type: QuizType) => void;
   setFlashcards: (flashcards: Flashcard[]) => void;
   setReverseFlashcards: (flashcards: ReverseFlashcard[]) => void;
   setWordCount: (count: number) => void;
+  setFreeformExpressions: (expressions: string[]) => void;
   submitResult: (result: QuizResult) => void;
   submitReverseResult: (result: ReverseQuizResult) => void;
   submitFreeformResult: (result: FreeformResult) => void;
@@ -78,6 +81,7 @@ const initialState = {
   reverseResults: [] as ReverseQuizResult[],
   freeformResults: [] as FreeformResult[],
   wordCount: 0,
+  freeformExpressions: [] as string[],
 };
 
 export const useQuizStore = create<QuizState>((set) => ({
@@ -86,6 +90,7 @@ export const useQuizStore = create<QuizState>((set) => ({
   setFlashcards: (flashcards) => set({ flashcards }),
   setReverseFlashcards: (reverseFlashcards) => set({ reverseFlashcards }),
   setWordCount: (wordCount) => set({ wordCount }),
+  setFreeformExpressions: (freeformExpressions) => set({ freeformExpressions }),
   submitResult: (result) =>
     set((state) => ({ results: [...state.results, result] })),
   submitReverseResult: (result) =>

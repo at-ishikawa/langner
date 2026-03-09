@@ -147,16 +147,16 @@ export default function ReverseQuizPage() {
       <Box flex="1" overflowY="auto" mb={4}>
         {phase === "answering" ? (
           <VStack align="stretch" gap={4}>
-            <Text fontWeight="medium" fontSize="sm" color="purple.600">
+            <Text fontWeight="medium" fontSize="sm" color="purple.600" _dark={{ color: "purple.300" }}>
               Meaning
             </Text>
-            <Heading size="xl" textAlign="center" color="purple.700">
+            <Heading size="xl" textAlign="center" color="purple.700" _dark={{ color: "purple.300" }}>
               {card.meaning}
             </Heading>
 
             {card.contexts.length > 0 && (
               <>
-                <Text fontWeight="medium" fontSize="sm" color="purple.600">
+                <Text fontWeight="medium" fontSize="sm" color="purple.600" _dark={{ color: "purple.300" }}>
                   Context (fill in the blank)
                 </Text>
                 <VStack align="stretch" gap={2}>
@@ -165,6 +165,7 @@ export default function ReverseQuizPage() {
                       key={i}
                       fontSize="md"
                       color="gray.600"
+                      _dark={{ color: "gray.400" }}
                       fontStyle="italic"
                     >
                       {ctx.maskedContext}
@@ -176,7 +177,7 @@ export default function ReverseQuizPage() {
           </VStack>
         ) : (
           <VStack align="stretch" gap={4}>
-            <Heading size="xl" textAlign="center" color="purple.700">
+            <Heading size="xl" textAlign="center" color="purple.700" _dark={{ color: "purple.300" }}>
               {card.meaning}
             </Heading>
 
@@ -192,6 +193,10 @@ export default function ReverseQuizPage() {
                   borderRadius="md"
                   bg={feedback.correct ? "green.100" : "red.100"}
                   color={feedback.correct ? "green.800" : "red.800"}
+                  _dark={{
+                    bg: feedback.correct ? "green.900" : "red.900",
+                    color: feedback.correct ? "green.200" : "red.200",
+                  }}
                 >
                   <Text fontWeight="bold">
                     {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}
@@ -222,7 +227,7 @@ export default function ReverseQuizPage() {
                       Context:
                     </Text>
                     {feedback.contexts.map((ctx, i) => (
-                      <Text key={i} fontSize="sm" color="gray.600">
+                      <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
                         {i + 1}. {ctx}
                       </Text>
                     ))}

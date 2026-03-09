@@ -171,6 +171,10 @@ export default function QuizCardPage() {
                   borderRadius="md"
                   bg={feedback.correct ? "green.100" : "red.100"}
                   color={feedback.correct ? "green.800" : "red.800"}
+                  _dark={{
+                    bg: feedback.correct ? "green.900" : "red.900",
+                    color: feedback.correct ? "green.200" : "red.200",
+                  }}
                 >
                   <Text fontWeight="bold">
                     {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}

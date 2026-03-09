@@ -10,6 +10,7 @@ interface ResultItem {
   entry: string;
   meaning: string;
   correct: boolean;
+  context?: string;
 }
 
 export default function SessionCompletePage() {
@@ -42,6 +43,7 @@ export default function SessionCompletePage() {
         entry: r.word,
         meaning: r.meaning,
         correct: r.correct,
+        context: r.context,
       }));
     }
     return [];
@@ -73,17 +75,17 @@ export default function SessionCompletePage() {
 
       <VStack align="stretch" gap={3} mb={6}>
         <Text fontWeight="bold">Total: {allResults.length} words</Text>
-        <Text color="green.600" fontWeight="bold">
+        <Text color="green.600" _dark={{ color: "green.300" }} fontWeight="bold">
           Correct: {correctResults.length}
         </Text>
-        <Text color="red.600" fontWeight="bold">
+        <Text color="red.600" _dark={{ color: "red.300" }} fontWeight="bold">
           Incorrect: {incorrectResults.length}
         </Text>
       </VStack>
 
       {correctResults.length > 0 && (
         <Box mb={6}>
-          <Heading size="md" color="green.600" mb={2}>
+          <Heading size="md" color="green.600" _dark={{ color: "green.300" }} mb={2}>
             Correct
           </Heading>
           <VStack align="stretch" gap={2}>
@@ -91,6 +93,11 @@ export default function SessionCompletePage() {
               <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
                 <Text fontWeight="bold">{r.entry}</Text>
                 <Text fontSize="sm">{r.meaning}</Text>
+                {r.context && (
+                  <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+                    {r.context}
+                  </Text>
+                )}
               </Box>
             ))}
           </VStack>
@@ -99,7 +106,7 @@ export default function SessionCompletePage() {
 
       {incorrectResults.length > 0 && (
         <Box mb={6}>
-          <Heading size="md" color="red.600" mb={2}>
+          <Heading size="md" color="red.600" _dark={{ color: "red.300" }} mb={2}>
             Incorrect
           </Heading>
           <VStack align="stretch" gap={2}>
@@ -107,6 +114,11 @@ export default function SessionCompletePage() {
               <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
                 <Text fontWeight="bold">{r.entry}</Text>
                 <Text fontSize="sm">{r.meaning}</Text>
+                {r.context && (
+                  <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+                    {r.context}
+                  </Text>
+                )}
               </Box>
             ))}
           </VStack>
