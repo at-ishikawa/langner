@@ -128,7 +128,7 @@ export default function NotebookDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const [selectedStory, setSelectedStory] = useState<StoryEntry | null>(null);
+  const [manuallySelectedStory, setSelectedStory] = useState<StoryEntry | null>(null);
   const [pdfOpen, setPdfOpen] = useState(false);
 
   useEffect(() => {
@@ -139,14 +139,13 @@ export default function NotebookDetailPage() {
       .finally(() => setLoading(false));
   }, [id]);
 
-  // Deep-link to chapter from search params
-  useEffect(() => {
-    if (!data) return;
-    const chapter = searchParams.get("chapter");
-    if (!chapter) return;
-    const match = data.stories.find((s) => s.event === chapter);
-    if (match) setSelectedStory(match);
-  }, [data, searchParams]);
+  // Deep-link to chapter from search params — derived without a setState effect
+  const chapter = searchParams.get("chapter");
+  const selectedStory =
+    manuallySelectedStory ??
+    (data && chapter
+      ? (data.stories.find((s) => s.event === chapter) ?? null)
+      : null);
 
   if (loading) {
     return (

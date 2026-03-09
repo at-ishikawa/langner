@@ -14,6 +14,7 @@ vi.mock("@/lib/client", () => ({
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
   useParams: () => ({ id: "nb-1" }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 function renderPage() {
@@ -36,6 +37,7 @@ const mockStoryNotebook = {
       scenes: [
         {
           title: "Opening Scene",
+          statements: [],
           conversations: [
             { speaker: "Alice", quote: "I need to {{ break the ice }} at this party." },
           ],
@@ -90,6 +92,7 @@ const mockFlashcardNotebook = {
       scenes: [
         {
           title: "",
+          statements: [],
           conversations: [],
           definitions: [
             {
@@ -147,6 +150,7 @@ describe("NotebookDetailPage — story list", () => {
           date: "",
           scenes: [{
             title: "Scene",
+            statements: [],
             conversations: [],
             definitions: [{
               expression: "look forward to",
