@@ -946,6 +946,62 @@ func kindFromIndex(index notebook.Index) string {
 	return ""
 }
 
+// GetFreeformNextReviewDates returns a map of lowercase expression -> next review date ("YYYY-MM-DD").
+// Only expressions that are NOT yet due are included; due or never-studied expressions are omitted.
+func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]string, error) {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	result := make(map[string]string)
+	for _, card := range cards {
+		nextDate := freeformNextReviewDate(learningHistories[card.NotebookName], card)
+		if nextDate != "" {
+			result[strings.ToLower(card.Expression)] = nextDate
+		}
+	}
+	return result, nil
+}
+
+func freeformNextReviewDate(histories []notebook.LearningHistory, card FreeformCard) string {
+	for _, hist := range histories {
+		if hist.Metadata.Title != card.StoryTitle {
+			continue
+		}
+		if hist.Metadata.Type == "flashcard" {
+			for _, expr := range hist.Expressions {
+				if strings.EqualFold(expr.Expression, card.Expression) {
+					return computeNextReviewDate(expr.LearnedLogs)
+				}
+			}
+			continue
+		}
+		for _, scene := range hist.Scenes {
+			if scene.Metadata.Title != card.SceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if strings.EqualFold(expr.Expression, card.Expression) {
+					return computeNextReviewDate(expr.LearnedLogs)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func computeNextReviewDate(logs []notebook.LearningRecord) string {
+	if len(logs) == 0 || logs[0].IntervalDays == 0 {
+		return ""
+	}
+	nextDate := logs[0].LearnedAt.AddDate(0, 0, logs[0].IntervalDays)
+	if !time.Now().Before(nextDate) {
+		return ""
+	}
+	return nextDate.Format("2006-01-02")
+}
+
 func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 	var matches []FreeformCard
 	wordLower := strings.ToLower(word)

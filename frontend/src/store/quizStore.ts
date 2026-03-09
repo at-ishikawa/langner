@@ -60,11 +60,13 @@ interface QuizState {
   freeformResults: FreeformResult[];
   wordCount: number;
   freeformExpressions: string[];
+  freeformNextReviewDates: Record<string, string>;
   setQuizType: (type: QuizType) => void;
   setFlashcards: (flashcards: Flashcard[]) => void;
   setReverseFlashcards: (flashcards: ReverseFlashcard[]) => void;
   setWordCount: (count: number) => void;
   setFreeformExpressions: (expressions: string[]) => void;
+  setFreeformNextReviewDates: (dates: Record<string, string>) => void;
   submitResult: (result: QuizResult) => void;
   submitReverseResult: (result: ReverseQuizResult) => void;
   submitFreeformResult: (result: FreeformResult) => void;
@@ -82,6 +84,7 @@ const initialState = {
   freeformResults: [] as FreeformResult[],
   wordCount: 0,
   freeformExpressions: [] as string[],
+  freeformNextReviewDates: {} as Record<string, string>,
 };
 
 export const useQuizStore = create<QuizState>((set) => ({
@@ -91,6 +94,7 @@ export const useQuizStore = create<QuizState>((set) => ({
   setReverseFlashcards: (reverseFlashcards) => set({ reverseFlashcards }),
   setWordCount: (wordCount) => set({ wordCount }),
   setFreeformExpressions: (freeformExpressions) => set({ freeformExpressions }),
+  setFreeformNextReviewDates: (freeformNextReviewDates) => set({ freeformNextReviewDates }),
   submitResult: (result) =>
     set((state) => ({ results: [...state.results, result] })),
   submitReverseResult: (result) =>

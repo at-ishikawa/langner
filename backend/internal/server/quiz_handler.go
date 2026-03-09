@@ -292,6 +292,11 @@ func (h *QuizHandler) StartFreeformQuiz(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load all words: %w", err))
 	}
 
+	nextReviewDates, err := h.svc.GetFreeformNextReviewDates(cards)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get next review dates: %w", err))
+	}
+
 	h.mu.Lock()
 	h.freeformCards = cards
 	h.mu.Unlock()
@@ -302,8 +307,9 @@ func (h *QuizHandler) StartFreeformQuiz(
 	}
 
 	return connect.NewResponse(&apiv1.StartFreeformQuizResponse{
-		WordCount:   int32(len(cards)),
-		Expressions: expressions,
+		WordCount:                int32(len(cards)),
+		Expressions:              expressions,
+		ExpressionNextReviewDate: nextReviewDates,
 	}), nil
 }
 

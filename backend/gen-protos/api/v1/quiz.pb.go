@@ -955,11 +955,12 @@ func (*StartFreeformQuizRequest) Descriptor() ([]byte, []int) {
 }
 
 type StartFreeformQuizResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WordCount     int32                  `protobuf:"varint,1,opt,name=word_count,json=wordCount,proto3" json:"word_count,omitempty"`
-	Expressions   []string               `protobuf:"bytes,2,rep,name=expressions,proto3" json:"expressions,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state                    protoimpl.MessageState `protogen:"open.v1"`
+	WordCount                int32                  `protobuf:"varint,1,opt,name=word_count,json=wordCount,proto3" json:"word_count,omitempty"`
+	Expressions              []string               `protobuf:"bytes,2,rep,name=expressions,proto3" json:"expressions,omitempty"`
+	ExpressionNextReviewDate map[string]string      `protobuf:"bytes,3,rep,name=expression_next_review_date,json=expressionNextReviewDate,proto3" json:"expression_next_review_date,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *StartFreeformQuizResponse) Reset() {
@@ -1002,6 +1003,13 @@ func (x *StartFreeformQuizResponse) GetWordCount() int32 {
 func (x *StartFreeformQuizResponse) GetExpressions() []string {
 	if x != nil {
 		return x.Expressions
+	}
+	return nil
+}
+
+func (x *StartFreeformQuizResponse) GetExpressionNextReviewDate() map[string]string {
+	if x != nil {
+		return x.ExpressionNextReviewDate
 	}
 	return nil
 }
@@ -1217,11 +1225,15 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\ameaning\x18\x03 \x01(\tR\ameaning\x12\x16\n" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x1a\n" +
 	"\bcontexts\x18\x05 \x03(\tR\bcontexts\"\x1a\n" +
-	"\x18StartFreeformQuizRequest\"\\\n" +
+	"\x18StartFreeformQuizRequest\"\xa9\x02\n" +
 	"\x19StartFreeformQuizResponse\x12\x1d\n" +
 	"\n" +
 	"word_count\x18\x01 \x01(\x05R\twordCount\x12 \n" +
-	"\vexpressions\x18\x02 \x03(\tR\vexpressions\"\x8f\x01\n" +
+	"\vexpressions\x18\x02 \x03(\tR\vexpressions\x12~\n" +
+	"\x1bexpression_next_review_date\x18\x03 \x03(\v2?.api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntryR\x18expressionNextReviewDate\x1aK\n" +
+	"\x1dExpressionNextReviewDateEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8f\x01\n" +
 	"\x1bSubmitFreeformAnswerRequest\x12\x1f\n" +
 	"\x04word\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x04word\x12%\n" +
 	"\ameaning\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\ameaning\x12(\n" +
@@ -1260,7 +1272,7 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_api_v1_quiz_proto_goTypes = []any{
 	(QuizType)(0),                        // 0: api.v1.QuizType
 	(*GetQuizOptionsRequest)(nil),        // 1: api.v1.GetQuizOptionsRequest
@@ -1282,6 +1294,7 @@ var file_api_v1_quiz_proto_goTypes = []any{
 	(*StartFreeformQuizResponse)(nil),    // 17: api.v1.StartFreeformQuizResponse
 	(*SubmitFreeformAnswerRequest)(nil),  // 18: api.v1.SubmitFreeformAnswerRequest
 	(*SubmitFreeformAnswerResponse)(nil), // 19: api.v1.SubmitFreeformAnswerResponse
+	nil,                                  // 20: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
 	3,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
@@ -1289,25 +1302,26 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	7,  // 2: api.v1.Flashcard.examples:type_name -> api.v1.Example
 	12, // 3: api.v1.StartReverseQuizResponse.flashcards:type_name -> api.v1.ReverseFlashcard
 	13, // 4: api.v1.ReverseFlashcard.contexts:type_name -> api.v1.ContextSentence
-	1,  // 5: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	4,  // 6: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	8,  // 7: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	10, // 8: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	14, // 9: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	16, // 10: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	18, // 11: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	2,  // 12: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	5,  // 13: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	9,  // 14: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	11, // 15: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	15, // 16: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	17, // 17: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	19, // 18: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	12, // [12:19] is the sub-list for method output_type
-	5,  // [5:12] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	20, // 5: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	1,  // 6: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	4,  // 7: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	8,  // 8: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	10, // 9: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	14, // 10: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	16, // 11: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	18, // 12: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	2,  // 13: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	5,  // 14: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	9,  // 15: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	11, // 16: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	15, // 17: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	17, // 18: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	19, // 19: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	13, // [13:20] is the sub-list for method output_type
+	6,  // [6:13] is the sub-list for method input_type
+	6,  // [6:6] is the sub-list for extension type_name
+	6,  // [6:6] is the sub-list for extension extendee
+	0,  // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -1321,7 +1335,7 @@ func file_api_v1_quiz_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   19,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

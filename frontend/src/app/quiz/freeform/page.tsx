@@ -22,6 +22,7 @@ export default function FreeformQuizPage() {
   const storeSubmitResult = useQuizStore((s) => s.submitFreeformResult);
   const freeformResults = useQuizStore((s) => s.freeformResults);
   const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
+  const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
   const reset = useQuizStore((s) => s.reset);
 
   const [word, setWord] = useState("");
@@ -46,11 +47,17 @@ export default function FreeformQuizPage() {
     wordInputRef.current?.focus();
   }, [quizType, router]);
 
-  const wordFound = useMemo(() => {
-    if (!word.trim() || freeformExpressions.length === 0) return null;
-    const lower = word.trim().toLowerCase();
-    return freeformExpressions.some((e) => e.toLowerCase() === lower);
-  }, [word, freeformExpressions]);
+  // Returns: null (no input), false (not found), true (found & due), string (found but not due - the date)
+  const wordStatus: null | boolean | string = useMemo(() => {
+    const trimmed = word.trim();
+    if (!trimmed || freeformExpressions.length === 0) return null;
+    const lower = trimmed.toLowerCase();
+    const found = freeformExpressions.some((e) => e.toLowerCase() === lower);
+    if (!found) return false;
+    const nextReview = freeformNextReviewDates[lower];
+    if (nextReview) return nextReview;
+    return true;
+  }, [word, freeformExpressions, freeformNextReviewDates]);
 
   const handleSubmit = async () => {
     if (!word.trim() || !meaning.trim()) return;
@@ -202,14 +209,19 @@ export default function FreeformQuizPage() {
               placeholder="e.g., hit the hay"
               size="lg"
             />
-            {wordFound === true && (
+            {wordStatus === true && (
               <Text fontSize="sm" color="green.500" mt={1}>
                 Found in notebooks
               </Text>
             )}
-            {wordFound === false && (
+            {wordStatus === false && (
               <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
                 Word not found in notebooks
+              </Text>
+            )}
+            {typeof wordStatus === "string" && (
+              <Text fontSize="sm" color="orange.500" _dark={{ color: "orange.300" }} mt={1}>
+                Not due until {wordStatus}
               </Text>
             )}
           </Box>
@@ -233,7 +245,7 @@ export default function FreeformQuizPage() {
           <Button
             colorPalette="blue"
             onClick={handleSubmit}
-            disabled={!word.trim() || !meaning.trim()}
+            disabled={!word.trim() || !meaning.trim() || wordStatus === false || typeof wordStatus === "string"}
             size="lg"
           >
             Check Answer

@@ -28,6 +28,7 @@ export default function QuizStartPage() {
   const setReverseFlashcards = useQuizStore((s) => s.setReverseFlashcards);
   const setWordCount = useQuizStore((s) => s.setWordCount);
   const setFreeformExpressions = useQuizStore((s) => s.setFreeformExpressions);
+  const setFreeformNextReviewDates = useQuizStore((s) => s.setFreeformNextReviewDates);
   const setQuizType = useQuizStore((s) => s.setQuizType);
 
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
@@ -115,6 +116,7 @@ export default function QuizStartPage() {
         const res = await quizClient.startFreeformQuiz({});
         setWordCount(res.wordCount);
         setFreeformExpressions(res.expressions ?? []);
+        setFreeformNextReviewDates(res.expressionNextReviewDate ?? {});
         router.push("/quiz/freeform");
       }
     } finally {
