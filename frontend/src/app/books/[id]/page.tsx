@@ -217,7 +217,7 @@ export default function BookReaderPage() {
       notebookClient
         .registerDefinition({
           notebookId: id,
-          notebookFile: story.date || "",
+          notebookFile: story.event || "",
           sceneIndex: lookup.sceneIndex,
           expression: lookup.word,
           meaning: def.definition,
