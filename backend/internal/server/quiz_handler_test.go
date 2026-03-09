@@ -933,3 +933,53 @@ func TestValidateRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestQuizHandler_GetQuizOptions_BooksHaveKind(t *testing.T) {
+	booksDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	// Create a book without a "kind" field in index.yml (as epub-imported books look)
+	bookDir := filepath.Join(booksDir, "test-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: test-book
+name: Test Book
+notebooks:
+  - 001-chapter-1.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "001-chapter-1.yml"), []byte(`- event: "Chapter 1"
+  date: 2024-01-01T00:00:00Z
+  scenes:
+    - scene: ""
+      statements:
+        - "It was a bright cold day in April."
+`), 0644))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	openaiClient := mock_inference.NewMockClient(ctrl)
+
+	svc := quiz.NewService(config.NotebooksConfig{
+		BooksDirectories:       []string{booksDir},
+		LearningNotesDirectory: learningDir,
+	}, openaiClient, make(map[string]rapidapi.Response))
+	handler := NewQuizHandler(svc)
+
+	resp, err := handler.GetQuizOptions(
+		context.Background(),
+		connect.NewRequest(&apiv1.GetQuizOptionsRequest{}),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	var book *apiv1.NotebookSummary
+	for _, n := range resp.Msg.GetNotebooks() {
+		if n.GetNotebookId() == "test-book" {
+			book = n
+			break
+		}
+	}
+
+	require.NotNil(t, book, "book should appear in GetQuizOptions response")
+	assert.Equal(t, "Books", book.GetKind(), "book kind should be 'Books'")
+}
