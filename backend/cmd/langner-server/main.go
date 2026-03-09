@@ -13,6 +13,7 @@ import (
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
@@ -79,7 +80,12 @@ func run(ctx context.Context) error {
 	handler := server.NewQuizHandler(svc)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 
-	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap)
+	dictConfig := dictionary.Config{
+		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
+		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
+	}
+	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, openaiClient)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
 
 	mux := http.NewServeMux()

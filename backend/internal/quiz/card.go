@@ -30,6 +30,7 @@ type NotebookSummary struct {
 	Name            string
 	ReviewCount     int
 	LatestStoryDate time.Time
+	Kind            string
 }
 
 // GradeResult holds the outcome of grading a user's answer.

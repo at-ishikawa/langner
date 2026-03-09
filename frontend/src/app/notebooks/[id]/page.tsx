@@ -1,7 +1,8 @@
 "use client";
 
+import React from "react";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Box,
@@ -70,15 +71,65 @@ function isFlatStory(story: StoryEntry): boolean {
   return story.scenes.length === 1 && !story.scenes[0].title;
 }
 
+// Check if notebook is a book (has scenes with statements)
+function isBookNotebook(data: GetNotebookDetailResponse): boolean {
+  return data.stories.some((story) =>
+    story.scenes.some((scene) => scene.statements.length > 0),
+  );
+}
+
+function findProseContext(
+  statements: string[],
+  expression: string,
+): string | null {
+  const lower = expression.toLowerCase();
+  for (const stmt of statements) {
+    if (stmt.toLowerCase().includes(lower)) {
+      const idx = stmt.toLowerCase().indexOf(lower);
+      const start = Math.max(0, idx - 80);
+      const end = Math.min(stmt.length, idx + expression.length + 80);
+      let excerpt = stmt.slice(start, end);
+      if (start > 0) excerpt = "\u2026" + excerpt;
+      if (end < stmt.length) excerpt = excerpt + "\u2026";
+      return excerpt;
+    }
+  }
+  return null;
+}
+
+function highlightExcerpt(
+  excerpt: string,
+  expression: string,
+): React.ReactNode[] {
+  const regex = new RegExp(
+    `(${expression.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+    "gi",
+  );
+  const parts = excerpt.split(regex);
+  // split() with a capturing group returns matched parts at odd indices
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <Text as="span" key={i} fontWeight="bold" color="blue.600">
+        {part}
+      </Text>
+    ) : (
+      <Text as="span" key={i}>
+        {part}
+      </Text>
+    ),
+  );
+}
+
 export default function NotebookDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const searchParams = useSearchParams();
 
   const [data, setData] = useState<GetNotebookDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<StatusFilter>("all");
-  const [selectedStory, setSelectedStory] = useState<StoryEntry | null>(null);
+  const [pickedStory, setPickedStory] = useState<StoryEntry | null>(null);
   const [pdfOpen, setPdfOpen] = useState(false);
 
   useEffect(() => {
@@ -88,6 +139,14 @@ export default function NotebookDetailPage() {
       .catch(() => setError("Failed to load notebook"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Deep-link to chapter from search params — derived without a setState effect
+  const chapter = searchParams.get("chapter");
+  const selectedStory =
+    pickedStory ??
+    (data && chapter
+      ? (data.stories.find((s) => s.event === chapter) ?? null)
+      : null);
 
   if (loading) {
     return (
@@ -118,9 +177,9 @@ export default function NotebookDetailPage() {
             color="blue.600"
             fontSize="sm"
             cursor="pointer"
-            onClick={() => setSelectedStory(null)}
+            onClick={() => setPickedStory(null)}
           >
-            ← {data.name}
+            &larr; {data.name}
           </Text>
         </Box>
 
@@ -186,7 +245,7 @@ export default function NotebookDetailPage() {
       <Box mb={2}>
         <Link href="/notebooks">
           <Text color="blue.600" fontSize="sm">
-            ← Back to notebooks
+            &larr; Back to notebooks
           </Text>
         </Link>
       </Box>
@@ -204,13 +263,22 @@ export default function NotebookDetailPage() {
               {data.totalWordCount} words
             </Text>
           </Box>
-          <Button
-            size="sm"
-            colorPalette="blue"
-            onClick={() => setPdfOpen(true)}
-          >
-            Export PDF
-          </Button>
+          <Box display="flex" gap={2}>
+            {isBookNotebook(data) && (
+              <Link href={`/books/${id}`}>
+                <Button size="sm" variant="outline">
+                  Read Book
+                </Button>
+              </Link>
+            )}
+            <Button
+              size="sm"
+              colorPalette="blue"
+              onClick={() => setPdfOpen(true)}
+            >
+              Export PDF
+            </Button>
+          </Box>
         </Box>
         <Box mt={3}>
           <select
@@ -245,7 +313,7 @@ export default function NotebookDetailPage() {
               borderRadius="md"
               cursor="pointer"
               _hover={{ bg: "bg.muted" }}
-              onClick={() => setSelectedStory(story)}
+              onClick={() => setPickedStory(story)}
               display="flex"
               justifyContent="space-between"
               alignItems="center"
@@ -269,7 +337,9 @@ export default function NotebookDetailPage() {
                 <Text fontSize="xs" color="fg.muted">
                   {filter === "all" ? total : `${matched}/${total}`} words
                 </Text>
-                <Text fontSize="xs" color="fg.muted">›</Text>
+                <Text fontSize="xs" color="fg.muted">
+                  &rsaquo;
+                </Text>
               </Box>
             </Box>
           );
@@ -314,15 +384,16 @@ function SceneRow({
         alignItems="center"
         gap={2}
       >
-        <Text fontSize="sm" fontWeight="medium" flex="1">
-          {scene.title}
+        <Text fontSize="sm" fontWeight="medium" flex="1" truncate>
+          {scene.title ||
+            scene.definitions.map((d) => d.expression).join(" · ")}
         </Text>
         <Box display="flex" alignItems="center" gap={2} flexShrink={0}>
           <Text fontSize="xs" color="fg.muted">
             {filter === "all" ? total : `${matched}/${total}`} words
           </Text>
           <Text fontSize="xs" color="fg.muted">
-            {open ? "▲" : "▼"}
+            {open ? "\u25B2" : "\u25BC"}
           </Text>
         </Box>
       </Box>
@@ -344,9 +415,30 @@ function SceneRow({
           <VStack align="stretch" gap={2}>
             {scene.definitions
               .filter((w) => filter === "all" || w.learningStatus === filter)
-              .map((word, i) => (
-                <WordCard key={i} word={word} />
-              ))}
+              .map((word, i) => {
+                const excerpt = findProseContext(
+                  scene.statements,
+                  word.expression,
+                );
+                return (
+                  <Box key={i}>
+                    {excerpt && (
+                      <Box
+                        borderLeftWidth="2px"
+                        borderColor="blue.200"
+                        pl={2}
+                        mb={1}
+                        _dark={{ borderColor: "blue.700" }}
+                      >
+                        <Text fontSize="xs" color="fg.muted" fontStyle="italic">
+                          {highlightExcerpt(excerpt, word.expression)}
+                        </Text>
+                      </Box>
+                    )}
+                    <WordCard word={word} />
+                  </Box>
+                );
+              })}
           </VStack>
         </Box>
       )}
@@ -408,6 +500,14 @@ function WordCard({ word }: { word: NotebookWord }) {
                   Pronunciation:
                 </Text>{" "}
                 {word.pronunciation}
+              </Text>
+            )}
+            {word.origin && (
+              <Text>
+                <Text as="span" fontWeight="bold">
+                  Origin:
+                </Text>{" "}
+                {word.origin}
               </Text>
             )}
             {word.examples.length > 0 && (

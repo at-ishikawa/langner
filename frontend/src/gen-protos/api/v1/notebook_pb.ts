@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/notebook.proto.
  */
 export const file_api_v1_notebook: GenFile = /*@__PURE__*/
-  fileDesc("ChVhcGkvdjEvbm90ZWJvb2sucHJvdG8SBmFwaS52MSI4ChhHZXROb3RlYm9va0RldGFpbFJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEifQoZR2V0Tm90ZWJvb2tEZXRhaWxSZXNwb25zZRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEiMKB3N0b3JpZXMYAyADKAsyEi5hcGkudjEuU3RvcnlFbnRyeRIYChB0b3RhbF93b3JkX2NvdW50GAQgASgFInYKClN0b3J5RW50cnkSDQoFZXZlbnQYASABKAkSJwoIbWV0YWRhdGEYAiABKAsyFS5hcGkudjEuU3RvcnlNZXRhZGF0YRIMCgRkYXRlGAMgASgJEiIKBnNjZW5lcxgEIAMoCzISLmFwaS52MS5TdG9yeVNjZW5lIkAKDVN0b3J5TWV0YWRhdGESDgoGc2VyaWVzGAEgASgJEg4KBnNlYXNvbhgCIAEoBRIPCgdlcGlzb2RlGAMgASgFInMKClN0b3J5U2NlbmUSDQoFdGl0bGUYASABKAkSKwoNY29udmVyc2F0aW9ucxgCIAMoCzIULmFwaS52MS5Db252ZXJzYXRpb24SKQoLZGVmaW5pdGlvbnMYAyADKAsyFC5hcGkudjEuTm90ZWJvb2tXb3JkIi4KDENvbnZlcnNhdGlvbhIPCgdzcGVha2VyGAEgASgJEg0KBXF1b3RlGAIgASgJIqgCCgxOb3RlYm9va1dvcmQSEgoKZXhwcmVzc2lvbhgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEg8KB21lYW5pbmcYAyABKAkSFgoOcGFydF9vZl9zcGVlY2gYBCABKAkSFQoNcHJvbnVuY2lhdGlvbhgFIAEoCRIQCghleGFtcGxlcxgGIAMoCRIQCghzeW5vbnltcxgHIAMoCRIQCghhbnRvbnltcxgIIAMoCRIXCg9sZWFybmluZ19zdGF0dXMYCSABKAkSLgoMbGVhcm5lZF9sb2dzGAogAygLMhguYXBpLnYxLkxlYXJuaW5nTG9nRW50cnkSFwoPZWFzaW5lc3NfZmFjdG9yGAsgASgBEhgKEG5leHRfcmV2aWV3X2RhdGUYDCABKAkiiwEKEExlYXJuaW5nTG9nRW50cnkSDgoGc3RhdHVzGAEgASgJEhIKCmxlYXJuZWRfYXQYAiABKAkSDwoHcXVhbGl0eRgDIAEoBRIYChByZXNwb25zZV90aW1lX21zGAQgASgDEhEKCXF1aXpfdHlwZRgFIAEoCRIVCg1pbnRlcnZhbF9kYXlzGAYgASgFIjgKGEV4cG9ydE5vdGVib29rUERGUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQASJCChlFeHBvcnROb3RlYm9va1BERlJlc3BvbnNlEhMKC3BkZl9jb250ZW50GAEgASgMEhAKCGZpbGVuYW1lGAIgASgJMsUBCg9Ob3RlYm9va1NlcnZpY2USWAoRR2V0Tm90ZWJvb2tEZXRhaWwSIC5hcGkudjEuR2V0Tm90ZWJvb2tEZXRhaWxSZXF1ZXN0GiEuYXBpLnYxLkdldE5vdGVib29rRGV0YWlsUmVzcG9uc2USWAoRRXhwb3J0Tm90ZWJvb2tQREYSIC5hcGkudjEuRXhwb3J0Tm90ZWJvb2tQREZSZXF1ZXN0GiEuYXBpLnYxLkV4cG9ydE5vdGVib29rUERGUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("ChVhcGkvdjEvbm90ZWJvb2sucHJvdG8SBmFwaS52MSI4ChhHZXROb3RlYm9va0RldGFpbFJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEifQoZR2V0Tm90ZWJvb2tEZXRhaWxSZXNwb25zZRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEiMKB3N0b3JpZXMYAyADKAsyEi5hcGkudjEuU3RvcnlFbnRyeRIYChB0b3RhbF93b3JkX2NvdW50GAQgASgFInYKClN0b3J5RW50cnkSDQoFZXZlbnQYASABKAkSJwoIbWV0YWRhdGEYAiABKAsyFS5hcGkudjEuU3RvcnlNZXRhZGF0YRIMCgRkYXRlGAMgASgJEiIKBnNjZW5lcxgEIAMoCzISLmFwaS52MS5TdG9yeVNjZW5lIkAKDVN0b3J5TWV0YWRhdGESDgoGc2VyaWVzGAEgASgJEg4KBnNlYXNvbhgCIAEoBRIPCgdlcGlzb2RlGAMgASgFIocBCgpTdG9yeVNjZW5lEg0KBXRpdGxlGAEgASgJEisKDWNvbnZlcnNhdGlvbnMYAiADKAsyFC5hcGkudjEuQ29udmVyc2F0aW9uEikKC2RlZmluaXRpb25zGAMgAygLMhQuYXBpLnYxLk5vdGVib29rV29yZBISCgpzdGF0ZW1lbnRzGAUgAygJIi4KDENvbnZlcnNhdGlvbhIPCgdzcGVha2VyGAEgASgJEg0KBXF1b3RlGAIgASgJIrgCCgxOb3RlYm9va1dvcmQSEgoKZXhwcmVzc2lvbhgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEg8KB21lYW5pbmcYAyABKAkSFgoOcGFydF9vZl9zcGVlY2gYBCABKAkSFQoNcHJvbnVuY2lhdGlvbhgFIAEoCRIQCghleGFtcGxlcxgGIAMoCRIQCghzeW5vbnltcxgHIAMoCRIQCghhbnRvbnltcxgIIAMoCRIXCg9sZWFybmluZ19zdGF0dXMYCSABKAkSLgoMbGVhcm5lZF9sb2dzGAogAygLMhguYXBpLnYxLkxlYXJuaW5nTG9nRW50cnkSFwoPZWFzaW5lc3NfZmFjdG9yGAsgASgBEhgKEG5leHRfcmV2aWV3X2RhdGUYDCABKAkSDgoGb3JpZ2luGA0gASgJIosBChBMZWFybmluZ0xvZ0VudHJ5Eg4KBnN0YXR1cxgBIAEoCRISCgpsZWFybmVkX2F0GAIgASgJEg8KB3F1YWxpdHkYAyABKAUSGAoQcmVzcG9uc2VfdGltZV9tcxgEIAEoAxIRCglxdWl6X3R5cGUYBSABKAkSFQoNaW50ZXJ2YWxfZGF5cxgGIAEoBSI4ChhFeHBvcnROb3RlYm9va1BERlJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEiQgoZRXhwb3J0Tm90ZWJvb2tQREZSZXNwb25zZRITCgtwZGZfY29udGVudBgBIAEoDBIQCghmaWxlbmFtZRgCIAEoCSJQChFMb29rdXBXb3JkUmVxdWVzdBIVCgR3b3JkGAEgASgJQge6SARyAhABEhMKC25vdGVib29rX2lkGAIgASgJEg8KB2NvbnRleHQYAyABKAkimQEKDldvcmREZWZpbml0aW9uEhYKDnBhcnRfb2Zfc3BlZWNoGAEgASgJEhIKCmRlZmluaXRpb24YAiABKAkSEAoIZXhhbXBsZXMYAyADKAkSEAoIc3lub255bXMYBCADKAkSFQoNcHJvbnVuY2lhdGlvbhgFIAEoCRIQCghhbnRvbnltcxgGIAMoCRIOCgZvcmlnaW4YByABKAkiXwoSTG9va3VwV29yZFJlc3BvbnNlEgwKBHdvcmQYASABKAkSKwoLZGVmaW5pdGlvbnMYAiADKAsyFi5hcGkudjEuV29yZERlZmluaXRpb24SDgoGc291cmNlGAMgASgJIsYBChlSZWdpc3RlckRlZmluaXRpb25SZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABEhUKDW5vdGVib29rX2ZpbGUYAiABKAkSEwoLc2NlbmVfaW5kZXgYAyABKAUSGwoKZXhwcmVzc2lvbhgEIAEoCUIHukgEcgIQARIYCgdtZWFuaW5nGAUgASgJQge6SARyAhABEhYKDnBhcnRfb2Zfc3BlZWNoGAYgASgJEhAKCGV4YW1wbGVzGAcgAygJIhwKGlJlZ2lzdGVyRGVmaW5pdGlvblJlc3BvbnNlIoABChdEZWxldGVEZWZpbml0aW9uUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQARIVCg1ub3RlYm9va19maWxlGAIgASgJEhMKC3NjZW5lX2luZGV4GAMgASgFEhsKCmV4cHJlc3Npb24YBCABKAlCB7pIBHICEAEiGgoYRGVsZXRlRGVmaW5pdGlvblJlc3BvbnNlMr4DCg9Ob3RlYm9va1NlcnZpY2USWAoRR2V0Tm90ZWJvb2tEZXRhaWwSIC5hcGkudjEuR2V0Tm90ZWJvb2tEZXRhaWxSZXF1ZXN0GiEuYXBpLnYxLkdldE5vdGVib29rRGV0YWlsUmVzcG9uc2USWAoRRXhwb3J0Tm90ZWJvb2tQREYSIC5hcGkudjEuRXhwb3J0Tm90ZWJvb2tQREZSZXF1ZXN0GiEuYXBpLnYxLkV4cG9ydE5vdGVib29rUERGUmVzcG9uc2USQwoKTG9va3VwV29yZBIZLmFwaS52MS5Mb29rdXBXb3JkUmVxdWVzdBoaLmFwaS52MS5Mb29rdXBXb3JkUmVzcG9uc2USWwoSUmVnaXN0ZXJEZWZpbml0aW9uEiEuYXBpLnYxLlJlZ2lzdGVyRGVmaW5pdGlvblJlcXVlc3QaIi5hcGkudjEuUmVnaXN0ZXJEZWZpbml0aW9uUmVzcG9uc2USVQoQRGVsZXRlRGVmaW5pdGlvbhIfLmFwaS52MS5EZWxldGVEZWZpbml0aW9uUmVxdWVzdBogLmFwaS52MS5EZWxldGVEZWZpbml0aW9uUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetNotebookDetailRequest
@@ -139,6 +139,11 @@ export type StoryScene = Message<"api.v1.StoryScene"> & {
    * @generated from field: repeated api.v1.NotebookWord definitions = 3;
    */
   definitions: NotebookWord[];
+
+  /**
+   * @generated from field: repeated string statements = 5;
+   */
+  statements: string[];
 };
 
 /**
@@ -233,6 +238,11 @@ export type NotebookWord = Message<"api.v1.NotebookWord"> & {
    * @generated from field: string next_review_date = 12;
    */
   nextReviewDate: string;
+
+  /**
+   * @generated from field: string origin = 13;
+   */
+  origin: string;
 };
 
 /**
@@ -324,6 +334,212 @@ export const ExportNotebookPDFResponseSchema: GenMessage<ExportNotebookPDFRespon
   messageDesc(file_api_v1_notebook, 9);
 
 /**
+ * @generated from message api.v1.LookupWordRequest
+ */
+export type LookupWordRequest = Message<"api.v1.LookupWordRequest"> & {
+  /**
+   * @generated from field: string word = 1;
+   */
+  word: string;
+
+  /**
+   * @generated from field: string notebook_id = 2;
+   */
+  notebookId: string;
+
+  /**
+   * @generated from field: string context = 3;
+   */
+  context: string;
+};
+
+/**
+ * Describes the message api.v1.LookupWordRequest.
+ * Use `create(LookupWordRequestSchema)` to create a new message.
+ */
+export const LookupWordRequestSchema: GenMessage<LookupWordRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 10);
+
+/**
+ * @generated from message api.v1.WordDefinition
+ */
+export type WordDefinition = Message<"api.v1.WordDefinition"> & {
+  /**
+   * @generated from field: string part_of_speech = 1;
+   */
+  partOfSpeech: string;
+
+  /**
+   * @generated from field: string definition = 2;
+   */
+  definition: string;
+
+  /**
+   * @generated from field: repeated string examples = 3;
+   */
+  examples: string[];
+
+  /**
+   * @generated from field: repeated string synonyms = 4;
+   */
+  synonyms: string[];
+
+  /**
+   * @generated from field: string pronunciation = 5;
+   */
+  pronunciation: string;
+
+  /**
+   * @generated from field: repeated string antonyms = 6;
+   */
+  antonyms: string[];
+
+  /**
+   * @generated from field: string origin = 7;
+   */
+  origin: string;
+};
+
+/**
+ * Describes the message api.v1.WordDefinition.
+ * Use `create(WordDefinitionSchema)` to create a new message.
+ */
+export const WordDefinitionSchema: GenMessage<WordDefinition> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 11);
+
+/**
+ * @generated from message api.v1.LookupWordResponse
+ */
+export type LookupWordResponse = Message<"api.v1.LookupWordResponse"> & {
+  /**
+   * @generated from field: string word = 1;
+   */
+  word: string;
+
+  /**
+   * @generated from field: repeated api.v1.WordDefinition definitions = 2;
+   */
+  definitions: WordDefinition[];
+
+  /**
+   * @generated from field: string source = 3;
+   */
+  source: string;
+};
+
+/**
+ * Describes the message api.v1.LookupWordResponse.
+ * Use `create(LookupWordResponseSchema)` to create a new message.
+ */
+export const LookupWordResponseSchema: GenMessage<LookupWordResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 12);
+
+/**
+ * @generated from message api.v1.RegisterDefinitionRequest
+ */
+export type RegisterDefinitionRequest = Message<"api.v1.RegisterDefinitionRequest"> & {
+  /**
+   * @generated from field: string notebook_id = 1;
+   */
+  notebookId: string;
+
+  /**
+   * @generated from field: string notebook_file = 2;
+   */
+  notebookFile: string;
+
+  /**
+   * @generated from field: int32 scene_index = 3;
+   */
+  sceneIndex: number;
+
+  /**
+   * @generated from field: string expression = 4;
+   */
+  expression: string;
+
+  /**
+   * @generated from field: string meaning = 5;
+   */
+  meaning: string;
+
+  /**
+   * @generated from field: string part_of_speech = 6;
+   */
+  partOfSpeech: string;
+
+  /**
+   * @generated from field: repeated string examples = 7;
+   */
+  examples: string[];
+};
+
+/**
+ * Describes the message api.v1.RegisterDefinitionRequest.
+ * Use `create(RegisterDefinitionRequestSchema)` to create a new message.
+ */
+export const RegisterDefinitionRequestSchema: GenMessage<RegisterDefinitionRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 13);
+
+/**
+ * @generated from message api.v1.RegisterDefinitionResponse
+ */
+export type RegisterDefinitionResponse = Message<"api.v1.RegisterDefinitionResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.RegisterDefinitionResponse.
+ * Use `create(RegisterDefinitionResponseSchema)` to create a new message.
+ */
+export const RegisterDefinitionResponseSchema: GenMessage<RegisterDefinitionResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 14);
+
+/**
+ * @generated from message api.v1.DeleteDefinitionRequest
+ */
+export type DeleteDefinitionRequest = Message<"api.v1.DeleteDefinitionRequest"> & {
+  /**
+   * @generated from field: string notebook_id = 1;
+   */
+  notebookId: string;
+
+  /**
+   * @generated from field: string notebook_file = 2;
+   */
+  notebookFile: string;
+
+  /**
+   * @generated from field: int32 scene_index = 3;
+   */
+  sceneIndex: number;
+
+  /**
+   * @generated from field: string expression = 4;
+   */
+  expression: string;
+};
+
+/**
+ * Describes the message api.v1.DeleteDefinitionRequest.
+ * Use `create(DeleteDefinitionRequestSchema)` to create a new message.
+ */
+export const DeleteDefinitionRequestSchema: GenMessage<DeleteDefinitionRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 15);
+
+/**
+ * @generated from message api.v1.DeleteDefinitionResponse
+ */
+export type DeleteDefinitionResponse = Message<"api.v1.DeleteDefinitionResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.DeleteDefinitionResponse.
+ * Use `create(DeleteDefinitionResponseSchema)` to create a new message.
+ */
+export const DeleteDefinitionResponseSchema: GenMessage<DeleteDefinitionResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 16);
+
+/**
  * @generated from service api.v1.NotebookService
  */
 export const NotebookService: GenService<{
@@ -342,6 +558,30 @@ export const NotebookService: GenService<{
     methodKind: "unary";
     input: typeof ExportNotebookPDFRequestSchema;
     output: typeof ExportNotebookPDFResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.NotebookService.LookupWord
+   */
+  lookupWord: {
+    methodKind: "unary";
+    input: typeof LookupWordRequestSchema;
+    output: typeof LookupWordResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.NotebookService.RegisterDefinition
+   */
+  registerDefinition: {
+    methodKind: "unary";
+    input: typeof RegisterDefinitionRequestSchema;
+    output: typeof RegisterDefinitionResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.NotebookService.DeleteDefinition
+   */
+  deleteDefinition: {
+    methodKind: "unary";
+    input: typeof DeleteDefinitionRequestSchema;
+    output: typeof DeleteDefinitionResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_notebook, 0);

@@ -541,3 +541,55 @@ func TestAddExpressionMarker(t *testing.T) {
 		})
 	}
 }
+
+func TestReadDefinitionsFromBytes(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		want    []Definitions
+		wantErr bool
+	}{
+		{
+			name: "valid definitions",
+			input: `- metadata:
+    notebook: "001-chapter-1.yml"
+  scenes:
+    - metadata:
+        index: 0
+      expressions:
+        - expression: "break the ice"
+          meaning: "to initiate conversation in a social situation"
+`,
+			want: []Definitions{{
+				Metadata: DefinitionsMetadata{Notebook: "001-chapter-1.yml"},
+				Scenes: []DefinitionsScene{{
+					Metadata:    DefinitionsSceneMetadata{Index: 0},
+					Expressions: []Note{{Expression: "break the ice", Meaning: "to initiate conversation in a social situation"}},
+				}},
+			}},
+			wantErr: false,
+		},
+		{
+			name:    "invalid yaml",
+			input:   "{{invalid yaml",
+			wantErr: true,
+		},
+		{
+			name:    "empty input",
+			input:   "",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ReadDefinitionsFromBytes([]byte(tt.input))
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}

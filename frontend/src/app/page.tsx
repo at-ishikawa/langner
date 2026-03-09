@@ -16,6 +16,12 @@ const features = [
     description: "Browse stories, scenes, and vocabulary",
     icon: "📖",
   },
+  {
+    href: "/books",
+    title: "Books",
+    description: "Read books and look up words",
+    icon: "📚",
+  },
 ];
 
 export default function HomePage() {

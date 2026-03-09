@@ -9,6 +9,9 @@ option go_package = "github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1";
 service NotebookService {
   rpc GetNotebookDetail(GetNotebookDetailRequest) returns (GetNotebookDetailResponse);
   rpc ExportNotebookPDF(ExportNotebookPDFRequest) returns (ExportNotebookPDFResponse);
+  rpc LookupWord(LookupWordRequest) returns (LookupWordResponse);
+  rpc RegisterDefinition(RegisterDefinitionRequest) returns (RegisterDefinitionResponse);
+  rpc DeleteDefinition(DeleteDefinitionRequest) returns (DeleteDefinitionResponse);
 }
 
 message GetNotebookDetailRequest {
@@ -41,6 +44,7 @@ message StoryScene {
   string title = 1;
   repeated Conversation conversations = 2;
   repeated NotebookWord definitions = 3;
+  repeated string statements = 5;
 }
 
 message Conversation {
@@ -61,6 +65,7 @@ message NotebookWord {
   repeated LearningLogEntry learned_logs = 10;
   double easiness_factor = 11;
   string next_review_date = 12;
+  string origin = 13;
 }
 
 message LearningLogEntry {
@@ -82,3 +87,46 @@ message ExportNotebookPDFResponse {
   bytes pdf_content = 1;
   string filename = 2;
 }
+
+message LookupWordRequest {
+  string word = 1 [(buf.validate.field).string.min_len = 1];
+  string notebook_id = 2;
+  string context = 3;
+}
+
+message WordDefinition {
+  string part_of_speech = 1;
+  string definition = 2;
+  repeated string examples = 3;
+  repeated string synonyms = 4;
+  string pronunciation = 5;
+  repeated string antonyms = 6;
+  string origin = 7;
+}
+
+message LookupWordResponse {
+  string word = 1;
+  repeated WordDefinition definitions = 2;
+  string source = 3;
+}
+
+message RegisterDefinitionRequest {
+  string notebook_id = 1 [(buf.validate.field).string.min_len = 1];
+  string notebook_file = 2;
+  int32 scene_index = 3;
+  string expression = 4 [(buf.validate.field).string.min_len = 1];
+  string meaning = 5 [(buf.validate.field).string.min_len = 1];
+  string part_of_speech = 6;
+  repeated string examples = 7;
+}
+
+message RegisterDefinitionResponse {}
+
+message DeleteDefinitionRequest {
+  string notebook_id = 1 [(buf.validate.field).string.min_len = 1];
+  string notebook_file = 2;
+  int32 scene_index = 3;
+  string expression = 4 [(buf.validate.field).string.min_len = 1];
+}
+
+message DeleteDefinitionResponse {}

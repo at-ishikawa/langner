@@ -79,6 +79,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			Name:            index.Name,
 			ReviewCount:     countStoryDefinitions(filtered),
 			LatestStoryDate: latestDate,
+			Kind:            kindFromIndex(index),
 		})
 	}
 
@@ -926,6 +927,19 @@ func (s *Service) SaveFreeformResult(card FreeformCard, result FreeformGradeResu
 	}
 
 	return nil
+}
+
+// kindFromIndex returns the kind string for a notebook index.
+// Books loaded from books_directories have IsBook=true but an empty Kind field,
+// so we fall back to "Books" when IsBook is set.
+func kindFromIndex(index notebook.Index) string {
+	if index.Kind != "" {
+		return index.Kind
+	}
+	if index.IsBook {
+		return "Books"
+	}
+	return ""
 }
 
 func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {

@@ -1,3 +1,4 @@
+import { AppHeader } from "@/components/AppHeader";
 import { Providers } from "./providers";
 
 export const metadata = {
@@ -11,9 +12,12 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body>
-        <Providers>{children}</Providers>
+        <Providers>
+          <AppHeader />
+          {children}
+        </Providers>
       </body>
     </html>
   );
