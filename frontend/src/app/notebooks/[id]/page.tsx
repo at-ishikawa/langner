@@ -384,8 +384,9 @@ function SceneRow({
         alignItems="center"
         gap={2}
       >
-        <Text fontSize="sm" fontWeight="medium" flex="1">
-          {scene.title}
+        <Text fontSize="sm" fontWeight="medium" flex="1" truncate>
+          {scene.title ||
+            scene.definitions.map((d) => d.expression).join(" · ")}
         </Text>
         <Box display="flex" alignItems="center" gap={2} flexShrink={0}>
           <Text fontSize="xs" color="fg.muted">
