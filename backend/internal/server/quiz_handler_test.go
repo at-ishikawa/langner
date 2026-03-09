@@ -935,14 +935,15 @@ func TestValidateRequest(t *testing.T) {
 }
 
 func TestQuizHandler_GetQuizOptions_BooksHaveKind(t *testing.T) {
-	booksDir := t.TempDir()
+	storiesDir := t.TempDir()
 	learningDir := t.TempDir()
 
-	// Create a book without a "kind" field in index.yml (as epub-imported books look)
-	bookDir := filepath.Join(booksDir, "test-book")
+	// Create a book with kind: Book (singular, as story-directory books look)
+	bookDir := filepath.Join(storiesDir, "test-book")
 	require.NoError(t, os.MkdirAll(bookDir, 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: test-book
 name: Test Book
+kind: Book
 notebooks:
   - 001-chapter-1.yml
 `), 0644))
@@ -959,7 +960,7 @@ notebooks:
 	openaiClient := mock_inference.NewMockClient(ctrl)
 
 	svc := quiz.NewService(config.NotebooksConfig{
-		BooksDirectories:       []string{booksDir},
+		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
 	}, openaiClient, make(map[string]rapidapi.Response))
 	handler := NewQuizHandler(svc)
