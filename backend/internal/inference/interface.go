@@ -10,6 +10,29 @@ import (
 type Client interface {
 	AnswerMeanings(ctx context.Context, params AnswerMeaningsRequest) (AnswerMeaningsResponse, error)
 	ValidateWordForm(ctx context.Context, params ValidateWordFormRequest) (ValidateWordFormResponse, error)
+	LookupWord(ctx context.Context, params LookupWordRequest) (LookupWordResponse, error)
+}
+
+// LookupWordRequest holds parameters for looking up a word definition
+type LookupWordRequest struct {
+	Word    string `json:"word"`
+	Context string `json:"context,omitempty"`
+}
+
+// LookupWordDefinition represents a single dictionary-style definition from AI
+type LookupWordDefinition struct {
+	PartOfSpeech  string   `json:"part_of_speech"`
+	Definition    string   `json:"definition"`
+	Pronunciation string   `json:"pronunciation,omitempty"`
+	Examples      []string `json:"examples,omitempty"`
+	Synonyms      []string `json:"synonyms,omitempty"`
+	Antonyms      []string `json:"antonyms,omitempty"`
+	Origin        string   `json:"origin,omitempty"`
+}
+
+// LookupWordResponse holds the result of a word lookup
+type LookupWordResponse struct {
+	Definitions []LookupWordDefinition `json:"definitions"`
 }
 
 // Expression represents a single expression with its contexts

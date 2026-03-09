@@ -394,24 +394,29 @@ func (h *NotebookHandler) LookupWord(
 	}
 
 	if h.openaiClient != nil {
-		aiResp, err := h.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
-			Expressions: []inference.Expression{{
-				Expression: word,
-				Meaning:    "",
-				Contexts: []inference.Context{{
-					Context: req.Msg.GetContext(),
-				}},
-			}},
+		aiResp, err := h.openaiClient.LookupWord(ctx, inference.LookupWordRequest{
+			Word:    word,
+			Context: req.Msg.GetContext(),
 		})
 		if err != nil {
 			slog.Warn("openai word lookup failed", "word", word, "error", err)
-		} else if len(aiResp.Answers) > 0 && aiResp.Answers[0].Meaning != "" {
+		} else if len(aiResp.Definitions) > 0 {
+			var defs []*apiv1.WordDefinition
+			for _, d := range aiResp.Definitions {
+				defs = append(defs, &apiv1.WordDefinition{
+					PartOfSpeech:  d.PartOfSpeech,
+					Definition:    d.Definition,
+					Pronunciation: d.Pronunciation,
+					Examples:      d.Examples,
+					Synonyms:      d.Synonyms,
+					Antonyms:      d.Antonyms,
+					Origin:        d.Origin,
+				})
+			}
 			return connect.NewResponse(&apiv1.LookupWordResponse{
-				Word: word,
-				Definitions: []*apiv1.WordDefinition{{
-					Definition: aiResp.Answers[0].Meaning,
-				}},
-				Source: "openai",
+				Word:        word,
+				Definitions: defs,
+				Source:      "openai",
 			}), nil
 		}
 	}

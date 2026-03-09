@@ -802,6 +802,113 @@ func (client *Client) answerMeanings(
 	return inference.AnswerMeaningsResponse{Answers: decoded}, nil
 }
 
+// LookupWord looks up a word and returns structured dictionary-style definitions.
+func (client *Client) LookupWord(
+	ctx context.Context,
+	params inference.LookupWordRequest,
+) (inference.LookupWordResponse, error) {
+	var result inference.LookupWordResponse
+	if err := retry.Do(
+		func() error {
+			response, err := client.lookupWord(ctx, params)
+			if err != nil {
+				if !isRetryableError(err) {
+					return retry.Unrecoverable(err)
+				}
+				return err
+			}
+			result = response
+			return nil
+		},
+		retry.Context(ctx),
+		retry.Attempts(client.maxRetryAttempts+1),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			return retry.BackOffDelay(n, err, config)
+		}),
+	); err != nil {
+		return inference.LookupWordResponse{}, err
+	}
+	return result, nil
+}
+
+func (client *Client) lookupWord(
+	ctx context.Context,
+	params inference.LookupWordRequest,
+) (inference.LookupWordResponse, error) {
+	systemPrompt := `You are a dictionary API. Given a word or expression and optional context, return a JSON array of definitions.
+
+Each definition object must have:
+- "part_of_speech": e.g. "noun", "verb", "adjective", "idiom", "phrasal verb"
+- "definition": clear, concise definition
+- "pronunciation": IPA pronunciation string (e.g. "/ˈwɜːrd/"), omit if uncertain
+- "examples": array of 1-2 example sentences using the word
+- "synonyms": array of synonyms (up to 5), empty array if none
+- "antonyms": array of antonyms (up to 3), empty array if none
+- "origin": brief etymology or origin note, omit if uncertain
+
+Return multiple definitions if the word has multiple senses or parts of speech.
+If context is provided, rank the most contextually relevant definition first.
+Return ONLY valid JSON. No text outside the JSON array.
+
+Example output format:
+[
+  {
+    "part_of_speech": "noun",
+    "definition": "a brief, comprehensive summary",
+    "pronunciation": "/ˈsɪnəpsɪs/",
+    "examples": ["She gave a synopsis of the film.", "The synopsis covered the main plot points."],
+    "synonyms": ["summary", "outline", "overview"],
+    "antonyms": [],
+    "origin": "from Greek synopsisthai, meaning 'to see together'"
+  }
+]`
+
+	contextLine := ""
+	if params.Context != "" {
+		contextLine = fmt.Sprintf("\nContext: %s", params.Context)
+	}
+	userMessage := fmt.Sprintf("Word: %s%s", params.Word, contextLine)
+
+	requestBody := ChatCompletionRequest{
+		Model:       client.model,
+		Temperature: 0.2,
+		Messages: []Message{
+			{Role: RoleSystem, Content: systemPrompt},
+			{Role: RoleUser, Content: userMessage},
+		},
+	}
+
+	response, err := client.httpClient.R().
+		SetContext(ctx).
+		SetBody(requestBody).
+		SetResult(&ChatCompletionResponse{}).
+		Post("/chat/completions")
+	if err != nil {
+		return inference.LookupWordResponse{}, fmt.Errorf("httpClient.Post > %w", err)
+	}
+	if response.IsError() {
+		return inference.LookupWordResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+	}
+
+	responseBody := response.Result().(*ChatCompletionResponse)
+	if responseBody == nil || len(responseBody.Choices) == 0 {
+		return inference.LookupWordResponse{}, fmt.Errorf("empty response body or choices: %s", response.String())
+	}
+
+	content := responseBody.Choices[0].Message.Content
+	if content == "" {
+		return inference.LookupWordResponse{}, fmt.Errorf("empty response content: %s", response.String())
+	}
+
+	slog.Default().Debug("lookupWord response", "word", params.Word, "response", content)
+
+	var defs []inference.LookupWordDefinition
+	if err := json.NewDecoder(strings.NewReader(content)).Decode(&defs); err != nil {
+		return inference.LookupWordResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
+	}
+	return inference.LookupWordResponse{Definitions: defs}, nil
+}
+
 // ValidateWordForm validates if the user's answer matches the expected word
 func (client *Client) ValidateWordForm(
 	ctx context.Context,
