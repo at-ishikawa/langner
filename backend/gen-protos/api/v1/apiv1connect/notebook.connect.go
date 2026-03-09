@@ -45,6 +45,9 @@ const (
 	// NotebookServiceRegisterDefinitionProcedure is the fully-qualified name of the NotebookService's
 	// RegisterDefinition RPC.
 	NotebookServiceRegisterDefinitionProcedure = "/api.v1.NotebookService/RegisterDefinition"
+	// NotebookServiceDeleteDefinitionProcedure is the fully-qualified name of the NotebookService's
+	// DeleteDefinition RPC.
+	NotebookServiceDeleteDefinitionProcedure = "/api.v1.NotebookService/DeleteDefinition"
 )
 
 // NotebookServiceClient is a client for the api.v1.NotebookService service.
@@ -53,6 +56,7 @@ type NotebookServiceClient interface {
 	ExportNotebookPDF(context.Context, *connect.Request[v1.ExportNotebookPDFRequest]) (*connect.Response[v1.ExportNotebookPDFResponse], error)
 	LookupWord(context.Context, *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error)
 	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
+	DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error)
 }
 
 // NewNotebookServiceClient constructs a client for the api.v1.NotebookService service. By default,
@@ -90,6 +94,12 @@ func NewNotebookServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(notebookServiceMethods.ByName("RegisterDefinition")),
 			connect.WithClientOptions(opts...),
 		),
+		deleteDefinition: connect.NewClient[v1.DeleteDefinitionRequest, v1.DeleteDefinitionResponse](
+			httpClient,
+			baseURL+NotebookServiceDeleteDefinitionProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("DeleteDefinition")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -99,6 +109,7 @@ type notebookServiceClient struct {
 	exportNotebookPDF  *connect.Client[v1.ExportNotebookPDFRequest, v1.ExportNotebookPDFResponse]
 	lookupWord         *connect.Client[v1.LookupWordRequest, v1.LookupWordResponse]
 	registerDefinition *connect.Client[v1.RegisterDefinitionRequest, v1.RegisterDefinitionResponse]
+	deleteDefinition   *connect.Client[v1.DeleteDefinitionRequest, v1.DeleteDefinitionResponse]
 }
 
 // GetNotebookDetail calls api.v1.NotebookService.GetNotebookDetail.
@@ -121,12 +132,18 @@ func (c *notebookServiceClient) RegisterDefinition(ctx context.Context, req *con
 	return c.registerDefinition.CallUnary(ctx, req)
 }
 
+// DeleteDefinition calls api.v1.NotebookService.DeleteDefinition.
+func (c *notebookServiceClient) DeleteDefinition(ctx context.Context, req *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error) {
+	return c.deleteDefinition.CallUnary(ctx, req)
+}
+
 // NotebookServiceHandler is an implementation of the api.v1.NotebookService service.
 type NotebookServiceHandler interface {
 	GetNotebookDetail(context.Context, *connect.Request[v1.GetNotebookDetailRequest]) (*connect.Response[v1.GetNotebookDetailResponse], error)
 	ExportNotebookPDF(context.Context, *connect.Request[v1.ExportNotebookPDFRequest]) (*connect.Response[v1.ExportNotebookPDFResponse], error)
 	LookupWord(context.Context, *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error)
 	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
+	DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error)
 }
 
 // NewNotebookServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -160,6 +177,12 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 		connect.WithSchema(notebookServiceMethods.ByName("RegisterDefinition")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notebookServiceDeleteDefinitionHandler := connect.NewUnaryHandler(
+		NotebookServiceDeleteDefinitionProcedure,
+		svc.DeleteDefinition,
+		connect.WithSchema(notebookServiceMethods.ByName("DeleteDefinition")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.NotebookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotebookServiceGetNotebookDetailProcedure:
@@ -170,6 +193,8 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 			notebookServiceLookupWordHandler.ServeHTTP(w, r)
 		case NotebookServiceRegisterDefinitionProcedure:
 			notebookServiceRegisterDefinitionHandler.ServeHTTP(w, r)
+		case NotebookServiceDeleteDefinitionProcedure:
+			notebookServiceDeleteDefinitionHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -193,4 +218,8 @@ func (UnimplementedNotebookServiceHandler) LookupWord(context.Context, *connect.
 
 func (UnimplementedNotebookServiceHandler) RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.RegisterDefinition is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.DeleteDefinition is not implemented"))
 }

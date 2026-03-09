@@ -46,4 +46,6 @@ export type {
   WordDefinition,
   RegisterDefinitionRequest,
   RegisterDefinitionResponse,
+  DeleteDefinitionRequest,
+  DeleteDefinitionResponse,
 } from "@/gen-protos/api/v1/notebook_pb";

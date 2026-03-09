@@ -524,3 +524,66 @@ func (h *NotebookHandler) RegisterDefinition(
 
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
+
+// DeleteDefinition removes a definition from a book's definitions file.
+func (h *NotebookHandler) DeleteDefinition(
+	ctx context.Context,
+	req *connect.Request[apiv1.DeleteDefinitionRequest],
+) (*connect.Response[apiv1.DeleteDefinitionResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	notebookID := filepath.Base(req.Msg.GetNotebookId())
+	if notebookID == "." || notebookID == ".." || strings.ContainsAny(notebookID, "/\\") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	}
+	notebookFile := req.Msg.GetNotebookFile()
+	sceneIndex := int(req.Msg.GetSceneIndex())
+	expression := req.Msg.GetExpression()
+
+	defsDir := "notebooks/definitions"
+	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
+		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
+	}
+
+	filePath := filepath.Join(defsDir, notebookID+".yml")
+
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("definitions file not found"))
+	}
+
+	definitions, err := notebook.ReadDefinitionsFromBytes(data)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read definitions: %w", err))
+	}
+
+	for i, def := range definitions {
+		key := def.Metadata.Notebook
+		if key == "" {
+			key = def.Metadata.Title
+		}
+		if key != notebookFile {
+			continue
+		}
+		for j, scene := range def.Scenes {
+			if scene.Metadata.GetIndex() != sceneIndex {
+				continue
+			}
+			var remaining []notebook.Note
+			for _, note := range scene.Expressions {
+				if !strings.EqualFold(note.Expression, expression) {
+					remaining = append(remaining, note)
+				}
+			}
+			definitions[i].Scenes[j].Expressions = remaining
+		}
+	}
+
+	if err := notebook.WriteYamlFile(filePath, definitions); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
+}

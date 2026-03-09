@@ -1,7 +1,8 @@
 "use client";
 
+import React from "react";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Box,
@@ -77,9 +78,51 @@ function isBookNotebook(data: GetNotebookDetailResponse): boolean {
   );
 }
 
+function findProseContext(
+  statements: string[],
+  expression: string,
+): string | null {
+  const lower = expression.toLowerCase();
+  for (const stmt of statements) {
+    if (stmt.toLowerCase().includes(lower)) {
+      const idx = stmt.toLowerCase().indexOf(lower);
+      const start = Math.max(0, idx - 80);
+      const end = Math.min(stmt.length, idx + expression.length + 80);
+      let excerpt = stmt.slice(start, end);
+      if (start > 0) excerpt = "\u2026" + excerpt;
+      if (end < stmt.length) excerpt = excerpt + "\u2026";
+      return excerpt;
+    }
+  }
+  return null;
+}
+
+function highlightExcerpt(
+  excerpt: string,
+  expression: string,
+): React.ReactNode[] {
+  const regex = new RegExp(
+    `(${expression.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`,
+    "gi",
+  );
+  const parts = excerpt.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <Text as="span" key={i} fontWeight="bold" color="blue.600">
+        {part}
+      </Text>
+    ) : (
+      <Text as="span" key={i}>
+        {part}
+      </Text>
+    ),
+  );
+}
+
 export default function NotebookDetailPage() {
   const params = useParams();
   const id = params.id as string;
+  const searchParams = useSearchParams();
 
   const [data, setData] = useState<GetNotebookDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -95,6 +138,15 @@ export default function NotebookDetailPage() {
       .catch(() => setError("Failed to load notebook"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Deep-link to chapter from search params
+  useEffect(() => {
+    if (!data) return;
+    const chapter = searchParams.get("chapter");
+    if (!chapter) return;
+    const match = data.stories.find((s) => s.event === chapter);
+    if (match) setSelectedStory(match);
+  }, [data, searchParams]);
 
   if (loading) {
     return (
@@ -127,7 +179,7 @@ export default function NotebookDetailPage() {
             cursor="pointer"
             onClick={() => setSelectedStory(null)}
           >
-            ← {data.name}
+            &larr; {data.name}
           </Text>
         </Box>
 
@@ -193,7 +245,7 @@ export default function NotebookDetailPage() {
       <Box mb={2}>
         <Link href="/notebooks">
           <Text color="blue.600" fontSize="sm">
-            ← Back to notebooks
+            &larr; Back to notebooks
           </Text>
         </Link>
       </Box>
@@ -285,7 +337,9 @@ export default function NotebookDetailPage() {
                 <Text fontSize="xs" color="fg.muted">
                   {filter === "all" ? total : `${matched}/${total}`} words
                 </Text>
-                <Text fontSize="xs" color="fg.muted">›</Text>
+                <Text fontSize="xs" color="fg.muted">
+                  &rsaquo;
+                </Text>
               </Box>
             </Box>
           );
@@ -338,7 +392,7 @@ function SceneRow({
             {filter === "all" ? total : `${matched}/${total}`} words
           </Text>
           <Text fontSize="xs" color="fg.muted">
-            {open ? "▲" : "▼"}
+            {open ? "\u25B2" : "\u25BC"}
           </Text>
         </Box>
       </Box>
@@ -360,9 +414,30 @@ function SceneRow({
           <VStack align="stretch" gap={2}>
             {scene.definitions
               .filter((w) => filter === "all" || w.learningStatus === filter)
-              .map((word, i) => (
-                <WordCard key={i} word={word} />
-              ))}
+              .map((word, i) => {
+                const excerpt = findProseContext(
+                  scene.statements,
+                  word.expression,
+                );
+                return (
+                  <Box key={i}>
+                    {excerpt && (
+                      <Box
+                        borderLeftWidth="2px"
+                        borderColor="blue.200"
+                        pl={2}
+                        mb={1}
+                        _dark={{ borderColor: "blue.700" }}
+                      >
+                        <Text fontSize="xs" color="fg.muted" fontStyle="italic">
+                          {highlightExcerpt(excerpt, word.expression)}
+                        </Text>
+                      </Box>
+                    )}
+                    <WordCard word={word} />
+                  </Box>
+                );
+              })}
           </VStack>
         </Box>
       )}

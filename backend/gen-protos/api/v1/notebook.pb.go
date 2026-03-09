@@ -1018,6 +1018,110 @@ func (*RegisterDefinitionResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_notebook_proto_rawDescGZIP(), []int{14}
 }
 
+type DeleteDefinitionRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NotebookId    string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	NotebookFile  string                 `protobuf:"bytes,2,opt,name=notebook_file,json=notebookFile,proto3" json:"notebook_file,omitempty"`
+	SceneIndex    int32                  `protobuf:"varint,3,opt,name=scene_index,json=sceneIndex,proto3" json:"scene_index,omitempty"`
+	Expression    string                 `protobuf:"bytes,4,opt,name=expression,proto3" json:"expression,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDefinitionRequest) Reset() {
+	*x = DeleteDefinitionRequest{}
+	mi := &file_api_v1_notebook_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDefinitionRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDefinitionRequest) ProtoMessage() {}
+
+func (x *DeleteDefinitionRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDefinitionRequest.ProtoReflect.Descriptor instead.
+func (*DeleteDefinitionRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *DeleteDefinitionRequest) GetNotebookId() string {
+	if x != nil {
+		return x.NotebookId
+	}
+	return ""
+}
+
+func (x *DeleteDefinitionRequest) GetNotebookFile() string {
+	if x != nil {
+		return x.NotebookFile
+	}
+	return ""
+}
+
+func (x *DeleteDefinitionRequest) GetSceneIndex() int32 {
+	if x != nil {
+		return x.SceneIndex
+	}
+	return 0
+}
+
+func (x *DeleteDefinitionRequest) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
+type DeleteDefinitionResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DeleteDefinitionResponse) Reset() {
+	*x = DeleteDefinitionResponse{}
+	mi := &file_api_v1_notebook_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DeleteDefinitionResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DeleteDefinitionResponse) ProtoMessage() {}
+
+func (x *DeleteDefinitionResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DeleteDefinitionResponse.ProtoReflect.Descriptor instead.
+func (*DeleteDefinitionResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{16}
+}
+
 var File_api_v1_notebook_proto protoreflect.FileDescriptor
 
 const file_api_v1_notebook_proto_rawDesc = "" +
@@ -1115,13 +1219,24 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\ameaning\x18\x05 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\ameaning\x12$\n" +
 	"\x0epart_of_speech\x18\x06 \x01(\tR\fpartOfSpeech\x12\x1a\n" +
 	"\bexamples\x18\a \x03(\tR\bexamples\"\x1c\n" +
-	"\x1aRegisterDefinitionResponse2\xe7\x02\n" +
+	"\x1aRegisterDefinitionResponse\"\xb2\x01\n" +
+	"\x17DeleteDefinitionRequest\x12(\n" +
+	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"notebookId\x12#\n" +
+	"\rnotebook_file\x18\x02 \x01(\tR\fnotebookFile\x12\x1f\n" +
+	"\vscene_index\x18\x03 \x01(\x05R\n" +
+	"sceneIndex\x12'\n" +
+	"\n" +
+	"expression\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"expression\"\x1a\n" +
+	"\x18DeleteDefinitionResponse2\xbe\x03\n" +
 	"\x0fNotebookService\x12X\n" +
 	"\x11GetNotebookDetail\x12 .api.v1.GetNotebookDetailRequest\x1a!.api.v1.GetNotebookDetailResponse\x12X\n" +
 	"\x11ExportNotebookPDF\x12 .api.v1.ExportNotebookPDFRequest\x1a!.api.v1.ExportNotebookPDFResponse\x12C\n" +
 	"\n" +
 	"LookupWord\x12\x19.api.v1.LookupWordRequest\x1a\x1a.api.v1.LookupWordResponse\x12[\n" +
-	"\x12RegisterDefinition\x12!.api.v1.RegisterDefinitionRequest\x1a\".api.v1.RegisterDefinitionResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x12RegisterDefinition\x12!.api.v1.RegisterDefinitionRequest\x1a\".api.v1.RegisterDefinitionResponse\x12U\n" +
+	"\x10DeleteDefinition\x12\x1f.api.v1.DeleteDefinitionRequest\x1a .api.v1.DeleteDefinitionResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_notebook_proto_rawDescOnce sync.Once
@@ -1135,7 +1250,7 @@ func file_api_v1_notebook_proto_rawDescGZIP() []byte {
 	return file_api_v1_notebook_proto_rawDescData
 }
 
-var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_api_v1_notebook_proto_goTypes = []any{
 	(*GetNotebookDetailRequest)(nil),   // 0: api.v1.GetNotebookDetailRequest
 	(*GetNotebookDetailResponse)(nil),  // 1: api.v1.GetNotebookDetailResponse
@@ -1152,6 +1267,8 @@ var file_api_v1_notebook_proto_goTypes = []any{
 	(*LookupWordResponse)(nil),         // 12: api.v1.LookupWordResponse
 	(*RegisterDefinitionRequest)(nil),  // 13: api.v1.RegisterDefinitionRequest
 	(*RegisterDefinitionResponse)(nil), // 14: api.v1.RegisterDefinitionResponse
+	(*DeleteDefinitionRequest)(nil),    // 15: api.v1.DeleteDefinitionRequest
+	(*DeleteDefinitionResponse)(nil),   // 16: api.v1.DeleteDefinitionResponse
 }
 var file_api_v1_notebook_proto_depIdxs = []int32{
 	2,  // 0: api.v1.GetNotebookDetailResponse.stories:type_name -> api.v1.StoryEntry
@@ -1165,12 +1282,14 @@ var file_api_v1_notebook_proto_depIdxs = []int32{
 	8,  // 8: api.v1.NotebookService.ExportNotebookPDF:input_type -> api.v1.ExportNotebookPDFRequest
 	10, // 9: api.v1.NotebookService.LookupWord:input_type -> api.v1.LookupWordRequest
 	13, // 10: api.v1.NotebookService.RegisterDefinition:input_type -> api.v1.RegisterDefinitionRequest
-	1,  // 11: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
-	9,  // 12: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
-	12, // 13: api.v1.NotebookService.LookupWord:output_type -> api.v1.LookupWordResponse
-	14, // 14: api.v1.NotebookService.RegisterDefinition:output_type -> api.v1.RegisterDefinitionResponse
-	11, // [11:15] is the sub-list for method output_type
-	7,  // [7:11] is the sub-list for method input_type
+	15, // 11: api.v1.NotebookService.DeleteDefinition:input_type -> api.v1.DeleteDefinitionRequest
+	1,  // 12: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
+	9,  // 13: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
+	12, // 14: api.v1.NotebookService.LookupWord:output_type -> api.v1.LookupWordResponse
+	14, // 15: api.v1.NotebookService.RegisterDefinition:output_type -> api.v1.RegisterDefinitionResponse
+	16, // 16: api.v1.NotebookService.DeleteDefinition:output_type -> api.v1.DeleteDefinitionResponse
+	12, // [12:17] is the sub-list for method output_type
+	7,  // [7:12] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -1187,7 +1306,7 @@ func file_api_v1_notebook_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_notebook_proto_rawDesc), len(file_api_v1_notebook_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   15,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
