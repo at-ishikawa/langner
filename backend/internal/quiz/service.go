@@ -930,14 +930,16 @@ func (s *Service) SaveFreeformResult(card FreeformCard, result FreeformGradeResu
 }
 
 // kindFromIndex returns the kind string for a notebook index.
-// Books imported from epubs have IsBook=true but an empty Kind field,
+// Books loaded from books_directories have IsBook=true but an empty Kind field,
 // so we fall back to "Books" when IsBook is set.
-// Notebooks with kind="Book" (singular) are also normalized to "Books".
 func kindFromIndex(index notebook.Index) string {
-	if index.IsBook || index.Kind == "Book" || index.Kind == "Books" {
+	if index.Kind != "" {
+		return index.Kind
+	}
+	if index.IsBook {
 		return "Books"
 	}
-	return index.Kind
+	return ""
 }
 
 func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
