@@ -10,7 +10,7 @@ interface ResultItem {
   entry: string;
   meaning: string;
   correct: boolean;
-  context?: string;
+  contexts?: string[];
 }
 
 export default function SessionCompletePage() {
@@ -27,7 +27,7 @@ export default function SessionCompletePage() {
         entry: r.entry,
         meaning: r.meaning,
         correct: r.correct,
-        context: r.context,
+        contexts: r.contexts,
       }));
     }
     if (reverseResults.length > 0) {
@@ -36,7 +36,7 @@ export default function SessionCompletePage() {
         entry: r.expression,
         meaning: r.meaning,
         correct: r.correct,
-        context: r.contexts?.[0],
+        contexts: r.contexts,
       }));
     }
     if (freeformResults.length > 0) {
@@ -45,7 +45,7 @@ export default function SessionCompletePage() {
         entry: r.word,
         meaning: r.meaning,
         correct: r.correct,
-        context: r.context,
+        contexts: r.contexts,
       }));
     }
     return [];
@@ -95,11 +95,11 @@ export default function SessionCompletePage() {
               <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
                 <Text fontWeight="bold">{r.entry}</Text>
                 <Text fontSize="sm">{r.meaning}</Text>
-                {r.context && (
-                  <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
-                    {r.context}
+                {r.contexts?.map((ctx, i) => (
+                  <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+                    {ctx}
                   </Text>
-                )}
+                ))}
               </Box>
             ))}
           </VStack>
@@ -116,11 +116,11 @@ export default function SessionCompletePage() {
               <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
                 <Text fontWeight="bold">{r.entry}</Text>
                 <Text fontSize="sm">{r.meaning}</Text>
-                {r.context && (
-                  <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
-                    {r.context}
+                {r.contexts?.map((ctx, i) => (
+                  <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+                    {ctx}
                   </Text>
-                )}
+                ))}
               </Box>
             ))}
           </VStack>

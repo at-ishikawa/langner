@@ -90,7 +90,7 @@ export default function QuizCardPage() {
         correct: res.correct,
         meaning: res.meaning,
         reason: res.reason,
-        context: card.examples[0]?.text,
+        contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
       });
     } catch {
       setError("Failed to submit answer");

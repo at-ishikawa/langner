@@ -34,7 +34,7 @@ export default function FreeformQuizPage() {
     meaning: string;
     reason: string;
     notebookName: string;
-    context: string;
+    context?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef(Date.now());
@@ -89,7 +89,7 @@ export default function FreeformQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         notebookName: res.notebookName,
-        context: res.context,
+        contexts: res.context ? [res.context] : [],
       });
     } catch {
       setError("Failed to submit answer");

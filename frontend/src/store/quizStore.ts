@@ -29,7 +29,7 @@ export interface QuizResult {
   correct: boolean;
   meaning: string;
   reason: string;
-  context?: string;
+  contexts?: string[];
 }
 
 export interface ReverseQuizResult {
@@ -49,7 +49,7 @@ export interface FreeformResult {
   meaning: string;
   reason: string;
   notebookName: string;
-  context?: string;
+  contexts?: string[];
 }
 
 interface QuizState {

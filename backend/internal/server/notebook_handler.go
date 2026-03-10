@@ -445,15 +445,16 @@ func rapidAPIToLookupResponse(word string, resp rapidapi.Response, source string
 
 // resolveDefinitionsFilePath validates the notebookID and returns the path to its definitions YAML file.
 func (h *NotebookHandler) resolveDefinitionsFilePath(notebookIDRaw string) (string, error) {
-	notebookID := filepath.Base(notebookIDRaw)
-	if notebookID == "." || notebookID == ".." || strings.ContainsAny(notebookID, "/\\") {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
-	}
 	defsDir := "notebooks/definitions"
 	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
 		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
 	}
-	return filepath.Join(defsDir, notebookID+".yml"), nil
+	filePath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
+	rel, err := filepath.Rel(defsDir, filePath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	}
+	return filePath, nil
 }
 
 // RegisterDefinition adds a definition to a book's definitions file.
