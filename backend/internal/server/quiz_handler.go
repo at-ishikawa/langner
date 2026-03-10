@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"buf.build/go/protovalidate"
@@ -301,9 +302,20 @@ func (h *QuizHandler) StartFreeformQuiz(
 	h.freeformCards = cards
 	h.mu.Unlock()
 
+	seen := make(map[string]struct{}, len(cards)*2)
 	expressions := make([]string, 0, len(cards))
+	addExpr := func(expr string) {
+		lower := strings.ToLower(expr)
+		if expr != "" {
+			if _, ok := seen[lower]; !ok {
+				seen[lower] = struct{}{}
+				expressions = append(expressions, expr)
+			}
+		}
+	}
 	for _, card := range cards {
-		expressions = append(expressions, card.Expression)
+		addExpr(card.Expression)
+		addExpr(card.OriginalExpression)
 	}
 
 	return connect.NewResponse(&apiv1.StartFreeformQuizResponse{

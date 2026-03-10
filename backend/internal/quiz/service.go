@@ -729,12 +729,13 @@ func (s *Service) SaveReverseResult(card ReverseCard, result GradeResult, respon
 
 // FreeformCard represents a freeform quiz card (user inputs word + meaning).
 type FreeformCard struct {
-	NotebookName string
-	StoryTitle   string
-	SceneTitle   string
-	Expression   string
-	Meaning      string
-	Contexts     []inference.Context
+	NotebookName       string
+	StoryTitle         string
+	SceneTitle         string
+	Expression         string // canonical form (Definition if set, otherwise Expression)
+	OriginalExpression string // text form as it appears in the story (Note.Expression)
+	Meaning            string
+	Contexts           []inference.Context
 }
 
 // LoadAllWords loads all words from all notebooks for freeform quiz.
@@ -786,12 +787,13 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 				_, contexts := buildFromConversations(&scene, &definition)
 
 				cards = append(cards, FreeformCard{
-					NotebookName: notebookID,
-					StoryTitle:   story.Event,
-					SceneTitle:   scene.Title,
-					Expression:   expression,
-					Meaning:      definition.Meaning,
-					Contexts:     contexts,
+					NotebookName:       notebookID,
+					StoryTitle:         story.Event,
+					SceneTitle:         scene.Title,
+					Expression:         expression,
+					OriginalExpression: definition.Expression,
+					Meaning:            definition.Meaning,
+					Contexts:           contexts,
 				})
 			}
 		}
@@ -959,6 +961,9 @@ func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]s
 		nextDate := freeformNextReviewDate(learningHistories[card.NotebookName], card)
 		if nextDate != "" {
 			result[strings.ToLower(card.Expression)] = nextDate
+			if card.OriginalExpression != "" {
+				result[strings.ToLower(card.OriginalExpression)] = nextDate
+			}
 		}
 	}
 	return result, nil
@@ -1004,9 +1009,8 @@ func computeNextReviewDate(logs []notebook.LearningRecord) string {
 
 func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 	var matches []FreeformCard
-	wordLower := strings.ToLower(word)
 	for _, card := range cards {
-		if strings.EqualFold(card.Expression, wordLower) {
+		if strings.EqualFold(card.Expression, word) || strings.EqualFold(card.OriginalExpression, word) {
 			matches = append(matches, card)
 		}
 	}

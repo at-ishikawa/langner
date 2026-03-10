@@ -613,3 +613,70 @@ func TestContainsExpression(t *testing.T) {
 		})
 	}
 }
+
+func TestFindMatchingCards(t *testing.T) {
+	cards := []FreeformCard{
+		{
+			Expression:         "jump down someone's throat",
+			OriginalExpression: "jumped down my throat",
+			Meaning:            "to speak sharply to someone",
+		},
+		{
+			Expression:         "break the ice",
+			OriginalExpression: "",
+			Meaning:            "to initiate social interaction",
+		},
+		{
+			Expression:         "lose one's temper",
+			OriginalExpression: "lost her temper",
+			Meaning:            "to become very angry",
+		},
+	}
+
+	tests := []struct {
+		name      string
+		word      string
+		wantCount int
+		wantExpr  string
+	}{
+		{
+			name:      "matches canonical expression",
+			word:      "break the ice",
+			wantCount: 1,
+			wantExpr:  "break the ice",
+		},
+		{
+			name:      "matches original expression from story text",
+			word:      "jumped down my throat",
+			wantCount: 1,
+			wantExpr:  "jump down someone's throat",
+		},
+		{
+			name:      "case insensitive match on canonical",
+			word:      "Break The Ice",
+			wantCount: 1,
+			wantExpr:  "break the ice",
+		},
+		{
+			name:      "case insensitive match on original",
+			word:      "Lost Her Temper",
+			wantCount: 1,
+			wantExpr:  "lose one's temper",
+		},
+		{
+			name:      "no match",
+			word:      "spill the beans",
+			wantCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findMatchingCards(cards, tt.word)
+			assert.Len(t, got, tt.wantCount)
+			if tt.wantCount > 0 {
+				assert.Equal(t, tt.wantExpr, got[0].Expression)
+			}
+		})
+	}
+}
