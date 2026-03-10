@@ -75,7 +75,7 @@ export default function QuizStartPage() {
 
   const totalDue = notebooks
     .filter((n) => selectedIds.has(n.notebookId))
-    .reduce((sum, n) => sum + n.reviewCount, 0);
+    .reduce((sum, n) => sum + (quizType === "reverse" ? n.reverseReviewCount : n.reviewCount), 0);
 
   const handleQuizTypeChange = (type: QuizType) => {
     setQuizTypeLocal(type);

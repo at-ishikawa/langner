@@ -62,10 +62,11 @@ func (h *QuizHandler) GetQuizOptions(
 	protoSummaries := make([]*apiv1.NotebookSummary, 0, len(summaries))
 	for _, s := range summaries {
 		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{
-			NotebookId:  s.NotebookID,
-			Name:        s.Name,
-			ReviewCount: int32(s.ReviewCount),
-			Kind:        s.Kind,
+			NotebookId:         s.NotebookID,
+			Name:               s.Name,
+			ReviewCount:        int32(s.ReviewCount),
+			Kind:               s.Kind,
+			ReverseReviewCount: int32(s.ReverseReviewCount),
 		})
 	}
 

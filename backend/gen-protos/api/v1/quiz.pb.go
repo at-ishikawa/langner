@@ -155,13 +155,14 @@ func (x *GetQuizOptionsResponse) GetNotebooks() []*NotebookSummary {
 }
 
 type NotebookSummary struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NotebookId    string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	ReviewCount   int32                  `protobuf:"varint,3,opt,name=review_count,json=reviewCount,proto3" json:"review_count,omitempty"`
-	Kind          string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	NotebookId         string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	Name               string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	ReviewCount        int32                  `protobuf:"varint,3,opt,name=review_count,json=reviewCount,proto3" json:"review_count,omitempty"`
+	Kind               string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
+	ReverseReviewCount int32                  `protobuf:"varint,5,opt,name=reverse_review_count,json=reverseReviewCount,proto3" json:"reverse_review_count,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *NotebookSummary) Reset() {
@@ -220,6 +221,13 @@ func (x *NotebookSummary) GetKind() string {
 		return x.Kind
 	}
 	return ""
+}
+
+func (x *NotebookSummary) GetReverseReviewCount() int32 {
+	if x != nil {
+		return x.ReverseReviewCount
+	}
+	return 0
 }
 
 type StartQuizRequest struct {
@@ -1165,13 +1173,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11api/v1/quiz.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"\x17\n" +
 	"\x15GetQuizOptionsRequest\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
-	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"}\n" +
+	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xaf\x01\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\freview_count\x18\x03 \x01(\x05R\vreviewCount\x12\x12\n" +
-	"\x04kind\x18\x04 \x01(\tR\x04kind\"l\n" +
+	"\x04kind\x18\x04 \x01(\tR\x04kind\x120\n" +
+	"\x14reverse_review_count\x18\x05 \x01(\x05R\x12reverseReviewCount\"l\n" +
 	"\x10StartQuizRequest\x12+\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\vnotebookIds\x12+\n" +
 	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"F\n" +

@@ -34,6 +34,7 @@ message NotebookSummary {
   string name = 2;
   int32 review_count = 3;
   string kind = 4;
+  int32 reverse_review_count = 5;
 }
 
 message StartQuizRequest {

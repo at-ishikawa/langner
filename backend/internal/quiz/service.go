@@ -74,12 +74,14 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 				latestDate = s.Date
 			}
 		}
+		reverseCount := countReverseStoryDefinitions(filtered, learningHistories[id])
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:      id,
-			Name:            index.Name,
-			ReviewCount:     countStoryDefinitions(filtered),
-			LatestStoryDate: latestDate,
-			Kind:            kindFromIndex(index),
+			NotebookID:         id,
+			Name:               index.Name,
+			ReviewCount:        countStoryDefinitions(filtered),
+			ReverseReviewCount: reverseCount,
+			LatestStoryDate:    latestDate,
+			Kind:               kindFromIndex(index),
 		})
 	}
 
@@ -96,10 +98,12 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
 		}
 
+		reverseCount := countReverseFlashcardCards(filtered, learningHistories[id])
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:  id,
-			Name:        index.Name,
-			ReviewCount: countFlashcardCards(filtered),
+			NotebookID:         id,
+			Name:               index.Name,
+			ReviewCount:        countFlashcardCards(filtered),
+			ReverseReviewCount: reverseCount,
 		})
 	}
 
@@ -314,6 +318,32 @@ func countStoryDefinitions(stories []notebook.StoryNotebook) int {
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			count += len(scene.Definitions)
+		}
+	}
+	return count
+}
+
+func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []notebook.LearningHistory) int {
+	var count int
+	for _, story := range stories {
+		for _, scene := range story.Scenes {
+			for i := range scene.Definitions {
+				if needsReverseReview(histories, story.Event, scene.Title, &scene.Definitions[i]) {
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
+func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, histories []notebook.LearningHistory) int {
+	var count int
+	for _, nb := range notebooks {
+		for i := range nb.Cards {
+			if needsReverseFlashcardReview(histories, nb.Title, &nb.Cards[i]) {
+				count++
+			}
 		}
 	}
 	return count
