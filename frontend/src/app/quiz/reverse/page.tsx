@@ -98,6 +98,7 @@ export default function ReverseQuizPage() {
         expression: res.expression,
         meaning: res.meaning,
         reason: res.reason,
+        contexts: res.contexts ?? [],
       });
     } catch {
       setError("Failed to submit answer");

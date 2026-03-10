@@ -29,6 +29,7 @@ export interface QuizResult {
   correct: boolean;
   meaning: string;
   reason: string;
+  context?: string;
 }
 
 export interface ReverseQuizResult {
@@ -38,6 +39,7 @@ export interface ReverseQuizResult {
   expression: string;
   meaning: string;
   reason: string;
+  contexts?: string[];
 }
 
 export interface FreeformResult {

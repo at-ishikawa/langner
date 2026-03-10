@@ -27,6 +27,7 @@ export default function SessionCompletePage() {
         entry: r.entry,
         meaning: r.meaning,
         correct: r.correct,
+        context: r.context,
       }));
     }
     if (reverseResults.length > 0) {
@@ -35,6 +36,7 @@ export default function SessionCompletePage() {
         entry: r.expression,
         meaning: r.meaning,
         correct: r.correct,
+        context: r.contexts?.[0],
       }));
     }
     if (freeformResults.length > 0) {
