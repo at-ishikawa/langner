@@ -140,32 +140,24 @@ export default function ReverseQuizPage() {
 
       {phase === "answering" ? (
         <VStack align="stretch" gap={4}>
-          <Text fontWeight="medium" fontSize="sm" color="purple.600" _dark={{ color: "purple.300" }}>
-            Meaning
-          </Text>
           <Heading size="xl" textAlign="center" color="purple.700" _dark={{ color: "purple.300" }}>
             {card.meaning}
           </Heading>
 
           {card.contexts.length > 0 && (
-            <>
-              <Text fontWeight="medium" fontSize="sm" color="purple.600" _dark={{ color: "purple.300" }}>
-                Context (fill in the blank)
-              </Text>
-              <VStack align="stretch" gap={2}>
-                {card.contexts.map((ctx, i) => (
-                  <Text
-                    key={i}
-                    fontSize="md"
-                    color="gray.600"
-                    _dark={{ color: "gray.400" }}
-                    fontStyle="italic"
-                  >
-                    {ctx.maskedContext}
-                  </Text>
-                ))}
-              </VStack>
-            </>
+            <VStack align="stretch" gap={2}>
+              {card.contexts.map((ctx, i) => (
+                <Text
+                  key={i}
+                  fontSize="md"
+                  color="gray.600"
+                  _dark={{ color: "gray.400" }}
+                  fontStyle="italic"
+                >
+                  {ctx.maskedContext}
+                </Text>
+              ))}
+            </VStack>
           )}
 
           <Box>

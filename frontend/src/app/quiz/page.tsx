@@ -206,7 +206,7 @@ export default function QuizStartPage() {
                 <Checkbox.Label flex="1">
                   <Box display="flex" justifyContent="space-between" w="full">
                     <Text>{notebook.name}</Text>
-                    <Text>{notebook.reviewCount}</Text>
+                    <Text>{quizType === "reverse" ? notebook.reverseReviewCount : notebook.reviewCount}</Text>
                   </Box>
                 </Checkbox.Label>
               </Checkbox.Root>

@@ -74,7 +74,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 				latestDate = s.Date
 			}
 		}
-		reverseCount := countReverseStoryDefinitions(filtered, learningHistories[id])
+		reverseCount := countReverseStoryDefinitions(stories, learningHistories[id])
 		summaries = append(summaries, NotebookSummary{
 			NotebookID:         id,
 			Name:               index.Name,
@@ -98,7 +98,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
 		}
 
-		reverseCount := countReverseFlashcardCards(filtered, learningHistories[id])
+		reverseCount := countReverseFlashcardCards(notebooks, learningHistories[id])
 		summaries = append(summaries, NotebookSummary{
 			NotebookID:         id,
 			Name:               index.Name,
@@ -490,16 +490,8 @@ func (s *Service) loadStoryReverseCards(
 		return nil, fmt.Errorf("failed to read story notebook %q: %w", notebookID, err)
 	}
 
-	filtered, err := notebook.FilterStoryNotebooks(
-		stories, learningHistories[notebookID], s.dictionaryMap,
-		false, true, true, false,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter story notebook %q: %w", notebookID, err)
-	}
-
 	var cards []ReverseCard
-	for _, story := range filtered {
+	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
 				expression := definition.Expression
@@ -546,15 +538,8 @@ func (s *Service) loadFlashcardReverseCards(
 		return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", notebookID, err)
 	}
 
-	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], s.dictionaryMap, false,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
-	}
-
 	var cards []ReverseCard
-	for _, nb := range filtered {
+	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
 			expression := card.Expression
 			if card.Definition != "" {
