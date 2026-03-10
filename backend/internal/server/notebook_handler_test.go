@@ -419,6 +419,40 @@ func TestNotebookHandler_RegisterDefinition(t *testing.T) {
 	assert.Contains(t, string(data), "001-chapter-1.yml")
 }
 
+func TestNotebookHandler_RegisterDefinition_Subdirectory(t *testing.T) {
+	defsDir := t.TempDir()
+
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{
+			DefinitionsDirectories: []string{defsDir},
+		},
+		config.TemplatesConfig{},
+		make(map[string]rapidapi.Response),
+		nil,
+		nil,
+	)
+
+	resp, err := handler.RegisterDefinition(
+		context.Background(),
+		connect.NewRequest(&apiv1.RegisterDefinitionRequest{
+			NotebookId:   "books/mybook",
+			NotebookFile: "001-chapter-1.yml",
+			SceneIndex:   0,
+			Expression:   "break the ice",
+			Meaning:      "to do something to relieve tension",
+			PartOfSpeech: "phrase",
+		}),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	// Verify the file was created under the subdirectory, not at the top level
+	data, err := os.ReadFile(filepath.Join(defsDir, "books", "mybook.yml"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "break the ice")
+}
+
 func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
 	defsDir := t.TempDir()
 
@@ -432,7 +466,6 @@ func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
 		nil,
 	)
 
-	// Path traversal input is sanitized by filepath.Base; the write goes to defsDir/passwd.yml (safe)
 	_, err := handler.RegisterDefinition(
 		context.Background(),
 		connect.NewRequest(&apiv1.RegisterDefinitionRequest{
@@ -442,8 +475,5 @@ func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
 		}),
 	)
 
-	require.NoError(t, err)
-	// Verify it wrote to defsDir/passwd.yml, not to /etc/passwd
-	_, statErr := os.Stat(filepath.Join(defsDir, "passwd.yml"))
-	assert.NoError(t, statErr, "file should be written inside defsDir, not the traversal path")
+	require.Error(t, err, "path traversal should be rejected")
 }
