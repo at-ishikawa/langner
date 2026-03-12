@@ -235,7 +235,29 @@ export default function QuizCardPage() {
               </Button>
             </>
           ) : error ? (
-            <Text color="red.500">{error}</Text>
+            <>
+              <Text color="red.500">{error}</Text>
+              <Button
+                w="full"
+                colorPalette="blue"
+                variant="outline"
+                onClick={() => {
+                  setPhase("answering");
+                  setError(null);
+                  setAnswer(submittedAnswer);
+                  setTimeout(() => inputRef.current?.focus(), 50);
+                }}
+              >
+                Retry
+              </Button>
+              <Button
+                w="full"
+                colorPalette="blue"
+                onClick={handleNext}
+              >
+                {currentIndex + 1 >= total ? "See Results" : "Skip"}
+              </Button>
+            </>
           ) : null}
         </VStack>
       )}

@@ -128,6 +128,21 @@ export default function FreeformQuizPage() {
           <Spinner size="lg" mb={4} />
           <Text>Checking your answer...</Text>
         </Box>
+      ) : error ? (
+        <VStack align="stretch" gap={4}>
+          <Text color="red.500">{error}</Text>
+          <Button
+            w="full"
+            colorPalette="blue"
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              wordInputRef.current?.focus();
+            }}
+          >
+            Retry
+          </Button>
+        </VStack>
       ) : feedback ? (
         <VStack align="stretch" gap={4}>
           <Box

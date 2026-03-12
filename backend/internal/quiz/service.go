@@ -3,6 +3,7 @@ package quiz
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -153,7 +154,11 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		}
 	}
 
-	return deduplicateCards(cards), nil
+	cards = deduplicateCards(cards)
+	rand.Shuffle(len(cards), func(i, j int) {
+		cards[i], cards[j] = cards[j], cards[i]
+	})
+	return cards, nil
 }
 
 func deduplicateCards(cards []Card) []Card {
@@ -514,7 +519,11 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 	}
 
-	return deduplicateReverseCards(cards), nil
+	cards = deduplicateReverseCards(cards)
+	rand.Shuffle(len(cards), func(i, j int) {
+		cards[i], cards[j] = cards[j], cards[i]
+	})
+	return cards, nil
 }
 
 func deduplicateReverseCards(cards []ReverseCard) []ReverseCard {
