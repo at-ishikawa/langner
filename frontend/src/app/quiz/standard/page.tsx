@@ -230,7 +230,6 @@ export default function QuizCardPage() {
                 w="full"
                 colorPalette="blue"
                 onClick={handleNext}
-                onKeyDown={handleKeyDown}
               >
                 {currentIndex + 1 >= total ? "See Results" : "Next"}
               </Button>

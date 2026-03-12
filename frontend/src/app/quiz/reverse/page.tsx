@@ -140,7 +140,7 @@ export default function ReverseQuizPage() {
 
       {phase === "answering" ? (
         <VStack align="stretch" gap={4}>
-          <Heading size="xl" textAlign="center" color="purple.700" _dark={{ color: "purple.300" }}>
+          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
             {card.meaning}
           </Heading>
 
@@ -171,12 +171,11 @@ export default function ReverseQuizPage() {
               onKeyDown={handleKeyDown}
               placeholder="Type the word"
               size="lg"
-              borderColor="purple.500"
             />
           </Box>
 
           <Button
-            colorPalette="purple"
+            colorPalette="blue"
             onClick={handleSubmit}
             disabled={!answer.trim()}
             size="lg"
@@ -186,7 +185,7 @@ export default function ReverseQuizPage() {
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
-          <Heading size="xl" textAlign="center" color="purple.700" _dark={{ color: "purple.300" }}>
+          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
             {card.meaning}
           </Heading>
 
@@ -243,9 +242,8 @@ export default function ReverseQuizPage() {
 
               <Button
                 w="full"
-                colorPalette="purple"
+                colorPalette="blue"
                 onClick={handleNext}
-                onKeyDown={handleKeyDown}
               >
                 {currentIndex + 1 >= total ? "See Results" : "Next"}
               </Button>
