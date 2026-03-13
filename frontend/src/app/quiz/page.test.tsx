@@ -63,6 +63,15 @@ describe("QuizCardPage", () => {
     });
   });
 
+  it("redirects to / when quizType is not standard even with flashcards", async () => {
+    useQuizStore.getState().setFlashcards(mockFlashcards);
+    useQuizStore.getState().setQuizType("reverse");
+    renderPage();
+    await waitFor(() => {
+      expect(pushMock).toHaveBeenCalledWith("/");
+    });
+  });
+
   it("renders quiz card with word and examples", () => {
     useQuizStore.getState().setFlashcards(mockFlashcards);
     renderPage();

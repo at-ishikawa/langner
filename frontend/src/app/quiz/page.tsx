@@ -84,6 +84,7 @@ export default function QuizStartPage() {
 
   const handleStart = async () => {
     setStarting(true);
+    setQuizType(quizType);
     try {
       if (quizType === "standard") {
         const res = await quizClient.startQuiz({

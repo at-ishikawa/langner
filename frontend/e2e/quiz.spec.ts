@@ -3,13 +3,14 @@ import { test, expect } from "@playwright/test";
 const GET_QUIZ_OPTIONS_URL = /GetQuizOptions/;
 const START_QUIZ_URL = /StartQuiz/;
 const SUBMIT_ANSWER_URL = /SubmitAnswer/;
+const START_REVERSE_QUIZ_URL = /StartReverseQuiz/;
 const START_FREEFORM_QUIZ_URL = /StartFreeformQuiz/;
 const SUBMIT_FREEFORM_ANSWER_URL = /SubmitFreeformAnswer/;
 
 const CONNECT_JSON_CONTENT_TYPE = "application/json";
 
 const mockNotebooks = [
-  { notebookId: "english-phrases", name: "English Phrases", reviewCount: 2 },
+  { notebookId: "english-phrases", name: "English Phrases", reviewCount: 2, reverseReviewCount: 1 },
 ];
 
 const mockFlashcards = [
@@ -240,4 +241,65 @@ test("completes freeform quiz flow and shows results", async ({ page }) => {
   await expect(page.getByText(/Total: 2 words/)).toBeVisible();
   await expect(page.getByText(/Correct: 1/)).toBeVisible();
   await expect(page.getByText(/Incorrect: 1/)).toBeVisible();
+});
+
+const mockReverseFlashcards = [
+  {
+    noteId: "1",
+    meaning: "to initiate social interaction",
+    contexts: [{ context: "She told a joke to break the ice.", maskedContext: "She told a joke to ___." }],
+    notebookName: "English Phrases",
+    storyTitle: "",
+    sceneTitle: "",
+  },
+];
+
+test("standard quiz starts correctly after a reverse quiz", async ({ page }) => {
+  await page.route(GET_QUIZ_OPTIONS_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ notebooks: mockNotebooks }),
+    });
+  });
+
+  await page.route(START_REVERSE_QUIZ_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ flashcards: mockReverseFlashcards }),
+    });
+  });
+
+  await page.route(START_QUIZ_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ flashcards: mockFlashcards }),
+    });
+  });
+
+  // Step 1: Start a reverse quiz to set quizType to "reverse" in the store
+  const getOptionsPromise = page.waitForResponse(GET_QUIZ_OPTIONS_URL, { timeout: 10000 });
+  await page.goto("/quiz");
+  await getOptionsPromise;
+
+  await page.getByText("Reverse").click();
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
+  await page.getByRole("button", { name: "Start" }).click();
+
+  await page.waitForURL("/quiz/reverse");
+
+  // Step 2: Navigate back using client-side navigation to preserve Zustand store state
+  // Using browser back button keeps the in-memory store (unlike page.goto which reloads)
+  await page.goBack();
+  await page.waitForURL("/quiz");
+
+  // "Standard" is already selected by default — user does NOT click it
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
+  await page.getByRole("button", { name: "Start" }).click();
+
+  // Should navigate to /quiz/standard, NOT redirect to /
+  await page.waitForURL("/quiz/standard");
+  await expect(page.getByRole("heading", { name: "break the ice" })).toBeVisible();
 });
