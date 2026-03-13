@@ -5,16 +5,18 @@ import { ThemeToggle } from "./ThemeToggle";
 
 export function AppHeader() {
   return (
-    <Box
-      as="header"
-      display="flex"
-      justifyContent="flex-end"
-      alignItems="center"
-      px={4}
-      py={2}
-      borderBottomWidth="1px"
-    >
-      <ThemeToggle />
+    <Box as="header" borderBottomWidth="1px">
+      <Box
+        display="flex"
+        justifyContent="flex-end"
+        alignItems="center"
+        maxW="md"
+        mx="auto"
+        px={4}
+        py={2}
+      >
+        <ThemeToggle />
+      </Box>
     </Box>
   );
 }
