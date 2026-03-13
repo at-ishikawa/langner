@@ -486,6 +486,68 @@ func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLog
 	}, nil
 }
 
+// ImportAllResult holds combined results from importing all data types.
+type ImportAllResult struct {
+	Notes      *ImportNotesResult
+	Learning   *ImportLearningLogsResult
+	Dictionary *ImportDictionaryResult
+}
+
+// ImportAll runs all import steps: notes, learning logs, and dictionary.
+func (imp *Importer) ImportAll(ctx context.Context, opts ImportOptions) (*ImportAllResult, error) {
+	noteResult, err := imp.ImportNotes(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("import notes: %w", err)
+	}
+
+	learningResult, err := imp.ImportLearningLogs(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("import learning logs: %w", err)
+	}
+
+	dictResult, err := imp.ImportDictionary(ctx, opts)
+	if err != nil {
+		return nil, fmt.Errorf("import dictionary: %w", err)
+	}
+
+	return &ImportAllResult{
+		Notes:      noteResult,
+		Learning:   learningResult,
+		Dictionary: dictResult,
+	}, nil
+}
+
+// ExportAllResult holds combined results from exporting all data types.
+type ExportAllResult struct {
+	Notes      *ExportNotesResult
+	Learning   *ExportLearningLogsResult
+	Dictionary *ExportDictionaryResult
+}
+
+// ExportAll runs all export steps: notes, learning logs, and dictionary.
+func (exp *Exporter) ExportAll(ctx context.Context) (*ExportAllResult, error) {
+	noteResult, err := exp.ExportNotes(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export notes: %w", err)
+	}
+
+	learningResult, err := exp.ExportLearningLogs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export learning logs: %w", err)
+	}
+
+	dictResult, err := exp.ExportDictionary(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export dictionary: %w", err)
+	}
+
+	return &ExportAllResult{
+		Notes:      noteResult,
+		Learning:   learningResult,
+		Dictionary: dictResult,
+	}, nil
+}
+
 // ExportDictionary reads dictionary entries from the database and writes them via the sink.
 func (exp *Exporter) ExportDictionary(ctx context.Context) (*ExportDictionaryResult, error) {
 	entries, err := exp.dictionaryRepo.FindAll(ctx)

@@ -1,12 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 
 	"github.com/at-ishikawa/langner/internal/config"
@@ -28,68 +30,31 @@ func newMigrateImportDBCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, db, err := openConfigAndDB()
 			if err != nil {
-				return fmt.Errorf("load config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("load config: %w", err)
-			}
-
-			db, err := database.Open(cfg.Database)
-			if err != nil {
-				return fmt.Errorf("open database: %w", err)
+				return err
 			}
 			defer func() { _ = db.Close() }()
-			noteRepo := notebook.NewDBNoteRepository(db)
-			learningRepo := learning.NewDBLearningRepository(db)
-			dictRepo := dictionary.NewDBDictionaryRepository(db)
 
-			reader, err := notebook.NewReader(
-				cfg.Notebooks.StoriesDirectories,
-				cfg.Notebooks.FlashcardsDirectories,
-				cfg.Notebooks.BooksDirectories,
-				cfg.Notebooks.DefinitionsDirectories,
-				nil,
-			)
-			if err != nil {
-				return fmt.Errorf("create notebook reader: %w", err)
-			}
-
-			yamlRepo := notebook.NewYAMLNoteRepository(reader)
-			yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
-			jsonDictRepo := rapidapi.NewJSONDictionaryRepository(cfg.Dictionaries.RapidAPI.CacheDirectory)
-
-			importer := datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, os.Stdout)
+			importer := newImporterFromConfig(cfg, db, os.Stdout)
 			opts := datasync.ImportOptions{
 				DryRun:         dryRun,
 				UpdateExisting: updateExisting,
 			}
 
-			noteResult, err := importer.ImportNotes(ctx, opts)
+			result, err := importer.ImportAll(ctx, opts)
 			if err != nil {
-				return fmt.Errorf("import notes: %w", err)
-			}
-
-			learningResult, err := importer.ImportLearningLogs(ctx, opts)
-			if err != nil {
-				return fmt.Errorf("import learning logs: %w", err)
-			}
-
-			dictResult, err := importer.ImportDictionary(ctx, opts)
-			if err != nil {
-				return fmt.Errorf("import dictionary: %w", err)
+				return err
 			}
 
 			fmt.Println("\nImport Summary:")
 			if opts.DryRun {
 				fmt.Println("  (dry-run mode — no changes made)")
 			}
-			fmt.Printf("  Notes:              %d new, %d skipped, %d updated\n", noteResult.NotesNew, noteResult.NotesSkipped, noteResult.NotesUpdated)
-			fmt.Printf("  Notebook notes:     %d new, %d skipped\n", noteResult.NotebookNew, noteResult.NotebookSkipped)
-			fmt.Printf("  Learning logs:      %d new, %d skipped\n", learningResult.LearningNew, learningResult.LearningSkipped)
-			fmt.Printf("  Dictionary entries: %d new, %d skipped, %d updated\n", dictResult.DictionaryNew, dictResult.DictionarySkipped, dictResult.DictionaryUpdated)
+			fmt.Printf("  Notes:              %d new, %d skipped, %d updated\n", result.Notes.NotesNew, result.Notes.NotesSkipped, result.Notes.NotesUpdated)
+			fmt.Printf("  Notebook notes:     %d new, %d skipped\n", result.Notes.NotebookNew, result.Notes.NotebookSkipped)
+			fmt.Printf("  Learning logs:      %d new, %d skipped\n", result.Learning.LearningNew, result.Learning.LearningSkipped)
+			fmt.Printf("  Dictionary entries: %d new, %d skipped, %d updated\n", result.Dictionary.DictionaryNew, result.Dictionary.DictionarySkipped, result.Dictionary.DictionaryUpdated)
 
 			return nil
 		},
@@ -109,48 +74,22 @@ func newExportDBCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, db, err := openConfigAndDB()
 			if err != nil {
-				return fmt.Errorf("load config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("load config: %w", err)
-			}
-
-			db, err := database.Open(cfg.Database)
-			if err != nil {
-				return fmt.Errorf("open database: %w", err)
+				return err
 			}
 			defer func() { _ = db.Close() }()
 
-			noteRepo := notebook.NewDBNoteRepository(db)
-			learningRepo := learning.NewDBLearningRepository(db)
-			dictRepo := dictionary.NewDBDictionaryRepository(db)
-			noteSink := notebook.NewYAMLNoteRepositoryWriter(outputDir)
-			learningSink := learning.NewYAMLLearningRepositoryWriter(outputDir)
-			dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(outputDir)
-			exporter := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, os.Stdout)
-
-			noteResult, err := exporter.ExportNotes(ctx)
+			exporter := newExporterFromConfig(cfg, db, outputDir, os.Stdout)
+			result, err := exporter.ExportAll(ctx)
 			if err != nil {
-				return fmt.Errorf("export notes: %w", err)
-			}
-
-			learningResult, err := exporter.ExportLearningLogs(ctx)
-			if err != nil {
-				return fmt.Errorf("export learning logs: %w", err)
-			}
-
-			dictResult, err := exporter.ExportDictionary(ctx)
-			if err != nil {
-				return fmt.Errorf("export dictionary: %w", err)
+				return err
 			}
 
 			fmt.Println("\nExport Summary:")
-			fmt.Printf("  Notes exported:              %d\n", noteResult.NotesExported)
-			fmt.Printf("  Learning logs exported:      %d\n", learningResult.LogsExported)
-			fmt.Printf("  Dictionary entries exported: %d\n", dictResult.EntriesExported)
+			fmt.Printf("  Notes exported:              %d\n", result.Notes.NotesExported)
+			fmt.Printf("  Learning logs exported:      %d\n", result.Learning.LogsExported)
+			fmt.Printf("  Dictionary entries exported: %d\n", result.Dictionary.EntriesExported)
 
 			return nil
 		},
@@ -168,51 +107,17 @@ func newValidateDBCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
-			loader, err := config.NewConfigLoader(configFile)
+			cfg, db, err := openConfigAndDB()
 			if err != nil {
-				return fmt.Errorf("load config loader: %w", err)
-			}
-			cfg, err := loader.Load()
-			if err != nil {
-				return fmt.Errorf("load config: %w", err)
-			}
-
-			db, err := database.Open(cfg.Database)
-			if err != nil {
-				return fmt.Errorf("open database: %w", err)
+				return err
 			}
 			defer func() { _ = db.Close() }()
 
-			noteRepo := notebook.NewDBNoteRepository(db)
-			learningRepo := learning.NewDBLearningRepository(db)
-			dictRepo := dictionary.NewDBDictionaryRepository(db)
-
 			// Step 1: Import
 			fmt.Println("Step 1: Importing data...")
-			reader, err := notebook.NewReader(
-				cfg.Notebooks.StoriesDirectories,
-				cfg.Notebooks.FlashcardsDirectories,
-				cfg.Notebooks.BooksDirectories,
-				cfg.Notebooks.DefinitionsDirectories,
-				nil,
-			)
-			if err != nil {
-				return fmt.Errorf("create notebook reader: %w", err)
-			}
-			yamlRepo := notebook.NewYAMLNoteRepository(reader)
-			yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
-			jsonDictRepo := rapidapi.NewJSONDictionaryRepository(cfg.Dictionaries.RapidAPI.CacheDirectory)
-
-			importer := datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, io.Discard)
-			opts := datasync.ImportOptions{UpdateExisting: true}
-			if _, err := importer.ImportNotes(ctx, opts); err != nil {
-				return fmt.Errorf("import notes: %w", err)
-			}
-			if _, err := importer.ImportLearningLogs(ctx, opts); err != nil {
-				return fmt.Errorf("import learning logs: %w", err)
-			}
-			if _, err := importer.ImportDictionary(ctx, opts); err != nil {
-				return fmt.Errorf("import dictionary: %w", err)
+			importer := newImporterFromConfig(cfg, db, io.Discard)
+			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
+				return err
 			}
 			fmt.Println("  Import complete.")
 
@@ -224,106 +129,38 @@ func newValidateDBCommand() *cobra.Command {
 			defer func() { _ = os.RemoveAll(exportDir) }()
 
 			fmt.Printf("Step 2: Exporting data to %s...\n", exportDir)
-			noteSink := notebook.NewYAMLNoteRepositoryWriter(exportDir)
-			learningSink := learning.NewYAMLLearningRepositoryWriter(exportDir)
-			dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(exportDir)
-			exporter := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, io.Discard)
-
-			if _, err := exporter.ExportNotes(ctx); err != nil {
-				return fmt.Errorf("export notes: %w", err)
-			}
-			if _, err := exporter.ExportLearningLogs(ctx); err != nil {
-				return fmt.Errorf("export learning logs: %w", err)
-			}
-			if _, err := exporter.ExportDictionary(ctx); err != nil {
-				return fmt.Errorf("export dictionary: %w", err)
+			exporter := newExporterFromConfig(cfg, db, exportDir, io.Discard)
+			if _, err := exporter.ExportAll(ctx); err != nil {
+				return err
 			}
 			fmt.Println("  Export complete.")
 
-			// Step 3: Read source data
+			// Step 3: Compare source vs exported
 			fmt.Println("Step 3: Validating round-trip...")
-			sourceReader, err := notebook.NewReader(
-				cfg.Notebooks.StoriesDirectories,
-				cfg.Notebooks.FlashcardsDirectories,
-				cfg.Notebooks.BooksDirectories,
-				cfg.Notebooks.DefinitionsDirectories,
-				nil,
-			)
-			if err != nil {
-				return fmt.Errorf("create source reader: %w", err)
-			}
-			sourceYAML := notebook.NewYAMLNoteRepository(sourceReader)
-			sourceNotes, err := sourceYAML.FindAll(ctx)
+
+			sourceNotes, err := readNotesFromDirs(ctx, cfg.Notebooks.StoriesDirectories, cfg.Notebooks.FlashcardsDirectories, cfg.Notebooks.BooksDirectories, cfg.Notebooks.DefinitionsDirectories)
 			if err != nil {
 				return fmt.Errorf("read source notes: %w", err)
 			}
-
-			// Read exported notes
-			exportedReader, err := notebook.NewReader(
+			exportedNotes, err := readNotesFromDirs(ctx,
 				[]string{filepath.Join(exportDir, "stories")},
 				[]string{filepath.Join(exportDir, "flashcards")},
 				[]string{filepath.Join(exportDir, "books")},
 				nil,
-				nil,
 			)
-			if err != nil {
-				return fmt.Errorf("create exported reader: %w", err)
-			}
-			exportedYAML := notebook.NewYAMLNoteRepository(exportedReader)
-			exportedNotes, err := exportedYAML.FindAll(ctx)
 			if err != nil {
 				return fmt.Errorf("read exported notes: %w", err)
 			}
 
-			// Read source learning logs by notebook
-			sourceLearningByNotebook := make(map[string][]notebook.LearningHistoryExpression)
-			sourceLearningYAML := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
-			for _, nbID := range extractNotebookIDs(sourceNotes) {
-				exprs, err := sourceLearningYAML.FindByNotebookID(nbID)
-				if err != nil {
-					return fmt.Errorf("read source learning for %s: %w", nbID, err)
-				}
-				if len(exprs) > 0 {
-					sourceLearningByNotebook[nbID] = exprs
-				}
-			}
+			sourceLearning := readLearningByNotebook(sourceNotes, cfg.Notebooks.LearningNotesDirectory)
+			exportedLearning := readLearningByNotebook(exportedNotes, filepath.Join(exportDir, "learning_notes"))
 
-			// Read exported learning logs by notebook
-			exportedLearningByNotebook := make(map[string][]notebook.LearningHistoryExpression)
-			exportedLearningYAML := learning.NewYAMLLearningRepository(filepath.Join(exportDir, "learning_notes"))
-			for _, nbID := range extractNotebookIDs(exportedNotes) {
-				exprs, err := exportedLearningYAML.FindByNotebookID(nbID)
-				if err != nil {
-					return fmt.Errorf("read exported learning for %s: %w", nbID, err)
-				}
-				if len(exprs) > 0 {
-					exportedLearningByNotebook[nbID] = exprs
-				}
-			}
+			sourceDictCount := countDictEntries(cfg.Dictionaries.RapidAPI.CacheDirectory)
+			exportedDictCount := countDictEntries(filepath.Join(exportDir, "dictionaries", "rapidapi"))
 
-			// Read dictionary counts
-			sourceDictCount := 0
-			if cfg.Dictionaries.RapidAPI.CacheDirectory != "" {
-				responses, err := jsonDictRepo.ReadAll()
-				if err == nil {
-					sourceDictCount = len(responses)
-				}
-			}
-
-			exportedDictCount := 0
-			exportedDictDir := filepath.Join(exportDir, "dictionaries", "rapidapi")
-			if _, statErr := os.Stat(exportedDictDir); statErr == nil {
-				exportedDictRepo := rapidapi.NewJSONDictionaryRepository(exportedDictDir)
-				responses, err := exportedDictRepo.ReadAll()
-				if err == nil {
-					exportedDictCount = len(responses)
-				}
-			}
-
-			// Run validation
 			validResult := datasync.ValidateRoundTrip(
 				sourceNotes, exportedNotes,
-				sourceLearningByNotebook, exportedLearningByNotebook,
+				sourceLearning, exportedLearning,
 				sourceDictCount, exportedDictCount,
 				os.Stdout,
 			)
@@ -337,6 +174,95 @@ func newValidateDBCommand() *cobra.Command {
 	}
 
 	return cmd
+}
+
+func openConfigAndDB() (*config.Config, *sqlx.DB, error) {
+	loader, err := config.NewConfigLoader(configFile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("load config loader: %w", err)
+	}
+	cfg, err := loader.Load()
+	if err != nil {
+		return nil, nil, fmt.Errorf("load config: %w", err)
+	}
+	db, err := database.Open(cfg.Database)
+	if err != nil {
+		return nil, nil, fmt.Errorf("open database: %w", err)
+	}
+	return cfg, db, nil
+}
+
+func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *datasync.Importer {
+	noteRepo := notebook.NewDBNoteRepository(db)
+	learningRepo := learning.NewDBLearningRepository(db)
+	dictRepo := dictionary.NewDBDictionaryRepository(db)
+
+	reader, err := notebook.NewReader(
+		cfg.Notebooks.StoriesDirectories,
+		cfg.Notebooks.FlashcardsDirectories,
+		cfg.Notebooks.BooksDirectories,
+		cfg.Notebooks.DefinitionsDirectories,
+		nil,
+	)
+	if err != nil {
+		// Reader creation only fails if directories are invalid, which is a config issue.
+		// The caller will get the error when ImportAll is called.
+		return datasync.NewImporter(noteRepo, learningRepo, nil, nil, nil, dictRepo, writer)
+	}
+
+	yamlRepo := notebook.NewYAMLNoteRepository(reader)
+	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
+	jsonDictRepo := rapidapi.NewJSONDictionaryRepository(cfg.Dictionaries.RapidAPI.CacheDirectory)
+
+	return datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, writer)
+}
+
+func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, writer io.Writer) *datasync.Exporter {
+	noteRepo := notebook.NewDBNoteRepository(db)
+	learningRepo := learning.NewDBLearningRepository(db)
+	dictRepo := dictionary.NewDBDictionaryRepository(db)
+	noteSink := notebook.NewYAMLNoteRepositoryWriter(outputDir)
+	learningSink := learning.NewYAMLLearningRepositoryWriter(outputDir)
+	dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(outputDir)
+
+	return datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, writer)
+}
+
+func readNotesFromDirs(ctx context.Context, storyDirs, flashcardDirs, bookDirs, definitionDirs []string) ([]notebook.NoteRecord, error) {
+	reader, err := notebook.NewReader(storyDirs, flashcardDirs, bookDirs, definitionDirs, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create reader: %w", err)
+	}
+	yamlRepo := notebook.NewYAMLNoteRepository(reader)
+	return yamlRepo.FindAll(ctx)
+}
+
+func readLearningByNotebook(notes []notebook.NoteRecord, learningDir string) map[string][]notebook.LearningHistoryExpression {
+	result := make(map[string][]notebook.LearningHistoryExpression)
+	repo := learning.NewYAMLLearningRepository(learningDir)
+	for _, nbID := range extractNotebookIDs(notes) {
+		exprs, err := repo.FindByNotebookID(nbID)
+		if err != nil || len(exprs) == 0 {
+			continue
+		}
+		result[nbID] = exprs
+	}
+	return result
+}
+
+func countDictEntries(dir string) int {
+	if dir == "" {
+		return 0
+	}
+	if _, err := os.Stat(dir); err != nil {
+		return 0
+	}
+	repo := rapidapi.NewJSONDictionaryRepository(dir)
+	responses, err := repo.ReadAll()
+	if err != nil {
+		return 0
+	}
+	return len(responses)
 }
 
 func extractNotebookIDs(notes []notebook.NoteRecord) []string {
