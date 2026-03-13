@@ -972,60 +972,6 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 	assert.Equal(t, 0, cli2.GetCardCount(), "Second quiz should have 0 cards - word was answered today")
 }
 
-func TestDeduplicateReverseCards(t *testing.T) {
-	tests := []struct {
-		name      string
-		cards     []quiz.ReverseCard
-		wantCount int
-		validate  func(t *testing.T, result []quiz.ReverseCard)
-	}{
-		{
-			name:      "empty input",
-			cards:     []quiz.ReverseCard{},
-			wantCount: 0,
-		},
-		{
-			name: "no duplicates",
-			cards: []quiz.ReverseCard{
-				{Expression: "hello", Meaning: "a greeting", Contexts: []quiz.ReverseContext{}},
-				{Expression: "world", Meaning: "the earth", Contexts: []quiz.ReverseContext{}},
-			},
-			wantCount: 2,
-		},
-		{
-			name: "duplicates - keeps one with more contexts",
-			cards: []quiz.ReverseCard{
-				{Expression: "hello", Meaning: "a greeting", Contexts: []quiz.ReverseContext{{Context: "Hello!", MaskedContext: "______!"}}},
-				{Expression: "hello", Meaning: "a greeting", Contexts: []quiz.ReverseContext{}},
-			},
-			wantCount: 1,
-			validate: func(t *testing.T, result []quiz.ReverseCard) {
-				assert.Equal(t, 1, len(result[0].Contexts), "should keep the card with more contexts")
-			},
-		},
-		{
-			name: "case insensitive dedup",
-			cards: []quiz.ReverseCard{
-				{Expression: "Hello", Meaning: "a greeting", Contexts: []quiz.ReverseContext{}},
-				{Expression: "hello", Meaning: "a greeting", Contexts: []quiz.ReverseContext{{Context: "Hello!", MaskedContext: "______!"}}},
-			},
-			wantCount: 1,
-			validate: func(t *testing.T, result []quiz.ReverseCard) {
-				assert.Equal(t, 1, len(result[0].Contexts), "should keep the card with more contexts")
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := deduplicateReverseCards(tt.cards)
-			assert.Equal(t, tt.wantCount, len(result))
-			if tt.validate != nil {
-				tt.validate(t, result)
-			}
-		})
-	}
-}
 
 func TestReverseQuizCLI_DisplayResult(t *testing.T) {
 	color.NoColor = true

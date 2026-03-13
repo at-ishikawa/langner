@@ -133,12 +133,117 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	storySummary, ok := summaryMap["test-story"]
 	require.True(t, ok)
 	assert.Equal(t, "Test Story", storySummary.Name)
-	assert.Equal(t, 1, storySummary.ReviewCount)
+	// Only misunderstood answers in fixture → no words with correct answers → ReviewCount=0
+	assert.Equal(t, 0, storySummary.ReviewCount)
+	// Only misunderstood answers in fixture → no words eligible for reverse quiz
+	assert.Equal(t, 0, storySummary.ReverseReviewCount)
 
 	vocabSummary, ok := summaryMap["test-vocab"]
 	require.True(t, ok)
 	assert.Equal(t, "Test Vocabulary", vocabSummary.Name)
 	assert.Equal(t, 1, vocabSummary.ReviewCount)
+	assert.Equal(t, 0, vocabSummary.ReverseReviewCount)
+}
+
+func TestService_LoadNotebookSummaries_ReverseReviewCount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	storiesDir := t.TempDir()
+	flashcardsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	// Story with one word that has a correct answer (eligible for reverse)
+	storyDir := filepath.Join(storiesDir, "my-story")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(`id: my-story
+name: My Story
+notebooks:
+  - ./episodes.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "episodes.yml"), []byte(`- event: "Episode 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "Scene 1"
+      conversations:
+        - speaker: "Bob"
+          quote: "He lost his temper completely."
+      definitions:
+        - expression: "lose one's temper"
+          meaning: "to become very angry"
+        - expression: "break the ice"
+          meaning: "to initiate social interaction"
+`), 0644))
+	// Learning history: "lose one's temper" has a correct answer, "break the ice" does not
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "my-story.yml"), []byte(`- metadata:
+    notebook_id: my-story
+    title: "Episode 1"
+  scenes:
+    - metadata:
+        title: "Scene 1"
+      expressions:
+        - expression: "lose one's temper"
+          learned_logs:
+            - status: "understood"
+              learned_at: "2025-01-14"
+              interval_days: 1
+        - expression: "break the ice"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+`), 0644))
+
+	// Flashcard with one word that has a correct answer
+	vocabDir := filepath.Join(flashcardsDir, "my-vocab")
+	require.NoError(t, os.MkdirAll(vocabDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "index.yml"), []byte(`id: my-vocab
+name: My Vocab
+notebooks:
+  - ./cards.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "cards.yml"), []byte(`- title: "Common Phrases"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "serendipity"
+      meaning: "a fortunate discovery by accident"
+    - expression: "ephemeral"
+      meaning: "lasting for a very short time"
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "my-vocab.yml"), []byte(`- metadata:
+    notebook_id: my-vocab
+    title: "Common Phrases"
+    type: "flashcard"
+  expressions:
+    - expression: "serendipity"
+      learned_logs:
+        - status: "understood"
+          learned_at: "2025-01-14"
+          interval_days: 1
+    - expression: "ephemeral"
+      learned_logs:
+        - status: "misunderstood"
+          learned_at: "2025-01-14"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		FlashcardsDirectories:  []string{flashcardsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response))
+
+	summaries, err := svc.LoadNotebookSummaries()
+	require.NoError(t, err)
+
+	summaryMap := make(map[string]NotebookSummary)
+	for _, s := range summaries {
+		summaryMap[s.NotebookID] = s
+	}
+
+	storySummary := summaryMap["my-story"]
+	assert.Equal(t, 1, storySummary.ReviewCount, "only the word with a correct answer is counted")
+	assert.Equal(t, 1, storySummary.ReverseReviewCount, "only the word with a correct answer is eligible for reverse")
+
+	vocabSummary := summaryMap["my-vocab"]
+	assert.Equal(t, 2, vocabSummary.ReviewCount)
+	assert.Equal(t, 1, vocabSummary.ReverseReviewCount, "only the word with a correct answer is eligible for reverse")
 }
 
 func TestService_LoadNotebookSummaries_LearningHistoryError(t *testing.T) {
@@ -610,6 +715,183 @@ func TestContainsExpression(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := containsExpression(tt.textLower, tt.expression, tt.definition)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestFindMatchingCards(t *testing.T) {
+	cards := []FreeformCard{
+		{
+			Expression:         "jump down someone's throat",
+			OriginalExpression: "jumped down my throat",
+			Meaning:            "to speak sharply to someone",
+		},
+		{
+			Expression:         "break the ice",
+			OriginalExpression: "",
+			Meaning:            "to initiate social interaction",
+		},
+		{
+			Expression:         "lose one's temper",
+			OriginalExpression: "lost her temper",
+			Meaning:            "to become very angry",
+		},
+	}
+
+	tests := []struct {
+		name      string
+		word      string
+		wantCount int
+		wantExpr  string
+	}{
+		{
+			name:      "matches canonical expression",
+			word:      "break the ice",
+			wantCount: 1,
+			wantExpr:  "break the ice",
+		},
+		{
+			name:      "matches original expression from story text",
+			word:      "jumped down my throat",
+			wantCount: 1,
+			wantExpr:  "jump down someone's throat",
+		},
+		{
+			name:      "case insensitive match on canonical",
+			word:      "Break The Ice",
+			wantCount: 1,
+			wantExpr:  "break the ice",
+		},
+		{
+			name:      "case insensitive match on original",
+			word:      "Lost Her Temper",
+			wantCount: 1,
+			wantExpr:  "lose one's temper",
+		},
+		{
+			name:      "no match",
+			word:      "spill the beans",
+			wantCount: 0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := findMatchingCards(cards, tt.word)
+			assert.Len(t, got, tt.wantCount)
+			if tt.wantCount > 0 {
+				assert.Equal(t, tt.wantExpr, got[0].Expression)
+			}
+		})
+	}
+}
+
+func TestDeduplicateReverseCards(t *testing.T) {
+	tests := []struct {
+		name      string
+		cards     []ReverseCard
+		wantCount int
+		validate  func(t *testing.T, result []ReverseCard)
+	}{
+		{
+			name:      "empty input",
+			cards:     []ReverseCard{},
+			wantCount: 0,
+		},
+		{
+			name: "no duplicates",
+			cards: []ReverseCard{
+				{Expression: "break the ice", Meaning: "to initiate conversation"},
+				{Expression: "lose one's temper", Meaning: "to become very angry"},
+			},
+			wantCount: 2,
+		},
+		{
+			name: "duplicates - keeps card with more contexts",
+			cards: []ReverseCard{
+				{Expression: "break the ice", Meaning: "to initiate conversation", Contexts: []ReverseContext{{Context: "She broke the ice.", MaskedContext: "She ______ the ice."}}},
+				{Expression: "break the ice", Meaning: "to initiate conversation", Contexts: []ReverseContext{}},
+			},
+			wantCount: 1,
+			validate: func(t *testing.T, result []ReverseCard) {
+				assert.Equal(t, 1, len(result[0].Contexts), "should keep card with more contexts")
+			},
+		},
+		{
+			name: "case insensitive dedup",
+			cards: []ReverseCard{
+				{Expression: "Break the Ice", Meaning: "to initiate conversation"},
+				{Expression: "break the ice", Meaning: "to initiate conversation", Contexts: []ReverseContext{{Context: "She broke the ice.", MaskedContext: "She ______ the ice."}}},
+			},
+			wantCount: 1,
+			validate: func(t *testing.T, result []ReverseCard) {
+				assert.Equal(t, 1, len(result[0].Contexts), "should keep card with more contexts")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := deduplicateReverseCards(tt.cards)
+			assert.Equal(t, tt.wantCount, len(result))
+			if tt.validate != nil {
+				tt.validate(t, result)
+			}
+		})
+	}
+}
+
+func TestDeduplicateCards(t *testing.T) {
+	tests := []struct {
+		name      string
+		cards     []Card
+		wantCount int
+		validate  func(t *testing.T, result []Card)
+	}{
+		{
+			name:      "empty input",
+			cards:     []Card{},
+			wantCount: 0,
+		},
+		{
+			name: "no duplicates",
+			cards: []Card{
+				{Entry: "break the ice", Meaning: "to initiate conversation"},
+				{Entry: "lose one's temper", Meaning: "to become very angry"},
+			},
+			wantCount: 2,
+		},
+		{
+			name: "duplicates - keeps card with more examples",
+			cards: []Card{
+				{Entry: "break the ice", Meaning: "to initiate conversation", Examples: []Example{{Text: "She broke the ice.", Speaker: "Alice"}}},
+				{Entry: "break the ice", Meaning: "to initiate conversation"},
+			},
+			wantCount: 1,
+			validate: func(t *testing.T, result []Card) {
+				assert.Equal(t, 1, len(result[0].Examples), "should keep card with more examples")
+			},
+		},
+		{
+			name: "case insensitive dedup",
+			cards: []Card{
+				{Entry: "Break the Ice", Meaning: "to initiate conversation"},
+				{Entry: "break the ice", Meaning: "to initiate conversation", Examples: []Example{{Text: "She broke the ice.", Speaker: "Alice"}}},
+			},
+			wantCount: 1,
+			validate: func(t *testing.T, result []Card) {
+				assert.Equal(t, 1, len(result[0].Examples), "should keep card with more examples")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := deduplicateCards(tt.cards)
+			assert.Equal(t, tt.wantCount, len(result))
+			if tt.validate != nil {
+				tt.validate(t, result)
+			}
 		})
 	}
 }

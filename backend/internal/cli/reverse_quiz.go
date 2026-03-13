@@ -61,7 +61,6 @@ func NewReverseQuizCLI(
 		return nil, fmt.Errorf("failed to load reverse cards: %w", err)
 	}
 
-	cards = deduplicateReverseCards(cards)
 	cards = sortReverseCardsByContextAvailability(cards)
 
 	return &ReverseQuizCLI{
@@ -71,26 +70,6 @@ func NewReverseQuizCLI(
 		cards:              cards,
 		listMissingContext: listMissingContext,
 	}, nil
-}
-
-// deduplicateReverseCards removes duplicate cards with the same expression,
-// keeping the one with the most context sentences.
-func deduplicateReverseCards(cards []quiz.ReverseCard) []quiz.ReverseCard {
-	seen := make(map[string]int) // expression -> index in result
-
-	var result []quiz.ReverseCard
-	for _, card := range cards {
-		expr := strings.ToLower(card.Expression)
-		if idx, ok := seen[expr]; ok {
-			if len(card.Contexts) > len(result[idx].Contexts) {
-				result[idx] = card
-			}
-		} else {
-			seen[expr] = len(result)
-			result = append(result, card)
-		}
-	}
-	return result
 }
 
 // sortReverseCardsByContextAvailability sorts cards so that words without context come first.

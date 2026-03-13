@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -21,6 +21,8 @@ export default function FreeformQuizPage() {
   const wordCount = useQuizStore((s) => s.wordCount);
   const storeSubmitResult = useQuizStore((s) => s.submitFreeformResult);
   const freeformResults = useQuizStore((s) => s.freeformResults);
+  const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
+  const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
   const reset = useQuizStore((s) => s.reset);
 
   const [word, setWord] = useState("");
@@ -32,6 +34,7 @@ export default function FreeformQuizPage() {
     meaning: string;
     reason: string;
     notebookName: string;
+    context?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef(Date.now());
@@ -43,6 +46,18 @@ export default function FreeformQuizPage() {
     }
     wordInputRef.current?.focus();
   }, [quizType, router]);
+
+  // Returns: null (no input), false (not found), true (found & due), string (found but not due - the date)
+  const wordStatus: null | boolean | string = useMemo(() => {
+    const trimmed = word.trim();
+    if (!trimmed || freeformExpressions.length === 0) return null;
+    const lower = trimmed.toLowerCase();
+    const found = freeformExpressions.some((e) => e.toLowerCase() === lower);
+    if (!found) return false;
+    const nextReview = freeformNextReviewDates[lower];
+    if (nextReview) return nextReview;
+    return true;
+  }, [word, freeformExpressions, freeformNextReviewDates]);
 
   const handleSubmit = async () => {
     if (!word.trim() || !meaning.trim()) return;
@@ -65,6 +80,7 @@ export default function FreeformQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         notebookName: res.notebookName,
+        context: res.context,
       });
       storeSubmitResult({
         word: res.word,
@@ -73,6 +89,7 @@ export default function FreeformQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         notebookName: res.notebookName,
+        contexts: res.context ? [res.context] : [],
       });
     } catch {
       setError("Failed to submit answer");
@@ -102,7 +119,7 @@ export default function FreeformQuizPage() {
         Freeform Quiz
       </Heading>
 
-      <Text mb={4} color="gray.600">
+      <Text mb={4} color="gray.600" _dark={{ color: "gray.400" }}>
         Type any word you&apos;re learning and its meaning
       </Text>
 
@@ -111,12 +128,28 @@ export default function FreeformQuizPage() {
           <Spinner size="lg" mb={4} />
           <Text>Checking your answer...</Text>
         </Box>
+      ) : error ? (
+        <VStack align="stretch" gap={4}>
+          <Text color="red.500">{error}</Text>
+          <Button
+            w="full"
+            colorPalette="blue"
+            variant="outline"
+            onClick={() => {
+              setError(null);
+              wordInputRef.current?.focus();
+            }}
+          >
+            Retry
+          </Button>
+        </VStack>
       ) : feedback ? (
         <VStack align="stretch" gap={4}>
           <Box
             p={4}
             borderRadius="md"
             bg={feedback.correct ? "green.100" : "red.100"}
+            _dark={{ bg: feedback.correct ? "green.900" : "red.900" }}
           >
             <Text fontWeight="bold" fontSize="lg">
               {feedback.correct ? "\u2713 Correct!" : "\u2717 Incorrect"}
@@ -141,9 +174,16 @@ export default function FreeformQuizPage() {
           )}
 
           {feedback.notebookName && (
-            <Text fontSize="sm" color="gray.500">
+            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
               Found in: {feedback.notebookName}
             </Text>
+          )}
+
+          {feedback.context && (
+            <Box>
+              <Text fontWeight="bold">Context</Text>
+              <Text fontStyle="italic">{feedback.context}</Text>
+            </Box>
           )}
 
           <Button colorPalette="blue" onClick={handleNext} mt={4}>
@@ -184,6 +224,21 @@ export default function FreeformQuizPage() {
               placeholder="e.g., hit the hay"
               size="lg"
             />
+            {wordStatus === true && (
+              <Text fontSize="sm" color="green.500" mt={1}>
+                Found in notebooks
+              </Text>
+            )}
+            {wordStatus === false && (
+              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+                Word not found in notebooks
+              </Text>
+            )}
+            {typeof wordStatus === "string" && (
+              <Text fontSize="sm" color="orange.500" _dark={{ color: "orange.300" }} mt={1}>
+                Not due until {wordStatus}
+              </Text>
+            )}
           </Box>
 
           <Box>
@@ -205,13 +260,23 @@ export default function FreeformQuizPage() {
           <Button
             colorPalette="blue"
             onClick={handleSubmit}
-            disabled={!word.trim() || !meaning.trim()}
+            disabled={!word.trim() || !meaning.trim() || wordStatus === false || typeof wordStatus === "string"}
             size="lg"
           >
             Check Answer
           </Button>
 
-          <Text fontSize="sm" color="gray.500" textAlign="center">
+          {freeformResults.length > 0 && (
+            <Button
+              colorPalette="green"
+              variant="outline"
+              onClick={() => router.push("/quiz/complete")}
+            >
+              See Results
+            </Button>
+          )}
+
+          <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center">
             {wordCount} words available in your notebooks
           </Text>
         </VStack>

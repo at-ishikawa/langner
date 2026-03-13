@@ -13,7 +13,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { quizClient } from "@/lib/client";
-import { useQuizStore, type ReverseFlashcard } from "@/store/quizStore";
+import { useQuizStore } from "@/store/quizStore";
 
 type QuizPhase = "answering" | "feedback";
 
@@ -98,6 +98,7 @@ export default function ReverseQuizPage() {
         expression: res.expression,
         meaning: res.meaning,
         reason: res.reason,
+        contexts: res.contexts ?? [],
       });
     } catch {
       setError("Failed to submit answer");
@@ -125,14 +126,7 @@ export default function ReverseQuizPage() {
   };
 
   return (
-    <Box
-      p={4}
-      maxW="md"
-      mx="auto"
-      display="flex"
-      flexDirection="column"
-      minH="100dvh"
-    >
+    <Box p={4} maxW="md" mx="auto">
       <Box mb={4}>
         <Text fontSize="sm" mb={1}>
           {currentIndex + 1} / {total}
@@ -144,131 +138,143 @@ export default function ReverseQuizPage() {
         </Progress.Root>
       </Box>
 
-      <Box flex="1" overflowY="auto" mb={4}>
-        {phase === "answering" ? (
-          <VStack align="stretch" gap={4}>
-            <Text fontWeight="medium" fontSize="sm" color="purple.600">
-              Meaning
-            </Text>
-            <Heading size="xl" textAlign="center" color="purple.700">
-              {card.meaning}
-            </Heading>
+      {phase === "answering" ? (
+        <VStack align="stretch" gap={4}>
+          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
+            {card.meaning}
+          </Heading>
 
-            {card.contexts.length > 0 && (
-              <>
-                <Text fontWeight="medium" fontSize="sm" color="purple.600">
-                  Context (fill in the blank)
-                </Text>
-                <VStack align="stretch" gap={2}>
-                  {card.contexts.map((ctx, i) => (
-                    <Text
-                      key={i}
-                      fontSize="md"
-                      color="gray.600"
-                      fontStyle="italic"
-                    >
-                      {ctx.maskedContext}
-                    </Text>
-                  ))}
-                </VStack>
-              </>
-            )}
-          </VStack>
-        ) : (
-          <VStack align="stretch" gap={4}>
-            <Heading size="xl" textAlign="center" color="purple.700">
-              {card.meaning}
-            </Heading>
-
-            {loading ? (
-              <Box textAlign="center" py={4}>
-                <Text mb={2}>Your answer: {submittedAnswer}</Text>
-                <Spinner size="lg" />
-              </Box>
-            ) : feedback ? (
-              <VStack align="stretch" gap={3}>
-                <Box
-                  p={3}
-                  borderRadius="md"
-                  bg={feedback.correct ? "green.100" : "red.100"}
-                  color={feedback.correct ? "green.800" : "red.800"}
-                >
-                  <Text fontWeight="bold">
-                    {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}
-                  </Text>
-                </Box>
-
+          {card.contexts.length > 0 && (
+            <VStack align="stretch" gap={2}>
+              {card.contexts.map((ctx, i) => (
                 <Text
-                  textDecoration={feedback.correct ? "none" : "line-through"}
+                  key={i}
+                  fontSize="md"
+                  color="gray.600"
+                  _dark={{ color: "gray.400" }}
+                  fontStyle="italic"
                 >
-                  Your answer: {submittedAnswer}
+                  {ctx.maskedContext}
                 </Text>
+              ))}
+            </VStack>
+          )}
 
-                <Box>
-                  <Text fontWeight="bold">Word</Text>
-                  <Text fontStyle="italic">{feedback.expression}</Text>
-                </Box>
-
-                {feedback.reason && (
-                  <Box>
-                    <Text fontWeight="bold">Reason</Text>
-                    <Text>{feedback.reason}</Text>
-                  </Box>
-                )}
-
-                {feedback.contexts.length > 0 && (
-                  <Box>
-                    <Text fontWeight="bold" mt={2}>
-                      Context:
-                    </Text>
-                    {feedback.contexts.map((ctx, i) => (
-                      <Text key={i} fontSize="sm" color="gray.600">
-                        {i + 1}. {ctx}
-                      </Text>
-                    ))}
-                  </Box>
-                )}
-              </VStack>
-            ) : error ? (
-              <Text color="red.500">{error}</Text>
-            ) : null}
-          </VStack>
-        )}
-      </Box>
-
-      <Box>
-        {phase === "answering" ? (
-          <Box display="flex" gap={2}>
+          <Box>
+            <Text fontWeight="medium" mb={1}>
+              Word
+            </Text>
             <Input
               ref={inputRef}
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Type the word"
-              flex="1"
-              autoFocus
-              borderColor="purple.500"
+              size="lg"
             />
-            <Button
-              colorPalette="purple"
-              onClick={handleSubmit}
-              disabled={!answer.trim()}
-            >
-              Submit
-            </Button>
           </Box>
-        ) : (
+
           <Button
-            w="full"
-            colorPalette="purple"
-            onClick={handleNext}
-            onKeyDown={handleKeyDown}
-            disabled={loading}
+            colorPalette="blue"
+            onClick={handleSubmit}
+            disabled={!answer.trim()}
+            size="lg"
           >
-            {currentIndex + 1 >= total ? "See Results" : "Next"}
+            Submit
           </Button>
-        )}
-      </Box>
+        </VStack>
+      ) : (
+        <VStack align="stretch" gap={4}>
+          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
+            {card.meaning}
+          </Heading>
+
+          {loading ? (
+            <Box textAlign="center" py={8}>
+              <Spinner size="lg" mb={4} />
+              <Text>Checking your answer...</Text>
+            </Box>
+          ) : feedback ? (
+            <>
+              <Box
+                p={3}
+                borderRadius="md"
+                bg={feedback.correct ? "green.100" : "red.100"}
+                color={feedback.correct ? "green.800" : "red.800"}
+                _dark={{
+                  bg: feedback.correct ? "green.900" : "red.900",
+                  color: feedback.correct ? "green.200" : "red.200",
+                }}
+              >
+                <Text fontWeight="bold">
+                  {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}
+                </Text>
+              </Box>
+
+              <Text textDecoration={feedback.correct ? "none" : "line-through"}>
+                Your answer: {submittedAnswer}
+              </Text>
+
+              <Box>
+                <Text fontWeight="bold">Word</Text>
+                <Text fontStyle="italic">{feedback.expression}</Text>
+              </Box>
+
+              {feedback.reason && (
+                <Box>
+                  <Text fontWeight="bold">Reason</Text>
+                  <Text>{feedback.reason}</Text>
+                </Box>
+              )}
+
+              {feedback.contexts.length > 0 && (
+                <Box>
+                  <Text fontWeight="bold">Context</Text>
+                  <VStack align="stretch" gap={1} mt={1}>
+                    {feedback.contexts.map((ctx, i) => (
+                      <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
+                        {i + 1}. {ctx}
+                      </Text>
+                    ))}
+                  </VStack>
+                </Box>
+              )}
+
+              <Button
+                w="full"
+                colorPalette="blue"
+                onClick={handleNext}
+              >
+                {currentIndex + 1 >= total ? "See Results" : "Next"}
+              </Button>
+            </>
+          ) : error ? (
+            <>
+              <Text color="red.500">{error}</Text>
+              <Button
+                w="full"
+                colorPalette="blue"
+                variant="outline"
+                onClick={() => {
+                  setPhase("answering");
+                  setError(null);
+                  setAnswer(submittedAnswer);
+                  setTimeout(() => inputRef.current?.focus(), 50);
+                }}
+              >
+                Retry
+              </Button>
+              <Button
+                w="full"
+                colorPalette="blue"
+                onClick={handleNext}
+              >
+                {currentIndex + 1 >= total ? "See Results" : "Skip"}
+              </Button>
+            </>
+          ) : null}
+        </VStack>
+      )}
     </Box>
   );
 }

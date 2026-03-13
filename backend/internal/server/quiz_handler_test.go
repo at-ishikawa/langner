@@ -181,7 +181,8 @@ func TestQuizHandler_GetQuizOptions_WithFixtures(t *testing.T) {
 	storySummary := summaryMap["test-story"]
 	require.NotNil(t, storySummary)
 	assert.Equal(t, "Test Story", storySummary.GetName())
-	assert.Equal(t, int32(1), storySummary.GetReviewCount())
+	// Only misunderstood answers in fixture → no words with correct answers → ReviewCount=0
+	assert.Equal(t, int32(0), storySummary.GetReviewCount())
 
 	vocabSummary := summaryMap["test-vocab"]
 	require.NotNil(t, vocabSummary)

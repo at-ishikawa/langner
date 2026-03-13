@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	"buf.build/go/protovalidate"
@@ -61,10 +62,11 @@ func (h *QuizHandler) GetQuizOptions(
 	protoSummaries := make([]*apiv1.NotebookSummary, 0, len(summaries))
 	for _, s := range summaries {
 		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{
-			NotebookId:  s.NotebookID,
-			Name:        s.Name,
-			ReviewCount: int32(s.ReviewCount),
-			Kind:        s.Kind,
+			NotebookId:         s.NotebookID,
+			Name:               s.Name,
+			ReviewCount:        int32(s.ReviewCount),
+			Kind:               s.Kind,
+			ReverseReviewCount: int32(s.ReverseReviewCount),
 		})
 	}
 
@@ -292,12 +294,35 @@ func (h *QuizHandler) StartFreeformQuiz(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load all words: %w", err))
 	}
 
+	nextReviewDates, err := h.svc.GetFreeformNextReviewDates(cards)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get next review dates: %w", err))
+	}
+
 	h.mu.Lock()
 	h.freeformCards = cards
 	h.mu.Unlock()
 
+	seen := make(map[string]struct{}, len(cards)*2)
+	expressions := make([]string, 0, len(cards))
+	addExpr := func(expr string) {
+		lower := strings.ToLower(expr)
+		if expr != "" {
+			if _, ok := seen[lower]; !ok {
+				seen[lower] = struct{}{}
+				expressions = append(expressions, expr)
+			}
+		}
+	}
+	for _, card := range cards {
+		addExpr(card.Expression)
+		addExpr(card.OriginalExpression)
+	}
+
 	return connect.NewResponse(&apiv1.StartFreeformQuizResponse{
-		WordCount: int32(len(cards)),
+		WordCount:                int32(len(cards)),
+		Expressions:              expressions,
+		ExpressionNextReviewDate: nextReviewDates,
 	}), nil
 }
 

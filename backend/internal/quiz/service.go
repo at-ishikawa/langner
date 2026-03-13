@@ -3,6 +3,7 @@ package quiz
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -62,7 +63,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 
 		filtered, err := notebook.FilterStoryNotebooks(
 			stories, learningHistories[id], s.dictionaryMap,
-			false, true, true, false,
+			false, false, true, false,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter story notebook %q: %w", id, err)
@@ -74,12 +75,14 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 				latestDate = s.Date
 			}
 		}
+		reverseCount := countReverseStoryDefinitions(stories, learningHistories[id])
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:      id,
-			Name:            index.Name,
-			ReviewCount:     countStoryDefinitions(filtered),
-			LatestStoryDate: latestDate,
-			Kind:            kindFromIndex(index),
+			NotebookID:         id,
+			Name:               index.Name,
+			ReviewCount:        countStoryDefinitions(filtered),
+			ReverseReviewCount: reverseCount,
+			LatestStoryDate:    latestDate,
+			Kind:               kindFromIndex(index),
 		})
 	}
 
@@ -96,10 +99,12 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
 		}
 
+		reverseCount := countReverseFlashcardCards(notebooks, learningHistories[id])
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:  id,
-			Name:        index.Name,
-			ReviewCount: countFlashcardCards(filtered),
+			NotebookID:         id,
+			Name:               index.Name,
+			ReviewCount:        countFlashcardCards(filtered),
+			ReverseReviewCount: reverseCount,
 		})
 	}
 
@@ -149,7 +154,29 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		}
 	}
 
+	cards = deduplicateCards(cards)
+	rand.Shuffle(len(cards), func(i, j int) {
+		cards[i], cards[j] = cards[j], cards[i]
+	})
 	return cards, nil
+}
+
+func deduplicateCards(cards []Card) []Card {
+	seen := make(map[string]int) // entry -> index in result
+	var result []Card
+	for _, card := range cards {
+		key := strings.ToLower(card.Entry)
+		if idx, ok := seen[key]; ok {
+			// Keep the card with more examples/contexts
+			if len(card.Examples) > len(result[idx].Examples) {
+				result[idx] = card
+			}
+		} else {
+			seen[key] = len(result)
+			result = append(result, card)
+		}
+	}
+	return result
 }
 
 func (s *Service) loadStoryCards(
@@ -310,21 +337,67 @@ func (s *Service) SaveResult(card Card, result GradeResult, responseTimeMs int64
 }
 
 func countStoryDefinitions(stories []notebook.StoryNotebook) int {
-	var count int
+	seen := make(map[string]struct{})
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
-			count += len(scene.Definitions)
+			for _, def := range scene.Definitions {
+				entry := def.Definition
+				if entry == "" {
+					entry = def.Expression
+				}
+				seen[strings.ToLower(entry)] = struct{}{}
+			}
 		}
 	}
-	return count
+	return len(seen)
+}
+
+func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []notebook.LearningHistory) int {
+	seen := make(map[string]struct{})
+	for _, story := range stories {
+		for _, scene := range story.Scenes {
+			for i := range scene.Definitions {
+				if needsReverseReview(histories, story.Event, scene.Title, &scene.Definitions[i]) {
+					expr := scene.Definitions[i].Expression
+					if scene.Definitions[i].Definition != "" {
+						expr = scene.Definitions[i].Definition
+					}
+					seen[strings.ToLower(expr)] = struct{}{}
+				}
+			}
+		}
+	}
+	return len(seen)
+}
+
+func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, histories []notebook.LearningHistory) int {
+	seen := make(map[string]struct{})
+	for _, nb := range notebooks {
+		for i := range nb.Cards {
+			if needsReverseFlashcardReview(histories, nb.Title, &nb.Cards[i]) {
+				expr := nb.Cards[i].Expression
+				if nb.Cards[i].Definition != "" {
+					expr = nb.Cards[i].Definition
+				}
+				seen[strings.ToLower(expr)] = struct{}{}
+			}
+		}
+	}
+	return len(seen)
 }
 
 func countFlashcardCards(notebooks []notebook.FlashcardNotebook) int {
-	var count int
+	seen := make(map[string]struct{})
 	for _, nb := range notebooks {
-		count += len(nb.Cards)
+		for _, card := range nb.Cards {
+			entry := card.Definition
+			if entry == "" {
+				entry = card.Expression
+			}
+			seen[strings.ToLower(entry)] = struct{}{}
+		}
 	}
-	return count
+	return len(seen)
 }
 
 func buildFromConversations(scene *notebook.StoryScene, definition *notebook.Note) ([]Example, []inference.Context) {
@@ -379,6 +452,10 @@ func extractAnswerResult(result inference.AnswerMeaning) (isCorrect bool, reason
 		} else {
 			quality = 1
 		}
+	}
+
+	if !isCorrect && quality >= 3 {
+		quality = 2
 	}
 
 	return isCorrect, reason, quality
@@ -442,7 +519,28 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 	}
 
+	cards = deduplicateReverseCards(cards)
+	rand.Shuffle(len(cards), func(i, j int) {
+		cards[i], cards[j] = cards[j], cards[i]
+	})
 	return cards, nil
+}
+
+func deduplicateReverseCards(cards []ReverseCard) []ReverseCard {
+	seen := make(map[string]int) // expression -> index in result
+	var result []ReverseCard
+	for _, card := range cards {
+		expr := strings.ToLower(card.Expression)
+		if idx, ok := seen[expr]; ok {
+			if len(card.Contexts) > len(result[idx].Contexts) {
+				result[idx] = card
+			}
+		} else {
+			seen[expr] = len(result)
+			result = append(result, card)
+		}
+	}
+	return result
 }
 
 func (s *Service) loadStoryReverseCards(
@@ -456,16 +554,8 @@ func (s *Service) loadStoryReverseCards(
 		return nil, fmt.Errorf("failed to read story notebook %q: %w", notebookID, err)
 	}
 
-	filtered, err := notebook.FilterStoryNotebooks(
-		stories, learningHistories[notebookID], s.dictionaryMap,
-		false, true, true, false,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter story notebook %q: %w", notebookID, err)
-	}
-
 	var cards []ReverseCard
-	for _, story := range filtered {
+	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
 				expression := definition.Expression
@@ -512,15 +602,8 @@ func (s *Service) loadFlashcardReverseCards(
 		return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", notebookID, err)
 	}
 
-	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], s.dictionaryMap, false,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
-	}
-
 	var cards []ReverseCard
-	for _, nb := range filtered {
+	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
 			expression := card.Expression
 			if card.Definition != "" {
@@ -725,12 +808,13 @@ func (s *Service) SaveReverseResult(card ReverseCard, result GradeResult, respon
 
 // FreeformCard represents a freeform quiz card (user inputs word + meaning).
 type FreeformCard struct {
-	NotebookName string
-	StoryTitle   string
-	SceneTitle   string
-	Expression   string
-	Meaning      string
-	Contexts     []inference.Context
+	NotebookName       string
+	StoryTitle         string
+	SceneTitle         string
+	Expression         string // canonical form (Definition if set, otherwise Expression)
+	OriginalExpression string // text form as it appears in the story (Note.Expression)
+	Meaning            string
+	Contexts           []inference.Context
 }
 
 // LoadAllWords loads all words from all notebooks for freeform quiz.
@@ -782,12 +866,13 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 				_, contexts := buildFromConversations(&scene, &definition)
 
 				cards = append(cards, FreeformCard{
-					NotebookName: notebookID,
-					StoryTitle:   story.Event,
-					SceneTitle:   scene.Title,
-					Expression:   expression,
-					Meaning:      definition.Meaning,
-					Contexts:     contexts,
+					NotebookName:       notebookID,
+					StoryTitle:         story.Event,
+					SceneTitle:         scene.Title,
+					Expression:         expression,
+					OriginalExpression: definition.Expression,
+					Meaning:            definition.Meaning,
+					Contexts:           contexts,
 				})
 			}
 		}
@@ -942,11 +1027,69 @@ func kindFromIndex(index notebook.Index) string {
 	return ""
 }
 
+// GetFreeformNextReviewDates returns a map of lowercase expression -> next review date ("YYYY-MM-DD").
+// Only expressions that are NOT yet due are included; due or never-studied expressions are omitted.
+func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]string, error) {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	result := make(map[string]string)
+	for _, card := range cards {
+		nextDate := freeformNextReviewDate(learningHistories[card.NotebookName], card)
+		if nextDate != "" {
+			result[strings.ToLower(card.Expression)] = nextDate
+			if card.OriginalExpression != "" {
+				result[strings.ToLower(card.OriginalExpression)] = nextDate
+			}
+		}
+	}
+	return result, nil
+}
+
+func freeformNextReviewDate(histories []notebook.LearningHistory, card FreeformCard) string {
+	for _, hist := range histories {
+		if hist.Metadata.Title != card.StoryTitle {
+			continue
+		}
+		if hist.Metadata.Type == "flashcard" {
+			for _, expr := range hist.Expressions {
+				if strings.EqualFold(expr.Expression, card.Expression) {
+					return computeNextReviewDate(expr.LearnedLogs)
+				}
+			}
+			continue
+		}
+		for _, scene := range hist.Scenes {
+			if scene.Metadata.Title != card.SceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if strings.EqualFold(expr.Expression, card.Expression) {
+					return computeNextReviewDate(expr.LearnedLogs)
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func computeNextReviewDate(logs []notebook.LearningRecord) string {
+	if len(logs) == 0 || logs[0].IntervalDays == 0 {
+		return ""
+	}
+	nextDate := logs[0].LearnedAt.AddDate(0, 0, logs[0].IntervalDays)
+	if !time.Now().Before(nextDate) {
+		return ""
+	}
+	return nextDate.Format("2006-01-02")
+}
+
 func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 	var matches []FreeformCard
-	wordLower := strings.ToLower(word)
 	for _, card := range cards {
-		if strings.EqualFold(card.Expression, wordLower) {
+		if strings.EqualFold(card.Expression, word) || strings.EqualFold(card.OriginalExpression, word) {
 			matches = append(matches, card)
 		}
 	}

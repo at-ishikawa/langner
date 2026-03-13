@@ -27,6 +27,8 @@ export default function QuizStartPage() {
   const setFlashcards = useQuizStore((s) => s.setFlashcards);
   const setReverseFlashcards = useQuizStore((s) => s.setReverseFlashcards);
   const setWordCount = useQuizStore((s) => s.setWordCount);
+  const setFreeformExpressions = useQuizStore((s) => s.setFreeformExpressions);
+  const setFreeformNextReviewDates = useQuizStore((s) => s.setFreeformNextReviewDates);
   const setQuizType = useQuizStore((s) => s.setQuizType);
 
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
@@ -73,7 +75,7 @@ export default function QuizStartPage() {
 
   const totalDue = notebooks
     .filter((n) => selectedIds.has(n.notebookId))
-    .reduce((sum, n) => sum + n.reviewCount, 0);
+    .reduce((sum, n) => sum + (quizType === "reverse" ? n.reverseReviewCount : n.reviewCount), 0);
 
   const handleQuizTypeChange = (type: QuizType) => {
     setQuizTypeLocal(type);
@@ -113,6 +115,8 @@ export default function QuizStartPage() {
       } else if (quizType === "freeform") {
         const res = await quizClient.startFreeformQuiz({});
         setWordCount(res.wordCount);
+        setFreeformExpressions(res.expressions ?? []);
+        setFreeformNextReviewDates(res.expressionNextReviewDate ?? {});
         router.push("/quiz/freeform");
       }
     } finally {
@@ -142,7 +146,7 @@ export default function QuizStartPage() {
     <Box p={4} maxW="md" mx="auto">
       <Box mb={2}>
         <Link href="/">
-          <Text color="blue.600" fontSize="sm">← Back</Text>
+          <Text color="blue.600" fontSize="sm" _dark={{ color: "blue.300" }}>← Back</Text>
         </Link>
       </Box>
       <Heading size="lg" mb={4}>Quiz</Heading>
@@ -162,9 +166,13 @@ export default function QuizStartPage() {
             onClick={() => handleQuizTypeChange(type.value)}
             bg={quizType === type.value ? "blue.50" : "white"}
             borderColor={quizType === type.value ? "blue.500" : "gray.200"}
+            _dark={{
+              bg: quizType === type.value ? "blue.900" : "gray.800",
+              borderColor: quizType === type.value ? "blue.400" : "gray.600",
+            }}
           >
             <Text fontWeight="medium">{type.label}</Text>
-            <Text fontSize="sm" color="gray.600">
+            <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
               {type.description}
             </Text>
           </Box>
@@ -195,10 +203,10 @@ export default function QuizStartPage() {
               >
                 <Checkbox.HiddenInput />
                 <Checkbox.Control />
-                <Checkbox.Label>
+                <Checkbox.Label flex="1">
                   <Box display="flex" justifyContent="space-between" w="full">
                     <Text>{notebook.name}</Text>
-                    <Text>{notebook.reviewCount}</Text>
+                    <Text>{quizType === "reverse" ? notebook.reverseReviewCount : notebook.reviewCount}</Text>
                   </Box>
                 </Checkbox.Label>
               </Checkbox.Root>
