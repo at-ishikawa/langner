@@ -2,6 +2,15 @@ import { create } from "zustand";
 
 export type QuizType = "standard" | "reverse" | "freeform";
 
+export interface WordDetail {
+  origin?: string;
+  pronunciation?: string;
+  partOfSpeech?: string;
+  synonyms?: string[];
+  antonyms?: string[];
+  memo?: string;
+}
+
 interface Example {
   text: string;
   speaker: string;
@@ -30,6 +39,7 @@ export interface QuizResult {
   meaning: string;
   reason: string;
   contexts?: string[];
+  wordDetail?: WordDetail;
 }
 
 export interface ReverseQuizResult {
@@ -40,6 +50,7 @@ export interface ReverseQuizResult {
   meaning: string;
   reason: string;
   contexts?: string[];
+  wordDetail?: WordDetail;
 }
 
 export interface FreeformResult {
@@ -50,6 +61,7 @@ export interface FreeformResult {
   reason: string;
   notebookName: string;
   contexts?: string[];
+  wordDetail?: WordDetail;
 }
 
 interface QuizState {

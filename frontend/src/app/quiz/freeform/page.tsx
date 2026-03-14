@@ -90,6 +90,7 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         contexts: res.context ? [res.context] : [],
+        wordDetail: res.wordDetail,
       });
     } catch {
       setError("Failed to submit answer");

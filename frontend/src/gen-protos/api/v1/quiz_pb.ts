@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/quiz.proto.
  */
 export const file_api_v1_quiz: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkidgoPTm90ZWJvb2tTdW1tYXJ5EhMKC25vdGVib29rX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcmV2aWV3X2NvdW50GAMgASgFEgwKBGtpbmQYBCABKAkSHAoUcmV2ZXJzZV9yZXZpZXdfY291bnQYBSABKAUiTQoQU3RhcnRRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhkKEWluY2x1ZGVfdW5zdHVkaWVkGAIgASgIIjoKEVN0YXJ0UXVpelJlc3BvbnNlEiUKCmZsYXNoY2FyZHMYASADKAsyES5hcGkudjEuRmxhc2hjYXJkIk4KCUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg0KBWVudHJ5GAIgASgJEiEKCGV4YW1wbGVzGAMgAygLMg8uYXBpLnYxLkV4YW1wbGUiKAoHRXhhbXBsZRIMCgR0ZXh0GAEgASgJEg8KB3NwZWFrZXIYAiABKAkiZgoTU3VibWl0QW5zd2VyUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAEhsKBmFuc3dlchgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyJIChRTdWJtaXRBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEg8KB21lYW5pbmcYAiABKAkSDgoGcmVhc29uGAMgASgJIlcKF1N0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0Eh4KDG5vdGVib29rX2lkcxgBIAMoCUIIukgFkgECCAESHAoUbGlzdF9taXNzaW5nX2NvbnRleHQYAiABKAgiSAoYU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEiwKCmZsYXNoY2FyZHMYASADKAsyGC5hcGkudjEuUmV2ZXJzZUZsYXNoY2FyZCKgAQoQUmV2ZXJzZUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg8KB21lYW5pbmcYAiABKAkSKQoIY29udGV4dHMYAyADKAsyFy5hcGkudjEuQ29udGV4dFNlbnRlbmNlEhUKDW5vdGVib29rX25hbWUYBCABKAkSEwoLc3RvcnlfdGl0bGUYBSABKAkSEwoLc2NlbmVfdGl0bGUYBiABKAkiOgoPQ29udGV4dFNlbnRlbmNlEg8KB2NvbnRleHQYASABKAkSFgoObWFza2VkX2NvbnRleHQYAiABKAkibQoaU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMidQobU3VibWl0UmV2ZXJzZUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSEgoKZXhwcmVzc2lvbhgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEg4KBnJlYXNvbhgEIAEoCRIQCghjb250ZXh0cxgFIAMoCSIaChhTdGFydEZyZWVmb3JtUXVpelJlcXVlc3Qi6wEKGVN0YXJ0RnJlZWZvcm1RdWl6UmVzcG9uc2USEgoKd29yZF9jb3VudBgBIAEoBRITCgtleHByZXNzaW9ucxgCIAMoCRJkChtleHByZXNzaW9uX25leHRfcmV2aWV3X2RhdGUYAyADKAsyPy5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZS5FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRo/Ch1FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBInAKG1N1Ym1pdEZyZWVmb3JtQW5zd2VyUmVxdWVzdBIZCgR3b3JkGAEgASgJQgu6SAhyBhABMgJcUxIcCgdtZWFuaW5nGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIoYBChxTdWJtaXRGcmVlZm9ybUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDAoEd29yZBgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEg4KBnJlYXNvbhgEIAEoCRIPCgdjb250ZXh0GAUgASgJEhUKDW5vdGVib29rX25hbWUYBiABKAkqbAoIUXVpelR5cGUSGQoVUVVJWl9UWVBFX1VOU1BFQ0lGSUVEEAASFgoSUVVJWl9UWVBFX1NUQU5EQVJEEAESFQoRUVVJWl9UWVBFX1JFVkVSU0UQAhIWChJRVUlaX1RZUEVfRlJFRUZPUk0QAzLfBAoLUXVpelNlcnZpY2USTwoOR2V0UXVpek9wdGlvbnMSHS5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXF1ZXN0Gh4uYXBpLnYxLkdldFF1aXpPcHRpb25zUmVzcG9uc2USQAoJU3RhcnRRdWl6EhguYXBpLnYxLlN0YXJ0UXVpelJlcXVlc3QaGS5hcGkudjEuU3RhcnRRdWl6UmVzcG9uc2USSQoMU3VibWl0QW5zd2VyEhsuYXBpLnYxLlN1Ym1pdEFuc3dlclJlcXVlc3QaHC5hcGkudjEuU3VibWl0QW5zd2VyUmVzcG9uc2USVQoQU3RhcnRSZXZlcnNlUXVpehIfLmFwaS52MS5TdGFydFJldmVyc2VRdWl6UmVxdWVzdBogLmFwaS52MS5TdGFydFJldmVyc2VRdWl6UmVzcG9uc2USXgoTU3VibWl0UmV2ZXJzZUFuc3dlchIiLmFwaS52MS5TdWJtaXRSZXZlcnNlQW5zd2VyUmVxdWVzdBojLmFwaS52MS5TdWJtaXRSZXZlcnNlQW5zd2VyUmVzcG9uc2USWAoRU3RhcnRGcmVlZm9ybVF1aXoSIC5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXF1ZXN0GiEuYXBpLnYxLlN0YXJ0RnJlZWZvcm1RdWl6UmVzcG9uc2USYQoUU3VibWl0RnJlZWZvcm1BbnN3ZXISIy5hcGkudjEuU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0GiQuYXBpLnYxLlN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkidgoPTm90ZWJvb2tTdW1tYXJ5EhMKC25vdGVib29rX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcmV2aWV3X2NvdW50GAMgASgFEgwKBGtpbmQYBCABKAkSHAoUcmV2ZXJzZV9yZXZpZXdfY291bnQYBSABKAUiTQoQU3RhcnRRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhkKEWluY2x1ZGVfdW5zdHVkaWVkGAIgASgIIjoKEVN0YXJ0UXVpelJlc3BvbnNlEiUKCmZsYXNoY2FyZHMYASADKAsyES5hcGkudjEuRmxhc2hjYXJkIk4KCUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg0KBWVudHJ5GAIgASgJEiEKCGV4YW1wbGVzGAMgAygLMg8uYXBpLnYxLkV4YW1wbGUiKAoHRXhhbXBsZRIMCgR0ZXh0GAEgASgJEg8KB3NwZWFrZXIYAiABKAkifQoKV29yZERldGFpbBIOCgZvcmlnaW4YASABKAkSFQoNcHJvbnVuY2lhdGlvbhgCIAEoCRIWCg5wYXJ0X29mX3NwZWVjaBgDIAEoCRIQCghzeW5vbnltcxgEIAMoCRIQCghhbnRvbnltcxgFIAMoCRIMCgRtZW1vGAYgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMicQoUU3VibWl0QW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIPCgdtZWFuaW5nGAIgASgJEg4KBnJlYXNvbhgDIAEoCRInCgt3b3JkX2RldGFpbBgEIAEoCzISLmFwaS52MS5Xb3JkRGV0YWlsIlcKF1N0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0Eh4KDG5vdGVib29rX2lkcxgBIAMoCUIIukgFkgECCAESHAoUbGlzdF9taXNzaW5nX2NvbnRleHQYAiABKAgiSAoYU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEiwKCmZsYXNoY2FyZHMYASADKAsyGC5hcGkudjEuUmV2ZXJzZUZsYXNoY2FyZCKgAQoQUmV2ZXJzZUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg8KB21lYW5pbmcYAiABKAkSKQoIY29udGV4dHMYAyADKAsyFy5hcGkudjEuQ29udGV4dFNlbnRlbmNlEhUKDW5vdGVib29rX25hbWUYBCABKAkSEwoLc3RvcnlfdGl0bGUYBSABKAkSEwoLc2NlbmVfdGl0bGUYBiABKAkiOgoPQ29udGV4dFNlbnRlbmNlEg8KB2NvbnRleHQYASABKAkSFgoObWFza2VkX2NvbnRleHQYAiABKAkibQoaU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMingEKG1N1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhIKCmV4cHJlc3Npb24YAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSEAoIY29udGV4dHMYBSADKAkSJwoLd29yZF9kZXRhaWwYBiABKAsyEi5hcGkudjEuV29yZERldGFpbCIaChhTdGFydEZyZWVmb3JtUXVpelJlcXVlc3Qi6wEKGVN0YXJ0RnJlZWZvcm1RdWl6UmVzcG9uc2USEgoKd29yZF9jb3VudBgBIAEoBRITCgtleHByZXNzaW9ucxgCIAMoCRJkChtleHByZXNzaW9uX25leHRfcmV2aWV3X2RhdGUYAyADKAsyPy5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZS5FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRo/Ch1FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBInAKG1N1Ym1pdEZyZWVmb3JtQW5zd2VyUmVxdWVzdBIZCgR3b3JkGAEgASgJQgu6SAhyBhABMgJcUxIcCgdtZWFuaW5nGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIq8BChxTdWJtaXRGcmVlZm9ybUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDAoEd29yZBgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEg4KBnJlYXNvbhgEIAEoCRIPCgdjb250ZXh0GAUgASgJEhUKDW5vdGVib29rX25hbWUYBiABKAkSJwoLd29yZF9kZXRhaWwYByABKAsyEi5hcGkudjEuV29yZERldGFpbCpsCghRdWl6VHlwZRIZChVRVUlaX1RZUEVfVU5TUEVDSUZJRUQQABIWChJRVUlaX1RZUEVfU1RBTkRBUkQQARIVChFRVUlaX1RZUEVfUkVWRVJTRRACEhYKElFVSVpfVFlQRV9GUkVFRk9STRADMt8ECgtRdWl6U2VydmljZRJPCg5HZXRRdWl6T3B0aW9ucxIdLmFwaS52MS5HZXRRdWl6T3B0aW9uc1JlcXVlc3QaHi5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXNwb25zZRJACglTdGFydFF1aXoSGC5hcGkudjEuU3RhcnRRdWl6UmVxdWVzdBoZLmFwaS52MS5TdGFydFF1aXpSZXNwb25zZRJJCgxTdWJtaXRBbnN3ZXISGy5hcGkudjEuU3VibWl0QW5zd2VyUmVxdWVzdBocLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXNwb25zZRJVChBTdGFydFJldmVyc2VRdWl6Eh8uYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0GiAuYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXNwb25zZRJeChNTdWJtaXRSZXZlcnNlQW5zd2VyEiIuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0GiMuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRJYChFTdGFydEZyZWVmb3JtUXVpehIgLmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlcXVlc3QaIS5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRJhChRTdWJtaXRGcmVlZm9ybUFuc3dlchIjLmFwaS52MS5TdWJtaXRGcmVlZm9ybUFuc3dlclJlcXVlc3QaJC5hcGkudjEuU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetQuizOptionsRequest
@@ -169,6 +169,48 @@ export const ExampleSchema: GenMessage<Example> = /*@__PURE__*/
   messageDesc(file_api_v1_quiz, 6);
 
 /**
+ * @generated from message api.v1.WordDetail
+ */
+export type WordDetail = Message<"api.v1.WordDetail"> & {
+  /**
+   * @generated from field: string origin = 1;
+   */
+  origin: string;
+
+  /**
+   * @generated from field: string pronunciation = 2;
+   */
+  pronunciation: string;
+
+  /**
+   * @generated from field: string part_of_speech = 3;
+   */
+  partOfSpeech: string;
+
+  /**
+   * @generated from field: repeated string synonyms = 4;
+   */
+  synonyms: string[];
+
+  /**
+   * @generated from field: repeated string antonyms = 5;
+   */
+  antonyms: string[];
+
+  /**
+   * @generated from field: string memo = 6;
+   */
+  memo: string;
+};
+
+/**
+ * Describes the message api.v1.WordDetail.
+ * Use `create(WordDetailSchema)` to create a new message.
+ */
+export const WordDetailSchema: GenMessage<WordDetail> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 7);
+
+/**
  * @generated from message api.v1.SubmitAnswerRequest
  */
 export type SubmitAnswerRequest = Message<"api.v1.SubmitAnswerRequest"> & {
@@ -193,7 +235,7 @@ export type SubmitAnswerRequest = Message<"api.v1.SubmitAnswerRequest"> & {
  * Use `create(SubmitAnswerRequestSchema)` to create a new message.
  */
 export const SubmitAnswerRequestSchema: GenMessage<SubmitAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 7);
+  messageDesc(file_api_v1_quiz, 8);
 
 /**
  * @generated from message api.v1.SubmitAnswerResponse
@@ -213,6 +255,11 @@ export type SubmitAnswerResponse = Message<"api.v1.SubmitAnswerResponse"> & {
    * @generated from field: string reason = 3;
    */
   reason: string;
+
+  /**
+   * @generated from field: api.v1.WordDetail word_detail = 4;
+   */
+  wordDetail?: WordDetail;
 };
 
 /**
@@ -220,7 +267,7 @@ export type SubmitAnswerResponse = Message<"api.v1.SubmitAnswerResponse"> & {
  * Use `create(SubmitAnswerResponseSchema)` to create a new message.
  */
 export const SubmitAnswerResponseSchema: GenMessage<SubmitAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 8);
+  messageDesc(file_api_v1_quiz, 9);
 
 /**
  * @generated from message api.v1.StartReverseQuizRequest
@@ -242,7 +289,7 @@ export type StartReverseQuizRequest = Message<"api.v1.StartReverseQuizRequest"> 
  * Use `create(StartReverseQuizRequestSchema)` to create a new message.
  */
 export const StartReverseQuizRequestSchema: GenMessage<StartReverseQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 9);
+  messageDesc(file_api_v1_quiz, 10);
 
 /**
  * @generated from message api.v1.StartReverseQuizResponse
@@ -259,7 +306,7 @@ export type StartReverseQuizResponse = Message<"api.v1.StartReverseQuizResponse"
  * Use `create(StartReverseQuizResponseSchema)` to create a new message.
  */
 export const StartReverseQuizResponseSchema: GenMessage<StartReverseQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 10);
+  messageDesc(file_api_v1_quiz, 11);
 
 /**
  * @generated from message api.v1.ReverseFlashcard
@@ -301,7 +348,7 @@ export type ReverseFlashcard = Message<"api.v1.ReverseFlashcard"> & {
  * Use `create(ReverseFlashcardSchema)` to create a new message.
  */
 export const ReverseFlashcardSchema: GenMessage<ReverseFlashcard> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 11);
+  messageDesc(file_api_v1_quiz, 12);
 
 /**
  * @generated from message api.v1.ContextSentence
@@ -323,7 +370,7 @@ export type ContextSentence = Message<"api.v1.ContextSentence"> & {
  * Use `create(ContextSentenceSchema)` to create a new message.
  */
 export const ContextSentenceSchema: GenMessage<ContextSentence> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 12);
+  messageDesc(file_api_v1_quiz, 13);
 
 /**
  * @generated from message api.v1.SubmitReverseAnswerRequest
@@ -350,7 +397,7 @@ export type SubmitReverseAnswerRequest = Message<"api.v1.SubmitReverseAnswerRequ
  * Use `create(SubmitReverseAnswerRequestSchema)` to create a new message.
  */
 export const SubmitReverseAnswerRequestSchema: GenMessage<SubmitReverseAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 13);
+  messageDesc(file_api_v1_quiz, 14);
 
 /**
  * @generated from message api.v1.SubmitReverseAnswerResponse
@@ -380,6 +427,11 @@ export type SubmitReverseAnswerResponse = Message<"api.v1.SubmitReverseAnswerRes
    * @generated from field: repeated string contexts = 5;
    */
   contexts: string[];
+
+  /**
+   * @generated from field: api.v1.WordDetail word_detail = 6;
+   */
+  wordDetail?: WordDetail;
 };
 
 /**
@@ -387,7 +439,7 @@ export type SubmitReverseAnswerResponse = Message<"api.v1.SubmitReverseAnswerRes
  * Use `create(SubmitReverseAnswerResponseSchema)` to create a new message.
  */
 export const SubmitReverseAnswerResponseSchema: GenMessage<SubmitReverseAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 14);
+  messageDesc(file_api_v1_quiz, 15);
 
 /**
  * @generated from message api.v1.StartFreeformQuizRequest
@@ -400,7 +452,7 @@ export type StartFreeformQuizRequest = Message<"api.v1.StartFreeformQuizRequest"
  * Use `create(StartFreeformQuizRequestSchema)` to create a new message.
  */
 export const StartFreeformQuizRequestSchema: GenMessage<StartFreeformQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 15);
+  messageDesc(file_api_v1_quiz, 16);
 
 /**
  * @generated from message api.v1.StartFreeformQuizResponse
@@ -427,7 +479,7 @@ export type StartFreeformQuizResponse = Message<"api.v1.StartFreeformQuizRespons
  * Use `create(StartFreeformQuizResponseSchema)` to create a new message.
  */
 export const StartFreeformQuizResponseSchema: GenMessage<StartFreeformQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 16);
+  messageDesc(file_api_v1_quiz, 17);
 
 /**
  * @generated from message api.v1.SubmitFreeformAnswerRequest
@@ -454,7 +506,7 @@ export type SubmitFreeformAnswerRequest = Message<"api.v1.SubmitFreeformAnswerRe
  * Use `create(SubmitFreeformAnswerRequestSchema)` to create a new message.
  */
 export const SubmitFreeformAnswerRequestSchema: GenMessage<SubmitFreeformAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 17);
+  messageDesc(file_api_v1_quiz, 18);
 
 /**
  * @generated from message api.v1.SubmitFreeformAnswerResponse
@@ -489,6 +541,11 @@ export type SubmitFreeformAnswerResponse = Message<"api.v1.SubmitFreeformAnswerR
    * @generated from field: string notebook_name = 6;
    */
   notebookName: string;
+
+  /**
+   * @generated from field: api.v1.WordDetail word_detail = 7;
+   */
+  wordDetail?: WordDetail;
 };
 
 /**
@@ -496,7 +553,7 @@ export type SubmitFreeformAnswerResponse = Message<"api.v1.SubmitFreeformAnswerR
  * Use `create(SubmitFreeformAnswerResponseSchema)` to create a new message.
  */
 export const SubmitFreeformAnswerResponseSchema: GenMessage<SubmitFreeformAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 18);
+  messageDesc(file_api_v1_quiz, 19);
 
 /**
  * @generated from enum api.v1.QuizType

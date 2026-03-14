@@ -99,6 +99,47 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
+        wordDetail: res.wordDetail,
+      });
+    } catch {
+      setError("Failed to submit answer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkip = async () => {
+    const responseTimeMs = Date.now() - startTimeRef.current;
+    setSubmittedAnswer("");
+    setAnswer("");
+    setPhase("feedback");
+    setLoading(true);
+    setFeedback(null);
+    setError(null);
+
+    try {
+      const res = await quizClient.submitReverseAnswer({
+        noteId: card.noteId,
+        answer: "I don't know",
+        responseTimeMs: BigInt(responseTimeMs),
+      });
+
+      setFeedback({
+        correct: false,
+        expression: res.expression,
+        meaning: res.meaning,
+        reason: res.reason,
+        contexts: res.contexts ?? [],
+      });
+      storeSubmitResult({
+        noteId: card.noteId,
+        answer: "(skipped)",
+        correct: false,
+        expression: res.expression,
+        meaning: res.meaning,
+        reason: res.reason,
+        contexts: res.contexts ?? [],
+        wordDetail: res.wordDetail,
       });
     } catch {
       setError("Failed to submit answer");
@@ -182,6 +223,14 @@ export default function ReverseQuizPage() {
           >
             Submit
           </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleSkip}
+            size="lg"
+          >
+            Don&apos;t Know
+          </Button>
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
@@ -211,9 +260,15 @@ export default function ReverseQuizPage() {
                 </Text>
               </Box>
 
-              <Text textDecoration={feedback.correct ? "none" : "line-through"}>
-                Your answer: {submittedAnswer}
-              </Text>
+              {submittedAnswer ? (
+                <Text textDecoration={feedback.correct ? "none" : "line-through"}>
+                  Your answer: {submittedAnswer}
+                </Text>
+              ) : (
+                <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                  Skipped
+                </Text>
+              )}
 
               <Box>
                 <Text fontWeight="bold">Word</Text>

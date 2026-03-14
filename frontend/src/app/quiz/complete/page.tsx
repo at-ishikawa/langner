@@ -3,7 +3,7 @@
 import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
-import { useQuizStore } from "@/store/quizStore";
+import { useQuizStore, WordDetail } from "@/store/quizStore";
 
 interface ResultItem {
   key: string;
@@ -11,6 +11,7 @@ interface ResultItem {
   meaning: string;
   correct: boolean;
   contexts?: string[];
+  wordDetail?: WordDetail;
 }
 
 export default function SessionCompletePage() {
@@ -28,6 +29,7 @@ export default function SessionCompletePage() {
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
+        wordDetail: r.wordDetail,
       }));
     }
     if (reverseResults.length > 0) {
@@ -37,6 +39,7 @@ export default function SessionCompletePage() {
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
+        wordDetail: r.wordDetail,
       }));
     }
     if (freeformResults.length > 0) {
@@ -46,6 +49,7 @@ export default function SessionCompletePage() {
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
+        wordDetail: r.wordDetail,
       }));
     }
     return [];
@@ -69,6 +73,40 @@ export default function SessionCompletePage() {
     router.push("/");
   };
 
+  const renderResultCard = (r: ResultItem) => (
+    <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
+      <Text fontWeight="bold">{r.entry}</Text>
+      <Text fontSize="sm">{r.meaning}</Text>
+      {r.contexts?.map((ctx, i) => (
+        <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+          {ctx}
+        </Text>
+      ))}
+      {r.wordDetail && (
+        <Box mt={1} fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>
+          {r.wordDetail.partOfSpeech && (
+            <Text><Text as="span" fontWeight="bold">Part of speech:</Text> {r.wordDetail.partOfSpeech}</Text>
+          )}
+          {r.wordDetail.pronunciation && (
+            <Text><Text as="span" fontWeight="bold">Pronunciation:</Text> {r.wordDetail.pronunciation}</Text>
+          )}
+          {r.wordDetail.origin && (
+            <Text><Text as="span" fontWeight="bold">Origin:</Text> {r.wordDetail.origin}</Text>
+          )}
+          {r.wordDetail.synonyms && r.wordDetail.synonyms.length > 0 && (
+            <Text><Text as="span" fontWeight="bold">Synonyms:</Text> {r.wordDetail.synonyms.join(", ")}</Text>
+          )}
+          {r.wordDetail.antonyms && r.wordDetail.antonyms.length > 0 && (
+            <Text><Text as="span" fontWeight="bold">Antonyms:</Text> {r.wordDetail.antonyms.join(", ")}</Text>
+          )}
+          {r.wordDetail.memo && (
+            <Text><Text as="span" fontWeight="bold">Memo:</Text> {r.wordDetail.memo}</Text>
+          )}
+        </Box>
+      )}
+    </Box>
+  );
+
   return (
     <Box p={4} maxW="md" mx="auto">
       <Heading size="lg" mb={4}>
@@ -91,17 +129,7 @@ export default function SessionCompletePage() {
             Correct
           </Heading>
           <VStack align="stretch" gap={2}>
-            {correctResults.map((r) => (
-              <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
-                <Text fontWeight="bold">{r.entry}</Text>
-                <Text fontSize="sm">{r.meaning}</Text>
-                {r.contexts?.map((ctx, i) => (
-                  <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
-                    {ctx}
-                  </Text>
-                ))}
-              </Box>
-            ))}
+            {correctResults.map(renderResultCard)}
           </VStack>
         </Box>
       )}
@@ -112,17 +140,7 @@ export default function SessionCompletePage() {
             Incorrect
           </Heading>
           <VStack align="stretch" gap={2}>
-            {incorrectResults.map((r) => (
-              <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
-                <Text fontWeight="bold">{r.entry}</Text>
-                <Text fontSize="sm">{r.meaning}</Text>
-                {r.contexts?.map((ctx, i) => (
-                  <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
-                    {ctx}
-                  </Text>
-                ))}
-              </Box>
-            ))}
+            {incorrectResults.map(renderResultCard)}
           </VStack>
         </Box>
       )}

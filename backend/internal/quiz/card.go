@@ -6,6 +6,16 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 )
 
+// WordDetail holds rich metadata about a word.
+type WordDetail struct {
+	Origin        string
+	Pronunciation string
+	PartOfSpeech  string
+	Synonyms      []string
+	Antonyms      []string
+	Memo          string
+}
+
 // Card represents a single quiz card shared between CLI and RPC.
 type Card struct {
 	NotebookName  string
@@ -16,6 +26,7 @@ type Card struct {
 	Meaning       string
 	Examples      []Example
 	Contexts      []inference.Context
+	WordDetail    WordDetail
 }
 
 // Example is a usage sentence for a card.

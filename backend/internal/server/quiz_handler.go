@@ -157,10 +157,25 @@ func (h *QuizHandler) SubmitAnswer(
 	}
 
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
-		Correct: grade.Correct,
-		Meaning: card.Meaning,
-		Reason:  grade.Reason,
+		Correct:    grade.Correct,
+		Meaning:    card.Meaning,
+		Reason:     grade.Reason,
+		WordDetail: toProtoWordDetail(card.WordDetail),
 	}), nil
+}
+
+func toProtoWordDetail(wd quiz.WordDetail) *apiv1.WordDetail {
+	if wd.Origin == "" && wd.Pronunciation == "" && wd.PartOfSpeech == "" && len(wd.Synonyms) == 0 && len(wd.Antonyms) == 0 && wd.Memo == "" {
+		return nil
+	}
+	return &apiv1.WordDetail{
+		Origin:        wd.Origin,
+		Pronunciation: wd.Pronunciation,
+		PartOfSpeech:  wd.PartOfSpeech,
+		Synonyms:      wd.Synonyms,
+		Antonyms:      wd.Antonyms,
+		Memo:          wd.Memo,
+	}
 }
 
 func validateRequest(msg proto.Message) *connect.Error {
@@ -281,6 +296,7 @@ func (h *QuizHandler) SubmitReverseAnswer(
 		Meaning:    card.Meaning,
 		Reason:     grade.Reason,
 		Contexts:   contexts,
+		WordDetail: toProtoWordDetail(card.WordDetail),
 	}), nil
 }
 
@@ -357,5 +373,11 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 		Reason:       grade.Reason,
 		Context:      grade.Context,
 		NotebookName: grade.NotebookName,
+		WordDetail: func() *apiv1.WordDetail {
+			if grade.MatchedCard != nil {
+				return toProtoWordDetail(grade.MatchedCard.WordDetail)
+			}
+			return nil
+		}(),
 	}), nil
 }
