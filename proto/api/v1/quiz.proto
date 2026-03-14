@@ -133,6 +133,7 @@ message SubmitReverseAnswerResponse {
   string reason = 4;
   repeated string contexts = 5;
   WordDetail word_detail = 6;
+  string classification = 7;
 }
 
 message StartFreeformQuizRequest {}

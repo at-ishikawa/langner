@@ -943,15 +943,16 @@ func (x *SubmitReverseAnswerRequest) GetResponseTimeMs() int64 {
 }
 
 type SubmitReverseAnswerResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Correct       bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
-	Expression    string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
-	Meaning       string                 `protobuf:"bytes,3,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	Contexts      []string               `protobuf:"bytes,5,rep,name=contexts,proto3" json:"contexts,omitempty"`
-	WordDetail    *WordDetail            `protobuf:"bytes,6,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Correct        bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
+	Expression     string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
+	Meaning        string                 `protobuf:"bytes,3,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Reason         string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Contexts       []string               `protobuf:"bytes,5,rep,name=contexts,proto3" json:"contexts,omitempty"`
+	WordDetail     *WordDetail            `protobuf:"bytes,6,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
+	Classification string                 `protobuf:"bytes,7,opt,name=classification,proto3" json:"classification,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SubmitReverseAnswerResponse) Reset() {
@@ -1024,6 +1025,13 @@ func (x *SubmitReverseAnswerResponse) GetWordDetail() *WordDetail {
 		return x.WordDetail
 	}
 	return nil
+}
+
+func (x *SubmitReverseAnswerResponse) GetClassification() string {
+	if x != nil {
+		return x.Classification
+	}
+	return ""
 }
 
 type StartFreeformQuizRequest struct {
@@ -1343,7 +1351,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x1aSubmitReverseAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xda\x01\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x82\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +
@@ -1353,7 +1361,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x06reason\x18\x04 \x01(\tR\x06reason\x12\x1a\n" +
 	"\bcontexts\x18\x05 \x03(\tR\bcontexts\x123\n" +
 	"\vword_detail\x18\x06 \x01(\v2\x12.api.v1.WordDetailR\n" +
-	"wordDetail\"\x1a\n" +
+	"wordDetail\x12&\n" +
+	"\x0eclassification\x18\a \x01(\tR\x0eclassification\"\x1a\n" +
 	"\x18StartFreeformQuizRequest\"\xa9\x02\n" +
 	"\x19StartFreeformQuizResponse\x12\x1d\n" +
 	"\n" +

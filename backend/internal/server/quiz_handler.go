@@ -16,6 +16,7 @@ import (
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
@@ -281,8 +282,11 @@ func (h *QuizHandler) SubmitReverseAnswer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
 	}
 
-	if err := h.svc.SaveReverseResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
+	// Don't save synonym results — the frontend will offer a retry
+	if grade.Classification != string(inference.ClassificationSynonym) {
+		if err := h.svc.SaveReverseResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
+		}
 	}
 
 	var contexts []string
@@ -291,12 +295,13 @@ func (h *QuizHandler) SubmitReverseAnswer(
 	}
 
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
-		Correct:    grade.Correct,
-		Expression: card.Expression,
-		Meaning:    card.Meaning,
-		Reason:     grade.Reason,
-		Contexts:   contexts,
-		WordDetail: toProtoWordDetail(card.WordDetail),
+		Correct:        grade.Correct,
+		Expression:     card.Expression,
+		Meaning:        card.Meaning,
+		Reason:         grade.Reason,
+		Contexts:       contexts,
+		WordDetail:     toProtoWordDetail(card.WordDetail),
+		Classification: grade.Classification,
 	}), nil
 }
 
