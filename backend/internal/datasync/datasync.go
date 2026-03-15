@@ -41,7 +41,7 @@ type logCounter struct {
 func newLogCounter(logs []learning.LearningLog) *logCounter {
 	lc := &logCounter{counts: make(map[logKey]int, len(logs))}
 	for _, l := range logs {
-		lc.counts[logKey{l.NoteID, l.QuizType, l.LearnedAt, l.SourceNotebookID, l.Status}]++
+		lc.counts[logKey{l.NoteID, l.QuizType, l.LearnedAt.UTC(), l.SourceNotebookID, l.Status}]++
 	}
 	return lc
 }
@@ -358,7 +358,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 			if quizType == "" {
 				quizType = "notebook"
 			}
-			key := logKey{n.ID, quizType, rec.LearnedAt.Time, expr.notebookID, string(rec.Status)}
+			key := logKey{n.ID, quizType, rec.LearnedAt.Time.UTC(), expr.notebookID, string(rec.Status)}
 			if existingLogs.alreadyImported(key) {
 				result.LearningSkipped++
 				continue
@@ -379,7 +379,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 
 		for _, rec := range expr.ReverseLogs {
 			quizType := "reverse"
-			key := logKey{n.ID, quizType, rec.LearnedAt.Time, expr.notebookID, string(rec.Status)}
+			key := logKey{n.ID, quizType, rec.LearnedAt.Time.UTC(), expr.notebookID, string(rec.Status)}
 			if existingLogs.alreadyImported(key) {
 				result.LearningSkipped++
 				continue
