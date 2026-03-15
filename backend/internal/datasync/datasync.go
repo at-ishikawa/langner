@@ -358,7 +358,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 			if quizType == "" {
 				quizType = "notebook"
 			}
-			key := logKey{n.ID, quizType, rec.LearnedAt.Time.UTC(), expr.notebookID, string(rec.Status)}
+			key := logKey{n.ID, quizType, rec.LearnedAt.UTC(), expr.notebookID, string(rec.Status)}
 			if existingLogs.alreadyImported(key) {
 				result.LearningSkipped++
 				continue
@@ -379,7 +379,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 
 		for _, rec := range expr.ReverseLogs {
 			quizType := "reverse"
-			key := logKey{n.ID, quizType, rec.LearnedAt.Time.UTC(), expr.notebookID, string(rec.Status)}
+			key := logKey{n.ID, quizType, rec.LearnedAt.UTC(), expr.notebookID, string(rec.Status)}
 			if existingLogs.alreadyImported(key) {
 				result.LearningSkipped++
 				continue
