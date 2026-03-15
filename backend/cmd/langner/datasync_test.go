@@ -47,3 +47,21 @@ func TestNewMigrateImportDBCommand_RunE_ConfigError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "load config")
 }
+
+func TestNewValidateDBCommand(t *testing.T) {
+	cmd := newValidateDBCommand()
+
+	assert.Equal(t, "validate-db", cmd.Use)
+	assert.NotNil(t, cmd.RunE)
+}
+
+func TestNewValidateDBCommand_RunE_ConfigError(t *testing.T) {
+	cfgPath := setupBrokenConfigFile(t)
+	setConfigFile(t, cfgPath)
+
+	cmd := newValidateDBCommand()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "load config")
+}
