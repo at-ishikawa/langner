@@ -59,6 +59,15 @@ message Example {
   string speaker = 2;
 }
 
+message WordDetail {
+  string origin = 1;
+  string pronunciation = 2;
+  string part_of_speech = 3;
+  repeated string synonyms = 4;
+  repeated string antonyms = 5;
+  string memo = 6;
+}
+
 message SubmitAnswerRequest {
   int64 note_id = 1 [
     (buf.validate.field).int64.gt = 0
@@ -76,6 +85,7 @@ message SubmitAnswerResponse {
   bool correct = 1;
   string meaning = 2;
   string reason = 3;
+  WordDetail word_detail = 4;
 }
 
 message StartReverseQuizRequest {
@@ -122,6 +132,8 @@ message SubmitReverseAnswerResponse {
   string meaning = 3;
   string reason = 4;
   repeated string contexts = 5;
+  WordDetail word_detail = 6;
+  string classification = 7;
 }
 
 message StartFreeformQuizRequest {}
@@ -155,4 +167,5 @@ message SubmitFreeformAnswerResponse {
   string reason = 4;
   string context = 5;
   string notebook_name = 6;
+  WordDetail word_detail = 7;
 }

@@ -15,7 +15,7 @@ import {
 import { quizClient } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 
-type QuizPhase = "answering" | "feedback";
+type QuizPhase = "answering" | "synonym-retry" | "feedback";
 
 interface FeedbackData {
   correct: boolean;
@@ -36,6 +36,7 @@ export default function ReverseQuizPage() {
   const [phase, setPhase] = useState<QuizPhase>("answering");
   const [answer, setAnswer] = useState("");
   const [submittedAnswer, setSubmittedAnswer] = useState("");
+  const [synonymAnswer, setSynonymAnswer] = useState("");
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -53,6 +54,7 @@ export default function ReverseQuizPage() {
     setPhase("answering");
     setAnswer("");
     setSubmittedAnswer("");
+    setSynonymAnswer("");
     setFeedback(null);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [currentIndex]);
@@ -65,7 +67,7 @@ export default function ReverseQuizPage() {
   const total = reverseFlashcards.length;
   const progress = ((currentIndex + 1) / total) * 100;
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (isRetry = false) => {
     if (!answer.trim()) return;
 
     const responseTimeMs = Date.now() - startTimeRef.current;
@@ -84,8 +86,20 @@ export default function ReverseQuizPage() {
         responseTimeMs: BigInt(responseTimeMs),
       });
 
+      // Synonym on first attempt: show hint and let user retry
+      if (res.classification === "synonym" && !isRetry) {
+        setSynonymAnswer(userAnswer);
+        setPhase("synonym-retry");
+        setLoading(false);
+        setTimeout(() => inputRef.current?.focus(), 100);
+        return;
+      }
+
+      // On retry with synonym, accept as correct with lower quality
+      const correct = isRetry && res.classification === "synonym" ? true : res.correct;
+
       setFeedback({
-        correct: res.correct,
+        correct,
         expression: res.expression,
         meaning: res.meaning,
         reason: res.reason,
@@ -93,12 +107,55 @@ export default function ReverseQuizPage() {
       });
       storeSubmitResult({
         noteId: card.noteId,
-        answer: userAnswer,
-        correct: res.correct,
+        answer: isRetry ? `${synonymAnswer} -> ${userAnswer}` : userAnswer,
+        correct,
+        expression: res.expression,
+        meaning: res.meaning,
+        reason: isRetry && res.classification === "synonym"
+          ? res.reason + " (accepted on retry)"
+          : res.reason,
+        contexts: res.contexts ?? [],
+        wordDetail: res.wordDetail,
+      });
+    } catch {
+      setError("Failed to submit answer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkip = async () => {
+    const responseTimeMs = Date.now() - startTimeRef.current;
+    setSubmittedAnswer("");
+    setAnswer("");
+    setPhase("feedback");
+    setLoading(true);
+    setFeedback(null);
+    setError(null);
+
+    try {
+      const res = await quizClient.submitReverseAnswer({
+        noteId: card.noteId,
+        answer: "I don't know",
+        responseTimeMs: BigInt(responseTimeMs),
+      });
+
+      setFeedback({
+        correct: false,
         expression: res.expression,
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
+      });
+      storeSubmitResult({
+        noteId: card.noteId,
+        answer: "(skipped)",
+        correct: false,
+        expression: res.expression,
+        meaning: res.meaning,
+        reason: res.reason,
+        contexts: res.contexts ?? [],
+        wordDetail: res.wordDetail,
       });
     } catch {
       setError("Failed to submit answer");
@@ -119,6 +176,8 @@ export default function ReverseQuizPage() {
     if (e.key === "Enter") {
       if (phase === "answering") {
         handleSubmit();
+      } else if (phase === "synonym-retry") {
+        handleSubmit(true);
       } else if (phase === "feedback" && !loading) {
         handleNext();
       }
@@ -138,7 +197,51 @@ export default function ReverseQuizPage() {
         </Progress.Root>
       </Box>
 
-      {phase === "answering" ? (
+      {phase === "synonym-retry" ? (
+        <VStack align="stretch" gap={4}>
+          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
+            {card.meaning}
+          </Heading>
+
+          <Box
+            p={3}
+            borderRadius="md"
+            bg="orange.100"
+            color="orange.800"
+            _dark={{ bg: "orange.900", color: "orange.200" }}
+          >
+            <Text fontWeight="bold">
+              That&apos;s a valid synonym! But we&apos;re looking for a specific word.
+            </Text>
+            <Text fontSize="sm" mt={1}>
+              Your word &quot;{synonymAnswer}&quot; means the same thing. Try the exact word.
+            </Text>
+          </Box>
+
+          <Box>
+            <Text fontWeight="medium" mb={1}>
+              Word
+            </Text>
+            <Input
+              ref={inputRef}
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Try again..."
+              size="lg"
+            />
+          </Box>
+
+          <Button
+            colorPalette="blue"
+            onClick={() => handleSubmit(true)}
+            disabled={!answer.trim()}
+            size="lg"
+          >
+            Submit
+          </Button>
+        </VStack>
+      ) : phase === "answering" ? (
         <VStack align="stretch" gap={4}>
           <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
             {card.meaning}
@@ -176,11 +279,19 @@ export default function ReverseQuizPage() {
 
           <Button
             colorPalette="blue"
-            onClick={handleSubmit}
+            onClick={() => handleSubmit()}
             disabled={!answer.trim()}
             size="lg"
           >
             Submit
+          </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleSkip}
+            size="lg"
+          >
+            Don&apos;t Know
           </Button>
         </VStack>
       ) : (
@@ -211,9 +322,15 @@ export default function ReverseQuizPage() {
                 </Text>
               </Box>
 
-              <Text textDecoration={feedback.correct ? "none" : "line-through"}>
-                Your answer: {submittedAnswer}
-              </Text>
+              {submittedAnswer ? (
+                <Text textDecoration={feedback.correct ? "none" : "line-through"}>
+                  Your answer: {submittedAnswer}
+                </Text>
+              ) : (
+                <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                  Skipped
+                </Text>
+              )}
 
               <Box>
                 <Text fontWeight="bold">Word</Text>

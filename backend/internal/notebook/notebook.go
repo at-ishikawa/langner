@@ -62,6 +62,7 @@ type Note struct {
 	Antonyms      []string `yaml:"antonyms,omitempty"`
 	PartOfSpeech  string   `yaml:"part_of_speech,omitempty"`
 	Pronunciation string   `yaml:"pronunciation,omitempty"`
+	Memo          string   `yaml:"memo,omitempty"`
 
 	// Deprecated: Use References
 	Reference string `yaml:"reference,omitempty"`

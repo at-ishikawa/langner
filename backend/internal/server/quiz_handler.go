@@ -16,6 +16,7 @@ import (
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
@@ -157,10 +158,25 @@ func (h *QuizHandler) SubmitAnswer(
 	}
 
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
-		Correct: grade.Correct,
-		Meaning: card.Meaning,
-		Reason:  grade.Reason,
+		Correct:    grade.Correct,
+		Meaning:    card.Meaning,
+		Reason:     grade.Reason,
+		WordDetail: toProtoWordDetail(card.WordDetail),
 	}), nil
+}
+
+func toProtoWordDetail(wd quiz.WordDetail) *apiv1.WordDetail {
+	if wd.Origin == "" && wd.Pronunciation == "" && wd.PartOfSpeech == "" && len(wd.Synonyms) == 0 && len(wd.Antonyms) == 0 && wd.Memo == "" {
+		return nil
+	}
+	return &apiv1.WordDetail{
+		Origin:        wd.Origin,
+		Pronunciation: wd.Pronunciation,
+		PartOfSpeech:  wd.PartOfSpeech,
+		Synonyms:      wd.Synonyms,
+		Antonyms:      wd.Antonyms,
+		Memo:          wd.Memo,
+	}
 }
 
 func validateRequest(msg proto.Message) *connect.Error {
@@ -266,8 +282,11 @@ func (h *QuizHandler) SubmitReverseAnswer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
 	}
 
-	if err := h.svc.SaveReverseResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
+	// Don't save synonym results — the frontend will offer a retry
+	if grade.Classification != string(inference.ClassificationSynonym) {
+		if err := h.svc.SaveReverseResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
+		}
 	}
 
 	var contexts []string
@@ -276,11 +295,13 @@ func (h *QuizHandler) SubmitReverseAnswer(
 	}
 
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
-		Correct:    grade.Correct,
-		Expression: card.Expression,
-		Meaning:    card.Meaning,
-		Reason:     grade.Reason,
-		Contexts:   contexts,
+		Correct:        grade.Correct,
+		Expression:     card.Expression,
+		Meaning:        card.Meaning,
+		Reason:         grade.Reason,
+		Contexts:       contexts,
+		WordDetail:     toProtoWordDetail(card.WordDetail),
+		Classification: grade.Classification,
 	}), nil
 }
 
@@ -357,5 +378,11 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 		Reason:       grade.Reason,
 		Context:      grade.Context,
 		NotebookName: grade.NotebookName,
+		WordDetail: func() *apiv1.WordDetail {
+			if grade.MatchedCard != nil {
+				return toProtoWordDetail(grade.MatchedCard.WordDetail)
+			}
+			return nil
+		}(),
 	}), nil
 }

@@ -91,6 +91,41 @@ export default function QuizCardPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
+        wordDetail: res.wordDetail,
+      });
+    } catch {
+      setError("Failed to submit answer");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSkip = async () => {
+    const responseTimeMs = Date.now() - startTimeRef.current;
+    setSubmittedAnswer("");
+    setAnswer("");
+    setPhase("feedback");
+    setLoading(true);
+    setFeedback(null);
+    setError(null);
+
+    try {
+      const res = await quizClient.submitAnswer({
+        noteId: card.noteId,
+        answer: "I don't know",
+        responseTimeMs: BigInt(responseTimeMs),
+      });
+
+      setFeedback(res);
+      storeSubmitResult({
+        noteId: card.noteId,
+        entry: card.entry,
+        answer: "(skipped)",
+        correct: false,
+        meaning: res.meaning,
+        reason: res.reason,
+        contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
+        wordDetail: res.wordDetail,
       });
     } catch {
       setError("Failed to submit answer");
@@ -168,6 +203,14 @@ export default function QuizCardPage() {
           >
             Submit
           </Button>
+
+          <Button
+            variant="outline"
+            onClick={handleSkip}
+            size="lg"
+          >
+            Don&apos;t Know
+          </Button>
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
@@ -197,9 +240,15 @@ export default function QuizCardPage() {
                 </Text>
               </Box>
 
-              <Text textDecoration={feedback.correct ? "none" : "line-through"}>
-                Your answer: {submittedAnswer}
-              </Text>
+              {submittedAnswer ? (
+                <Text textDecoration={feedback.correct ? "none" : "line-through"}>
+                  Your answer: {submittedAnswer}
+                </Text>
+              ) : (
+                <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                  Skipped
+                </Text>
+              )}
 
               <Box>
                 <Text fontWeight="bold">Meaning</Text>

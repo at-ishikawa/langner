@@ -221,6 +221,14 @@ func (s *Service) loadStoryCards(
 					Meaning:       definition.Meaning,
 					Examples:      examples,
 					Contexts:      contexts,
+					WordDetail: WordDetail{
+						Origin:        definition.Origin,
+						Pronunciation: definition.Pronunciation,
+						PartOfSpeech:  definition.PartOfSpeech,
+						Synonyms:      definition.Synonyms,
+						Antonyms:      definition.Antonyms,
+						Memo:          definition.Memo,
+					},
 				})
 			}
 		}
@@ -270,6 +278,14 @@ func (s *Service) loadFlashcardCards(
 				OriginalEntry: originalEntry,
 				Meaning:       card.Meaning,
 				Examples:      examples,
+				WordDetail: WordDetail{
+					Origin:        card.Origin,
+					Pronunciation: card.Pronunciation,
+					PartOfSpeech:  card.PartOfSpeech,
+					Synonyms:      card.Synonyms,
+					Antonyms:      card.Antonyms,
+					Memo:          card.Memo,
+				},
 			})
 		}
 	}
@@ -469,6 +485,7 @@ type ReverseCard struct {
 	Meaning      string
 	Contexts     []ReverseContext
 	Expression   string // original expression to guess
+	WordDetail   WordDetail
 }
 
 // ReverseContext represents a context sentence with masking info.
@@ -583,6 +600,14 @@ func (s *Service) loadStoryReverseCards(
 					Meaning:      definition.Meaning,
 					Contexts:     contexts,
 					Expression:   expression,
+					WordDetail: WordDetail{
+						Origin:        definition.Origin,
+						Pronunciation: definition.Pronunciation,
+						PartOfSpeech:  definition.PartOfSpeech,
+						Synonyms:      definition.Synonyms,
+						Antonyms:      definition.Antonyms,
+						Memo:          definition.Memo,
+					},
 				})
 			}
 		}
@@ -639,6 +664,14 @@ func (s *Service) loadFlashcardReverseCards(
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
 				Expression:   expression,
+				WordDetail: WordDetail{
+					Origin:        card.Origin,
+					Pronunciation: card.Pronunciation,
+					PartOfSpeech:  card.PartOfSpeech,
+					Synonyms:      card.Synonyms,
+					Antonyms:      card.Antonyms,
+					Memo:          card.Memo,
+				},
 			})
 		}
 	}
@@ -815,6 +848,7 @@ type FreeformCard struct {
 	OriginalExpression string // text form as it appears in the story (Note.Expression)
 	Meaning            string
 	Contexts           []inference.Context
+	WordDetail         WordDetail
 }
 
 // LoadAllWords loads all words from all notebooks for freeform quiz.
@@ -873,6 +907,14 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 					OriginalExpression: definition.Expression,
 					Meaning:            definition.Meaning,
 					Contexts:           contexts,
+					WordDetail: WordDetail{
+						Origin:        definition.Origin,
+						Pronunciation: definition.Pronunciation,
+						PartOfSpeech:  definition.PartOfSpeech,
+						Synonyms:      definition.Synonyms,
+						Antonyms:      definition.Antonyms,
+						Memo:          definition.Memo,
+					},
 				})
 			}
 		}
@@ -910,6 +952,14 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string)
 				Expression:   expression,
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
+				WordDetail: WordDetail{
+					Origin:        card.Origin,
+					Pronunciation: card.Pronunciation,
+					PartOfSpeech:  card.PartOfSpeech,
+					Synonyms:      card.Synonyms,
+					Antonyms:      card.Antonyms,
+					Memo:          card.Memo,
+				},
 			})
 		}
 	}
