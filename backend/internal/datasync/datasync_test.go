@@ -508,7 +508,7 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 					{ID: 1, Entry: "break the ice", NotebookNotes: []notebook.NotebookNote{{NotebookID: "test-story"}}},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{
-					{NoteID: 1, QuizType: "notebook", LearnedAt: baseTime},
+					{NoteID: 1, QuizType: "notebook", LearnedAt: baseTime, SourceNotebookID: "test-story", Status: "understood"},
 				}, nil)
 				learningSource.EXPECT().FindByNotebookID("test-story").Return([]notebook.LearningHistoryExpression{
 					{
@@ -755,13 +755,55 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 			},
 		},
 		{
+			name: "multiple notes with same entry uses notebook-specific note",
+			setup: func(learningSource *mock_datasync.MockLearningSource, noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Usage: "took off", Entry: "take off", NotebookNotes: []notebook.NotebookNote{{NotebookID: "series-a"}}},
+					{ID: 2, Usage: "take off", Entry: "take off", NotebookNotes: []notebook.NotebookNote{{NotebookID: "series-b"}}},
+				}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
+				learningSource.EXPECT().FindByNotebookID("series-a").Return([]notebook.LearningHistoryExpression{
+					{
+						Expression:     "take off",
+						EasinessFactor: 2.5,
+						LearnedLogs: []notebook.LearningRecord{
+							{Status: "understood", LearnedAt: notebook.NewDate(baseTime), Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7},
+						},
+					},
+				}, nil)
+				learningSource.EXPECT().FindByNotebookID("series-b").Return([]notebook.LearningHistoryExpression{
+					{
+						Expression:     "take off",
+						EasinessFactor: 2.3,
+						LearnedLogs: []notebook.LearningRecord{
+							{Status: "misunderstood", LearnedAt: notebook.NewDate(baseTime.Add(time.Hour)), Quality: 2, ResponseTimeMs: 3000, QuizType: "notebook", IntervalDays: 1},
+						},
+					},
+				}, nil)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 2)
+						// series-a log should use note ID 1 (the note linked to series-a)
+						assert.Equal(t, int64(1), logs[0].NoteID)
+						assert.Equal(t, "series-a", logs[0].SourceNotebookID)
+						// series-b log should use note ID 2 (the note linked to series-b)
+						assert.Equal(t, int64(2), logs[1].NoteID)
+						assert.Equal(t, "series-b", logs[1].SourceNotebookID)
+						return nil
+					})
+			},
+			want: &ImportLearningLogsResult{
+				LearningNew: 2,
+			},
+		},
+		{
 			name: "duplicate reverse log is skipped",
 			setup: func(learningSource *mock_datasync.MockLearningSource, noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Entry: "break the ice", NotebookNotes: []notebook.NotebookNote{{NotebookID: "test-story"}}},
 				}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{
-					{NoteID: 1, QuizType: "reverse", LearnedAt: baseTime},
+					{NoteID: 1, QuizType: "reverse", LearnedAt: baseTime, SourceNotebookID: "test-story", Status: "understood"},
 				}, nil)
 				learningSource.EXPECT().FindByNotebookID("test-story").Return([]notebook.LearningHistoryExpression{
 					{

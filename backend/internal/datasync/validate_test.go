@@ -191,6 +191,35 @@ func TestValidateRoundTrip(t *testing.T) {
 			wantCategories:             []string{"dictionary"},
 		},
 		{
+			name: "case-differing source notes deduplicated to match exported",
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage: "Break the ice", Entry: "break the ice",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "s1", Group: "Ep1", Subgroup: "Scene1"},
+					},
+				},
+				{
+					Usage: "break the ice", Entry: "break the ice",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "s1", Group: "Ep1", Subgroup: "Scene2"},
+					},
+				},
+			},
+			exportedNotes: []notebook.NoteRecord{
+				{
+					Usage: "break the ice", Entry: "break the ice",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "s1", Group: "Ep1", Subgroup: "Scene1"},
+						{NotebookType: "story", NotebookID: "s1", Group: "Ep1", Subgroup: "Scene2"},
+					},
+				},
+			},
+			sourceLearningByNotebook:   map[string][]notebook.LearningHistoryExpression{},
+			exportedLearningByNotebook: map[string][]notebook.LearningHistoryExpression{},
+			wantMismatches:             0,
+		},
+		{
 			name: "multiple notebooks with mixed results",
 			sourceNotes: []notebook.NoteRecord{
 				{
@@ -248,27 +277,63 @@ func TestValidateRoundTrip(t *testing.T) {
 }
 
 func TestBuildNoteStats(t *testing.T) {
-	notes := []notebook.NoteRecord{
+	tests := []struct {
+		name                string
+		notes               []notebook.NoteRecord
+		wantTotalNotes      int
+		wantNotebookCounts  map[string]int
+	}{
 		{
-			Usage: "break the ice", Entry: "break the ice",
-			NotebookNotes: []notebook.NotebookNote{
-				{NotebookType: "story", NotebookID: "s1"},
-				{NotebookType: "flashcard", NotebookID: "f1"},
+			name: "distinct notes across notebooks",
+			notes: []notebook.NoteRecord{
+				{
+					Usage: "break the ice", Entry: "break the ice",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "s1"},
+						{NotebookType: "flashcard", NotebookID: "f1"},
+					},
+				},
+				{
+					Usage: "lose one's temper", Entry: "lose one's temper",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "s1"},
+					},
+				},
 			},
+			wantTotalNotes:     2,
+			wantNotebookCounts: map[string]int{"s1": 2, "f1": 1},
 		},
 		{
-			Usage: "lose one's temper", Entry: "lose one's temper",
-			NotebookNotes: []notebook.NotebookNote{
-				{NotebookType: "story", NotebookID: "s1"},
+			name: "case-insensitive deduplication of unique notes",
+			notes: []notebook.NoteRecord{
+				{
+					Usage: "Break the ice", Entry: "break the ice",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "s1"},
+					},
+				},
+				{
+					Usage: "break the ice", Entry: "break the ice",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "s1"},
+					},
+				},
 			},
+			wantTotalNotes:     1,
+			wantNotebookCounts: map[string]int{"s1": 2},
 		},
 	}
 
-	stats := buildNoteStats(notes)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stats := buildNoteStats(tt.notes)
 
-	assert.Equal(t, 2, stats.TotalNotes)
-	assert.Equal(t, 2, stats.NotebookStats["s1"].DefinitionCount)
-	assert.Equal(t, 1, stats.NotebookStats["f1"].DefinitionCount)
+			assert.Equal(t, tt.wantTotalNotes, stats.TotalNotes)
+			for nbID, wantCount := range tt.wantNotebookCounts {
+				assert.Equal(t, wantCount, stats.NotebookStats[nbID].DefinitionCount)
+			}
+		})
+	}
 }
 
 func TestBuildLearningStats(t *testing.T) {

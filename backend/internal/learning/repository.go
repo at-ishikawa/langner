@@ -35,23 +35,32 @@ func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, erro
 	return logs, nil
 }
 
-// BatchCreate inserts multiple learning logs in a single transaction using a multi-row INSERT.
+// BatchCreate inserts multiple learning logs in a single transaction using multi-row INSERTs.
+// Rows are chunked to stay under MySQL's 65535 placeholder limit.
 func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*LearningLog) error {
 	if len(logs) == 0 {
 		return nil
 	}
 
-	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		columns := []string{"note_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "easiness_factor"}
-		query := database.BuildMultiRowInsert("learning_logs", columns, len(logs))
+	columns := []string{"note_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "easiness_factor", "source_notebook_id"}
+	const chunkSize = 5000 // 5000 * 9 columns = 45000 placeholders, well under 65535
 
-		var args []interface{}
-		for _, l := range logs {
-			args = append(args, l.NoteID, l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.EasinessFactor)
-		}
-		_, err := tx.ExecContext(ctx, query, args...)
-		if err != nil {
-			return fmt.Errorf("insert learning logs: %w", err)
+	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		for i := 0; i < len(logs); i += chunkSize {
+			end := i + chunkSize
+			if end > len(logs) {
+				end = len(logs)
+			}
+			chunk := logs[i:end]
+
+			query := database.BuildMultiRowInsert("learning_logs", columns, len(chunk))
+			var args []interface{}
+			for _, l := range chunk {
+				args = append(args, l.NoteID, l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.EasinessFactor, l.SourceNotebookID)
+			}
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				return fmt.Errorf("insert learning logs: %w", err)
+			}
 		}
 		return nil
 	})

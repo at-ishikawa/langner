@@ -60,15 +60,17 @@ type Validator struct {
 	learningNotesDir   string
 	storyNotebooksDirs []string
 	flashcardsDirs     []string
+	definitionsDirs    []string
 	dictionaryDir      string
 }
 
 // NewValidator creates a new validator
-func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, dictionaryDir string) *Validator {
+func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, definitionsDirs []string, dictionaryDir string) *Validator {
 	return &Validator{
 		learningNotesDir:   learningNotesDir,
 		storyNotebooksDirs: storyNotebooksDirs,
 		flashcardsDirs:     flashcardsDirs,
+		definitionsDirs:    definitionsDirs,
 		dictionaryDir:      dictionaryDir,
 	}
 }
@@ -100,11 +102,14 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 		v.validateFlashcardNotebooks(flashcardNotebooks, result)
 	}
 
+	// Load definitions
+	definitionsExpressions := v.loadDefinitionsExpressions()
+
 	// Validate learning notes structure
 	v.validateLearningNotesStructure(learningHistories, result)
 
 	// Validate cross-notebook consistency
-	v.validateConsistency(learningHistories, storyNotebooks, result)
+	v.validateConsistency(learningHistories, storyNotebooks, definitionsExpressions, result)
 
 	// Validate dictionary references
 	v.validateDictionaryReferences(storyNotebooks, result)
@@ -198,6 +203,31 @@ func (v *Validator) loadStoryNotebooks() ([]storyNotebookFile, error) {
 	return allFiles, nil
 }
 
+// loadDefinitionsExpressions returns a set of all expressions found in definitions directories.
+func (v *Validator) loadDefinitionsExpressions() map[string]bool {
+	result := make(map[string]bool)
+	defsMap, err := NewDefinitionsMap(v.definitionsDirs)
+	if err != nil {
+		return result
+	}
+	for _, bookDefs := range defsMap {
+		for _, notebookDefs := range bookDefs {
+			for _, sceneDefs := range notebookDefs {
+				for _, note := range sceneDefs {
+					expr := strings.TrimSpace(note.Expression)
+					if expr != "" {
+						result[expr] = true
+					}
+					if note.Definition != "" {
+						result[strings.TrimSpace(note.Definition)] = true
+					}
+				}
+			}
+		}
+	}
+	return result
+}
+
 func (v *Validator) loadFlashcardNotebooks() ([]flashcardNotebookFile, error) {
 	var allFiles []flashcardNotebookFile
 	for _, dir := range v.flashcardsDirs {
@@ -230,6 +260,7 @@ func (v *Validator) validateLearningNotesStructure(files []learningHistoryFile, 
 func (v *Validator) validateConsistency(
 	learningFiles []learningHistoryFile,
 	storyFiles []storyNotebookFile,
+	definitionsExpressions map[string]bool,
 	result *ValidationResult,
 ) {
 	// Build index of all expressions in story notebooks
@@ -295,17 +326,21 @@ func (v *Validator) validateConsistency(
 					}
 					seenExpressions[expression] = exprIdx
 
-					// Check if expression exists in story notebooks
+					// Check if expression exists in story notebooks or definitions
 					locations, found := storyExpressions[expression]
-					if !found {
+					if !found && !definitionsExpressions[expression] {
 						result.AddError("consistency", ValidationError{
 							File:     file.path,
 							Location: exprLocation,
-							Message:  fmt.Sprintf("orphaned learning note: expression %q not found in any story notebook", expression),
+							Message:  fmt.Sprintf("orphaned learning note: expression %q not found in any notebook or definition", expression),
 							Suggestions: []string{
-								"remove this learning note or add the expression to a story notebook",
+								"remove this learning note or add the expression to a notebook or definition",
 							},
 						})
+						continue
+					}
+					if !found {
+						// Found in definitions but not stories — skip scene checks
 						continue
 					}
 

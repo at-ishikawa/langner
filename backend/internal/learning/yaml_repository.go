@@ -60,9 +60,15 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 		noteByID[notes[i].ID] = &notes[i]
 	}
 
-	logsByNoteID := make(map[int64][]LearningLog)
+	// Group logs by (noteID, sourceNotebookID)
+	type noteNotebook struct {
+		noteID     int64
+		notebookID string
+	}
+	logsByNoteNotebook := make(map[noteNotebook][]LearningLog)
 	for _, log := range logs {
-		logsByNoteID[log.NoteID] = append(logsByNoteID[log.NoteID], log)
+		key := noteNotebook{log.NoteID, log.SourceNotebookID}
+		logsByNoteNotebook[key] = append(logsByNoteNotebook[key], log)
 	}
 
 	// Group notes by NotebookID and detect notebook type per notebook
@@ -103,11 +109,19 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 			}
 		}
 
+		// Build per-note log map filtered by source notebook
+		filteredLogs := make(map[int64][]LearningLog)
+		for _, id := range uniqueNoteIDs {
+			if logs := logsByNoteNotebook[noteNotebook{id, nbID}]; len(logs) > 0 {
+				filteredLogs[id] = logs
+			}
+		}
+
 		var histories []notebook.LearningHistory
 		if info.isFlashcard {
-			histories = r.buildFlashcardHistories(nbID, uniqueNoteIDs, noteByID, logsByNoteID)
+			histories = r.buildFlashcardHistories(nbID, uniqueNoteIDs, noteByID, filteredLogs)
 		} else {
-			histories = r.buildStoryHistories(nbID, uniqueNoteIDs, noteByID, logsByNoteID)
+			histories = r.buildStoryHistories(nbID, uniqueNoteIDs, noteByID, filteredLogs)
 		}
 
 		if len(histories) == 0 {
@@ -166,6 +180,9 @@ func (r *YAMLLearningRepository) buildFlashcardHistories(
 		return groupOrder[groups[i]] < groupOrder[groups[j]]
 	})
 
+	// Track notes whose logs have been written to avoid duplicating across groups
+	logsClaimed := make(map[int64]bool)
+
 	var histories []notebook.LearningHistory
 	for _, group := range groups {
 		// Deduplicate note IDs within group
@@ -180,7 +197,12 @@ func (r *YAMLLearningRepository) buildFlashcardHistories(
 			if note == nil {
 				continue
 			}
-			expr := buildExpression(note.Entry, logsByNoteID[noteID])
+			var logs []LearningLog
+			if !logsClaimed[noteID] {
+				logs = logsByNoteID[noteID]
+				logsClaimed[noteID] = true
+			}
+			expr := buildExpression(note.Entry, logs)
 			expressions = append(expressions, expr)
 		}
 
@@ -252,6 +274,9 @@ func (r *YAMLLearningRepository) buildStoryHistories(
 		return eventOrder[events[i]] < eventOrder[events[j]]
 	})
 
+	// Track notes whose logs have been written to avoid duplicating across scenes
+	logsClaimed := make(map[int64]bool)
+
 	var histories []notebook.LearningHistory
 	for _, event := range events {
 		scenes := eventScenes[event]
@@ -275,7 +300,12 @@ func (r *YAMLLearningRepository) buildStoryHistories(
 				if note == nil {
 					continue
 				}
-				expr := buildExpression(note.Entry, logsByNoteID[noteID])
+				var logs []LearningLog
+				if !logsClaimed[noteID] {
+					logs = logsByNoteID[noteID]
+					logsClaimed[noteID] = true
+				}
+				expr := buildExpression(note.Entry, logs)
 				expressions = append(expressions, expr)
 			}
 

@@ -171,8 +171,8 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, EasinessFactor: 2.5},
-				{NoteID: 2, Status: "misunderstood", LearnedAt: baseTime.Add(time.Hour), Quality: 2, ResponseTimeMs: 3000, QuizType: "notebook", IntervalDays: 1, EasinessFactor: 2.1},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, EasinessFactor: 2.5, SourceNotebookID: "test-series"},
+				{NoteID: 2, Status: "misunderstood", LearnedAt: baseTime.Add(time.Hour), Quality: 2, ResponseTimeMs: 3000, QuizType: "notebook", IntervalDays: 1, EasinessFactor: 2.1, SourceNotebookID: "test-series"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				filePath := filepath.Join(outputDir, "learning_notes", "test-series.yml")
@@ -221,8 +221,8 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, EasinessFactor: 2.5},
-				{NoteID: 2, Status: "misunderstood", LearnedAt: baseTime, Quality: 2, ResponseTimeMs: 3000, QuizType: "notebook", IntervalDays: 1, EasinessFactor: 2.1},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, EasinessFactor: 2.5, SourceNotebookID: "vocab-cards"},
+				{NoteID: 2, Status: "misunderstood", LearnedAt: baseTime, Quality: 2, ResponseTimeMs: 3000, QuizType: "notebook", IntervalDays: 1, EasinessFactor: 2.1, SourceNotebookID: "vocab-cards"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				filePath := filepath.Join(outputDir, "learning_notes", "vocab-cards.yml")
@@ -255,8 +255,8 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5},
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(time.Hour), Quality: 3, QuizType: "reverse", EasinessFactor: 2.3},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5, SourceNotebookID: "vocab-cards"},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(time.Hour), Quality: 3, QuizType: "reverse", EasinessFactor: 2.3, SourceNotebookID: "vocab-cards"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				filePath := filepath.Join(outputDir, "learning_notes", "vocab-cards.yml")
@@ -286,10 +286,10 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "misunderstood", LearnedAt: baseTime, Quality: 2, QuizType: "notebook", EasinessFactor: 2.0},
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 4, QuizType: "notebook", EasinessFactor: 2.6},
-				{NoteID: 1, Status: "misunderstood", LearnedAt: baseTime, Quality: 1, QuizType: "reverse", EasinessFactor: 1.8},
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 5, QuizType: "reverse", EasinessFactor: 2.4},
+				{NoteID: 1, Status: "misunderstood", LearnedAt: baseTime, Quality: 2, QuizType: "notebook", EasinessFactor: 2.0, SourceNotebookID: "vocab-cards"},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 4, QuizType: "notebook", EasinessFactor: 2.6, SourceNotebookID: "vocab-cards"},
+				{NoteID: 1, Status: "misunderstood", LearnedAt: baseTime, Quality: 1, QuizType: "reverse", EasinessFactor: 1.8, SourceNotebookID: "vocab-cards"},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 5, QuizType: "reverse", EasinessFactor: 2.4, SourceNotebookID: "vocab-cards"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				filePath := filepath.Join(outputDir, "learning_notes", "vocab-cards.yml")
@@ -316,8 +316,8 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "misunderstood", LearnedAt: baseTime, Quality: 2, QuizType: "notebook", EasinessFactor: 2.0},
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 4, QuizType: "notebook", EasinessFactor: 2.6},
+				{NoteID: 1, Status: "misunderstood", LearnedAt: baseTime, Quality: 2, QuizType: "notebook", EasinessFactor: 2.0, SourceNotebookID: "vocab-cards"},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 4, QuizType: "notebook", EasinessFactor: 2.6, SourceNotebookID: "vocab-cards"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				filePath := filepath.Join(outputDir, "learning_notes", "vocab-cards.yml")
@@ -359,8 +359,8 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5},
-				{NoteID: 2, Status: "understood", LearnedAt: baseTime, Quality: 3, QuizType: "notebook", EasinessFactor: 2.3},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5, SourceNotebookID: "series-a"},
+				{NoteID: 2, Status: "understood", LearnedAt: baseTime, Quality: 3, QuizType: "notebook", EasinessFactor: 2.3, SourceNotebookID: "vocab-cards"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				// Verify both files exist
@@ -402,7 +402,7 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 			},
 		},
 		{
-			name: "note in multiple notebooks appears in both files",
+			name: "note in multiple notebooks has logs only in source notebook",
 			notes: []notebook.NoteRecord{
 				{
 					ID:    1,
@@ -414,22 +414,27 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5, SourceNotebookID: "vocab-cards"},
 			},
 			verify: func(t *testing.T, outputDir string) {
+				// series-a gets the expression but no logs (logs came from vocab-cards)
 				fileA := filepath.Join(outputDir, "learning_notes", "series-a.yml")
 				var historiesA []notebook.LearningHistory
 				readYAMLHelper(t, fileA, &historiesA)
 				require.Len(t, historiesA, 1)
 				require.Len(t, historiesA[0].Scenes, 1)
 				assert.Equal(t, "break the ice", historiesA[0].Scenes[0].Expressions[0].Expression)
+				assert.Empty(t, historiesA[0].Scenes[0].Expressions[0].LearnedLogs)
 
+				// vocab-cards gets the expression with logs (matching source_notebook_id)
 				fileB := filepath.Join(outputDir, "learning_notes", "vocab-cards.yml")
 				var historiesB []notebook.LearningHistory
 				readYAMLHelper(t, fileB, &historiesB)
 				require.Len(t, historiesB, 1)
 				require.Len(t, historiesB[0].Expressions, 1)
 				assert.Equal(t, "break the ice", historiesB[0].Expressions[0].Expression)
+				require.Len(t, historiesB[0].Expressions[0].LearnedLogs, 1)
+				assert.Equal(t, notebook.LearnedStatus("understood"), historiesB[0].Expressions[0].LearnedLogs[0].Status)
 			},
 		},
 		{
@@ -451,8 +456,8 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5},
-				{NoteID: 2, Status: "understood", LearnedAt: baseTime, Quality: 3, QuizType: "notebook", EasinessFactor: 2.3},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5, SourceNotebookID: "test-series"},
+				{NoteID: 2, Status: "understood", LearnedAt: baseTime, Quality: 3, QuizType: "notebook", EasinessFactor: 2.3, SourceNotebookID: "test-series"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				filePath := filepath.Join(outputDir, "learning_notes", "test-series.yml")
@@ -482,8 +487,8 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 				},
 			},
 			logs: []LearningLog{
-				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5},
-				{NoteID: 2, Status: "understood", LearnedAt: baseTime, Quality: 3, QuizType: "notebook", EasinessFactor: 2.3},
+				{NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook", EasinessFactor: 2.5, SourceNotebookID: "vocab-cards"},
+				{NoteID: 2, Status: "understood", LearnedAt: baseTime, Quality: 3, QuizType: "notebook", EasinessFactor: 2.3, SourceNotebookID: "vocab-cards"},
 			},
 			verify: func(t *testing.T, outputDir string) {
 				filePath := filepath.Join(outputDir, "learning_notes", "vocab-cards.yml")

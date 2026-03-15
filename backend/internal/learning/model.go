@@ -12,7 +12,8 @@ type LearningLog struct {
 	ResponseTimeMs int       `db:"response_time_ms"`
 	QuizType       string    `db:"quiz_type"`
 	IntervalDays   int       `db:"interval_days"`
-	EasinessFactor float64   `db:"easiness_factor"`
-	CreatedAt      time.Time `db:"created_at"`
+	EasinessFactor   float64   `db:"easiness_factor"`
+	SourceNotebookID string    `db:"source_notebook_id"`
+	CreatedAt        time.Time `db:"created_at"`
 	UpdatedAt      time.Time `db:"updated_at"`
 }

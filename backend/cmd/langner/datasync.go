@@ -113,6 +113,14 @@ func newValidateDBCommand() *cobra.Command {
 			}
 			defer func() { _ = db.Close() }()
 
+			// Step 0: Clear existing data for a clean round-trip test
+			fmt.Println("Clearing database for clean round-trip test...")
+			for _, table := range []string{"learning_logs", "notebook_notes", "note_images", "note_references", "notes", "dictionary_entries"} {
+				if _, err := db.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+					return fmt.Errorf("clear table %s: %w", table, err)
+				}
+			}
+
 			// Step 1: Import
 			fmt.Println("Step 1: Importing data...")
 			importer := newImporterFromConfig(cfg, db, io.Discard)
@@ -262,7 +270,11 @@ func countDictEntries(dir string) int {
 	if err != nil {
 		return 0
 	}
-	return len(responses)
+	unique := make(map[string]struct{}, len(responses))
+	for _, r := range responses {
+		unique[r.Word] = struct{}{}
+	}
+	return len(unique)
 }
 
 func extractNotebookIDs(notes []notebook.NoteRecord) []string {

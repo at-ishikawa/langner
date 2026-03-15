@@ -9,7 +9,7 @@ import (
 type DictionaryEntry struct {
 	Word       string          `db:"word"`
 	SourceType string          `db:"source_type"`
-	SourceURL  string          `db:"source_url"`
+	SourceURL  *string         `db:"source_url"`
 	Response   json.RawMessage `db:"response"`
 	CreatedAt  time.Time       `db:"created_at"`
 	UpdatedAt  time.Time       `db:"updated_at"`

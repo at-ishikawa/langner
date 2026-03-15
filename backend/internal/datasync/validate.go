@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
@@ -59,7 +60,7 @@ func buildNoteStats(notes []notebook.NoteRecord) DataStats {
 	uniqueNotes := make(map[nk]bool)
 
 	for _, rec := range notes {
-		uniqueNotes[nk{rec.Usage, rec.Entry}] = true
+		uniqueNotes[nk{strings.ToLower(rec.Usage), strings.ToLower(rec.Entry)}] = true
 		for _, nn := range rec.NotebookNotes {
 			ns, ok := stats.NotebookStats[nn.NotebookID]
 			if !ok {
@@ -81,10 +82,13 @@ func buildLearningStats(learningByNotebook map[string][]notebook.LearningHistory
 	for nbID, expressions := range learningByNotebook {
 		exprStats := make(map[string]*LearningExpressionStats)
 		for _, expr := range expressions {
-			exprStats[expr.Expression] = &LearningExpressionStats{
-				LearnedLogCount: len(expr.LearnedLogs),
-				ReverseLogCount: len(expr.ReverseLogs),
+			es := exprStats[expr.Expression]
+			if es == nil {
+				es = &LearningExpressionStats{}
+				exprStats[expr.Expression] = es
 			}
+			es.LearnedLogCount += len(expr.LearnedLogs)
+			es.ReverseLogCount += len(expr.ReverseLogs)
 		}
 		result[nbID] = exprStats
 	}
@@ -236,19 +240,44 @@ func printValidationSummary(writer io.Writer, result *ValidateResult) {
 		_, _ = fmt.Fprintf(writer, "  %s %-40s source=%-4d exported=%-4d\n", marker, nbID, srcCount, expCount)
 	}
 
-	// Learning stats summary
+	// Learning stats summary per notebook
+	_, _ = fmt.Fprintf(writer, "\nPer-Notebook Learning Logs:\n")
+	allLearningNBIDs2 := mergeStringKeys(result.SourceStats.LearningStats, result.ExportedStats.LearningStats)
+	sort.Strings(allLearningNBIDs2)
+
 	totalSrcLogs, totalExpLogs := 0, 0
-	for _, exprs := range result.SourceStats.LearningStats {
-		for _, es := range exprs {
-			totalSrcLogs += es.LearnedLogCount + es.ReverseLogCount
+	for _, nbID := range allLearningNBIDs2 {
+		srcExprs := result.SourceStats.LearningStats[nbID]
+		expExprs := result.ExportedStats.LearningStats[nbID]
+
+		srcLogs, expLogs, srcExprCount, expExprCount := 0, 0, 0, 0
+		if srcExprs != nil {
+			srcExprCount = len(srcExprs)
+			for _, es := range srcExprs {
+				srcLogs += es.LearnedLogCount + es.ReverseLogCount
+			}
 		}
-	}
-	for _, exprs := range result.ExportedStats.LearningStats {
-		for _, es := range exprs {
-			totalExpLogs += es.LearnedLogCount + es.ReverseLogCount
+		if expExprs != nil {
+			expExprCount = len(expExprs)
+			for _, es := range expExprs {
+				expLogs += es.LearnedLogCount + es.ReverseLogCount
+			}
 		}
+		totalSrcLogs += srcLogs
+		totalExpLogs += expLogs
+
+		logsMarker := " "
+		if srcLogs != expLogs {
+			logsMarker = "!"
+		}
+		exprMarker := " "
+		if srcExprCount != expExprCount {
+			exprMarker = "!"
+		}
+		_, _ = fmt.Fprintf(writer, "  %s %-40s expressions: source=%-4d exported=%-4d  %slogs: source=%-5d exported=%-5d\n",
+			logsMarker, nbID, srcExprCount, expExprCount, exprMarker, srcLogs, expLogs)
 	}
-	_, _ = fmt.Fprintf(writer, "\nLearning Logs:\n")
+	_, _ = fmt.Fprintf(writer, "\nLearning Logs Total:\n")
 	_, _ = fmt.Fprintf(writer, "  Source:   %d total logs\n", totalSrcLogs)
 	_, _ = fmt.Fprintf(writer, "  Exported: %d total logs\n", totalExpLogs)
 

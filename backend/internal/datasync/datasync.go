@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/dictionary"
@@ -19,10 +20,40 @@ import (
 
 type noteKey struct{ usage, entry string }
 
+func newNoteKey(usage, entry string) noteKey {
+	return noteKey{strings.ToLower(usage), strings.ToLower(entry)}
+}
+
 type logKey struct {
-	noteID    int64
-	quizType  string
-	learnedAt time.Time
+	noteID           int64
+	quizType         string
+	learnedAt        time.Time
+	sourceNotebookID string
+	status           string
+}
+
+// logCounter tracks how many logs with a given key exist in the DB vs have been seen in the source.
+// This allows multiple identical logs (e.g., same day, same status) to be imported correctly.
+type logCounter struct {
+	counts map[logKey]int
+}
+
+func newLogCounter(logs []learning.LearningLog) *logCounter {
+	lc := &logCounter{counts: make(map[logKey]int, len(logs))}
+	for _, l := range logs {
+		lc.counts[logKey{l.NoteID, l.QuizType, l.LearnedAt, l.SourceNotebookID, l.Status}]++
+	}
+	return lc
+}
+
+// alreadyImported returns true if the source log is already accounted for in the DB.
+// Each call consumes one "slot" from the DB count.
+func (lc *logCounter) alreadyImported(key logKey) bool {
+	if lc.counts[key] > 0 {
+		lc.counts[key]--
+		return true
+	}
+	return false
 }
 
 type nnKey struct {
@@ -124,7 +155,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 
 	// Build caches from DB notes
 	for i := range allNotes {
-		state.noteCache[noteKey{allNotes[i].Usage, allNotes[i].Entry}] = &allNotes[i]
+		state.noteCache[newNoteKey(allNotes[i].Usage, allNotes[i].Entry)] = &allNotes[i]
 		for _, nn := range allNotes[i].NotebookNotes {
 			state.nnCache[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
 		}
@@ -158,7 +189,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 }
 
 func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions, state *classifyState) {
-	key := noteKey{src.Usage, src.Entry}
+	key := newNoteKey(src.Usage, src.Entry)
 	existing := state.noteCache[key]
 
 	if existing == nil {
@@ -193,12 +224,52 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 			state.result.NotebookSkipped++
 			continue
 		}
-		state.newNNs = append(state.newNNs, notebook.NotebookNote{
-			NoteID: existing.ID, NotebookType: nn.NotebookType, NotebookID: nn.NotebookID, Group: nn.Group, Subgroup: nn.Subgroup,
-		})
+		if existing.ID == 0 {
+			// Note is pending insertion (classified as NEW earlier); append NNs to it directly.
+			existing.NotebookNotes = append(existing.NotebookNotes, nn)
+		} else {
+			state.newNNs = append(state.newNNs, notebook.NotebookNote{
+				NoteID: existing.ID, NotebookType: nn.NotebookType, NotebookID: nn.NotebookID, Group: nn.Group, Subgroup: nn.Subgroup,
+			})
+		}
 		state.nnCache[nnk] = true
 		state.result.NotebookNew++
 	}
+}
+
+// noteLookup indexes notes by Entry, supporting notebook-aware lookup.
+// When multiple notes share the same Entry, lookup prefers the note
+// linked to a specific notebook via NotebookNotes.
+type noteLookup struct {
+	byEntry map[string][]*notebook.NoteRecord
+}
+
+// buildNoteMap creates a noteLookup from a slice of NoteRecords.
+func buildNoteMap(notes []notebook.NoteRecord) noteLookup {
+	m := noteLookup{byEntry: make(map[string][]*notebook.NoteRecord, len(notes))}
+	for i := range notes {
+		entry := notes[i].Entry
+		m.byEntry[entry] = append(m.byEntry[entry], &notes[i])
+	}
+	return m
+}
+
+// lookup returns the best-matching note for the given entry and notebook ID.
+// It prefers a note that has a NotebookNote with the given notebookID.
+// If no notebook-specific match is found, it falls back to the first note with that entry.
+func (m noteLookup) lookup(entry, notebookID string) *notebook.NoteRecord {
+	candidates := m.byEntry[entry]
+	if len(candidates) == 0 {
+		return nil
+	}
+	for _, n := range candidates {
+		for _, nn := range n.NotebookNotes {
+			if nn.NotebookID == notebookID {
+				return n
+			}
+		}
+	}
+	return candidates[0]
 }
 
 // ImportLearningLogs imports learning history YAML data into the database.
@@ -209,19 +280,13 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 	if err != nil {
 		return nil, fmt.Errorf("load existing notes: %w", err)
 	}
-	noteMap := make(map[string]*notebook.NoteRecord, len(allNotes))
-	for i := range allNotes {
-		noteMap[allNotes[i].Entry] = &allNotes[i]
-	}
+	noteMap := buildNoteMap(allNotes)
 
 	allLogs, err := imp.learningRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load existing learning logs: %w", err)
 	}
-	logCache := make(map[logKey]bool, len(allLogs))
-	for _, l := range allLogs {
-		logCache[logKey{l.NoteID, l.QuizType, l.LearnedAt}] = true
-	}
+	existingLogs := newLogCounter(allLogs)
 
 	// Extract unique notebook IDs from notes
 	notebookIDs := make(map[string]bool)
@@ -236,21 +301,27 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 	}
 	sort.Strings(sortedIDs)
 
-	// Collect all expressions from the source
-	var allExpressions []notebook.LearningHistoryExpression
+	// Collect all expressions from the source, tracking their notebook origin
+	type exprWithNotebook struct {
+		notebook.LearningHistoryExpression
+		notebookID string
+	}
+	var allExpressions []exprWithNotebook
 	for _, id := range sortedIDs {
 		exprs, err := imp.learningSource.FindByNotebookID(id)
 		if err != nil {
 			return nil, fmt.Errorf("find expressions for notebook %s: %w", id, err)
 		}
-		allExpressions = append(allExpressions, exprs...)
+		for _, e := range exprs {
+			allExpressions = append(allExpressions, exprWithNotebook{e, id})
+		}
 	}
 
 	// First pass: batch-create auto notes for unknown expressions
 	newNoteEntries := make(map[string]bool)
 	var newNotes []*notebook.NoteRecord
 	for _, expr := range allExpressions {
-		if _, ok := noteMap[expr.Expression]; !ok && !newNoteEntries[expr.Expression] {
+		if noteMap.lookup(expr.Expression, expr.notebookID) == nil && !newNoteEntries[expr.Expression] {
 			newNoteEntries[expr.Expression] = true
 			n := &notebook.NoteRecord{
 				Usage: expr.Expression,
@@ -271,17 +342,14 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		if err != nil {
 			return nil, fmt.Errorf("reload notes after batch create: %w", err)
 		}
-		noteMap = make(map[string]*notebook.NoteRecord, len(allNotes))
-		for i := range allNotes {
-			noteMap[allNotes[i].Entry] = &allNotes[i]
-		}
+		noteMap = buildNoteMap(allNotes)
 	}
 
 	// Second pass: collect learning logs with correct note IDs
 	var newLogs []*learning.LearningLog
 	for _, expr := range allExpressions {
-		n, ok := noteMap[expr.Expression]
-		if !ok {
+		n := noteMap.lookup(expr.Expression, expr.notebookID)
+		if n == nil {
 			continue
 		}
 
@@ -290,41 +358,43 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 			if quizType == "" {
 				quizType = "notebook"
 			}
-			if logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] {
+			key := logKey{n.ID, quizType, rec.LearnedAt.Time, expr.notebookID, string(rec.Status)}
+			if existingLogs.alreadyImported(key) {
 				result.LearningSkipped++
 				continue
 			}
 			newLogs = append(newLogs, &learning.LearningLog{
-				NoteID:         n.ID,
-				Status:         string(rec.Status),
-				LearnedAt:      rec.LearnedAt.Time,
-				Quality:        rec.Quality,
-				ResponseTimeMs: int(rec.ResponseTimeMs),
-				QuizType:       quizType,
-				IntervalDays:   rec.IntervalDays,
-				EasinessFactor: expr.EasinessFactor,
+				NoteID:           n.ID,
+				Status:           string(rec.Status),
+				LearnedAt:        rec.LearnedAt.Time,
+				Quality:          rec.Quality,
+				ResponseTimeMs:   int(rec.ResponseTimeMs),
+				QuizType:         quizType,
+				IntervalDays:     rec.IntervalDays,
+				EasinessFactor:   expr.EasinessFactor,
+				SourceNotebookID: expr.notebookID,
 			})
-			logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] = true
 			result.LearningNew++
 		}
 
 		for _, rec := range expr.ReverseLogs {
 			quizType := "reverse"
-			if logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] {
+			key := logKey{n.ID, quizType, rec.LearnedAt.Time, expr.notebookID, string(rec.Status)}
+			if existingLogs.alreadyImported(key) {
 				result.LearningSkipped++
 				continue
 			}
 			newLogs = append(newLogs, &learning.LearningLog{
-				NoteID:         n.ID,
-				Status:         string(rec.Status),
-				LearnedAt:      rec.LearnedAt.Time,
-				Quality:        rec.Quality,
-				ResponseTimeMs: int(rec.ResponseTimeMs),
-				QuizType:       quizType,
-				IntervalDays:   rec.IntervalDays,
-				EasinessFactor: expr.ReverseEasinessFactor,
+				NoteID:           n.ID,
+				Status:           string(rec.Status),
+				LearnedAt:        rec.LearnedAt.Time,
+				Quality:          rec.Quality,
+				ResponseTimeMs:   int(rec.ResponseTimeMs),
+				QuizType:         quizType,
+				IntervalDays:     rec.IntervalDays,
+				EasinessFactor:   expr.ReverseEasinessFactor,
+				SourceNotebookID: expr.notebookID,
 			})
-			logCache[logKey{n.ID, quizType, rec.LearnedAt.Time}] = true
 			result.LearningNew++
 		}
 	}
