@@ -81,7 +81,8 @@ type LearningRecord struct {
 	Quality        int           `yaml:"quality,omitempty"`          // 0-5 grade
 	ResponseTimeMs int64         `yaml:"response_time_ms,omitempty"` // milliseconds
 	QuizType       string        `yaml:"quiz_type,omitempty"`        // "freeform" or "notebook"
-	IntervalDays   int           `yaml:"interval_days,omitempty"`    // days until next review
+	IntervalDays     int           `yaml:"interval_days,omitempty"`      // days until next review
+	OverrideInterval int           `yaml:"override_interval,omitempty"` // manually-set interval (non-zero = user override)
 }
 
 type LearningHistoryExpression struct {

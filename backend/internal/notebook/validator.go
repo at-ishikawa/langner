@@ -1170,12 +1170,21 @@ func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord, 
 			correctStreak = 0
 		}
 		ef = UpdateEasinessFactor(ef, quality, correctStreak)
-		nextInterval := CalculateNextInterval(lastInterval, ef, quality, correctStreak)
-		if logs[i].IntervalDays != nextInterval {
-			logs[i].IntervalDays = nextInterval
-			changed = true
+		if logs[i].OverrideInterval > 0 {
+			// User manually set this interval; preserve it
+			lastInterval = logs[i].OverrideInterval
+			if logs[i].IntervalDays != logs[i].OverrideInterval {
+				logs[i].IntervalDays = logs[i].OverrideInterval
+				changed = true
+			}
+		} else {
+			nextInterval := CalculateNextInterval(lastInterval, ef, quality, correctStreak)
+			if logs[i].IntervalDays != nextInterval {
+				logs[i].IntervalDays = nextInterval
+				changed = true
+			}
+			lastInterval = nextInterval
 		}
-		lastInterval = nextInterval
 	}
 
 	// Re-sort by date descending (newest first) for storage

@@ -331,6 +331,7 @@ func (u *LearningHistoryUpdater) OverrideLog(
 					intervalDays = 1
 				}
 				logs[i].IntervalDays = intervalDays
+				logs[i].OverrideInterval = intervalDays
 			}
 		}
 
@@ -372,6 +373,7 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(
 		logs[i].Quality = originalQuality
 		logs[i].Status = LearnedStatus(originalStatus)
 		logs[i].IntervalDays = originalIntervalDays
+		logs[i].OverrideInterval = 0
 
 		if quizType == QuizTypeReverse {
 			expr.ReverseEasinessFactor = originalEF
