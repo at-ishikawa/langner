@@ -11,6 +11,16 @@ vi.mock("@/lib/client", () => ({
     getQuizOptions: vi.fn(),
     startQuiz: vi.fn(),
     submitAnswer: vi.fn(),
+    overrideAnswer: vi.fn(),
+    undoOverrideAnswer: vi.fn(),
+    skipWord: vi.fn(),
+    resumeWord: vi.fn(),
+  },
+  QuizType: {
+    UNSPECIFIED: 0,
+    STANDARD: 1,
+    REVERSE: 2,
+    FREEFORM: 3,
   },
 }));
 
