@@ -1185,7 +1185,7 @@ func TestQuizHandler_OverrideAnswer_FromSession(t *testing.T) {
 	resp, err := handler.OverrideAnswer(
 		context.Background(),
 		connect.NewRequest(&apiv1.OverrideAnswerRequest{
-			NoteId: noteID,
+			NoteId: noteID, LearnedAt: "2026-01-01",
 		}),
 	)
 	require.NoError(t, err)
@@ -1236,7 +1236,7 @@ func TestQuizHandler_UndoOverrideAnswer_FromSession(t *testing.T) {
 	_, err = handler.OverrideAnswer(
 		context.Background(),
 		connect.NewRequest(&apiv1.OverrideAnswerRequest{
-			NoteId: noteID,
+			NoteId: noteID, LearnedAt: "2026-01-01",
 		}),
 	)
 	require.NoError(t, err)
@@ -1245,7 +1245,8 @@ func TestQuizHandler_UndoOverrideAnswer_FromSession(t *testing.T) {
 	resp, err := handler.UndoOverrideAnswer(
 		context.Background(),
 		connect.NewRequest(&apiv1.UndoOverrideAnswerRequest{
-			NoteId: noteID,
+			NoteId:    noteID,
+			LearnedAt: "2026-01-01",
 		}),
 	)
 	require.NoError(t, err)
@@ -1300,7 +1301,7 @@ func TestQuizHandler_OverrideAnswer_WithDBFallback(t *testing.T) {
 	_, err = handler.OverrideAnswer(
 		context.Background(),
 		connect.NewRequest(&apiv1.OverrideAnswerRequest{
-			NoteId: noteID,
+			NoteId: noteID, LearnedAt: "2026-01-01",
 		}),
 	)
 	require.Error(t, err)
@@ -1330,7 +1331,7 @@ func TestQuizHandler_OverrideAnswer_WithDBFallback(t *testing.T) {
 	resp, err := handler.OverrideAnswer(
 		context.Background(),
 		connect.NewRequest(&apiv1.OverrideAnswerRequest{
-			NoteId: noteID,
+			NoteId: noteID, LearnedAt: "2026-01-01",
 		}),
 	)
 	require.NoError(t, err)
