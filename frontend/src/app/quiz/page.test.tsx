@@ -11,7 +11,11 @@ vi.mock("@/lib/client", () => ({
     getQuizOptions: vi.fn(),
     startQuiz: vi.fn(),
     submitAnswer: vi.fn(),
+    overrideAnswer: vi.fn(),
+    undoOverrideAnswer: vi.fn(),
+    skipWord: vi.fn(),
   },
+  QuizType: { STANDARD: 0, REVERSE: 1 },
 }));
 
 const pushMock = vi.fn();
@@ -180,6 +184,130 @@ describe("QuizCardPage", () => {
     expect(
       screen.getByPlaceholderText("Type your answer")
     ).toBeInTheDocument();
+  });
+
+  it("feedback phase shows next review date when response includes it", async () => {
+    useQuizStore.getState().setFlashcards(mockFlashcards);
+    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
+      correct: true,
+      meaning: "to initiate social interaction",
+      reason: "correct",
+      nextReviewDate: "2027-06-15",
+      learnedAt: "2026-03-16T00:00:00Z",
+    });
+
+    renderPage();
+
+    const input = screen.getByPlaceholderText("Type your answer");
+    fireEvent.change(input, { target: { value: "start a conversation" } });
+    fireEvent.click(screen.getByText("Submit"));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Next review:/)).toBeInTheDocument();
+      expect(screen.getByText(/June 15, 2027/)).toBeInTheDocument();
+    });
+  });
+
+  it("feedback phase shows Mark as Incorrect button after correct answer", async () => {
+    useQuizStore.getState().setFlashcards(mockFlashcards);
+    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
+      correct: true,
+      meaning: "to initiate social interaction",
+      reason: "correct",
+    });
+
+    renderPage();
+
+    const input = screen.getByPlaceholderText("Type your answer");
+    fireEvent.change(input, { target: { value: "start a conversation" } });
+    fireEvent.click(screen.getByText("Submit"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Mark as Incorrect")).toBeInTheDocument();
+    });
+  });
+
+  it("feedback phase shows Mark as Correct button after incorrect answer", async () => {
+    useQuizStore.getState().setFlashcards(mockFlashcards);
+    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
+      correct: false,
+      meaning: "to initiate social interaction",
+      reason: "wrong",
+    });
+
+    renderPage();
+
+    const input = screen.getByPlaceholderText("Type your answer");
+    fireEvent.change(input, { target: { value: "to freeze something" } });
+    fireEvent.click(screen.getByText("Submit"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Mark as Correct")).toBeInTheDocument();
+    });
+  });
+
+  it("override button calls quizClient.overrideAnswer", async () => {
+    useQuizStore.getState().setFlashcards(mockFlashcards);
+    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
+      correct: true,
+      meaning: "to initiate social interaction",
+      reason: "correct",
+      learnedAt: "2026-03-16T00:00:00Z",
+    });
+    vi.mocked(client.quizClient.overrideAnswer).mockResolvedValue({
+      nextReviewDate: "2027-06-20",
+      originalQuality: 5,
+      originalStatus: "understood",
+      originalIntervalDays: 10,
+      originalEasinessFactor: 2.5,
+    });
+
+    renderPage();
+
+    const input = screen.getByPlaceholderText("Type your answer");
+    fireEvent.change(input, { target: { value: "start a conversation" } });
+    fireEvent.click(screen.getByText("Submit"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Mark as Incorrect")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Mark as Incorrect"));
+
+    await waitFor(() => {
+      expect(client.quizClient.overrideAnswer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          noteId: 1n,
+          markCorrect: false,
+        })
+      );
+    });
+  });
+
+  it("skip button calls quizClient.skipWord immediately", async () => {
+    useQuizStore.getState().setFlashcards(mockFlashcards);
+    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
+      correct: true,
+      meaning: "to initiate social interaction",
+      reason: "correct",
+    });
+    vi.mocked(client.quizClient.skipWord).mockResolvedValue({});
+
+    renderPage();
+
+    const input = screen.getByPlaceholderText("Type your answer");
+    fireEvent.change(input, { target: { value: "start a conversation" } });
+    fireEvent.click(screen.getByText("Submit"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Skip")).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText("Skip"));
+
+    await waitFor(() => {
+      expect(client.quizClient.skipWord).toHaveBeenCalledWith({ noteId: 1n });
+    });
   });
 
   it("navigates to /quiz/complete after last card", async () => {

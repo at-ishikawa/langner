@@ -21,8 +21,10 @@ interface FeedbackActionsProps {
   onNext: () => void;
   /** Called when the user overrides the result. */
   onOverride?: () => void;
-  /** Called when the user skips the word, with an optional custom date. */
-  onSkip?: (customDate?: string) => void;
+  /** Called when the user skips the word. */
+  onSkip?: () => void;
+  /** Called when the user changes the review date. */
+  onChangeReviewDate?: (newDate: string) => void;
 }
 
 export function FeedbackActions({
@@ -35,9 +37,11 @@ export function FeedbackActions({
   onNext,
   onOverride,
   onSkip,
+  onChangeReviewDate,
 }: FeedbackActionsProps) {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [customDate, setCustomDate] = useState("");
+  const [originalDate, setOriginalDate] = useState<string | null>(null);
 
   const canOverrideOrSkip = noteId !== undefined && !isOverridden && !isSkipped;
 
@@ -59,9 +63,69 @@ export function FeedbackActions({
           borderRadius="md"
           p={3}
         >
-          <Text fontSize="sm" fontWeight="medium">
-            Next review: {formatReviewDate(nextReviewDate)}
-          </Text>
+          {showDatePicker ? (
+            <VStack align="stretch" gap={2}>
+              <Text fontSize="sm" fontWeight="medium">
+                Pick a new review date:
+              </Text>
+              <Input
+                type="date"
+                size="sm"
+                value={customDate}
+                min={tomorrowStr}
+                onChange={(e) => setCustomDate(e.target.value)}
+              />
+              <Box display="flex" gap={2} justifyContent="flex-end">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowDatePicker(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  colorPalette="blue"
+                  onClick={() => {
+                    if (customDate && onChangeReviewDate) {
+                      if (!originalDate) {
+                        setOriginalDate(nextReviewDate);
+                      }
+                      onChangeReviewDate(customDate);
+                    }
+                    setShowDatePicker(false);
+                  }}
+                >
+                  Save
+                </Button>
+              </Box>
+            </VStack>
+          ) : (
+            <>
+              <Text fontSize="sm" fontWeight="medium">
+                Next review: {formatReviewDate(nextReviewDate)}
+              </Text>
+              {originalDate && originalDate !== nextReviewDate && (
+                <Text fontSize="xs" color="fg.muted">
+                  (changed from {formatReviewDate(originalDate)})
+                </Text>
+              )}
+              {onChangeReviewDate && (
+                <Text
+                  fontSize="xs"
+                  color="blue.600"
+                  _dark={{ color: "blue.300" }}
+                  cursor="pointer"
+                  onClick={() => {
+                    setCustomDate(nextReviewDate);
+                    setShowDatePicker(true);
+                  }}
+                >
+                  Change
+                </Text>
+              )}
+            </>
+          )}
         </Box>
       )}
 
@@ -75,6 +139,7 @@ export function FeedbackActions({
         <Button
           w="full"
           variant="outline"
+          colorPalette={isCorrect ? "red" : "blue"}
           onClick={onOverride}
         >
           {isCorrect ? "Mark as Incorrect" : "Mark as Correct"}
@@ -87,58 +152,14 @@ export function FeedbackActions({
           Skipped
         </Text>
       ) : canOverrideOrSkip && onSkip ? (
-        <>
-          {showDatePicker ? (
-            <VStack align="stretch" gap={2}>
-              <Text fontSize="sm" fontWeight="medium">
-                Skip until:
-              </Text>
-              <Input
-                type="date"
-                size="sm"
-                value={customDate}
-                min={tomorrowStr}
-                onChange={(e) => setCustomDate(e.target.value)}
-              />
-              <Box display="flex" gap={2}>
-                <Button
-                  flex="1"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => {
-                    onSkip(customDate || undefined);
-                    setShowDatePicker(false);
-                  }}
-                >
-                  Confirm Skip
-                </Button>
-                <Button
-                  flex="1"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowDatePicker(false)}
-                >
-                  Cancel
-                </Button>
-              </Box>
-            </VStack>
-          ) : (
-            <Button
-              w="full"
-              variant="outline"
-              colorPalette="gray"
-              onClick={() => setShowDatePicker(true)}
-            >
-              Skip
-            </Button>
-          )}
-        </>
-      ) : noteId === undefined && !isOverridden && !isSkipped ? (
-        // Freeform quiz: noteId is not available from the SubmitFreeformAnswerResponse proto,
-        // so override/skip are disabled. The backend SubmitFreeformAnswer handler knows the
-        // noteId but does not return it in the response. A proto change would be needed to
-        // enable these actions for freeform quizzes.
-        null
+        <Button
+          w="full"
+          variant="outline"
+          colorPalette="gray"
+          onClick={onSkip}
+        >
+          Skip
+        </Button>
       ) : null}
     </VStack>
   );

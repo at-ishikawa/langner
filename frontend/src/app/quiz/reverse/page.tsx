@@ -457,6 +457,17 @@ export default function ReverseQuizPage() {
                     setSkipped(true);
                   } catch { /* silently fail */ }
                 }}
+                onChangeReviewDate={async (newDate) => {
+                  try {
+                    await quizClient.overrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.REVERSE,
+                      learnedAt: feedback.learnedAt!,
+                      nextReviewDate: newDate,
+                    });
+                    setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
+                  } catch { /* silently fail */ }
+                }}
               />
             </>
           ) : error ? (
