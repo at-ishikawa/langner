@@ -32,6 +32,7 @@ export default function QuizCardPage() {
   const quizType = useQuizStore((s) => s.quizType);
   const currentIndex = useQuizStore((s) => s.currentIndex);
   const storeSubmitResult = useQuizStore((s) => s.submitResult);
+  const storeSkipResult = useQuizStore((s) => s.skipResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
@@ -381,6 +382,7 @@ export default function QuizCardPage() {
                   try {
                     await quizClient.skipWord({ noteId: card.noteId });
                     setSkipped(true);
+                    storeSkipResult(currentIndex, "standard");
                   } catch { /* silently fail */ }
                 }}
                 onChangeReviewDate={async (newDate) => {

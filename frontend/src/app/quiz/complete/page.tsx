@@ -239,6 +239,9 @@ export default function SessionCompletePage() {
 
       {skippedResults.length > 0 && (
         <Box mb={6}>
+          <Text fontWeight="bold" mb={2} color="gray.500">
+            Excluded from Quizzes ({skippedResults.length})
+          </Text>
           <VStack align="stretch" gap={2}>
             {skippedResults.map((r) => (
               <ResultCard
