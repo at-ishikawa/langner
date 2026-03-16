@@ -141,7 +141,7 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("start a conversation");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/Correct|Incorrect/)).toBeVisible();
+  await expect(page.getByText(/^[✓✗] (?:Correct|Incorrect)/)).toBeVisible();
   expect(submitAnswerCallCount).toBe(1);
 
   await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -151,7 +151,7 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("get angry");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/Correct|Incorrect/)).toBeVisible();
+  await expect(page.getByText(/^[✓✗] (?:Correct|Incorrect)/)).toBeVisible();
   expect(submitAnswerCallCount).toBe(2);
 
   await page.getByRole("button", { name: "See Results" }).click();

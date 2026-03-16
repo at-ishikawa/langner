@@ -262,17 +262,6 @@ type learningInfo struct {
 	isSkipped      bool
 }
 
-// findLearningInfo finds the learning status, easiness factor, and next review date
-// for a definition by searching through learning history expressions.
-func (h *NotebookHandler) findLearningInfo(
-	learningHistory []notebook.LearningHistory,
-	event, sceneTitle string,
-	def notebook.Note,
-) (notebook.LearnedStatus, float64, string) {
-	info := h.findLearningInfoFull(learningHistory, event, sceneTitle, def)
-	return info.status, info.easinessFactor, info.nextReviewDate
-}
-
 // findLearningInfoFull returns full learning info including skip status.
 func (h *NotebookHandler) findLearningInfoFull(
 	learningHistory []notebook.LearningHistory,
