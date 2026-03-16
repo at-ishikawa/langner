@@ -84,7 +84,7 @@ func (mr *MockNoteRepositoryMockRecorder) Create(ctx, note any) *gomock.Call {
 }
 
 // Delete mocks base method.
-func (m *MockNoteRepository) Delete(ctx context.Context, notebookID string, expression string) error {
+func (m *MockNoteRepository) Delete(ctx context.Context, notebookID, expression string) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Delete", ctx, notebookID, expression)
 	ret0, _ := ret[0].(error)
