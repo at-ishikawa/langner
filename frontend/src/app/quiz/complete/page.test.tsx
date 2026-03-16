@@ -10,6 +10,7 @@ vi.mock("@/lib/client", () => ({
     overrideAnswer: vi.fn(),
     undoOverrideAnswer: vi.fn(),
     skipWord: vi.fn(),
+    resumeWord: vi.fn(),
   },
   QuizType: { STANDARD: 1, REVERSE: 2, FREEFORM: 3 },
 }));
@@ -204,7 +205,7 @@ describe("SessionCompletePage", () => {
       renderPage();
 
       // Get the Skip buttons - should have 2 (one per card)
-      const skipButtons = screen.getAllByText("Skip");
+      const skipButtons = screen.getAllByText("Exclude from Quizzes");
       fireEvent.click(skipButtons[0]);
 
       await waitFor(() => {
@@ -213,7 +214,7 @@ describe("SessionCompletePage", () => {
 
       // Skipped card shows "Skipped" badge
       await waitFor(() => {
-        expect(screen.getByText("Skipped")).toBeInTheDocument();
+        expect(screen.getByText("Excluded")).toBeInTheDocument();
       });
     });
 
@@ -252,6 +253,77 @@ describe("SessionCompletePage", () => {
       await waitFor(() => {
         expect(screen.getByText("Correct: 1")).toBeInTheDocument();
         expect(screen.getByText("Incorrect: 1")).toBeInTheDocument();
+      });
+    });
+
+    it("resume button calls quizClient.resumeWord and un-skips the card", async () => {
+      vi.mocked(client.quizClient.skipWord).mockResolvedValue({});
+      vi.mocked(client.quizClient.resumeWord).mockResolvedValue({});
+      useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
+      renderPage();
+
+      // Skip the incorrect card first
+      const skipButtons = screen.getAllByText("Exclude from Quizzes");
+      fireEvent.click(skipButtons[0]);
+
+      await waitFor(() => {
+        expect(screen.getByText("Resume")).toBeInTheDocument();
+      });
+
+      // Click Resume
+      fireEvent.click(screen.getByText("Resume"));
+
+      await waitFor(() => {
+        expect(client.quizClient.resumeWord).toHaveBeenCalledWith({ noteId: 2n });
+      });
+
+      // Card should be back (no longer skipped)
+      await waitFor(() => {
+        expect(screen.queryByText("Excluded")).not.toBeInTheDocument();
+      });
+    });
+
+    it("Change link opens inline date picker instead of prompt", async () => {
+      useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
+      renderPage();
+
+      // Find "Change" links
+      const changeLinks = screen.getAllByText("Change");
+      expect(changeLinks.length).toBeGreaterThan(0);
+
+      // Click Change on first card
+      fireEvent.click(changeLinks[0]);
+
+      // Should show inline date picker, not prompt()
+      expect(screen.getByText("Pick a new review date:")).toBeInTheDocument();
+      expect(screen.getByText("Save")).toBeInTheDocument();
+      expect(screen.getByText("Cancel")).toBeInTheDocument();
+    });
+
+    it("Change date picker calls quizClient.overrideAnswer with nextReviewDate", async () => {
+      vi.mocked(client.quizClient.overrideAnswer).mockResolvedValue({
+        nextReviewDate: "2027-08-01",
+        originalQuality: 5,
+        originalStatus: "understood",
+        originalIntervalDays: 10,
+        originalEasinessFactor: 2.5,
+      });
+      useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
+      renderPage();
+
+      // Click Change
+      const changeLinks = screen.getAllByText("Change");
+      fireEvent.click(changeLinks[0]);
+
+      // Set new date and save
+      const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
+      fireEvent.change(dateInput, { target: { value: "2027-08-01" } });
+      fireEvent.click(screen.getByText("Save"));
+
+      await waitFor(() => {
+        expect(client.quizClient.overrideAnswer).toHaveBeenCalledWith(
+          expect.objectContaining({ nextReviewDate: "2027-08-01" })
+        );
       });
     });
   });

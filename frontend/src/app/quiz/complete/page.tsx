@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
 import { useQuizStore, type QuizType } from "@/store/quizStore";
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { formatReviewDate } from "@/lib/formatReviewDate";
@@ -38,6 +38,7 @@ export default function SessionCompletePage() {
   const overrideResult = useQuizStore((s) => s.overrideResult);
   const undoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
   const skipResult = useQuizStore((s) => s.skipResult);
+  const resumeResult = useQuizStore((s) => s.resumeResult);
   const updateResultReviewDate = useQuizStore((s) => s.updateResultReviewDate);
 
   const allResults = useMemo((): ResultItem[] => {
@@ -152,6 +153,14 @@ export default function SessionCompletePage() {
     } catch { /* silently fail */ }
   };
 
+  const handleResume = async (item: ResultItem) => {
+    if (!item.noteId) return;
+    try {
+      await quizClient.resumeWord({ noteId: item.noteId });
+      resumeResult(item.index, quizType);
+    } catch { /* silently fail */ }
+  };
+
   const handleChangeReviewDate = async (item: ResultItem, newDate: string) => {
     if (!item.noteId || !item.learnedAt) return;
     try {
@@ -199,6 +208,7 @@ export default function SessionCompletePage() {
                 onOverride={handleOverride}
                 onUndo={handleUndo}
                 onSkip={handleSkip}
+                onResume={handleResume}
                 onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
@@ -219,6 +229,7 @@ export default function SessionCompletePage() {
                 onOverride={handleOverride}
                 onUndo={handleUndo}
                 onSkip={handleSkip}
+                onResume={handleResume}
                 onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
@@ -236,6 +247,7 @@ export default function SessionCompletePage() {
                 onOverride={handleOverride}
                 onUndo={handleUndo}
                 onSkip={handleSkip}
+                onResume={handleResume}
                 onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
@@ -255,24 +267,30 @@ function ResultCard({
   onOverride,
   onUndo,
   onSkip,
+  onResume,
   onChangeReviewDate,
 }: {
   item: ResultItem;
   onOverride: (item: ResultItem) => void;
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
+  onResume: (item: ResultItem) => void;
   onChangeReviewDate: (item: ResultItem, newDate: string) => void;
 }) {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customDate, setCustomDate] = useState("");
+
+  const tomorrowStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split("T")[0];
+  }, []);
+
   const borderColor = item.isSkipped
     ? "gray.200"
     : item.correct
       ? "green.200"
       : "red.200";
-  const topBarColor = item.isSkipped
-    ? "gray.400"
-    : item.correct
-      ? "green.500"
-      : "red.500";
 
   return (
     <Box
@@ -286,7 +304,7 @@ function ResultCard({
         <Text fontWeight="bold">{item.entry}</Text>
         {item.isSkipped && (
           <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
-            <Text fontSize="xs" color="fg.muted" fontStyle="italic">Skipped</Text>
+            <Text fontSize="xs" color="fg.muted" fontStyle="italic">Excluded</Text>
           </Box>
         )}
       </Box>
@@ -308,24 +326,60 @@ function ResultCard({
           borderRadius="md"
           p={2}
         >
-          <Text fontSize="xs" fontWeight="medium">
-            Next review: {formatReviewDate(item.nextReviewDate)}
-          </Text>
-          {item.noteId && item.learnedAt && (
-            <Text
-              fontSize="xs"
-              color="blue.600"
-              _dark={{ color: "blue.300" }}
-              cursor="pointer"
-              onClick={() => {
-                const newDate = prompt("Enter new review date (YYYY-MM-DD):", item.nextReviewDate);
-                if (newDate) {
-                  onChangeReviewDate(item, newDate);
-                }
-              }}
-            >
-              Change
-            </Text>
+          {showDatePicker ? (
+            <VStack align="stretch" gap={2}>
+              <Text fontSize="xs" fontWeight="medium">
+                Pick a new review date:
+              </Text>
+              <Input
+                type="date"
+                size="sm"
+                value={customDate}
+                min={tomorrowStr}
+                onChange={(e) => setCustomDate(e.target.value)}
+              />
+              <Box display="flex" gap={2} justifyContent="flex-end">
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => setShowDatePicker(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="xs"
+                  colorPalette="blue"
+                  onClick={() => {
+                    if (customDate) {
+                      onChangeReviewDate(item, customDate);
+                    }
+                    setShowDatePicker(false);
+                  }}
+                >
+                  Save
+                </Button>
+              </Box>
+            </VStack>
+          ) : (
+            <>
+              <Text fontSize="xs" fontWeight="medium">
+                Next review: {formatReviewDate(item.nextReviewDate)}
+              </Text>
+              {item.noteId && item.learnedAt && (
+                <Text
+                  fontSize="xs"
+                  color="blue.600"
+                  _dark={{ color: "blue.300" }}
+                  cursor="pointer"
+                  onClick={() => {
+                    setCustomDate(item.nextReviewDate!);
+                    setShowDatePicker(true);
+                  }}
+                >
+                  Change
+                </Text>
+              )}
+            </>
           )}
         </Box>
       )}
@@ -359,8 +413,21 @@ function ResultCard({
         </Text>
       )}
 
-      {/* Skip button or Skipped label */}
-      {item.isSkipped ? null : !item.isOverridden && item.noteId ? (
+      {/* Skip button, Resume button, or nothing */}
+      {item.isSkipped ? (
+        item.noteId ? (
+          <Button
+            w="full"
+            mt={2}
+            size="sm"
+            variant="outline"
+            colorPalette="blue"
+            onClick={() => onResume(item)}
+          >
+            Resume
+          </Button>
+        ) : null
+      ) : !item.isOverridden && item.noteId ? (
         <Button
           w="full"
           mt={2}
@@ -369,7 +436,7 @@ function ResultCard({
           colorPalette="gray"
           onClick={() => onSkip(item)}
         >
-          Skip
+          Exclude from Quizzes
         </Button>
       ) : null}
     </Box>

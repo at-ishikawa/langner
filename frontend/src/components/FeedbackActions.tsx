@@ -146,10 +146,10 @@ export function FeedbackActions({
         </Button>
       ) : null}
 
-      {/* Skip button or Skipped label */}
+      {/* Exclude button or Excluded label */}
       {isSkipped ? (
         <Text fontSize="sm" color="fg.muted" fontStyle="italic">
-          Skipped
+          Excluded from quizzes
         </Text>
       ) : canOverrideOrSkip && onSkip ? (
         <Button
@@ -158,7 +158,7 @@ export function FeedbackActions({
           colorPalette="gray"
           onClick={onSkip}
         >
-          Skip
+          Exclude from Quizzes
         </Button>
       ) : null}
     </VStack>

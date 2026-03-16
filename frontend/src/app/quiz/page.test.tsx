@@ -300,10 +300,10 @@ describe("QuizCardPage", () => {
     fireEvent.click(screen.getByText("Submit"));
 
     await waitFor(() => {
-      expect(screen.getByText("Skip")).toBeInTheDocument();
+      expect(screen.getByText("Exclude from Quizzes")).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByText("Skip"));
+    fireEvent.click(screen.getByText("Exclude from Quizzes"));
 
     await waitFor(() => {
       expect(client.quizClient.skipWord).toHaveBeenCalledWith({ noteId: 1n });

@@ -67,7 +67,7 @@ describe("FeedbackActions", () => {
 
   it("renders Skip button when onSkip provided and noteId defined", () => {
     renderComponent({ onSkip: vi.fn(), noteId: BigInt(1) });
-    expect(screen.getByText("Skip")).toBeInTheDocument();
+    expect(screen.getByText("Exclude from Quizzes")).toBeInTheDocument();
   });
 
   it("does not render Skip button when isSkipped=true", () => {
@@ -77,7 +77,7 @@ describe("FeedbackActions", () => {
 
   it("shows Skipped dimmed label when isSkipped=true", () => {
     renderComponent({ isSkipped: true, onSkip: vi.fn() });
-    expect(screen.getByText("Skipped")).toBeInTheDocument();
+    expect(screen.getByText("Excluded from quizzes")).toBeInTheDocument();
   });
 
   it("calls onNext when Next button clicked", () => {
@@ -97,7 +97,7 @@ describe("FeedbackActions", () => {
   it("calls onSkip immediately when Skip button clicked (no confirmation)", () => {
     const onSkip = vi.fn();
     renderComponent({ onSkip, noteId: BigInt(1) });
-    fireEvent.click(screen.getByText("Skip"));
+    fireEvent.click(screen.getByText("Exclude from Quizzes"));
     expect(onSkip).toHaveBeenCalledTimes(1);
   });
 

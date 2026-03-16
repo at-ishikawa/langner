@@ -449,13 +449,13 @@ test("skip word in standard quiz feedback", async ({ page }) => {
   await expect(page.getByText(/Correct/)).toBeVisible();
 
   // Click "Skip" button — immediately skips (no confirmation)
-  await page.getByRole("button", { name: "Skip" }).click();
+  await page.getByRole("button", { name: "Exclude from Quizzes" }).click();
 
   // Verify "Skipped" label appears
-  await expect(page.getByText("Skipped")).toBeVisible();
+  await expect(page.getByText("Excluded from quizzes")).toBeVisible();
 
   // Verify "Skip" button is gone
-  await expect(page.getByRole("button", { name: "Skip" })).not.toBeVisible();
+  await expect(page.getByRole("button", { name: "Exclude from Quizzes" })).not.toBeVisible();
 });
 
 test("change review date in standard quiz feedback", async ({ page }) => {
