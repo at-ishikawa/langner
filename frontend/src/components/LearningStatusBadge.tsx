@@ -6,6 +6,7 @@ const statusConfig: Record<string, { label: string; colorPalette: string }> = {
   understood: { label: "Understood", colorPalette: "yellow" },
   usable: { label: "Usable", colorPalette: "blue" },
   intuitive: { label: "Intuitive", colorPalette: "green" },
+  skipped: { label: "Skipped", colorPalette: "gray" },
 };
 
 export function LearningStatusBadge({ status }: { status: string }) {

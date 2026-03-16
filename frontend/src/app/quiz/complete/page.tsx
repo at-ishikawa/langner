@@ -258,6 +258,17 @@ export default function SessionCompletePage() {
         </Box>
       )}
 
+      {correctResults.length > 0 && (
+        <Box mb={6}>
+          <Heading size="md" color="green.600" _dark={{ color: "green.300" }} mb={2}>
+            Correct
+          </Heading>
+          <VStack align="stretch" gap={2}>
+            {correctResults.map(renderResultCard)}
+          </VStack>
+        </Box>
+      )}
+
       <Button w="full" colorPalette="blue" onClick={handleBackToStart}>
         Back to Start
       </Button>

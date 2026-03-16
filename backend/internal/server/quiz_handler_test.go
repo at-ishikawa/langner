@@ -17,6 +17,8 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
+	mock_notebook "github.com/at-ishikawa/langner/internal/mocks/notebook"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
@@ -983,4 +985,410 @@ notebooks:
 
 	require.NotNil(t, book, "book should appear in GetQuizOptions response")
 	assert.Equal(t, "Books", book.GetKind(), "book kind should be 'Books'")
+}
+
+func TestQuizHandler_SkipWord_FromSession(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, learningDir := newTestHandlerWithFixtures(t, mockClient)
+
+	// Start a quiz to populate the note store
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	require.Len(t, startResp.Msg.GetFlashcards(), 1)
+
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	// First submit an answer so there's a learning history entry
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "serendipity",
+					Meaning:    "a fortunate discovery by accident",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Reason: "Good.", Quality: 4},
+					},
+				},
+			},
+		}, nil,
+	)
+	_, err = handler.SubmitAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId:         noteID,
+			Answer:         "a fortunate discovery by accident",
+			ResponseTimeMs: 1000,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Now skip the word
+	resp, err := handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	// Verify learning history file was updated
+	historyPath := filepath.Join(learningDir, "test-vocab.yml")
+	_, err = os.Stat(historyPath)
+	assert.NoError(t, err)
+}
+
+func TestQuizHandler_SkipWord_ValidationError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler := newTestHandler(t, mockClient)
+
+	resp, err := handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId: 0,
+		}),
+	)
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	connectErr, ok := err.(*connect.Error)
+	require.True(t, ok)
+	assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
+}
+
+func TestQuizHandler_SkipWord_NotFound(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler := newTestHandler(t, mockClient)
+
+	resp, err := handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId: 999,
+		}),
+	)
+	require.Error(t, err)
+	assert.Nil(t, resp)
+	connectErr, ok := err.(*connect.Error)
+	require.True(t, ok)
+	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
+}
+
+func TestQuizHandler_ResumeWord_FromSession(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
+
+	// Start a quiz to populate the note store
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	// Submit an answer first
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "serendipity",
+					Meaning:    "a fortunate discovery by accident",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Reason: "Good.", Quality: 4},
+					},
+				},
+			},
+		}, nil,
+	)
+	_, err = handler.SubmitAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId:         noteID,
+			Answer:         "a fortunate discovery by accident",
+			ResponseTimeMs: 1000,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Skip the word first
+	_, err = handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Now resume it
+	resp, err := handler.ResumeWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.ResumeWordRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+}
+
+func TestQuizHandler_OverrideAnswer_FromSession(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
+
+	// Start a quiz to populate the note store
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	// Submit a correct answer
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "serendipity",
+					Meaning:    "a fortunate discovery by accident",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Reason: "Good.", Quality: 4},
+					},
+				},
+			},
+		}, nil,
+	)
+	_, err = handler.SubmitAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId:         noteID,
+			Answer:         "a fortunate discovery by accident",
+			ResponseTimeMs: 1000,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Override the answer (correct -> incorrect)
+	resp, err := handler.OverrideAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.OverrideAnswerRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+}
+
+func TestQuizHandler_UndoOverrideAnswer_FromSession(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
+
+	// Start a quiz to populate the note store
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	// Submit a correct answer
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "serendipity",
+					Meaning:    "a fortunate discovery by accident",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Reason: "Good.", Quality: 4},
+					},
+				},
+			},
+		}, nil,
+	)
+	_, err = handler.SubmitAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId:         noteID,
+			Answer:         "a fortunate discovery by accident",
+			ResponseTimeMs: 1000,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Override the answer
+	_, err = handler.OverrideAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.OverrideAnswerRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Undo the override
+	resp, err := handler.UndoOverrideAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.UndoOverrideAnswerRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+}
+
+func TestQuizHandler_OverrideAnswer_WithDBFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, learningDir := newTestHandlerWithFixtures(t, mockClient)
+
+	// Start a quiz, submit answer, then clear session to simulate session expiry
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "serendipity",
+					Meaning:    "a fortunate discovery by accident",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Reason: "Good.", Quality: 4},
+					},
+				},
+			},
+		}, nil,
+	)
+	_, err = handler.SubmitAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId:         noteID,
+			Answer:         "a fortunate discovery by accident",
+			ResponseTimeMs: 1000,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Clear the session store to simulate session expiry
+	handler.mu.Lock()
+	handler.noteStore = make(map[int64]quiz.Card)
+	handler.mu.Unlock()
+
+	// Without a noteRepository, the override should fail with NOT_FOUND
+	_, err = handler.OverrideAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.OverrideAnswerRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.Error(t, err)
+	connectErr, ok := err.(*connect.Error)
+	require.True(t, ok)
+	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
+
+	// Set up a mock note repository
+	mockRepo := mock_notebook.NewMockNoteRepository(ctrl)
+	handler.SetNoteRepository(mockRepo)
+
+	mockRepo.EXPECT().FindByID(gomock.Any(), noteID).Return(&notebook.NoteRecord{
+		ID:      noteID,
+		Usage:   "serendipity",
+		Entry:   "serendipity",
+		Meaning: "a fortunate discovery by accident",
+		NotebookNotes: []notebook.NotebookNote{
+			{
+				NotebookID: "test-vocab",
+				Group:      "flashcards",
+				Subgroup:   "",
+			},
+		},
+	}, nil)
+
+	// With DB fallback, override should work
+	resp, err := handler.OverrideAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.OverrideAnswerRequest{
+			NoteId: noteID,
+		}),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
+
+	// Verify learning history file was updated
+	historyPath := filepath.Join(learningDir, "test-vocab.yml")
+	_, err = os.Stat(historyPath)
+	assert.NoError(t, err)
+}
+
+func TestQuizHandler_SkipWord_WithCustomDate(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
+
+	// Start quiz and submit answer
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{
+				{
+					Expression: "serendipity",
+					Meaning:    "a fortunate discovery by accident",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Reason: "Good.", Quality: 4},
+					},
+				},
+			},
+		}, nil,
+	)
+	_, err = handler.SubmitAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId:         noteID,
+			Answer:         "a fortunate discovery by accident",
+			ResponseTimeMs: 1000,
+		}),
+	)
+	require.NoError(t, err)
+
+	// Skip with a custom date
+	resp, err := handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId:    noteID,
+			SkipUntil: "2027-01-01",
+		}),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, resp)
 }
