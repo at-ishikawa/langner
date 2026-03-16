@@ -12,7 +12,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient } from "@/lib/client";
+import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
 
@@ -22,6 +22,8 @@ interface FeedbackData {
   correct: boolean;
   meaning: string;
   reason: string;
+  nextReviewDate?: string;
+  learnedAt?: string;
 }
 
 export default function QuizCardPage() {
@@ -39,7 +41,14 @@ export default function QuizCardPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [overridden, setOverridden] = useState(false);
+  const [skipped, setSkipped] = useState(false);
   const [displayCorrect, setDisplayCorrect] = useState(false);
+  const [overrideOriginals, setOverrideOriginals] = useState<{
+    quality: number;
+    status: string;
+    intervalDays: number;
+    easinessFactor: number;
+  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -56,7 +65,9 @@ export default function QuizCardPage() {
     setSubmittedAnswer("");
     setFeedback(null);
     setOverridden(false);
+    setSkipped(false);
     setDisplayCorrect(false);
+    setOverrideOriginals(null);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [currentIndex]);
 
@@ -87,7 +98,13 @@ export default function QuizCardPage() {
         responseTimeMs: BigInt(responseTimeMs),
       });
 
-      setFeedback(res);
+      setFeedback({
+        correct: res.correct,
+        meaning: res.meaning,
+        reason: res.reason,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
+      });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
         noteId: card.noteId,
@@ -98,6 +115,8 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -122,7 +141,13 @@ export default function QuizCardPage() {
         responseTimeMs: BigInt(responseTimeMs),
       });
 
-      setFeedback(res);
+      setFeedback({
+        correct: false,
+        meaning: res.meaning,
+        reason: res.reason,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
+      });
       setDisplayCorrect(false);
       storeSubmitResult({
         noteId: card.noteId,
@@ -133,6 +158,8 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -258,9 +285,26 @@ export default function QuizCardPage() {
                     fontSize="sm"
                     cursor="pointer"
                     textDecoration="underline"
-                    onClick={() => {
-                      setOverridden(false);
-                      setDisplayCorrect(feedback.correct);
+                    onClick={async () => {
+                      try {
+                        const res = await quizClient.undoOverrideAnswer({
+                          noteId: card.noteId,
+                          quizType: ProtoQuizType.STANDARD,
+                          learnedAt: feedback.learnedAt!,
+                          originalQuality: overrideOriginals?.quality ?? 0,
+                          originalStatus: overrideOriginals?.status ?? "",
+                          originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                          originalEasinessFactor: overrideOriginals?.easinessFactor ?? 0,
+                        });
+                        setOverridden(false);
+                        setOverrideOriginals(null);
+                        setDisplayCorrect(res.correct);
+                        setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
+                      } catch {
+                        setOverridden(false);
+                        setOverrideOriginals(null);
+                        setDisplayCorrect(feedback.correct);
+                      }
                     }}
                   >
                     Undo
@@ -309,13 +353,35 @@ export default function QuizCardPage() {
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
+                nextReviewDate={feedback.nextReviewDate}
                 isOverridden={overridden}
-                isSkipped={false}
+                isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
                 onNext={handleNext}
-                onOverride={() => {
-                  setOverridden(true);
-                  setDisplayCorrect(!displayCorrect);
+                onOverride={async () => {
+                  try {
+                    const res = await quizClient.overrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.STANDARD,
+                      learnedAt: feedback.learnedAt!,
+                      markCorrect: !displayCorrect,
+                    });
+                    setOverridden(true);
+                    setDisplayCorrect(!displayCorrect);
+                    setOverrideOriginals({
+                      quality: res.originalQuality,
+                      status: res.originalStatus,
+                      intervalDays: res.originalIntervalDays,
+                      easinessFactor: res.originalEasinessFactor,
+                    });
+                    setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
+                  } catch { /* silently fail */ }
+                }}
+                onSkip={async () => {
+                  try {
+                    await quizClient.skipWord({ noteId: card.noteId });
+                    setSkipped(true);
+                  } catch { /* silently fail */ }
                 }}
               />
             </>

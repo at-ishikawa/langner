@@ -36,6 +36,8 @@ export default function FreeformQuizPage() {
     reason: string;
     notebookName: string;
     context?: string;
+    nextReviewDate?: string;
+    learnedAt?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef(Date.now());
@@ -82,6 +84,8 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         context: res.context,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
       storeSubmitResult({
         word: res.word,
@@ -92,6 +96,8 @@ export default function FreeformQuizPage() {
         notebookName: res.notebookName,
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -195,6 +201,7 @@ export default function FreeformQuizPage() {
           <FeedbackActions
             isCorrect={feedback.correct}
             noteId={undefined}
+            nextReviewDate={feedback.nextReviewDate}
             isOverridden={false}
             isSkipped={false}
             nextLabel="Next Word"
