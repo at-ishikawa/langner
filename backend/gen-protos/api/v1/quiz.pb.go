@@ -1632,6 +1632,8 @@ func (x *UndoOverrideAnswerResponse) GetNextReviewDate() string {
 type SkipWordRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	QuizType      QuizType               `protobuf:"varint,2,opt,name=quiz_type,json=quizType,proto3,enum=api.v1.QuizType" json:"quiz_type,omitempty"`
+	SkipUntil     string                 `protobuf:"bytes,3,opt,name=skip_until,json=skipUntil,proto3" json:"skip_until,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1671,6 +1673,20 @@ func (x *SkipWordRequest) GetNoteId() int64 {
 		return x.NoteId
 	}
 	return 0
+}
+
+func (x *SkipWordRequest) GetQuizType() QuizType {
+	if x != nil {
+		return x.QuizType
+	}
+	return QuizType_QUIZ_TYPE_UNSPECIFIED
+}
+
+func (x *SkipWordRequest) GetSkipUntil() string {
+	if x != nil {
+		return x.SkipUntil
+	}
+	return ""
 }
 
 type SkipWordResponse struct {
@@ -1713,6 +1729,7 @@ func (*SkipWordResponse) Descriptor() ([]byte, []int) {
 type ResumeWordRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	QuizType      QuizType               `protobuf:"varint,2,opt,name=quiz_type,json=quizType,proto3,enum=api.v1.QuizType" json:"quiz_type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1752,6 +1769,13 @@ func (x *ResumeWordRequest) GetNoteId() int64 {
 		return x.NoteId
 	}
 	return 0
+}
+
+func (x *ResumeWordRequest) GetQuizType() QuizType {
+	if x != nil {
+		return x.QuizType
+	}
+	return QuizType_QUIZ_TYPE_UNSPECIFIED
 }
 
 type ResumeWordResponse struct {
@@ -1930,12 +1954,16 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x18original_easiness_factor\x18\a \x01(\x01R\x16originalEasinessFactor\"`\n" +
 	"\x1aUndoOverrideAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12(\n" +
-	"\x10next_review_date\x18\x02 \x01(\tR\x0enextReviewDate\"3\n" +
+	"\x10next_review_date\x18\x02 \x01(\tR\x0enextReviewDate\"\x81\x01\n" +
 	"\x0fSkipWordRequest\x12 \n" +
-	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\"\x12\n" +
-	"\x10SkipWordResponse\"5\n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
+	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\x12\x1d\n" +
+	"\n" +
+	"skip_until\x18\x03 \x01(\tR\tskipUntil\"\x12\n" +
+	"\x10SkipWordResponse\"d\n" +
 	"\x11ResumeWordRequest\x12 \n" +
-	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\"\x14\n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
+	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\"\x14\n" +
 	"\x12ResumeWordResponse*l\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
@@ -2014,33 +2042,35 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	8,  // 8: api.v1.SubmitFreeformAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	0,  // 9: api.v1.OverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
 	0,  // 10: api.v1.UndoOverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
-	1,  // 11: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	4,  // 12: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	9,  // 13: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	11, // 14: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	15, // 15: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	17, // 16: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	19, // 17: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	21, // 18: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	23, // 19: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	25, // 20: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	27, // 21: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	2,  // 22: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	5,  // 23: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	10, // 24: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	12, // 25: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	16, // 26: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	18, // 27: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	20, // 28: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	22, // 29: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
-	24, // 30: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
-	26, // 31: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
-	28, // 32: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
-	22, // [22:33] is the sub-list for method output_type
-	11, // [11:22] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 11: api.v1.SkipWordRequest.quiz_type:type_name -> api.v1.QuizType
+	0,  // 12: api.v1.ResumeWordRequest.quiz_type:type_name -> api.v1.QuizType
+	1,  // 13: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	4,  // 14: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	9,  // 15: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	11, // 16: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	15, // 17: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	17, // 18: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	19, // 19: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	21, // 20: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	23, // 21: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	25, // 22: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	27, // 23: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	2,  // 24: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	5,  // 25: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	10, // 26: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	12, // 27: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	16, // 28: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	18, // 29: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	20, // 30: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	22, // 31: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	24, // 32: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	26, // 33: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	28, // 34: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	24, // [24:35] is the sub-list for method output_type
+	13, // [13:24] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
