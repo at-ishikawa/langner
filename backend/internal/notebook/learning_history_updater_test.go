@@ -262,7 +262,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 							Expressions: []LearningHistoryExpression{
 								{
 									Expression:            "break the ice",
-									LearnedLogs:           []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+									LearnedLogs:           []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
 									EasinessFactor:        2.5,
 									ReverseEasinessFactor: DefaultEasinessFactor,
 								},
@@ -294,7 +294,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 					Expressions: []LearningHistoryExpression{
 						{
 							Expression:            "lose one's temper",
-							LearnedLogs:           []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+							LearnedLogs:           []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
 							EasinessFactor:        2.5,
 							ReverseEasinessFactor: DefaultEasinessFactor,
 						},
@@ -431,7 +431,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name: "Update existing expression",
@@ -472,7 +472,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeNotebook,
 			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name: "Create new scene in existing story",
@@ -543,7 +543,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeNotebook,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name:            "Special characters in names",
@@ -559,7 +559,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeNotebook,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name: "Update expression with existing logs",
@@ -604,7 +604,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 			wantLogs:        3,
 		},
 		{
@@ -625,7 +625,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 									Expression: "word1",
 									LearnedLogs: []LearningRecord{
 										{
-											Status:    learnedStatusUnderstood,
+											Status:    LearnedStatusUnderstood,
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 									},
@@ -708,7 +708,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeNotebook,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name: "Update existing flashcard expression",
@@ -743,7 +743,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeNotebook,
 			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name: "flashcard type matches but expression not found creates new expression",
@@ -773,7 +773,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 2,
-			wantStatus:      learnedStatusUnderstood,
+			wantStatus:      LearnedStatusUnderstood,
 		},
 		{
 			name: "story matches but scene not found creates new scene",
@@ -821,7 +821,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 							Expressions: []LearningHistoryExpression{
 								{
 									Expression:     "break the ice",
-									LearnedLogs:    []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+									LearnedLogs:    []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
 									EasinessFactor: 2.5,
 								},
 							},
@@ -841,7 +841,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:           QuizTypeNotebook,
 			wantFound:          true,
 			wantExpressions:    1,
-			wantStatus:         learnedStatusUnderstood,
+			wantStatus:         LearnedStatusUnderstood,
 			wantLogs:           2,
 		},
 		{
@@ -856,7 +856,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 					Expressions: []LearningHistoryExpression{
 						{
 							Expression:     "lose one's temper",
-							LearnedLogs:    []LearningRecord{{Status: learnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+							LearnedLogs:    []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
 							EasinessFactor: 2.5,
 						},
 					},
@@ -874,7 +874,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:           QuizTypeNotebook,
 			wantFound:          true,
 			wantExpressions:    1,
-			wantStatus:         learnedStatusUnderstood,
+			wantStatus:         LearnedStatusUnderstood,
 			wantLogs:           2,
 		},
 	}

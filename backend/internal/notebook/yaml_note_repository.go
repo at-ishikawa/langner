@@ -36,6 +36,11 @@ func NewYAMLNoteRepositoryWriter(outputDir string) *YAMLNoteRepository {
 	return &YAMLNoteRepository{outputDir: outputDir}
 }
 
+// FindByID is not supported for YAML-based repositories.
+func (r *YAMLNoteRepository) FindByID(_ context.Context, _ int64) (*NoteRecord, error) {
+	return nil, fmt.Errorf("FindByID is not supported for YAML note repository")
+}
+
 // FindAll reads all story and flashcard notebooks, converts each YAML Note
 // to a NoteRecord, and deduplicates by (Usage, Entry) key.
 func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {

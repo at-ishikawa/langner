@@ -257,7 +257,7 @@ func TestDBNoteRepository_Delete(t *testing.T) {
 		wantErr    bool
 	}{
 		{
-			name:       "deletes note and related records",
+			name:       "deletes note and related records when no remaining links",
 			notebookID: "test-book",
 			expression: "break the ice",
 			setupMock: func(mock sqlmock.Sqlmock) {
@@ -265,18 +265,42 @@ func TestDBNoteRepository_Delete(t *testing.T) {
 				mock.ExpectQuery("SELECT n.id FROM notes").
 					WithArgs("test-book", "break the ice").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
+				mock.ExpectExec("DELETE FROM notebook_notes WHERE note_id = \\? AND notebook_id = \\?").
+					WithArgs(int64(42), "test-book").
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectQuery("SELECT COUNT").
+					WithArgs(int64(42)).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(0))
+				mock.ExpectExec("DELETE FROM learning_logs WHERE note_id").
+					WithArgs(int64(42)).
+					WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectExec("DELETE FROM note_images WHERE note_id").
 					WithArgs(int64(42)).
 					WillReturnResult(sqlmock.NewResult(0, 0))
 				mock.ExpectExec("DELETE FROM note_references WHERE note_id").
 					WithArgs(int64(42)).
 					WillReturnResult(sqlmock.NewResult(0, 0))
-				mock.ExpectExec("DELETE FROM notebook_notes WHERE note_id").
-					WithArgs(int64(42)).
-					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec("DELETE FROM notes WHERE id").
 					WithArgs(int64(42)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			},
+		},
+		{
+			name:       "only removes link when note has other notebooks",
+			notebookID: "test-book",
+			expression: "break the ice",
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery("SELECT n.id FROM notes").
+					WithArgs("test-book", "break the ice").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
+				mock.ExpectExec("DELETE FROM notebook_notes WHERE note_id = \\? AND notebook_id = \\?").
+					WithArgs(int64(42), "test-book").
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectQuery("SELECT COUNT").
+					WithArgs(int64(42)).
+					WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 				mock.ExpectCommit()
 			},
 		},

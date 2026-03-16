@@ -30,6 +30,7 @@ func newTestNotebookHandler(t *testing.T) *NotebookHandler {
 		make(map[string]rapidapi.Response),
 		nil,
 		nil,
+		nil,
 	)
 }
 
@@ -76,6 +77,7 @@ notebooks:
 		},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
+		nil,
 		nil,
 		nil,
 	), learningDir
@@ -320,6 +322,7 @@ notebooks:
 		make(map[string]rapidapi.Response),
 		nil,
 		nil,
+		nil,
 	)
 
 	resp, err := handler.GetNotebookDetail(
@@ -349,6 +352,7 @@ func TestNotebookHandler_LookupWord_FromCache(t *testing.T) {
 		dictionaryMap,
 		nil,
 		nil,
+		nil,
 	)
 
 	resp, err := handler.LookupWord(
@@ -369,6 +373,7 @@ func TestNotebookHandler_LookupWord_NotFound(t *testing.T) {
 		config.NotebooksConfig{},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
+		nil,
 		nil,
 		nil,
 	)
@@ -393,6 +398,7 @@ func TestNotebookHandler_RegisterDefinition(t *testing.T) {
 		},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
+		nil,
 		nil,
 		nil,
 	)
@@ -430,6 +436,7 @@ func TestNotebookHandler_RegisterDefinition_Subdirectory(t *testing.T) {
 		make(map[string]rapidapi.Response),
 		nil,
 		nil,
+		nil,
 	)
 
 	resp, err := handler.RegisterDefinition(
@@ -462,6 +469,7 @@ func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
 		},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
+		nil,
 		nil,
 		nil,
 	)

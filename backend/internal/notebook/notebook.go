@@ -32,7 +32,7 @@ type LearnedStatus string
 const (
 	LearnedStatusLearning        LearnedStatus = ""
 	LearnedStatusMisunderstood   LearnedStatus = "misunderstood"
-	learnedStatusUnderstood      LearnedStatus = "understood"
+	LearnedStatusUnderstood      LearnedStatus = "understood"
 	learnedStatusCanBeUsed       LearnedStatus = "usable"
 	learnedStatusIntuitivelyUsed LearnedStatus = "intuitive"
 )
@@ -137,7 +137,7 @@ func (note Note) getLearnScore() int {
 		case LearnedStatusMisunderstood:
 			// Misunderstood has negative impact on score
 			score -= 5
-		case learnedStatusUnderstood:
+		case LearnedStatusUnderstood:
 			score += 10
 		case learnedStatusCanBeUsed:
 			score += 1_000
@@ -254,7 +254,7 @@ func (note Note) hasAnyCorrectAnswer() bool {
 	}
 
 	for _, log := range note.LearnedLogs {
-		if log.Status == learnedStatusUnderstood ||
+		if log.Status == LearnedStatusUnderstood ||
 			log.Status == learnedStatusCanBeUsed ||
 			log.Status == learnedStatusIntuitivelyUsed {
 			return true

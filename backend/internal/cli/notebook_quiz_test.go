@@ -773,7 +773,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 			// Set up CLI with mocks - use a real quiz.Service backed by temp dirs
 			svc := quiz.NewService(config.NotebooksConfig{
 				LearningNotesDirectory: learningDir,
-			}, mockClient, make(map[string]rapidapi.Response))
+			}, mockClient, make(map[string]rapidapi.Response), nil)
 
 			cli := &NotebookQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{

@@ -37,7 +37,7 @@ func NewNotebookQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, nil)
 
 	var cards []quiz.Card
 
@@ -101,7 +101,7 @@ func NewFlashcardQuizCLI(
 		return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, nil)
 
 	cards, err := svc.LoadCards([]string{notebookName}, false)
 	if err != nil {
@@ -208,7 +208,7 @@ func (r *NotebookQuizCLI) Session(ctx context.Context) error {
 	}
 	fmt.Println()
 
-	if err := r.svc.SaveResult(*currentCard, grade, responseTimeMs); err != nil {
+	if err := r.svc.SaveResult(ctx, *currentCard, grade, responseTimeMs); err != nil {
 		return err
 	}
 

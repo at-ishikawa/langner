@@ -289,7 +289,7 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 					Return(tt.mockResponse, tt.mockError)
 			}
 
-			svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response))
+			svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), nil)
 
 			cli := &ReverseQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
@@ -416,7 +416,7 @@ func TestReverseQuizCLI_Session(t *testing.T) {
 			notebooksConfig := config.NotebooksConfig{
 				LearningNotesDirectory: learningNotesDir,
 			}
-			svc := quiz.NewService(notebooksConfig, mockClient, make(map[string]rapidapi.Response))
+			svc := quiz.NewService(notebooksConfig, mockClient, make(map[string]rapidapi.Response), nil)
 
 			cli := &ReverseQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
@@ -943,7 +943,7 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 		Reason:  "exact match",
 		Quality: int(notebook.QualityCorrect),
 	}
-	err = cli1.svc.SaveReverseResult(card, gradeResult, 5000)
+	err = cli1.svc.SaveReverseResult(context.Background(), card, gradeResult, 5000)
 	require.NoError(t, err)
 
 	writtenHistories, err := notebook.NewLearningHistories(learningNotesDir)
@@ -1367,7 +1367,7 @@ func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
 	retryInput := "correct-word\n"
 	stdinReader := bufio.NewReader(strings.NewReader(retryInput))
 
-	svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response))
+	svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), nil)
 
 	cli := &ReverseQuizCLI{
 		InteractiveQuizCLI: &InteractiveQuizCLI{

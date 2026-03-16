@@ -243,7 +243,7 @@ func TestGetCorrectStreak(t *testing.T) {
 			name: "old data without quality field",
 			logs: []LearningRecord{
 				{Status: learnedStatusCanBeUsed},
-				{Status: learnedStatusUnderstood},
+				{Status: LearnedStatusUnderstood},
 				{Status: LearnedStatusMisunderstood},
 				{Status: learnedStatusCanBeUsed},
 			},

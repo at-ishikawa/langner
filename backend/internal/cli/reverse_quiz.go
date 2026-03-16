@@ -37,7 +37,7 @@ func NewReverseQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, nil)
 
 	var notebookIDs []string
 	if notebookName == "" {
@@ -156,7 +156,7 @@ func (r *ReverseQuizCLI) Session(ctx context.Context) error {
 
 	r.displayReverseResult(currentCard, userAnswer, grade)
 
-	if err := r.svc.SaveReverseResult(*currentCard, grade, responseTimeMs); err != nil {
+	if err := r.svc.SaveReverseResult(ctx, *currentCard, grade, responseTimeMs); err != nil {
 		return err
 	}
 

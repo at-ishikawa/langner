@@ -35,20 +35,16 @@ type NotebookHandler struct {
 }
 
 // NewNotebookHandler creates a new NotebookHandler.
-func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client) *NotebookHandler {
+// noteRepo is optional; pass nil when DB is not configured.
+func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client, noteRepo notebook.NoteRepository) *NotebookHandler {
 	return &NotebookHandler{
 		notebooksConfig:  notebooksConfig,
 		templatesConfig:  templatesConfig,
 		dictionaryMap:    dictionaryMap,
 		dictionaryReader: dictionaryReader,
 		openaiClient:     openaiClient,
+		noteRepository:   noteRepo,
 	}
-}
-
-// SetNoteRepository sets an optional note repository for dual storage.
-// When set, definition changes are written to the DB in addition to YAML files.
-func (h *NotebookHandler) SetNoteRepository(repo notebook.NoteRepository) {
-	h.noteRepository = repo
 }
 
 func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
@@ -59,6 +55,17 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 		h.notebooksConfig.DefinitionsDirectories,
 		h.dictionaryMap,
 	)
+}
+
+// writeNoteToDB performs a best-effort DB write for notes.
+// Errors are logged but do not fail the request.
+func (h *NotebookHandler) writeNoteToDB(ctx context.Context, op string, fn func() error) {
+	if h.noteRepository == nil {
+		return
+	}
+	if err := fn(); err != nil {
+		slog.Warn("failed to "+op, "error", err)
+	}
 }
 
 func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
@@ -558,8 +565,8 @@ func (h *NotebookHandler) RegisterDefinition(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions file: %w", err))
 	}
 
-	if h.noteRepository != nil {
-		noteRecord := &notebook.NoteRecord{
+	h.writeNoteToDB(ctx, "write note to DB", func() error {
+		return h.noteRepository.Create(ctx, &notebook.NoteRecord{
 			Usage:   expression,
 			Entry:   expression,
 			Meaning: meaning,
@@ -570,11 +577,8 @@ func (h *NotebookHandler) RegisterDefinition(
 					Group:        notebookFile,
 				},
 			},
-		}
-		if err := h.noteRepository.Create(ctx, noteRecord); err != nil {
-			slog.Warn("failed to write note to DB", "expression", expression, "error", err)
-		}
-	}
+		})
+	})
 
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
@@ -632,11 +636,9 @@ func (h *NotebookHandler) DeleteDefinition(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions: %w", err))
 	}
 
-	if h.noteRepository != nil {
-		if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), expression); err != nil {
-			slog.Warn("failed to delete note from DB", "expression", expression, "error", err)
-		}
-	}
+	h.writeNoteToDB(ctx, "delete note from DB", func() error {
+		return h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), expression)
+	})
 
 	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
 }

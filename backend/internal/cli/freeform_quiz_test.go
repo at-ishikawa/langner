@@ -246,6 +246,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 				},
 				mockClient,
 				nil,
+				nil,
 			)
 
 			cli := &FreeformQuizCLI{
@@ -258,7 +259,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 
 			// Simulate the save path: if grade has MatchedCard, call SaveFreeformResult
 			if grade.MatchedCard != nil {
-				err := cli.svc.SaveFreeformResult(*grade.MatchedCard, grade, 1000)
+				err := cli.svc.SaveFreeformResult(context.Background(), *grade.MatchedCard, grade, 1000)
 				require.NoError(t, err)
 			}
 
@@ -467,6 +468,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 					LearningNotesDirectory: tmpDir,
 				},
 				mockClient,
+				nil,
 				nil,
 			)
 

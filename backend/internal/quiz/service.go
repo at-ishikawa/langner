@@ -26,18 +26,14 @@ type Service struct {
 }
 
 // NewService creates a new Service.
-func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response) *Service {
+// learningRepo is optional; pass nil when DB is not configured.
+func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository) *Service {
 	return &Service{
-		notebooksConfig: notebooksConfig,
-		openaiClient:    openaiClient,
-		dictionaryMap:   dictionaryMap,
+		notebooksConfig:    notebooksConfig,
+		openaiClient:       openaiClient,
+		dictionaryMap:      dictionaryMap,
+		learningRepository: learningRepo,
 	}
-}
-
-// SetLearningRepository sets an optional learning repository for dual storage.
-// When set, quiz results are written to the DB in addition to YAML files.
-func (s *Service) SetLearningRepository(repo learning.LearningRepository) {
-	s.learningRepository = repo
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
@@ -333,7 +329,7 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer str
 }
 
 // SaveResult updates the learning history file for the answered card.
-func (s *Service) SaveResult(card Card, result GradeResult, responseTimeMs int64) error {
+func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) error {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
@@ -358,7 +354,7 @@ func (s *Service) SaveResult(card Card, result GradeResult, responseTimeMs int64
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
 
-	s.saveLearningLogToDB(card.NotebookName, card.Entry, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeNotebook))
+	s.saveLearningLogToDB(ctx, card.NotebookName, card.Entry, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeNotebook))
 	return nil
 }
 
@@ -832,7 +828,7 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answ
 }
 
 // SaveReverseResult updates the learning history for a reverse quiz answer.
-func (s *Service) SaveReverseResult(card ReverseCard, result GradeResult, responseTimeMs int64) error {
+func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, result GradeResult, responseTimeMs int64) error {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
@@ -856,7 +852,7 @@ func (s *Service) SaveReverseResult(card ReverseCard, result GradeResult, respon
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
 
-	s.saveLearningLogToDB(card.NotebookName, card.Expression, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeReverse))
+	s.saveLearningLogToDB(ctx, card.NotebookName, card.Expression, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeReverse))
 	return nil
 }
 
@@ -1077,7 +1073,7 @@ type FreeformGradeResult struct {
 }
 
 // SaveFreeformResult updates the learning history for a freeform quiz answer.
-func (s *Service) SaveFreeformResult(card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
+func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
@@ -1102,22 +1098,24 @@ func (s *Service) SaveFreeformResult(card FreeformCard, result FreeformGradeResu
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
 
-	s.saveLearningLogToDB(card.NotebookName, card.Expression, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeFreeform))
+	s.saveLearningLogToDB(ctx, card.NotebookName, card.Expression, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeFreeform))
 	return nil
 }
 
 // saveLearningLogToDB writes a learning log to the DB repository if configured.
 // DB writes are best-effort; errors are logged but do not fail the request.
-func (s *Service) saveLearningLogToDB(sourceNotebookID, entry string, isCorrect bool, quality int, responseTimeMs int64, quizType string) {
+func (s *Service) saveLearningLogToDB(ctx context.Context, sourceNotebookID, entry string, isCorrect bool, quality int, responseTimeMs int64, quizType string) {
 	if s.learningRepository == nil {
 		return
 	}
 
 	status := string(notebook.LearnedStatusMisunderstood)
 	if isCorrect {
-		status = "understood"
+		status = string(notebook.LearnedStatusUnderstood)
 	}
 
+	// NoteID is left as 0 because the quiz path doesn't have note IDs.
+	// The data can be correlated via expression and source_notebook_id.
 	log := &learning.LearningLog{
 		Status:           status,
 		LearnedAt:        time.Now(),
@@ -1127,7 +1125,7 @@ func (s *Service) saveLearningLogToDB(sourceNotebookID, entry string, isCorrect 
 		SourceNotebookID: sourceNotebookID,
 	}
 
-	if err := s.learningRepository.Create(context.Background(), log); err != nil {
+	if err := s.learningRepository.Create(ctx, log); err != nil {
 		slog.Warn("failed to write learning log to DB", "entry", entry, "error", err)
 	}
 }

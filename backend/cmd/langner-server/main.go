@@ -79,16 +79,9 @@ func run(ctx context.Context) error {
 		}
 	}))
 
-	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap)
-
-	dictConfig := dictionary.Config{
-		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
-		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
-	}
-	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
-	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, openaiClient)
-
 	// Set up optional DB repositories for dual storage
+	var learningRepo learning.LearningRepository
+	var noteRepo notebook.NoteRepository
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		db, err := database.Open(cfg.Database)
 		if err != nil {
@@ -97,11 +90,20 @@ func run(ctx context.Context) error {
 			app.AddShutdownHook(func(ctx context.Context) error {
 				return db.Close()
 			})
-			svc.SetLearningRepository(learning.NewDBLearningRepository(db))
-			notebookHandler.SetNoteRepository(notebook.NewDBNoteRepository(db))
+			learningRepo = learning.NewDBLearningRepository(db)
+			noteRepo = notebook.NewDBNoteRepository(db)
 			slog.Info("database connected, dual storage enabled")
 		}
 	}
+
+	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap, learningRepo)
+
+	dictConfig := dictionary.Config{
+		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
+		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
+	}
+	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, openaiClient, noteRepo)
 
 	handler := server.NewQuizHandler(svc)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)

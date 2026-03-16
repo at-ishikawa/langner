@@ -12,6 +12,7 @@ import (
 // NoteRepository defines operations for managing notes.
 type NoteRepository interface {
 	FindAll(ctx context.Context) ([]NoteRecord, error)
+	FindByID(ctx context.Context, id int64) (*NoteRecord, error)
 	BatchCreate(ctx context.Context, notes []*NoteRecord) error
 	BatchUpdate(ctx context.Context, notes []*NoteRecord, newNotebookNotes []NotebookNote) error
 	Create(ctx context.Context, note *NoteRecord) error
@@ -38,6 +39,19 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 		return nil, err
 	}
 	return notes, nil
+}
+
+// FindByID returns a single note by ID with its notebook notes.
+func (r *DBNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) {
+	var note NoteRecord
+	if err := r.db.GetContext(ctx, &note, "SELECT * FROM notes WHERE id = ?", id); err != nil {
+		return nil, fmt.Errorf("find note by id %d: %w", id, err)
+	}
+	notes := []NoteRecord{note}
+	if err := r.loadRelations(ctx, notes); err != nil {
+		return nil, err
+	}
+	return &notes[0], nil
 }
 
 // BatchCreate inserts multiple notes with their images, references, and notebook notes in a single transaction.
@@ -147,7 +161,9 @@ func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	})
 }
 
-// Delete removes a note by notebook ID and expression (usage field).
+// Delete removes the notebook_notes link for the given notebook and expression.
+// If the note has no remaining notebook_notes links, the note itself and its
+// related images, references, and learning_logs are also deleted.
 func (r *DBNoteRepository) Delete(ctx context.Context, notebookID string, expression string) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Find note IDs linked to this notebook with matching expression
@@ -163,14 +179,29 @@ func (r *DBNoteRepository) Delete(ctx context.Context, notebookID string, expres
 		}
 
 		for _, noteID := range noteIDs {
+			// Remove the specific notebook_notes link for this notebook
+			if _, err := tx.ExecContext(ctx, "DELETE FROM notebook_notes WHERE note_id = ? AND notebook_id = ?", noteID, notebookID); err != nil {
+				return fmt.Errorf("delete notebook note link: %w", err)
+			}
+
+			// Check if the note still has any remaining notebook_notes links
+			var remaining int
+			if err := tx.GetContext(ctx, &remaining, "SELECT COUNT(*) FROM notebook_notes WHERE note_id = ?", noteID); err != nil {
+				return fmt.Errorf("count remaining notebook notes: %w", err)
+			}
+			if remaining > 0 {
+				continue
+			}
+
+			// No remaining links — delete the note and all related data
+			if _, err := tx.ExecContext(ctx, "DELETE FROM learning_logs WHERE note_id = ?", noteID); err != nil {
+				return fmt.Errorf("delete learning logs: %w", err)
+			}
 			if _, err := tx.ExecContext(ctx, "DELETE FROM note_images WHERE note_id = ?", noteID); err != nil {
 				return fmt.Errorf("delete note images: %w", err)
 			}
 			if _, err := tx.ExecContext(ctx, "DELETE FROM note_references WHERE note_id = ?", noteID); err != nil {
 				return fmt.Errorf("delete note references: %w", err)
-			}
-			if _, err := tx.ExecContext(ctx, "DELETE FROM notebook_notes WHERE note_id = ?", noteID); err != nil {
-				return fmt.Errorf("delete notebook notes: %w", err)
 			}
 			if _, err := tx.ExecContext(ctx, "DELETE FROM notes WHERE id = ?", noteID); err != nil {
 				return fmt.Errorf("delete note: %w", err)

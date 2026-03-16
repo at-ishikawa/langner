@@ -111,3 +111,18 @@ func (mr *MockNoteRepositoryMockRecorder) FindAll(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockNoteRepository)(nil).FindAll), ctx)
 }
+
+// FindByID mocks base method.
+func (m *MockNoteRepository) FindByID(ctx context.Context, id int64) (*notebook.NoteRecord, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindByID", ctx, id)
+	ret0, _ := ret[0].(*notebook.NoteRecord)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindByID indicates an expected call of FindByID.
+func (mr *MockNoteRepositoryMockRecorder) FindByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindByID", reflect.TypeOf((*MockNoteRepository)(nil).FindByID), ctx, id)
+}

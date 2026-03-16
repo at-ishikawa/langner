@@ -538,11 +538,11 @@ func TestLearningHistoryExpression_GetLatestStatus(t *testing.T) {
 			name: "returns first log status",
 			expression: LearningHistoryExpression{
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood},
+					{Status: LearnedStatusUnderstood},
 					{Status: LearnedStatusMisunderstood},
 				},
 			},
-			want: learnedStatusUnderstood,
+			want: LearnedStatusUnderstood,
 		},
 	}
 
@@ -556,7 +556,7 @@ func TestLearningHistoryExpression_GetLatestStatus(t *testing.T) {
 
 func TestLearningHistoryExpression_GetLogsForQuizType(t *testing.T) {
 	reverseLogs := []LearningRecord{{Status: LearnedStatusMisunderstood, Quality: 1}}
-	learnedLogs := []LearningRecord{{Status: learnedStatusUnderstood, Quality: 4}}
+	learnedLogs := []LearningRecord{{Status: LearnedStatusUnderstood, Quality: 4}}
 
 	expr := LearningHistoryExpression{
 		LearnedLogs: learnedLogs,
@@ -651,7 +651,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 			isKnownWord:    true,
 			quality:        int(QualityCorrect),
 			responseTimeMs: 3000,
-			wantStatus:     learnedStatusUnderstood,
+			wantStatus:     LearnedStatusUnderstood,
 		},
 		{
 			name: "correct unknown word",
@@ -687,7 +687,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 			isKnownWord:    true,
 			quality:        int(QualityCorrect),
 			responseTimeMs: 3000,
-			wantStatus:     learnedStatusUnderstood,
+			wantStatus:     LearnedStatusUnderstood,
 		},
 	}
 
@@ -728,7 +728,7 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 			quality:        int(QualityCorrect),
 			responseTimeMs: 3000,
 			quizType:       QuizTypeFreeform,
-			wantStatus:     learnedStatusUnderstood,
+			wantStatus:     LearnedStatusUnderstood,
 		},
 		{
 			name: "correct unknown word",
@@ -767,7 +767,7 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 			quality:        int(QualityCorrect),
 			responseTimeMs: 3000,
 			quizType:       QuizTypeFreeform,
-			wantStatus:     learnedStatusUnderstood,
+			wantStatus:     LearnedStatusUnderstood,
 		},
 	}
 
@@ -800,7 +800,7 @@ func TestLearningHistoryExpression_Validate(t *testing.T) {
 			expr: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(olderTime)},
 				},
 			},
@@ -838,7 +838,7 @@ func TestLearningHistoryExpression_Validate(t *testing.T) {
 			expr: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood},
+					{Status: LearnedStatusUnderstood},
 				},
 			},
 			wantErrors: 1,
@@ -849,7 +849,7 @@ func TestLearningHistoryExpression_Validate(t *testing.T) {
 			expr: LearningHistoryExpression{
 				Expression: "hello",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDate(olderTime)},
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(olderTime)},
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(fixedTime)},
 				},
 			},
@@ -883,7 +883,7 @@ func TestLearningScene_Validate(t *testing.T) {
 				Metadata: LearningSceneMetadata{Title: "Scene 1"},
 				Expressions: []LearningHistoryExpression{
 					{Expression: "hello", LearnedLogs: []LearningRecord{
-						{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+						{Status: LearnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
 					}},
 				},
 			},
@@ -935,7 +935,7 @@ func TestLearningHistory_Validate(t *testing.T) {
 						Metadata: LearningSceneMetadata{Title: "Scene 1"},
 						Expressions: []LearningHistoryExpression{
 							{Expression: "hello", LearnedLogs: []LearningRecord{
-								{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+								{Status: LearnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
 							}},
 						},
 					},
@@ -949,7 +949,7 @@ func TestLearningHistory_Validate(t *testing.T) {
 				Metadata: LearningHistoryMetadata{Title: "Flashcards", Type: "flashcard"},
 				Expressions: []LearningHistoryExpression{
 					{Expression: "hello", LearnedLogs: []LearningRecord{
-						{Status: learnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
+						{Status: LearnedStatusUnderstood, LearnedAt: NewDate(fixedTime)},
 					}},
 				},
 			},
@@ -1056,7 +1056,7 @@ func TestLearningHistoryExpression_HasAnyCorrectAnswer(t *testing.T) {
 				Expression: "test",
 				LearnedLogs: []LearningRecord{
 					{Status: LearnedStatusMisunderstood},
-					{Status: learnedStatusUnderstood},
+					{Status: LearnedStatusUnderstood},
 				},
 			},
 			want: true,

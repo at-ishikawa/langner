@@ -30,7 +30,7 @@ func NewFreeformQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, nil)
 
 	cards, err := svc.LoadAllWords()
 	if err != nil {
@@ -86,7 +86,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	r.displayFreeformResult(grade)
 
 	if grade.MatchedCard != nil {
-		if err := r.svc.SaveFreeformResult(*grade.MatchedCard, grade, responseTimeMs); err != nil {
+		if err := r.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, responseTimeMs); err != nil {
 			return err
 		}
 	}

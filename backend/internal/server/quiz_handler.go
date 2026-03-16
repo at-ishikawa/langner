@@ -154,7 +154,7 @@ func (h *QuizHandler) SubmitAnswer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
 	}
 
-	if err := h.svc.SaveResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
 
@@ -289,7 +289,7 @@ func (h *QuizHandler) SubmitReverseAnswer(
 
 	// Don't save synonym results — the frontend will offer a retry
 	if grade.Classification != string(inference.ClassificationSynonym) {
-		if err := h.svc.SaveReverseResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveReverseResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
@@ -375,7 +375,7 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 	}
 
 	if grade.MatchedCard != nil {
-		if err := h.svc.SaveFreeformResult(*grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
