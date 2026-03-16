@@ -36,13 +36,10 @@ export default function FreeformQuizPage() {
     reason: string;
     notebookName: string;
     context?: string;
-    nextReviewDate: string;
-    learnedAt: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef(Date.now());
   const wordInputRef = useRef<HTMLInputElement>(null);
-
 
   useEffect(() => {
     if (quizType !== "freeform") {
@@ -85,8 +82,6 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         context: res.context,
-        nextReviewDate: res.nextReviewDate,
-        learnedAt: res.learnedAt,
       });
       storeSubmitResult({
         word: res.word,
@@ -97,8 +92,6 @@ export default function FreeformQuizPage() {
         notebookName: res.notebookName,
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate,
-        learnedAt: res.learnedAt,
       });
     } catch {
       setError("Failed to submit answer");
@@ -195,17 +188,18 @@ export default function FreeformQuizPage() {
             </Box>
           )}
 
+          {/* Next review date, Next button, Override/Skip disabled for freeform.
+              The SubmitFreeformAnswerResponse proto does not include noteId,
+              so override/skip RPCs cannot be called. A proto change is needed
+              to return noteId from SubmitFreeformAnswer to enable these. */}
           <FeedbackActions
+            isCorrect={feedback.correct}
             noteId={undefined}
-            quizType="freeform"
-            learnedAt={feedback.learnedAt}
-            correct={feedback.correct}
-            nextReviewDate={feedback.nextReviewDate}
+            isOverridden={false}
+            isSkipped={false}
+            nextLabel="Next Word"
+            onNext={handleNext}
           />
-
-          <Button colorPalette="blue" onClick={handleNext} mt={4}>
-            Next Word
-          </Button>
 
           {freeformResults.length > 0 && (
             <Button

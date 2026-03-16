@@ -1,232 +1,145 @@
 "use client";
 
-import { useState } from "react";
-import {
-  Box,
-  Button,
-  Flex,
-  Input,
-  Text,
-} from "@chakra-ui/react";
-import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
-import { useQuizStore, type OriginalValues } from "@/store/quizStore";
+import { useMemo, useState } from "react";
+import { Box, Button, Input, Text, VStack } from "@chakra-ui/react";
+import { formatReviewDate } from "@/lib/formatReviewDate";
 
 interface FeedbackActionsProps {
-  noteId: bigint | undefined;
-  quizType: string;
-  learnedAt: string | undefined;
-  correct: boolean;
-  nextReviewDate: string | undefined;
-  onOverride?: (newCorrect: boolean, newNextReviewDate: string, originalValues: OriginalValues) => void;
-  onUndo?: (correct: boolean, nextReviewDate: string) => void;
-  onSkip?: () => void;
-}
-
-function toProtoQuizType(quizType: string): ProtoQuizType {
-  switch (quizType) {
-    case "reverse":
-      return ProtoQuizType.REVERSE;
-    case "freeform":
-      return ProtoQuizType.FREEFORM;
-    default:
-      return ProtoQuizType.STANDARD;
-  }
+  /** Whether the current answer was correct (possibly after override). */
+  isCorrect: boolean;
+  /** noteId for the word, needed for override/skip RPCs. undefined disables those actions. */
+  noteId?: bigint;
+  /** Next review date in YYYY-MM-DD format. */
+  nextReviewDate?: string;
+  /** Whether the result has been overridden. */
+  isOverridden: boolean;
+  /** Whether the word has been skipped. */
+  isSkipped: boolean;
+  /** Label for the primary navigation button. */
+  nextLabel: string;
+  /** Called when the user clicks Next / See Results. */
+  onNext: () => void;
+  /** Called when the user overrides the result. */
+  onOverride?: () => void;
+  /** Called when the user skips the word, with an optional custom date. */
+  onSkip?: (customDate?: string) => void;
 }
 
 export function FeedbackActions({
+  isCorrect,
   noteId,
-  quizType,
-  learnedAt,
-  correct,
   nextReviewDate,
+  isOverridden,
+  isSkipped,
+  nextLabel,
+  onNext,
   onOverride,
-  onUndo,
   onSkip,
 }: FeedbackActionsProps) {
-  const [isOverridden, setIsOverridden] = useState(false);
-  const [isSkipped, setIsSkipped] = useState(false);
-  const [overrideLoading, setOverrideLoading] = useState(false);
-  const [skipLoading, setSkipLoading] = useState(false);
-  const [localNextReviewDate, setLocalNextReviewDate] = useState(nextReviewDate ?? "");
   const [showDatePicker, setShowDatePicker] = useState(false);
-  const [dateLoading, setDateLoading] = useState(false);
+  const [customDate, setCustomDate] = useState("");
 
-  const protoQuizType = toProtoQuizType(quizType);
+  const canOverrideOrSkip = noteId !== undefined && !isOverridden && !isSkipped;
 
-  const handleOverride = async () => {
-    if (!noteId || !learnedAt || !onOverride) return;
-    setOverrideLoading(true);
-    try {
-      const res = await quizClient.overrideAnswer({
-        noteId,
-        quizType: protoQuizType,
-        learnedAt,
-        markCorrect: !correct,
-      });
-      const originalValues: OriginalValues = {
-        quality: res.originalQuality,
-        status: res.originalStatus,
-        intervalDays: res.originalIntervalDays,
-        easinessFactor: res.originalEasinessFactor,
-      };
-      onOverride(!correct, res.nextReviewDate, originalValues);
-      setLocalNextReviewDate(res.nextReviewDate);
-      setIsOverridden(true);
-    } catch {
-      // silently fail
-    } finally {
-      setOverrideLoading(false);
-    }
-  };
-
-  const handleUndoOverride = async () => {
-    if (!noteId || !learnedAt || !onUndo) return;
-    const store = useQuizStore.getState();
-    const currentIndex = store.currentIndex;
-    let originalValues: OriginalValues | undefined;
-    if (quizType === "standard") {
-      originalValues = store.results[currentIndex]?.originalValues;
-    } else if (quizType === "reverse") {
-      originalValues = store.reverseResults[currentIndex]?.originalValues;
-    } else {
-      originalValues = store.freeformResults[currentIndex]?.originalValues;
-    }
-    if (!originalValues) return;
-    setOverrideLoading(true);
-    try {
-      const res = await quizClient.undoOverrideAnswer({
-        noteId,
-        quizType: protoQuizType,
-        learnedAt,
-        originalQuality: originalValues.quality,
-        originalStatus: originalValues.status,
-        originalIntervalDays: originalValues.intervalDays,
-        originalEasinessFactor: originalValues.easinessFactor,
-      });
-      onUndo(res.correct, res.nextReviewDate);
-      setLocalNextReviewDate(res.nextReviewDate);
-      setIsOverridden(false);
-    } catch {
-      // silently fail
-    } finally {
-      setOverrideLoading(false);
-    }
-  };
-
-  const handleSkipWord = async () => {
-    if (!noteId || !onSkip) return;
-    setSkipLoading(true);
-    try {
-      await quizClient.skipWord({ noteId });
-      onSkip();
-      setIsSkipped(true);
-    } catch {
-      // silently fail
-    } finally {
-      setSkipLoading(false);
-    }
-  };
-
-  const handleDateChange = async (newDate: string) => {
-    if (!noteId || !learnedAt || !newDate) return;
-    setDateLoading(true);
-    try {
-      const res = await quizClient.overrideAnswer({
-        noteId,
-        quizType: protoQuizType,
-        learnedAt,
-        nextReviewDate: newDate,
-      });
-      setLocalNextReviewDate(res.nextReviewDate);
-      const store = useQuizStore.getState();
-      store.updateResultReviewDate(store.currentIndex, quizType as "standard" | "reverse" | "freeform", res.nextReviewDate);
-      setShowDatePicker(false);
-    } catch {
-      // silently fail
-    } finally {
-      setDateLoading(false);
-    }
-  };
+  const tomorrowStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split("T")[0];
+  }, []);
 
   return (
-    <>
-      {localNextReviewDate && (
-        <Box>
-          <Flex alignItems="center" gap={2}>
-            <Text fontSize="sm" color="fg.muted">
-              Next review: {localNextReviewDate}
-            </Text>
-            {!showDatePicker && noteId && (
-              <Text
-                fontSize="sm"
-                color="blue.500"
-                cursor="pointer"
-                onClick={() => setShowDatePicker(true)}
-              >
-                Change
-              </Text>
-            )}
-          </Flex>
-          {showDatePicker && (
-            <Flex mt={1} gap={2} alignItems="center">
-              <Input
-                type="date"
-                size="sm"
-                defaultValue={localNextReviewDate}
-                disabled={dateLoading}
-                onChange={(e) => {
-                  if (e.target.value) handleDateChange(e.target.value);
-                }}
-              />
-              <Text
-                fontSize="sm"
-                color="gray.500"
-                cursor="pointer"
-                onClick={() => setShowDatePicker(false)}
-              >
-                Cancel
-              </Text>
-            </Flex>
-          )}
+    <VStack align="stretch" gap={3}>
+      {/* Next review date box */}
+      {nextReviewDate && (
+        <Box
+          bg="blue.50"
+          _dark={{ bg: "blue.900/20", borderColor: "blue.700" }}
+          borderWidth="1px"
+          borderColor="blue.200"
+          borderRadius="md"
+          p={3}
+        >
+          <Text fontSize="sm" fontWeight="medium">
+            Next review: {formatReviewDate(nextReviewDate)}
+          </Text>
         </Box>
       )}
 
-      {onOverride && !isOverridden && !isSkipped && (
-        <Button
-          variant="outline"
-          colorPalette={correct ? "red" : "blue"}
-          onClick={handleOverride}
-          disabled={overrideLoading}
-          size="sm"
-        >
-          {correct ? "Mark as Incorrect" : "Mark as Correct"}
-        </Button>
-      )}
+      {/* Primary navigation button */}
+      <Button w="full" colorPalette="blue" onClick={onNext}>
+        {nextLabel}
+      </Button>
 
-      {onUndo && isOverridden && (
-        <Flex alignItems="center" gap={2}>
-          <Text
-            fontSize="sm"
-            color="blue.500"
-            cursor="pointer"
-            onClick={handleUndoOverride}
-          >
-            Undo
-          </Text>
-        </Flex>
-      )}
-
-      {onSkip && !isSkipped && (
+      {/* Override button */}
+      {canOverrideOrSkip && onOverride ? (
         <Button
+          w="full"
           variant="outline"
-          colorPalette="gray"
-          onClick={handleSkipWord}
-          disabled={skipLoading}
-          size="sm"
+          onClick={onOverride}
         >
-          Skip Word
+          {isCorrect ? "Mark as Incorrect" : "Mark as Correct"}
         </Button>
-      )}
-    </>
+      ) : null}
+
+      {/* Skip button or Skipped label */}
+      {isSkipped ? (
+        <Text fontSize="sm" color="fg.muted" fontStyle="italic">
+          Skipped
+        </Text>
+      ) : canOverrideOrSkip && onSkip ? (
+        <>
+          {showDatePicker ? (
+            <VStack align="stretch" gap={2}>
+              <Text fontSize="sm" fontWeight="medium">
+                Skip until:
+              </Text>
+              <Input
+                type="date"
+                size="sm"
+                value={customDate}
+                min={tomorrowStr}
+                onChange={(e) => setCustomDate(e.target.value)}
+              />
+              <Box display="flex" gap={2}>
+                <Button
+                  flex="1"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    onSkip(customDate || undefined);
+                    setShowDatePicker(false);
+                  }}
+                >
+                  Confirm Skip
+                </Button>
+                <Button
+                  flex="1"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowDatePicker(false)}
+                >
+                  Cancel
+                </Button>
+              </Box>
+            </VStack>
+          ) : (
+            <Button
+              w="full"
+              variant="outline"
+              colorPalette="gray"
+              onClick={() => setShowDatePicker(true)}
+            >
+              Skip
+            </Button>
+          )}
+        </>
+      ) : noteId === undefined && !isOverridden && !isSkipped ? (
+        // Freeform quiz: noteId is not available from the SubmitFreeformAnswerResponse proto,
+        // so override/skip are disabled. The backend SubmitFreeformAnswer handler knows the
+        // noteId but does not return it in the response. A proto change would be needed to
+        // enable these actions for freeform quizzes.
+        null
+      ) : null}
+    </VStack>
   );
 }

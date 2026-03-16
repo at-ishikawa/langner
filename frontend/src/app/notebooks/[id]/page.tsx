@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
-  Badge,
   Box,
   Button,
   Heading,
@@ -22,6 +21,7 @@ import {
 } from "@/lib/client";
 import { LearningStatusBadge } from "@/components/LearningStatusBadge";
 import { PdfPreviewModal } from "@/components/PdfPreviewModal";
+import { formatReviewDate } from "@/lib/formatReviewDate";
 
 type StatusFilter =
   | "all"
@@ -29,8 +29,7 @@ type StatusFilter =
   | "misunderstood"
   | "understood"
   | "usable"
-  | "intuitive"
-  | "skipped";
+  | "intuitive";
 
 const filterOptions: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -39,7 +38,6 @@ const filterOptions: { value: StatusFilter; label: string }[] = [
   { value: "understood", label: "Understood" },
   { value: "usable", label: "Usable" },
   { value: "intuitive", label: "Intuitive" },
-  { value: "skipped", label: "Skipped" },
 ];
 
 function renderQuote(quote: string) {
@@ -59,8 +57,7 @@ function renderQuote(quote: string) {
 
 function matchCount(definitions: NotebookWord[], filter: StatusFilter): number {
   if (filter === "all") return definitions.length;
-  if (filter === "skipped") return definitions.filter((w) => w.isSkipped).length;
-  return definitions.filter((w) => w.learningStatus === filter && !w.isSkipped).length;
+  return definitions.filter((w) => w.learningStatus === filter).length;
 }
 
 function storyMatchCount(story: StoryEntry, filter: StatusFilter): number {
@@ -224,7 +221,7 @@ export default function NotebookDetailPage() {
           // Flashcard-style: no scene level, show words directly
           <VStack align="stretch" gap={2}>
             {selectedStory.scenes[0].definitions
-              .filter((w) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
+              .filter((w) => filter === "all" || w.learningStatus === filter)
               .map((word, i) => (
                 <WordCard key={i} word={word} />
               ))}
@@ -418,7 +415,7 @@ function SceneRow({
           )}
           <VStack align="stretch" gap={2}>
             {scene.definitions
-              .filter((w) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
+              .filter((w) => filter === "all" || w.learningStatus === filter)
               .map((word, i) => {
                 const excerpt = findProseContext(
                   scene.statements,
@@ -450,22 +447,20 @@ function SceneRow({
   );
 }
 
+// TODO: Add a "Resume" button for skipped words. The ResumeWord RPC requires a
+// note_id, but the NotebookWord proto does not expose note_id. A proto change is
+// needed to add note_id to NotebookWord before this feature can be implemented.
+
 function WordCard({ word }: { word: NotebookWord }) {
   const [open, setOpen] = useState(false);
 
   const lastLog =
     word.learnedLogs.length > 0
-      ? word.learnedLogs[0]
+      ? word.learnedLogs[word.learnedLogs.length - 1]
       : null;
 
   return (
-    <Box
-      borderWidth="1px"
-      borderRadius="md"
-      overflow="hidden"
-      fontSize="sm"
-      opacity={word.isSkipped ? 0.6 : 1}
-    >
+    <Box borderWidth="1px" borderRadius="md" overflow="hidden" fontSize="sm">
       <Box
         p={3}
         cursor="pointer"
@@ -481,19 +476,14 @@ function WordCard({ word }: { word: NotebookWord }) {
           <Text fontWeight="semibold" flex="1">
             {word.expression}
           </Text>
-          <Box display="flex" gap={1} alignItems="center">
-            {word.isSkipped && (
-              <Badge colorPalette="orange">Skipped</Badge>
-            )}
-            <LearningStatusBadge status={word.learningStatus} />
-          </Box>
+          <LearningStatusBadge status={word.learningStatus} />
         </Box>
         <Text color="fg.muted" mt={1}>
           {word.meaning || word.definition}
         </Text>
         {word.nextReviewDate && (
           <Text fontSize="xs" color="fg.subtle" mt={1}>
-            Next review: {word.nextReviewDate}
+            Next review: {formatReviewDate(word.nextReviewDate)}
           </Text>
         )}
       </Box>

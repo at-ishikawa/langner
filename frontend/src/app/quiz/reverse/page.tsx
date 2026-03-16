@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
-  Flex,
   Heading,
   Input,
   Progress,
@@ -14,7 +13,7 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { quizClient } from "@/lib/client";
-import { useQuizStore, type OriginalValues } from "@/store/quizStore";
+import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
 
 type QuizPhase = "answering" | "synonym-retry" | "feedback";
@@ -25,8 +24,6 @@ interface FeedbackData {
   meaning: string;
   reason: string;
   contexts: string[];
-  nextReviewDate: string;
-  learnedAt: string;
 }
 
 export default function ReverseQuizPage() {
@@ -44,12 +41,10 @@ export default function ReverseQuizPage() {
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overridden, setOverridden] = useState(false);
+  const [displayCorrect, setDisplayCorrect] = useState(false);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
-
-  // Override/skip local state (used for banner display)
-  const [isOverridden, setIsOverridden] = useState(false);
-  const [isSkipped, setIsSkipped] = useState(false);
 
   useEffect(() => {
     if (reverseFlashcards.length === 0 || quizType !== "reverse") {
@@ -64,8 +59,8 @@ export default function ReverseQuizPage() {
     setSubmittedAnswer("");
     setSynonymAnswer("");
     setFeedback(null);
-    setIsOverridden(false);
-    setIsSkipped(false);
+    setOverridden(false);
+    setDisplayCorrect(false);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [currentIndex]);
 
@@ -114,9 +109,8 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
-        nextReviewDate: res.nextReviewDate,
-        learnedAt: res.learnedAt,
       });
+      setDisplayCorrect(correct);
       storeSubmitResult({
         noteId: card.noteId,
         answer: isRetry ? `${synonymAnswer} -> ${userAnswer}` : userAnswer,
@@ -128,8 +122,6 @@ export default function ReverseQuizPage() {
           : res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate,
-        learnedAt: res.learnedAt,
       });
     } catch {
       setError("Failed to submit answer");
@@ -160,9 +152,8 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
-        nextReviewDate: res.nextReviewDate,
-        learnedAt: res.learnedAt,
       });
+      setDisplayCorrect(false);
       storeSubmitResult({
         noteId: card.noteId,
         answer: "(skipped)",
@@ -172,8 +163,6 @@ export default function ReverseQuizPage() {
         reason: res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate,
-        learnedAt: res.learnedAt,
       });
     } catch {
       setError("Failed to submit answer");
@@ -188,25 +177,6 @@ export default function ReverseQuizPage() {
     } else {
       nextCard();
     }
-  };
-
-  const handleOverrideResult = (newCorrect: boolean, newNextReviewDate: string, originalValues: OriginalValues) => {
-    if (!feedback) return;
-    useQuizStore.getState().overrideResult(currentIndex, "reverse", newNextReviewDate, originalValues);
-    setFeedback({ ...feedback, correct: newCorrect });
-    setIsOverridden(true);
-  };
-
-  const handleUndoResult = (correct: boolean, nextReviewDate: string) => {
-    if (!feedback) return;
-    useQuizStore.getState().undoOverrideResult(currentIndex, "reverse", correct, nextReviewDate);
-    setFeedback({ ...feedback, correct });
-    setIsOverridden(false);
-  };
-
-  const handleSkipResult = () => {
-    useQuizStore.getState().skipResult(currentIndex, "reverse");
-    setIsSkipped(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -344,31 +314,45 @@ export default function ReverseQuizPage() {
             </Box>
           ) : feedback ? (
             <>
+              {/* 1. Correct/Incorrect indicator with override/undo labels */}
               <Box
                 p={3}
                 borderRadius="md"
-                bg={feedback.correct ? "green.100" : "red.100"}
-                color={feedback.correct ? "green.800" : "red.800"}
+                bg={displayCorrect ? "green.100" : "red.100"}
+                color={displayCorrect ? "green.800" : "red.800"}
                 _dark={{
-                  bg: feedback.correct ? "green.900" : "red.900",
-                  color: feedback.correct ? "green.200" : "red.200",
+                  bg: displayCorrect ? "green.900" : "red.900",
+                  color: displayCorrect ? "green.200" : "red.200",
                 }}
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
               >
-                <Flex alignItems="center" gap={2}>
-                  <Text fontWeight="bold">
-                    {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}
+                <Text fontWeight="bold">
+                  {displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}
+                  {overridden && (
+                    <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
+                  )}
+                </Text>
+                {overridden && (
+                  <Text
+                    as="span"
+                    fontSize="sm"
+                    cursor="pointer"
+                    textDecoration="underline"
+                    onClick={() => {
+                      setOverridden(false);
+                      setDisplayCorrect(feedback.correct);
+                    }}
+                  >
+                    Undo
                   </Text>
-                  {isOverridden && (
-                    <Text fontSize="sm" fontStyle="italic">(overridden)</Text>
-                  )}
-                  {isSkipped && (
-                    <Text fontSize="sm" fontStyle="italic">(skipped)</Text>
-                  )}
-                </Flex>
+                )}
               </Box>
 
+              {/* 2. Your answer */}
               {submittedAnswer ? (
-                <Text textDecoration={feedback.correct ? "none" : "line-through"}>
+                <Text textDecoration={displayCorrect ? "none" : "line-through"}>
                   Your answer: {submittedAnswer}
                 </Text>
               ) : (
@@ -377,6 +361,7 @@ export default function ReverseQuizPage() {
                 </Text>
               )}
 
+              {/* 3. Meaning, reason, examples */}
               <Box>
                 <Text fontWeight="bold">Word</Text>
                 <Text fontStyle="italic">{feedback.expression}</Text>
@@ -402,25 +387,19 @@ export default function ReverseQuizPage() {
                 </Box>
               )}
 
+              {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
-                key={currentIndex}
+                isCorrect={displayCorrect}
                 noteId={card.noteId}
-                quizType="reverse"
-                learnedAt={feedback.learnedAt}
-                correct={feedback.correct}
-                nextReviewDate={feedback.nextReviewDate}
-                onOverride={handleOverrideResult}
-                onUndo={handleUndoResult}
-                onSkip={handleSkipResult}
+                isOverridden={overridden}
+                isSkipped={false}
+                nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
+                onNext={handleNext}
+                onOverride={() => {
+                  setOverridden(true);
+                  setDisplayCorrect(!displayCorrect);
+                }}
               />
-
-              <Button
-                w="full"
-                colorPalette="blue"
-                onClick={handleNext}
-              >
-                {currentIndex + 1 >= total ? "See Results" : "Next"}
-              </Button>
             </>
           ) : error ? (
             <>
