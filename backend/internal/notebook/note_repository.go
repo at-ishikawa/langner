@@ -14,6 +14,8 @@ type NoteRepository interface {
 	FindAll(ctx context.Context) ([]NoteRecord, error)
 	BatchCreate(ctx context.Context, notes []*NoteRecord) error
 	BatchUpdate(ctx context.Context, notes []*NoteRecord, newNotebookNotes []NotebookNote) error
+	Create(ctx context.Context, note *NoteRecord) error
+	Delete(ctx context.Context, notebookID string, expression string) error
 }
 
 // DBNoteRepository implements NoteRepository using MySQL.
@@ -114,6 +116,66 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 
+		return nil
+	})
+}
+
+// Create inserts a single note with its notebook_notes in a transaction.
+func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
+	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		result, err := tx.ExecContext(ctx,
+			"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number) VALUES (?, ?, ?, ?, ?)",
+			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber)
+		if err != nil {
+			return fmt.Errorf("insert note: %w", err)
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			return fmt.Errorf("get note insert ID: %w", err)
+		}
+		note.ID = id
+
+		for _, nn := range note.NotebookNotes {
+			_, err := tx.ExecContext(ctx,
+				"INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, `group`, subgroup) VALUES (?, ?, ?, ?, ?)",
+				note.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup)
+			if err != nil {
+				return fmt.Errorf("insert notebook note: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// Delete removes a note by notebook ID and expression (usage field).
+func (r *DBNoteRepository) Delete(ctx context.Context, notebookID string, expression string) error {
+	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Find note IDs linked to this notebook with matching expression
+		var noteIDs []int64
+		query := `SELECT n.id FROM notes n
+			JOIN notebook_notes nn ON n.id = nn.note_id
+			WHERE nn.notebook_id = ? AND LOWER(n.usage) = LOWER(?)`
+		if err := tx.SelectContext(ctx, &noteIDs, query, notebookID, expression); err != nil {
+			return fmt.Errorf("find notes to delete: %w", err)
+		}
+		if len(noteIDs) == 0 {
+			return nil
+		}
+
+		for _, noteID := range noteIDs {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM note_images WHERE note_id = ?", noteID); err != nil {
+				return fmt.Errorf("delete note images: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM note_references WHERE note_id = ?", noteID); err != nil {
+				return fmt.Errorf("delete note references: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM notebook_notes WHERE note_id = ?", noteID); err != nil {
+				return fmt.Errorf("delete notebook notes: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM notes WHERE id = ?", noteID); err != nil {
+				return fmt.Errorf("delete note: %w", err)
+			}
+		}
 		return nil
 	})
 }

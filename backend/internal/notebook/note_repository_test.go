@@ -163,6 +163,170 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 	}
 }
 
+func TestDBNoteRepository_Create(t *testing.T) {
+	tests := []struct {
+		name      string
+		note      *NoteRecord
+		setupMock func(mock sqlmock.Sqlmock)
+		wantID    int64
+		wantErr   bool
+	}{
+		{
+			name: "inserts note and notebook_notes",
+			note: &NoteRecord{
+				Usage:   "break the ice",
+				Entry:   "break the ice",
+				Meaning: "to initiate conversation",
+				NotebookNotes: []NotebookNote{
+					{NotebookType: "book", NotebookID: "test-book", Group: "chapter1"},
+				},
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("INSERT INTO notes").
+					WithArgs("break the ice", "break the ice", "to initiate conversation", "", 0).
+					WillReturnResult(sqlmock.NewResult(42, 1))
+				mock.ExpectExec("INSERT INTO notebook_notes").
+					WithArgs(int64(42), "book", "test-book", "chapter1", "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+				mock.ExpectCommit()
+			},
+			wantID: 42,
+		},
+		{
+			name: "inserts note without notebook_notes",
+			note: &NoteRecord{
+				Usage:   "give up",
+				Entry:   "give up",
+				Meaning: "to stop trying",
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("INSERT INTO notes").
+					WithArgs("give up", "give up", "to stop trying", "", 0).
+					WillReturnResult(sqlmock.NewResult(43, 1))
+				mock.ExpectCommit()
+			},
+			wantID: 43,
+		},
+		{
+			name: "insert note db error",
+			note: &NoteRecord{
+				Usage:   "break the ice",
+				Entry:   "break the ice",
+				Meaning: "to initiate conversation",
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectExec("INSERT INTO notes").
+					WillReturnError(fmt.Errorf("duplicate entry"))
+				mock.ExpectRollback()
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+
+			sqlxDB := sqlx.NewDb(db, "mysql")
+			repo := NewDBNoteRepository(sqlxDB)
+			tt.setupMock(mock)
+
+			err = repo.Create(context.Background(), tt.note)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantID, tt.note.ID)
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
+func TestDBNoteRepository_Delete(t *testing.T) {
+	tests := []struct {
+		name       string
+		notebookID string
+		expression string
+		setupMock  func(mock sqlmock.Sqlmock)
+		wantErr    bool
+	}{
+		{
+			name:       "deletes note and related records",
+			notebookID: "test-book",
+			expression: "break the ice",
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery("SELECT n.id FROM notes").
+					WithArgs("test-book", "break the ice").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
+				mock.ExpectExec("DELETE FROM note_images WHERE note_id").
+					WithArgs(int64(42)).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+				mock.ExpectExec("DELETE FROM note_references WHERE note_id").
+					WithArgs(int64(42)).
+					WillReturnResult(sqlmock.NewResult(0, 0))
+				mock.ExpectExec("DELETE FROM notebook_notes WHERE note_id").
+					WithArgs(int64(42)).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectExec("DELETE FROM notes WHERE id").
+					WithArgs(int64(42)).
+					WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectCommit()
+			},
+		},
+		{
+			name:       "no matching notes does nothing",
+			notebookID: "test-book",
+			expression: "nonexistent",
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery("SELECT n.id FROM notes").
+					WithArgs("test-book", "nonexistent").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}))
+				mock.ExpectCommit()
+			},
+		},
+		{
+			name:       "query error propagates",
+			notebookID: "test-book",
+			expression: "break the ice",
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectBegin()
+				mock.ExpectQuery("SELECT n.id FROM notes").
+					WillReturnError(fmt.Errorf("connection refused"))
+				mock.ExpectRollback()
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+
+			sqlxDB := sqlx.NewDb(db, "mysql")
+			repo := NewDBNoteRepository(sqlxDB)
+			tt.setupMock(mock)
+
+			err = repo.Delete(context.Background(), tt.notebookID, tt.expression)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
 func TestDBNoteRepository_BatchCreate(t *testing.T) {
 	tests := []struct {
 		name      string

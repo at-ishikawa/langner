@@ -14,6 +14,7 @@ import (
 type LearningRepository interface {
 	FindAll(ctx context.Context) ([]LearningLog, error)
 	BatchCreate(ctx context.Context, logs []*LearningLog) error
+	Create(ctx context.Context, log *LearningLog) error
 }
 
 // DBLearningRepository implements LearningRepository using MySQL.
@@ -33,6 +34,18 @@ func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, erro
 		return nil, fmt.Errorf("load all learning logs: %w", err)
 	}
 	return logs, nil
+}
+
+// Create inserts a single learning log.
+func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) error {
+	query := `INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, easiness_factor, source_notebook_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	_, err := r.db.ExecContext(ctx, query,
+		log.NoteID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.EasinessFactor, log.SourceNotebookID)
+	if err != nil {
+		return fmt.Errorf("insert learning log: %w", err)
+	}
+	return nil
 }
 
 // BatchCreate inserts multiple learning logs in a single transaction using multi-row INSERTs.

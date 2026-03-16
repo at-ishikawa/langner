@@ -13,10 +13,13 @@ import (
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
+	"github.com/at-ishikawa/langner/internal/learning"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/internal/server"
 	"golang.org/x/net/http2"
@@ -77,8 +80,6 @@ func run(ctx context.Context) error {
 	}))
 
 	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap)
-	handler := server.NewQuizHandler(svc)
-	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
@@ -86,6 +87,24 @@ func run(ctx context.Context) error {
 	}
 	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
 	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, openaiClient)
+
+	// Set up optional DB repositories for dual storage
+	if cfg.Database.Host != "" && cfg.Database.Password != "" {
+		db, err := database.Open(cfg.Database)
+		if err != nil {
+			slog.Warn("failed to open database, running with YAML-only storage", "error", err)
+		} else {
+			app.AddShutdownHook(func(ctx context.Context) error {
+				return db.Close()
+			})
+			svc.SetLearningRepository(learning.NewDBLearningRepository(db))
+			notebookHandler.SetNoteRepository(notebook.NewDBNoteRepository(db))
+			slog.Info("database connected, dual storage enabled")
+		}
+	}
+
+	handler := server.NewQuizHandler(svc)
+	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
 
 	mux := http.NewServeMux()

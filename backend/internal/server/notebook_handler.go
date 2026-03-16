@@ -31,6 +31,7 @@ type NotebookHandler struct {
 	dictionaryMap    map[string]rapidapi.Response
 	dictionaryReader *dictionary.Reader
 	openaiClient     inference.Client
+	noteRepository   notebook.NoteRepository
 }
 
 // NewNotebookHandler creates a new NotebookHandler.
@@ -42,6 +43,12 @@ func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig 
 		dictionaryReader: dictionaryReader,
 		openaiClient:     openaiClient,
 	}
+}
+
+// SetNoteRepository sets an optional note repository for dual storage.
+// When set, definition changes are written to the DB in addition to YAML files.
+func (h *NotebookHandler) SetNoteRepository(repo notebook.NoteRepository) {
+	h.noteRepository = repo
 }
 
 func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
@@ -551,6 +558,24 @@ func (h *NotebookHandler) RegisterDefinition(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions file: %w", err))
 	}
 
+	if h.noteRepository != nil {
+		noteRecord := &notebook.NoteRecord{
+			Usage:   expression,
+			Entry:   expression,
+			Meaning: meaning,
+			NotebookNotes: []notebook.NotebookNote{
+				{
+					NotebookType: "book",
+					NotebookID:   req.Msg.GetNotebookId(),
+					Group:        notebookFile,
+				},
+			},
+		}
+		if err := h.noteRepository.Create(ctx, noteRecord); err != nil {
+			slog.Warn("failed to write note to DB", "expression", expression, "error", err)
+		}
+	}
+
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
 
@@ -605,6 +630,12 @@ func (h *NotebookHandler) DeleteDefinition(
 
 	if err := notebook.WriteYamlFile(filePath, definitions); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions: %w", err))
+	}
+
+	if h.noteRepository != nil {
+		if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), expression); err != nil {
+			slog.Warn("failed to delete note from DB", "expression", expression, "error", err)
+		}
 	}
 
 	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil

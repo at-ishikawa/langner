@@ -69,6 +69,34 @@ func (mr *MockNoteRepositoryMockRecorder) BatchUpdate(ctx, notes, newNotebookNot
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchUpdate", reflect.TypeOf((*MockNoteRepository)(nil).BatchUpdate), ctx, notes, newNotebookNotes)
 }
 
+// Create mocks base method.
+func (m *MockNoteRepository) Create(ctx context.Context, note *notebook.NoteRecord) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Create", ctx, note)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Create indicates an expected call of Create.
+func (mr *MockNoteRepositoryMockRecorder) Create(ctx, note any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Create", reflect.TypeOf((*MockNoteRepository)(nil).Create), ctx, note)
+}
+
+// Delete mocks base method.
+func (m *MockNoteRepository) Delete(ctx context.Context, notebookID string, expression string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Delete", ctx, notebookID, expression)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Delete indicates an expected call of Delete.
+func (mr *MockNoteRepositoryMockRecorder) Delete(ctx, notebookID, expression any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockNoteRepository)(nil).Delete), ctx, notebookID, expression)
+}
+
 // FindAll mocks base method.
 func (m *MockNoteRepository) FindAll(ctx context.Context) ([]notebook.NoteRecord, error) {
 	m.ctrl.T.Helper()

@@ -3,6 +3,7 @@ package quiz
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"path/filepath"
 	"regexp"
@@ -12,14 +13,16 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 // Service owns all quiz business logic shared between the CLI and RPC handler.
 type Service struct {
-	notebooksConfig config.NotebooksConfig
-	openaiClient    inference.Client
-	dictionaryMap   map[string]rapidapi.Response
+	notebooksConfig    config.NotebooksConfig
+	openaiClient       inference.Client
+	dictionaryMap      map[string]rapidapi.Response
+	learningRepository learning.LearningRepository
 }
 
 // NewService creates a new Service.
@@ -29,6 +32,12 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 		openaiClient:    openaiClient,
 		dictionaryMap:   dictionaryMap,
 	}
+}
+
+// SetLearningRepository sets an optional learning repository for dual storage.
+// When set, quiz results are written to the DB in addition to YAML files.
+func (s *Service) SetLearningRepository(repo learning.LearningRepository) {
+	s.learningRepository = repo
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
@@ -349,6 +358,7 @@ func (s *Service) SaveResult(card Card, result GradeResult, responseTimeMs int64
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
 
+	s.saveLearningLogToDB(card.NotebookName, card.Entry, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeNotebook))
 	return nil
 }
 
@@ -846,6 +856,7 @@ func (s *Service) SaveReverseResult(card ReverseCard, result GradeResult, respon
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
 
+	s.saveLearningLogToDB(card.NotebookName, card.Expression, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeReverse))
 	return nil
 }
 
@@ -1091,7 +1102,34 @@ func (s *Service) SaveFreeformResult(card FreeformCard, result FreeformGradeResu
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
 
+	s.saveLearningLogToDB(card.NotebookName, card.Expression, result.Correct, result.Quality, responseTimeMs, string(notebook.QuizTypeFreeform))
 	return nil
+}
+
+// saveLearningLogToDB writes a learning log to the DB repository if configured.
+// DB writes are best-effort; errors are logged but do not fail the request.
+func (s *Service) saveLearningLogToDB(sourceNotebookID, entry string, isCorrect bool, quality int, responseTimeMs int64, quizType string) {
+	if s.learningRepository == nil {
+		return
+	}
+
+	status := string(notebook.LearnedStatusMisunderstood)
+	if isCorrect {
+		status = "understood"
+	}
+
+	log := &learning.LearningLog{
+		Status:           status,
+		LearnedAt:        time.Now(),
+		Quality:          quality,
+		ResponseTimeMs:   int(responseTimeMs),
+		QuizType:         quizType,
+		SourceNotebookID: sourceNotebookID,
+	}
+
+	if err := s.learningRepository.Create(context.Background(), log); err != nil {
+		slog.Warn("failed to write learning log to DB", "entry", entry, "error", err)
+	}
 }
 
 // kindFromIndex returns the kind string for a notebook index.
