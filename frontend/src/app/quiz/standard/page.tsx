@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
+  Flex,
   Heading,
   Input,
   Progress,
@@ -12,7 +13,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient } from "@/lib/client";
+import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 
 type QuizPhase = "answering" | "feedback";
@@ -21,6 +22,8 @@ interface FeedbackData {
   correct: boolean;
   meaning: string;
   reason: string;
+  nextReviewDate: string;
+  learnedAt: string;
 }
 
 export default function QuizCardPage() {
@@ -40,6 +43,15 @@ export default function QuizCardPage() {
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Override/skip local state for current card
+  const [isOverridden, setIsOverridden] = useState(false);
+  const [isSkipped, setIsSkipped] = useState(false);
+  const [overrideLoading, setOverrideLoading] = useState(false);
+  const [skipLoading, setSkipLoading] = useState(false);
+  const [localNextReviewDate, setLocalNextReviewDate] = useState("");
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [dateLoading, setDateLoading] = useState(false);
+
   useEffect(() => {
     if (flashcards.length === 0 || quizType !== "standard") {
       router.push("/");
@@ -52,6 +64,10 @@ export default function QuizCardPage() {
     setAnswer("");
     setSubmittedAnswer("");
     setFeedback(null);
+    setIsOverridden(false);
+    setIsSkipped(false);
+    setShowDatePicker(false);
+    setLocalNextReviewDate("");
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [currentIndex]);
 
@@ -83,6 +99,7 @@ export default function QuizCardPage() {
       });
 
       setFeedback(res);
+      setLocalNextReviewDate(res.nextReviewDate);
       storeSubmitResult({
         noteId: card.noteId,
         entry: card.entry,
@@ -92,6 +109,8 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate,
+        learnedAt: res.learnedAt,
       });
     } catch {
       setError("Failed to submit answer");
@@ -117,6 +136,7 @@ export default function QuizCardPage() {
       });
 
       setFeedback(res);
+      setLocalNextReviewDate(res.nextReviewDate);
       storeSubmitResult({
         noteId: card.noteId,
         entry: card.entry,
@@ -126,6 +146,8 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate,
+        learnedAt: res.learnedAt,
       });
     } catch {
       setError("Failed to submit answer");
@@ -139,6 +161,96 @@ export default function QuizCardPage() {
       router.push("/quiz/complete");
     } else {
       nextCard();
+    }
+  };
+
+  const handleOverride = async () => {
+    if (!feedback) return;
+    setOverrideLoading(true);
+    try {
+      const res = await quizClient.overrideAnswer({
+        noteId: card.noteId,
+        quizType: ProtoQuizType.STANDARD,
+        learnedAt: feedback.learnedAt,
+        markCorrect: !feedback.correct,
+      });
+      const resultIndex = currentIndex;
+      const store = useQuizStore.getState();
+      store.overrideResult(resultIndex, "standard", res.nextReviewDate, {
+        quality: res.originalQuality,
+        status: res.originalStatus,
+        intervalDays: res.originalIntervalDays,
+        easinessFactor: res.originalEasinessFactor,
+      });
+      setFeedback({ ...feedback, correct: !feedback.correct });
+      setLocalNextReviewDate(res.nextReviewDate);
+      setIsOverridden(true);
+    } catch {
+      // silently fail
+    } finally {
+      setOverrideLoading(false);
+    }
+  };
+
+  const handleUndoOverride = async () => {
+    if (!feedback) return;
+    const resultIndex = currentIndex;
+    const result = useQuizStore.getState().results[resultIndex];
+    if (!result?.originalValues) return;
+    setOverrideLoading(true);
+    try {
+      const res = await quizClient.undoOverrideAnswer({
+        noteId: card.noteId,
+        quizType: ProtoQuizType.STANDARD,
+        learnedAt: feedback.learnedAt,
+        originalQuality: result.originalValues.quality,
+        originalStatus: result.originalValues.status,
+        originalIntervalDays: result.originalValues.intervalDays,
+        originalEasinessFactor: result.originalValues.easinessFactor,
+      });
+      const store = useQuizStore.getState();
+      store.undoOverrideResult(resultIndex, "standard", res.correct, res.nextReviewDate);
+      setFeedback({ ...feedback, correct: res.correct });
+      setLocalNextReviewDate(res.nextReviewDate);
+      setIsOverridden(false);
+    } catch {
+      // silently fail
+    } finally {
+      setOverrideLoading(false);
+    }
+  };
+
+  const handleSkipWord = async () => {
+    setSkipLoading(true);
+    try {
+      await quizClient.skipWord({ noteId: card.noteId });
+      const resultIndex = currentIndex;
+      useQuizStore.getState().skipResult(resultIndex, "standard");
+      setIsSkipped(true);
+    } catch {
+      // silently fail
+    } finally {
+      setSkipLoading(false);
+    }
+  };
+
+  const handleDateChange = async (newDate: string) => {
+    if (!feedback || !newDate) return;
+    setDateLoading(true);
+    try {
+      const res = await quizClient.overrideAnswer({
+        noteId: card.noteId,
+        quizType: ProtoQuizType.STANDARD,
+        learnedAt: feedback.learnedAt,
+        nextReviewDate: newDate,
+      });
+      setLocalNextReviewDate(res.nextReviewDate);
+      useQuizStore.getState().updateResultReviewDate(currentIndex, "standard", res.nextReviewDate);
+      setShowDatePicker(false);
+    } catch {
+      // silently fail
+    } finally {
+      setDateLoading(false);
     }
   };
 
@@ -235,9 +347,17 @@ export default function QuizCardPage() {
                   color: feedback.correct ? "green.200" : "red.200",
                 }}
               >
-                <Text fontWeight="bold">
-                  {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}
-                </Text>
+                <Flex alignItems="center" gap={2}>
+                  <Text fontWeight="bold">
+                    {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}
+                  </Text>
+                  {isOverridden && (
+                    <Text fontSize="sm" fontStyle="italic">(overridden)</Text>
+                  )}
+                  {isSkipped && (
+                    <Text fontSize="sm" fontStyle="italic">(skipped)</Text>
+                  )}
+                </Flex>
               </Box>
 
               {submittedAnswer ? (
@@ -273,6 +393,84 @@ export default function QuizCardPage() {
                     ))}
                   </VStack>
                 </Box>
+              )}
+
+              {localNextReviewDate && (
+                <Box>
+                  <Flex alignItems="center" gap={2}>
+                    <Text fontSize="sm" color="fg.muted">
+                      Next review: {localNextReviewDate}
+                    </Text>
+                    {!showDatePicker && (
+                      <Text
+                        fontSize="sm"
+                        color="blue.500"
+                        cursor="pointer"
+                        onClick={() => setShowDatePicker(true)}
+                      >
+                        Change
+                      </Text>
+                    )}
+                  </Flex>
+                  {showDatePicker && (
+                    <Flex mt={1} gap={2} alignItems="center">
+                      <Input
+                        type="date"
+                        size="sm"
+                        defaultValue={localNextReviewDate}
+                        disabled={dateLoading}
+                        onChange={(e) => {
+                          if (e.target.value) handleDateChange(e.target.value);
+                        }}
+                      />
+                      <Text
+                        fontSize="sm"
+                        color="gray.500"
+                        cursor="pointer"
+                        onClick={() => setShowDatePicker(false)}
+                      >
+                        Cancel
+                      </Text>
+                    </Flex>
+                  )}
+                </Box>
+              )}
+
+              {!isOverridden && !isSkipped && (
+                <Button
+                  variant="outline"
+                  colorPalette={feedback.correct ? "red" : "blue"}
+                  onClick={handleOverride}
+                  disabled={overrideLoading}
+                  size="sm"
+                >
+                  {feedback.correct ? "Mark as Incorrect" : "Mark as Correct"}
+                </Button>
+              )}
+
+              {isOverridden && (
+                <Flex alignItems="center" gap={2}>
+                  <Text
+                    fontSize="sm"
+                    color="blue.500"
+                    cursor="pointer"
+                    onClick={handleUndoOverride}
+                  >
+                    Undo
+                  </Text>
+                </Flex>
+              )}
+
+              {!isSkipped && (
+                <Button
+                  variant="outline"
+                  colorPalette="gray"
+                  onClick={handleSkipWord}
+                  disabled={skipLoading}
+                  size="sm"
+                >
+                  Skip Word
+                </Button>
               )}
 
               <Button

@@ -17,6 +17,7 @@ import (
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
@@ -157,11 +158,15 @@ func (h *QuizHandler) SubmitAnswer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
 
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Entry, notebook.QuizTypeNotebook)
+
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
-		Correct:    grade.Correct,
-		Meaning:    card.Meaning,
-		Reason:     grade.Reason,
-		WordDetail: toProtoWordDetail(card.WordDetail),
+		Correct:        grade.Correct,
+		Meaning:        card.Meaning,
+		Reason:         grade.Reason,
+		WordDetail:     toProtoWordDetail(card.WordDetail),
+		NextReviewDate: nextReviewDate,
+		LearnedAt:      learnedAt,
 	}), nil
 }
 
@@ -294,6 +299,8 @@ func (h *QuizHandler) SubmitReverseAnswer(
 		contexts = append(contexts, ctx.Context)
 	}
 
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeReverse)
+
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
 		Correct:        grade.Correct,
 		Expression:     card.Expression,
@@ -302,6 +309,8 @@ func (h *QuizHandler) SubmitReverseAnswer(
 		Contexts:       contexts,
 		WordDetail:     toProtoWordDetail(card.WordDetail),
 		Classification: grade.Classification,
+		NextReviewDate: nextReviewDate,
+		LearnedAt:      learnedAt,
 	}), nil
 }
 
@@ -371,6 +380,11 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 		}
 	}
 
+	var learnedAt, nextReviewDate string
+	if grade.MatchedCard != nil {
+		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
+	}
+
 	return connect.NewResponse(&apiv1.SubmitFreeformAnswerResponse{
 		Correct:      grade.Correct,
 		Word:         grade.Word,
@@ -384,5 +398,169 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 			}
 			return nil
 		}(),
+		NextReviewDate: nextReviewDate,
+		LearnedAt:      learnedAt,
 	}), nil
+}
+
+// protoQuizTypeToNotebook converts a proto QuizType enum to a notebook QuizType string.
+func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
+	switch qt {
+	case apiv1.QuizType_QUIZ_TYPE_STANDARD:
+		return notebook.QuizTypeNotebook
+	case apiv1.QuizType_QUIZ_TYPE_REVERSE:
+		return notebook.QuizTypeReverse
+	case apiv1.QuizType_QUIZ_TYPE_FREEFORM:
+		return notebook.QuizTypeFreeform
+	default:
+		return notebook.QuizTypeNotebook
+	}
+}
+
+// OverrideAnswer overrides a previously graded quiz answer.
+func (h *QuizHandler) OverrideAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.OverrideAnswerRequest],
+) (*connect.Response[apiv1.OverrideAnswerResponse], error) {
+	noteID := req.Msg.GetNoteId()
+	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	learnedAt := req.Msg.GetLearnedAt()
+
+	// Look up the card to find notebook name and expression
+	var notebookName, expression string
+
+	h.mu.Lock()
+	if card, ok := h.noteStore[noteID]; ok {
+		notebookName = card.NotebookName
+		expression = card.Entry
+	} else if rcard, ok := h.reverseStore[noteID]; ok {
+		notebookName = rcard.NotebookName
+		expression = rcard.Expression
+	}
+	h.mu.Unlock()
+
+	if notebookName == "" {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
+	}
+
+	var markCorrect *bool
+	if req.Msg.MarkCorrect != nil {
+		mc := req.Msg.GetMarkCorrect()
+		markCorrect = &mc
+	}
+
+	oq, os, oid, oef, nnr, err := h.svc.OverrideAnswer(notebookName, expression, quizType, learnedAt, markCorrect, req.Msg.GetNextReviewDate())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.OverrideAnswerResponse{
+		NextReviewDate:         nnr,
+		OriginalQuality:        int32(oq),
+		OriginalStatus:         os,
+		OriginalIntervalDays:   int32(oid),
+		OriginalEasinessFactor: oef,
+	}), nil
+}
+
+// UndoOverrideAnswer restores the original values of a previously overridden answer.
+func (h *QuizHandler) UndoOverrideAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.UndoOverrideAnswerRequest],
+) (*connect.Response[apiv1.UndoOverrideAnswerResponse], error) {
+	noteID := req.Msg.GetNoteId()
+	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	learnedAt := req.Msg.GetLearnedAt()
+
+	var notebookName, expression string
+
+	h.mu.Lock()
+	if card, ok := h.noteStore[noteID]; ok {
+		notebookName = card.NotebookName
+		expression = card.Entry
+	} else if rcard, ok := h.reverseStore[noteID]; ok {
+		notebookName = rcard.NotebookName
+		expression = rcard.Expression
+	}
+	h.mu.Unlock()
+
+	if notebookName == "" {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
+	}
+
+	correct, nextReview, err := h.svc.UndoOverrideAnswer(
+		notebookName, expression, quizType, learnedAt,
+		int(req.Msg.GetOriginalQuality()),
+		req.Msg.GetOriginalStatus(),
+		int(req.Msg.GetOriginalIntervalDays()),
+		req.Msg.GetOriginalEasinessFactor(),
+	)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("undo override answer: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.UndoOverrideAnswerResponse{
+		Correct:        correct,
+		NextReviewDate: nextReview,
+	}), nil
+}
+
+// SkipWord marks a word to be skipped from future quizzes.
+func (h *QuizHandler) SkipWord(
+	ctx context.Context,
+	req *connect.Request[apiv1.SkipWordRequest],
+) (*connect.Response[apiv1.SkipWordResponse], error) {
+	noteID := req.Msg.GetNoteId()
+
+	var notebookName, expression string
+
+	h.mu.Lock()
+	if card, ok := h.noteStore[noteID]; ok {
+		notebookName = card.NotebookName
+		expression = card.Entry
+	} else if rcard, ok := h.reverseStore[noteID]; ok {
+		notebookName = rcard.NotebookName
+		expression = rcard.Expression
+	}
+	h.mu.Unlock()
+
+	if notebookName == "" {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
+	}
+
+	if err := h.svc.SkipWord(notebookName, expression); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("skip word: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.SkipWordResponse{}), nil
+}
+
+// ResumeWord clears the skip status for a word, allowing it to appear in quizzes again.
+func (h *QuizHandler) ResumeWord(
+	ctx context.Context,
+	req *connect.Request[apiv1.ResumeWordRequest],
+) (*connect.Response[apiv1.ResumeWordResponse], error) {
+	noteID := req.Msg.GetNoteId()
+
+	var notebookName, expression string
+
+	h.mu.Lock()
+	if card, ok := h.noteStore[noteID]; ok {
+		notebookName = card.NotebookName
+		expression = card.Entry
+	} else if rcard, ok := h.reverseStore[noteID]; ok {
+		notebookName = rcard.NotebookName
+		expression = rcard.Expression
+	}
+	h.mu.Unlock()
+
+	if notebookName == "" {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
+	}
+
+	if err := h.svc.ResumeWord(notebookName, expression); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume word: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.ResumeWordResponse{}), nil
 }

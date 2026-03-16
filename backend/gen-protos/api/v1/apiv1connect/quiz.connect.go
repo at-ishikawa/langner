@@ -53,6 +53,16 @@ const (
 	// QuizServiceSubmitFreeformAnswerProcedure is the fully-qualified name of the QuizService's
 	// SubmitFreeformAnswer RPC.
 	QuizServiceSubmitFreeformAnswerProcedure = "/api.v1.QuizService/SubmitFreeformAnswer"
+	// QuizServiceOverrideAnswerProcedure is the fully-qualified name of the QuizService's
+	// OverrideAnswer RPC.
+	QuizServiceOverrideAnswerProcedure = "/api.v1.QuizService/OverrideAnswer"
+	// QuizServiceUndoOverrideAnswerProcedure is the fully-qualified name of the QuizService's
+	// UndoOverrideAnswer RPC.
+	QuizServiceUndoOverrideAnswerProcedure = "/api.v1.QuizService/UndoOverrideAnswer"
+	// QuizServiceSkipWordProcedure is the fully-qualified name of the QuizService's SkipWord RPC.
+	QuizServiceSkipWordProcedure = "/api.v1.QuizService/SkipWord"
+	// QuizServiceResumeWordProcedure is the fully-qualified name of the QuizService's ResumeWord RPC.
+	QuizServiceResumeWordProcedure = "/api.v1.QuizService/ResumeWord"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -64,6 +74,10 @@ type QuizServiceClient interface {
 	SubmitReverseAnswer(context.Context, *connect.Request[v1.SubmitReverseAnswerRequest]) (*connect.Response[v1.SubmitReverseAnswerResponse], error)
 	StartFreeformQuiz(context.Context, *connect.Request[v1.StartFreeformQuizRequest]) (*connect.Response[v1.StartFreeformQuizResponse], error)
 	SubmitFreeformAnswer(context.Context, *connect.Request[v1.SubmitFreeformAnswerRequest]) (*connect.Response[v1.SubmitFreeformAnswerResponse], error)
+	OverrideAnswer(context.Context, *connect.Request[v1.OverrideAnswerRequest]) (*connect.Response[v1.OverrideAnswerResponse], error)
+	UndoOverrideAnswer(context.Context, *connect.Request[v1.UndoOverrideAnswerRequest]) (*connect.Response[v1.UndoOverrideAnswerResponse], error)
+	SkipWord(context.Context, *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error)
+	ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -119,6 +133,30 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("SubmitFreeformAnswer")),
 			connect.WithClientOptions(opts...),
 		),
+		overrideAnswer: connect.NewClient[v1.OverrideAnswerRequest, v1.OverrideAnswerResponse](
+			httpClient,
+			baseURL+QuizServiceOverrideAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("OverrideAnswer")),
+			connect.WithClientOptions(opts...),
+		),
+		undoOverrideAnswer: connect.NewClient[v1.UndoOverrideAnswerRequest, v1.UndoOverrideAnswerResponse](
+			httpClient,
+			baseURL+QuizServiceUndoOverrideAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("UndoOverrideAnswer")),
+			connect.WithClientOptions(opts...),
+		),
+		skipWord: connect.NewClient[v1.SkipWordRequest, v1.SkipWordResponse](
+			httpClient,
+			baseURL+QuizServiceSkipWordProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SkipWord")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeWord: connect.NewClient[v1.ResumeWordRequest, v1.ResumeWordResponse](
+			httpClient,
+			baseURL+QuizServiceResumeWordProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ResumeWord")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -131,6 +169,10 @@ type quizServiceClient struct {
 	submitReverseAnswer  *connect.Client[v1.SubmitReverseAnswerRequest, v1.SubmitReverseAnswerResponse]
 	startFreeformQuiz    *connect.Client[v1.StartFreeformQuizRequest, v1.StartFreeformQuizResponse]
 	submitFreeformAnswer *connect.Client[v1.SubmitFreeformAnswerRequest, v1.SubmitFreeformAnswerResponse]
+	overrideAnswer       *connect.Client[v1.OverrideAnswerRequest, v1.OverrideAnswerResponse]
+	undoOverrideAnswer   *connect.Client[v1.UndoOverrideAnswerRequest, v1.UndoOverrideAnswerResponse]
+	skipWord             *connect.Client[v1.SkipWordRequest, v1.SkipWordResponse]
+	resumeWord           *connect.Client[v1.ResumeWordRequest, v1.ResumeWordResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -168,6 +210,26 @@ func (c *quizServiceClient) SubmitFreeformAnswer(ctx context.Context, req *conne
 	return c.submitFreeformAnswer.CallUnary(ctx, req)
 }
 
+// OverrideAnswer calls api.v1.QuizService.OverrideAnswer.
+func (c *quizServiceClient) OverrideAnswer(ctx context.Context, req *connect.Request[v1.OverrideAnswerRequest]) (*connect.Response[v1.OverrideAnswerResponse], error) {
+	return c.overrideAnswer.CallUnary(ctx, req)
+}
+
+// UndoOverrideAnswer calls api.v1.QuizService.UndoOverrideAnswer.
+func (c *quizServiceClient) UndoOverrideAnswer(ctx context.Context, req *connect.Request[v1.UndoOverrideAnswerRequest]) (*connect.Response[v1.UndoOverrideAnswerResponse], error) {
+	return c.undoOverrideAnswer.CallUnary(ctx, req)
+}
+
+// SkipWord calls api.v1.QuizService.SkipWord.
+func (c *quizServiceClient) SkipWord(ctx context.Context, req *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error) {
+	return c.skipWord.CallUnary(ctx, req)
+}
+
+// ResumeWord calls api.v1.QuizService.ResumeWord.
+func (c *quizServiceClient) ResumeWord(ctx context.Context, req *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error) {
+	return c.resumeWord.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -177,6 +239,10 @@ type QuizServiceHandler interface {
 	SubmitReverseAnswer(context.Context, *connect.Request[v1.SubmitReverseAnswerRequest]) (*connect.Response[v1.SubmitReverseAnswerResponse], error)
 	StartFreeformQuiz(context.Context, *connect.Request[v1.StartFreeformQuizRequest]) (*connect.Response[v1.StartFreeformQuizResponse], error)
 	SubmitFreeformAnswer(context.Context, *connect.Request[v1.SubmitFreeformAnswerRequest]) (*connect.Response[v1.SubmitFreeformAnswerResponse], error)
+	OverrideAnswer(context.Context, *connect.Request[v1.OverrideAnswerRequest]) (*connect.Response[v1.OverrideAnswerResponse], error)
+	UndoOverrideAnswer(context.Context, *connect.Request[v1.UndoOverrideAnswerRequest]) (*connect.Response[v1.UndoOverrideAnswerResponse], error)
+	SkipWord(context.Context, *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error)
+	ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -228,6 +294,30 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("SubmitFreeformAnswer")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceOverrideAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceOverrideAnswerProcedure,
+		svc.OverrideAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("OverrideAnswer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceUndoOverrideAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceUndoOverrideAnswerProcedure,
+		svc.UndoOverrideAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("UndoOverrideAnswer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceSkipWordHandler := connect.NewUnaryHandler(
+		QuizServiceSkipWordProcedure,
+		svc.SkipWord,
+		connect.WithSchema(quizServiceMethods.ByName("SkipWord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceResumeWordHandler := connect.NewUnaryHandler(
+		QuizServiceResumeWordProcedure,
+		svc.ResumeWord,
+		connect.WithSchema(quizServiceMethods.ByName("ResumeWord")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -244,6 +334,14 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceStartFreeformQuizHandler.ServeHTTP(w, r)
 		case QuizServiceSubmitFreeformAnswerProcedure:
 			quizServiceSubmitFreeformAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceOverrideAnswerProcedure:
+			quizServiceOverrideAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceUndoOverrideAnswerProcedure:
+			quizServiceUndoOverrideAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceSkipWordProcedure:
+			quizServiceSkipWordHandler.ServeHTTP(w, r)
+		case QuizServiceResumeWordProcedure:
+			quizServiceResumeWordHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -279,4 +377,20 @@ func (UnimplementedQuizServiceHandler) StartFreeformQuiz(context.Context, *conne
 
 func (UnimplementedQuizServiceHandler) SubmitFreeformAnswer(context.Context, *connect.Request[v1.SubmitFreeformAnswerRequest]) (*connect.Response[v1.SubmitFreeformAnswerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitFreeformAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) OverrideAnswer(context.Context, *connect.Request[v1.OverrideAnswerRequest]) (*connect.Response[v1.OverrideAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.OverrideAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) UndoOverrideAnswer(context.Context, *connect.Request[v1.UndoOverrideAnswerRequest]) (*connect.Response[v1.UndoOverrideAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.UndoOverrideAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) SkipWord(context.Context, *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SkipWord is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ResumeWord is not implemented"))
 }

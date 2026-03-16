@@ -178,6 +178,12 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 				if strings.TrimSpace(definition.Expression) == "" {
 					return nil, fmt.Errorf("empty definition.Expression: %v in story %s", definition, notebook.Event)
 				}
+
+				// Skip words that are marked as skipped in learning history
+				if isExpressionSkipped(learningHistory, notebook.Event, scene.Title, definition) {
+					continue
+				}
+
 				// Filter out words without any correct answers if not included
 				if !includeNoCorrectAnswers && !definition.hasAnyCorrectAnswer() {
 					continue
@@ -480,4 +486,32 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 		Type:          scene.Type,
 		Definitions:   assetsNotes,
 	}
+}
+
+// isExpressionSkipped checks if a definition is marked as skipped in learning history.
+func isExpressionSkipped(learningHistory []LearningHistory, event, sceneTitle string, def Note) bool {
+	for _, hist := range learningHistory {
+		if hist.Metadata.Title != event {
+			continue
+		}
+		if hist.Metadata.Type == "flashcard" {
+			for _, expr := range hist.Expressions {
+				if expr.Expression == def.Expression || expr.Expression == def.Definition {
+					return expr.SkippedAt != ""
+				}
+			}
+			continue
+		}
+		for _, scene := range hist.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if expr.Expression == def.Expression || expr.Expression == def.Definition {
+					return expr.SkippedAt != ""
+				}
+			}
+		}
+	}
+	return false
 }

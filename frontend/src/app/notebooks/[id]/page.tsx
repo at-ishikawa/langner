@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
+  Badge,
   Box,
   Button,
   Heading,
@@ -28,7 +29,8 @@ type StatusFilter =
   | "misunderstood"
   | "understood"
   | "usable"
-  | "intuitive";
+  | "intuitive"
+  | "skipped";
 
 const filterOptions: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
@@ -37,6 +39,7 @@ const filterOptions: { value: StatusFilter; label: string }[] = [
   { value: "understood", label: "Understood" },
   { value: "usable", label: "Usable" },
   { value: "intuitive", label: "Intuitive" },
+  { value: "skipped", label: "Skipped" },
 ];
 
 function renderQuote(quote: string) {
@@ -56,7 +59,8 @@ function renderQuote(quote: string) {
 
 function matchCount(definitions: NotebookWord[], filter: StatusFilter): number {
   if (filter === "all") return definitions.length;
-  return definitions.filter((w) => w.learningStatus === filter).length;
+  if (filter === "skipped") return definitions.filter((w) => w.isSkipped).length;
+  return definitions.filter((w) => w.learningStatus === filter && !w.isSkipped).length;
 }
 
 function storyMatchCount(story: StoryEntry, filter: StatusFilter): number {
@@ -220,7 +224,7 @@ export default function NotebookDetailPage() {
           // Flashcard-style: no scene level, show words directly
           <VStack align="stretch" gap={2}>
             {selectedStory.scenes[0].definitions
-              .filter((w) => filter === "all" || w.learningStatus === filter)
+              .filter((w) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
               .map((word, i) => (
                 <WordCard key={i} word={word} />
               ))}
@@ -414,7 +418,7 @@ function SceneRow({
           )}
           <VStack align="stretch" gap={2}>
             {scene.definitions
-              .filter((w) => filter === "all" || w.learningStatus === filter)
+              .filter((w) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
               .map((word, i) => {
                 const excerpt = findProseContext(
                   scene.statements,
@@ -455,7 +459,13 @@ function WordCard({ word }: { word: NotebookWord }) {
       : null;
 
   return (
-    <Box borderWidth="1px" borderRadius="md" overflow="hidden" fontSize="sm">
+    <Box
+      borderWidth="1px"
+      borderRadius="md"
+      overflow="hidden"
+      fontSize="sm"
+      opacity={word.isSkipped ? 0.6 : 1}
+    >
       <Box
         p={3}
         cursor="pointer"
@@ -471,7 +481,12 @@ function WordCard({ word }: { word: NotebookWord }) {
           <Text fontWeight="semibold" flex="1">
             {word.expression}
           </Text>
-          <LearningStatusBadge status={word.learningStatus} />
+          <Box display="flex" gap={1} alignItems="center">
+            {word.isSkipped && (
+              <Badge colorPalette="orange">Skipped</Badge>
+            )}
+            <LearningStatusBadge status={word.learningStatus} />
+          </Box>
         </Box>
         <Text color="fg.muted" mt={1}>
           {word.meaning || word.definition}

@@ -92,6 +92,8 @@ type LearningHistoryExpression struct {
 	// Reverse quiz fields - track separately from regular quiz
 	ReverseLogs           []LearningRecord `yaml:"reverse_logs,omitempty"`
 	ReverseEasinessFactor float64          `yaml:"reverse_easiness_factor,omitempty"` // default 2.5
+
+	SkippedAt string `yaml:"skipped_at,omitempty"` // RFC3339 date when skipped
 }
 
 func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {

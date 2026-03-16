@@ -126,7 +126,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 				}
 
 				_ = def.SetDetails(h.dictionaryMap, "")
-				learningStatus, easinessFactor, nextReviewDate := h.findLearningInfo(learningHistory, nb.Event, scene.Title, def)
+				info := h.findLearningInfoFull(learningHistory, nb.Event, scene.Title, def)
 
 				definitions = append(definitions, &apiv1.NotebookWord{
 					Expression:     def.Expression,
@@ -137,11 +137,12 @@ func (h *NotebookHandler) GetNotebookDetail(
 					Examples:       def.Examples,
 					Synonyms:       def.Synonyms,
 					Antonyms:       def.Antonyms,
-					LearningStatus: string(learningStatus),
+					LearningStatus: string(info.status),
 					LearnedLogs:    convertLogsToProto(logs),
-					EasinessFactor: easinessFactor,
-					NextReviewDate: nextReviewDate,
+					EasinessFactor: info.easinessFactor,
+					NextReviewDate: info.nextReviewDate,
 					Origin:         def.Origin,
+					IsSkipped:      info.isSkipped,
 				})
 				totalWordCount++
 			}
@@ -214,7 +215,7 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 			}
 
 			_ = card.SetDetails(h.dictionaryMap, "")
-			learningStatus, easinessFactor, nextReviewDate := h.findLearningInfo(learningHistory, nb.Title, "", card)
+			info := h.findLearningInfoFull(learningHistory, nb.Title, "", card)
 
 			definitions = append(definitions, &apiv1.NotebookWord{
 				Expression:     card.Expression,
@@ -225,11 +226,12 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 				Examples:       card.Examples,
 				Synonyms:       card.Synonyms,
 				Antonyms:       card.Antonyms,
-				LearningStatus: string(learningStatus),
+				LearningStatus: string(info.status),
 				LearnedLogs:    convertLogsToProto(logs),
-				EasinessFactor: easinessFactor,
-				NextReviewDate: nextReviewDate,
+				EasinessFactor: info.easinessFactor,
+				NextReviewDate: info.nextReviewDate,
 				Origin:         card.Origin,
+				IsSkipped:      info.isSkipped,
 			})
 			totalWordCount++
 		}
@@ -252,6 +254,14 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 	}), nil
 }
 
+// learningInfo holds learning status details for a definition.
+type learningInfo struct {
+	status         notebook.LearnedStatus
+	easinessFactor float64
+	nextReviewDate string
+	isSkipped      bool
+}
+
 // findLearningInfo finds the learning status, easiness factor, and next review date
 // for a definition by searching through learning history expressions.
 func (h *NotebookHandler) findLearningInfo(
@@ -259,17 +269,32 @@ func (h *NotebookHandler) findLearningInfo(
 	event, sceneTitle string,
 	def notebook.Note,
 ) (notebook.LearnedStatus, float64, string) {
+	info := h.findLearningInfoFull(learningHistory, event, sceneTitle, def)
+	return info.status, info.easinessFactor, info.nextReviewDate
+}
+
+// findLearningInfoFull returns full learning info including skip status.
+func (h *NotebookHandler) findLearningInfoFull(
+	learningHistory []notebook.LearningHistory,
+	event, sceneTitle string,
+	def notebook.Note,
+) learningInfo {
 	matchesExpr := func(expr notebook.LearningHistoryExpression) bool {
 		return expr.Expression == def.Expression || expr.Expression == def.Definition
 	}
-	extractInfo := func(expr notebook.LearningHistoryExpression) (notebook.LearnedStatus, float64, string) {
+	extractInfo := func(expr notebook.LearningHistoryExpression) learningInfo {
 		var nextReview string
 		if len(expr.LearnedLogs) > 0 {
 			if last := expr.LearnedLogs[0]; last.IntervalDays > 0 {
 				nextReview = last.LearnedAt.AddDate(0, 0, last.IntervalDays).Format("2006-01-02")
 			}
 		}
-		return expr.GetLatestStatus(), expr.EasinessFactor, nextReview
+		return learningInfo{
+			status:         expr.GetLatestStatus(),
+			easinessFactor: expr.EasinessFactor,
+			nextReviewDate: nextReview,
+			isSkipped:      expr.SkippedAt != "",
+		}
 	}
 
 	for _, hist := range learningHistory {
@@ -294,7 +319,7 @@ func (h *NotebookHandler) findLearningInfo(
 			}
 		}
 	}
-	return notebook.LearnedStatusLearning, 0, ""
+	return learningInfo{status: notebook.LearnedStatusLearning}
 }
 
 // ExportNotebookPDF generates a PDF for a notebook and returns its content.
