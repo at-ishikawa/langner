@@ -455,7 +455,7 @@ function WordCard({ word }: { word: NotebookWord }) {
 
   const lastLog =
     word.learnedLogs.length > 0
-      ? word.learnedLogs[word.learnedLogs.length - 1]
+      ? word.learnedLogs[0]
       : null;
 
   return (

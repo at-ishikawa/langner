@@ -490,28 +490,5 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 
 // isExpressionSkipped checks if a definition is marked as skipped in learning history.
 func isExpressionSkipped(learningHistory []LearningHistory, event, sceneTitle string, def Note) bool {
-	for _, hist := range learningHistory {
-		if hist.Metadata.Title != event {
-			continue
-		}
-		if hist.Metadata.Type == "flashcard" {
-			for _, expr := range hist.Expressions {
-				if expr.Expression == def.Expression || expr.Expression == def.Definition {
-					return expr.SkippedAt != ""
-				}
-			}
-			continue
-		}
-		for _, scene := range hist.Scenes {
-			if scene.Metadata.Title != sceneTitle {
-				continue
-			}
-			for _, expr := range scene.Expressions {
-				if expr.Expression == def.Expression || expr.Expression == def.Definition {
-					return expr.SkippedAt != ""
-				}
-			}
-		}
-	}
-	return false
+	return IsExpressionSkipped(learningHistory, event, sceneTitle, def.Expression, def.Definition)
 }

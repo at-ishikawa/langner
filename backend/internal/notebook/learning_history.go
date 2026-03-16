@@ -255,6 +255,34 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 	exp.LearnedLogs = append([]LearningRecord{newRecord}, exp.LearnedLogs...)
 }
 
+// IsExpressionSkipped checks if a note is marked as skipped in the learning history.
+func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition string) bool {
+	for _, hist := range histories {
+		if hist.Metadata.Title != event {
+			continue
+		}
+		if hist.Metadata.Type == "flashcard" {
+			for _, expr := range hist.Expressions {
+				if expr.Expression == expression || expr.Expression == definition {
+					return expr.SkippedAt != ""
+				}
+			}
+			continue
+		}
+		for _, scene := range hist.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if expr.Expression == expression || expr.Expression == definition {
+					return expr.SkippedAt != ""
+				}
+			}
+		}
+	}
+	return false
+}
+
 // Validate validates a LearningHistoryExpression
 func (exp *LearningHistoryExpression) Validate(location string) []ValidationError {
 	var errors []ValidationError

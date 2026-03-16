@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   Box,
   Button,
-  Flex,
   Heading,
   Input,
   Spinner,
@@ -15,6 +14,7 @@ import {
 } from "@chakra-ui/react";
 import { quizClient } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
+import { FeedbackActions } from "@/components/FeedbackActions";
 
 export default function FreeformQuizPage() {
   const router = useRouter();
@@ -43,9 +43,6 @@ export default function FreeformQuizPage() {
   const startTimeRef = useRef(Date.now());
   const wordInputRef = useRef<HTMLInputElement>(null);
 
-  // Local next review date for display
-  const [localNextReviewDate, setLocalNextReviewDate] = useState("");
-  const [showDatePicker, setShowDatePicker] = useState(false);
 
   useEffect(() => {
     if (quizType !== "freeform") {
@@ -91,7 +88,6 @@ export default function FreeformQuizPage() {
         nextReviewDate: res.nextReviewDate,
         learnedAt: res.learnedAt,
       });
-      setLocalNextReviewDate(res.nextReviewDate);
       storeSubmitResult({
         word: res.word,
         answer: meaning.trim(),
@@ -116,8 +112,6 @@ export default function FreeformQuizPage() {
     setMeaning("");
     setFeedback(null);
     setError(null);
-    setLocalNextReviewDate("");
-    setShowDatePicker(false);
     startTimeRef.current = Date.now();
     wordInputRef.current?.focus();
   };
@@ -201,46 +195,13 @@ export default function FreeformQuizPage() {
             </Box>
           )}
 
-          {localNextReviewDate && (
-            <Box>
-              <Flex alignItems="center" gap={2}>
-                <Text fontSize="sm" color="fg.muted">
-                  Next review: {localNextReviewDate}
-                </Text>
-                {!showDatePicker && (
-                  <Text
-                    fontSize="sm"
-                    color="blue.500"
-                    cursor="pointer"
-                    onClick={() => setShowDatePicker(true)}
-                  >
-                    Change
-                  </Text>
-                )}
-              </Flex>
-              {showDatePicker && (
-                <Flex mt={1} gap={2} alignItems="center">
-                  <Input
-                    type="date"
-                    size="sm"
-                    defaultValue={localNextReviewDate}
-                    onChange={() => {
-                      // Freeform does not have noteId, so date change is display-only
-                      setShowDatePicker(false);
-                    }}
-                  />
-                  <Text
-                    fontSize="sm"
-                    color="gray.500"
-                    cursor="pointer"
-                    onClick={() => setShowDatePicker(false)}
-                  >
-                    Cancel
-                  </Text>
-                </Flex>
-              )}
-            </Box>
-          )}
+          <FeedbackActions
+            noteId={undefined}
+            quizType="freeform"
+            learnedAt={feedback.learnedAt}
+            correct={feedback.correct}
+            nextReviewDate={feedback.nextReviewDate}
+          />
 
           <Button colorPalette="blue" onClick={handleNext} mt={4}>
             Next Word

@@ -1302,28 +1302,5 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 
 // isExpressionSkippedInHistory checks if a note is marked as skipped in the learning history.
 func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note) bool {
-	for _, hist := range histories {
-		if hist.Metadata.Title != event {
-			continue
-		}
-		if hist.Metadata.Type == "flashcard" {
-			for _, expr := range hist.Expressions {
-				if expr.Expression == def.Expression || expr.Expression == def.Definition {
-					return expr.SkippedAt != ""
-				}
-			}
-			continue
-		}
-		for _, scene := range hist.Scenes {
-			if scene.Metadata.Title != sceneTitle {
-				continue
-			}
-			for _, expr := range scene.Expressions {
-				if expr.Expression == def.Expression || expr.Expression == def.Definition {
-					return expr.SkippedAt != ""
-				}
-			}
-		}
-	}
-	return false
+	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition)
 }

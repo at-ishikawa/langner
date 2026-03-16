@@ -13,8 +13,9 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
-import { useQuizStore } from "@/store/quizStore";
+import { quizClient } from "@/lib/client";
+import { useQuizStore, type OriginalValues } from "@/store/quizStore";
+import { FeedbackActions } from "@/components/FeedbackActions";
 
 type QuizPhase = "answering" | "feedback";
 
@@ -43,14 +44,9 @@ export default function QuizCardPage() {
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Override/skip local state for current card
+  // Override/skip local state for current card (used for banner display)
   const [isOverridden, setIsOverridden] = useState(false);
   const [isSkipped, setIsSkipped] = useState(false);
-  const [overrideLoading, setOverrideLoading] = useState(false);
-  const [skipLoading, setSkipLoading] = useState(false);
-  const [localNextReviewDate, setLocalNextReviewDate] = useState("");
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [dateLoading, setDateLoading] = useState(false);
 
   useEffect(() => {
     if (flashcards.length === 0 || quizType !== "standard") {
@@ -66,8 +62,6 @@ export default function QuizCardPage() {
     setFeedback(null);
     setIsOverridden(false);
     setIsSkipped(false);
-    setShowDatePicker(false);
-    setLocalNextReviewDate("");
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [currentIndex]);
 
@@ -99,7 +93,6 @@ export default function QuizCardPage() {
       });
 
       setFeedback(res);
-      setLocalNextReviewDate(res.nextReviewDate);
       storeSubmitResult({
         noteId: card.noteId,
         entry: card.entry,
@@ -136,7 +129,6 @@ export default function QuizCardPage() {
       });
 
       setFeedback(res);
-      setLocalNextReviewDate(res.nextReviewDate);
       storeSubmitResult({
         noteId: card.noteId,
         entry: card.entry,
@@ -164,94 +156,23 @@ export default function QuizCardPage() {
     }
   };
 
-  const handleOverride = async () => {
+  const handleOverrideResult = (newCorrect: boolean, newNextReviewDate: string, originalValues: OriginalValues) => {
     if (!feedback) return;
-    setOverrideLoading(true);
-    try {
-      const res = await quizClient.overrideAnswer({
-        noteId: card.noteId,
-        quizType: ProtoQuizType.STANDARD,
-        learnedAt: feedback.learnedAt,
-        markCorrect: !feedback.correct,
-      });
-      const resultIndex = currentIndex;
-      const store = useQuizStore.getState();
-      store.overrideResult(resultIndex, "standard", res.nextReviewDate, {
-        quality: res.originalQuality,
-        status: res.originalStatus,
-        intervalDays: res.originalIntervalDays,
-        easinessFactor: res.originalEasinessFactor,
-      });
-      setFeedback({ ...feedback, correct: !feedback.correct });
-      setLocalNextReviewDate(res.nextReviewDate);
-      setIsOverridden(true);
-    } catch {
-      // silently fail
-    } finally {
-      setOverrideLoading(false);
-    }
+    useQuizStore.getState().overrideResult(currentIndex, "standard", newNextReviewDate, originalValues);
+    setFeedback({ ...feedback, correct: newCorrect });
+    setIsOverridden(true);
   };
 
-  const handleUndoOverride = async () => {
+  const handleUndoResult = (correct: boolean, nextReviewDate: string) => {
     if (!feedback) return;
-    const resultIndex = currentIndex;
-    const result = useQuizStore.getState().results[resultIndex];
-    if (!result?.originalValues) return;
-    setOverrideLoading(true);
-    try {
-      const res = await quizClient.undoOverrideAnswer({
-        noteId: card.noteId,
-        quizType: ProtoQuizType.STANDARD,
-        learnedAt: feedback.learnedAt,
-        originalQuality: result.originalValues.quality,
-        originalStatus: result.originalValues.status,
-        originalIntervalDays: result.originalValues.intervalDays,
-        originalEasinessFactor: result.originalValues.easinessFactor,
-      });
-      const store = useQuizStore.getState();
-      store.undoOverrideResult(resultIndex, "standard", res.correct, res.nextReviewDate);
-      setFeedback({ ...feedback, correct: res.correct });
-      setLocalNextReviewDate(res.nextReviewDate);
-      setIsOverridden(false);
-    } catch {
-      // silently fail
-    } finally {
-      setOverrideLoading(false);
-    }
+    useQuizStore.getState().undoOverrideResult(currentIndex, "standard", correct, nextReviewDate);
+    setFeedback({ ...feedback, correct });
+    setIsOverridden(false);
   };
 
-  const handleSkipWord = async () => {
-    setSkipLoading(true);
-    try {
-      await quizClient.skipWord({ noteId: card.noteId });
-      const resultIndex = currentIndex;
-      useQuizStore.getState().skipResult(resultIndex, "standard");
-      setIsSkipped(true);
-    } catch {
-      // silently fail
-    } finally {
-      setSkipLoading(false);
-    }
-  };
-
-  const handleDateChange = async (newDate: string) => {
-    if (!feedback || !newDate) return;
-    setDateLoading(true);
-    try {
-      const res = await quizClient.overrideAnswer({
-        noteId: card.noteId,
-        quizType: ProtoQuizType.STANDARD,
-        learnedAt: feedback.learnedAt,
-        nextReviewDate: newDate,
-      });
-      setLocalNextReviewDate(res.nextReviewDate);
-      useQuizStore.getState().updateResultReviewDate(currentIndex, "standard", res.nextReviewDate);
-      setShowDatePicker(false);
-    } catch {
-      // silently fail
-    } finally {
-      setDateLoading(false);
-    }
+  const handleSkipResult = () => {
+    useQuizStore.getState().skipResult(currentIndex, "standard");
+    setIsSkipped(true);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -395,83 +316,17 @@ export default function QuizCardPage() {
                 </Box>
               )}
 
-              {localNextReviewDate && (
-                <Box>
-                  <Flex alignItems="center" gap={2}>
-                    <Text fontSize="sm" color="fg.muted">
-                      Next review: {localNextReviewDate}
-                    </Text>
-                    {!showDatePicker && (
-                      <Text
-                        fontSize="sm"
-                        color="blue.500"
-                        cursor="pointer"
-                        onClick={() => setShowDatePicker(true)}
-                      >
-                        Change
-                      </Text>
-                    )}
-                  </Flex>
-                  {showDatePicker && (
-                    <Flex mt={1} gap={2} alignItems="center">
-                      <Input
-                        type="date"
-                        size="sm"
-                        defaultValue={localNextReviewDate}
-                        disabled={dateLoading}
-                        onChange={(e) => {
-                          if (e.target.value) handleDateChange(e.target.value);
-                        }}
-                      />
-                      <Text
-                        fontSize="sm"
-                        color="gray.500"
-                        cursor="pointer"
-                        onClick={() => setShowDatePicker(false)}
-                      >
-                        Cancel
-                      </Text>
-                    </Flex>
-                  )}
-                </Box>
-              )}
-
-              {!isOverridden && !isSkipped && (
-                <Button
-                  variant="outline"
-                  colorPalette={feedback.correct ? "red" : "blue"}
-                  onClick={handleOverride}
-                  disabled={overrideLoading}
-                  size="sm"
-                >
-                  {feedback.correct ? "Mark as Incorrect" : "Mark as Correct"}
-                </Button>
-              )}
-
-              {isOverridden && (
-                <Flex alignItems="center" gap={2}>
-                  <Text
-                    fontSize="sm"
-                    color="blue.500"
-                    cursor="pointer"
-                    onClick={handleUndoOverride}
-                  >
-                    Undo
-                  </Text>
-                </Flex>
-              )}
-
-              {!isSkipped && (
-                <Button
-                  variant="outline"
-                  colorPalette="gray"
-                  onClick={handleSkipWord}
-                  disabled={skipLoading}
-                  size="sm"
-                >
-                  Skip Word
-                </Button>
-              )}
+              <FeedbackActions
+                key={currentIndex}
+                noteId={card.noteId}
+                quizType="standard"
+                learnedAt={feedback.learnedAt}
+                correct={feedback.correct}
+                nextReviewDate={feedback.nextReviewDate}
+                onOverride={handleOverrideResult}
+                onUndo={handleUndoResult}
+                onSkip={handleSkipResult}
+              />
 
               <Button
                 w="full"

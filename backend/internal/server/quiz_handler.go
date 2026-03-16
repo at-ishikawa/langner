@@ -404,17 +404,31 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 }
 
 // protoQuizTypeToNotebook converts a proto QuizType enum to a notebook QuizType string.
-func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
+func protoQuizTypeToNotebook(qt apiv1.QuizType) (notebook.QuizType, error) {
 	switch qt {
 	case apiv1.QuizType_QUIZ_TYPE_STANDARD:
-		return notebook.QuizTypeNotebook
+		return notebook.QuizTypeNotebook, nil
 	case apiv1.QuizType_QUIZ_TYPE_REVERSE:
-		return notebook.QuizTypeReverse
+		return notebook.QuizTypeReverse, nil
 	case apiv1.QuizType_QUIZ_TYPE_FREEFORM:
-		return notebook.QuizTypeFreeform
+		return notebook.QuizTypeFreeform, nil
 	default:
-		return notebook.QuizTypeNotebook
+		return "", fmt.Errorf("unsupported quiz type: %v", qt)
 	}
+}
+
+// resolveCard looks up the notebook name and expression for a given note ID
+// from either the noteStore or reverseStore.
+func (h *QuizHandler) resolveCard(noteID int64) (notebookName, expression string, ok bool) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if card, found := h.noteStore[noteID]; found {
+		return card.NotebookName, card.Entry, true
+	}
+	if rcard, found := h.reverseStore[noteID]; found {
+		return rcard.NotebookName, rcard.Expression, true
+	}
+	return "", "", false
 }
 
 // OverrideAnswer overrides a previously graded quiz answer.
@@ -422,24 +436,19 @@ func (h *QuizHandler) OverrideAnswer(
 	ctx context.Context,
 	req *connect.Request[apiv1.OverrideAnswerRequest],
 ) (*connect.Response[apiv1.OverrideAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
 	noteID := req.Msg.GetNoteId()
-	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	quizType, err := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	learnedAt := req.Msg.GetLearnedAt()
 
-	// Look up the card to find notebook name and expression
-	var notebookName, expression string
-
-	h.mu.Lock()
-	if card, ok := h.noteStore[noteID]; ok {
-		notebookName = card.NotebookName
-		expression = card.Entry
-	} else if rcard, ok := h.reverseStore[noteID]; ok {
-		notebookName = rcard.NotebookName
-		expression = rcard.Expression
-	}
-	h.mu.Unlock()
-
-	if notebookName == "" {
+	notebookName, expression, ok := h.resolveCard(noteID)
+	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
 	}
 
@@ -468,23 +477,19 @@ func (h *QuizHandler) UndoOverrideAnswer(
 	ctx context.Context,
 	req *connect.Request[apiv1.UndoOverrideAnswerRequest],
 ) (*connect.Response[apiv1.UndoOverrideAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
 	noteID := req.Msg.GetNoteId()
-	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	quizType, err := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+	}
 	learnedAt := req.Msg.GetLearnedAt()
 
-	var notebookName, expression string
-
-	h.mu.Lock()
-	if card, ok := h.noteStore[noteID]; ok {
-		notebookName = card.NotebookName
-		expression = card.Entry
-	} else if rcard, ok := h.reverseStore[noteID]; ok {
-		notebookName = rcard.NotebookName
-		expression = rcard.Expression
-	}
-	h.mu.Unlock()
-
-	if notebookName == "" {
+	notebookName, expression, ok := h.resolveCard(noteID)
+	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
 	}
 
@@ -510,21 +515,14 @@ func (h *QuizHandler) SkipWord(
 	ctx context.Context,
 	req *connect.Request[apiv1.SkipWordRequest],
 ) (*connect.Response[apiv1.SkipWordResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
 	noteID := req.Msg.GetNoteId()
 
-	var notebookName, expression string
-
-	h.mu.Lock()
-	if card, ok := h.noteStore[noteID]; ok {
-		notebookName = card.NotebookName
-		expression = card.Entry
-	} else if rcard, ok := h.reverseStore[noteID]; ok {
-		notebookName = rcard.NotebookName
-		expression = rcard.Expression
-	}
-	h.mu.Unlock()
-
-	if notebookName == "" {
+	notebookName, expression, ok := h.resolveCard(noteID)
+	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
 	}
 
@@ -540,21 +538,14 @@ func (h *QuizHandler) ResumeWord(
 	ctx context.Context,
 	req *connect.Request[apiv1.ResumeWordRequest],
 ) (*connect.Response[apiv1.ResumeWordResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
 	noteID := req.Msg.GetNoteId()
 
-	var notebookName, expression string
-
-	h.mu.Lock()
-	if card, ok := h.noteStore[noteID]; ok {
-		notebookName = card.NotebookName
-		expression = card.Entry
-	} else if rcard, ok := h.reverseStore[noteID]; ok {
-		notebookName = rcard.NotebookName
-		expression = rcard.Expression
-	}
-	h.mu.Unlock()
-
-	if notebookName == "" {
+	notebookName, expression, ok := h.resolveCard(noteID)
+	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
 	}
 
