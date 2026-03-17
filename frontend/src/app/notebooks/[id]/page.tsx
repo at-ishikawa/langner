@@ -266,7 +266,7 @@ export default function NotebookDetailPage() {
             <Text fontSize="sm" color="fg.muted">
               {filter === "all"
                 ? `${data.totalWordCount} words`
-                : `${data.stories.reduce((sum, s) => sum + storyMatchCount(s, filter), 0)} / ${data.totalWordCount} words`}
+                : `${data.stories.reduce((sum, s) => sum + storyMatchCount(s, filter), 0)} words`}
             </Text>
           </Box>
           <Box display="flex" gap={2}>
@@ -341,7 +341,7 @@ export default function NotebookDetailPage() {
               </Box>
               <Box flexShrink={0} textAlign="right">
                 <Text fontSize="xs" color="fg.muted">
-                  {filter === "all" ? total : `${matched}/${total}`} words
+                  {filter === "all" ? total : matched} words
                 </Text>
                 <Text fontSize="xs" color="fg.muted">
                   &rsaquo;
@@ -396,7 +396,7 @@ function SceneRow({
         </Text>
         <Box display="flex" alignItems="center" gap={2} flexShrink={0}>
           <Text fontSize="xs" color="fg.muted">
-            {filter === "all" ? total : `${matched}/${total}`} words
+            {filter === "all" ? total : matched} words
           </Text>
           <Text fontSize="xs" color="fg.muted">
             {open ? "\u25B2" : "\u25BC"}
