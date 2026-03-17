@@ -277,9 +277,10 @@ describe("SessionCompletePage", () => {
         expect(client.quizClient.resumeWord).toHaveBeenCalledWith({ noteId: 2n });
       });
 
-      // Card should be back (no longer skipped)
+      // Card should be back (no longer skipped) — no "Excluded" badge or section
       await waitFor(() => {
-        expect(screen.queryByText("Excluded")).not.toBeInTheDocument();
+        expect(screen.queryByText("Excluded", { exact: true })).not.toBeInTheDocument();
+        expect(screen.queryByText(/Excluded from Quizzes/)).not.toBeInTheDocument();
       });
     });
 
