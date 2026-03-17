@@ -6,10 +6,43 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
+	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/testutil"
-	"github.com/stretchr/testify/assert"
 )
+
+func TestIsDBConfigured(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  config.DatabaseConfig
+		want bool
+	}{
+		{
+			name: "password set - configured",
+			cfg:  config.DatabaseConfig{Host: "localhost", Password: "secret"},
+			want: true,
+		},
+		{
+			name: "empty password - not configured",
+			cfg:  config.DatabaseConfig{Host: "localhost"},
+			want: false,
+		},
+		{
+			name: "empty config - not configured",
+			cfg:  config.DatabaseConfig{},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isDBConfigured(tt.cfg)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
 
 func TestNewValidateCommand(t *testing.T) {
 	cmd := newValidateCommand()
