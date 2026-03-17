@@ -264,7 +264,9 @@ export default function NotebookDetailPage() {
           <Box flex="1">
             <Heading size="lg">{data.name}</Heading>
             <Text fontSize="sm" color="fg.muted">
-              {data.totalWordCount} words
+              {filter === "all"
+                ? `${data.totalWordCount} words`
+                : `${data.stories.reduce((sum, s) => sum + storyMatchCount(s, filter), 0)} / ${data.totalWordCount} words`}
             </Text>
           </Box>
           <Box display="flex" gap={2}>
