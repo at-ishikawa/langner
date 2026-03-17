@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 700" width="375" height="700">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .breadcrumb { font-size: 13px; fill: #2563eb; }
+      .subtitle { font-size: 13px; fill: #999; }
+      .word { font-size: 15px; font-weight: 600; fill: #111; }
+      .word-dimmed { font-size: 15px; font-weight: 600; fill: #9ca3af; }
+      .meaning { font-size: 13px; fill: #555; }
+      .meaning-dimmed { font-size: 13px; fill: #d1d5db; }
+      .badge { font-size: 10px; font-weight: 600; fill: #fff; }
+      .filter-label { font-size: 13px; fill: #333; }
+      .filter-active { font-size: 13px; fill: #2563eb; font-weight: 600; }
+      .btn-outline-text { font-size: 12px; font-weight: 500; fill: #2563eb; }
+      .skipped-label { font-size: 11px; fill: #9ca3af; font-style: italic; }
+      .annotation { font-size: 10px; fill: #2563eb; font-style: italic; }
+      .review-date { font-size: 11px; fill: #999; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="700" fill="#f8f9fa"/>
+
+  <!-- Status bar -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Breadcrumb -->
+  <text x="24" y="68" class="breadcrumb">← Back to notebooks</text>
+
+  <!-- Title -->
+  <text x="24" y="100" class="title">Friends S01E01</text>
+  <text x="24" y="118" class="subtitle">12 words</text>
+
+  <!-- Filter dropdown -->
+  <rect x="24" y="132" width="327" height="36" rx="6" fill="#fff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="40" y="156" class="filter-active">Skipped</text>
+  <text x="330" y="156" text-anchor="end" class="subtitle">▼</text>
+
+  <!-- Annotation: new filter option -->
+  <text x="24" y="186" class="annotation">New "Skipped" filter option added to existing dropdown</text>
+  <text x="24" y="200" class="annotation">(alongside All, Learning, Misunderstood, Understood, Usable, Intuitive)</text>
+
+  <!-- Skipped word card 1 -->
+  <rect x="16" y="218" width="343" height="110" rx="8" fill="#fafafa" stroke="#e5e7eb" stroke-width="1"/>
+
+  <text x="32" y="244" class="word-dimmed">break the ice</text>
+  <!-- Skipped badge -->
+  <rect x="270" y="230" width="68" height="20" rx="4" fill="#f3f4f6"/>
+  <text x="304" y="244" text-anchor="middle" class="skipped-label">Skipped</text>
+
+  <text x="32" y="266" class="meaning-dimmed">to initiate conversation in a social setting</text>
+  <text x="32" y="286" class="review-date">Skipped on: March 15, 2026</text>
+
+  <!-- Resume button -->
+  <rect x="32" y="298" width="100" height="24" rx="6" fill="#fff" stroke="#2563eb" stroke-width="1"/>
+  <text x="82" y="315" text-anchor="middle" class="btn-outline-text">Resume</text>
+
+  <!-- Skipped word card 2 -->
+  <rect x="16" y="342" width="343" height="110" rx="8" fill="#fafafa" stroke="#e5e7eb" stroke-width="1"/>
+
+  <text x="32" y="368" class="word-dimmed">lose one's temper</text>
+  <!-- Skipped badge -->
+  <rect x="270" y="354" width="68" height="20" rx="4" fill="#f3f4f6"/>
+  <text x="304" y="368" text-anchor="middle" class="skipped-label">Skipped</text>
+
+  <text x="32" y="390" class="meaning-dimmed">to become angry</text>
+  <text x="32" y="410" class="review-date">Skipped on: March 10, 2026</text>
+
+  <!-- Resume button -->
+  <rect x="32" y="422" width="100" height="24" rx="6" fill="#fff" stroke="#2563eb" stroke-width="1"/>
+  <text x="82" y="439" text-anchor="middle" class="btn-outline-text">Resume</text>
+
+  <!-- After undo annotation -->
+  <text x="24" y="488" class="annotation">After clicking "Resume":</text>
+
+  <!-- Restored word card -->
+  <rect x="16" y="502" width="343" height="90" rx="8" fill="#fff" stroke="#e5e7eb" stroke-width="1"/>
+
+  <text x="32" y="528" class="word">break the ice</text>
+  <!-- Status badge (restored) -->
+  <rect x="270" y="514" width="72" height="20" rx="4" fill="#dbeafe"/>
+  <text x="306" y="528" text-anchor="middle" style="font-size: 10px; font-weight: 600; fill: #2563eb;">Learning</text>
+
+  <text x="32" y="550" class="meaning">to initiate conversation in a social setting</text>
+  <text x="32" y="570" class="review-date">Next review: March 16, 2026</text>
+
+  <!-- Annotation -->
+  <text x="24" y="616" class="annotation">Word is restored and disappears from "Skipped" filter.</text>
+  <text x="24" y="632" class="annotation">It will appear in future quizzes based on its SM-2 schedule.</text>
+</svg>

@@ -31,6 +31,13 @@ export interface ReverseFlashcard {
   sceneTitle: string;
 }
 
+export interface OriginalValues {
+  quality: number;
+  status: string;
+  intervalDays: number;
+  easinessFactor: number;
+}
+
 export interface QuizResult {
   noteId: bigint;
   entry: string;
@@ -40,6 +47,11 @@ export interface QuizResult {
   reason: string;
   contexts?: string[];
   wordDetail?: WordDetail;
+  nextReviewDate?: string;
+  learnedAt?: string;
+  isOverridden?: boolean;
+  isSkipped?: boolean;
+  originalValues?: OriginalValues;
 }
 
 export interface ReverseQuizResult {
@@ -51,6 +63,11 @@ export interface ReverseQuizResult {
   reason: string;
   contexts?: string[];
   wordDetail?: WordDetail;
+  nextReviewDate?: string;
+  learnedAt?: string;
+  isOverridden?: boolean;
+  isSkipped?: boolean;
+  originalValues?: OriginalValues;
 }
 
 export interface FreeformResult {
@@ -62,6 +79,11 @@ export interface FreeformResult {
   notebookName: string;
   contexts?: string[];
   wordDetail?: WordDetail;
+  nextReviewDate?: string;
+  learnedAt?: string;
+  isOverridden?: boolean;
+  isSkipped?: boolean;
+  originalValues?: OriginalValues;
 }
 
 interface QuizState {
@@ -86,6 +108,10 @@ interface QuizState {
   submitFreeformResult: (result: FreeformResult) => void;
   nextCard: () => void;
   reset: () => void;
+  overrideResult: (index: number, quizType: QuizType, nextReviewDate: string, originalValues: OriginalValues) => void;
+  undoOverrideResult: (index: number, quizType: QuizType, correct: boolean, nextReviewDate: string) => void;
+  skipResult: (index: number, quizType: QuizType) => void;
+  updateResultReviewDate: (index: number, quizType: QuizType, newDate: string) => void;
 }
 
 const initialState = {
@@ -100,6 +126,10 @@ const initialState = {
   freeformExpressions: [] as string[],
   freeformNextReviewDates: {} as Record<string, string>,
 };
+
+function updateArrayItem<T>(arr: T[], index: number, patch: Partial<T>): T[] {
+  return arr.map((item, i) => (i === index ? { ...item, ...patch } : item));
+}
 
 export const useQuizStore = create<QuizState>((set) => ({
   ...initialState,
@@ -118,4 +148,48 @@ export const useQuizStore = create<QuizState>((set) => ({
   nextCard: () =>
     set((state) => ({ currentIndex: state.currentIndex + 1 })),
   reset: () => set(initialState),
+
+  overrideResult: (index, quizType, nextReviewDate, originalValues) =>
+    set((state) => {
+      if (quizType === "standard") {
+        return { results: updateArrayItem(state.results, index, { correct: !state.results[index].correct, isOverridden: true, nextReviewDate, originalValues }) };
+      }
+      if (quizType === "reverse") {
+        return { reverseResults: updateArrayItem(state.reverseResults, index, { correct: !state.reverseResults[index].correct, isOverridden: true, nextReviewDate, originalValues }) };
+      }
+      return { freeformResults: updateArrayItem(state.freeformResults, index, { correct: !state.freeformResults[index].correct, isOverridden: true, nextReviewDate, originalValues }) };
+    }),
+
+  undoOverrideResult: (index, quizType, correct, nextReviewDate) =>
+    set((state) => {
+      if (quizType === "standard") {
+        return { results: updateArrayItem(state.results, index, { correct, isOverridden: false, nextReviewDate, originalValues: undefined }) };
+      }
+      if (quizType === "reverse") {
+        return { reverseResults: updateArrayItem(state.reverseResults, index, { correct, isOverridden: false, nextReviewDate, originalValues: undefined }) };
+      }
+      return { freeformResults: updateArrayItem(state.freeformResults, index, { correct, isOverridden: false, nextReviewDate, originalValues: undefined }) };
+    }),
+
+  skipResult: (index, quizType) =>
+    set((state) => {
+      if (quizType === "standard") {
+        return { results: updateArrayItem(state.results, index, { isSkipped: true }) };
+      }
+      if (quizType === "reverse") {
+        return { reverseResults: updateArrayItem(state.reverseResults, index, { isSkipped: true }) };
+      }
+      return { freeformResults: updateArrayItem(state.freeformResults, index, { isSkipped: true }) };
+    }),
+
+  updateResultReviewDate: (index, quizType, newDate) =>
+    set((state) => {
+      if (quizType === "standard") {
+        return { results: updateArrayItem(state.results, index, { nextReviewDate: newDate }) };
+      }
+      if (quizType === "reverse") {
+        return { reverseResults: updateArrayItem(state.reverseResults, index, { nextReviewDate: newDate }) };
+      }
+      return { freeformResults: updateArrayItem(state.freeformResults, index, { nextReviewDate: newDate }) };
+    }),
 }));

@@ -7,6 +7,10 @@ const START_REVERSE_QUIZ_URL = /StartReverseQuiz/;
 const START_FREEFORM_QUIZ_URL = /StartFreeformQuiz/;
 const SUBMIT_FREEFORM_ANSWER_URL = /SubmitFreeformAnswer/;
 
+const OVERRIDE_ANSWER_URL = /OverrideAnswer/;
+const UNDO_OVERRIDE_ANSWER_URL = /UndoOverrideAnswer/;
+const SKIP_WORD_URL = /SkipWord/;
+
 const CONNECT_JSON_CONTENT_TYPE = "application/json";
 
 const mockNotebooks = [
@@ -141,7 +145,7 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("start a conversation");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/Correct|Incorrect/)).toBeVisible();
+  await expect(page.getByText(/^[✓✗] (?:Correct|Incorrect)/)).toBeVisible();
   expect(submitAnswerCallCount).toBe(1);
 
   await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -151,7 +155,7 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("get angry");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/Correct|Incorrect/)).toBeVisible();
+  await expect(page.getByText(/^[✓✗] (?:Correct|Incorrect)/)).toBeVisible();
   expect(submitAnswerCallCount).toBe(2);
 
   await page.getByRole("button", { name: "See Results" }).click();
@@ -302,4 +306,278 @@ test("standard quiz starts correctly after a reverse quiz", async ({ page }) => 
   // Should navigate to /quiz/standard, NOT redirect to /
   await page.waitForURL("/quiz/standard");
   await expect(page.getByRole("heading", { name: "break the ice" })).toBeVisible();
+});
+
+test("override answer in standard quiz feedback", async ({ page }) => {
+  await page.route(GET_QUIZ_OPTIONS_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ notebooks: mockNotebooks }),
+    });
+  });
+
+  await page.route(START_QUIZ_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ flashcards: [mockFlashcards[0]] }),
+    });
+  });
+
+  await page.route(SUBMIT_ANSWER_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({
+        correct: true,
+        meaning: "to initiate social interaction",
+        reason: "The answer captures the core meaning",
+        nextReviewDate: "2027-06-15",
+        learnedAt: "2026-03-16T00:00:00Z",
+      }),
+    });
+  });
+
+  await page.route(OVERRIDE_ANSWER_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({
+        nextReviewDate: "2027-06-20",
+        originalQuality: 5,
+        originalStatus: "understood",
+        originalIntervalDays: 10,
+        originalEasinessFactor: 2.5,
+      }),
+    });
+  });
+
+  await page.route(UNDO_OVERRIDE_ANSWER_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({
+        correct: true,
+        nextReviewDate: "2027-06-15",
+      }),
+    });
+  });
+
+  const getOptionsPromise = page.waitForResponse(GET_QUIZ_OPTIONS_URL, { timeout: 10000 });
+  await page.goto("/quiz");
+  await getOptionsPromise;
+
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
+  await page.getByRole("button", { name: "Start" }).click();
+  await page.waitForURL("/quiz/standard");
+
+  // Submit answer
+  await page.getByPlaceholder("Type your answer").fill("start a conversation");
+  await page.getByRole("button", { name: "Submit" }).click();
+
+  await expect(page.getByText(/Correct/)).toBeVisible();
+
+  // Click "Mark as Incorrect" to override
+  await page.getByRole("button", { name: "Mark as Incorrect" }).click();
+
+  // Verify "(overridden)" label appears
+  await expect(page.getByText("(overridden)")).toBeVisible();
+
+  // Verify "Undo" link appears
+  await expect(page.getByText("Undo")).toBeVisible();
+
+  // Click "Undo" to restore original state
+  await page.getByText("Undo").click();
+
+  // Verify original state restored: should show Correct again without (overridden)
+  await expect(page.getByText("(overridden)")).not.toBeVisible();
+  await expect(page.getByText(/Correct/)).toBeVisible();
+});
+
+test("skip word in standard quiz feedback", async ({ page }) => {
+  await page.route(GET_QUIZ_OPTIONS_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ notebooks: mockNotebooks }),
+    });
+  });
+
+  await page.route(START_QUIZ_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ flashcards: [mockFlashcards[0]] }),
+    });
+  });
+
+  await page.route(SUBMIT_ANSWER_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({
+        correct: true,
+        meaning: "to initiate social interaction",
+        reason: "The answer captures the core meaning",
+        nextReviewDate: "2027-06-15",
+        learnedAt: "2026-03-16T00:00:00Z",
+      }),
+    });
+  });
+
+  await page.route(SKIP_WORD_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({}),
+    });
+  });
+
+  const getOptionsPromise = page.waitForResponse(GET_QUIZ_OPTIONS_URL, { timeout: 10000 });
+  await page.goto("/quiz");
+  await getOptionsPromise;
+
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
+  await page.getByRole("button", { name: "Start" }).click();
+  await page.waitForURL("/quiz/standard");
+
+  // Submit answer
+  await page.getByPlaceholder("Type your answer").fill("start a conversation");
+  await page.getByRole("button", { name: "Submit" }).click();
+
+  await expect(page.getByText(/Correct/)).toBeVisible();
+
+  // Click "Skip" button — immediately skips (no confirmation)
+  await page.getByRole("button", { name: "Exclude from Quizzes" }).click();
+
+  // Verify "Skipped" label appears
+  await expect(page.getByText("Excluded from quizzes")).toBeVisible();
+
+  // Verify "Skip" button is gone
+  await expect(page.getByRole("button", { name: "Exclude from Quizzes" })).not.toBeVisible();
+});
+
+test("change review date in standard quiz feedback", async ({ page }) => {
+  await page.route(GET_QUIZ_OPTIONS_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ notebooks: mockNotebooks }),
+    });
+  });
+
+  await page.route(START_QUIZ_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ flashcards: [mockFlashcards[0]] }),
+    });
+  });
+
+  await page.route(SUBMIT_ANSWER_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({
+        correct: true,
+        meaning: "to initiate social interaction",
+        reason: "The answer captures the core meaning",
+        nextReviewDate: "2027-06-15",
+        learnedAt: "2026-03-16T00:00:00Z",
+      }),
+    });
+  });
+
+  await page.route(OVERRIDE_ANSWER_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({
+        nextReviewDate: "2027-07-01",
+        originalQuality: 5,
+        originalStatus: "understood",
+        originalIntervalDays: 10,
+        originalEasinessFactor: 2.5,
+      }),
+    });
+  });
+
+  const getOptionsPromise = page.waitForResponse(GET_QUIZ_OPTIONS_URL, { timeout: 10000 });
+  await page.goto("/quiz");
+  await getOptionsPromise;
+
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
+  await page.getByRole("button", { name: "Start" }).click();
+  await page.waitForURL("/quiz/standard");
+
+  // Submit answer
+  await page.getByPlaceholder("Type your answer").fill("start a conversation");
+  await page.getByRole("button", { name: "Submit" }).click();
+
+  // Verify review date is shown
+  await expect(page.getByText(/Next review:/)).toBeVisible();
+  await expect(page.getByText(/June 15, 2027/)).toBeVisible();
+
+  // Click "Change" link
+  await page.getByText("Change").click();
+
+  // Verify date picker is shown
+  await expect(page.getByText("Pick a new review date:")).toBeVisible();
+
+  // Select a new date and save
+  await page.locator('input[type="date"]').fill("2027-07-01");
+  await page.getByRole("button", { name: "Save" }).click();
+
+  // Verify date picker closes and updated date is shown
+  await expect(page.getByText("Pick a new review date:")).not.toBeVisible();
+  await expect(page.getByText(/July 1, 2027/)).toBeVisible();
+});
+
+test("next review date display in standard quiz feedback", async ({ page }) => {
+  await page.route(GET_QUIZ_OPTIONS_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ notebooks: mockNotebooks }),
+    });
+  });
+
+  await page.route(START_QUIZ_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({ flashcards: [mockFlashcards[0]] }),
+    });
+  });
+
+  await page.route(SUBMIT_ANSWER_URL, async (route) => {
+    await route.fulfill({
+      status: 200,
+      headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
+      body: JSON.stringify({
+        correct: true,
+        meaning: "to initiate social interaction",
+        reason: "The answer captures the core meaning",
+        nextReviewDate: "2027-06-15",
+        learnedAt: "2026-03-16T00:00:00Z",
+      }),
+    });
+  });
+
+  const getOptionsPromise = page.waitForResponse(GET_QUIZ_OPTIONS_URL, { timeout: 10000 });
+  await page.goto("/quiz");
+  await getOptionsPromise;
+
+  await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
+  await page.getByRole("button", { name: "Start" }).click();
+  await page.waitForURL("/quiz/standard");
+
+  // Submit answer
+  await page.getByPlaceholder("Type your answer").fill("start a conversation");
+  await page.getByRole("button", { name: "Submit" }).click();
+
+  // Verify next review date box appears with formatted date
+  await expect(page.getByText(/Next review:/)).toBeVisible();
+  await expect(page.getByText(/June 15, 2027/)).toBeVisible();
 });

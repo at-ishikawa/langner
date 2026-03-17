@@ -73,6 +73,67 @@ describe("useQuizStore", () => {
     expect(useQuizStore.getState().currentIndex).toBe(2);
   });
 
+  it("overrideResult flips correct and sets isOverridden", () => {
+    useQuizStore.getState().submitResult(mockResult);
+
+    useQuizStore.getState().overrideResult(0, "standard", "2027-06-20", {
+      quality: 5,
+      status: "understood",
+      intervalDays: 10,
+      easinessFactor: 2.5,
+    });
+
+    const state = useQuizStore.getState();
+    expect(state.results[0].correct).toBe(false);
+    expect(state.results[0].isOverridden).toBe(true);
+    expect(state.results[0].nextReviewDate).toBe("2027-06-20");
+    expect(state.results[0].originalValues).toEqual({
+      quality: 5,
+      status: "understood",
+      intervalDays: 10,
+      easinessFactor: 2.5,
+    });
+  });
+
+  it("undoOverrideResult restores correct and clears isOverridden", () => {
+    useQuizStore.getState().submitResult(mockResult);
+
+    // First override
+    useQuizStore.getState().overrideResult(0, "standard", "2027-06-20", {
+      quality: 5,
+      status: "understood",
+      intervalDays: 10,
+      easinessFactor: 2.5,
+    });
+
+    // Then undo
+    useQuizStore.getState().undoOverrideResult(0, "standard", true, "2027-06-15");
+
+    const state = useQuizStore.getState();
+    expect(state.results[0].correct).toBe(true);
+    expect(state.results[0].isOverridden).toBe(false);
+    expect(state.results[0].nextReviewDate).toBe("2027-06-15");
+    expect(state.results[0].originalValues).toBeUndefined();
+  });
+
+  it("skipResult sets isSkipped", () => {
+    useQuizStore.getState().submitResult(mockResult);
+
+    useQuizStore.getState().skipResult(0, "standard");
+
+    const state = useQuizStore.getState();
+    expect(state.results[0].isSkipped).toBe(true);
+  });
+
+  it("updateResultReviewDate updates nextReviewDate", () => {
+    useQuizStore.getState().submitResult(mockResult);
+
+    useQuizStore.getState().updateResultReviewDate(0, "standard", "2027-12-25");
+
+    const state = useQuizStore.getState();
+    expect(state.results[0].nextReviewDate).toBe("2027-12-25");
+  });
+
   it("reset clears all fields to initial state", () => {
     useQuizStore.getState().setFlashcards(mockFlashcards);
     useQuizStore.getState().submitResult(mockResult);

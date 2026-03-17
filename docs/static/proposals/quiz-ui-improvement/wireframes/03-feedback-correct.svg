@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 820" width="375" height="820">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .word { font-size: 24px; font-weight: 700; fill: #111; }
+      .progress { font-size: 13px; fill: #666; }
+      .btn-text { font-size: 14px; font-weight: 600; fill: #fff; }
+      .btn-outline-red { font-size: 14px; font-weight: 600; fill: #dc2626; }
+      .btn-outline-gray { font-size: 14px; font-weight: 600; fill: #333; }
+      .correct { font-size: 16px; font-weight: 600; fill: #16a34a; }
+      .meaning { font-size: 15px; fill: #333; }
+      .example { font-size: 13px; fill: #555; font-style: italic; }
+      .label { font-size: 12px; fill: #999; font-weight: 500; }
+      .answer { font-size: 14px; fill: #333; }
+      .review-date { font-size: 14px; fill: #333; }
+      .change-link { font-size: 12px; fill: #2563eb; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="820" fill="#f8f9fa"/>
+
+  <!-- Status bar -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Progress -->
+  <text x="24" y="72" class="progress">3 / 25</text>
+  <rect x="24" y="82" width="327" height="4" rx="2" fill="#e5e7eb"/>
+  <rect x="24" y="82" width="39" height="4" rx="2" fill="#2563eb"/>
+
+  <!-- Word -->
+  <text x="187" y="130" text-anchor="middle" class="word">break the ice</text>
+
+  <!-- Correct indicator -->
+  <rect x="24" y="150" width="327" height="44" rx="8" fill="#f0fdf4"/>
+  <text x="44" y="178" class="correct">✓ Correct</text>
+
+  <!-- Your answer -->
+  <text x="24" y="224" class="answer">Your answer: to start a conversation</text>
+
+  <!-- Meaning -->
+  <text x="24" y="260" class="label">Meaning</text>
+  <text x="24" y="280" class="meaning">to initiate conversation in a social setting</text>
+
+  <!-- Examples -->
+  <text x="24" y="316" class="label">Examples</text>
+  <text x="24" y="336" class="example">Alice: "She told a joke to break the ice</text>
+  <text x="24" y="354" class="example">at the party."</text>
+
+  <!-- Next review date box -->
+  <rect x="24" y="378" width="327" height="52" rx="8" fill="#f0f9ff" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="40" y="402" class="review-date">Next review: April 2, 2026</text>
+  <text x="310" y="418" text-anchor="end" class="change-link">Change</text>
+
+  <!-- Next button (primary) -->
+  <rect x="24" y="450" width="327" height="44" rx="8" fill="#2563eb"/>
+  <text x="187" y="478" text-anchor="middle" class="btn-text">Next</text>
+
+  <!-- Mark as Incorrect button (outline, red) -->
+  <rect x="24" y="510" width="327" height="44" rx="8" fill="#fff" stroke="#dc2626" stroke-width="2"/>
+  <text x="187" y="538" text-anchor="middle" class="btn-outline-red">Mark as Incorrect</text>
+
+  <!-- Skip button (outline) -->
+  <rect x="24" y="568" width="327" height="44" rx="8" fill="#fff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="187" y="596" text-anchor="middle" class="btn-outline-gray">Skip</text>
+</svg>

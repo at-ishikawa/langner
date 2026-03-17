@@ -12,8 +12,9 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient } from "@/lib/client";
+import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
+import { FeedbackActions } from "@/components/FeedbackActions";
 
 type QuizPhase = "answering" | "synonym-retry" | "feedback";
 
@@ -23,6 +24,8 @@ interface FeedbackData {
   meaning: string;
   reason: string;
   contexts: string[];
+  nextReviewDate?: string;
+  learnedAt?: string;
 }
 
 export default function ReverseQuizPage() {
@@ -31,6 +34,7 @@ export default function ReverseQuizPage() {
   const quizType = useQuizStore((s) => s.quizType);
   const currentIndex = useQuizStore((s) => s.currentIndex);
   const storeSubmitResult = useQuizStore((s) => s.submitReverseResult);
+  const storeSkipResult = useQuizStore((s) => s.skipResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
@@ -40,6 +44,15 @@ export default function ReverseQuizPage() {
   const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [overridden, setOverridden] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const [displayCorrect, setDisplayCorrect] = useState(false);
+  const [overrideOriginals, setOverrideOriginals] = useState<{
+    quality: number;
+    status: string;
+    intervalDays: number;
+    easinessFactor: number;
+  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -56,6 +69,10 @@ export default function ReverseQuizPage() {
     setSubmittedAnswer("");
     setSynonymAnswer("");
     setFeedback(null);
+    setOverridden(false);
+    setSkipped(false);
+    setDisplayCorrect(false);
+    setOverrideOriginals(null);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [currentIndex]);
 
@@ -104,7 +121,10 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
+      setDisplayCorrect(correct);
       storeSubmitResult({
         noteId: card.noteId,
         answer: isRetry ? `${synonymAnswer} -> ${userAnswer}` : userAnswer,
@@ -116,6 +136,8 @@ export default function ReverseQuizPage() {
           : res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -146,7 +168,10 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
+      setDisplayCorrect(false);
       storeSubmitResult({
         noteId: card.noteId,
         answer: "(skipped)",
@@ -156,6 +181,8 @@ export default function ReverseQuizPage() {
         reason: res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -307,23 +334,62 @@ export default function ReverseQuizPage() {
             </Box>
           ) : feedback ? (
             <>
+              {/* 1. Correct/Incorrect indicator with override/undo labels */}
               <Box
                 p={3}
                 borderRadius="md"
-                bg={feedback.correct ? "green.100" : "red.100"}
-                color={feedback.correct ? "green.800" : "red.800"}
+                bg={displayCorrect ? "green.100" : "red.100"}
+                color={displayCorrect ? "green.800" : "red.800"}
                 _dark={{
-                  bg: feedback.correct ? "green.900" : "red.900",
-                  color: feedback.correct ? "green.200" : "red.200",
+                  bg: displayCorrect ? "green.900" : "red.900",
+                  color: displayCorrect ? "green.200" : "red.200",
                 }}
+                display="flex"
+                justifyContent="space-between"
+                alignItems="center"
               >
                 <Text fontWeight="bold">
-                  {feedback.correct ? "\u2713 Correct" : "\u2717 Incorrect"}
+                  {displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}
+                  {overridden && (
+                    <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
+                  )}
                 </Text>
+                {overridden && (
+                  <Text
+                    as="span"
+                    fontSize="sm"
+                    cursor="pointer"
+                    textDecoration="underline"
+                    onClick={async () => {
+                      try {
+                        const res = await quizClient.undoOverrideAnswer({
+                          noteId: card.noteId,
+                          quizType: ProtoQuizType.REVERSE,
+                          learnedAt: feedback.learnedAt!,
+                          originalQuality: overrideOriginals?.quality ?? 0,
+                          originalStatus: overrideOriginals?.status ?? "",
+                          originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                          originalEasinessFactor: overrideOriginals?.easinessFactor ?? 0,
+                        });
+                        setOverridden(false);
+                        setOverrideOriginals(null);
+                        setDisplayCorrect(res.correct);
+                        setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
+                      } catch {
+                        setOverridden(false);
+                        setOverrideOriginals(null);
+                        setDisplayCorrect(feedback.correct);
+                      }
+                    }}
+                  >
+                    Undo
+                  </Text>
+                )}
               </Box>
 
+              {/* 2. Your answer */}
               {submittedAnswer ? (
-                <Text textDecoration={feedback.correct ? "none" : "line-through"}>
+                <Text textDecoration={displayCorrect ? "none" : "line-through"}>
                   Your answer: {submittedAnswer}
                 </Text>
               ) : (
@@ -332,6 +398,7 @@ export default function ReverseQuizPage() {
                 </Text>
               )}
 
+              {/* 3. Meaning, reason, examples */}
               <Box>
                 <Text fontWeight="bold">Word</Text>
                 <Text fontStyle="italic">{feedback.expression}</Text>
@@ -357,13 +424,53 @@ export default function ReverseQuizPage() {
                 </Box>
               )}
 
-              <Button
-                w="full"
-                colorPalette="blue"
-                onClick={handleNext}
-              >
-                {currentIndex + 1 >= total ? "See Results" : "Next"}
-              </Button>
+              {/* 4-7. Next review date, Next button, Override, Skip */}
+              <FeedbackActions
+                isCorrect={displayCorrect}
+                noteId={card.noteId}
+                nextReviewDate={feedback.nextReviewDate}
+                isOverridden={overridden}
+                isSkipped={skipped}
+                nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
+                onNext={handleNext}
+                onOverride={async () => {
+                  try {
+                    const res = await quizClient.overrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.REVERSE,
+                      learnedAt: feedback.learnedAt!,
+                      markCorrect: !displayCorrect,
+                    });
+                    setOverridden(true);
+                    setDisplayCorrect(!displayCorrect);
+                    setOverrideOriginals({
+                      quality: res.originalQuality,
+                      status: res.originalStatus,
+                      intervalDays: res.originalIntervalDays,
+                      easinessFactor: res.originalEasinessFactor,
+                    });
+                    setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
+                  } catch { /* silently fail */ }
+                }}
+                onSkip={async () => {
+                  try {
+                    await quizClient.skipWord({ noteId: card.noteId });
+                    setSkipped(true);
+                    storeSkipResult(currentIndex, "reverse");
+                  } catch { /* silently fail */ }
+                }}
+                onChangeReviewDate={async (newDate) => {
+                  try {
+                    await quizClient.overrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.REVERSE,
+                      learnedAt: feedback.learnedAt!,
+                      nextReviewDate: newDate,
+                    });
+                    setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
+                  } catch { /* silently fail */ }
+                }}
+              />
             </>
           ) : error ? (
             <>

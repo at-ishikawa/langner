@@ -118,6 +118,11 @@ func FilterFlashcardNotebooks(
 				return nil, fmt.Errorf("empty card.Expression: %v in flashcard notebook %s", card, notebook.Title)
 			}
 
+			// Skip words that are marked as skipped in learning history
+			if isExpressionSkipped(learningHistory, notebook.Title, "", card) {
+				continue
+			}
+
 			// Check if card needs to be learned based on spaced repetition
 			if !card.needsToLearn() {
 				continue

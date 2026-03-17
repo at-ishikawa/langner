@@ -66,6 +66,7 @@ message NotebookWord {
   double easiness_factor = 11;
   string next_review_date = 12;
   string origin = 13;
+  bool is_skipped = 14;
 }
 
 message LearningLogEntry {

@@ -30,7 +30,17 @@ export type {
   StartFreeformQuizResponse,
   SubmitFreeformAnswerRequest,
   SubmitFreeformAnswerResponse,
+  OverrideAnswerRequest,
+  OverrideAnswerResponse,
+  UndoOverrideAnswerRequest,
+  UndoOverrideAnswerResponse,
+  SkipWordRequest,
+  SkipWordResponse,
+  ResumeWordRequest,
+  ResumeWordResponse,
 } from "@/gen-protos/api/v1/quiz_pb";
+
+export { QuizType } from "@/gen-protos/api/v1/quiz_pb";
 
 export type {
   GetNotebookDetailResponse,

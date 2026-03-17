@@ -397,6 +397,7 @@ type NotebookWord struct {
 	EasinessFactor float64                `protobuf:"fixed64,11,opt,name=easiness_factor,json=easinessFactor,proto3" json:"easiness_factor,omitempty"`
 	NextReviewDate string                 `protobuf:"bytes,12,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	Origin         string                 `protobuf:"bytes,13,opt,name=origin,proto3" json:"origin,omitempty"`
+	IsSkipped      bool                   `protobuf:"varint,14,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -520,6 +521,13 @@ func (x *NotebookWord) GetOrigin() string {
 		return x.Origin
 	}
 	return ""
+}
+
+func (x *NotebookWord) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
 }
 
 type LearningLogEntry struct {
@@ -1180,7 +1188,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"statements\">\n" +
 	"\fConversation\x12\x18\n" +
 	"\aspeaker\x18\x01 \x01(\tR\aspeaker\x12\x14\n" +
-	"\x05quote\x18\x02 \x01(\tR\x05quote\"\xd9\x03\n" +
+	"\x05quote\x18\x02 \x01(\tR\x05quote\"\xf8\x03\n" +
 	"\fNotebookWord\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -1199,7 +1207,9 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	" \x03(\v2\x18.api.v1.LearningLogEntryR\vlearnedLogs\x12'\n" +
 	"\x0feasiness_factor\x18\v \x01(\x01R\x0eeasinessFactor\x12(\n" +
 	"\x10next_review_date\x18\f \x01(\tR\x0enextReviewDate\x12\x16\n" +
-	"\x06origin\x18\r \x01(\tR\x06origin\"\xcf\x01\n" +
+	"\x06origin\x18\r \x01(\tR\x06origin\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x0e \x01(\bR\tisSkipped\"\xcf\x01\n" +
 	"\x10LearningLogEntry\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1d\n" +
 	"\n" +

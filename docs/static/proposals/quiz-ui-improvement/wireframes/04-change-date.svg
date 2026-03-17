@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 300" width="375" height="300">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .label { font-size: 14px; fill: #333; font-weight: 500; }
+      .date-text { font-size: 14px; fill: #333; }
+      .date-muted { font-size: 12px; fill: #999; }
+      .btn-text { font-size: 14px; font-weight: 600; fill: #fff; }
+      .btn-cancel-text { font-size: 14px; font-weight: 500; fill: #666; }
+      .change-link { font-size: 12px; fill: #2563eb; }
+      .review-date { font-size: 14px; fill: #333; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="300" fill="#f8f9fa"/>
+
+  <!-- Before state -->
+  <text x="24" y="30" class="label">Before clicking "Change":</text>
+  <rect x="24" y="44" width="327" height="52" rx="8" fill="#f0f9ff" stroke="#bfdbfe" stroke-width="1"/>
+  <text x="40" y="68" class="review-date">Next review: March 16, 2026</text>
+  <text x="310" y="84" text-anchor="end" class="change-link">Change</text>
+
+  <!-- Arrow -->
+  <text x="187" y="120" text-anchor="middle" class="date-muted">↓ after clicking "Change"</text>
+
+  <!-- Date picker popover -->
+  <rect x="24" y="136" width="327" height="120" rx="8" fill="#fff" stroke="#e5e7eb" stroke-width="1"/>
+  <text x="40" y="162" class="label">Pick a new review date:</text>
+
+  <!-- Date input -->
+  <rect x="40" y="174" width="240" height="36" rx="6" fill="#fff" stroke="#d1d5db" stroke-width="1"/>
+  <text x="52" y="198" class="date-text">2026-03-20</text>
+
+  <!-- Calendar icon -->
+  <rect x="290" y="174" width="36" height="36" rx="6" fill="#f3f4f6" stroke="#d1d5db" stroke-width="1"/>
+  <text x="308" y="198" text-anchor="middle" class="date-text">📅</text>
+
+  <!-- Cancel button -->
+  <rect x="136" y="222" width="72" height="28" rx="6" fill="#f3f4f6"/>
+  <text x="172" y="241" text-anchor="middle" class="btn-cancel-text">Cancel</text>
+
+  <!-- Save button -->
+  <rect x="216" y="222" width="72" height="28" rx="6" fill="#2563eb"/>
+  <text x="252" y="241" text-anchor="middle" class="btn-text">Save</text>
+
+  <!-- After state hint -->
+  <text x="24" y="284" class="date-muted">After saving: date updates inline, shows "(changed from March 16)"</text>
+</svg>

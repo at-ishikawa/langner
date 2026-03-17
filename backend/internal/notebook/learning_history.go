@@ -81,7 +81,8 @@ type LearningRecord struct {
 	Quality        int           `yaml:"quality,omitempty"`          // 0-5 grade
 	ResponseTimeMs int64         `yaml:"response_time_ms,omitempty"` // milliseconds
 	QuizType       string        `yaml:"quiz_type,omitempty"`        // "freeform" or "notebook"
-	IntervalDays   int           `yaml:"interval_days,omitempty"`    // days until next review
+	IntervalDays     int           `yaml:"interval_days,omitempty"`      // days until next review
+	OverrideInterval int           `yaml:"override_interval,omitempty"` // manually-set interval (non-zero = user override)
 }
 
 type LearningHistoryExpression struct {
@@ -92,6 +93,8 @@ type LearningHistoryExpression struct {
 	// Reverse quiz fields - track separately from regular quiz
 	ReverseLogs           []LearningRecord `yaml:"reverse_logs,omitempty"`
 	ReverseEasinessFactor float64          `yaml:"reverse_easiness_factor,omitempty"` // default 2.5
+
+	SkippedAt string `yaml:"skipped_at,omitempty"` // RFC3339 date when skipped
 }
 
 func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
@@ -251,6 +254,34 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 	}
 
 	exp.LearnedLogs = append([]LearningRecord{newRecord}, exp.LearnedLogs...)
+}
+
+// IsExpressionSkipped checks if a note is marked as skipped in the learning history.
+func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition string) bool {
+	for _, hist := range histories {
+		if hist.Metadata.Title != event {
+			continue
+		}
+		if hist.Metadata.Type == "flashcard" {
+			for _, expr := range hist.Expressions {
+				if expr.Expression == expression || expr.Expression == definition {
+					return expr.SkippedAt != ""
+				}
+			}
+			continue
+		}
+		for _, scene := range hist.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if expr.Expression == expression || expr.Expression == definition {
+					return expr.SkippedAt != ""
+				}
+			}
+		}
+	}
+	return false
 }
 
 // Validate validates a LearningHistoryExpression

@@ -580,6 +580,11 @@ func (s *Service) loadStoryReverseCards(
 					expression = definition.Definition
 				}
 
+				// Skip words marked as skipped
+				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition) {
+					continue
+				}
+
 				contexts := buildReverseContexts(&scene, &definition)
 
 				if listMissingContext {
@@ -633,6 +638,11 @@ func (s *Service) loadFlashcardReverseCards(
 			expression := card.Expression
 			if card.Definition != "" {
 				expression = card.Definition
+			}
+
+			// Skip words marked as skipped
+			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card) {
+				continue
 			}
 
 			var contexts []ReverseContext
@@ -888,10 +898,20 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 		return nil, err
 	}
 
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
 	var cards []FreeformCard
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
+				// Skip words marked as skipped
+				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition) {
+					continue
+				}
+
 				expression := definition.Expression
 				if definition.Definition != "" {
 					expression = definition.Definition
@@ -929,9 +949,19 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string)
 		return nil, err
 	}
 
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
 	var cards []FreeformCard
 	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
+			// Skip words marked as skipped
+			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card) {
+				continue
+			}
+
 			expression := card.Expression
 			if card.Definition != "" {
 				expression = card.Definition
@@ -1144,4 +1174,133 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 		}
 	}
 	return matches
+}
+
+// OverrideAnswer overrides a learning log entry in the YAML learning history.
+func (s *Service) OverrideAnswer(
+	notebookName, expression string,
+	quizType notebook.QuizType,
+	learnedAt string,
+	markCorrect *bool,
+	nextReviewDate string,
+) (originalQuality int, originalStatus string, originalIntervalDays int, originalEF float64, newNextReview string, err error) {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return 0, "", 0, 0, "", fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
+	oq, os, oid, oef, nnr, found := updater.OverrideLog(expression, quizType, learnedAt, markCorrect, nextReviewDate)
+	if !found {
+		return 0, "", 0, 0, "", fmt.Errorf("learning log entry not found for expression %q at %s", expression, learnedAt)
+	}
+
+	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return 0, "", 0, 0, "", fmt.Errorf("failed to save learning history: %w", err)
+	}
+
+	return oq, os, oid, oef, nnr, nil
+}
+
+// UndoOverrideAnswer restores original values for a learning log entry.
+func (s *Service) UndoOverrideAnswer(
+	notebookName, expression string,
+	quizType notebook.QuizType,
+	learnedAt string,
+	originalQuality int,
+	originalStatus string,
+	originalIntervalDays int,
+	originalEF float64,
+) (correct bool, nextReview string, err error) {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return false, "", fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
+	correct, nextReview, found := updater.UndoOverrideLog(expression, quizType, learnedAt, originalQuality, originalStatus, originalIntervalDays, originalEF)
+	if !found {
+		return false, "", fmt.Errorf("learning log entry not found for expression %q at %s", expression, learnedAt)
+	}
+
+	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return false, "", fmt.Errorf("failed to save learning history: %w", err)
+	}
+
+	return correct, nextReview, nil
+}
+
+// SkipWord marks a word as skipped in the YAML learning history.
+func (s *Service) SkipWord(notebookName, expression string) error {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
+	skippedAt := time.Now().Format(time.RFC3339)
+	if !updater.SetSkippedAt(expression, skippedAt) {
+		return fmt.Errorf("expression %q not found in learning history for notebook %q", expression, notebookName)
+	}
+
+	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return fmt.Errorf("failed to save learning history: %w", err)
+	}
+
+	return nil
+}
+
+// ResumeWord clears the skipped status for a word in the YAML learning history.
+func (s *Service) ResumeWord(notebookName, expression string) error {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
+	if !updater.ClearSkippedAt(expression) {
+		return fmt.Errorf("expression %q not found in learning history for notebook %q", expression, notebookName)
+	}
+
+	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return fmt.Errorf("failed to save learning history: %w", err)
+	}
+
+	return nil
+}
+
+// GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log
+// of a given expression in a specific notebook.
+func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return "", ""
+	}
+
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
+	expr := updater.FindExpressionByName(expression)
+	if expr == nil {
+		return "", ""
+	}
+
+	logs := expr.GetLogsForQuizType(quizType)
+	if len(logs) == 0 {
+		return "", ""
+	}
+
+	latest := logs[0]
+	learnedAt = latest.LearnedAt.Format("2006-01-02")
+	if latest.IntervalDays > 0 {
+		nextReviewDate = latest.LearnedAt.AddDate(0, 0, latest.IntervalDays).Format("2006-01-02")
+	}
+	return learnedAt, nextReviewDate
+}
+
+// isExpressionSkippedInHistory checks if a note is marked as skipped in the learning history.
+func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note) bool {
+	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition)
 }

@@ -21,6 +21,10 @@ service QuizService {
   rpc SubmitReverseAnswer(SubmitReverseAnswerRequest) returns (SubmitReverseAnswerResponse);
   rpc StartFreeformQuiz(StartFreeformQuizRequest) returns (StartFreeformQuizResponse);
   rpc SubmitFreeformAnswer(SubmitFreeformAnswerRequest) returns (SubmitFreeformAnswerResponse);
+  rpc OverrideAnswer(OverrideAnswerRequest) returns (OverrideAnswerResponse);
+  rpc UndoOverrideAnswer(UndoOverrideAnswerRequest) returns (UndoOverrideAnswerResponse);
+  rpc SkipWord(SkipWordRequest) returns (SkipWordResponse);
+  rpc ResumeWord(ResumeWordRequest) returns (ResumeWordResponse);
 }
 
 message GetQuizOptionsRequest {}
@@ -86,6 +90,8 @@ message SubmitAnswerResponse {
   string meaning = 2;
   string reason = 3;
   WordDetail word_detail = 4;
+  string next_review_date = 5;
+  string learned_at = 6;
 }
 
 message StartReverseQuizRequest {
@@ -134,6 +140,8 @@ message SubmitReverseAnswerResponse {
   repeated string contexts = 5;
   WordDetail word_detail = 6;
   string classification = 7;
+  string next_review_date = 8;
+  string learned_at = 9;
 }
 
 message StartFreeformQuizRequest {}
@@ -168,4 +176,65 @@ message SubmitFreeformAnswerResponse {
   string context = 5;
   string notebook_name = 6;
   WordDetail word_detail = 7;
+  string next_review_date = 8;
+  string learned_at = 9;
 }
+
+// Override Answer
+message OverrideAnswerRequest {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  QuizType quiz_type = 2;
+  string learned_at = 3 [
+    (buf.validate.field).string.min_len = 10
+  ];
+  optional bool mark_correct = 4;
+  optional string next_review_date = 5;
+}
+
+message OverrideAnswerResponse {
+  string next_review_date = 1;
+  int32 original_quality = 2;
+  string original_status = 3;
+  int32 original_interval_days = 4;
+  double original_easiness_factor = 5;
+}
+
+// Undo Override Answer
+message UndoOverrideAnswerRequest {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  QuizType quiz_type = 2;
+  string learned_at = 3 [
+    (buf.validate.field).string.min_len = 10
+  ];
+  int32 original_quality = 4;
+  string original_status = 5;
+  int32 original_interval_days = 6;
+  double original_easiness_factor = 7;
+}
+
+message UndoOverrideAnswerResponse {
+  bool correct = 1;
+  string next_review_date = 2;
+}
+
+// Skip Word
+message SkipWordRequest {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+}
+
+message SkipWordResponse {}
+
+// Resume Skipped Word
+message ResumeWordRequest {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+}
+
+message ResumeWordResponse {}

@@ -289,6 +289,138 @@ describe("NotebookDetailPage — story detail (story notebook)", () => {
   });
 });
 
+describe("NotebookDetailPage — filtered word counts", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  const notebookWithSkipped = {
+    notebookId: "nb-1",
+    name: "Business English",
+    totalWordCount: 3,
+    stories: [
+      {
+        event: "Lesson 1",
+        metadata: { series: "", season: 0, episode: 0 },
+        date: "",
+        scenes: [
+          {
+            title: "Scene A",
+            statements: [],
+            conversations: [],
+            definitions: [
+              {
+                expression: "break the ice",
+                definition: "",
+                meaning: "to initiate social interaction",
+                partOfSpeech: "idiom",
+                pronunciation: "",
+                examples: [],
+                synonyms: [],
+                antonyms: [],
+                learningStatus: "understood",
+                learnedLogs: [],
+                easinessFactor: 2.5,
+                nextReviewDate: "",
+                isSkipped: true,
+              },
+              {
+                expression: "lose one's temper",
+                definition: "",
+                meaning: "to become angry",
+                partOfSpeech: "idiom",
+                pronunciation: "",
+                examples: [],
+                synonyms: [],
+                antonyms: [],
+                learningStatus: "misunderstood",
+                learnedLogs: [],
+                easinessFactor: 2.5,
+                nextReviewDate: "",
+                isSkipped: false,
+              },
+              {
+                expression: "call it a day",
+                definition: "",
+                meaning: "to stop working",
+                partOfSpeech: "idiom",
+                pronunciation: "",
+                examples: [],
+                synonyms: [],
+                antonyms: [],
+                learningStatus: "understood",
+                learnedLogs: [],
+                easinessFactor: 2.5,
+                nextReviewDate: "",
+                isSkipped: false,
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  };
+
+  it("shows total word count when no filter is active", async () => {
+    vi.mocked(client.notebookClient.getNotebookDetail).mockResolvedValue(notebookWithSkipped);
+    renderPage();
+    await waitFor(() => {
+      expect(screen.getAllByText("3 words").length).toBeGreaterThan(0);
+    });
+  });
+
+  it("shows filtered word count in header when filter is active", async () => {
+    vi.mocked(client.notebookClient.getNotebookDetail).mockResolvedValue(notebookWithSkipped);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Business English")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "skipped" } });
+
+    await waitFor(() => {
+      // Header and story row both show "1 words" (filtered count only)
+      expect(screen.getAllByText("1 words").length).toBeGreaterThan(0);
+      // Should NOT show ratio format like "1/3"
+      const allText = document.body.textContent ?? "";
+      expect(allText).not.toContain("1/3");
+    });
+  });
+
+  it("shows filtered word count per story when filter is active", async () => {
+    vi.mocked(client.notebookClient.getNotebookDetail).mockResolvedValue(notebookWithSkipped);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Lesson 1")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "skipped" } });
+
+    await waitFor(() => {
+      // Should show "1 words" (filtered count only), not "1/3 words"
+      const wordsCounts = screen.getAllByText(/words/);
+      const hasFilteredOnly = wordsCounts.some((el) => el.textContent === "1 words");
+      expect(hasFilteredOnly).toBe(true);
+      const hasRatio = wordsCounts.some((el) => el.textContent?.includes("/3"));
+      expect(hasRatio).toBe(false);
+    });
+  });
+
+  it("shows filtered word count per scene when filter is active", async () => {
+    vi.mocked(client.notebookClient.getNotebookDetail).mockResolvedValue(notebookWithSkipped);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("Lesson 1")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText("Lesson 1"));
+
+    await waitFor(() => expect(screen.getByText("Scene A")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByRole("combobox"), { target: { value: "skipped" } });
+
+    await waitFor(() => {
+      const wordsCounts = screen.getAllByText(/words/);
+      const hasFilteredOnly = wordsCounts.some((el) => el.textContent === "1 words");
+      expect(hasFilteredOnly).toBe(true);
+      const hasRatio = wordsCounts.some((el) => el.textContent?.includes("/3"));
+      expect(hasRatio).toBe(false);
+    });
+  });
+});
+
 describe("NotebookDetailPage — story detail (flashcard notebook)", () => {
   beforeEach(() => vi.clearAllMocks());
 

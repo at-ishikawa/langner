@@ -1,6 +1,9 @@
 package notebook
 
-import "strings"
+import (
+	"strings"
+	"time"
+)
 
 // normalizeTitle normalizes a title for comparison by trimming whitespace
 // and normalizing internal whitespace (newlines, multiple spaces -> single space)
@@ -243,4 +246,167 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 		u.history[storyIndex].Scenes[sceneIndex].Expressions,
 		newExpression,
 	)
+}
+
+// FindExpressionByName searches for an expression across all histories, returning
+// a pointer to the expression. Returns nil if not found.
+func (u *LearningHistoryUpdater) FindExpressionByName(expression string) *LearningHistoryExpression {
+	for hi := range u.history {
+		h := &u.history[hi]
+		if h.Metadata.Type == "flashcard" {
+			for ei := range h.Expressions {
+				if strings.EqualFold(h.Expressions[ei].Expression, expression) {
+					return &h.Expressions[ei]
+				}
+			}
+			continue
+		}
+		for si := range h.Scenes {
+			for ei := range h.Scenes[si].Expressions {
+				if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, expression) {
+					return &h.Scenes[si].Expressions[ei]
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// OverrideLog finds a learning log by learnedAt date and quiz type, then overrides it.
+// Returns the original values for undo purposes.
+func (u *LearningHistoryUpdater) OverrideLog(
+	expression string,
+	quizType QuizType,
+	learnedAt string,
+	markCorrect *bool,
+	nextReviewDate string,
+) (originalQuality int, originalStatus string, originalIntervalDays int, originalEF float64, newNextReview string, found bool) {
+	expr := u.FindExpressionByName(expression)
+	if expr == nil {
+		return 0, "", 0, 0, "", false
+	}
+
+	logs := expr.GetLogsForQuizType(quizType)
+	for i, log := range logs {
+		if log.LearnedAt.Format("2006-01-02") != learnedAt && log.LearnedAt.Format(time.RFC3339) != learnedAt {
+			continue
+		}
+
+		originalQuality = log.Quality
+		originalStatus = string(log.Status)
+		originalIntervalDays = log.IntervalDays
+		originalEF = expr.GetEasinessFactorForQuizType(quizType)
+
+		if markCorrect != nil {
+			if *markCorrect {
+				logs[i].Quality = 3
+				logs[i].Status = learnedStatusUnderstood
+			} else {
+				logs[i].Quality = 1
+				logs[i].Status = LearnedStatusMisunderstood
+			}
+
+			// Recalculate interval and easiness factor
+			correctStreak := GetCorrectStreak(logs)
+			lastInterval := 0
+			if i+1 < len(logs) {
+				lastInterval = logs[i+1].IntervalDays
+			}
+			newEF := UpdateEasinessFactor(originalEF, logs[i].Quality, correctStreak)
+			newInterval := CalculateNextInterval(lastInterval, newEF, logs[i].Quality, correctStreak)
+			logs[i].IntervalDays = newInterval
+
+			if quizType == QuizTypeReverse {
+				expr.ReverseEasinessFactor = newEF
+			} else {
+				expr.EasinessFactor = newEF
+			}
+		}
+
+		if nextReviewDate != "" {
+			nextDate, err := time.Parse("2006-01-02", nextReviewDate)
+			if err == nil {
+				intervalDays := int(nextDate.Sub(log.LearnedAt.Time).Hours() / 24)
+				if intervalDays < 1 {
+					intervalDays = 1
+				}
+				logs[i].IntervalDays = intervalDays
+				logs[i].OverrideInterval = intervalDays
+			}
+		}
+
+		// Write back the logs
+		if quizType == QuizTypeReverse {
+			expr.ReverseLogs = logs
+		} else {
+			expr.LearnedLogs = logs
+		}
+
+		newNextReview = logs[i].LearnedAt.AddDate(0, 0, logs[i].IntervalDays).Format("2006-01-02")
+		return originalQuality, originalStatus, originalIntervalDays, originalEF, newNextReview, true
+	}
+
+	return 0, "", 0, 0, "", false
+}
+
+// UndoOverrideLog restores original values for a learning log entry.
+func (u *LearningHistoryUpdater) UndoOverrideLog(
+	expression string,
+	quizType QuizType,
+	learnedAt string,
+	originalQuality int,
+	originalStatus string,
+	originalIntervalDays int,
+	originalEF float64,
+) (correct bool, nextReview string, found bool) {
+	expr := u.FindExpressionByName(expression)
+	if expr == nil {
+		return false, "", false
+	}
+
+	logs := expr.GetLogsForQuizType(quizType)
+	for i, log := range logs {
+		if log.LearnedAt.Format("2006-01-02") != learnedAt && log.LearnedAt.Format(time.RFC3339) != learnedAt {
+			continue
+		}
+
+		logs[i].Quality = originalQuality
+		logs[i].Status = LearnedStatus(originalStatus)
+		logs[i].IntervalDays = originalIntervalDays
+		logs[i].OverrideInterval = 0
+
+		if quizType == QuizTypeReverse {
+			expr.ReverseEasinessFactor = originalEF
+			expr.ReverseLogs = logs
+		} else {
+			expr.EasinessFactor = originalEF
+			expr.LearnedLogs = logs
+		}
+
+		correct = logs[i].Quality >= 3
+		nextReview = logs[i].LearnedAt.AddDate(0, 0, logs[i].IntervalDays).Format("2006-01-02")
+		return correct, nextReview, true
+	}
+
+	return false, "", false
+}
+
+// SetSkippedAt sets the skipped_at field on an expression.
+func (u *LearningHistoryUpdater) SetSkippedAt(expression string, skippedAt string) bool {
+	expr := u.FindExpressionByName(expression)
+	if expr == nil {
+		return false
+	}
+	expr.SkippedAt = skippedAt
+	return true
+}
+
+// ClearSkippedAt clears the skipped_at field on an expression.
+func (u *LearningHistoryUpdater) ClearSkippedAt(expression string) bool {
+	expr := u.FindExpressionByName(expression)
+	if expr == nil {
+		return false
+	}
+	expr.SkippedAt = ""
+	return true
 }

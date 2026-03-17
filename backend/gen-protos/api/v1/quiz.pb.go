@@ -583,13 +583,15 @@ func (x *SubmitAnswerRequest) GetResponseTimeMs() int64 {
 }
 
 type SubmitAnswerResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Correct       bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
-	Meaning       string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	Reason        string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	WordDetail    *WordDetail            `protobuf:"bytes,4,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Correct        bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
+	Meaning        string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Reason         string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	WordDetail     *WordDetail            `protobuf:"bytes,4,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
+	NextReviewDate string                 `protobuf:"bytes,5,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	LearnedAt      string                 `protobuf:"bytes,6,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SubmitAnswerResponse) Reset() {
@@ -648,6 +650,20 @@ func (x *SubmitAnswerResponse) GetWordDetail() *WordDetail {
 		return x.WordDetail
 	}
 	return nil
+}
+
+func (x *SubmitAnswerResponse) GetNextReviewDate() string {
+	if x != nil {
+		return x.NextReviewDate
+	}
+	return ""
+}
+
+func (x *SubmitAnswerResponse) GetLearnedAt() string {
+	if x != nil {
+		return x.LearnedAt
+	}
+	return ""
 }
 
 type StartReverseQuizRequest struct {
@@ -951,6 +967,8 @@ type SubmitReverseAnswerResponse struct {
 	Contexts       []string               `protobuf:"bytes,5,rep,name=contexts,proto3" json:"contexts,omitempty"`
 	WordDetail     *WordDetail            `protobuf:"bytes,6,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
 	Classification string                 `protobuf:"bytes,7,opt,name=classification,proto3" json:"classification,omitempty"`
+	NextReviewDate string                 `protobuf:"bytes,8,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1030,6 +1048,20 @@ func (x *SubmitReverseAnswerResponse) GetWordDetail() *WordDetail {
 func (x *SubmitReverseAnswerResponse) GetClassification() string {
 	if x != nil {
 		return x.Classification
+	}
+	return ""
+}
+
+func (x *SubmitReverseAnswerResponse) GetNextReviewDate() string {
+	if x != nil {
+		return x.NextReviewDate
+	}
+	return ""
+}
+
+func (x *SubmitReverseAnswerResponse) GetLearnedAt() string {
+	if x != nil {
+		return x.LearnedAt
 	}
 	return ""
 }
@@ -1191,16 +1223,18 @@ func (x *SubmitFreeformAnswerRequest) GetResponseTimeMs() int64 {
 }
 
 type SubmitFreeformAnswerResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Correct       bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
-	Word          string                 `protobuf:"bytes,2,opt,name=word,proto3" json:"word,omitempty"`
-	Meaning       string                 `protobuf:"bytes,3,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
-	Context       string                 `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
-	NotebookName  string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
-	WordDetail    *WordDetail            `protobuf:"bytes,7,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Correct        bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
+	Word           string                 `protobuf:"bytes,2,opt,name=word,proto3" json:"word,omitempty"`
+	Meaning        string                 `protobuf:"bytes,3,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Reason         string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	Context        string                 `protobuf:"bytes,5,opt,name=context,proto3" json:"context,omitempty"`
+	NotebookName   string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	WordDetail     *WordDetail            `protobuf:"bytes,7,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
+	NextReviewDate string                 `protobuf:"bytes,8,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *SubmitFreeformAnswerResponse) Reset() {
@@ -1282,6 +1316,480 @@ func (x *SubmitFreeformAnswerResponse) GetWordDetail() *WordDetail {
 	return nil
 }
 
+func (x *SubmitFreeformAnswerResponse) GetNextReviewDate() string {
+	if x != nil {
+		return x.NextReviewDate
+	}
+	return ""
+}
+
+func (x *SubmitFreeformAnswerResponse) GetLearnedAt() string {
+	if x != nil {
+		return x.LearnedAt
+	}
+	return ""
+}
+
+// Override Answer
+type OverrideAnswerRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	QuizType       QuizType               `protobuf:"varint,2,opt,name=quiz_type,json=quizType,proto3,enum=api.v1.QuizType" json:"quiz_type,omitempty"`
+	LearnedAt      string                 `protobuf:"bytes,3,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	MarkCorrect    *bool                  `protobuf:"varint,4,opt,name=mark_correct,json=markCorrect,proto3,oneof" json:"mark_correct,omitempty"`
+	NextReviewDate *string                `protobuf:"bytes,5,opt,name=next_review_date,json=nextReviewDate,proto3,oneof" json:"next_review_date,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *OverrideAnswerRequest) Reset() {
+	*x = OverrideAnswerRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OverrideAnswerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverrideAnswerRequest) ProtoMessage() {}
+
+func (x *OverrideAnswerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverrideAnswerRequest.ProtoReflect.Descriptor instead.
+func (*OverrideAnswerRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *OverrideAnswerRequest) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *OverrideAnswerRequest) GetQuizType() QuizType {
+	if x != nil {
+		return x.QuizType
+	}
+	return QuizType_QUIZ_TYPE_UNSPECIFIED
+}
+
+func (x *OverrideAnswerRequest) GetLearnedAt() string {
+	if x != nil {
+		return x.LearnedAt
+	}
+	return ""
+}
+
+func (x *OverrideAnswerRequest) GetMarkCorrect() bool {
+	if x != nil && x.MarkCorrect != nil {
+		return *x.MarkCorrect
+	}
+	return false
+}
+
+func (x *OverrideAnswerRequest) GetNextReviewDate() string {
+	if x != nil && x.NextReviewDate != nil {
+		return *x.NextReviewDate
+	}
+	return ""
+}
+
+type OverrideAnswerResponse struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	NextReviewDate         string                 `protobuf:"bytes,1,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	OriginalQuality        int32                  `protobuf:"varint,2,opt,name=original_quality,json=originalQuality,proto3" json:"original_quality,omitempty"`
+	OriginalStatus         string                 `protobuf:"bytes,3,opt,name=original_status,json=originalStatus,proto3" json:"original_status,omitempty"`
+	OriginalIntervalDays   int32                  `protobuf:"varint,4,opt,name=original_interval_days,json=originalIntervalDays,proto3" json:"original_interval_days,omitempty"`
+	OriginalEasinessFactor float64                `protobuf:"fixed64,5,opt,name=original_easiness_factor,json=originalEasinessFactor,proto3" json:"original_easiness_factor,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *OverrideAnswerResponse) Reset() {
+	*x = OverrideAnswerResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OverrideAnswerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OverrideAnswerResponse) ProtoMessage() {}
+
+func (x *OverrideAnswerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OverrideAnswerResponse.ProtoReflect.Descriptor instead.
+func (*OverrideAnswerResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *OverrideAnswerResponse) GetNextReviewDate() string {
+	if x != nil {
+		return x.NextReviewDate
+	}
+	return ""
+}
+
+func (x *OverrideAnswerResponse) GetOriginalQuality() int32 {
+	if x != nil {
+		return x.OriginalQuality
+	}
+	return 0
+}
+
+func (x *OverrideAnswerResponse) GetOriginalStatus() string {
+	if x != nil {
+		return x.OriginalStatus
+	}
+	return ""
+}
+
+func (x *OverrideAnswerResponse) GetOriginalIntervalDays() int32 {
+	if x != nil {
+		return x.OriginalIntervalDays
+	}
+	return 0
+}
+
+func (x *OverrideAnswerResponse) GetOriginalEasinessFactor() float64 {
+	if x != nil {
+		return x.OriginalEasinessFactor
+	}
+	return 0
+}
+
+// Undo Override Answer
+type UndoOverrideAnswerRequest struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	NoteId                 int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	QuizType               QuizType               `protobuf:"varint,2,opt,name=quiz_type,json=quizType,proto3,enum=api.v1.QuizType" json:"quiz_type,omitempty"`
+	LearnedAt              string                 `protobuf:"bytes,3,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	OriginalQuality        int32                  `protobuf:"varint,4,opt,name=original_quality,json=originalQuality,proto3" json:"original_quality,omitempty"`
+	OriginalStatus         string                 `protobuf:"bytes,5,opt,name=original_status,json=originalStatus,proto3" json:"original_status,omitempty"`
+	OriginalIntervalDays   int32                  `protobuf:"varint,6,opt,name=original_interval_days,json=originalIntervalDays,proto3" json:"original_interval_days,omitempty"`
+	OriginalEasinessFactor float64                `protobuf:"fixed64,7,opt,name=original_easiness_factor,json=originalEasinessFactor,proto3" json:"original_easiness_factor,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *UndoOverrideAnswerRequest) Reset() {
+	*x = UndoOverrideAnswerRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UndoOverrideAnswerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UndoOverrideAnswerRequest) ProtoMessage() {}
+
+func (x *UndoOverrideAnswerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UndoOverrideAnswerRequest.ProtoReflect.Descriptor instead.
+func (*UndoOverrideAnswerRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *UndoOverrideAnswerRequest) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *UndoOverrideAnswerRequest) GetQuizType() QuizType {
+	if x != nil {
+		return x.QuizType
+	}
+	return QuizType_QUIZ_TYPE_UNSPECIFIED
+}
+
+func (x *UndoOverrideAnswerRequest) GetLearnedAt() string {
+	if x != nil {
+		return x.LearnedAt
+	}
+	return ""
+}
+
+func (x *UndoOverrideAnswerRequest) GetOriginalQuality() int32 {
+	if x != nil {
+		return x.OriginalQuality
+	}
+	return 0
+}
+
+func (x *UndoOverrideAnswerRequest) GetOriginalStatus() string {
+	if x != nil {
+		return x.OriginalStatus
+	}
+	return ""
+}
+
+func (x *UndoOverrideAnswerRequest) GetOriginalIntervalDays() int32 {
+	if x != nil {
+		return x.OriginalIntervalDays
+	}
+	return 0
+}
+
+func (x *UndoOverrideAnswerRequest) GetOriginalEasinessFactor() float64 {
+	if x != nil {
+		return x.OriginalEasinessFactor
+	}
+	return 0
+}
+
+type UndoOverrideAnswerResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Correct        bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
+	NextReviewDate string                 `protobuf:"bytes,2,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *UndoOverrideAnswerResponse) Reset() {
+	*x = UndoOverrideAnswerResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[23]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UndoOverrideAnswerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UndoOverrideAnswerResponse) ProtoMessage() {}
+
+func (x *UndoOverrideAnswerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[23]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UndoOverrideAnswerResponse.ProtoReflect.Descriptor instead.
+func (*UndoOverrideAnswerResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{23}
+}
+
+func (x *UndoOverrideAnswerResponse) GetCorrect() bool {
+	if x != nil {
+		return x.Correct
+	}
+	return false
+}
+
+func (x *UndoOverrideAnswerResponse) GetNextReviewDate() string {
+	if x != nil {
+		return x.NextReviewDate
+	}
+	return ""
+}
+
+// Skip Word
+type SkipWordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkipWordRequest) Reset() {
+	*x = SkipWordRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[24]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkipWordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkipWordRequest) ProtoMessage() {}
+
+func (x *SkipWordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[24]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkipWordRequest.ProtoReflect.Descriptor instead.
+func (*SkipWordRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{24}
+}
+
+func (x *SkipWordRequest) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+type SkipWordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SkipWordResponse) Reset() {
+	*x = SkipWordResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[25]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SkipWordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SkipWordResponse) ProtoMessage() {}
+
+func (x *SkipWordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[25]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SkipWordResponse.ProtoReflect.Descriptor instead.
+func (*SkipWordResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{25}
+}
+
+// Resume Skipped Word
+type ResumeWordRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResumeWordRequest) Reset() {
+	*x = ResumeWordRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[26]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeWordRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeWordRequest) ProtoMessage() {}
+
+func (x *ResumeWordRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[26]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeWordRequest.ProtoReflect.Descriptor instead.
+func (*ResumeWordRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{26}
+}
+
+func (x *ResumeWordRequest) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+type ResumeWordResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResumeWordResponse) Reset() {
+	*x = ResumeWordResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[27]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResumeWordResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResumeWordResponse) ProtoMessage() {}
+
+func (x *ResumeWordResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[27]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResumeWordResponse.ProtoReflect.Descriptor instead.
+func (*ResumeWordResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{27}
+}
+
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
@@ -1322,13 +1830,16 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x13SubmitAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x97\x01\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xe0\x01\n" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x123\n" +
 	"\vword_detail\x18\x04 \x01(\v2\x12.api.v1.WordDetailR\n" +
-	"wordDetail\"x\n" +
+	"wordDetail\x12(\n" +
+	"\x10next_review_date\x18\x05 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
+	"\n" +
+	"learned_at\x18\x06 \x01(\tR\tlearnedAt\"x\n" +
 	"\x17StartReverseQuizRequest\x12+\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\vnotebookIds\x120\n" +
 	"\x14list_missing_context\x18\x02 \x01(\bR\x12listMissingContext\"T\n" +
@@ -1351,7 +1862,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x1aSubmitReverseAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x82\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xcb\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +
@@ -1362,7 +1873,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\bcontexts\x18\x05 \x03(\tR\bcontexts\x123\n" +
 	"\vword_detail\x18\x06 \x01(\v2\x12.api.v1.WordDetailR\n" +
 	"wordDetail\x12&\n" +
-	"\x0eclassification\x18\a \x01(\tR\x0eclassification\"\x1a\n" +
+	"\x0eclassification\x18\a \x01(\tR\x0eclassification\x12(\n" +
+	"\x10next_review_date\x18\b \x01(\tR\x0enextReviewDate\x12\x1d\n" +
+	"\n" +
+	"learned_at\x18\t \x01(\tR\tlearnedAt\"\x1a\n" +
 	"\x18StartFreeformQuizRequest\"\xa9\x02\n" +
 	"\x19StartFreeformQuizResponse\x12\x1d\n" +
 	"\n" +
@@ -1375,7 +1889,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x1bSubmitFreeformAnswerRequest\x12\x1f\n" +
 	"\x04word\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x04word\x12%\n" +
 	"\ameaning\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\ameaning\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xf2\x01\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xbb\x02\n" +
 	"\x1cSubmitFreeformAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x18\n" +
@@ -1384,12 +1898,50 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\acontext\x18\x05 \x01(\tR\acontext\x12#\n" +
 	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\x123\n" +
 	"\vword_detail\x18\a \x01(\v2\x12.api.v1.WordDetailR\n" +
-	"wordDetail*l\n" +
+	"wordDetail\x12(\n" +
+	"\x10next_review_date\x18\b \x01(\tR\x0enextReviewDate\x12\x1d\n" +
+	"\n" +
+	"learned_at\x18\t \x01(\tR\tlearnedAt\"\x8d\x02\n" +
+	"\x15OverrideAnswerRequest\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
+	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\x12&\n" +
+	"\n" +
+	"learned_at\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\n" +
+	"R\tlearnedAt\x12&\n" +
+	"\fmark_correct\x18\x04 \x01(\bH\x00R\vmarkCorrect\x88\x01\x01\x12-\n" +
+	"\x10next_review_date\x18\x05 \x01(\tH\x01R\x0enextReviewDate\x88\x01\x01B\x0f\n" +
+	"\r_mark_correctB\x13\n" +
+	"\x11_next_review_date\"\x86\x02\n" +
+	"\x16OverrideAnswerResponse\x12(\n" +
+	"\x10next_review_date\x18\x01 \x01(\tR\x0enextReviewDate\x12)\n" +
+	"\x10original_quality\x18\x02 \x01(\x05R\x0foriginalQuality\x12'\n" +
+	"\x0foriginal_status\x18\x03 \x01(\tR\x0eoriginalStatus\x124\n" +
+	"\x16original_interval_days\x18\x04 \x01(\x05R\x14originalIntervalDays\x128\n" +
+	"\x18original_easiness_factor\x18\x05 \x01(\x01R\x16originalEasinessFactor\"\xd8\x02\n" +
+	"\x19UndoOverrideAnswerRequest\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
+	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\x12&\n" +
+	"\n" +
+	"learned_at\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\n" +
+	"R\tlearnedAt\x12)\n" +
+	"\x10original_quality\x18\x04 \x01(\x05R\x0foriginalQuality\x12'\n" +
+	"\x0foriginal_status\x18\x05 \x01(\tR\x0eoriginalStatus\x124\n" +
+	"\x16original_interval_days\x18\x06 \x01(\x05R\x14originalIntervalDays\x128\n" +
+	"\x18original_easiness_factor\x18\a \x01(\x01R\x16originalEasinessFactor\"`\n" +
+	"\x1aUndoOverrideAnswerResponse\x12\x18\n" +
+	"\acorrect\x18\x01 \x01(\bR\acorrect\x12(\n" +
+	"\x10next_review_date\x18\x02 \x01(\tR\x0enextReviewDate\"3\n" +
+	"\x0fSkipWordRequest\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\"\x12\n" +
+	"\x10SkipWordResponse\"5\n" +
+	"\x11ResumeWordRequest\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\"\x14\n" +
+	"\x12ResumeWordResponse*l\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +
 	"\x11QUIZ_TYPE_REVERSE\x10\x02\x12\x16\n" +
-	"\x12QUIZ_TYPE_FREEFORM\x10\x032\xdf\x04\n" +
+	"\x12QUIZ_TYPE_FREEFORM\x10\x032\x91\a\n" +
 	"\vQuizService\x12O\n" +
 	"\x0eGetQuizOptions\x12\x1d.api.v1.GetQuizOptionsRequest\x1a\x1e.api.v1.GetQuizOptionsResponse\x12@\n" +
 	"\tStartQuiz\x12\x18.api.v1.StartQuizRequest\x1a\x19.api.v1.StartQuizResponse\x12I\n" +
@@ -1397,7 +1949,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10StartReverseQuiz\x12\x1f.api.v1.StartReverseQuizRequest\x1a .api.v1.StartReverseQuizResponse\x12^\n" +
 	"\x13SubmitReverseAnswer\x12\".api.v1.SubmitReverseAnswerRequest\x1a#.api.v1.SubmitReverseAnswerResponse\x12X\n" +
 	"\x11StartFreeformQuiz\x12 .api.v1.StartFreeformQuizRequest\x1a!.api.v1.StartFreeformQuizResponse\x12a\n" +
-	"\x14SubmitFreeformAnswer\x12#.api.v1.SubmitFreeformAnswerRequest\x1a$.api.v1.SubmitFreeformAnswerResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x14SubmitFreeformAnswer\x12#.api.v1.SubmitFreeformAnswerRequest\x1a$.api.v1.SubmitFreeformAnswerResponse\x12O\n" +
+	"\x0eOverrideAnswer\x12\x1d.api.v1.OverrideAnswerRequest\x1a\x1e.api.v1.OverrideAnswerResponse\x12[\n" +
+	"\x12UndoOverrideAnswer\x12!.api.v1.UndoOverrideAnswerRequest\x1a\".api.v1.UndoOverrideAnswerResponse\x12=\n" +
+	"\bSkipWord\x12\x17.api.v1.SkipWordRequest\x1a\x18.api.v1.SkipWordResponse\x12C\n" +
+	"\n" +
+	"ResumeWord\x12\x19.api.v1.ResumeWordRequest\x1a\x1a.api.v1.ResumeWordResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_quiz_proto_rawDescOnce sync.Once
@@ -1412,7 +1969,7 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 29)
 var file_api_v1_quiz_proto_goTypes = []any{
 	(QuizType)(0),                        // 0: api.v1.QuizType
 	(*GetQuizOptionsRequest)(nil),        // 1: api.v1.GetQuizOptionsRequest
@@ -1435,7 +1992,15 @@ var file_api_v1_quiz_proto_goTypes = []any{
 	(*StartFreeformQuizResponse)(nil),    // 18: api.v1.StartFreeformQuizResponse
 	(*SubmitFreeformAnswerRequest)(nil),  // 19: api.v1.SubmitFreeformAnswerRequest
 	(*SubmitFreeformAnswerResponse)(nil), // 20: api.v1.SubmitFreeformAnswerResponse
-	nil,                                  // 21: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	(*OverrideAnswerRequest)(nil),        // 21: api.v1.OverrideAnswerRequest
+	(*OverrideAnswerResponse)(nil),       // 22: api.v1.OverrideAnswerResponse
+	(*UndoOverrideAnswerRequest)(nil),    // 23: api.v1.UndoOverrideAnswerRequest
+	(*UndoOverrideAnswerResponse)(nil),   // 24: api.v1.UndoOverrideAnswerResponse
+	(*SkipWordRequest)(nil),              // 25: api.v1.SkipWordRequest
+	(*SkipWordResponse)(nil),             // 26: api.v1.SkipWordResponse
+	(*ResumeWordRequest)(nil),            // 27: api.v1.ResumeWordRequest
+	(*ResumeWordResponse)(nil),           // 28: api.v1.ResumeWordResponse
+	nil,                                  // 29: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
 	3,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
@@ -1445,27 +2010,37 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	13, // 4: api.v1.StartReverseQuizResponse.flashcards:type_name -> api.v1.ReverseFlashcard
 	14, // 5: api.v1.ReverseFlashcard.contexts:type_name -> api.v1.ContextSentence
 	8,  // 6: api.v1.SubmitReverseAnswerResponse.word_detail:type_name -> api.v1.WordDetail
-	21, // 7: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	29, // 7: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 	8,  // 8: api.v1.SubmitFreeformAnswerResponse.word_detail:type_name -> api.v1.WordDetail
-	1,  // 9: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	4,  // 10: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	9,  // 11: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	11, // 12: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	15, // 13: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	17, // 14: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	19, // 15: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	2,  // 16: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	5,  // 17: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	10, // 18: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	12, // 19: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	16, // 20: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	18, // 21: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	20, // 22: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	16, // [16:23] is the sub-list for method output_type
-	9,  // [9:16] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	0,  // 9: api.v1.OverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
+	0,  // 10: api.v1.UndoOverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
+	1,  // 11: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	4,  // 12: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	9,  // 13: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	11, // 14: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	15, // 15: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	17, // 16: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	19, // 17: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	21, // 18: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	23, // 19: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	25, // 20: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	27, // 21: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	2,  // 22: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	5,  // 23: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	10, // 24: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	12, // 25: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	16, // 26: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	18, // 27: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	20, // 28: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	22, // 29: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	24, // 30: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	26, // 31: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	28, // 32: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	22, // [22:33] is the sub-list for method output_type
+	11, // [11:22] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -1473,13 +2048,14 @@ func file_api_v1_quiz_proto_init() {
 	if File_api_v1_quiz_proto != nil {
 		return
 	}
+	file_api_v1_quiz_proto_msgTypes[20].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   21,
+			NumMessages:   29,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,17 +1,31 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
-import { useQuizStore, WordDetail } from "@/store/quizStore";
+import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
+import { useQuizStore, type QuizType } from "@/store/quizStore";
+import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
+import { formatReviewDate } from "@/lib/formatReviewDate";
 
 interface ResultItem {
+  index: number;
   key: string;
   entry: string;
   meaning: string;
   correct: boolean;
   contexts?: string[];
-  wordDetail?: WordDetail;
+  nextReviewDate?: string;
+  noteId?: bigint;
+  learnedAt?: string;
+  isOverridden?: boolean;
+  isSkipped?: boolean;
+  originalCorrect: boolean;
+}
+
+function getProtoQuizType(qt: QuizType): ProtoQuizType {
+  if (qt === "reverse") return ProtoQuizType.REVERSE;
+  if (qt === "freeform") return ProtoQuizType.FREEFORM;
+  return ProtoQuizType.STANDARD;
 }
 
 export default function SessionCompletePage() {
@@ -19,37 +33,60 @@ export default function SessionCompletePage() {
   const results = useQuizStore((s) => s.results);
   const reverseResults = useQuizStore((s) => s.reverseResults);
   const freeformResults = useQuizStore((s) => s.freeformResults);
+  const quizType = useQuizStore((s) => s.quizType);
   const reset = useQuizStore((s) => s.reset);
+  const overrideResult = useQuizStore((s) => s.overrideResult);
+  const undoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
+  const skipResult = useQuizStore((s) => s.skipResult);
+  const resumeResult = useQuizStore((s) => s.resumeResult);
+  const updateResultReviewDate = useQuizStore((s) => s.updateResultReviewDate);
 
   const allResults = useMemo((): ResultItem[] => {
     if (results.length > 0) {
-      return results.map((r) => ({
+      return results.map((r, i) => ({
+        index: i,
         key: r.noteId.toString(),
         entry: r.entry,
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
-        wordDetail: r.wordDetail,
+        nextReviewDate: r.nextReviewDate,
+        noteId: r.noteId,
+        learnedAt: r.learnedAt,
+        isOverridden: r.isOverridden,
+        isSkipped: r.isSkipped,
+        originalCorrect: r.isOverridden ? !r.correct : r.correct,
       }));
     }
     if (reverseResults.length > 0) {
-      return reverseResults.map((r) => ({
+      return reverseResults.map((r, i) => ({
+        index: i,
         key: r.noteId.toString(),
         entry: r.expression,
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
-        wordDetail: r.wordDetail,
+        nextReviewDate: r.nextReviewDate,
+        noteId: r.noteId,
+        learnedAt: r.learnedAt,
+        isOverridden: r.isOverridden,
+        isSkipped: r.isSkipped,
+        originalCorrect: r.isOverridden ? !r.correct : r.correct,
       }));
     }
     if (freeformResults.length > 0) {
       return freeformResults.map((r, i) => ({
+        index: i,
         key: `freeform-${i}`,
         entry: r.word,
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
-        wordDetail: r.wordDetail,
+        nextReviewDate: r.nextReviewDate,
+        learnedAt: r.learnedAt,
+        isOverridden: r.isOverridden,
+        isSkipped: r.isSkipped,
+        originalCorrect: r.isOverridden ? !r.correct : r.correct,
       }));
     }
     return [];
@@ -65,47 +102,82 @@ export default function SessionCompletePage() {
     return null;
   }
 
-  const correctResults = allResults.filter((r) => r.correct);
-  const incorrectResults = allResults.filter((r) => !r.correct);
+  const correctResults = allResults.filter((r) => r.correct && !r.isSkipped);
+  const incorrectResults = allResults.filter((r) => !r.correct && !r.isSkipped);
+  const skippedResults = allResults.filter((r) => r.isSkipped);
+
+  const protoQt = getProtoQuizType(quizType);
+
+  const handleOverride = async (item: ResultItem) => {
+    if (!item.noteId || !item.learnedAt) return;
+    try {
+      const res = await quizClient.overrideAnswer({
+        noteId: item.noteId,
+        quizType: protoQt,
+        learnedAt: item.learnedAt,
+        markCorrect: !item.correct,
+      });
+      overrideResult(item.index, quizType, res.nextReviewDate || item.nextReviewDate || "", {
+        quality: res.originalQuality,
+        status: res.originalStatus,
+        intervalDays: res.originalIntervalDays,
+        easinessFactor: res.originalEasinessFactor,
+      });
+    } catch { /* silently fail */ }
+  };
+
+  const handleUndo = async (item: ResultItem) => {
+    if (!item.noteId || !item.learnedAt) return;
+    const storeResults = results.length > 0 ? results : reverseResults.length > 0 ? reverseResults : freeformResults;
+    const original = storeResults[item.index];
+    if (!original?.originalValues) return;
+    try {
+      const res = await quizClient.undoOverrideAnswer({
+        noteId: item.noteId,
+        quizType: protoQt,
+        learnedAt: item.learnedAt,
+        originalQuality: original.originalValues.quality,
+        originalStatus: original.originalValues.status,
+        originalIntervalDays: original.originalValues.intervalDays,
+        originalEasinessFactor: original.originalValues.easinessFactor,
+      });
+      undoOverrideResult(item.index, quizType, res.correct, res.nextReviewDate || item.nextReviewDate || "");
+    } catch { /* silently fail */ }
+  };
+
+  const handleSkip = async (item: ResultItem) => {
+    if (!item.noteId) return;
+    try {
+      await quizClient.skipWord({ noteId: item.noteId });
+      skipResult(item.index, quizType);
+    } catch { /* silently fail */ }
+  };
+
+  const handleResume = async (item: ResultItem) => {
+    if (!item.noteId) return;
+    try {
+      await quizClient.resumeWord({ noteId: item.noteId });
+      resumeResult(item.index, quizType);
+    } catch { /* silently fail */ }
+  };
+
+  const handleChangeReviewDate = async (item: ResultItem, newDate: string) => {
+    if (!item.noteId || !item.learnedAt) return;
+    try {
+      await quizClient.overrideAnswer({
+        noteId: item.noteId,
+        quizType: protoQt,
+        learnedAt: item.learnedAt,
+        nextReviewDate: newDate,
+      });
+      updateResultReviewDate(item.index, quizType, newDate);
+    } catch { /* silently fail */ }
+  };
 
   const handleBackToStart = () => {
     reset();
     router.push("/");
   };
-
-  const renderResultCard = (r: ResultItem) => (
-    <Box key={r.key} p={2} borderWidth="1px" borderRadius="md">
-      <Text fontWeight="bold">{r.entry}</Text>
-      <Text fontSize="sm">{r.meaning}</Text>
-      {r.contexts?.map((ctx, i) => (
-        <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
-          {ctx}
-        </Text>
-      ))}
-      {r.wordDetail && (
-        <Box mt={1} fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>
-          {r.wordDetail.partOfSpeech && (
-            <Text><Text as="span" fontWeight="bold">Part of speech:</Text> {r.wordDetail.partOfSpeech}</Text>
-          )}
-          {r.wordDetail.pronunciation && (
-            <Text><Text as="span" fontWeight="bold">Pronunciation:</Text> {r.wordDetail.pronunciation}</Text>
-          )}
-          {r.wordDetail.origin && (
-            <Text><Text as="span" fontWeight="bold">Origin:</Text> {r.wordDetail.origin}</Text>
-          )}
-          {r.wordDetail.synonyms && r.wordDetail.synonyms.length > 0 && (
-            <Text><Text as="span" fontWeight="bold">Synonyms:</Text> {r.wordDetail.synonyms.join(", ")}</Text>
-          )}
-          {r.wordDetail.antonyms && r.wordDetail.antonyms.length > 0 && (
-            <Text><Text as="span" fontWeight="bold">Antonyms:</Text> {r.wordDetail.antonyms.join(", ")}</Text>
-          )}
-          {r.wordDetail.memo && (
-            <Text><Text as="span" fontWeight="bold">Memo:</Text> {r.wordDetail.memo}</Text>
-          )}
-        </Box>
-      )}
-    </Box>
-  );
 
   return (
     <Box p={4} maxW="md" mx="auto">
@@ -123,24 +195,65 @@ export default function SessionCompletePage() {
         </Text>
       </VStack>
 
-      {correctResults.length > 0 && (
-        <Box mb={6}>
-          <Heading size="md" color="green.600" _dark={{ color: "green.300" }} mb={2}>
-            Correct
-          </Heading>
-          <VStack align="stretch" gap={2}>
-            {correctResults.map(renderResultCard)}
-          </VStack>
-        </Box>
-      )}
-
       {incorrectResults.length > 0 && (
         <Box mb={6}>
           <Heading size="md" color="red.600" _dark={{ color: "red.300" }} mb={2}>
             Incorrect
           </Heading>
           <VStack align="stretch" gap={2}>
-            {incorrectResults.map(renderResultCard)}
+            {incorrectResults.map((r) => (
+              <ResultCard
+                key={r.key}
+                item={r}
+                onOverride={handleOverride}
+                onUndo={handleUndo}
+                onSkip={handleSkip}
+                onResume={handleResume}
+                onChangeReviewDate={handleChangeReviewDate}
+              />
+            ))}
+          </VStack>
+        </Box>
+      )}
+
+      {correctResults.length > 0 && (
+        <Box mb={6}>
+          <Heading size="md" color="green.600" _dark={{ color: "green.300" }} mb={2}>
+            Correct
+          </Heading>
+          <VStack align="stretch" gap={2}>
+            {correctResults.map((r) => (
+              <ResultCard
+                key={r.key}
+                item={r}
+                onOverride={handleOverride}
+                onUndo={handleUndo}
+                onSkip={handleSkip}
+                onResume={handleResume}
+                onChangeReviewDate={handleChangeReviewDate}
+              />
+            ))}
+          </VStack>
+        </Box>
+      )}
+
+      {skippedResults.length > 0 && (
+        <Box mb={6}>
+          <Text fontWeight="bold" mb={2} color="gray.500">
+            Excluded from Quizzes ({skippedResults.length})
+          </Text>
+          <VStack align="stretch" gap={2}>
+            {skippedResults.map((r) => (
+              <ResultCard
+                key={r.key}
+                item={r}
+                onOverride={handleOverride}
+                onUndo={handleUndo}
+                onSkip={handleSkip}
+                onResume={handleResume}
+                onChangeReviewDate={handleChangeReviewDate}
+              />
+            ))}
           </VStack>
         </Box>
       )}
@@ -148,6 +261,187 @@ export default function SessionCompletePage() {
       <Button w="full" colorPalette="blue" onClick={handleBackToStart}>
         Back to Start
       </Button>
+    </Box>
+  );
+}
+
+function ResultCard({
+  item,
+  onOverride,
+  onUndo,
+  onSkip,
+  onResume,
+  onChangeReviewDate,
+}: {
+  item: ResultItem;
+  onOverride: (item: ResultItem) => void;
+  onUndo: (item: ResultItem) => void;
+  onSkip: (item: ResultItem) => void;
+  onResume: (item: ResultItem) => void;
+  onChangeReviewDate: (item: ResultItem, newDate: string) => void;
+}) {
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customDate, setCustomDate] = useState("");
+
+  const tomorrowStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 1);
+    return d.toISOString().split("T")[0];
+  }, []);
+
+  const borderColor = item.isSkipped
+    ? "gray.200"
+    : item.correct
+      ? "green.200"
+      : "red.200";
+
+  return (
+    <Box
+      p={2}
+      borderWidth="1px"
+      borderColor={borderColor}
+      borderRadius="md"
+      opacity={item.isSkipped ? 0.6 : 1}
+    >
+      <Box display="flex" justifyContent="space-between" alignItems="center">
+        <Text fontWeight="bold">{item.entry}</Text>
+        {item.isSkipped && (
+          <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
+            <Text fontSize="xs" color="fg.muted" fontStyle="italic">Excluded</Text>
+          </Box>
+        )}
+      </Box>
+      <Text fontSize="sm">{item.meaning}</Text>
+      {item.contexts?.map((ctx, i) => (
+        <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+          {ctx}
+        </Text>
+      ))}
+
+      {/* Review date */}
+      {item.nextReviewDate && (
+        <Box
+          mt={2}
+          bg="blue.50"
+          _dark={{ bg: "blue.900/20", borderColor: "blue.700" }}
+          borderWidth="1px"
+          borderColor="blue.200"
+          borderRadius="md"
+          p={2}
+        >
+          {showDatePicker ? (
+            <VStack align="stretch" gap={2}>
+              <Text fontSize="xs" fontWeight="medium">
+                Pick a new review date:
+              </Text>
+              <Input
+                type="date"
+                size="sm"
+                value={customDate}
+                min={tomorrowStr}
+                onChange={(e) => setCustomDate(e.target.value)}
+              />
+              <Box display="flex" gap={2} justifyContent="flex-end">
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => setShowDatePicker(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="xs"
+                  colorPalette="blue"
+                  onClick={() => {
+                    if (customDate) {
+                      onChangeReviewDate(item, customDate);
+                    }
+                    setShowDatePicker(false);
+                  }}
+                >
+                  Save
+                </Button>
+              </Box>
+            </VStack>
+          ) : (
+            <>
+              <Text fontSize="xs" fontWeight="medium">
+                Next review: {formatReviewDate(item.nextReviewDate)}
+              </Text>
+              {item.noteId && item.learnedAt && (
+                <Text
+                  fontSize="xs"
+                  color="blue.600"
+                  _dark={{ color: "blue.300" }}
+                  cursor="pointer"
+                  onClick={() => {
+                    setCustomDate(item.nextReviewDate!);
+                    setShowDatePicker(true);
+                  }}
+                >
+                  Change
+                </Text>
+              )}
+            </>
+          )}
+        </Box>
+      )}
+
+      {/* Override button */}
+      {!item.isOverridden && !item.isSkipped && item.noteId && item.learnedAt && (
+        <Button
+          w="full"
+          mt={2}
+          size="sm"
+          variant="outline"
+          colorPalette={item.correct ? "red" : "blue"}
+          onClick={() => onOverride(item)}
+        >
+          {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
+        </Button>
+      )}
+
+      {item.isOverridden && (
+        <Text mt={2} fontSize="xs" color="fg.muted" fontStyle="italic">
+          {item.correct ? "Marked as correct" : "Marked as incorrect"} (overridden){" "}
+          <Text
+            as="span"
+            color="blue.600"
+            cursor="pointer"
+            textDecoration="underline"
+            onClick={() => onUndo(item)}
+          >
+            Undo
+          </Text>
+        </Text>
+      )}
+
+      {/* Skip button, Resume button, or nothing */}
+      {item.isSkipped ? (
+        item.noteId ? (
+          <Button
+            w="full"
+            mt={2}
+            size="sm"
+            variant="outline"
+            colorPalette="blue"
+            onClick={() => onResume(item)}
+          >
+            Resume
+          </Button>
+        ) : null
+      ) : !item.isOverridden && item.noteId ? (
+        <Button
+          w="full"
+          mt={2}
+          size="sm"
+          variant="outline"
+          colorPalette="gray"
+          onClick={() => onSkip(item)}
+        >
+          Exclude from Quizzes
+        </Button>
+      ) : null}
     </Box>
   );
 }

@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/quiz.proto.
  */
 export const file_api_v1_quiz: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkidgoPTm90ZWJvb2tTdW1tYXJ5EhMKC25vdGVib29rX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcmV2aWV3X2NvdW50GAMgASgFEgwKBGtpbmQYBCABKAkSHAoUcmV2ZXJzZV9yZXZpZXdfY291bnQYBSABKAUiTQoQU3RhcnRRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhkKEWluY2x1ZGVfdW5zdHVkaWVkGAIgASgIIjoKEVN0YXJ0UXVpelJlc3BvbnNlEiUKCmZsYXNoY2FyZHMYASADKAsyES5hcGkudjEuRmxhc2hjYXJkIk4KCUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg0KBWVudHJ5GAIgASgJEiEKCGV4YW1wbGVzGAMgAygLMg8uYXBpLnYxLkV4YW1wbGUiKAoHRXhhbXBsZRIMCgR0ZXh0GAEgASgJEg8KB3NwZWFrZXIYAiABKAkifQoKV29yZERldGFpbBIOCgZvcmlnaW4YASABKAkSFQoNcHJvbnVuY2lhdGlvbhgCIAEoCRIWCg5wYXJ0X29mX3NwZWVjaBgDIAEoCRIQCghzeW5vbnltcxgEIAMoCRIQCghhbnRvbnltcxgFIAMoCRIMCgRtZW1vGAYgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMicQoUU3VibWl0QW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIPCgdtZWFuaW5nGAIgASgJEg4KBnJlYXNvbhgDIAEoCRInCgt3b3JkX2RldGFpbBgEIAEoCzISLmFwaS52MS5Xb3JkRGV0YWlsIlcKF1N0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0Eh4KDG5vdGVib29rX2lkcxgBIAMoCUIIukgFkgECCAESHAoUbGlzdF9taXNzaW5nX2NvbnRleHQYAiABKAgiSAoYU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEiwKCmZsYXNoY2FyZHMYASADKAsyGC5hcGkudjEuUmV2ZXJzZUZsYXNoY2FyZCKgAQoQUmV2ZXJzZUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg8KB21lYW5pbmcYAiABKAkSKQoIY29udGV4dHMYAyADKAsyFy5hcGkudjEuQ29udGV4dFNlbnRlbmNlEhUKDW5vdGVib29rX25hbWUYBCABKAkSEwoLc3RvcnlfdGl0bGUYBSABKAkSEwoLc2NlbmVfdGl0bGUYBiABKAkiOgoPQ29udGV4dFNlbnRlbmNlEg8KB2NvbnRleHQYASABKAkSFgoObWFza2VkX2NvbnRleHQYAiABKAkibQoaU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMitgEKG1N1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhIKCmV4cHJlc3Npb24YAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSEAoIY29udGV4dHMYBSADKAkSJwoLd29yZF9kZXRhaWwYBiABKAsyEi5hcGkudjEuV29yZERldGFpbBIWCg5jbGFzc2lmaWNhdGlvbhgHIAEoCSIaChhTdGFydEZyZWVmb3JtUXVpelJlcXVlc3Qi6wEKGVN0YXJ0RnJlZWZvcm1RdWl6UmVzcG9uc2USEgoKd29yZF9jb3VudBgBIAEoBRITCgtleHByZXNzaW9ucxgCIAMoCRJkChtleHByZXNzaW9uX25leHRfcmV2aWV3X2RhdGUYAyADKAsyPy5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZS5FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRo/Ch1FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBInAKG1N1Ym1pdEZyZWVmb3JtQW5zd2VyUmVxdWVzdBIZCgR3b3JkGAEgASgJQgu6SAhyBhABMgJcUxIcCgdtZWFuaW5nGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIq8BChxTdWJtaXRGcmVlZm9ybUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDAoEd29yZBgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEg4KBnJlYXNvbhgEIAEoCRIPCgdjb250ZXh0GAUgASgJEhUKDW5vdGVib29rX25hbWUYBiABKAkSJwoLd29yZF9kZXRhaWwYByABKAsyEi5hcGkudjEuV29yZERldGFpbCpsCghRdWl6VHlwZRIZChVRVUlaX1RZUEVfVU5TUEVDSUZJRUQQABIWChJRVUlaX1RZUEVfU1RBTkRBUkQQARIVChFRVUlaX1RZUEVfUkVWRVJTRRACEhYKElFVSVpfVFlQRV9GUkVFRk9STRADMt8ECgtRdWl6U2VydmljZRJPCg5HZXRRdWl6T3B0aW9ucxIdLmFwaS52MS5HZXRRdWl6T3B0aW9uc1JlcXVlc3QaHi5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXNwb25zZRJACglTdGFydFF1aXoSGC5hcGkudjEuU3RhcnRRdWl6UmVxdWVzdBoZLmFwaS52MS5TdGFydFF1aXpSZXNwb25zZRJJCgxTdWJtaXRBbnN3ZXISGy5hcGkudjEuU3VibWl0QW5zd2VyUmVxdWVzdBocLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXNwb25zZRJVChBTdGFydFJldmVyc2VRdWl6Eh8uYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0GiAuYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXNwb25zZRJeChNTdWJtaXRSZXZlcnNlQW5zd2VyEiIuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0GiMuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRJYChFTdGFydEZyZWVmb3JtUXVpehIgLmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlcXVlc3QaIS5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRJhChRTdWJtaXRGcmVlZm9ybUFuc3dlchIjLmFwaS52MS5TdWJtaXRGcmVlZm9ybUFuc3dlclJlcXVlc3QaJC5hcGkudjEuU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
+  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkidgoPTm90ZWJvb2tTdW1tYXJ5EhMKC25vdGVib29rX2lkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMcmV2aWV3X2NvdW50GAMgASgFEgwKBGtpbmQYBCABKAkSHAoUcmV2ZXJzZV9yZXZpZXdfY291bnQYBSABKAUiTQoQU3RhcnRRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhkKEWluY2x1ZGVfdW5zdHVkaWVkGAIgASgIIjoKEVN0YXJ0UXVpelJlc3BvbnNlEiUKCmZsYXNoY2FyZHMYASADKAsyES5hcGkudjEuRmxhc2hjYXJkIk4KCUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg0KBWVudHJ5GAIgASgJEiEKCGV4YW1wbGVzGAMgAygLMg8uYXBpLnYxLkV4YW1wbGUiKAoHRXhhbXBsZRIMCgR0ZXh0GAEgASgJEg8KB3NwZWFrZXIYAiABKAkifQoKV29yZERldGFpbBIOCgZvcmlnaW4YASABKAkSFQoNcHJvbnVuY2lhdGlvbhgCIAEoCRIWCg5wYXJ0X29mX3NwZWVjaBgDIAEoCRIQCghzeW5vbnltcxgEIAMoCRIQCghhbnRvbnltcxgFIAMoCRIMCgRtZW1vGAYgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMinwEKFFN1Ym1pdEFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDwoHbWVhbmluZxgCIAEoCRIOCgZyZWFzb24YAyABKAkSJwoLd29yZF9kZXRhaWwYBCABKAsyEi5hcGkudjEuV29yZERldGFpbBIYChBuZXh0X3Jldmlld19kYXRlGAUgASgJEhIKCmxlYXJuZWRfYXQYBiABKAkiVwoXU3RhcnRSZXZlcnNlUXVpelJlcXVlc3QSHgoMbm90ZWJvb2tfaWRzGAEgAygJQgi6SAWSAQIIARIcChRsaXN0X21pc3NpbmdfY29udGV4dBgCIAEoCCJIChhTdGFydFJldmVyc2VRdWl6UmVzcG9uc2USLAoKZmxhc2hjYXJkcxgBIAMoCzIYLmFwaS52MS5SZXZlcnNlRmxhc2hjYXJkIqABChBSZXZlcnNlRmxhc2hjYXJkEg8KB25vdGVfaWQYASABKAMSDwoHbWVhbmluZxgCIAEoCRIpCghjb250ZXh0cxgDIAMoCzIXLmFwaS52MS5Db250ZXh0U2VudGVuY2USFQoNbm90ZWJvb2tfbmFtZRgEIAEoCRITCgtzdG9yeV90aXRsZRgFIAEoCRITCgtzY2VuZV90aXRsZRgGIAEoCSI6Cg9Db250ZXh0U2VudGVuY2USDwoHY29udGV4dBgBIAEoCRIWCg5tYXNrZWRfY29udGV4dBgCIAEoCSJtChpTdWJtaXRSZXZlcnNlQW5zd2VyUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAEhsKBmFuc3dlchgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyLkAQobU3VibWl0UmV2ZXJzZUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSEgoKZXhwcmVzc2lvbhgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEg4KBnJlYXNvbhgEIAEoCRIQCghjb250ZXh0cxgFIAMoCRInCgt3b3JkX2RldGFpbBgGIAEoCzISLmFwaS52MS5Xb3JkRGV0YWlsEhYKDmNsYXNzaWZpY2F0aW9uGAcgASgJEhgKEG5leHRfcmV2aWV3X2RhdGUYCCABKAkSEgoKbGVhcm5lZF9hdBgJIAEoCSIaChhTdGFydEZyZWVmb3JtUXVpelJlcXVlc3Qi6wEKGVN0YXJ0RnJlZWZvcm1RdWl6UmVzcG9uc2USEgoKd29yZF9jb3VudBgBIAEoBRITCgtleHByZXNzaW9ucxgCIAMoCRJkChtleHByZXNzaW9uX25leHRfcmV2aWV3X2RhdGUYAyADKAsyPy5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZS5FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRo/Ch1FeHByZXNzaW9uTmV4dFJldmlld0RhdGVFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBInAKG1N1Ym1pdEZyZWVmb3JtQW5zd2VyUmVxdWVzdBIZCgR3b3JkGAEgASgJQgu6SAhyBhABMgJcUxIcCgdtZWFuaW5nGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIt0BChxTdWJtaXRGcmVlZm9ybUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDAoEd29yZBgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEg4KBnJlYXNvbhgEIAEoCRIPCgdjb250ZXh0GAUgASgJEhUKDW5vdGVib29rX25hbWUYBiABKAkSJwoLd29yZF9kZXRhaWwYByABKAsyEi5hcGkudjEuV29yZERldGFpbBIYChBuZXh0X3Jldmlld19kYXRlGAggASgJEhIKCmxlYXJuZWRfYXQYCSABKAki0wEKFU92ZXJyaWRlQW5zd2VyUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAEiMKCXF1aXpfdHlwZRgCIAEoDjIQLmFwaS52MS5RdWl6VHlwZRIbCgpsZWFybmVkX2F0GAMgASgJQge6SARyAhAKEhkKDG1hcmtfY29ycmVjdBgEIAEoCEgAiAEBEh0KEG5leHRfcmV2aWV3X2RhdGUYBSABKAlIAYgBAUIPCg1fbWFya19jb3JyZWN0QhMKEV9uZXh0X3Jldmlld19kYXRlIqcBChZPdmVycmlkZUFuc3dlclJlc3BvbnNlEhgKEG5leHRfcmV2aWV3X2RhdGUYASABKAkSGAoQb3JpZ2luYWxfcXVhbGl0eRgCIAEoBRIXCg9vcmlnaW5hbF9zdGF0dXMYAyABKAkSHgoWb3JpZ2luYWxfaW50ZXJ2YWxfZGF5cxgEIAEoBRIgChhvcmlnaW5hbF9lYXNpbmVzc19mYWN0b3IYBSABKAEi7AEKGVVuZG9PdmVycmlkZUFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIjCglxdWl6X3R5cGUYAiABKA4yEC5hcGkudjEuUXVpelR5cGUSGwoKbGVhcm5lZF9hdBgDIAEoCUIHukgEcgIQChIYChBvcmlnaW5hbF9xdWFsaXR5GAQgASgFEhcKD29yaWdpbmFsX3N0YXR1cxgFIAEoCRIeChZvcmlnaW5hbF9pbnRlcnZhbF9kYXlzGAYgASgFEiAKGG9yaWdpbmFsX2Vhc2luZXNzX2ZhY3RvchgHIAEoASJHChpVbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhgKEG5leHRfcmV2aWV3X2RhdGUYAiABKAkiKwoPU2tpcFdvcmRSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAAiEgoQU2tpcFdvcmRSZXNwb25zZSItChFSZXN1bWVXb3JkUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAIhQKElJlc3VtZVdvcmRSZXNwb25zZSpsCghRdWl6VHlwZRIZChVRVUlaX1RZUEVfVU5TUEVDSUZJRUQQABIWChJRVUlaX1RZUEVfU1RBTkRBUkQQARIVChFRVUlaX1RZUEVfUkVWRVJTRRACEhYKElFVSVpfVFlQRV9GUkVFRk9STRADMpEHCgtRdWl6U2VydmljZRJPCg5HZXRRdWl6T3B0aW9ucxIdLmFwaS52MS5HZXRRdWl6T3B0aW9uc1JlcXVlc3QaHi5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXNwb25zZRJACglTdGFydFF1aXoSGC5hcGkudjEuU3RhcnRRdWl6UmVxdWVzdBoZLmFwaS52MS5TdGFydFF1aXpSZXNwb25zZRJJCgxTdWJtaXRBbnN3ZXISGy5hcGkudjEuU3VibWl0QW5zd2VyUmVxdWVzdBocLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXNwb25zZRJVChBTdGFydFJldmVyc2VRdWl6Eh8uYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0GiAuYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXNwb25zZRJeChNTdWJtaXRSZXZlcnNlQW5zd2VyEiIuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0GiMuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRJYChFTdGFydEZyZWVmb3JtUXVpehIgLmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlcXVlc3QaIS5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRJhChRTdWJtaXRGcmVlZm9ybUFuc3dlchIjLmFwaS52MS5TdWJtaXRGcmVlZm9ybUFuc3dlclJlcXVlc3QaJC5hcGkudjEuU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXNwb25zZRJPCg5PdmVycmlkZUFuc3dlchIdLmFwaS52MS5PdmVycmlkZUFuc3dlclJlcXVlc3QaHi5hcGkudjEuT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRJbChJVbmRvT3ZlcnJpZGVBbnN3ZXISIS5hcGkudjEuVW5kb092ZXJyaWRlQW5zd2VyUmVxdWVzdBoiLmFwaS52MS5VbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRI9CghTa2lwV29yZBIXLmFwaS52MS5Ta2lwV29yZFJlcXVlc3QaGC5hcGkudjEuU2tpcFdvcmRSZXNwb25zZRJDCgpSZXN1bWVXb3JkEhkuYXBpLnYxLlJlc3VtZVdvcmRSZXF1ZXN0GhouYXBpLnYxLlJlc3VtZVdvcmRSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetQuizOptionsRequest
@@ -260,6 +260,16 @@ export type SubmitAnswerResponse = Message<"api.v1.SubmitAnswerResponse"> & {
    * @generated from field: api.v1.WordDetail word_detail = 4;
    */
   wordDetail?: WordDetail;
+
+  /**
+   * @generated from field: string next_review_date = 5;
+   */
+  nextReviewDate: string;
+
+  /**
+   * @generated from field: string learned_at = 6;
+   */
+  learnedAt: string;
 };
 
 /**
@@ -437,6 +447,16 @@ export type SubmitReverseAnswerResponse = Message<"api.v1.SubmitReverseAnswerRes
    * @generated from field: string classification = 7;
    */
   classification: string;
+
+  /**
+   * @generated from field: string next_review_date = 8;
+   */
+  nextReviewDate: string;
+
+  /**
+   * @generated from field: string learned_at = 9;
+   */
+  learnedAt: string;
 };
 
 /**
@@ -551,6 +571,16 @@ export type SubmitFreeformAnswerResponse = Message<"api.v1.SubmitFreeformAnswerR
    * @generated from field: api.v1.WordDetail word_detail = 7;
    */
   wordDetail?: WordDetail;
+
+  /**
+   * @generated from field: string next_review_date = 8;
+   */
+  nextReviewDate: string;
+
+  /**
+   * @generated from field: string learned_at = 9;
+   */
+  learnedAt: string;
 };
 
 /**
@@ -559,6 +589,217 @@ export type SubmitFreeformAnswerResponse = Message<"api.v1.SubmitFreeformAnswerR
  */
 export const SubmitFreeformAnswerResponseSchema: GenMessage<SubmitFreeformAnswerResponse> = /*@__PURE__*/
   messageDesc(file_api_v1_quiz, 19);
+
+/**
+ * Override Answer
+ *
+ * @generated from message api.v1.OverrideAnswerRequest
+ */
+export type OverrideAnswerRequest = Message<"api.v1.OverrideAnswerRequest"> & {
+  /**
+   * @generated from field: int64 note_id = 1;
+   */
+  noteId: bigint;
+
+  /**
+   * @generated from field: api.v1.QuizType quiz_type = 2;
+   */
+  quizType: QuizType;
+
+  /**
+   * @generated from field: string learned_at = 3;
+   */
+  learnedAt: string;
+
+  /**
+   * @generated from field: optional bool mark_correct = 4;
+   */
+  markCorrect?: boolean;
+
+  /**
+   * @generated from field: optional string next_review_date = 5;
+   */
+  nextReviewDate?: string;
+};
+
+/**
+ * Describes the message api.v1.OverrideAnswerRequest.
+ * Use `create(OverrideAnswerRequestSchema)` to create a new message.
+ */
+export const OverrideAnswerRequestSchema: GenMessage<OverrideAnswerRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 20);
+
+/**
+ * @generated from message api.v1.OverrideAnswerResponse
+ */
+export type OverrideAnswerResponse = Message<"api.v1.OverrideAnswerResponse"> & {
+  /**
+   * @generated from field: string next_review_date = 1;
+   */
+  nextReviewDate: string;
+
+  /**
+   * @generated from field: int32 original_quality = 2;
+   */
+  originalQuality: number;
+
+  /**
+   * @generated from field: string original_status = 3;
+   */
+  originalStatus: string;
+
+  /**
+   * @generated from field: int32 original_interval_days = 4;
+   */
+  originalIntervalDays: number;
+
+  /**
+   * @generated from field: double original_easiness_factor = 5;
+   */
+  originalEasinessFactor: number;
+};
+
+/**
+ * Describes the message api.v1.OverrideAnswerResponse.
+ * Use `create(OverrideAnswerResponseSchema)` to create a new message.
+ */
+export const OverrideAnswerResponseSchema: GenMessage<OverrideAnswerResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 21);
+
+/**
+ * Undo Override Answer
+ *
+ * @generated from message api.v1.UndoOverrideAnswerRequest
+ */
+export type UndoOverrideAnswerRequest = Message<"api.v1.UndoOverrideAnswerRequest"> & {
+  /**
+   * @generated from field: int64 note_id = 1;
+   */
+  noteId: bigint;
+
+  /**
+   * @generated from field: api.v1.QuizType quiz_type = 2;
+   */
+  quizType: QuizType;
+
+  /**
+   * @generated from field: string learned_at = 3;
+   */
+  learnedAt: string;
+
+  /**
+   * @generated from field: int32 original_quality = 4;
+   */
+  originalQuality: number;
+
+  /**
+   * @generated from field: string original_status = 5;
+   */
+  originalStatus: string;
+
+  /**
+   * @generated from field: int32 original_interval_days = 6;
+   */
+  originalIntervalDays: number;
+
+  /**
+   * @generated from field: double original_easiness_factor = 7;
+   */
+  originalEasinessFactor: number;
+};
+
+/**
+ * Describes the message api.v1.UndoOverrideAnswerRequest.
+ * Use `create(UndoOverrideAnswerRequestSchema)` to create a new message.
+ */
+export const UndoOverrideAnswerRequestSchema: GenMessage<UndoOverrideAnswerRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 22);
+
+/**
+ * @generated from message api.v1.UndoOverrideAnswerResponse
+ */
+export type UndoOverrideAnswerResponse = Message<"api.v1.UndoOverrideAnswerResponse"> & {
+  /**
+   * @generated from field: bool correct = 1;
+   */
+  correct: boolean;
+
+  /**
+   * @generated from field: string next_review_date = 2;
+   */
+  nextReviewDate: string;
+};
+
+/**
+ * Describes the message api.v1.UndoOverrideAnswerResponse.
+ * Use `create(UndoOverrideAnswerResponseSchema)` to create a new message.
+ */
+export const UndoOverrideAnswerResponseSchema: GenMessage<UndoOverrideAnswerResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 23);
+
+/**
+ * Skip Word
+ *
+ * @generated from message api.v1.SkipWordRequest
+ */
+export type SkipWordRequest = Message<"api.v1.SkipWordRequest"> & {
+  /**
+   * @generated from field: int64 note_id = 1;
+   */
+  noteId: bigint;
+};
+
+/**
+ * Describes the message api.v1.SkipWordRequest.
+ * Use `create(SkipWordRequestSchema)` to create a new message.
+ */
+export const SkipWordRequestSchema: GenMessage<SkipWordRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 24);
+
+/**
+ * @generated from message api.v1.SkipWordResponse
+ */
+export type SkipWordResponse = Message<"api.v1.SkipWordResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.SkipWordResponse.
+ * Use `create(SkipWordResponseSchema)` to create a new message.
+ */
+export const SkipWordResponseSchema: GenMessage<SkipWordResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 25);
+
+/**
+ * Resume Skipped Word
+ *
+ * @generated from message api.v1.ResumeWordRequest
+ */
+export type ResumeWordRequest = Message<"api.v1.ResumeWordRequest"> & {
+  /**
+   * @generated from field: int64 note_id = 1;
+   */
+  noteId: bigint;
+};
+
+/**
+ * Describes the message api.v1.ResumeWordRequest.
+ * Use `create(ResumeWordRequestSchema)` to create a new message.
+ */
+export const ResumeWordRequestSchema: GenMessage<ResumeWordRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 26);
+
+/**
+ * @generated from message api.v1.ResumeWordResponse
+ */
+export type ResumeWordResponse = Message<"api.v1.ResumeWordResponse"> & {
+};
+
+/**
+ * Describes the message api.v1.ResumeWordResponse.
+ * Use `create(ResumeWordResponseSchema)` to create a new message.
+ */
+export const ResumeWordResponseSchema: GenMessage<ResumeWordResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 27);
 
 /**
  * @generated from enum api.v1.QuizType
@@ -650,6 +891,38 @@ export const QuizService: GenService<{
     methodKind: "unary";
     input: typeof SubmitFreeformAnswerRequestSchema;
     output: typeof SubmitFreeformAnswerResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.OverrideAnswer
+   */
+  overrideAnswer: {
+    methodKind: "unary";
+    input: typeof OverrideAnswerRequestSchema;
+    output: typeof OverrideAnswerResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.UndoOverrideAnswer
+   */
+  undoOverrideAnswer: {
+    methodKind: "unary";
+    input: typeof UndoOverrideAnswerRequestSchema;
+    output: typeof UndoOverrideAnswerResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.SkipWord
+   */
+  skipWord: {
+    methodKind: "unary";
+    input: typeof SkipWordRequestSchema;
+    output: typeof SkipWordResponseSchema;
+  },
+  /**
+   * @generated from rpc api.v1.QuizService.ResumeWord
+   */
+  resumeWord: {
+    methodKind: "unary";
+    input: typeof ResumeWordRequestSchema;
+    output: typeof ResumeWordResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_quiz, 0);

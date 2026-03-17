@@ -14,6 +14,7 @@ import {
 } from "@chakra-ui/react";
 import { quizClient } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
+import { FeedbackActions } from "@/components/FeedbackActions";
 
 export default function FreeformQuizPage() {
   const router = useRouter();
@@ -35,6 +36,8 @@ export default function FreeformQuizPage() {
     reason: string;
     notebookName: string;
     context?: string;
+    nextReviewDate?: string;
+    learnedAt?: string;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef(Date.now());
@@ -81,6 +84,8 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         context: res.context,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
       storeSubmitResult({
         word: res.word,
@@ -91,6 +96,8 @@ export default function FreeformQuizPage() {
         notebookName: res.notebookName,
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
+        nextReviewDate: res.nextReviewDate || undefined,
+        learnedAt: res.learnedAt || undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -187,9 +194,19 @@ export default function FreeformQuizPage() {
             </Box>
           )}
 
-          <Button colorPalette="blue" onClick={handleNext} mt={4}>
-            Next Word
-          </Button>
+          {/* Next review date, Next button, Override/Skip disabled for freeform.
+              The SubmitFreeformAnswerResponse proto does not include noteId,
+              so override/skip RPCs cannot be called. A proto change is needed
+              to return noteId from SubmitFreeformAnswer to enable these. */}
+          <FeedbackActions
+            isCorrect={feedback.correct}
+            noteId={undefined}
+            nextReviewDate={feedback.nextReviewDate}
+            isOverridden={false}
+            isSkipped={false}
+            nextLabel="Next Word"
+            onNext={handleNext}
+          />
 
           {freeformResults.length > 0 && (
             <Button
