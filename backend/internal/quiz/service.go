@@ -44,6 +44,12 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 	)
 }
 
+// NewReader creates a new notebook reader. Exported for use by handlers
+// that need to pass a reader to multiple service methods.
+func (s *Service) NewReader() (*notebook.Reader, error) {
+	return s.newReader()
+}
+
 // LoadNotebookSummaries returns all available notebooks with their review counts.
 func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 	reader, err := s.newReader()

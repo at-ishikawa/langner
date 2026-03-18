@@ -8,7 +8,9 @@ CREATE TABLE etymology_origins (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE (notebook_id, origin, language),
-    INDEX (notebook_id)
+    INDEX (notebook_id),
+    INDEX (origin, language),
+    INDEX idx_meaning (meaning(100))
 ) COMMENT='Etymology origin parts (roots, prefixes, suffixes)';
 
 CREATE TABLE note_origin_parts (
@@ -20,6 +22,7 @@ CREATE TABLE note_origin_parts (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (note_id) REFERENCES notes(id),
     FOREIGN KEY (origin_id) REFERENCES etymology_origins(id),
+    UNIQUE (note_id, sort_order),
     INDEX (note_id),
     INDEX (origin_id)
 ) COMMENT='Junction table linking notes to their etymology origin parts';

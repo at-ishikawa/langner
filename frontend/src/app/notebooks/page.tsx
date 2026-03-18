@@ -37,8 +37,8 @@ export default function NotebookListPage() {
   }
 
   const books = notebooks.filter((n) => n.kind === "Books");
-  const etymologyNotebooks = notebooks.filter((n) => n.etymologyReviewCount > 0 && n.kind !== "Books");
-  const otherNotebooks = notebooks.filter((n) => n.kind !== "Books" && !(n.etymologyReviewCount > 0));
+  const etymologyNotebooks = notebooks.filter((n) => n.kind === "Etymology");
+  const otherNotebooks = notebooks.filter((n) => n.kind !== "Books" && n.kind !== "Etymology");
 
   return (
     <Box p={4} maxW="md" mx="auto">

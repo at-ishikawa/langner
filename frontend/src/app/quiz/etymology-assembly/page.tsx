@@ -43,12 +43,6 @@ export default function EtymologyAssemblyPage() {
   const [overridden, setOverridden] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [displayCorrect, setDisplayCorrect] = useState(false);
-  const [overrideOriginals, setOverrideOriginals] = useState<{
-    quality: number;
-    status: string;
-    intervalDays: number;
-    easinessFactor: number;
-  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -66,7 +60,6 @@ export default function EtymologyAssemblyPage() {
     setOverridden(false);
     setSkipped(false);
     setDisplayCorrect(false);
-    setOverrideOriginals(null);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [currentIndex]);
 
@@ -298,12 +291,6 @@ export default function EtymologyAssemblyPage() {
                     });
                     setOverridden(true);
                     setDisplayCorrect(!displayCorrect);
-                    setOverrideOriginals({
-                      quality: res.originalQuality,
-                      status: res.originalStatus,
-                      intervalDays: res.originalIntervalDays,
-                      easinessFactor: res.originalEasinessFactor,
-                    });
                     setFeedback((prev) => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                   } catch { /* silently fail */ }
                 } : undefined}

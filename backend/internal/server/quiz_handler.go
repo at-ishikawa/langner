@@ -428,6 +428,14 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 		info := quiz.CardInfoFromReverseCard(card)
 		return &info, nil
 	}
+	if ecard, found := h.etymologyStore[noteID]; found {
+		h.mu.Unlock()
+		info := quiz.CardInfo{
+			NotebookName: ecard.NotebookName,
+			Expression:   ecard.Expression,
+		}
+		return &info, nil
+	}
 	h.mu.Unlock()
 
 	// Fall back to DB lookup
@@ -531,6 +539,10 @@ func (h *QuizHandler) StartEtymologyQuiz(
 	ctx context.Context,
 	req *connect.Request[apiv1.StartEtymologyQuizRequest],
 ) (*connect.Response[apiv1.StartEtymologyQuizResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
 	cards, err := h.svc.LoadEtymologyCards(
 		req.Msg.GetEtymologyNotebookIds(),
 		req.Msg.GetDefinitionNotebookIds(),
@@ -615,7 +627,11 @@ func (h *QuizHandler) SubmitEtymologyBreakdownAnswer(
 	}
 
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeEtymologyBreakdown)
-	relatedDefs := h.svc.FindRelatedDefinitions(card)
+	reader, err := h.svc.NewReader()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader for related definitions: %w", err))
+	}
+	relatedDefs := h.svc.FindRelatedDefinitions(reader, card)
 
 	var protoGrades []*apiv1.EtymologyOriginGrade
 	for _, g := range grade.OriginGrades {
@@ -682,7 +698,11 @@ func (h *QuizHandler) SubmitEtymologyAssemblyAnswer(
 	}
 
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeEtymologyAssembly)
-	relatedDefs := h.svc.FindRelatedDefinitions(card)
+	reader, err := h.svc.NewReader()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader for related definitions: %w", err))
+	}
+	relatedDefs := h.svc.FindRelatedDefinitions(reader, card)
 
 	var parts []*apiv1.EtymologyQuizOriginPart
 	for _, p := range card.OriginParts {
@@ -719,6 +739,10 @@ func (h *QuizHandler) StartEtymologyFreeformQuiz(
 	ctx context.Context,
 	req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest],
 ) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
 	cards, err := h.svc.LoadEtymologyFreeformExpressions(
 		req.Msg.GetEtymologyNotebookIds(),
 		req.Msg.GetDefinitionNotebookIds(),
@@ -800,7 +824,11 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(
 	}
 
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(matchedCard.NotebookName, matchedCard.Expression, notebook.QuizTypeEtymologyBreakdown)
-	relatedDefs := h.svc.FindRelatedDefinitions(*matchedCard)
+	reader, err := h.svc.NewReader()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader for related definitions: %w", err))
+	}
+	relatedDefs := h.svc.FindRelatedDefinitions(reader, *matchedCard)
 
 	var protoGrades []*apiv1.EtymologyOriginGrade
 	for _, g := range grade.OriginGrades {

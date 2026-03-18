@@ -89,14 +89,14 @@ func (s *Service) LoadEtymologyCards(
 		if _, isStory := storyIndexes[nbID]; isStory {
 			storyCards, err := s.loadEtymologyStoryCards(reader, nbID, originMap, learningHistories, includeUnstudied)
 			if err != nil {
-				continue
+				return nil, fmt.Errorf("failed to load etymology story cards for %q: %w", nbID, err)
 			}
 			cards = append(cards, storyCards...)
 		}
 		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
 			flashcardCards, err := s.loadEtymologyFlashcardCards(reader, nbID, originMap, learningHistories, includeUnstudied)
 			if err != nil {
-				continue
+				return nil, fmt.Errorf("failed to load etymology flashcard cards for %q: %w", nbID, err)
 			}
 			cards = append(cards, flashcardCards...)
 		}
@@ -392,12 +392,7 @@ func (s *Service) SaveEtymologyResult(card EtymologyCard, quality int, correct b
 }
 
 // FindRelatedDefinitions finds definitions that share origin parts with the given card.
-func (s *Service) FindRelatedDefinitions(card EtymologyCard) []RelatedDefinition {
-	reader, err := s.newReader()
-	if err != nil {
-		return nil
-	}
-
+func (s *Service) FindRelatedDefinitions(reader *notebook.Reader, card EtymologyCard) []RelatedDefinition {
 	originSet := make(map[string]bool)
 	for _, p := range card.OriginParts {
 		originSet[strings.ToLower(p.Origin)] = true

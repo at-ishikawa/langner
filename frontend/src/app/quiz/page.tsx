@@ -23,7 +23,7 @@ const quizTypes: { value: QuizType; label: string; description: string }[] = [
   { value: "etymology-breakdown", label: "Etymology", description: "Practice word origins and roots" },
 ];
 
-type EtymologyMode = "breakdown" | "assembly";
+type EtymologyMode = "breakdown" | "assembly" | "freeform";
 
 export default function QuizStartPage() {
   const router = useRouter();
@@ -136,7 +136,16 @@ export default function QuizStartPage() {
         router.push("/quiz/freeform");
       } else if (isEtymology) {
         const selectedNotebookIds = Array.from(selectedIds);
-        if (etymologyMode === "breakdown" || etymologyMode === "assembly") {
+        if (etymologyMode === "freeform") {
+          setQuizType("etymology-freeform" as QuizType);
+          const res = await quizClient.startEtymologyFreeformQuiz({
+            etymologyNotebookIds: selectedNotebookIds,
+            definitionNotebookIds: selectedNotebookIds,
+          });
+          setEtymologyFreeformExpressions(res.expressions ?? []);
+          setEtymologyFreeformNextReviewDates(res.nextReviewDates ?? {});
+          router.push("/quiz/etymology-freeform");
+        } else {
           const mode = etymologyMode === "breakdown"
             ? EtymologyQuizMode.BREAKDOWN
             : EtymologyQuizMode.ASSEMBLY;
@@ -233,6 +242,7 @@ export default function QuizStartPage() {
             {[
               { value: "breakdown" as EtymologyMode, label: "Breakdown", desc: "See word -> identify origins" },
               { value: "assembly" as EtymologyMode, label: "Assembly", desc: "See origins -> guess the word" },
+              { value: "freeform" as EtymologyMode, label: "Freeform", desc: "Type any word -> break down origins" },
             ].map((m) => (
               <Box
                 key={m.value}

@@ -316,9 +316,14 @@ func (u *LearningHistoryUpdater) OverrideLog(
 			newInterval := CalculateNextInterval(lastInterval, newEF, logs[i].Quality, correctStreak)
 			logs[i].IntervalDays = newInterval
 
-			if quizType == QuizTypeReverse {
+			switch quizType {
+			case QuizTypeReverse:
 				expr.ReverseEasinessFactor = newEF
-			} else {
+			case QuizTypeEtymologyBreakdown:
+				expr.EtymologyBreakdownEasinessFactor = newEF
+			case QuizTypeEtymologyAssembly:
+				expr.EtymologyAssemblyEasinessFactor = newEF
+			default:
 				expr.EasinessFactor = newEF
 			}
 		}
@@ -336,9 +341,14 @@ func (u *LearningHistoryUpdater) OverrideLog(
 		}
 
 		// Write back the logs
-		if quizType == QuizTypeReverse {
+		switch quizType {
+		case QuizTypeReverse:
 			expr.ReverseLogs = logs
-		} else {
+		case QuizTypeEtymologyBreakdown:
+			expr.EtymologyBreakdownLogs = logs
+		case QuizTypeEtymologyAssembly:
+			expr.EtymologyAssemblyLogs = logs
+		default:
 			expr.LearnedLogs = logs
 		}
 
@@ -375,10 +385,17 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(
 		logs[i].IntervalDays = originalIntervalDays
 		logs[i].OverrideInterval = 0
 
-		if quizType == QuizTypeReverse {
+		switch quizType {
+		case QuizTypeReverse:
 			expr.ReverseEasinessFactor = originalEF
 			expr.ReverseLogs = logs
-		} else {
+		case QuizTypeEtymologyBreakdown:
+			expr.EtymologyBreakdownEasinessFactor = originalEF
+			expr.EtymologyBreakdownLogs = logs
+		case QuizTypeEtymologyAssembly:
+			expr.EtymologyAssemblyEasinessFactor = originalEF
+			expr.EtymologyAssemblyLogs = logs
+		default:
 			expr.EasinessFactor = originalEF
 			expr.LearnedLogs = logs
 		}
