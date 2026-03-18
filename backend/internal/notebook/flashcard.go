@@ -49,6 +49,9 @@ func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[strin
 		// This works because both Index and FlashcardIndex have a path field
 		switch v := any(&index).(type) {
 		case *Index:
+			if v.Kind == "Etymology" {
+				return nil // Skip etymology notebooks; they are loaded separately
+			}
 			v.Path = filepath.Dir(path)
 			v.IsBook = isBook
 			indexMap[v.ID] = any(*v).(T)
@@ -71,6 +74,17 @@ func NewReader(
 	indexes := make(map[string]Index, 0)
 	etymologyIndexes := make(map[string]EtymologyIndex)
 
+	// Scan all directories for etymology notebooks
+	allDirs := make([]string, 0, len(storyDirectories)+len(flashcardDirectories)+len(etymologyDirectories))
+	allDirs = append(allDirs, storyDirectories...)
+	allDirs = append(allDirs, flashcardDirectories...)
+	allDirs = append(allDirs, etymologyDirectories...)
+	for _, dir := range allDirs {
+		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
+			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
+		}
+	}
+
 	for _, dir := range storyDirectories {
 		if err := walkIndexFiles(dir, indexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(story, %s) > %w", dir, err)
@@ -90,20 +104,9 @@ func NewReader(
 		}
 	}
 
-	for _, dir := range etymologyDirectories {
-		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
-			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
-		}
-	}
-
 	definitionsMap, err := NewDefinitionsMap(definitionsDirectories)
 	if err != nil {
 		return nil, fmt.Errorf("NewDefinitionsMap: %w", err)
-	}
-
-	// Remove etymology indexes from story indexes to avoid duplication
-	for id := range etymologyIndexes {
-		delete(indexes, id)
 	}
 
 	return &Reader{
