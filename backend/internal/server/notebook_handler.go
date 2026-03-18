@@ -461,6 +461,170 @@ func rapidAPIToLookupResponse(word string, resp rapidapi.Response, source string
 	}
 }
 
+// GetEtymologyNotebook returns the contents of an etymology notebook.
+func (h *NotebookHandler) GetEtymologyNotebook(
+	ctx context.Context,
+	req *connect.Request[apiv1.GetEtymologyNotebookRequest],
+) (*connect.Response[apiv1.GetEtymologyNotebookResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	notebookID := req.Msg.GetNotebookId()
+
+	reader, err := h.newReader()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create notebook reader: %w", err))
+	}
+
+	origins, err := reader.ReadEtymologyNotebook(notebookID)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("etymology notebook %s not found", notebookID))
+		}
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read etymology notebook: %w", err))
+	}
+
+	// Build origin map for counting words per origin
+	originWordCounts := make(map[string]int)
+
+	// Find all definitions across all notebooks that have matching origin_parts
+	var definitions []*apiv1.EtymologyDefinition
+	originSet := make(map[string]bool)
+	for _, o := range origins {
+		originSet[strings.ToLower(o.Origin)] = true
+	}
+
+	// Search story notebooks
+	for nbID := range reader.GetStoryIndexes() {
+		stories, err := reader.ReadStoryNotebooks(nbID)
+		if err != nil {
+			continue
+		}
+		for _, story := range stories {
+			for _, scene := range story.Scenes {
+				for _, def := range scene.Definitions {
+					if len(def.OriginParts) == 0 {
+						continue
+					}
+					if !hasMatchingOriginParts(def.OriginParts, originSet) {
+						continue
+					}
+					var parts []*apiv1.EtymologyOriginPart
+					for _, ref := range def.OriginParts {
+						parts = append(parts, &apiv1.EtymologyOriginPart{
+							Origin:   ref.Origin,
+							Language: ref.Language,
+						})
+						originWordCounts[strings.ToLower(ref.Origin)]++
+					}
+					definitions = append(definitions, &apiv1.EtymologyDefinition{
+						Expression:   def.Expression,
+						Meaning:      def.Meaning,
+						PartOfSpeech: def.PartOfSpeech,
+						OriginParts:  parts,
+						NotebookName: nbID,
+					})
+				}
+			}
+		}
+	}
+
+	// Search flashcard notebooks
+	for nbID := range reader.GetFlashcardIndexes() {
+		notebooks, err := reader.ReadFlashcardNotebooks(nbID)
+		if err != nil {
+			continue
+		}
+		for _, nb := range notebooks {
+			for _, card := range nb.Cards {
+				if len(card.OriginParts) == 0 {
+					continue
+				}
+				if !hasMatchingOriginParts(card.OriginParts, originSet) {
+					continue
+				}
+				var parts []*apiv1.EtymologyOriginPart
+				for _, ref := range card.OriginParts {
+					parts = append(parts, &apiv1.EtymologyOriginPart{
+						Origin:   ref.Origin,
+						Language: ref.Language,
+					})
+					originWordCounts[strings.ToLower(ref.Origin)]++
+				}
+				definitions = append(definitions, &apiv1.EtymologyDefinition{
+					Expression:   card.Expression,
+					Meaning:      card.Meaning,
+					PartOfSpeech: card.PartOfSpeech,
+					OriginParts:  parts,
+					NotebookName: nbID,
+				})
+			}
+		}
+	}
+
+	// Build proto origins with word counts
+	var protoOrigins []*apiv1.EtymologyOriginPart
+	for _, o := range origins {
+		protoOrigins = append(protoOrigins, &apiv1.EtymologyOriginPart{
+			Origin:    o.Origin,
+			Type:      o.Type,
+			Language:  o.Language,
+			Meaning:   o.Meaning,
+			WordCount: int32(originWordCounts[strings.ToLower(o.Origin)]),
+		})
+	}
+
+	// Group origins by meaning for the "By Meaning" tab
+	meaningMap := make(map[string][]*apiv1.EtymologyOriginPart)
+	var meaningOrder []string
+	for _, o := range protoOrigins {
+		meaning := o.Meaning
+		if _, exists := meaningMap[meaning]; !exists {
+			meaningOrder = append(meaningOrder, meaning)
+		}
+		meaningMap[meaning] = append(meaningMap[meaning], o)
+	}
+
+	var meaningGroups []*apiv1.EtymologyMeaningGroup
+	for _, meaning := range meaningOrder {
+		meaningGroups = append(meaningGroups, &apiv1.EtymologyMeaningGroup{
+			Meaning: meaning,
+			Origins: meaningMap[meaning],
+		})
+	}
+
+	return connect.NewResponse(&apiv1.GetEtymologyNotebookResponse{
+		Origins:         protoOrigins,
+		Definitions:     definitions,
+		MeaningGroups:   meaningGroups,
+		OriginCount:     int32(len(origins)),
+		DefinitionCount: int32(len(definitions)),
+	}), nil
+}
+
+func hasMatchingOriginParts(refs []notebook.OriginPartRef, originSet map[string]bool) bool {
+	for _, ref := range refs {
+		if originSet[strings.ToLower(ref.Origin)] {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveDefinitionsFilePath validates the notebookID and returns the path to its definitions YAML file.
+func (h *NotebookHandler) resolveDefinitionsFilePath(notebookIDRaw string) (string, error) {
+	defsDir := "notebooks/definitions"
+	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
+		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
+	}
+	filePath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
+	rel, err := filepath.Rel(defsDir, filePath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	}
+	return filePath, nil
+}
 
 // RegisterDefinition adds a definition via the repository.
 func (h *NotebookHandler) RegisterDefinition(

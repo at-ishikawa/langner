@@ -20,11 +20,15 @@ interface ResultItem {
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalCorrect: boolean;
+  originBreakdown?: Array<{ origin: string; meaning: string }>;
 }
 
 function getProtoQuizType(qt: QuizType): ProtoQuizType {
   if (qt === "reverse") return ProtoQuizType.REVERSE;
   if (qt === "freeform") return ProtoQuizType.FREEFORM;
+  if (qt === "etymology-breakdown") return ProtoQuizType.ETYMOLOGY_BREAKDOWN;
+  if (qt === "etymology-assembly") return ProtoQuizType.ETYMOLOGY_ASSEMBLY;
+  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_BREAKDOWN;
   return ProtoQuizType.STANDARD;
 }
 
@@ -33,6 +37,7 @@ export default function SessionCompletePage() {
   const results = useQuizStore((s) => s.results);
   const reverseResults = useQuizStore((s) => s.reverseResults);
   const freeformResults = useQuizStore((s) => s.freeformResults);
+  const etymologyResults = useQuizStore((s) => s.etymologyResults);
   const quizType = useQuizStore((s) => s.quizType);
   const reset = useQuizStore((s) => s.reset);
   const overrideResult = useQuizStore((s) => s.overrideResult);
@@ -89,8 +94,24 @@ export default function SessionCompletePage() {
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
       }));
     }
+    if (etymologyResults.length > 0) {
+      return etymologyResults.map((r, i) => ({
+        index: i,
+        key: r.noteId ? r.noteId.toString() : `ety-${i}`,
+        entry: r.expression,
+        meaning: r.meaning,
+        correct: r.correct,
+        nextReviewDate: r.nextReviewDate,
+        noteId: r.noteId,
+        learnedAt: r.learnedAt,
+        isOverridden: r.isOverridden,
+        isSkipped: r.isSkipped,
+        originalCorrect: r.isOverridden ? !r.correct : r.correct,
+        originBreakdown: r.originParts?.map((p) => ({ origin: p.origin, meaning: p.meaning })),
+      }));
+    }
     return [];
-  }, [results, reverseResults, freeformResults]);
+  }, [results, reverseResults, freeformResults, etymologyResults]);
 
   useEffect(() => {
     if (allResults.length === 0) {
@@ -128,7 +149,7 @@ export default function SessionCompletePage() {
 
   const handleUndo = async (item: ResultItem) => {
     if (!item.noteId || !item.learnedAt) return;
-    const storeResults = results.length > 0 ? results : reverseResults.length > 0 ? reverseResults : freeformResults;
+    const storeResults = results.length > 0 ? results : reverseResults.length > 0 ? reverseResults : freeformResults.length > 0 ? freeformResults : etymologyResults;
     const original = storeResults[item.index];
     if (!original?.originalValues) return;
     try {
@@ -317,6 +338,18 @@ function ResultCard({
           {ctx}
         </Text>
       ))}
+
+      {item.originBreakdown && item.originBreakdown.length > 0 && (
+        <Box display="flex" gap={1} alignItems="center" flexWrap="wrap" mt={1}>
+          {item.originBreakdown.map((p, i) => (
+            <Box key={i} display="flex" alignItems="center" gap={1}>
+              {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
+              <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
+              <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
 
       {/* Review date */}
       {item.nextReviewDate && (

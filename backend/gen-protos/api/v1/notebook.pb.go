@@ -1154,6 +1154,339 @@ func (*DeleteDefinitionResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_notebook_proto_rawDescGZIP(), []int{16}
 }
 
+// Etymology Notebook
+type EtymologyOriginPart struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Origin        string                 `protobuf:"bytes,1,opt,name=origin,proto3" json:"origin,omitempty"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Language      string                 `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
+	Meaning       string                 `protobuf:"bytes,4,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	WordCount     int32                  `protobuf:"varint,5,opt,name=word_count,json=wordCount,proto3" json:"word_count,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EtymologyOriginPart) Reset() {
+	*x = EtymologyOriginPart{}
+	mi := &file_api_v1_notebook_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EtymologyOriginPart) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EtymologyOriginPart) ProtoMessage() {}
+
+func (x *EtymologyOriginPart) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EtymologyOriginPart.ProtoReflect.Descriptor instead.
+func (*EtymologyOriginPart) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *EtymologyOriginPart) GetOrigin() string {
+	if x != nil {
+		return x.Origin
+	}
+	return ""
+}
+
+func (x *EtymologyOriginPart) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *EtymologyOriginPart) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *EtymologyOriginPart) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *EtymologyOriginPart) GetWordCount() int32 {
+	if x != nil {
+		return x.WordCount
+	}
+	return 0
+}
+
+type EtymologyDefinition struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Expression    string                 `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
+	Meaning       string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	PartOfSpeech  string                 `protobuf:"bytes,3,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
+	Note          string                 `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
+	OriginParts   []*EtymologyOriginPart `protobuf:"bytes,5,rep,name=origin_parts,json=originParts,proto3" json:"origin_parts,omitempty"`
+	NotebookName  string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EtymologyDefinition) Reset() {
+	*x = EtymologyDefinition{}
+	mi := &file_api_v1_notebook_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EtymologyDefinition) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EtymologyDefinition) ProtoMessage() {}
+
+func (x *EtymologyDefinition) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EtymologyDefinition.ProtoReflect.Descriptor instead.
+func (*EtymologyDefinition) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *EtymologyDefinition) GetExpression() string {
+	if x != nil {
+		return x.Expression
+	}
+	return ""
+}
+
+func (x *EtymologyDefinition) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *EtymologyDefinition) GetPartOfSpeech() string {
+	if x != nil {
+		return x.PartOfSpeech
+	}
+	return ""
+}
+
+func (x *EtymologyDefinition) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+func (x *EtymologyDefinition) GetOriginParts() []*EtymologyOriginPart {
+	if x != nil {
+		return x.OriginParts
+	}
+	return nil
+}
+
+func (x *EtymologyDefinition) GetNotebookName() string {
+	if x != nil {
+		return x.NotebookName
+	}
+	return ""
+}
+
+type EtymologyMeaningGroup struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meaning       string                 `protobuf:"bytes,1,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Origins       []*EtymologyOriginPart `protobuf:"bytes,2,rep,name=origins,proto3" json:"origins,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EtymologyMeaningGroup) Reset() {
+	*x = EtymologyMeaningGroup{}
+	mi := &file_api_v1_notebook_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EtymologyMeaningGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EtymologyMeaningGroup) ProtoMessage() {}
+
+func (x *EtymologyMeaningGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EtymologyMeaningGroup.ProtoReflect.Descriptor instead.
+func (*EtymologyMeaningGroup) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *EtymologyMeaningGroup) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *EtymologyMeaningGroup) GetOrigins() []*EtymologyOriginPart {
+	if x != nil {
+		return x.Origins
+	}
+	return nil
+}
+
+type GetEtymologyNotebookRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NotebookId    string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetEtymologyNotebookRequest) Reset() {
+	*x = GetEtymologyNotebookRequest{}
+	mi := &file_api_v1_notebook_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEtymologyNotebookRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEtymologyNotebookRequest) ProtoMessage() {}
+
+func (x *GetEtymologyNotebookRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEtymologyNotebookRequest.ProtoReflect.Descriptor instead.
+func (*GetEtymologyNotebookRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *GetEtymologyNotebookRequest) GetNotebookId() string {
+	if x != nil {
+		return x.NotebookId
+	}
+	return ""
+}
+
+type GetEtymologyNotebookResponse struct {
+	state           protoimpl.MessageState   `protogen:"open.v1"`
+	Origins         []*EtymologyOriginPart   `protobuf:"bytes,1,rep,name=origins,proto3" json:"origins,omitempty"`
+	Definitions     []*EtymologyDefinition   `protobuf:"bytes,2,rep,name=definitions,proto3" json:"definitions,omitempty"`
+	MeaningGroups   []*EtymologyMeaningGroup `protobuf:"bytes,3,rep,name=meaning_groups,json=meaningGroups,proto3" json:"meaning_groups,omitempty"`
+	OriginCount     int32                    `protobuf:"varint,4,opt,name=origin_count,json=originCount,proto3" json:"origin_count,omitempty"`
+	DefinitionCount int32                    `protobuf:"varint,5,opt,name=definition_count,json=definitionCount,proto3" json:"definition_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *GetEtymologyNotebookResponse) Reset() {
+	*x = GetEtymologyNotebookResponse{}
+	mi := &file_api_v1_notebook_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetEtymologyNotebookResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetEtymologyNotebookResponse) ProtoMessage() {}
+
+func (x *GetEtymologyNotebookResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_notebook_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetEtymologyNotebookResponse.ProtoReflect.Descriptor instead.
+func (*GetEtymologyNotebookResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_notebook_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *GetEtymologyNotebookResponse) GetOrigins() []*EtymologyOriginPart {
+	if x != nil {
+		return x.Origins
+	}
+	return nil
+}
+
+func (x *GetEtymologyNotebookResponse) GetDefinitions() []*EtymologyDefinition {
+	if x != nil {
+		return x.Definitions
+	}
+	return nil
+}
+
+func (x *GetEtymologyNotebookResponse) GetMeaningGroups() []*EtymologyMeaningGroup {
+	if x != nil {
+		return x.MeaningGroups
+	}
+	return nil
+}
+
+func (x *GetEtymologyNotebookResponse) GetOriginCount() int32 {
+	if x != nil {
+		return x.OriginCount
+	}
+	return 0
+}
+
+func (x *GetEtymologyNotebookResponse) GetDefinitionCount() int32 {
+	if x != nil {
+		return x.DefinitionCount
+	}
+	return 0
+}
+
 var File_api_v1_notebook_proto protoreflect.FileDescriptor
 
 const file_api_v1_notebook_proto_rawDesc = "" +
@@ -1266,14 +1599,43 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\n" +
 	"expression\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"expression\"\x1a\n" +
-	"\x18DeleteDefinitionResponse2\xbe\x03\n" +
+	"\x18DeleteDefinitionResponse\"\x96\x01\n" +
+	"\x13EtymologyOriginPart\x12\x16\n" +
+	"\x06origin\x18\x01 \x01(\tR\x06origin\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
+	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x18\n" +
+	"\ameaning\x18\x04 \x01(\tR\ameaning\x12\x1d\n" +
+	"\n" +
+	"word_count\x18\x05 \x01(\x05R\twordCount\"\xee\x01\n" +
+	"\x13EtymologyDefinition\x12\x1e\n" +
+	"\n" +
+	"expression\x18\x01 \x01(\tR\n" +
+	"expression\x12\x18\n" +
+	"\ameaning\x18\x02 \x01(\tR\ameaning\x12$\n" +
+	"\x0epart_of_speech\x18\x03 \x01(\tR\fpartOfSpeech\x12\x12\n" +
+	"\x04note\x18\x04 \x01(\tR\x04note\x12>\n" +
+	"\forigin_parts\x18\x05 \x03(\v2\x1b.api.v1.EtymologyOriginPartR\voriginParts\x12#\n" +
+	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\"h\n" +
+	"\x15EtymologyMeaningGroup\x12\x18\n" +
+	"\ameaning\x18\x01 \x01(\tR\ameaning\x125\n" +
+	"\aorigins\x18\x02 \x03(\v2\x1b.api.v1.EtymologyOriginPartR\aorigins\"G\n" +
+	"\x1bGetEtymologyNotebookRequest\x12(\n" +
+	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
+	"notebookId\"\xa8\x02\n" +
+	"\x1cGetEtymologyNotebookResponse\x125\n" +
+	"\aorigins\x18\x01 \x03(\v2\x1b.api.v1.EtymologyOriginPartR\aorigins\x12=\n" +
+	"\vdefinitions\x18\x02 \x03(\v2\x1b.api.v1.EtymologyDefinitionR\vdefinitions\x12D\n" +
+	"\x0emeaning_groups\x18\x03 \x03(\v2\x1d.api.v1.EtymologyMeaningGroupR\rmeaningGroups\x12!\n" +
+	"\forigin_count\x18\x04 \x01(\x05R\voriginCount\x12)\n" +
+	"\x10definition_count\x18\x05 \x01(\x05R\x0fdefinitionCount2\xa1\x04\n" +
 	"\x0fNotebookService\x12X\n" +
 	"\x11GetNotebookDetail\x12 .api.v1.GetNotebookDetailRequest\x1a!.api.v1.GetNotebookDetailResponse\x12X\n" +
 	"\x11ExportNotebookPDF\x12 .api.v1.ExportNotebookPDFRequest\x1a!.api.v1.ExportNotebookPDFResponse\x12C\n" +
 	"\n" +
 	"LookupWord\x12\x19.api.v1.LookupWordRequest\x1a\x1a.api.v1.LookupWordResponse\x12[\n" +
 	"\x12RegisterDefinition\x12!.api.v1.RegisterDefinitionRequest\x1a\".api.v1.RegisterDefinitionResponse\x12U\n" +
-	"\x10DeleteDefinition\x12\x1f.api.v1.DeleteDefinitionRequest\x1a .api.v1.DeleteDefinitionResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x10DeleteDefinition\x12\x1f.api.v1.DeleteDefinitionRequest\x1a .api.v1.DeleteDefinitionResponse\x12a\n" +
+	"\x14GetEtymologyNotebook\x12#.api.v1.GetEtymologyNotebookRequest\x1a$.api.v1.GetEtymologyNotebookResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_notebook_proto_rawDescOnce sync.Once
@@ -1287,25 +1649,30 @@ func file_api_v1_notebook_proto_rawDescGZIP() []byte {
 	return file_api_v1_notebook_proto_rawDescData
 }
 
-var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_api_v1_notebook_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_api_v1_notebook_proto_goTypes = []any{
-	(*GetNotebookDetailRequest)(nil),   // 0: api.v1.GetNotebookDetailRequest
-	(*GetNotebookDetailResponse)(nil),  // 1: api.v1.GetNotebookDetailResponse
-	(*StoryEntry)(nil),                 // 2: api.v1.StoryEntry
-	(*StoryMetadata)(nil),              // 3: api.v1.StoryMetadata
-	(*StoryScene)(nil),                 // 4: api.v1.StoryScene
-	(*Conversation)(nil),               // 5: api.v1.Conversation
-	(*NotebookWord)(nil),               // 6: api.v1.NotebookWord
-	(*LearningLogEntry)(nil),           // 7: api.v1.LearningLogEntry
-	(*ExportNotebookPDFRequest)(nil),   // 8: api.v1.ExportNotebookPDFRequest
-	(*ExportNotebookPDFResponse)(nil),  // 9: api.v1.ExportNotebookPDFResponse
-	(*LookupWordRequest)(nil),          // 10: api.v1.LookupWordRequest
-	(*WordDefinition)(nil),             // 11: api.v1.WordDefinition
-	(*LookupWordResponse)(nil),         // 12: api.v1.LookupWordResponse
-	(*RegisterDefinitionRequest)(nil),  // 13: api.v1.RegisterDefinitionRequest
-	(*RegisterDefinitionResponse)(nil), // 14: api.v1.RegisterDefinitionResponse
-	(*DeleteDefinitionRequest)(nil),    // 15: api.v1.DeleteDefinitionRequest
-	(*DeleteDefinitionResponse)(nil),   // 16: api.v1.DeleteDefinitionResponse
+	(*GetNotebookDetailRequest)(nil),     // 0: api.v1.GetNotebookDetailRequest
+	(*GetNotebookDetailResponse)(nil),    // 1: api.v1.GetNotebookDetailResponse
+	(*StoryEntry)(nil),                   // 2: api.v1.StoryEntry
+	(*StoryMetadata)(nil),                // 3: api.v1.StoryMetadata
+	(*StoryScene)(nil),                   // 4: api.v1.StoryScene
+	(*Conversation)(nil),                 // 5: api.v1.Conversation
+	(*NotebookWord)(nil),                 // 6: api.v1.NotebookWord
+	(*LearningLogEntry)(nil),             // 7: api.v1.LearningLogEntry
+	(*ExportNotebookPDFRequest)(nil),     // 8: api.v1.ExportNotebookPDFRequest
+	(*ExportNotebookPDFResponse)(nil),    // 9: api.v1.ExportNotebookPDFResponse
+	(*LookupWordRequest)(nil),            // 10: api.v1.LookupWordRequest
+	(*WordDefinition)(nil),               // 11: api.v1.WordDefinition
+	(*LookupWordResponse)(nil),           // 12: api.v1.LookupWordResponse
+	(*RegisterDefinitionRequest)(nil),    // 13: api.v1.RegisterDefinitionRequest
+	(*RegisterDefinitionResponse)(nil),   // 14: api.v1.RegisterDefinitionResponse
+	(*DeleteDefinitionRequest)(nil),      // 15: api.v1.DeleteDefinitionRequest
+	(*DeleteDefinitionResponse)(nil),     // 16: api.v1.DeleteDefinitionResponse
+	(*EtymologyOriginPart)(nil),          // 17: api.v1.EtymologyOriginPart
+	(*EtymologyDefinition)(nil),          // 18: api.v1.EtymologyDefinition
+	(*EtymologyMeaningGroup)(nil),        // 19: api.v1.EtymologyMeaningGroup
+	(*GetEtymologyNotebookRequest)(nil),  // 20: api.v1.GetEtymologyNotebookRequest
+	(*GetEtymologyNotebookResponse)(nil), // 21: api.v1.GetEtymologyNotebookResponse
 }
 var file_api_v1_notebook_proto_depIdxs = []int32{
 	2,  // 0: api.v1.GetNotebookDetailResponse.stories:type_name -> api.v1.StoryEntry
@@ -1315,21 +1682,28 @@ var file_api_v1_notebook_proto_depIdxs = []int32{
 	6,  // 4: api.v1.StoryScene.definitions:type_name -> api.v1.NotebookWord
 	7,  // 5: api.v1.NotebookWord.learned_logs:type_name -> api.v1.LearningLogEntry
 	11, // 6: api.v1.LookupWordResponse.definitions:type_name -> api.v1.WordDefinition
-	0,  // 7: api.v1.NotebookService.GetNotebookDetail:input_type -> api.v1.GetNotebookDetailRequest
-	8,  // 8: api.v1.NotebookService.ExportNotebookPDF:input_type -> api.v1.ExportNotebookPDFRequest
-	10, // 9: api.v1.NotebookService.LookupWord:input_type -> api.v1.LookupWordRequest
-	13, // 10: api.v1.NotebookService.RegisterDefinition:input_type -> api.v1.RegisterDefinitionRequest
-	15, // 11: api.v1.NotebookService.DeleteDefinition:input_type -> api.v1.DeleteDefinitionRequest
-	1,  // 12: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
-	9,  // 13: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
-	12, // 14: api.v1.NotebookService.LookupWord:output_type -> api.v1.LookupWordResponse
-	14, // 15: api.v1.NotebookService.RegisterDefinition:output_type -> api.v1.RegisterDefinitionResponse
-	16, // 16: api.v1.NotebookService.DeleteDefinition:output_type -> api.v1.DeleteDefinitionResponse
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	17, // 7: api.v1.EtymologyDefinition.origin_parts:type_name -> api.v1.EtymologyOriginPart
+	17, // 8: api.v1.EtymologyMeaningGroup.origins:type_name -> api.v1.EtymologyOriginPart
+	17, // 9: api.v1.GetEtymologyNotebookResponse.origins:type_name -> api.v1.EtymologyOriginPart
+	18, // 10: api.v1.GetEtymologyNotebookResponse.definitions:type_name -> api.v1.EtymologyDefinition
+	19, // 11: api.v1.GetEtymologyNotebookResponse.meaning_groups:type_name -> api.v1.EtymologyMeaningGroup
+	0,  // 12: api.v1.NotebookService.GetNotebookDetail:input_type -> api.v1.GetNotebookDetailRequest
+	8,  // 13: api.v1.NotebookService.ExportNotebookPDF:input_type -> api.v1.ExportNotebookPDFRequest
+	10, // 14: api.v1.NotebookService.LookupWord:input_type -> api.v1.LookupWordRequest
+	13, // 15: api.v1.NotebookService.RegisterDefinition:input_type -> api.v1.RegisterDefinitionRequest
+	15, // 16: api.v1.NotebookService.DeleteDefinition:input_type -> api.v1.DeleteDefinitionRequest
+	20, // 17: api.v1.NotebookService.GetEtymologyNotebook:input_type -> api.v1.GetEtymologyNotebookRequest
+	1,  // 18: api.v1.NotebookService.GetNotebookDetail:output_type -> api.v1.GetNotebookDetailResponse
+	9,  // 19: api.v1.NotebookService.ExportNotebookPDF:output_type -> api.v1.ExportNotebookPDFResponse
+	12, // 20: api.v1.NotebookService.LookupWord:output_type -> api.v1.LookupWordResponse
+	14, // 21: api.v1.NotebookService.RegisterDefinition:output_type -> api.v1.RegisterDefinitionResponse
+	16, // 22: api.v1.NotebookService.DeleteDefinition:output_type -> api.v1.DeleteDefinitionResponse
+	21, // 23: api.v1.NotebookService.GetEtymologyNotebook:output_type -> api.v1.GetEtymologyNotebookResponse
+	18, // [18:24] is the sub-list for method output_type
+	12, // [12:18] is the sub-list for method input_type
+	12, // [12:12] is the sub-list for extension type_name
+	12, // [12:12] is the sub-list for extension extendee
+	0,  // [0:12] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_notebook_proto_init() }
@@ -1343,7 +1717,7 @@ func file_api_v1_notebook_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_notebook_proto_rawDesc), len(file_api_v1_notebook_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 812" width="375" height="812">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .subtitle { font-size: 14px; fill: #666; }
+      .label { font-size: 13px; fill: #333; font-weight: 500; }
+      .body { font-size: 14px; fill: #333; }
+      .muted { font-size: 12px; fill: #999; }
+      .btn-text { font-size: 15px; font-weight: 600; fill: #fff; }
+      .progress { font-size: 13px; fill: #666; }
+      .incorrect { font-size: 16px; font-weight: 600; fill: #dc2626; }
+      .strikethrough { font-size: 14px; fill: #999; text-decoration: line-through; }
+      .link { font-size: 13px; fill: #2563eb; font-weight: 500; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="812" fill="#f8f9fa"/>
+
+  <!-- Status bar -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Header -->
+  <rect y="44" width="375" height="56" fill="#fff"/>
+  <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb"/>
+  <text x="187" y="78" text-anchor="middle" class="title">Breakdown</text>
+
+  <!-- Progress -->
+  <text x="187" y="124" text-anchor="middle" class="progress">4 / 18</text>
+  <rect x="24" y="132" width="327" height="4" rx="2" fill="#e5e7eb"/>
+  <rect x="24" y="132" width="73" height="4" rx="2" fill="#2563eb"/>
+
+  <!-- Incorrect banner -->
+  <rect x="0" y="148" width="375" height="44" fill="#fef2f2"/>
+  <text x="187" y="175" text-anchor="middle" class="incorrect">&#10007; Incorrect</text>
+
+  <!-- Word -->
+  <rect x="16" y="208" width="343" height="56" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="234" font-size="22" font-weight="700" fill="#111">bicycle</text>
+  <text x="32" y="252" class="muted">a two-wheeled vehicle</text>
+
+  <!-- Your answer (with errors) -->
+  <text x="24" y="292" class="label">Your answer</text>
+  <rect x="16" y="300" width="343" height="70" rx="10" fill="#fff" stroke="#dc2626" stroke-width="1.5"/>
+  <text x="32" y="326" font-size="14" fill="#333">bi = two</text>
+  <text x="280" y="326" font-size="12" fill="#16a34a" font-weight="500">&#10003;</text>
+  <text x="32" y="350" font-size="14" fill="#dc2626" text-decoration="line-through">cycle = circle</text>
+  <text x="280" y="350" font-size="12" fill="#dc2626" font-weight="500">&#10007;</text>
+
+  <!-- Correct breakdown -->
+  <text x="24" y="400" class="label">Correct breakdown</text>
+  <rect x="16" y="408" width="343" height="76" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="432" class="link">bi</text>
+  <text x="50" y="432" class="body">= two</text>
+  <rect x="92" y="420" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="115" y="433" text-anchor="middle" font-size="10" fill="#666">Latin</text>
+  <rect x="146" y="420" width="52" height="18" rx="9" fill="#fef3c7"/>
+  <text x="172" y="433" text-anchor="middle" font-size="10" fill="#92400e">prefix</text>
+
+  <text x="32" y="464" class="link">kyklos</text>
+  <text x="82" y="464" class="body">= circle, wheel</text>
+  <rect x="182" y="452" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="205" y="465" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+  <rect x="236" y="452" width="44" height="18" rx="9" fill="#dbeafe"/>
+  <text x="258" y="465" text-anchor="middle" font-size="10" fill="#2563eb">root</text>
+
+  <!-- Related words -->
+  <text x="24" y="516" class="label">Related words sharing these origins</text>
+  <rect x="16" y="524" width="343" height="100" rx="10" fill="#fff" stroke="#e5e7eb"/>
+
+  <text x="32" y="548" class="muted">Also using bi:</text>
+  <text x="32" y="568" class="link">bilingual, binocular, bilateral</text>
+
+  <text x="32" y="592" class="muted">Also using kyklos:</text>
+  <text x="32" y="612" class="link">tricycle, cycle, cyclical, motorcycle</text>
+
+  <!-- Next review date -->
+  <text x="24" y="656" class="muted">Next review: March 18, 2026</text>
+
+  <!-- Next button -->
+  <rect y="742" width="375" height="70" fill="#fff"/>
+  <line x1="0" y1="742" x2="375" y2="742" stroke="#e5e7eb"/>
+  <rect x="24" y="754" width="327" height="46" rx="10" fill="#2563eb"/>
+  <text x="187" y="783" text-anchor="middle" class="btn-text">Next</text>
+</svg>

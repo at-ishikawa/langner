@@ -111,6 +111,13 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		})
 	}
 
+	// Add etymology notebooks
+	etymSummaries, err := s.LoadEtymologyNotebookSummaries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load etymology notebook summaries: %w", err)
+	}
+	summaries = append(summaries, etymSummaries...)
+
 	return summaries, nil
 }
 

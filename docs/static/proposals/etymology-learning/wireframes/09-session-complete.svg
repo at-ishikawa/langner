@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 900" width="375" height="900">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .heading { font-size: 22px; font-weight: 700; fill: #111; }
+      .muted { font-size: 12px; fill: #999; }
+      .btn-text { font-size: 15px; font-weight: 600; fill: #fff; }
+      .stat-number { font-size: 36px; font-weight: 700; }
+      .stat-label { font-size: 13px; fill: #666; }
+      .section-label { font-size: 13px; font-weight: 600; fill: #333; }
+      .word-text { font-size: 14px; font-weight: 600; fill: #111; }
+      .word-meaning { font-size: 12px; fill: #999; }
+      .review-date { font-size: 12px; fill: #666; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="900" fill="#f8f9fa"/>
+
+  <!-- Status bar area -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Header -->
+  <rect y="44" width="375" height="56" fill="#fff"/>
+  <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb" stroke-width="1"/>
+  <text x="187" y="78" text-anchor="middle" class="title">Etymology Quiz</text>
+
+  <!-- Progress bar (full) -->
+  <rect x="24" y="112" width="327" height="4" rx="2" fill="#2563eb"/>
+
+  <!-- Completion message -->
+  <text x="187" y="168" text-anchor="middle" class="heading">Session Complete</text>
+
+  <!-- Stats card (matching existing layout) -->
+  <rect x="16" y="190" width="343" height="160" rx="12" fill="#fff" stroke="#e5e7eb" stroke-width="1"/>
+
+  <!-- Total -->
+  <text x="187" y="234" text-anchor="middle" class="stat-number" fill="#111">18</text>
+  <text x="187" y="254" text-anchor="middle" class="stat-label">words practiced</text>
+
+  <!-- Correct -->
+  <text x="110" y="310" text-anchor="middle" class="stat-number" fill="#16a34a">14</text>
+  <text x="110" y="330" text-anchor="middle" class="stat-label">correct</text>
+
+  <!-- Divider -->
+  <line x1="187" y1="280" x2="187" y2="340" stroke="#e5e7eb" stroke-width="1"/>
+
+  <!-- Incorrect -->
+  <text x="265" y="310" text-anchor="middle" class="stat-number" fill="#dc2626">4</text>
+  <text x="265" y="330" text-anchor="middle" class="stat-label">incorrect</text>
+
+  <!-- Incorrect section -->
+  <text x="24" y="392" class="section-label" fill="#dc2626">Incorrect</text>
+
+  <!-- Incorrect result card 1 (with color bar at top) -->
+  <rect x="16" y="404" width="343" height="100" rx="8" fill="#fff" stroke="#fecaca" stroke-width="1"/>
+  <rect x="16" y="404" width="343" height="4" rx="2" fill="#dc2626"/>
+  <text x="32" y="432" class="word-text">bicycle</text>
+  <text x="32" y="450" class="word-meaning">Your answer: bi = two, cycle = circle</text>
+  <text x="32" y="466" font-size="12" fill="#16a34a">Correct: bi (Latin) + kyklos (Greek)</text>
+  <text x="32" y="490" class="review-date">Next review: March 18, 2026</text>
+
+  <!-- Incorrect result card 2 -->
+  <rect x="16" y="516" width="343" height="100" rx="8" fill="#fff" stroke="#fecaca" stroke-width="1"/>
+  <rect x="16" y="516" width="343" height="4" rx="2" fill="#dc2626"/>
+  <text x="32" y="544" class="word-text">describe</text>
+  <text x="32" y="562" class="word-meaning">Your answer: dis = apart, scribe = write</text>
+  <text x="32" y="578" font-size="12" fill="#16a34a">Correct: de (Latin) + scribere (Latin)</text>
+  <text x="32" y="602" class="review-date">Next review: March 18, 2026</text>
+
+  <!-- Correct section -->
+  <text x="24" y="650" class="section-label" fill="#16a34a">Correct</text>
+
+  <!-- Correct result card 1 (with color bar at top) -->
+  <rect x="16" y="662" width="343" height="72" rx="8" fill="#fff" stroke="#bbf7d0" stroke-width="1"/>
+  <rect x="16" y="662" width="343" height="4" rx="2" fill="#16a34a"/>
+  <text x="32" y="690" class="word-text">telescope</text>
+  <text x="32" y="706" class="word-meaning">tele (Greek) + scope (Greek)</text>
+  <text x="32" y="722" class="review-date">Next review: April 2, 2026</text>
+
+  <!-- Correct result card 2 -->
+  <rect x="16" y="746" width="343" height="72" rx="8" fill="#fff" stroke="#bbf7d0" stroke-width="1"/>
+  <rect x="16" y="746" width="343" height="4" rx="2" fill="#16a34a"/>
+  <text x="32" y="774" class="word-text">microphone</text>
+  <text x="32" y="790" class="word-meaning">micro (Greek) + phone (Greek)</text>
+  <text x="32" y="806" class="review-date">Next review: April 5, 2026</text>
+
+  <!-- Back to Start button -->
+  <rect x="24" y="840" width="327" height="52" rx="10" fill="#2563eb"/>
+  <text x="187" y="872" text-anchor="middle" class="btn-text">Back to Start</text>
+</svg>

@@ -37,12 +37,13 @@ type Example struct {
 
 // NotebookSummary holds display info for one notebook.
 type NotebookSummary struct {
-	NotebookID         string
-	Name               string
-	ReviewCount        int
-	ReverseReviewCount int
-	LatestStoryDate    time.Time
-	Kind               string
+	NotebookID            string
+	Name                  string
+	ReviewCount           int
+	ReverseReviewCount    int
+	EtymologyReviewCount  int
+	LatestStoryDate       time.Time
+	Kind                  string
 }
 
 // GradeResult holds the outcome of grading a user's answer.

@@ -10,10 +10,11 @@ import (
 )
 
 type Reader struct {
-	indexes          map[string]Index
-	flashcardIndexes map[string]FlashcardIndex
-	dictionaryMap    map[string]rapidapi.Response
-	definitionsMap   DefinitionsMap
+	indexes           map[string]Index
+	flashcardIndexes  map[string]FlashcardIndex
+	etymologyIndexes  map[string]EtymologyIndex
+	dictionaryMap     map[string]rapidapi.Response
+	definitionsMap    DefinitionsMap
 }
 
 // walkIndexFiles walks a directory and loads index.yml files into the provided map
@@ -67,9 +68,14 @@ func NewReader(
 	dictionaryMap map[string]rapidapi.Response,
 ) (*Reader, error) {
 	indexes := make(map[string]Index, 0)
+	etymologyIndexes := make(map[string]EtymologyIndex)
+
 	for _, dir := range storyDirectories {
 		if err := walkIndexFiles(dir, indexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(story, %s) > %w", dir, err)
+		}
+		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
+			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
 		}
 	}
 
@@ -77,6 +83,9 @@ func NewReader(
 	for _, dir := range flashcardDirectories {
 		if err := walkIndexFiles(dir, flashcardIndexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(flashcard, %s) > %w", dir, err)
+		}
+		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
+			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
 		}
 	}
 
@@ -91,9 +100,15 @@ func NewReader(
 		return nil, fmt.Errorf("NewDefinitionsMap: %w", err)
 	}
 
+	// Remove etymology indexes from story indexes to avoid duplication
+	for id := range etymologyIndexes {
+		delete(indexes, id)
+	}
+
 	return &Reader{
 		indexes:          indexes,
 		flashcardIndexes: flashcardIndexes,
+		etymologyIndexes: etymologyIndexes,
 		dictionaryMap:    dictionaryMap,
 		definitionsMap:   definitionsMap,
 	}, nil

@@ -4,9 +4,11 @@ package notebook
 type QuizType string
 
 const (
-	QuizTypeFreeform QuizType = "freeform"
-	QuizTypeNotebook QuizType = "notebook"
-	QuizTypeReverse  QuizType = "reverse"
+	QuizTypeFreeform            QuizType = "freeform"
+	QuizTypeNotebook            QuizType = "notebook"
+	QuizTypeReverse             QuizType = "reverse"
+	QuizTypeEtymologyBreakdown  QuizType = "etymology_breakdown"
+	QuizTypeEtymologyAssembly   QuizType = "etymology_assembly"
 )
 
 // Quality represents the quality of a response in the SM-2 algorithm

@@ -67,7 +67,8 @@ type Note struct {
 	// Deprecated: Use References
 	Reference string `yaml:"reference,omitempty"`
 
-	Statements []Phrase `yaml:"statements,omitempty"`
+	OriginParts []OriginPartRef `yaml:"origin_parts,omitempty"`
+	Statements  []Phrase        `yaml:"statements,omitempty"`
 
 	YouTubeTimeSeconds int         `yaml:"youtube_time_seconds,omitempty"`
 	References         []Reference `yaml:"references,omitempty"`
@@ -199,6 +200,12 @@ func (note *Note) SetDetails(dictionaryMap map[string]rapidapi.Response, youTube
 type Reference struct {
 	URL         string `yaml:"url,omitempty"`
 	Description string `yaml:"description,omitempty"`
+}
+
+// OriginPartRef references an etymology origin by origin name and language.
+type OriginPartRef struct {
+	Origin   string `yaml:"origin"`
+	Language string `yaml:"language,omitempty"`
 }
 
 type Phrase struct {
