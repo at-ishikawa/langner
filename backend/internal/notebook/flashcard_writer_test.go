@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewFlashcardNotebookWriter(t *testing.T) {
-	reader, err := NewReader(nil, nil, nil, nil, nil)
+	reader, err := NewReader(nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	writer := NewFlashcardNotebookWriter(reader, "template.md")
@@ -153,7 +153,7 @@ func TestOutputFlashcardNotebooks(t *testing.T) {
 		},
 	}))
 
-	reader, err := NewReader(nil, []string{flashcardsDir}, nil, nil, nil)
+	reader, err := NewReader(nil, []string{flashcardsDir}, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	writer := NewFlashcardNotebookWriter(reader, "")

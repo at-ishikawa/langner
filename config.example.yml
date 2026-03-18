@@ -38,6 +38,10 @@ notebooks:
   definitions_directories:
     - examples/definitions
 
+  # Directories containing etymology notebooks (roots, prefixes, suffixes)
+  etymology_directories:
+    - examples/etymology
+
   # Directory containing learning notes/history
   learning_notes_directory: examples/learning_notes
 

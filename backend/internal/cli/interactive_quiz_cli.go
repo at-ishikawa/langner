@@ -42,7 +42,7 @@ func initializeQuizCLI(
 	dictionaryMap := rapidapi.FromResponsesToMap(response)
 
 	// Create notebook reader
-	reader, err := notebook.NewReader(notebooksConfig.StoriesDirectories, notebooksConfig.FlashcardsDirectories, notebooksConfig.BooksDirectories, notebooksConfig.DefinitionsDirectories, dictionaryMap)
+	reader, err := notebook.NewReader(notebooksConfig.StoriesDirectories, notebooksConfig.FlashcardsDirectories, notebooksConfig.BooksDirectories, notebooksConfig.DefinitionsDirectories, notebooksConfig.EtymologyDirectories, dictionaryMap)
 	if err != nil {
 		return nil, nil, fmt.Errorf("notebook.NewReader() > %w", err)
 	}

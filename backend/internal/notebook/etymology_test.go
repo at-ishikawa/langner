@@ -41,10 +41,11 @@ notebooks:
 	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(originsYAML), 0644))
 
 	reader, err := NewReader(
+		nil,
+		nil,
+		nil,
+		nil,
 		[]string{filepath.Join(tmpDir, "etymology")},
-		nil,
-		nil,
-		nil,
 		nil,
 	)
 	require.NoError(t, err)
@@ -73,7 +74,7 @@ notebooks:
 }
 
 func TestReader_ReadEtymologyNotebook_NotFound(t *testing.T) {
-	reader, err := NewReader(nil, nil, nil, nil, nil)
+	reader, err := NewReader(nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	_, err = reader.ReadEtymologyNotebook("nonexistent")
@@ -113,6 +114,7 @@ notebooks:
 		nil,
 		nil,
 		nil,
+		[]string{mixedDir},
 		nil,
 	)
 	require.NoError(t, err)

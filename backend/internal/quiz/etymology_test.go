@@ -86,7 +86,7 @@ func TestService_LoadEtymologyCards(t *testing.T) {
 
 	svc := NewService(
 		config.NotebooksConfig{
-			StoriesDirectories:     []string{filepath.Join(tmpDir, "etymology")},
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
 			FlashcardsDirectories:  []string{filepath.Join(tmpDir, "flashcards")},
 			LearningNotesDirectory: learningDir,
 		},
@@ -157,7 +157,7 @@ notebooks:
 
 	svc := NewService(
 		config.NotebooksConfig{
-			StoriesDirectories:     []string{filepath.Join(tmpDir, "etymology")},
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
 			FlashcardsDirectories:  []string{filepath.Join(tmpDir, "flashcards")},
 			LearningNotesDirectory: learningDir,
 		},

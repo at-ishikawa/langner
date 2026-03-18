@@ -40,6 +40,7 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 		s.notebooksConfig.FlashcardsDirectories,
 		s.notebooksConfig.BooksDirectories,
 		s.notebooksConfig.DefinitionsDirectories,
+		s.notebooksConfig.EtymologyDirectories,
 		s.dictionaryMap,
 	)
 }

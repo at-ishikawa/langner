@@ -55,6 +55,7 @@ func TestConfigLoader_Load(t *testing.T) {
 					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
 					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
 					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -105,6 +106,7 @@ outputs:
 					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
 					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
 					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -149,6 +151,7 @@ outputs:
 					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
 					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
 					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{

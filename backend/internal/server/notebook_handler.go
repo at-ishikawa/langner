@@ -53,6 +53,7 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 		h.notebooksConfig.FlashcardsDirectories,
 		h.notebooksConfig.BooksDirectories,
 		h.notebooksConfig.DefinitionsDirectories,
+		h.notebooksConfig.EtymologyDirectories,
 		h.dictionaryMap,
 	)
 }

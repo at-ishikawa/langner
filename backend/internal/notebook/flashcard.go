@@ -65,6 +65,7 @@ func NewReader(
 	flashcardDirectories []string,
 	booksDirectories []string,
 	definitionsDirectories []string,
+	etymologyDirectories []string,
 	dictionaryMap map[string]rapidapi.Response,
 ) (*Reader, error) {
 	indexes := make(map[string]Index, 0)
@@ -74,9 +75,6 @@ func NewReader(
 		if err := walkIndexFiles(dir, indexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(story, %s) > %w", dir, err)
 		}
-		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
-			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
-		}
 	}
 
 	flashcardIndexes := make(map[string]FlashcardIndex, 0)
@@ -84,14 +82,17 @@ func NewReader(
 		if err := walkIndexFiles(dir, flashcardIndexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(flashcard, %s) > %w", dir, err)
 		}
-		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
-			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
-		}
 	}
 
 	for _, dir := range booksDirectories {
 		if err := walkIndexFiles(dir, indexes, true); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(books, %s) > %w", dir, err)
+		}
+	}
+
+	for _, dir := range etymologyDirectories {
+		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
+			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
 		}
 	}
 

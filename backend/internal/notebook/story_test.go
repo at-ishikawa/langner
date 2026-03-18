@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewStoryNotebookWriter(t *testing.T) {
-	reader, err := NewReader(nil, nil, nil, nil, nil)
+	reader, err := NewReader(nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	writer := NewStoryNotebookWriter(reader, "template.md")
@@ -896,7 +896,7 @@ func TestReader_ReadAllStoryNotebooksMap(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tempDir := tt.setupFunc(t)
 
-			reader, err := NewReader([]string{tempDir}, []string{}, nil, nil, map[string]rapidapi.Response{})
+			reader, err := NewReader([]string{tempDir}, []string{}, nil, nil, nil, map[string]rapidapi.Response{})
 			require.NoError(t, err)
 
 			result, err := reader.ReadAllStoryNotebooksMap()
@@ -943,7 +943,7 @@ func TestOutputStoryNotebooks(t *testing.T) {
 		},
 	}))
 
-	reader, err := NewReader([]string{storiesDir}, nil, nil, nil, nil)
+	reader, err := NewReader([]string{storiesDir}, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
 	writer := NewStoryNotebookWriter(reader, "")
