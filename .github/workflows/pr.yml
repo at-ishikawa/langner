@@ -38,6 +38,21 @@ jobs:
   validate-examples:
     name: Validate example configurations
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8
+        ports:
+          - 3306:3306
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: local
+          MYSQL_USER: user
+          MYSQL_PASSWORD: password
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -54,3 +69,24 @@ jobs:
 
       - name: Output markdown and PDF files
         run: ./langner --config config.example.yml notebooks stories friends --pdf
+
+      - name: Install migrate tool
+        run: go install -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+
+      - name: Run database migrations
+        run: migrate -source file://backend/schemas/migrations -database "mysql://user:password@tcp(localhost:3306)/local" up
+
+      - name: Import example data to DB
+        run: ./langner migrate import-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
+
+      - name: Run langner validate (with DB consistency)
+        run: ./langner validate --config config.example.yml
+        env:
+          DB_PASSWORD: password
+
+      - name: Run langner migrate validate-db
+        run: ./langner migrate validate-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
