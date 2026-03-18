@@ -12,6 +12,7 @@ type NoteRecord struct {
 	DictionaryNumber int             `db:"dictionary_number"`
 	CreatedAt        time.Time       `db:"created_at"`
 	UpdatedAt        time.Time       `db:"updated_at"`
+	SkippedAt        *time.Time      `db:"skipped_at"`
 	Images           []NoteImage     `db:"-"`
 	References       []NoteReference `db:"-"`
 	NotebookNotes    []NotebookNote  `db:"-"`
