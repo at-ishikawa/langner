@@ -1,6 +1,7 @@
 package learning
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -385,4 +386,29 @@ func convertToRecords(logs []LearningLog) []notebook.LearningRecord {
 		}
 	}
 	return records
+}
+
+func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) error {
+	dir := log.LearningNotesDir
+	if dir == "" { dir = r.directory }
+	learningHistories, err := notebook.NewLearningHistories(dir)
+	if err != nil { return fmt.Errorf("load learning histories: %w", err) }
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[log.NotebookName])
+	quizType := notebook.QuizType(log.QuizType)
+	if quizType == notebook.QuizTypeReverse {
+		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs))
+	} else {
+		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), quizType)
+	}
+	notePath := filepath.Join(dir, log.NotebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil { return fmt.Errorf("write learning history for %q: %w", log.NotebookName, err) }
+	return nil
+}
+
+func (r *YAMLLearningRepository) FindAll(_ context.Context) ([]LearningLog, error) {
+	return nil, fmt.Errorf("FindAll is not supported for YAML learning repository")
+}
+
+func (r *YAMLLearningRepository) BatchCreate(_ context.Context, _ []*LearningLog) error {
+	return fmt.Errorf("BatchCreate is not supported for YAML learning repository")
 }

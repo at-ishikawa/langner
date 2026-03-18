@@ -14,6 +14,7 @@ import (
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
@@ -31,7 +32,7 @@ func newTestHandler(t *testing.T, openaiClient inference.Client) *QuizHandler {
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningNotesDir,
-	}, openaiClient, make(map[string]rapidapi.Response), nil)
+	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningNotesDir))
 
 	return NewQuizHandler(svc)
 }
@@ -84,7 +85,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), nil)
+	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 
 	return NewQuizHandler(svc), learningDir
 }
@@ -309,7 +310,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), nil)
+	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	// Test story with definition field
@@ -420,7 +421,7 @@ func TestQuizHandler_SubmitAnswer_UpdateLearningHistoryError(t *testing.T) {
 
 	svc := quiz.NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), nil)
+	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory to trigger error in SaveResult
@@ -476,7 +477,7 @@ func TestQuizHandler_GetQuizOptions_LearningHistoryError(t *testing.T) {
 
 	svc := quiz.NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), nil)
+	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory
@@ -524,7 +525,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), nil)
+	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.GetQuizOptions(
@@ -564,7 +565,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), nil)
+	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.StartQuiz(
@@ -612,7 +613,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), nil)
+	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.StartQuiz(
@@ -660,7 +661,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response), nil)
+	}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	// Place a malformed YAML file in the learning directory
@@ -964,7 +965,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		BooksDirectories:       []string{booksDir},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), nil)
+	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 	handler := NewQuizHandler(svc)
 
 	resp, err := handler.GetQuizOptions(

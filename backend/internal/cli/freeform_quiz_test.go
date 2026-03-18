@@ -13,6 +13,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -246,7 +247,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 				},
 				mockClient,
 				nil,
-				nil,
+				learning.NewYAMLLearningRepository(tmpDir),
 			)
 
 			cli := &FreeformQuizCLI{
@@ -469,7 +470,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 				},
 				mockClient,
 				nil,
-				nil,
+				learning.NewYAMLLearningRepository(tmpDir),
 			)
 
 			cli := &FreeformQuizCLI{

@@ -15,6 +15,12 @@ type NoteRecord struct {
 	Images           []NoteImage     `db:"-"`
 	References       []NoteReference `db:"-"`
 	NotebookNotes    []NotebookNote  `db:"-"`
+
+	DefinitionsDir string   `db:"-"`
+	NotebookFile   string   `db:"-"`
+	SceneIndex     int      `db:"-"`
+	PartOfSpeech   string   `db:"-"`
+	Examples       []string `db:"-"`
 }
 
 // NoteImage represents an image link for visual vocabulary learning.

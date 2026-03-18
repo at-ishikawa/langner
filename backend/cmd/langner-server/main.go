@@ -79,9 +79,15 @@ func run(ctx context.Context) error {
 		}
 	}))
 
-	// Set up optional DB repositories for dual storage
-	var learningRepo learning.LearningRepository
+	// Set up repositories with dual storage when DB is configured
+	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
+	var learningRepo learning.LearningRepository = yamlLearningRepo
 	var noteRepo notebook.NoteRepository
+	var defsDir string
+	if len(cfg.Notebooks.DefinitionsDirectories) > 0 && cfg.Notebooks.DefinitionsDirectories[0] != "" { defsDir = cfg.Notebooks.DefinitionsDirectories[0] }
+	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
+	noteRepo = yamlNoteRepo
+
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		db, err := database.Open(cfg.Database)
 		if err != nil {
@@ -90,8 +96,10 @@ func run(ctx context.Context) error {
 			app.AddShutdownHook(func(ctx context.Context) error {
 				return db.Close()
 			})
-			learningRepo = learning.NewDBLearningRepository(db)
-			noteRepo = notebook.NewDBNoteRepository(db)
+			dbLearningRepo := learning.NewDBLearningRepository(db)
+			dbNoteRepo := notebook.NewDBNoteRepository(db)
+			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
+			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
 			slog.Info("database connected, dual storage enabled")
 		}
 	}

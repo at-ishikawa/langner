@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
@@ -773,7 +774,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 			// Set up CLI with mocks - use a real quiz.Service backed by temp dirs
 			svc := quiz.NewService(config.NotebooksConfig{
 				LearningNotesDirectory: learningDir,
-			}, mockClient, make(map[string]rapidapi.Response), nil)
+			}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
 
 			cli := &NotebookQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{

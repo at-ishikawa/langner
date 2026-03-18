@@ -8,6 +8,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/fatih/color"
 )
@@ -30,7 +31,7 @@ func NewFreeformQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, nil)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
 
 	cards, err := svc.LoadAllWords()
 	if err != nil {

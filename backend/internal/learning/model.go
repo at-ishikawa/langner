@@ -15,5 +15,13 @@ type LearningLog struct {
 	EasinessFactor   float64   `db:"easiness_factor"`
 	SourceNotebookID string    `db:"source_notebook_id"`
 	CreatedAt        time.Time `db:"created_at"`
-	UpdatedAt      time.Time `db:"updated_at"`
+	UpdatedAt        time.Time `db:"updated_at"`
+
+	NotebookName       string `db:"-"`
+	StoryTitle         string `db:"-"`
+	SceneTitle         string `db:"-"`
+	Expression         string `db:"-"`
+	OriginalExpression string `db:"-"`
+	IsCorrect          bool   `db:"-"`
+	LearningNotesDir   string `db:"-"`
 }

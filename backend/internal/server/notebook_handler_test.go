@@ -13,6 +13,7 @@ import (
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 func newTestNotebookHandler(t *testing.T) *NotebookHandler {
@@ -400,7 +401,7 @@ func TestNotebookHandler_RegisterDefinition(t *testing.T) {
 		make(map[string]rapidapi.Response),
 		nil,
 		nil,
-		nil,
+		notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
 	)
 
 	resp, err := handler.RegisterDefinition(
@@ -436,7 +437,7 @@ func TestNotebookHandler_RegisterDefinition_Subdirectory(t *testing.T) {
 		make(map[string]rapidapi.Response),
 		nil,
 		nil,
-		nil,
+		notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
 	)
 
 	resp, err := handler.RegisterDefinition(
@@ -471,7 +472,7 @@ func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
 		make(map[string]rapidapi.Response),
 		nil,
 		nil,
-		nil,
+		notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
 	)
 
 	_, err := handler.RegisterDefinition(

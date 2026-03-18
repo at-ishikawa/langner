@@ -10,6 +10,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/fatih/color"
 )
@@ -37,7 +38,7 @@ func NewNotebookQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, nil)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
 
 	var cards []quiz.Card
 
@@ -101,7 +102,7 @@ func NewFlashcardQuizCLI(
 		return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, nil)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
 
 	cards, err := svc.LoadCards([]string{notebookName}, false)
 	if err != nil {
