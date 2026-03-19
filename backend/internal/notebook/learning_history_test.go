@@ -1036,7 +1036,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T
 			name:       "breakdown correct",
 			quizType:   QuizTypeEtymologyBreakdown,
 			isCorrect:  true,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus: LearnedStatusUnderstood,
 		},
 		{
 			name:       "breakdown incorrect",
@@ -1048,7 +1048,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T
 			name:       "assembly correct",
 			quizType:   QuizTypeEtymologyAssembly,
 			isCorrect:  true,
-			wantStatus: learnedStatusUnderstood,
+			wantStatus: LearnedStatusUnderstood,
 		},
 		{
 			name:       "assembly incorrect",
@@ -1112,7 +1112,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 			expr: LearningHistoryExpression{
 				Expression: "test",
 				EtymologyBreakdownLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 3},
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 3},
 				},
 			},
 			quizType: QuizTypeEtymologyBreakdown,
@@ -1123,7 +1123,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 			expr: LearningHistoryExpression{
 				Expression: "test",
 				EtymologyAssemblyLogs: []LearningRecord{
-					{Status: learnedStatusUnderstood, LearnedAt: NewDate(oneDayAgo), IntervalDays: 1},
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneDayAgo), IntervalDays: 1},
 				},
 			},
 			quizType: QuizTypeEtymologyAssembly,
@@ -1140,7 +1140,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 }
 
 func TestLearningHistoryExpression_GetLogsForQuizType_Etymology(t *testing.T) {
-	breakdownLogs := []LearningRecord{{Status: learnedStatusUnderstood, Quality: 4}}
+	breakdownLogs := []LearningRecord{{Status: LearnedStatusUnderstood, Quality: 4}}
 	assemblyLogs := []LearningRecord{{Status: LearnedStatusMisunderstood, Quality: 1}}
 	learnedLogs := []LearningRecord{{Status: learnedStatusCanBeUsed, Quality: 5}}
 

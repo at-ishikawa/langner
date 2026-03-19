@@ -92,6 +92,7 @@ func TestService_LoadEtymologyCards(t *testing.T) {
 		},
 		nil, // openaiClient not needed for loading
 		nil, // dictionaryMap not needed
+		nil, // learningRepo not needed
 	)
 
 	cards, err := svc.LoadEtymologyCards(
@@ -161,7 +162,7 @@ notebooks:
 			FlashcardsDirectories:  []string{filepath.Join(tmpDir, "flashcards")},
 			LearningNotesDirectory: learningDir,
 		},
-		nil, nil,
+		nil, nil, nil,
 	)
 
 	cards, err := svc.LoadEtymologyCards([]string{"test-roots"}, []string{"simple"}, true)

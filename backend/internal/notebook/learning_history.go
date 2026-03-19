@@ -219,7 +219,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
-			status = learnedStatusUnderstood
+			status = LearnedStatusUnderstood
 		} else {
 			status = learnedStatusCanBeUsed
 		}
