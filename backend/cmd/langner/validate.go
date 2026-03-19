@@ -1,11 +1,18 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"strings"
 
-	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/spf13/cobra"
+
+	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/datasync"
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 func newValidateCommand() *cobra.Command {
@@ -65,10 +72,19 @@ func newValidateCommand() *cobra.Command {
 			// Display results
 			displayValidationResults(result)
 
+			// DB consistency validation (auto-detect)
+			dbResult, err := validateDBConsistency(cmd.Context(), cfg)
+			if err != nil {
+				fmt.Printf("Warning: DB consistency check failed: %v\n\n", err)
+			}
+
 			// Exit with error code if there are validation errors
 			if result.HasErrors() {
 				return fmt.Errorf("validation failed with %d error(s)",
 					len(result.LearningNotesErrors)+len(result.ConsistencyErrors))
+			}
+			if dbResult != nil && dbResult.HasMismatches() {
+				return fmt.Errorf("DB consistency validation failed with %d mismatch(es)", len(dbResult.Mismatches))
 			}
 
 			return nil
@@ -78,6 +94,77 @@ func newValidateCommand() *cobra.Command {
 	command.Flags().BoolVar(&fix, "fix", false, "Automatically fix validation errors")
 
 	return command
+}
+
+// isDBConfigured returns true if the database password is set.
+func isDBConfigured(cfg config.DatabaseConfig) bool {
+	return cfg.Password != ""
+}
+
+// validateDBConsistency exports DB data to a temp directory and compares against YAML source.
+// Returns nil result if DB is not configured.
+func validateDBConsistency(ctx context.Context, cfg *config.Config) (*datasync.ValidateResult, error) {
+	if !isDBConfigured(cfg.Database) {
+		return nil, nil
+	}
+
+	fmt.Println("=== DB Consistency Validation ===")
+	fmt.Println("Database is configured. Comparing YAML files against DB data...")
+
+	db, err := openDB(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("open database: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	// Export DB to temp dir (read-only: only SELECTs)
+	exportDir, err := os.MkdirTemp("", "langner-validate-*")
+	if err != nil {
+		return nil, fmt.Errorf("create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(exportDir) }()
+
+	exporter := newExporterFromConfig(cfg, db, exportDir, io.Discard)
+	if _, err := exporter.ExportAll(ctx); err != nil {
+		return nil, fmt.Errorf("export DB data: %w", err)
+	}
+
+	// Read source YAML data
+	sourceNotes, err := readNotesFromDirs(ctx,
+		cfg.Notebooks.StoriesDirectories,
+		cfg.Notebooks.FlashcardsDirectories,
+		cfg.Notebooks.BooksDirectories,
+		cfg.Notebooks.DefinitionsDirectories,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("read source notes: %w", err)
+	}
+
+	// Read exported DB data
+	exportedNotes, err := readNotesFromDirs(ctx,
+		[]string{filepath.Join(exportDir, "stories")},
+		[]string{filepath.Join(exportDir, "flashcards")},
+		[]string{filepath.Join(exportDir, "books")},
+		nil,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("read exported notes: %w", err)
+	}
+
+	sourceLearning := readLearningByNotebook(sourceNotes, cfg.Notebooks.LearningNotesDirectory)
+	exportedLearning := readLearningByNotebook(exportedNotes, filepath.Join(exportDir, "learning_notes"))
+
+	sourceDictCount := countDictEntries(cfg.Dictionaries.RapidAPI.CacheDirectory)
+	exportedDictCount := countDictEntries(filepath.Join(exportDir, "dictionaries", "rapidapi"))
+
+	result := datasync.ValidateRoundTrip(
+		sourceNotes, exportedNotes,
+		sourceLearning, exportedLearning,
+		sourceDictCount, exportedDictCount,
+		os.Stdout,
+	)
+
+	return result, nil
 }
 
 func displayValidationResults(result *notebook.ValidationResult) {

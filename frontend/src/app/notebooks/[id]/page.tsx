@@ -452,6 +452,10 @@ function SceneRow({
   );
 }
 
+// TODO: Add a "Resume" button for skipped words. The ResumeWord RPC requires a
+// note_id, but the NotebookWord proto does not expose note_id. A proto change is
+// needed to add note_id to NotebookWord before this feature can be implemented.
+
 function WordCard({ word }: { word: NotebookWord }) {
   const [open, setOpen] = useState(false);
 

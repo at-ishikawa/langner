@@ -31,16 +31,19 @@ type NotebookHandler struct {
 	dictionaryMap    map[string]rapidapi.Response
 	dictionaryReader *dictionary.Reader
 	openaiClient     inference.Client
+	noteRepository   notebook.NoteRepository
 }
 
 // NewNotebookHandler creates a new NotebookHandler.
-func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client) *NotebookHandler {
+// noteRepo is optional; pass nil when DB is not configured.
+func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client, noteRepo notebook.NoteRepository) *NotebookHandler {
 	return &NotebookHandler{
 		notebooksConfig:  notebooksConfig,
 		templatesConfig:  templatesConfig,
 		dictionaryMap:    dictionaryMap,
 		dictionaryReader: dictionaryReader,
 		openaiClient:     openaiClient,
+		noteRepository:   noteRepo,
 	}
 }
 
@@ -53,6 +56,7 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 		h.dictionaryMap,
 	)
 }
+
 
 func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
 	histories, err := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
@@ -457,155 +461,38 @@ func rapidAPIToLookupResponse(word string, resp rapidapi.Response, source string
 	}
 }
 
-// resolveDefinitionsFilePath validates the notebookID and returns the path to its definitions YAML file.
-func (h *NotebookHandler) resolveDefinitionsFilePath(notebookIDRaw string) (string, error) {
-	defsDir := "notebooks/definitions"
-	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
-		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
-	}
-	filePath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
-	rel, err := filepath.Rel(defsDir, filePath)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
-	}
-	return filePath, nil
-}
 
-// RegisterDefinition adds a definition to a book's definitions file.
+// RegisterDefinition adds a definition via the repository.
 func (h *NotebookHandler) RegisterDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.RegisterDefinitionRequest],
 ) (*connect.Response[apiv1.RegisterDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-
-	filePath, err := h.resolveDefinitionsFilePath(req.Msg.GetNotebookId())
-	if err != nil {
-		return nil, err
-	}
-	notebookFile := req.Msg.GetNotebookFile()
-	sceneIndex := int(req.Msg.GetSceneIndex())
+	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	defsDir := "notebooks/definitions"
+	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" { defsDir = h.notebooksConfig.DefinitionsDirectories[0] }
+	notebookIDRaw := req.Msg.GetNotebookId()
+	checkPath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
+	rel, err := filepath.Rel(defsDir, checkPath)
+	if err != nil || strings.HasPrefix(rel, "..") { return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id")) }
 	expression := req.Msg.GetExpression()
 	meaning := req.Msg.GetMeaning()
-
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create definitions directory: %w", err))
+	note := &notebook.NoteRecord{
+		Usage: expression, Entry: expression, Meaning: meaning,
+		DefinitionsDir: defsDir, NotebookFile: req.Msg.GetNotebookFile(),
+		SceneIndex: int(req.Msg.GetSceneIndex()),
+		PartOfSpeech: req.Msg.GetPartOfSpeech(), Examples: req.Msg.GetExamples(),
+		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: notebookIDRaw, Group: req.Msg.GetNotebookFile()}},
 	}
-
-	newNote := notebook.Note{
-		Expression:   expression,
-		Meaning:      meaning,
-		PartOfSpeech: req.Msg.GetPartOfSpeech(),
-		Examples:     req.Msg.GetExamples(),
-	}
-
-	var definitions []notebook.Definitions
-
-	if data, err := os.ReadFile(filePath); err == nil && len(data) > 0 {
-		existing, err := notebook.ReadDefinitionsFromBytes(data)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read existing definitions: %w", err))
-		}
-		definitions = existing
-	}
-
-	found := false
-	for i, def := range definitions {
-		key := def.Metadata.Notebook
-		if key == "" {
-			key = def.Metadata.Title
-		}
-		if key != notebookFile {
-			continue
-		}
-		found = true
-		sceneFound := false
-		for j, scene := range def.Scenes {
-			if scene.Metadata.GetIndex() == sceneIndex {
-				definitions[i].Scenes[j].Expressions = append(definitions[i].Scenes[j].Expressions, newNote)
-				sceneFound = true
-				break
-			}
-		}
-		if !sceneFound {
-			definitions[i].Scenes = append(definitions[i].Scenes, notebook.DefinitionsScene{
-				Metadata:    notebook.DefinitionsSceneMetadata{Index: sceneIndex},
-				Expressions: []notebook.Note{newNote},
-			})
-		}
-		break
-	}
-
-	if !found {
-		definitions = append(definitions, notebook.Definitions{
-			Metadata: notebook.DefinitionsMetadata{Notebook: notebookFile},
-			Scenes: []notebook.DefinitionsScene{{
-				Metadata:    notebook.DefinitionsSceneMetadata{Index: sceneIndex},
-				Expressions: []notebook.Note{newNote},
-			}},
-		})
-	}
-
-	if err := notebook.WriteYamlFile(filePath, definitions); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions file: %w", err))
-	}
-
+	if err := h.noteRepository.Create(ctx, note); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err)) }
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
 
-// DeleteDefinition removes a definition from a book's definitions file.
+// DeleteDefinition removes a definition via the repository.
 func (h *NotebookHandler) DeleteDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.DeleteDefinitionRequest],
 ) (*connect.Response[apiv1.DeleteDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-
-	filePath, err := h.resolveDefinitionsFilePath(req.Msg.GetNotebookId())
-	if err != nil {
-		return nil, err
-	}
-	notebookFile := req.Msg.GetNotebookFile()
-	sceneIndex := int(req.Msg.GetSceneIndex())
-	expression := req.Msg.GetExpression()
-
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("definitions file not found"))
-	}
-
-	definitions, err := notebook.ReadDefinitionsFromBytes(data)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read definitions: %w", err))
-	}
-
-	for i, def := range definitions {
-		key := def.Metadata.Notebook
-		if key == "" {
-			key = def.Metadata.Title
-		}
-		if key != notebookFile {
-			continue
-		}
-		for j, scene := range def.Scenes {
-			if scene.Metadata.GetIndex() != sceneIndex {
-				continue
-			}
-			var remaining []notebook.Note
-			for _, note := range scene.Expressions {
-				if !strings.EqualFold(note.Expression, expression) {
-					remaining = append(remaining, note)
-				}
-			}
-			definitions[i].Scenes[j].Expressions = remaining
-		}
-	}
-
-	if err := notebook.WriteYamlFile(filePath, definitions); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("write definitions: %w", err))
-	}
-
+	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err)) }
 	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
 }

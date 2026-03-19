@@ -71,6 +71,57 @@ func TestDBLearningRepository_FindAll(t *testing.T) {
 	}
 }
 
+func TestDBLearningRepository_Create(t *testing.T) {
+	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	tests := []struct {
+		name      string
+		log       *LearningLog
+		setupMock func(mock sqlmock.Sqlmock)
+		wantErr   bool
+	}{
+		{
+			name: "inserts a single learning log",
+			log:  &LearningLog{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, EasinessFactor: 2.5, SourceNotebookID: "nb-1"},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("INSERT INTO learning_logs").
+					WithArgs(int64(10), "understood", now, 4, 1500, "notebook", 7, 2.5, "nb-1").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
+		{
+			name: "db error propagates",
+			log:  &LearningLog{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, EasinessFactor: 2.5, SourceNotebookID: "nb-1"},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("INSERT INTO learning_logs").
+					WillReturnError(fmt.Errorf("connection refused"))
+			},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db, mock, err := sqlmock.New()
+			require.NoError(t, err)
+			defer db.Close()
+
+			sqlxDB := sqlx.NewDb(db, "mysql")
+			repo := NewDBLearningRepository(sqlxDB)
+			tt.setupMock(mock)
+
+			err = repo.Create(context.Background(), tt.log)
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+
+			assert.NoError(t, mock.ExpectationsWereMet())
+		})
+	}
+}
+
 func TestDBLearningRepository_BatchCreate(t *testing.T) {
 	now := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
 

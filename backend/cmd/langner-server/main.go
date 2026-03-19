@@ -13,10 +13,13 @@ import (
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
+	"github.com/at-ishikawa/langner/internal/learning"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/internal/server"
 	"golang.org/x/net/http2"
@@ -76,16 +79,42 @@ func run(ctx context.Context) error {
 		}
 	}))
 
-	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap)
-	handler := server.NewQuizHandler(svc)
-	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
+	// Set up repositories with dual storage when DB is configured
+	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
+	var learningRepo learning.LearningRepository = yamlLearningRepo
+	var noteRepo notebook.NoteRepository
+	var defsDir string
+	if len(cfg.Notebooks.DefinitionsDirectories) > 0 && cfg.Notebooks.DefinitionsDirectories[0] != "" { defsDir = cfg.Notebooks.DefinitionsDirectories[0] }
+	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
+	noteRepo = yamlNoteRepo
+
+	if cfg.Database.Host != "" && cfg.Database.Password != "" {
+		db, err := database.Open(cfg.Database)
+		if err != nil {
+			slog.Warn("failed to open database, running with YAML-only storage", "error", err)
+		} else {
+			app.AddShutdownHook(func(ctx context.Context) error {
+				return db.Close()
+			})
+			dbLearningRepo := learning.NewDBLearningRepository(db)
+			dbNoteRepo := notebook.NewDBNoteRepository(db)
+			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
+			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
+			slog.Info("database connected, dual storage enabled")
+		}
+	}
+
+	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap, learningRepo)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
 		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
 	}
 	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
-	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, openaiClient)
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, openaiClient, noteRepo)
+
+	handler := server.NewQuizHandler(svc)
+	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
 
 	mux := http.NewServeMux()

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -12,22 +11,26 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 // Service owns all quiz business logic shared between the CLI and RPC handler.
 type Service struct {
-	notebooksConfig config.NotebooksConfig
-	openaiClient    inference.Client
-	dictionaryMap   map[string]rapidapi.Response
+	notebooksConfig    config.NotebooksConfig
+	openaiClient       inference.Client
+	dictionaryMap      map[string]rapidapi.Response
+	learningRepository learning.LearningRepository
 }
 
 // NewService creates a new Service.
-func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response) *Service {
+// learningRepo is optional; pass nil when DB is not configured.
+func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository) *Service {
 	return &Service{
-		notebooksConfig: notebooksConfig,
-		openaiClient:    openaiClient,
-		dictionaryMap:   dictionaryMap,
+		notebooksConfig:    notebooksConfig,
+		openaiClient:       openaiClient,
+		dictionaryMap:      dictionaryMap,
+		learningRepository: learningRepo,
 	}
 }
 
@@ -323,32 +326,21 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer str
 	}, nil
 }
 
-// SaveResult updates the learning history file for the answered card.
-func (s *Service) SaveResult(card Card, result GradeResult, responseTimeMs int64) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
+// SaveResult updates learning history via the repository.
+func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) error {
+	status := "misunderstood"
+	if result.Correct { status = "understood" }
+	log := &learning.LearningLog{
+		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
+		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeNotebook),
+		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
+		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
+		Expression: card.Entry, OriginalExpression: card.OriginalEntry,
+		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName])
-	updater.UpdateOrCreateExpressionWithQuality(
-		card.NotebookName,
-		card.StoryTitle,
-		card.SceneTitle,
-		card.Entry,
-		card.OriginalEntry,
-		result.Correct,
-		true,
-		result.Quality,
-		responseTimeMs,
-		notebook.QuizTypeNotebook,
-	)
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
+	if err := s.learningRepository.Create(ctx, log); err != nil {
+		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
-
 	return nil
 }
 
@@ -821,31 +813,21 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answ
 	}, nil
 }
 
-// SaveReverseResult updates the learning history for a reverse quiz answer.
-func (s *Service) SaveReverseResult(card ReverseCard, result GradeResult, responseTimeMs int64) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
+// SaveReverseResult updates learning history via the repository.
+func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, result GradeResult, responseTimeMs int64) error {
+	status := "misunderstood"
+	if result.Correct { status = "understood" }
+	log := &learning.LearningLog{
+		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
+		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeReverse),
+		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
+		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
+		Expression: card.Expression, OriginalExpression: card.Expression,
+		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName])
-	updater.UpdateOrCreateExpressionWithQualityForReverse(
-		card.NotebookName,
-		card.StoryTitle,
-		card.SceneTitle,
-		card.Expression,
-		card.Expression,
-		result.Correct,
-		true,
-		result.Quality,
-		responseTimeMs,
-	)
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
+	if err := s.learningRepository.Create(ctx, log); err != nil {
+		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
-
 	return nil
 }
 
@@ -1065,34 +1047,24 @@ type FreeformGradeResult struct {
 	MatchedCard  *FreeformCard
 }
 
-// SaveFreeformResult updates the learning history for a freeform quiz answer.
-func (s *Service) SaveFreeformResult(card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
+// SaveFreeformResult updates learning history via the repository.
+func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
+	status := "misunderstood"
+	if result.Correct { status = "understood" }
+	log := &learning.LearningLog{
+		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
+		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeFreeform),
+		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
+		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
+		Expression: card.Expression, OriginalExpression: card.Expression,
+		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName])
-	updater.UpdateOrCreateExpressionWithQuality(
-		card.NotebookName,
-		card.StoryTitle,
-		card.SceneTitle,
-		card.Expression,
-		card.Expression,
-		result.Correct,
-		true,
-		result.Quality,
-		responseTimeMs,
-		notebook.QuizTypeFreeform,
-	)
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
+	if err := s.learningRepository.Create(ctx, log); err != nil {
+		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
-
 	return nil
 }
+
 
 // kindFromIndex returns the kind string for a notebook index.
 // Books loaded from books_directories have IsBook=true but an empty Kind field,
@@ -1174,103 +1146,6 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 		}
 	}
 	return matches
-}
-
-// OverrideAnswer overrides a learning log entry in the YAML learning history.
-func (s *Service) OverrideAnswer(
-	notebookName, expression string,
-	quizType notebook.QuizType,
-	learnedAt string,
-	markCorrect *bool,
-	nextReviewDate string,
-) (originalQuality int, originalStatus string, originalIntervalDays int, originalEF float64, newNextReview string, err error) {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return 0, "", 0, 0, "", fmt.Errorf("failed to load learning histories: %w", err)
-	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
-	oq, os, oid, oef, nnr, found := updater.OverrideLog(expression, quizType, learnedAt, markCorrect, nextReviewDate)
-	if !found {
-		return 0, "", 0, 0, "", fmt.Errorf("learning log entry not found for expression %q at %s", expression, learnedAt)
-	}
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return 0, "", 0, 0, "", fmt.Errorf("failed to save learning history: %w", err)
-	}
-
-	return oq, os, oid, oef, nnr, nil
-}
-
-// UndoOverrideAnswer restores original values for a learning log entry.
-func (s *Service) UndoOverrideAnswer(
-	notebookName, expression string,
-	quizType notebook.QuizType,
-	learnedAt string,
-	originalQuality int,
-	originalStatus string,
-	originalIntervalDays int,
-	originalEF float64,
-) (correct bool, nextReview string, err error) {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return false, "", fmt.Errorf("failed to load learning histories: %w", err)
-	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
-	correct, nextReview, found := updater.UndoOverrideLog(expression, quizType, learnedAt, originalQuality, originalStatus, originalIntervalDays, originalEF)
-	if !found {
-		return false, "", fmt.Errorf("learning log entry not found for expression %q at %s", expression, learnedAt)
-	}
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return false, "", fmt.Errorf("failed to save learning history: %w", err)
-	}
-
-	return correct, nextReview, nil
-}
-
-// SkipWord marks a word as skipped in the YAML learning history.
-func (s *Service) SkipWord(notebookName, expression string) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
-	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
-	skippedAt := time.Now().Format(time.RFC3339)
-	if !updater.SetSkippedAt(expression, skippedAt) {
-		return fmt.Errorf("expression %q not found in learning history for notebook %q", expression, notebookName)
-	}
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return fmt.Errorf("failed to save learning history: %w", err)
-	}
-
-	return nil
-}
-
-// ResumeWord clears the skipped status for a word in the YAML learning history.
-func (s *Service) ResumeWord(notebookName, expression string) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
-	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
-	if !updater.ClearSkippedAt(expression) {
-		return fmt.Errorf("expression %q not found in learning history for notebook %q", expression, notebookName)
-	}
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return fmt.Errorf("failed to save learning history: %w", err)
-	}
-
-	return nil
 }
 
 // GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log

@@ -10,6 +10,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/fatih/color"
 )
@@ -37,7 +38,7 @@ func NewReverseQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
 
 	var notebookIDs []string
 	if notebookName == "" {
@@ -156,7 +157,7 @@ func (r *ReverseQuizCLI) Session(ctx context.Context) error {
 
 	r.displayReverseResult(currentCard, userAnswer, grade)
 
-	if err := r.svc.SaveReverseResult(*currentCard, grade, responseTimeMs); err != nil {
+	if err := r.svc.SaveReverseResult(ctx, *currentCard, grade, responseTimeMs); err != nil {
 		return err
 	}
 

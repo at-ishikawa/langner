@@ -140,7 +140,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
-			status = learnedStatusUnderstood
+			status = LearnedStatusUnderstood
 		} else {
 			status = learnedStatusCanBeUsed
 		}
@@ -171,7 +171,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 // for reverse quiz - words should be learned in forward direction first.
 func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
 	for _, log := range exp.LearnedLogs {
-		if log.Status == learnedStatusUnderstood ||
+		if log.Status == LearnedStatusUnderstood ||
 			log.Status == learnedStatusCanBeUsed ||
 			log.Status == learnedStatusIntuitivelyUsed {
 			return true
@@ -230,7 +230,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
-			status = learnedStatusUnderstood
+			status = LearnedStatusUnderstood
 		} else {
 			status = learnedStatusCanBeUsed
 		}
@@ -306,7 +306,7 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 	validStatuses := map[LearnedStatus]bool{
 		LearnedStatusLearning:        true,
 		LearnedStatusMisunderstood:   true,
-		learnedStatusUnderstood:      true,
+		LearnedStatusUnderstood:      true,
 		learnedStatusCanBeUsed:       true,
 		learnedStatusIntuitivelyUsed: true,
 	}

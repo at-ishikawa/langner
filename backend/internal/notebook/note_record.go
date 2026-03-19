@@ -12,9 +12,16 @@ type NoteRecord struct {
 	DictionaryNumber int             `db:"dictionary_number"`
 	CreatedAt        time.Time       `db:"created_at"`
 	UpdatedAt        time.Time       `db:"updated_at"`
+	SkippedAt        *time.Time      `db:"skipped_at"`
 	Images           []NoteImage     `db:"-"`
 	References       []NoteReference `db:"-"`
 	NotebookNotes    []NotebookNote  `db:"-"`
+
+	DefinitionsDir string   `db:"-"`
+	NotebookFile   string   `db:"-"`
+	SceneIndex     int      `db:"-"`
+	PartOfSpeech   string   `db:"-"`
+	Examples       []string `db:"-"`
 }
 
 // NoteImage represents an image link for visual vocabulary learning.

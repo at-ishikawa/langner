@@ -8,6 +8,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/fatih/color"
 )
@@ -30,7 +31,7 @@ func NewFreeformQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
 
 	cards, err := svc.LoadAllWords()
 	if err != nil {
@@ -86,7 +87,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	r.displayFreeformResult(grade)
 
 	if grade.MatchedCard != nil {
-		if err := r.svc.SaveFreeformResult(*grade.MatchedCard, grade, responseTimeMs); err != nil {
+		if err := r.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, responseTimeMs); err != nil {
 			return err
 		}
 	}

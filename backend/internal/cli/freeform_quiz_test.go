@@ -13,6 +13,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -246,6 +247,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 				},
 				mockClient,
 				nil,
+				learning.NewYAMLLearningRepository(tmpDir),
 			)
 
 			cli := &FreeformQuizCLI{
@@ -258,7 +260,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 
 			// Simulate the save path: if grade has MatchedCard, call SaveFreeformResult
 			if grade.MatchedCard != nil {
-				err := cli.svc.SaveFreeformResult(*grade.MatchedCard, grade, 1000)
+				err := cli.svc.SaveFreeformResult(context.Background(), *grade.MatchedCard, grade, 1000)
 				require.NoError(t, err)
 			}
 
@@ -468,6 +470,7 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 				},
 				mockClient,
 				nil,
+				learning.NewYAMLLearningRepository(tmpDir),
 			)
 
 			cli := &FreeformQuizCLI{

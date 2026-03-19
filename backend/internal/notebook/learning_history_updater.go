@@ -300,7 +300,7 @@ func (u *LearningHistoryUpdater) OverrideLog(
 		if markCorrect != nil {
 			if *markCorrect {
 				logs[i].Quality = 3
-				logs[i].Status = learnedStatusUnderstood
+				logs[i].Status = LearnedStatusUnderstood
 			} else {
 				logs[i].Quality = 1
 				logs[i].Status = LearnedStatusMisunderstood

@@ -111,6 +111,7 @@ interface QuizState {
   overrideResult: (index: number, quizType: QuizType, nextReviewDate: string, originalValues: OriginalValues) => void;
   undoOverrideResult: (index: number, quizType: QuizType, correct: boolean, nextReviewDate: string) => void;
   skipResult: (index: number, quizType: QuizType) => void;
+  resumeResult: (index: number, quizType: QuizType) => void;
   updateResultReviewDate: (index: number, quizType: QuizType, newDate: string) => void;
 }
 
@@ -180,6 +181,17 @@ export const useQuizStore = create<QuizState>((set) => ({
         return { reverseResults: updateArrayItem(state.reverseResults, index, { isSkipped: true }) };
       }
       return { freeformResults: updateArrayItem(state.freeformResults, index, { isSkipped: true }) };
+    }),
+
+  resumeResult: (index, quizType) =>
+    set((state) => {
+      if (quizType === "standard") {
+        return { results: updateArrayItem(state.results, index, { isSkipped: false }) };
+      }
+      if (quizType === "reverse") {
+        return { reverseResults: updateArrayItem(state.reverseResults, index, { isSkipped: false }) };
+      }
+      return { freeformResults: updateArrayItem(state.freeformResults, index, { isSkipped: false }) };
     }),
 
   updateResultReviewDate: (index, quizType, newDate) =>

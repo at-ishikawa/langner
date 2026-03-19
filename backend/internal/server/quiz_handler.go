@@ -25,12 +25,13 @@ import (
 type QuizHandler struct {
 	apiv1connect.UnimplementedQuizServiceHandler
 
-	svc           *quiz.Service
-	mu            sync.Mutex
-	noteStore     map[int64]quiz.Card
-	reverseStore  map[int64]quiz.ReverseCard
-	freeformCards []quiz.FreeformCard
-	nextID        int64
+	svc            *quiz.Service
+	noteRepository notebook.NoteRepository
+	mu             sync.Mutex
+	noteStore      map[int64]quiz.Card
+	reverseStore   map[int64]quiz.ReverseCard
+	freeformCards  []quiz.FreeformCard
+	nextID         int64
 }
 
 // NewQuizHandler creates a new QuizHandler.
@@ -41,6 +42,12 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		reverseStore: make(map[int64]quiz.ReverseCard),
 		nextID:       1,
 	}
+}
+
+// SetNoteRepository sets an optional note repository for DB-based card resolution.
+// When set, handlers can look up cards from the database when no active quiz session exists.
+func (h *QuizHandler) SetNoteRepository(repo notebook.NoteRepository) {
+	h.noteRepository = repo
 }
 
 // GetQuizOptions returns available notebooks with review counts.
@@ -154,7 +161,7 @@ func (h *QuizHandler) SubmitAnswer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
 	}
 
-	if err := h.svc.SaveResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
 
@@ -289,7 +296,7 @@ func (h *QuizHandler) SubmitReverseAnswer(
 
 	// Don't save synonym results — the frontend will offer a retry
 	if grade.Classification != string(inference.ClassificationSynonym) {
-		if err := h.svc.SaveReverseResult(card, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveReverseResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
@@ -375,7 +382,7 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 	}
 
 	if grade.MatchedCard != nil {
-		if err := h.svc.SaveFreeformResult(*grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
@@ -403,114 +410,71 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 	}), nil
 }
 
-// protoQuizTypeToNotebook converts a proto QuizType enum to a notebook QuizType string.
-func protoQuizTypeToNotebook(qt apiv1.QuizType) (notebook.QuizType, error) {
-	switch qt {
-	case apiv1.QuizType_QUIZ_TYPE_STANDARD:
-		return notebook.QuizTypeNotebook, nil
-	case apiv1.QuizType_QUIZ_TYPE_REVERSE:
-		return notebook.QuizTypeReverse, nil
-	case apiv1.QuizType_QUIZ_TYPE_FREEFORM:
-		return notebook.QuizTypeFreeform, nil
-	default:
-		return "", fmt.Errorf("unsupported quiz type: %v", qt)
-	}
-}
-
-// resolveCard looks up the notebook name and expression for a given note ID
-// from either the noteStore or reverseStore.
-func (h *QuizHandler) resolveCard(noteID int64) (notebookName, expression string, ok bool) {
+// resolveCardInfo resolves a note_id to a CardInfo by first checking the in-memory
+// session stores, then falling back to the database if no active quiz session has it.
+func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.CardInfo, error) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
-	if card, found := h.noteStore[noteID]; found {
-		return card.NotebookName, card.Entry, true
+	if card, ok := h.noteStore[noteID]; ok {
+		h.mu.Unlock()
+		info := quiz.CardInfoFromCard(card)
+		return &info, nil
 	}
-	if rcard, found := h.reverseStore[noteID]; found {
-		return rcard.NotebookName, rcard.Expression, true
+	if card, ok := h.reverseStore[noteID]; ok {
+		h.mu.Unlock()
+		info := quiz.CardInfoFromReverseCard(card)
+		return &info, nil
 	}
-	return "", "", false
+	h.mu.Unlock()
+
+	// Fall back to DB lookup
+	if h.noteRepository == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found: no active quiz session and no database configured", noteID))
+	}
+
+	noteRecord, err := h.noteRepository.FindByID(ctx, noteID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in database: %w", noteID, err))
+	}
+
+	// Determine notebook ID from notebook_notes
+	var notebookName, group, subgroup string
+	if len(noteRecord.NotebookNotes) > 0 {
+		nn := noteRecord.NotebookNotes[0]
+		notebookName = nn.NotebookID
+		group = nn.Group
+		subgroup = nn.Subgroup
+	}
+	if notebookName == "" {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d has no linked notebook", noteID))
+	}
+
+	expression := noteRecord.Entry
+	if expression == "" {
+		expression = noteRecord.Usage
+	}
+
+	info := quiz.CardInfo{
+		NotebookName: notebookName,
+		StoryTitle:   group,
+		SceneTitle:   subgroup,
+		Expression:   expression,
+	}
+	return &info, nil
 }
 
-// OverrideAnswer overrides a previously graded quiz answer.
-func (h *QuizHandler) OverrideAnswer(
-	ctx context.Context,
-	req *connect.Request[apiv1.OverrideAnswerRequest],
-) (*connect.Response[apiv1.OverrideAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
+// protoQuizTypeToNotebook converts a proto QuizType enum to a notebook.QuizType.
+func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
+	switch qt {
+	case apiv1.QuizType_QUIZ_TYPE_REVERSE:
+		return notebook.QuizTypeReverse
+	case apiv1.QuizType_QUIZ_TYPE_FREEFORM:
+		return notebook.QuizTypeFreeform
+	default:
+		return notebook.QuizTypeNotebook
 	}
-
-	noteID := req.Msg.GetNoteId()
-	quizType, err := protoQuizTypeToNotebook(req.Msg.GetQuizType())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	learnedAt := req.Msg.GetLearnedAt()
-
-	notebookName, expression, ok := h.resolveCard(noteID)
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
-	}
-
-	var markCorrect *bool
-	if req.Msg.MarkCorrect != nil {
-		mc := req.Msg.GetMarkCorrect()
-		markCorrect = &mc
-	}
-
-	oq, os, oid, oef, nnr, err := h.svc.OverrideAnswer(notebookName, expression, quizType, learnedAt, markCorrect, req.Msg.GetNextReviewDate())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err))
-	}
-
-	return connect.NewResponse(&apiv1.OverrideAnswerResponse{
-		NextReviewDate:         nnr,
-		OriginalQuality:        int32(oq),
-		OriginalStatus:         os,
-		OriginalIntervalDays:   int32(oid),
-		OriginalEasinessFactor: oef,
-	}), nil
 }
 
-// UndoOverrideAnswer restores the original values of a previously overridden answer.
-func (h *QuizHandler) UndoOverrideAnswer(
-	ctx context.Context,
-	req *connect.Request[apiv1.UndoOverrideAnswerRequest],
-) (*connect.Response[apiv1.UndoOverrideAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-
-	noteID := req.Msg.GetNoteId()
-	quizType, err := protoQuizTypeToNotebook(req.Msg.GetQuizType())
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
-	}
-	learnedAt := req.Msg.GetLearnedAt()
-
-	notebookName, expression, ok := h.resolveCard(noteID)
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
-	}
-
-	correct, nextReview, err := h.svc.UndoOverrideAnswer(
-		notebookName, expression, quizType, learnedAt,
-		int(req.Msg.GetOriginalQuality()),
-		req.Msg.GetOriginalStatus(),
-		int(req.Msg.GetOriginalIntervalDays()),
-		req.Msg.GetOriginalEasinessFactor(),
-	)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("undo override answer: %w", err))
-	}
-
-	return connect.NewResponse(&apiv1.UndoOverrideAnswerResponse{
-		Correct:        correct,
-		NextReviewDate: nextReview,
-	}), nil
-}
-
-// SkipWord marks a word to be skipped from future quizzes.
+// SkipWord marks a word as skipped so it won't appear in quizzes until the specified date.
 func (h *QuizHandler) SkipWord(
 	ctx context.Context,
 	req *connect.Request[apiv1.SkipWordRequest],
@@ -519,21 +483,20 @@ func (h *QuizHandler) SkipWord(
 		return nil, err
 	}
 
-	noteID := req.Msg.GetNoteId()
-
-	notebookName, expression, ok := h.resolveCard(noteID)
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
+	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
+	if err != nil {
+		return nil, err
 	}
 
-	if err := h.svc.SkipWord(notebookName, expression); err != nil {
+	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	if err := h.svc.SkipWord(*info, req.Msg.GetSkipUntil(), quizType); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("skip word: %w", err))
 	}
 
 	return connect.NewResponse(&apiv1.SkipWordResponse{}), nil
 }
 
-// ResumeWord clears the skip status for a word, allowing it to appear in quizzes again.
+// ResumeWord removes the skip from a word so it appears in quizzes again.
 func (h *QuizHandler) ResumeWord(
 	ctx context.Context,
 	req *connect.Request[apiv1.ResumeWordRequest],
@@ -542,16 +505,65 @@ func (h *QuizHandler) ResumeWord(
 		return nil, err
 	}
 
-	noteID := req.Msg.GetNoteId()
-
-	notebookName, expression, ok := h.resolveCard(noteID)
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in active quiz session", noteID))
+	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
+	if err != nil {
+		return nil, err
 	}
 
-	if err := h.svc.ResumeWord(notebookName, expression); err != nil {
+	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	if err := h.svc.ResumeWord(*info, quizType); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume word: %w", err))
 	}
 
 	return connect.NewResponse(&apiv1.ResumeWordResponse{}), nil
+}
+
+// OverrideAnswer toggles the correctness of the most recent answer for a word.
+func (h *QuizHandler) OverrideAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.OverrideAnswerRequest],
+) (*connect.Response[apiv1.OverrideAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
+	if err != nil {
+		return nil, err
+	}
+
+	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	nextReviewDate, err := h.svc.OverrideAnswer(*info, quizType)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.OverrideAnswerResponse{
+		NextReviewDate: nextReviewDate,
+	}), nil
+}
+
+// UndoOverrideAnswer reverts the most recent answer override for a word.
+func (h *QuizHandler) UndoOverrideAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.UndoOverrideAnswerRequest],
+) (*connect.Response[apiv1.UndoOverrideAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
+	if err != nil {
+		return nil, err
+	}
+
+	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+	nextReviewDate, err := h.svc.UndoOverrideAnswer(*info, quizType)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("undo override answer: %w", err))
+	}
+
+	return connect.NewResponse(&apiv1.UndoOverrideAnswerResponse{
+		NextReviewDate: nextReviewDate,
+	}), nil
 }
