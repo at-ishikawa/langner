@@ -20,6 +20,19 @@ interface OriginRow {
   meaning: string;
 }
 
+function getTypeBadgeColors(type: string): { bg: string; color: string } {
+  switch (type.toLowerCase()) {
+    case "root":
+      return { bg: "#dbeafe", color: "#2563eb" };
+    case "prefix":
+      return { bg: "#fef3c7", color: "#92400e" };
+    case "suffix":
+      return { bg: "#dcfce7", color: "#166534" };
+    default:
+      return { bg: "#f3f4f6", color: "#666" };
+  }
+}
+
 export default function EtymologyFreeformQuizPage() {
   const router = useRouter();
   const quizType = useQuizStore((s) => s.quizType);
@@ -43,6 +56,7 @@ export default function EtymologyFreeformQuizPage() {
       meaningCorrect: boolean;
       correctOrigin?: { origin: string; meaning: string };
     }>;
+    originParts?: Array<{ origin: string; type: string; language: string; meaning: string }>;
     relatedDefinitions: Array<{ expression: string; meaning: string; notebookName: string }>;
     nextReviewDate?: string;
     learnedAt?: string;
@@ -113,6 +127,15 @@ export default function EtymologyFreeformQuizPage() {
             ? { origin: g.correctOrigin.origin, meaning: g.correctOrigin.meaning }
             : undefined,
         })),
+        // Freeform response does not include originParts; build from correctOrigin in grades
+        originParts: (res.originGrades ?? [])
+          .filter((g) => g.correctOrigin)
+          .map((g) => ({
+            origin: g.correctOrigin!.origin,
+            type: "",
+            language: "",
+            meaning: g.correctOrigin!.meaning,
+          })),
         relatedDefinitions: (res.relatedDefinitions ?? []).map((d) => ({
           expression: d.expression,
           meaning: d.meaning,
@@ -134,6 +157,7 @@ export default function EtymologyFreeformQuizPage() {
         reason: res.reason,
         originGrades: fb.originGrades,
         relatedDefinitions: fb.relatedDefinitions,
+        originParts: fb.originParts,
         nextReviewDate: fb.nextReviewDate,
         learnedAt: fb.learnedAt,
       });
@@ -154,13 +178,13 @@ export default function EtymologyFreeformQuizPage() {
   };
 
   return (
-    <Box p={4} maxW="md" mx="auto" minH="100dvh">
-      <Heading size="lg" mb={4}>
-        Etymology Freeform
+    <Box p={4} maxW="sm" mx="auto" minH="100dvh">
+      <Heading size="lg" mb={2}>
+        Freeform Etymology
       </Heading>
 
-      <Text mb={4} color="gray.600" _dark={{ color: "gray.400" }}>
-        Type any word and break it down into origins
+      <Text mb={4} color="gray.600" _dark={{ color: "gray.400" }} fontSize="sm">
+        Type any word to see its etymology. The word must exist in your etymology notebooks.
       </Text>
 
       {loading ? (
@@ -185,21 +209,93 @@ export default function EtymologyFreeformQuizPage() {
         </VStack>
       ) : feedback ? (
         <VStack align="stretch" gap={4}>
+          {/* Correct/Incorrect banner */}
           <Box
             p={4}
             borderRadius="md"
             bg={feedback.correct ? "green.100" : "red.100"}
             _dark={{ bg: feedback.correct ? "green.900" : "red.900" }}
+            textAlign="center"
           >
             <Text fontWeight="bold" fontSize="lg">
               {feedback.correct ? "\u2713 Correct!" : "\u2717 Incorrect"}
             </Text>
           </Box>
 
+          {/* Word */}
           <Box>
             <Text fontWeight="bold">Word</Text>
             <Text fontSize="xl">{word}</Text>
           </Box>
+
+          {/* Your answer section */}
+          {feedback.originGrades.length > 0 && (
+            <Box>
+              <Text fontWeight="medium" fontSize="sm" mb={1}>Your answer</Text>
+              <Box
+                p={3}
+                borderWidth="1.5px"
+                borderRadius="lg"
+                borderColor={feedback.correct ? "#16a34a" : "#dc2626"}
+                bg="white"
+                _dark={{ bg: "gray.800" }}
+              >
+                <VStack align="stretch" gap={2}>
+                  {feedback.originGrades.map((g, i) => {
+                    const bothCorrect = g.originCorrect && g.meaningCorrect;
+                    return (
+                      <Box key={i} display="flex" justifyContent="space-between" alignItems="center">
+                        <Text
+                          fontSize="sm"
+                          textDecoration={!bothCorrect ? "line-through" : "none"}
+                          color={!bothCorrect ? "#dc2626" : undefined}
+                        >
+                          {g.userOrigin} = {g.userMeaning}
+                        </Text>
+                        <Text
+                          fontSize="sm"
+                          fontWeight="medium"
+                          color={bothCorrect ? "#16a34a" : "#dc2626"}
+                        >
+                          {bothCorrect ? "\u2713" : "\u2717"}
+                        </Text>
+                      </Box>
+                    );
+                  })}
+                </VStack>
+              </Box>
+            </Box>
+          )}
+
+          {/* Full/Correct breakdown with badges */}
+          {feedback.originParts && feedback.originParts.length > 0 && (
+            <Box>
+              <Text fontWeight="medium" fontSize="sm" mb={1}>
+                {feedback.correct ? "Full breakdown" : "Correct breakdown"}
+              </Text>
+              <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                <VStack align="stretch" gap={2}>
+                  {feedback.originParts.map((p, i) => {
+                    const typeBadge = getTypeBadgeColors(p.type);
+                    return (
+                      <Box key={i} display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                        <Text color="#2563eb" fontWeight="medium" fontSize="sm">{p.origin}</Text>
+                        <Text fontSize="sm" color="fg.muted">= {p.meaning}</Text>
+                        <Box px={2} py={0.5} borderRadius="full" bg="#f3f4f6">
+                          <Text fontSize="xs" color="#666">{p.language}</Text>
+                        </Box>
+                        {p.type && (
+                          <Box px={2} py={0.5} borderRadius="full" bg={typeBadge.bg}>
+                            <Text fontSize="xs" color={typeBadge.color}>{p.type}</Text>
+                          </Box>
+                        )}
+                      </Box>
+                    );
+                  })}
+                </VStack>
+              </Box>
+            </Box>
+          )}
 
           {feedback.reason && (
             <Box>
@@ -208,55 +304,20 @@ export default function EtymologyFreeformQuizPage() {
             </Box>
           )}
 
-          {feedback.originGrades.length > 0 && (
-            <Box>
-              <Text fontWeight="bold" mb={1}>Your answers:</Text>
-              <VStack align="stretch" gap={1}>
-                {feedback.originGrades.map((g, i) => (
-                  <Box
-                    key={i}
-                    p={2}
-                    borderWidth="1px"
-                    borderRadius="sm"
-                    borderColor={g.originCorrect && g.meaningCorrect ? "green.200" : "red.200"}
-                  >
-                    <Box display="flex" gap={2} alignItems="center">
-                      <Text
-                        textDecoration={g.originCorrect ? "none" : "line-through"}
-                        color={g.originCorrect ? "green.600" : "red.600"}
-                      >
-                        {g.userOrigin}
-                      </Text>
-                      <Text color="fg.muted">=</Text>
-                      <Text
-                        textDecoration={g.meaningCorrect ? "none" : "line-through"}
-                        color={g.meaningCorrect ? "green.600" : "red.600"}
-                      >
-                        {g.userMeaning}
-                      </Text>
-                    </Box>
-                    {g.correctOrigin && !(g.originCorrect && g.meaningCorrect) && (
-                      <Text fontSize="sm" color="fg.muted" mt={1}>
-                        Correct: {g.correctOrigin.origin} = {g.correctOrigin.meaning}
-                      </Text>
-                    )}
-                  </Box>
-                ))}
-              </VStack>
-            </Box>
-          )}
-
+          {/* Related words */}
           {feedback.relatedDefinitions.length > 0 && (
             <Box>
-              <Text fontWeight="bold" mb={1}>Related words:</Text>
-              <VStack align="stretch" gap={1}>
-                {feedback.relatedDefinitions.map((d, i) => (
-                  <Text key={i} fontSize="sm">
-                    <Text as="span" fontWeight="medium">{d.expression}</Text>
-                    {" - "}{d.meaning}
-                  </Text>
-                ))}
-              </VStack>
+              <Text fontWeight="medium" fontSize="sm" mb={1}>Related words</Text>
+              <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                <VStack align="stretch" gap={1}>
+                  {feedback.relatedDefinitions.map((d, i) => (
+                    <Text key={i} fontSize="sm">
+                      <Text as="span" fontWeight="medium" color="#2563eb">{d.expression}</Text>
+                      {" - "}{d.meaning}
+                    </Text>
+                  ))}
+                </VStack>
+              </Box>
             </Box>
           )}
 
@@ -299,7 +360,7 @@ export default function EtymologyFreeformQuizPage() {
       ) : (
         <VStack align="stretch" gap={4}>
           <Box>
-            <Text fontWeight="medium" mb={1}>Word</Text>
+            <Text fontWeight="medium" mb={1} fontSize="sm">Word</Text>
             <Input
               ref={wordInputRef}
               value={word}
@@ -324,33 +385,38 @@ export default function EtymologyFreeformQuizPage() {
             )}
           </Box>
 
-          <Text fontWeight="medium">Break down the origins:</Text>
+          <Box>
+            <Text fontWeight="medium" fontSize="sm">What are the origins of this word?</Text>
+          </Box>
 
           {rows.map((row, i) => (
-            <Box key={i} display="flex" gap={2} alignItems="center">
-              <Input
-                placeholder="Origin"
-                value={row.origin}
-                onChange={(e) => updateRow(i, "origin", e.target.value)}
-                flex={1}
-              />
-              <Text color="fg.muted">=</Text>
-              <Input
-                placeholder="Meaning"
-                value={row.meaning}
-                onChange={(e) => updateRow(i, "meaning", e.target.value)}
-                flex={1}
-              />
-              {rows.length > 1 && (
-                <Text
-                  color="red.500"
-                  cursor="pointer"
-                  fontSize="sm"
-                  onClick={() => removeRow(i)}
-                >
-                  x
-                </Text>
-              )}
+            <Box key={i}>
+              <Text fontSize="xs" color="fg.muted" mb={1}>Origin {i + 1}</Text>
+              <Box display="flex" gap={2} alignItems="center">
+                <Input
+                  placeholder="origin..."
+                  value={row.origin}
+                  onChange={(e) => updateRow(i, "origin", e.target.value)}
+                  flex={1}
+                />
+                <Text color="fg.muted">=</Text>
+                <Input
+                  placeholder="meaning..."
+                  value={row.meaning}
+                  onChange={(e) => updateRow(i, "meaning", e.target.value)}
+                  flex={1}
+                />
+                {rows.length > 1 && (
+                  <Text
+                    color="red.500"
+                    cursor="pointer"
+                    fontSize="sm"
+                    onClick={() => removeRow(i)}
+                  >
+                    x
+                  </Text>
+                )}
+              </Box>
             </Box>
           ))}
 
@@ -358,6 +424,7 @@ export default function EtymologyFreeformQuizPage() {
             color="#2563eb"
             fontSize="sm"
             cursor="pointer"
+            fontWeight="medium"
             onClick={addRow}
           >
             + Add origin
@@ -369,7 +436,7 @@ export default function EtymologyFreeformQuizPage() {
             disabled={!canSubmit || wordStatus === false || typeof wordStatus === "string"}
             size="lg"
           >
-            Check Answer
+            Submit
           </Button>
 
           {etymologyResults.length > 0 && (

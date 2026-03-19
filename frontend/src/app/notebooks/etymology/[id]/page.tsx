@@ -27,14 +27,17 @@ const typeBadgeColors: Record<string, { bg: string; color: string }> = {
 };
 
 function TypeBadge({ type }: { type: string }) {
-  const colors = typeBadgeColors[type.toLowerCase()] ?? { bg: "#f3f4f6", color: "#374151" };
+  const colors = typeBadgeColors[type.toLowerCase()] ?? {
+    bg: "#f3f4f6",
+    color: "#374151",
+  };
   return (
     <Box
       as="span"
       display="inline-block"
       px={2}
       py={0.5}
-      borderRadius="sm"
+      borderRadius="full"
       fontSize="xs"
       fontWeight="medium"
       bg={colors.bg}
@@ -53,10 +56,10 @@ function LanguageBadge({ language }: { language: string }) {
       display="inline-block"
       px={2}
       py={0.5}
-      borderRadius="sm"
+      borderRadius="full"
       fontSize="xs"
       bg="#f3f4f6"
-      color="#374151"
+      color="#666"
     >
       {language}
     </Box>
@@ -65,41 +68,263 @@ function LanguageBadge({ language }: { language: string }) {
 
 function OriginCard({
   origin,
-  notebookId,
+  onClick,
 }: {
   origin: EtymologyOriginPart;
-  notebookId: string;
+  onClick: () => void;
 }) {
   return (
     <Box
       p={3}
       borderWidth="1px"
-      borderRadius="md"
-      _hover={{ bg: "bg.muted" }}
+      borderRadius="lg"
+      bg="white"
+      _hover={{ bg: "gray.50" }}
+      cursor="pointer"
+      onClick={onClick}
     >
-      <Box display="flex" alignItems="center" gap={2} mb={1} flexWrap="wrap">
-        <Link
-          href={`/notebooks/etymology/${notebookId}?origin=${encodeURIComponent(origin.origin)}`}
-        >
+      <Box
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        mb={1}
+      >
+        <Box display="flex" alignItems="center" gap={2} flexWrap="wrap">
           <Text
+            fontSize="md"
             fontWeight="semibold"
             color="#2563eb"
-            cursor="pointer"
-            _hover={{ textDecoration: "underline" }}
           >
             {origin.origin}
           </Text>
-        </Link>
-        {origin.type && <TypeBadge type={origin.type} />}
-        <LanguageBadge language={origin.language} />
+          {origin.type && <TypeBadge type={origin.type} />}
+          <LanguageBadge language={origin.language} />
+        </Box>
+        <Text fontSize="xs" color="#666" flexShrink={0}>
+          {origin.wordCount} {origin.wordCount === 1 ? "word" : "words"}
+        </Text>
       </Box>
-      <Text fontSize="sm" color="fg.muted">
+      <Text fontSize="sm" color="#555">
         {origin.meaning}
       </Text>
-      <Text fontSize="xs" color="fg.subtle" mt={1}>
-        {origin.wordCount} {origin.wordCount === 1 ? "word" : "words"}
-      </Text>
     </Box>
+  );
+}
+
+function OriginDetailView({
+  selectedOrigin,
+  origins,
+  definitions,
+  notebookId,
+  onBack,
+  onSelectOrigin,
+}: {
+  selectedOrigin: string;
+  origins: EtymologyOriginPart[];
+  definitions: EtymologyDefinition[];
+  notebookId: string;
+  onBack: () => void;
+  onSelectOrigin: (origin: string) => void;
+}) {
+  const originData = origins.find((o) => o.origin === selectedOrigin);
+  const relatedDefs = definitions.filter((d) =>
+    d.originParts.some((p) => p.origin === selectedOrigin),
+  );
+
+  return (
+    <Box maxW="sm" mx="auto" bg="#f8f9fa" minH="100vh">
+      {/* Header */}
+      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
+        <Box px={4} pt={2}>
+          <Text
+            color="#999"
+            fontSize="xs"
+            cursor="pointer"
+            onClick={onBack}
+            _hover={{ textDecoration: "underline" }}
+          >
+            &lt; Origin List
+          </Text>
+        </Box>
+        <Box px={4} pb={3} textAlign="center">
+          <Heading size="md">Origin Detail</Heading>
+        </Box>
+      </Box>
+
+      <Box p={4}>
+        {/* Origin info card */}
+        {originData && (
+          <Box
+            p={4}
+            borderWidth="1px"
+            borderRadius="lg"
+            mb={4}
+            bg="white"
+            borderColor="#e5e7eb"
+          >
+            <Heading size="lg" mb={2}>
+              {originData.origin}
+            </Heading>
+            <Box display="flex" alignItems="center" gap={2} mb={2}>
+              {originData.type && <TypeBadge type={originData.type} />}
+              <LanguageBadge language={originData.language} />
+            </Box>
+            <Text color="#666">{originData.meaning}</Text>
+          </Box>
+        )}
+
+        {/* Words section */}
+        <Text fontSize="sm" fontWeight="medium" color="#333" mb={3}>
+          Words using this origin ({relatedDefs.length})
+        </Text>
+
+        <VStack align="stretch" gap={2}>
+          {relatedDefs.map((def, i) => (
+            <Box
+              key={i}
+              p={3}
+              borderWidth="1px"
+              borderRadius="lg"
+              bg="white"
+              borderColor="#e5e7eb"
+            >
+              <Text fontSize="md" fontWeight="semibold" mb={1}>
+                {def.expression}
+              </Text>
+              <Text fontSize="sm" color="#333" mb={2}>
+                {def.meaning}
+              </Text>
+              <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                {def.originParts.map((part, j) => (
+                  <Box key={j} display="flex" alignItems="center" gap={1}>
+                    {j > 0 && (
+                      <Text fontSize="sm" color="#999">
+                        +
+                      </Text>
+                    )}
+                    {part.origin === selectedOrigin ? (
+                      <Box
+                        px={2}
+                        py={0.5}
+                        borderRadius="sm"
+                        borderWidth="1px"
+                        borderColor="#2563eb"
+                        bg="#eff6ff"
+                      >
+                        <Text
+                          fontSize="sm"
+                          color="#2563eb"
+                          fontWeight="semibold"
+                        >
+                          {part.origin}
+                        </Text>
+                      </Box>
+                    ) : (
+                      <Text
+                        fontSize="sm"
+                        color="#2563eb"
+                        fontWeight="medium"
+                        cursor="pointer"
+                        _hover={{ textDecoration: "underline" }}
+                        onClick={() => onSelectOrigin(part.origin)}
+                      >
+                        {part.origin}
+                      </Text>
+                    )}
+                    {part.origin === selectedOrigin && (
+                      <Text fontSize="xs" color="#999">
+                        (current)
+                      </Text>
+                    )}
+                  </Box>
+                ))}
+              </Box>
+            </Box>
+          ))}
+        </VStack>
+
+        {relatedDefs.length > 0 && (
+          <Text
+            fontSize="xs"
+            color="#999"
+            textAlign="center"
+            mt={4}
+          >
+            Tap a blue origin to navigate to its page
+          </Text>
+        )}
+      </Box>
+    </Box>
+  );
+}
+
+function ByMeaningView({
+  meaningGroups,
+  search,
+  onSelectOrigin,
+}: {
+  meaningGroups: EtymologyMeaningGroup[];
+  search: string;
+  onSelectOrigin: (origin: string) => void;
+}) {
+  const filtered = useMemo(() => {
+    if (!search.trim()) return meaningGroups;
+    const lower = search.toLowerCase();
+    return meaningGroups.filter(
+      (g) =>
+        g.meaning.toLowerCase().includes(lower) ||
+        g.origins.some((o) => o.origin.toLowerCase().includes(lower)),
+    );
+  }, [meaningGroups, search]);
+
+  return (
+    <VStack align="stretch" gap={2}>
+      {filtered.map((group, i) => (
+        <Box
+          key={i}
+          p={3}
+          borderWidth="1px"
+          borderRadius="lg"
+          bg="white"
+          borderColor="#e5e7eb"
+        >
+          <Text fontSize="md" fontWeight="semibold" mb={2}>
+            &ldquo;{group.meaning}&rdquo;
+          </Text>
+          <VStack align="stretch" gap={1}>
+            {group.origins.map((origin, j) => (
+              <Box
+                key={j}
+                display="flex"
+                alignItems="center"
+                gap={2}
+                cursor="pointer"
+                onClick={() => onSelectOrigin(origin.origin)}
+              >
+                <Text
+                  fontSize="sm"
+                  color="#2563eb"
+                  fontWeight="medium"
+                  _hover={{ textDecoration: "underline" }}
+                >
+                  {origin.origin}
+                </Text>
+                <LanguageBadge language={origin.language} />
+                <Text fontSize="xs" color="#999">
+                  {origin.wordCount}{" "}
+                  {origin.wordCount === 1 ? "word" : "words"}
+                </Text>
+              </Box>
+            ))}
+          </VStack>
+        </Box>
+      ))}
+      {filtered.length === 0 && (
+        <Text color="fg.muted" textAlign="center">
+          No meaning groups match your search.
+        </Text>
+      )}
+    </VStack>
   );
 }
 
@@ -109,7 +334,11 @@ export default function EtymologyNotebookPage() {
 
   const [origins, setOrigins] = useState<EtymologyOriginPart[]>([]);
   const [definitions, setDefinitions] = useState<EtymologyDefinition[]>([]);
-  const [meaningGroups, setMeaningGroups] = useState<EtymologyMeaningGroup[]>([]);
+  const [meaningGroups, setMeaningGroups] = useState<EtymologyMeaningGroup[]>(
+    [],
+  );
+  const [originCount, setOriginCount] = useState(0);
+  const [definitionCount, setDefinitionCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -123,6 +352,8 @@ export default function EtymologyNotebookPage() {
         setOrigins(res.origins ?? []);
         setDefinitions(res.definitions ?? []);
         setMeaningGroups(res.meaningGroups ?? []);
+        setOriginCount(res.originCount);
+        setDefinitionCount(res.definitionCount);
 
         // Check URL for origin query param
         const url = new URL(window.location.href);
@@ -145,19 +376,9 @@ export default function EtymologyNotebookPage() {
     );
   }, [origins, search]);
 
-  const filteredMeaningGroups = useMemo(() => {
-    if (!search.trim()) return meaningGroups;
-    const lower = search.toLowerCase();
-    return meaningGroups.filter(
-      (g) =>
-        g.meaning.toLowerCase().includes(lower) ||
-        g.origins.some((o) => o.origin.toLowerCase().includes(lower)),
-    );
-  }, [meaningGroups, search]);
-
   if (loading) {
     return (
-      <Box p={4} maxW="2xl" mx="auto" textAlign="center">
+      <Box p={4} maxW="sm" mx="auto" textAlign="center">
         <Spinner size="lg" />
       </Box>
     );
@@ -165,7 +386,7 @@ export default function EtymologyNotebookPage() {
 
   if (error) {
     return (
-      <Box p={4} maxW="2xl" mx="auto">
+      <Box p={4} maxW="sm" mx="auto">
         <Text color="red.500">{error}</Text>
       </Box>
     );
@@ -173,206 +394,155 @@ export default function EtymologyNotebookPage() {
 
   // Origin detail view
   if (selectedOrigin) {
-    const originData = origins.find((o) => o.origin === selectedOrigin);
-    const relatedDefs = definitions.filter((d) =>
-      d.originParts.some((p) => p.origin === selectedOrigin),
-    );
-
     return (
-      <Box p={4} maxW="2xl" mx="auto">
-        <Box mb={2}>
-          <Text
-            color="blue.600"
-            fontSize="sm"
-            cursor="pointer"
-            onClick={() => setSelectedOrigin(null)}
-          >
-            &larr; Back to origins
-          </Text>
-        </Box>
-
-        {originData && (
-          <Box
-            p={4}
-            borderWidth="1px"
-            borderRadius="md"
-            mb={4}
-            bg="blue.50"
-            _dark={{ bg: "blue.900/20" }}
-          >
-            <Box display="flex" alignItems="center" gap={2} mb={2} flexWrap="wrap">
-              <Heading size="md">{originData.origin}</Heading>
-              {originData.type && <TypeBadge type={originData.type} />}
-              <LanguageBadge language={originData.language} />
-            </Box>
-            <Text>{originData.meaning}</Text>
-          </Box>
-        )}
-
-        <Heading size="sm" mb={3}>
-          Words ({relatedDefs.length})
-        </Heading>
-        <VStack align="stretch" gap={2}>
-          {relatedDefs.map((def, i) => (
-            <Box key={i} p={3} borderWidth="1px" borderRadius="md">
-              <Text fontWeight="semibold">{def.expression}</Text>
-              <Text fontSize="sm" color="fg.muted" mb={2}>
-                {def.meaning}
-              </Text>
-              <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
-                {def.originParts.map((part, j) => (
-                  <Box key={j} display="flex" alignItems="center" gap={1}>
-                    {j > 0 && (
-                      <Text fontSize="sm" color="fg.muted">
-                        +
-                      </Text>
-                    )}
-                    {part.origin === selectedOrigin ? (
-                      <Box
-                        px={2}
-                        py={0.5}
-                        borderRadius="sm"
-                        borderWidth="2px"
-                        borderColor="#2563eb"
-                        bg="blue.50"
-                        _dark={{ bg: "blue.900/20" }}
-                      >
-                        <Text fontSize="sm" color="#2563eb" fontWeight="medium">
-                          {part.origin} (current)
-                        </Text>
-                      </Box>
-                    ) : (
-                      <Text
-                        fontSize="sm"
-                        color="#2563eb"
-                        cursor="pointer"
-                        _hover={{ textDecoration: "underline" }}
-                        onClick={() => setSelectedOrigin(part.origin)}
-                      >
-                        {part.origin}
-                      </Text>
-                    )}
-                    <LanguageBadge language={part.language} />
-                  </Box>
-                ))}
-              </Box>
-            </Box>
-          ))}
-        </VStack>
-      </Box>
+      <OriginDetailView
+        selectedOrigin={selectedOrigin}
+        origins={origins}
+        definitions={definitions}
+        notebookId={id}
+        onBack={() => setSelectedOrigin(null)}
+        onSelectOrigin={setSelectedOrigin}
+      />
     );
   }
 
   // Origin list view
   return (
-    <Box p={4} maxW="2xl" mx="auto">
-      <Box mb={2}>
-        <Link href="/notebooks">
-          <Text color="blue.600" fontSize="sm">
-            &larr; Back to notebooks
-          </Text>
-        </Link>
+    <Box maxW="sm" mx="auto" bg="#f8f9fa" minH="100vh">
+      {/* Header */}
+      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
+        <Box px={4} pt={2}>
+          <Link href="/notebooks">
+            <Text
+              color="#999"
+              fontSize="xs"
+              _hover={{ textDecoration: "underline" }}
+            >
+              &lt; Notebooks
+            </Text>
+          </Link>
+        </Box>
+        <Box px={4} pb={3} textAlign="center">
+          <Heading size="md">Etymology</Heading>
+        </Box>
       </Box>
 
-      <Heading size="lg" mb={4}>
-        Etymology Origins
-      </Heading>
+      {/* Search bar */}
+      <Box px={4} pt={3}>
+        <Input
+          placeholder="Search origins or meanings..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          borderRadius="lg"
+          bg="white"
+          borderColor="#d1d5db"
+        />
+      </Box>
 
-      <Input
-        placeholder="Search origins or meanings..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        mb={4}
-      />
-
-      <Box display="flex" gap={2} mb={4}>
+      {/* Tabs */}
+      <Box
+        bg="white"
+        mt={3}
+        borderBottomWidth="1px"
+        borderColor="#e5e7eb"
+        display="flex"
+      >
         <Box
-          px={3}
-          py={1}
-          borderRadius="md"
+          flex={1}
+          textAlign="center"
+          py={2}
           cursor="pointer"
-          fontWeight="medium"
-          fontSize="sm"
-          bg={tab === "origins" ? "blue.500" : "gray.100"}
-          color={tab === "origins" ? "white" : "fg.default"}
-          _dark={{
-            bg: tab === "origins" ? "blue.500" : "gray.700",
-            color: tab === "origins" ? "white" : "fg.default",
-          }}
           onClick={() => setTab("origins")}
+          position="relative"
         >
-          All Origins
+          <Text
+            fontSize="sm"
+            fontWeight={tab === "origins" ? "semibold" : "normal"}
+            color={tab === "origins" ? "#2563eb" : "#999"}
+          >
+            All Origins
+          </Text>
+          {tab === "origins" && (
+            <Box
+              position="absolute"
+              bottom={0}
+              left="50%"
+              transform="translateX(-50%)"
+              w="60%"
+              h="3px"
+              borderRadius="full"
+              bg="#2563eb"
+            />
+          )}
         </Box>
         <Box
-          px={3}
-          py={1}
-          borderRadius="md"
+          flex={1}
+          textAlign="center"
+          py={2}
           cursor="pointer"
-          fontWeight="medium"
-          fontSize="sm"
-          bg={tab === "meanings" ? "blue.500" : "gray.100"}
-          color={tab === "meanings" ? "white" : "fg.default"}
-          _dark={{
-            bg: tab === "meanings" ? "blue.500" : "gray.700",
-            color: tab === "meanings" ? "white" : "fg.default",
-          }}
           onClick={() => setTab("meanings")}
+          position="relative"
         >
-          By Meaning
+          <Text
+            fontSize="sm"
+            fontWeight={tab === "meanings" ? "semibold" : "normal"}
+            color={tab === "meanings" ? "#2563eb" : "#999"}
+          >
+            By Meaning
+          </Text>
+          {tab === "meanings" && (
+            <Box
+              position="absolute"
+              bottom={0}
+              left="50%"
+              transform="translateX(-50%)"
+              w="60%"
+              h="3px"
+              borderRadius="full"
+              bg="#2563eb"
+            />
+          )}
         </Box>
       </Box>
 
-      {tab === "origins" ? (
-        <VStack align="stretch" gap={2}>
-          {filteredOrigins.map((origin, i) => (
-            <OriginCard key={i} origin={origin} notebookId={id} />
-          ))}
-          {filteredOrigins.length === 0 && (
-            <Text color="fg.muted" textAlign="center">
-              No origins match your search.
-            </Text>
-          )}
-        </VStack>
-      ) : (
-        <VStack align="stretch" gap={3}>
-          {filteredMeaningGroups.map((group, i) => (
-            <Box key={i} p={3} borderWidth="1px" borderRadius="md">
-              <Text fontWeight="semibold" mb={2}>
-                {group.meaning}
+      {/* Content */}
+      <Box p={4}>
+        {tab === "origins" ? (
+          <VStack align="stretch" gap={2}>
+            {filteredOrigins.map((origin, i) => (
+              <OriginCard
+                key={i}
+                origin={origin}
+                onClick={() => setSelectedOrigin(origin.origin)}
+              />
+            ))}
+            {filteredOrigins.length === 0 && (
+              <Text color="fg.muted" textAlign="center">
+                No origins match your search.
               </Text>
-              <VStack align="stretch" gap={1}>
-                {group.origins.map((origin, j) => (
-                  <Box
-                    key={j}
-                    display="flex"
-                    alignItems="center"
-                    gap={2}
-                    pl={2}
-                  >
-                    <Text
-                      color="#2563eb"
-                      cursor="pointer"
-                      _hover={{ textDecoration: "underline" }}
-                      onClick={() => setSelectedOrigin(origin.origin)}
-                    >
-                      {origin.origin}
-                    </Text>
-                    <LanguageBadge language={origin.language} />
-                    <Text fontSize="xs" color="fg.subtle">
-                      {origin.wordCount} {origin.wordCount === 1 ? "word" : "words"}
-                    </Text>
-                  </Box>
-                ))}
-              </VStack>
-            </Box>
-          ))}
-          {filteredMeaningGroups.length === 0 && (
-            <Text color="fg.muted" textAlign="center">
-              No meaning groups match your search.
-            </Text>
-          )}
-        </VStack>
-      )}
+            )}
+          </VStack>
+        ) : (
+          <ByMeaningView
+            meaningGroups={meaningGroups}
+            search={search}
+            onSelectOrigin={setSelectedOrigin}
+          />
+        )}
+      </Box>
+
+      {/* Summary footer */}
+      <Box
+        bg="white"
+        borderTopWidth="1px"
+        borderColor="#e5e7eb"
+        py={3}
+        textAlign="center"
+      >
+        <Text fontSize="sm" color="#666">
+          {originCount} origins &middot; {definitionCount} words
+        </Text>
+      </Box>
     </Box>
   );
 }

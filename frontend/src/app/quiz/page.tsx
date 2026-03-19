@@ -182,7 +182,7 @@ export default function QuizStartPage() {
 
   if (loading) {
     return (
-      <Box p={4} maxW="md" mx="auto" textAlign="center">
+      <Box p={4} maxW="sm" mx="auto" textAlign="center">
         <Spinner size="lg" />
       </Box>
     );
@@ -190,7 +190,7 @@ export default function QuizStartPage() {
 
   if (error) {
     return (
-      <Box p={4} maxW="md" mx="auto">
+      <Box p={4} maxW="sm" mx="auto">
         <Text color="red.500">{error}</Text>
       </Box>
     );
@@ -199,13 +199,13 @@ export default function QuizStartPage() {
   const showNotebookSelection = quizType !== "freeform";
 
   return (
-    <Box p={4} maxW="md" mx="auto">
+    <Box p={4} maxW="sm" mx="auto">
       <Box mb={2}>
         <Link href="/">
           <Text color="blue.600" fontSize="sm" _dark={{ color: "blue.300" }}>&larr; Back</Text>
         </Link>
       </Box>
-      <Heading size="lg" mb={4}>Quiz</Heading>
+      <Heading size="lg" mb={4}>{isEtymology ? "Etymology Quiz" : "Quiz"}</Heading>
 
       <Text fontWeight="medium" mb={2}>
         Select quiz type
@@ -240,9 +240,9 @@ export default function QuizStartPage() {
           <Text fontWeight="medium" mb={2}>Quiz mode</Text>
           <VStack align="stretch" gap={2}>
             {[
-              { value: "breakdown" as EtymologyMode, label: "Breakdown", desc: "See word -> identify origins" },
-              { value: "assembly" as EtymologyMode, label: "Assembly", desc: "See origins -> guess the word" },
-              { value: "freeform" as EtymologyMode, label: "Freeform", desc: "Type any word -> break down origins" },
+              { value: "breakdown" as EtymologyMode, label: "Breakdown", desc: "Given a word, type its origins and their meanings" },
+              { value: "assembly" as EtymologyMode, label: "Assembly", desc: "Given origins and meanings, type the word" },
+              { value: "freeform" as EtymologyMode, label: "Freeform", desc: "Type any word and break down its origins" },
             ].map((m) => (
               <Box
                 key={m.value}
@@ -271,6 +271,11 @@ export default function QuizStartPage() {
           <Text fontWeight="medium" mb={2}>
             Select notebooks
           </Text>
+          {isEtymology && (
+            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mb={2}>
+              Only notebooks with etymology data are shown
+            </Text>
+          )}
 
           <VStack align="stretch" gap={3}>
             <Checkbox.Root
@@ -293,9 +298,9 @@ export default function QuizStartPage() {
                 <Checkbox.Label flex="1">
                   <Box display="flex" justifyContent="space-between" w="full">
                     <Text>{notebook.name}</Text>
-                    <Text>
+                    <Text color="gray.500" fontSize="sm">
                       {isEtymology
-                        ? notebook.etymologyReviewCount
+                        ? `${notebook.etymologyReviewCount} words`
                         : quizType === "reverse"
                           ? notebook.reverseReviewCount
                           : notebook.reviewCount}

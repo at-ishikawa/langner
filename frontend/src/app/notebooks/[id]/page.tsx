@@ -14,14 +14,19 @@ import {
 } from "@chakra-ui/react";
 import {
   notebookClient,
+  quizClient,
   type GetNotebookDetailResponse,
   type NotebookWord,
   type StoryEntry,
   type StoryScene,
+  type EtymologyOriginPart,
+  type EtymologyDefinition,
 } from "@/lib/client";
 import { LearningStatusBadge } from "@/components/LearningStatusBadge";
 import { PdfPreviewModal } from "@/components/PdfPreviewModal";
 import { formatReviewDate } from "@/lib/formatReviewDate";
+
+type OriginPartsMap = Map<string, { parts: EtymologyOriginPart[]; etymologyNotebookId: string }>;
 
 type StatusFilter =
   | "all"
@@ -124,6 +129,39 @@ function highlightExcerpt(
   );
 }
 
+async function loadEtymologyData(notebookName: string): Promise<OriginPartsMap> {
+  const opts = await quizClient.getQuizOptions({});
+  const etymologyNotebooks = (opts.notebooks ?? []).filter(
+    (n) => n.kind === "Etymology",
+  );
+  if (etymologyNotebooks.length === 0) return new Map();
+
+  const results = await Promise.all(
+    etymologyNotebooks.map((nb) =>
+      notebookClient
+        .getEtymologyNotebook({ notebookId: nb.notebookId })
+        .then((res) => ({ notebookId: nb.notebookId, definitions: res.definitions ?? [] }))
+        .catch(() => ({ notebookId: nb.notebookId, definitions: [] as EtymologyDefinition[] })),
+    ),
+  );
+
+  const map: OriginPartsMap = new Map();
+  for (const { notebookId, definitions } of results) {
+    for (const def of definitions) {
+      if (
+        def.originParts.length > 0 &&
+        def.notebookName === notebookName
+      ) {
+        map.set(def.expression, {
+          parts: def.originParts,
+          etymologyNotebookId: notebookId,
+        });
+      }
+    }
+  }
+  return map;
+}
+
 export default function NotebookDetailPage() {
   const params = useParams();
   const id = params.id as string;
@@ -135,11 +173,18 @@ export default function NotebookDetailPage() {
   const [filter, setFilter] = useState<StatusFilter>("all");
   const [pickedStory, setPickedStory] = useState<StoryEntry | null>(null);
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [originPartsMap, setOriginPartsMap] = useState<OriginPartsMap>(new Map());
 
   useEffect(() => {
     notebookClient
       .getNotebookDetail({ notebookId: id })
-      .then((res) => setData(res))
+      .then((res) => {
+        setData(res);
+        // Load etymology data to show origin_parts on word cards
+        loadEtymologyData(res.name).then(setOriginPartsMap).catch(() => {
+          // Etymology data is optional; ignore errors
+        });
+      })
       .catch(() => setError("Failed to load notebook"))
       .finally(() => setLoading(false));
   }, [id]);
@@ -226,7 +271,7 @@ export default function NotebookDetailPage() {
             {selectedStory.scenes[0].definitions
               .filter((w) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
               .map((word, i) => (
-                <WordCard key={i} word={word} />
+                <WordCard key={i} word={word} originPartsMap={originPartsMap} />
               ))}
           </VStack>
         ) : (
@@ -235,7 +280,7 @@ export default function NotebookDetailPage() {
             {selectedStory.scenes
               .filter((scene) => matchCount(scene.definitions, filter) > 0)
               .map((scene, i) => (
-                <SceneRow key={i} scene={scene} filter={filter} />
+                <SceneRow key={i} scene={scene} filter={filter} originPartsMap={originPartsMap} />
               ))}
           </VStack>
         )}
@@ -370,9 +415,11 @@ export default function NotebookDetailPage() {
 function SceneRow({
   scene,
   filter,
+  originPartsMap,
 }: {
   scene: StoryScene;
   filter: StatusFilter;
+  originPartsMap: OriginPartsMap;
 }) {
   const [open, setOpen] = useState(false);
   const total = matchCount(scene.definitions, "all");
@@ -441,7 +488,7 @@ function SceneRow({
                         </Text>
                       </Box>
                     )}
-                    <WordCard word={word} />
+                    <WordCard word={word} originPartsMap={originPartsMap} />
                   </Box>
                 );
               })}
@@ -456,13 +503,21 @@ function SceneRow({
 // note_id, but the NotebookWord proto does not expose note_id. A proto change is
 // needed to add note_id to NotebookWord before this feature can be implemented.
 
-function WordCard({ word }: { word: NotebookWord }) {
+function WordCard({
+  word,
+  originPartsMap,
+}: {
+  word: NotebookWord;
+  originPartsMap: OriginPartsMap;
+}) {
   const [open, setOpen] = useState(false);
 
   const lastLog =
     word.learnedLogs.length > 0
       ? word.learnedLogs[word.learnedLogs.length - 1]
       : null;
+
+  const etymologyData = originPartsMap.get(word.expression);
 
   return (
     <Box
@@ -498,6 +553,57 @@ function WordCard({ word }: { word: NotebookWord }) {
         <Text color="fg.muted" mt={1}>
           {word.meaning || word.definition}
         </Text>
+        {etymologyData && (
+          <Box mt={2}>
+            <Text fontSize="xs" color="#999" mb={1}>
+              Origins:
+            </Text>
+            <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+              {etymologyData.parts.map((part, j) => (
+                <Box key={j} display="flex" alignItems="center" gap={1}>
+                  {j > 0 && (
+                    <Text fontSize="xs" color="#999">
+                      +
+                    </Text>
+                  )}
+                  <Link
+                    href={`/notebooks/etymology/${etymologyData.etymologyNotebookId}?origin=${encodeURIComponent(part.origin)}`}
+                  >
+                    <Box
+                      display="inline-flex"
+                      alignItems="center"
+                      gap={1}
+                      px={2}
+                      py={0.5}
+                      borderRadius="full"
+                      borderWidth="1px"
+                      borderColor="#2563eb"
+                      bg="#eff6ff"
+                      cursor="pointer"
+                      _hover={{ bg: "#dbeafe" }}
+                    >
+                      <Text fontSize="xs" color="#2563eb" fontWeight="medium">
+                        {part.origin}
+                      </Text>
+                      {part.language && (
+                        <Box
+                          px={1.5}
+                          py={0}
+                          borderRadius="full"
+                          bg="#f3f4f6"
+                          fontSize="2xs"
+                          color="#666"
+                        >
+                          {part.language}
+                        </Box>
+                      )}
+                    </Box>
+                  </Link>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
         {word.nextReviewDate && (
           <Text fontSize="xs" color="fg.subtle" mt={1}>
             Next review: {formatReviewDate(word.nextReviewDate)}

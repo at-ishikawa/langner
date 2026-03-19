@@ -23,6 +23,19 @@ interface OriginRow {
 
 type QuizPhase = "answering" | "feedback";
 
+function getTypeBadgeColors(type: string): { bg: string; color: string } {
+  switch (type.toLowerCase()) {
+    case "root":
+      return { bg: "#dbeafe", color: "#2563eb" };
+    case "prefix":
+      return { bg: "#fef3c7", color: "#92400e" };
+    case "suffix":
+      return { bg: "#dcfce7", color: "#166534" };
+    default:
+      return { bg: "#f3f4f6", color: "#666" };
+  }
+}
+
 export default function EtymologyBreakdownPage() {
   const router = useRouter();
   const etymologyCards = useQuizStore((s) => s.etymologyCards);
@@ -55,6 +68,7 @@ export default function EtymologyBreakdownPage() {
   const [skipped, setSkipped] = useState(false);
   const [displayCorrect, setDisplayCorrect] = useState(false);
   const startTimeRef = useRef(Date.now());
+  const firstInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (etymologyCards.length === 0 || quizType !== "etymology-breakdown") {
@@ -70,6 +84,7 @@ export default function EtymologyBreakdownPage() {
     setOverridden(false);
     setSkipped(false);
     setDisplayCorrect(false);
+    setTimeout(() => firstInputRef.current?.focus(), 50);
   }, [currentIndex]);
 
   if (etymologyCards.length === 0) return null;
@@ -163,8 +178,19 @@ export default function EtymologyBreakdownPage() {
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && phase === "feedback" && !loading) {
+      handleNext();
+    }
+  };
+
+  // Group related definitions by origin for the "Related words" section
+  const groupedRelated = feedback?.relatedDefinitions
+    ? groupRelatedByOrigin(feedback.relatedDefinitions, card.originParts)
+    : [];
+
   return (
-    <Box p={4} maxW="md" mx="auto">
+    <Box p={4} maxW="sm" mx="auto" onKeyDown={handleKeyDown}>
       <Box mb={4}>
         <Text fontSize="sm" mb={1}>
           {currentIndex + 1} / {total}
@@ -178,38 +204,45 @@ export default function EtymologyBreakdownPage() {
 
       {phase === "answering" ? (
         <VStack align="stretch" gap={4}>
-          <Box p={4} borderWidth="1px" borderRadius="md" textAlign="center">
+          <Box p={4} borderWidth="1px" borderRadius="lg" textAlign="center" bg="white" _dark={{ bg: "gray.800" }}>
             <Heading size="xl">{card.expression}</Heading>
             <Text color="fg.muted" mt={1}>{card.meaning}</Text>
           </Box>
 
-          <Text fontWeight="medium">Break down the origins:</Text>
+          <Box>
+            <Text fontWeight="medium" mb={1}>What are the origins of this word?</Text>
+            <Text fontSize="sm" color="fg.muted">Type each origin and its meaning. Add more rows as needed.</Text>
+          </Box>
 
           {rows.map((row, i) => (
-            <Box key={i} display="flex" gap={2} alignItems="center">
-              <Input
-                placeholder="Origin"
-                value={row.origin}
-                onChange={(e) => updateRow(i, "origin", e.target.value)}
-                flex={1}
-              />
-              <Text color="fg.muted">=</Text>
-              <Input
-                placeholder="Meaning"
-                value={row.meaning}
-                onChange={(e) => updateRow(i, "meaning", e.target.value)}
-                flex={1}
-              />
-              {rows.length > 1 && (
-                <Text
-                  color="red.500"
-                  cursor="pointer"
-                  fontSize="sm"
-                  onClick={() => removeRow(i)}
-                >
-                  x
-                </Text>
-              )}
+            <Box key={i}>
+              <Text fontSize="xs" color="fg.muted" mb={1}>Origin {i + 1}</Text>
+              <Box display="flex" gap={2} alignItems="center">
+                <Input
+                  ref={i === 0 ? firstInputRef : undefined}
+                  placeholder="origin..."
+                  value={row.origin}
+                  onChange={(e) => updateRow(i, "origin", e.target.value)}
+                  flex={1}
+                />
+                <Text color="fg.muted">=</Text>
+                <Input
+                  placeholder="meaning..."
+                  value={row.meaning}
+                  onChange={(e) => updateRow(i, "meaning", e.target.value)}
+                  flex={1}
+                />
+                {rows.length > 1 && (
+                  <Text
+                    color="red.500"
+                    cursor="pointer"
+                    fontSize="sm"
+                    onClick={() => removeRow(i)}
+                  >
+                    x
+                  </Text>
+                )}
+              </Box>
             </Box>
           ))}
 
@@ -217,6 +250,7 @@ export default function EtymologyBreakdownPage() {
             color="#2563eb"
             fontSize="sm"
             cursor="pointer"
+            fontWeight="medium"
             onClick={addRow}
           >
             + Add origin
@@ -235,11 +269,6 @@ export default function EtymologyBreakdownPage() {
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
-          <Box p={4} borderWidth="1px" borderRadius="md" textAlign="center">
-            <Heading size="xl">{card.expression}</Heading>
-            <Text color="fg.muted" mt={1}>{card.meaning}</Text>
-          </Box>
-
           {loading ? (
             <Box textAlign="center" py={8}>
               <Spinner size="lg" mb={4} />
@@ -247,6 +276,7 @@ export default function EtymologyBreakdownPage() {
             </Box>
           ) : feedback ? (
             <>
+              {/* Correct/Incorrect banner */}
               <Box
                 p={3}
                 borderRadius="md"
@@ -256,8 +286,9 @@ export default function EtymologyBreakdownPage() {
                   bg: displayCorrect ? "green.900" : "red.900",
                   color: displayCorrect ? "green.200" : "red.200",
                 }}
+                textAlign="center"
               >
-                <Text fontWeight="bold">
+                <Text fontWeight="bold" fontSize="md">
                   {displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}
                   {overridden && (
                     <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
@@ -265,75 +296,112 @@ export default function EtymologyBreakdownPage() {
                 </Text>
               </Box>
 
-              {feedback.reason && (
-                <Box>
-                  <Text fontWeight="bold">Reason</Text>
-                  <Text>{feedback.reason}</Text>
-                </Box>
-              )}
+              {/* Word card */}
+              <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                <Text fontSize="xl" fontWeight="bold">{card.expression}</Text>
+                <Text fontSize="sm" color="fg.muted">{card.meaning}</Text>
+              </Box>
 
+              {/* Your answer section */}
               {feedback.originGrades.length > 0 && (
                 <Box>
-                  <Text fontWeight="bold" mb={1}>Your answers:</Text>
-                  <VStack align="stretch" gap={1}>
-                    {feedback.originGrades.map((g, i) => (
-                      <Box
-                        key={i}
-                        p={2}
-                        borderWidth="1px"
-                        borderRadius="sm"
-                        borderColor={g.originCorrect && g.meaningCorrect ? "green.200" : "red.200"}
-                      >
-                        <Box display="flex" gap={2} alignItems="center">
-                          <Text
-                            textDecoration={g.originCorrect ? "none" : "line-through"}
-                            color={g.originCorrect ? "green.600" : "red.600"}
-                          >
-                            {g.userOrigin}
-                          </Text>
-                          <Text color="fg.muted">=</Text>
-                          <Text
-                            textDecoration={g.meaningCorrect ? "none" : "line-through"}
-                            color={g.meaningCorrect ? "green.600" : "red.600"}
-                          >
-                            {g.userMeaning}
-                          </Text>
-                        </Box>
-                        {g.correctOrigin && !(g.originCorrect && g.meaningCorrect) && (
-                          <Text fontSize="sm" color="fg.muted" mt={1}>
-                            Correct: {g.correctOrigin.origin} = {g.correctOrigin.meaning}
-                          </Text>
-                        )}
-                      </Box>
-                    ))}
-                  </VStack>
+                  <Text fontWeight="medium" fontSize="sm" mb={1}>Your answer</Text>
+                  <Box
+                    p={3}
+                    borderWidth="1.5px"
+                    borderRadius="lg"
+                    borderColor={displayCorrect ? "#16a34a" : "#dc2626"}
+                    bg="white"
+                    _dark={{ bg: "gray.800" }}
+                  >
+                    <VStack align="stretch" gap={2}>
+                      {feedback.originGrades.map((g, i) => {
+                        const bothCorrect = g.originCorrect && g.meaningCorrect;
+                        return (
+                          <Box key={i} display="flex" justifyContent="space-between" alignItems="center">
+                            <Text
+                              fontSize="sm"
+                              textDecoration={!bothCorrect ? "line-through" : "none"}
+                              color={!bothCorrect ? "#dc2626" : undefined}
+                            >
+                              {g.userOrigin} = {g.userMeaning}
+                            </Text>
+                            <Text
+                              fontSize="sm"
+                              fontWeight="medium"
+                              color={bothCorrect ? "#16a34a" : "#dc2626"}
+                            >
+                              {bothCorrect ? "\u2713" : "\u2717"}
+                            </Text>
+                          </Box>
+                        );
+                      })}
+                    </VStack>
+                  </Box>
                 </Box>
               )}
 
+              {/* Full breakdown / Correct breakdown */}
               <Box>
-                <Text fontWeight="bold" mb={1}>Full breakdown:</Text>
-                <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
-                  {card.originParts.map((p, i) => (
-                    <Box key={i} display="flex" alignItems="center" gap={1}>
-                      {i > 0 && <Text color="fg.muted">+</Text>}
-                      <Text color="#2563eb" fontWeight="medium">{p.origin}</Text>
-                      <Text fontSize="sm" color="fg.muted">({p.meaning})</Text>
-                    </Box>
-                  ))}
+                <Text fontWeight="medium" fontSize="sm" mb={1}>
+                  {displayCorrect ? "Full breakdown" : "Correct breakdown"}
+                </Text>
+                <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                  <VStack align="stretch" gap={2}>
+                    {card.originParts.map((p, i) => {
+                      const typeBadge = getTypeBadgeColors(p.type);
+                      return (
+                        <Box key={i} display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                          <Text color="#2563eb" fontWeight="medium" fontSize="sm">{p.origin}</Text>
+                          <Text fontSize="sm" color="fg.muted">= {p.meaning}</Text>
+                          <Box px={2} py={0.5} borderRadius="full" bg="#f3f4f6">
+                            <Text fontSize="xs" color="#666">{p.language}</Text>
+                          </Box>
+                          {p.type && (
+                            <Box px={2} py={0.5} borderRadius="full" bg={typeBadge.bg}>
+                              <Text fontSize="xs" color={typeBadge.color}>{p.type}</Text>
+                            </Box>
+                          )}
+                        </Box>
+                      );
+                    })}
+                  </VStack>
                 </Box>
               </Box>
 
-              {feedback.relatedDefinitions.length > 0 && (
+              {/* Related words grouped by origin */}
+              {groupedRelated.length > 0 && (
                 <Box>
-                  <Text fontWeight="bold" mb={1}>Related words:</Text>
-                  <VStack align="stretch" gap={1}>
-                    {feedback.relatedDefinitions.map((d, i) => (
-                      <Text key={i} fontSize="sm">
-                        <Text as="span" fontWeight="medium">{d.expression}</Text>
-                        {" - "}{d.meaning}
-                      </Text>
-                    ))}
-                  </VStack>
+                  <Text fontWeight="medium" fontSize="sm" mb={1}>Related words sharing these origins</Text>
+                  <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                    <VStack align="stretch" gap={2}>
+                      {groupedRelated.map((group, i) => (
+                        <Box key={i}>
+                          <Text fontSize="xs" color="fg.muted">Also using {group.origin}:</Text>
+                          <Text fontSize="sm" color="#2563eb" fontWeight="medium">
+                            {group.expressions.join(", ")}
+                          </Text>
+                        </Box>
+                      ))}
+                    </VStack>
+                  </Box>
+                </Box>
+              )}
+
+              {/* Fallback: show ungrouped related words if no grouping available */}
+              {groupedRelated.length === 0 && feedback.relatedDefinitions.length > 0 && (
+                <Box>
+                  <Text fontWeight="medium" fontSize="sm" mb={1}>Related words</Text>
+                  <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                    <VStack align="stretch" gap={1}>
+                      {feedback.relatedDefinitions.map((d, i) => (
+                        <Text key={i} fontSize="sm">
+                          <Text as="span" fontWeight="medium" color="#2563eb">{d.expression}</Text>
+                          {" - "}{d.meaning}
+                        </Text>
+                      ))}
+                    </VStack>
+                  </Box>
                 </Box>
               )}
 
@@ -401,4 +469,35 @@ export default function EtymologyBreakdownPage() {
       )}
     </Box>
   );
+}
+
+/** Group related definitions by origin for display like "Also using tele: telephone, television" */
+function groupRelatedByOrigin(
+  relatedDefs: Array<{ expression: string; meaning: string; notebookName: string }>,
+  originParts: Array<{ origin: string; type: string; language: string; meaning: string }>,
+): Array<{ origin: string; expressions: string[] }> {
+  if (relatedDefs.length === 0 || originParts.length === 0) return [];
+
+  // Simple approach: show all related definitions grouped by each origin
+  const groups: Array<{ origin: string; expressions: string[] }> = [];
+  const allExpressions = relatedDefs.map((d) => d.expression);
+
+  for (const part of originParts) {
+    if (allExpressions.length > 0) {
+      groups.push({ origin: part.origin, expressions: allExpressions });
+    }
+  }
+
+  // If we have multiple origins but same expressions, deduplicate display
+  if (groups.length > 1) {
+    const seen = new Set<string>();
+    return groups.filter((g) => {
+      const key = g.expressions.join(",");
+      if (seen.has(key) && groups.length > 1) return true; // keep all origin groups
+      seen.add(key);
+      return true;
+    });
+  }
+
+  return groups;
 }

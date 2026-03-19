@@ -7,6 +7,13 @@ import { useQuizStore, type QuizType } from "@/store/quizStore";
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { formatReviewDate } from "@/lib/formatReviewDate";
 
+interface OriginPartDisplay {
+  origin: string;
+  meaning: string;
+  language?: string;
+  type?: string;
+}
+
 interface ResultItem {
   index: number;
   key: string;
@@ -20,7 +27,8 @@ interface ResultItem {
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalCorrect: boolean;
-  originBreakdown?: Array<{ origin: string; meaning: string }>;
+  originBreakdown?: OriginPartDisplay[];
+  userAnswer?: string;
 }
 
 function getProtoQuizType(qt: QuizType): ProtoQuizType {
@@ -30,6 +38,19 @@ function getProtoQuizType(qt: QuizType): ProtoQuizType {
   if (qt === "etymology-assembly") return ProtoQuizType.ETYMOLOGY_ASSEMBLY;
   if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_BREAKDOWN;
   return ProtoQuizType.STANDARD;
+}
+
+function getTypeBadgeColors(type: string): { bg: string; color: string } {
+  switch (type.toLowerCase()) {
+    case "root":
+      return { bg: "#dbeafe", color: "#2563eb" };
+    case "prefix":
+      return { bg: "#fef3c7", color: "#92400e" };
+    case "suffix":
+      return { bg: "#dcfce7", color: "#166534" };
+    default:
+      return { bg: "#f3f4f6", color: "#666" };
+  }
 }
 
 export default function SessionCompletePage() {
@@ -45,6 +66,8 @@ export default function SessionCompletePage() {
   const skipResult = useQuizStore((s) => s.skipResult);
   const resumeResult = useQuizStore((s) => s.resumeResult);
   const updateResultReviewDate = useQuizStore((s) => s.updateResultReviewDate);
+
+  const isEtymologyQuiz = quizType === "etymology-breakdown" || quizType === "etymology-assembly" || quizType === "etymology-freeform";
 
   const allResults = useMemo((): ResultItem[] => {
     if (results.length > 0) {
@@ -107,7 +130,13 @@ export default function SessionCompletePage() {
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
-        originBreakdown: r.originParts?.map((p) => ({ origin: p.origin, meaning: p.meaning })),
+        originBreakdown: r.originParts?.map((p) => ({
+          origin: p.origin,
+          meaning: p.meaning,
+          language: p.language,
+          type: p.type,
+        })),
+        userAnswer: r.answer,
       }));
     }
     return [];
@@ -201,7 +230,7 @@ export default function SessionCompletePage() {
   };
 
   return (
-    <Box p={4} maxW="md" mx="auto">
+    <Box p={4} maxW="sm" mx="auto">
       <Heading size="lg" mb={4}>
         Session Complete
       </Heading>
@@ -226,6 +255,7 @@ export default function SessionCompletePage() {
               <ResultCard
                 key={r.key}
                 item={r}
+                isEtymology={isEtymologyQuiz}
                 onOverride={handleOverride}
                 onUndo={handleUndo}
                 onSkip={handleSkip}
@@ -247,6 +277,7 @@ export default function SessionCompletePage() {
               <ResultCard
                 key={r.key}
                 item={r}
+                isEtymology={isEtymologyQuiz}
                 onOverride={handleOverride}
                 onUndo={handleUndo}
                 onSkip={handleSkip}
@@ -268,6 +299,7 @@ export default function SessionCompletePage() {
               <ResultCard
                 key={r.key}
                 item={r}
+                isEtymology={isEtymologyQuiz}
                 onOverride={handleOverride}
                 onUndo={handleUndo}
                 onSkip={handleSkip}
@@ -288,6 +320,7 @@ export default function SessionCompletePage() {
 
 function ResultCard({
   item,
+  isEtymology,
   onOverride,
   onUndo,
   onSkip,
@@ -295,6 +328,7 @@ function ResultCard({
   onChangeReviewDate,
 }: {
   item: ResultItem;
+  isEtymology: boolean;
   onOverride: (item: ResultItem) => void;
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
@@ -316,165 +350,214 @@ function ResultCard({
       ? "green.200"
       : "red.200";
 
+  const topBarColor = item.isSkipped
+    ? "#d1d5db"
+    : item.correct
+      ? "#16a34a"
+      : "#dc2626";
+
   return (
     <Box
-      p={2}
       borderWidth="1px"
       borderColor={borderColor}
       borderRadius="md"
+      overflow="hidden"
       opacity={item.isSkipped ? 0.6 : 1}
     >
-      <Box display="flex" justifyContent="space-between" alignItems="center">
-        <Text fontWeight="bold">{item.entry}</Text>
-        {item.isSkipped && (
-          <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
-            <Text fontSize="xs" color="fg.muted" fontStyle="italic">Excluded</Text>
-          </Box>
-        )}
-      </Box>
-      <Text fontSize="sm">{item.meaning}</Text>
-      {item.contexts?.map((ctx, i) => (
-        <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
-          {ctx}
-        </Text>
-      ))}
+      {/* Color bar at top */}
+      <Box h="4px" bg={topBarColor} />
 
-      {item.originBreakdown && item.originBreakdown.length > 0 && (
-        <Box display="flex" gap={1} alignItems="center" flexWrap="wrap" mt={1}>
-          {item.originBreakdown.map((p, i) => (
-            <Box key={i} display="flex" alignItems="center" gap={1}>
-              {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-              <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
-              <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
+      <Box p={2}>
+        <Box display="flex" justifyContent="space-between" alignItems="center">
+          <Text fontWeight="bold">{item.entry}</Text>
+          {item.isSkipped && (
+            <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
+              <Text fontSize="xs" color="fg.muted" fontStyle="italic">Excluded</Text>
             </Box>
-          ))}
-        </Box>
-      )}
-
-      {/* Review date */}
-      {item.nextReviewDate && (
-        <Box
-          mt={2}
-          bg="blue.50"
-          _dark={{ bg: "blue.900/20", borderColor: "blue.700" }}
-          borderWidth="1px"
-          borderColor="blue.200"
-          borderRadius="md"
-          p={2}
-        >
-          {showDatePicker ? (
-            <VStack align="stretch" gap={2}>
-              <Text fontSize="xs" fontWeight="medium">
-                Pick a new review date:
-              </Text>
-              <Input
-                type="date"
-                size="sm"
-                value={customDate}
-                min={tomorrowStr}
-                onChange={(e) => setCustomDate(e.target.value)}
-              />
-              <Box display="flex" gap={2} justifyContent="flex-end">
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  onClick={() => setShowDatePicker(false)}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  size="xs"
-                  colorPalette="blue"
-                  onClick={() => {
-                    if (customDate) {
-                      onChangeReviewDate(item, customDate);
-                    }
-                    setShowDatePicker(false);
-                  }}
-                >
-                  Save
-                </Button>
-              </Box>
-            </VStack>
-          ) : (
-            <>
-              <Text fontSize="xs" fontWeight="medium">
-                Next review: {formatReviewDate(item.nextReviewDate)}
-              </Text>
-              {item.noteId && item.learnedAt && (
-                <Text
-                  fontSize="xs"
-                  color="blue.600"
-                  _dark={{ color: "blue.300" }}
-                  cursor="pointer"
-                  onClick={() => {
-                    setCustomDate(item.nextReviewDate!);
-                    setShowDatePicker(true);
-                  }}
-                >
-                  Change
-                </Text>
-              )}
-            </>
           )}
         </Box>
-      )}
-
-      {/* Override button */}
-      {!item.isOverridden && !item.isSkipped && item.noteId && item.learnedAt && (
-        <Button
-          w="full"
-          mt={2}
-          size="sm"
-          variant="outline"
-          colorPalette={item.correct ? "red" : "blue"}
-          onClick={() => onOverride(item)}
-        >
-          {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
-        </Button>
-      )}
-
-      {item.isOverridden && (
-        <Text mt={2} fontSize="xs" color="fg.muted" fontStyle="italic">
-          {item.correct ? "Marked as correct" : "Marked as incorrect"} (overridden){" "}
-          <Text
-            as="span"
-            color="blue.600"
-            cursor="pointer"
-            textDecoration="underline"
-            onClick={() => onUndo(item)}
-          >
-            Undo
+        <Text fontSize="sm">{item.meaning}</Text>
+        {item.contexts?.map((ctx, i) => (
+          <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+            {ctx}
           </Text>
-        </Text>
-      )}
+        ))}
 
-      {/* Skip button, Resume button, or nothing */}
-      {item.isSkipped ? (
-        item.noteId ? (
+        {/* Etymology origin breakdown with badges */}
+        {isEtymology && item.originBreakdown && item.originBreakdown.length > 0 && (
+          <Box mt={2}>
+            {/* Show user answer for incorrect results */}
+            {!item.correct && item.userAnswer && (
+              <Text fontSize="xs" color="fg.muted" mb={1}>
+                Your answer: {item.userAnswer}
+              </Text>
+            )}
+            <Text fontSize="xs" color={item.correct ? "#16a34a" : "fg.muted"} mb={1}>
+              {item.correct ? "Breakdown:" : "Correct:"}
+            </Text>
+            <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
+              {item.originBreakdown.map((p, i) => {
+                const typeBadge = p.type ? getTypeBadgeColors(p.type) : null;
+                return (
+                  <Box key={i} display="flex" alignItems="center" gap={1}>
+                    {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
+                    <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
+                    <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
+                    {p.language && (
+                      <Box px={1.5} py={0} borderRadius="full" bg="#f3f4f6">
+                        <Text fontSize="2xs" color="#666">{p.language}</Text>
+                      </Box>
+                    )}
+                    {typeBadge && p.type && (
+                      <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg}>
+                        <Text fontSize="2xs" color={typeBadge.color}>{p.type}</Text>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
+          </Box>
+        )}
+
+        {/* Non-etymology origin breakdown (backward compatible) */}
+        {!isEtymology && item.originBreakdown && item.originBreakdown.length > 0 && (
+          <Box display="flex" gap={1} alignItems="center" flexWrap="wrap" mt={1}>
+            {item.originBreakdown.map((p, i) => (
+              <Box key={i} display="flex" alignItems="center" gap={1}>
+                {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
+                <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
+                <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
+              </Box>
+            ))}
+          </Box>
+        )}
+
+        {/* Review date */}
+        {item.nextReviewDate && (
+          <Box
+            mt={2}
+            bg="blue.50"
+            _dark={{ bg: "blue.900/20", borderColor: "blue.700" }}
+            borderWidth="1px"
+            borderColor="blue.200"
+            borderRadius="md"
+            p={2}
+          >
+            {showDatePicker ? (
+              <VStack align="stretch" gap={2}>
+                <Text fontSize="xs" fontWeight="medium">
+                  Pick a new review date:
+                </Text>
+                <Input
+                  type="date"
+                  size="sm"
+                  value={customDate}
+                  min={tomorrowStr}
+                  onChange={(e) => setCustomDate(e.target.value)}
+                />
+                <Box display="flex" gap={2} justifyContent="flex-end">
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => setShowDatePicker(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="xs"
+                    colorPalette="blue"
+                    onClick={() => {
+                      if (customDate) {
+                        onChangeReviewDate(item, customDate);
+                      }
+                      setShowDatePicker(false);
+                    }}
+                  >
+                    Save
+                  </Button>
+                </Box>
+              </VStack>
+            ) : (
+              <>
+                <Text fontSize="xs" fontWeight="medium">
+                  Next review: {formatReviewDate(item.nextReviewDate)}
+                </Text>
+                {item.noteId && item.learnedAt && (
+                  <Text
+                    fontSize="xs"
+                    color="blue.600"
+                    _dark={{ color: "blue.300" }}
+                    cursor="pointer"
+                    onClick={() => {
+                      setCustomDate(item.nextReviewDate!);
+                      setShowDatePicker(true);
+                    }}
+                  >
+                    Change
+                  </Text>
+                )}
+              </>
+            )}
+          </Box>
+        )}
+
+        {/* Override button */}
+        {!item.isOverridden && !item.isSkipped && item.noteId && item.learnedAt && (
           <Button
             w="full"
             mt={2}
             size="sm"
             variant="outline"
-            colorPalette="blue"
-            onClick={() => onResume(item)}
+            colorPalette={item.correct ? "red" : "blue"}
+            onClick={() => onOverride(item)}
           >
-            Resume
+            {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
           </Button>
-        ) : null
-      ) : !item.isOverridden && item.noteId ? (
-        <Button
-          w="full"
-          mt={2}
-          size="sm"
-          variant="outline"
-          colorPalette="gray"
-          onClick={() => onSkip(item)}
-        >
-          Exclude from Quizzes
-        </Button>
-      ) : null}
+        )}
+
+        {item.isOverridden && (
+          <Text mt={2} fontSize="xs" color="fg.muted" fontStyle="italic">
+            {item.correct ? "Marked as correct" : "Marked as incorrect"} (overridden){" "}
+            <Text
+              as="span"
+              color="blue.600"
+              cursor="pointer"
+              textDecoration="underline"
+              onClick={() => onUndo(item)}
+            >
+              Undo
+            </Text>
+          </Text>
+        )}
+
+        {/* Skip button, Resume button, or nothing */}
+        {item.isSkipped ? (
+          item.noteId ? (
+            <Button
+              w="full"
+              mt={2}
+              size="sm"
+              variant="outline"
+              colorPalette="blue"
+              onClick={() => onResume(item)}
+            >
+              Resume
+            </Button>
+          ) : null
+        ) : !item.isOverridden && item.noteId ? (
+          <Button
+            w="full"
+            mt={2}
+            size="sm"
+            variant="outline"
+            colorPalette="gray"
+            onClick={() => onSkip(item)}
+          >
+            Exclude from Quizzes
+          </Button>
+        ) : null}
+      </Box>
     </Box>
   );
 }
