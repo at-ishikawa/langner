@@ -57,7 +57,29 @@ func (r *Reader) GetEtymologyIndexes() map[string]EtymologyIndex {
 	return r.etymologyIndexes
 }
 
+// sessionHasOriginParts checks if a session YAML file contains origin_parts,
+// indicating it is etymology-related even without kind: Etymology in the index.
+func sessionHasOriginParts(path string) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	// Simple heuristic: check if the file contains "origin_parts:" text
+	return len(data) > 0 && contains(data, []byte("origin_parts:"))
+}
+
+func contains(data, substr []byte) bool {
+	for i := 0; i <= len(data)-len(substr); i++ {
+		if string(data[i:i+len(substr)]) == string(substr) {
+			return true
+		}
+	}
+	return false
+}
+
 // walkEtymologyIndexFiles walks a directory and loads etymology index.yml files.
+// It loads indexes with kind: Etymology, and also indexes without a kind if their
+// session files contain origin_parts (indicating etymology data).
 func walkEtymologyIndexFiles(rootDir string, indexMap map[string]EtymologyIndex) error {
 	if rootDir == "" {
 		return nil
@@ -83,11 +105,24 @@ func walkEtymologyIndexFiles(rootDir string, indexMap map[string]EtymologyIndex)
 			return err
 		}
 
-		if index.Kind != "Etymology" {
+		dir := filepath.Dir(path)
+		isEtymology := index.Kind == "Etymology"
+
+		// For indexes without kind: Etymology, check if session files contain origin_parts
+		if !isEtymology && index.Kind == "" {
+			for _, nbPath := range index.NotebookPaths {
+				if sessionHasOriginParts(filepath.Join(dir, nbPath)) {
+					isEtymology = true
+					break
+				}
+			}
+		}
+
+		if !isEtymology {
 			return nil
 		}
 
-		index.Path = filepath.Dir(path)
+		index.Path = dir
 		indexMap[index.ID] = index
 		return nil
 	})

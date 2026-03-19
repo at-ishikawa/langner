@@ -82,6 +82,54 @@ func TestReader_ReadEtymologyNotebook_NotFound(t *testing.T) {
 	assert.Contains(t, err.Error(), "not found")
 }
 
+func TestReader_NoKindIndexInStoryDir_NotLoadedAsStory(t *testing.T) {
+	// Reproduce: user has a notebook in stories dir with no "kind" field
+	// and session files that are NOT story format. The reader should not crash.
+	tmpDir := t.TempDir()
+	storyDir := filepath.Join(tmpDir, "stories")
+	nbDir := filepath.Join(storyDir, "word-power")
+	require.NoError(t, os.MkdirAll(nbDir, 0755))
+
+	// index.yml with no kind
+	indexYAML := `id: word-power
+name: "Word Power Made Easy"
+notebooks:
+  - ./session1.yml
+`
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(indexYAML), 0644))
+
+	// Session file with definitions (NOT story format - would fail to unmarshal as []StoryNotebook)
+	sessionYAML := `definitions:
+  - definition: "cardiograph"
+    meaning: "heart writer"
+    origin_parts:
+      - origin: kardia
+        language: Greek
+      - origin: graphein
+        language: Greek
+`
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session1.yml"), []byte(sessionYAML), 0644))
+
+	reader, err := NewReader(
+		[]string{storyDir},
+		nil,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+	require.NoError(t, err)
+
+	// The notebook should NOT be in story indexes (it would crash ReadStoryNotebooks)
+	storyIndexes := reader.GetStoryIndexes()
+	assert.NotContains(t, storyIndexes, "word-power")
+
+	// It should be detected as an etymology notebook via origin_parts heuristic
+	etymIndexes := reader.GetEtymologyIndexes()
+	assert.Contains(t, etymIndexes, "word-power")
+	assert.Equal(t, "Word Power Made Easy", etymIndexes["word-power"].Name)
+}
+
 func TestReader_EtymologyNotSeparatedFromStory(t *testing.T) {
 	// Verify that etymology indexes with kind "Etymology" are NOT loaded as story indexes
 	tmpDir := t.TempDir()

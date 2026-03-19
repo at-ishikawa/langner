@@ -109,6 +109,11 @@ func NewReader(
 		return nil, fmt.Errorf("NewDefinitionsMap: %w", err)
 	}
 
+	// Remove etymology indexes from story indexes to avoid parse errors
+	for id := range etymologyIndexes {
+		delete(indexes, id)
+	}
+
 	return &Reader{
 		indexes:          indexes,
 		flashcardIndexes: flashcardIndexes,

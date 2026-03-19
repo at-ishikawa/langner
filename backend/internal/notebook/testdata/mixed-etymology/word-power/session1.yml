@@ -1,0 +1,8 @@
+definitions:
+  - definition: "cardiograph"
+    meaning: "heart writer"
+    origin_parts:
+      - origin: kardia
+        language: Greek
+      - origin: graphein
+        language: Greek
