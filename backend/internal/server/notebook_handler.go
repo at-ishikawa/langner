@@ -613,20 +613,6 @@ func hasMatchingOriginParts(refs []notebook.OriginPartRef, originSet map[string]
 	return false
 }
 
-// resolveDefinitionsFilePath validates the notebookID and returns the path to its definitions YAML file.
-func (h *NotebookHandler) resolveDefinitionsFilePath(notebookIDRaw string) (string, error) {
-	defsDir := "notebooks/definitions"
-	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
-		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
-	}
-	filePath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
-	rel, err := filepath.Rel(defsDir, filePath)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
-	}
-	return filePath, nil
-}
-
 // RegisterDefinition adds a definition via the repository.
 func (h *NotebookHandler) RegisterDefinition(
 	ctx context.Context,
