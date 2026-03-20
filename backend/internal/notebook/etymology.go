@@ -26,6 +26,14 @@ type EtymologyIndex struct {
 	Origins []EtymologyOrigin `yaml:"-"`
 }
 
+// etymologySessionFile supports both flat list and wrapped formats:
+//
+//	Flat:    [{ origin: tele, ... }, ...]
+//	Wrapped: { origins: [{ origin: tele, ... }, ...] }
+type etymologySessionFile struct {
+	Origins []EtymologyOrigin `yaml:"origins"`
+}
+
 // ReadEtymologyNotebook reads the origins from an etymology notebook.
 func (r *Reader) ReadEtymologyNotebook(etymologyID string) ([]EtymologyOrigin, error) {
 	index, ok := r.etymologyIndexes[etymologyID]
@@ -40,11 +48,18 @@ func (r *Reader) ReadEtymologyNotebook(etymologyID string) ([]EtymologyOrigin, e
 	var allOrigins []EtymologyOrigin
 	for _, notebookPath := range index.NotebookPaths {
 		path := filepath.Join(index.Path, notebookPath)
-		origins, err := readYamlFile[[]EtymologyOrigin](path)
-		if err != nil {
-			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, err)
+		// Try flat list first (e.g., [{ origin: tele, ... }])
+		origins, flatErr := readYamlFile[[]EtymologyOrigin](path)
+		if flatErr == nil {
+			allOrigins = append(allOrigins, origins...)
+			continue
 		}
-		allOrigins = append(allOrigins, origins...)
+		// Try wrapped format (e.g., origins: [{ origin: tele, ... }])
+		wrapped, wrappedErr := readYamlFile[etymologySessionFile](path)
+		if wrappedErr != nil {
+			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, flatErr)
+		}
+		allOrigins = append(allOrigins, wrapped.Origins...)
 	}
 
 	index.Origins = allOrigins

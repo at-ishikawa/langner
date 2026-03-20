@@ -73,6 +73,43 @@ notebooks:
 	assert.Equal(t, "Greek", origins[2].Language)
 }
 
+func TestReader_ReadEtymologyNotebook_WrappedFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "wrapped")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+
+	indexYAML := `id: wrapped
+kind: Etymology
+name: Wrapped Format
+notebooks:
+  - ./session.yml
+`
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
+
+	// Wrapped format: origins under "origins:" key
+	sessionYAML := `origins:
+  - origin: duc
+    type: root
+    language: Latin
+    meaning: to lead
+  - origin: vert
+    type: root
+    language: Latin
+    meaning: to turn
+`
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session.yml"), []byte(sessionYAML), 0644))
+
+	reader, err := NewReader(nil, nil, nil, nil, []string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.NoError(t, err)
+
+	origins, err := reader.ReadEtymologyNotebook("wrapped")
+	require.NoError(t, err)
+	assert.Len(t, origins, 2)
+	assert.Equal(t, "duc", origins[0].Origin)
+	assert.Equal(t, "to lead", origins[0].Meaning)
+	assert.Equal(t, "vert", origins[1].Origin)
+}
+
 func TestReader_ReadEtymologyNotebook_NotFound(t *testing.T) {
 	reader, err := NewReader(nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
