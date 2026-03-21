@@ -81,10 +81,20 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, error) {
 				return nil
 			}
 
-			// Get the book ID from the filename (without extension)
-			// e.g., definitions/books/frankenstein.yml -> bookID = "frankenstein"
-			bookID := filepath.Base(path)
-			bookID = bookID[:len(bookID)-len(filepath.Ext(bookID))] // remove .yml
+			// Get the book ID from the path relative to the definitions directory.
+			// Single file:  definitions/books/frankenstein.yml -> bookID = "frankenstein"
+			// Directory:    definitions/books/frankenstein/session1.yml -> bookID = "frankenstein"
+			relPath, _ := filepath.Rel(dir, path)
+			parts := strings.Split(filepath.ToSlash(relPath), "/")
+			var bookID string
+			if len(parts) >= 2 {
+				// File is inside a subdirectory — use the parent directory name
+				bookID = parts[len(parts)-2]
+			} else {
+				// File is directly in the definitions directory
+				bookID = parts[0]
+			}
+			bookID = strings.TrimSuffix(bookID, filepath.Ext(bookID))
 
 			definitions, err := readYamlFile[[]Definitions](path)
 			if err != nil {
