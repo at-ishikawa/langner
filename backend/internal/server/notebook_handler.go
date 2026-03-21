@@ -520,15 +520,13 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 						originWordCounts[strings.ToLower(ref.Origin)]++
 					}
 					// Collect context from the scene (statements, conversations)
-				var contexts []string
-				for _, stmt := range scene.Statements {
-					contexts = append(contexts, stmt)
-				}
-				for _, conv := range scene.Conversations {
-					contexts = append(contexts, conv.Speaker+": "+conv.Quote)
-				}
+					var contexts []string
+					contexts = append(contexts, scene.Statements...)
+					for _, conv := range scene.Conversations {
+						contexts = append(contexts, conv.Speaker+": "+conv.Quote)
+					}
 
-				definitions = append(definitions, &apiv1.EtymologyDefinition{
+					definitions = append(definitions, &apiv1.EtymologyDefinition{
 						Expression:   def.Expression,
 						Meaning:      def.Meaning,
 						PartOfSpeech: def.PartOfSpeech,
