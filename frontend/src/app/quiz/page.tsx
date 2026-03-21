@@ -61,7 +61,7 @@ export default function QuizStartPage() {
 
   // For etymology quiz, separate etymology notebooks from definition notebooks
   const etymologyNotebooks = notebooks.filter((n) => n.kind === "Etymology");
-  const definitionNotebooks = notebooks.filter((n) => n.kind !== "Etymology");
+  const definitionNotebooks = notebooks.filter((n) => n.kind !== "Etymology" && n.etymologyReviewCount > 0);
   const displayedNotebooks = isEtymology ? definitionNotebooks : notebooks;
 
   const allSelected =
