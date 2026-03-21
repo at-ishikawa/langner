@@ -174,9 +174,14 @@ export default function EtymologyAssemblyPage() {
         <VStack align="stretch" gap={4}>
           {/* Origins card */}
           <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
-            <Text fontWeight="medium" mb={3} fontSize="sm" textAlign="center">
+            <Text fontWeight="medium" mb={1} fontSize="sm" textAlign="center">
               What word is made from these origins?
             </Text>
+            {card.meaning && (
+              <Text fontSize="sm" color="fg.muted" textAlign="center" mb={3} fontStyle="italic">
+                Hint: {card.meaning}
+              </Text>
+            )}
             <VStack align="stretch" gap={2}>
               {card.originParts.map((p, i) => (
                 <Box key={i}>
