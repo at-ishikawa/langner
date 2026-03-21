@@ -157,14 +157,19 @@ notebooks:
 	)
 	require.NoError(t, err)
 
-	// The notebook should NOT be in story indexes (it would crash ReadStoryNotebooks)
+	// The notebook has no kind and definitions format — it stays in story indexes
+	// but ReadStoryNotebooks should skip unparseable session files gracefully
 	storyIndexes := reader.GetStoryIndexes()
-	assert.NotContains(t, storyIndexes, "word-power")
+	assert.Contains(t, storyIndexes, "word-power")
 
-	// It should be detected as an etymology notebook via origin_parts heuristic
+	// It should NOT be in etymology indexes (it has definitions, not origins)
 	etymIndexes := reader.GetEtymologyIndexes()
-	assert.Contains(t, etymIndexes, "word-power")
-	assert.Equal(t, "Word Power Made Easy", etymIndexes["word-power"].Name)
+	assert.NotContains(t, etymIndexes, "word-power")
+
+	// Reading story notebooks should not crash — it skips unparseable files
+	stories, err := reader.ReadStoryNotebooks("word-power")
+	require.NoError(t, err)
+	assert.Empty(t, stories)
 }
 
 func TestReader_EtymologyNotSeparatedFromStory(t *testing.T) {

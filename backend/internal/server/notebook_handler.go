@@ -531,6 +531,29 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		}
 	}
 
+	// Search etymology notebook's own definitions (definitions in session files)
+	etymDefs, _ := reader.ReadEtymologyDefinitions(notebookID)
+	for _, def := range etymDefs {
+		if !hasMatchingOriginParts(def.OriginParts, originSet) {
+			continue
+		}
+		var parts []*apiv1.EtymologyOriginPart
+		for _, ref := range def.OriginParts {
+			parts = append(parts, &apiv1.EtymologyOriginPart{
+				Origin:   ref.Origin,
+				Language: ref.Language,
+			})
+			originWordCounts[strings.ToLower(ref.Origin)]++
+		}
+		definitions = append(definitions, &apiv1.EtymologyDefinition{
+			Expression:   def.GetExpression(),
+			Meaning:      def.Meaning,
+			PartOfSpeech: def.PartOfSpeech,
+			OriginParts:  parts,
+			NotebookName: notebookID,
+		})
+	}
+
 	// Search flashcard notebooks
 	for nbID := range reader.GetFlashcardIndexes() {
 		notebooks, err := reader.ReadFlashcardNotebooks(nbID)

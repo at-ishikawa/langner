@@ -54,7 +54,9 @@ func (reader *Reader) ReadStoryNotebooks(storyID string) ([]StoryNotebook, error
 
 		notebooks, err := readYamlFile[[]StoryNotebook](path)
 		if err != nil {
-			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, err)
+			// Skip files that can't be parsed as story notebooks
+			// (e.g., definition-only files with origin_parts)
+			continue
 		}
 
 		index.Notebooks = append(index.Notebooks, notebooks)
