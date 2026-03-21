@@ -37,7 +37,6 @@ export default function NotebookListPage() {
   }
 
   const books = notebooks.filter((n) => n.kind === "Books");
-  const etymologyNotebooks = notebooks.filter((n) => n.kind === "Etymology");
   const otherNotebooks = notebooks.filter((n) => n.kind !== "Books" && n.kind !== "Etymology");
 
   return (
@@ -72,38 +71,9 @@ export default function NotebookListPage() {
         </Box>
       )}
 
-      {etymologyNotebooks.length > 0 && (
-        <Box mb={6}>
-          <Heading size="md" mb={3}>
-            Etymology
-          </Heading>
-          <VStack align="stretch" gap={3}>
-            {etymologyNotebooks.map((notebook) => (
-              <Link
-                key={notebook.notebookId}
-                href={`/notebooks/etymology/${notebook.notebookId}`}
-              >
-                <Box
-                  p={4}
-                  borderWidth="1px"
-                  borderRadius="md"
-                  _hover={{ bg: "bg.muted" }}
-                  cursor="pointer"
-                >
-                  <Text fontWeight="medium">{notebook.name}</Text>
-                  <Text fontSize="sm" color="fg.muted">
-                    {notebook.etymologyReviewCount} origins
-                  </Text>
-                </Box>
-              </Link>
-            ))}
-          </VStack>
-        </Box>
-      )}
-
       {otherNotebooks.length > 0 && (
         <Box>
-          {(books.length > 0 || etymologyNotebooks.length > 0) && (
+          {books.length > 0 && (
             <Heading size="md" mb={3}>
               Other Notebooks
             </Heading>

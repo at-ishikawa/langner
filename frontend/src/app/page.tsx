@@ -22,6 +22,12 @@ const features = [
     description: "Read books and look up words",
     icon: "📚",
   },
+  {
+    href: "/etymology",
+    title: "Etymology",
+    description: "Explore word origins, roots, and prefixes",
+    icon: "🌳",
+  },
 ];
 
 export default function HomePage() {
