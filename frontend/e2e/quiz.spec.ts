@@ -72,6 +72,9 @@ test("shows notebooks and starts quiz", async ({ page }) => {
   const bodyText = await page.locator("body").innerText().catch(() => "failed to get text");
   console.log("Page body text after GetQuizOptions:", bodyText.substring(0, 1000));
 
+  // Select "Standard" mode to reveal notebook selection
+  await page.getByText("Standard").click();
+
   await expect(page.getByText("English Phrases")).toBeVisible();
 
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
@@ -133,6 +136,9 @@ test("completes full quiz flow", async ({ page }) => {
 
   // Wait for the GetQuizOptions response to be intercepted
   await getOptionsPromise;
+
+  // Select "Standard" mode to reveal notebook selection
+  await page.getByText("Standard").click();
 
   await expect(page.getByText("English Phrases")).toBeVisible();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
@@ -299,7 +305,8 @@ test("standard quiz starts correctly after a reverse quiz", async ({ page }) => 
   await page.goBack();
   await page.waitForURL("/quiz");
 
-  // "Standard" is already selected by default — user does NOT click it
+  // Select "Standard" mode — no mode is pre-selected after navigating back
+  await page.getByText("Standard").click();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
   await page.getByRole("button", { name: "Start" }).click();
 
@@ -368,6 +375,7 @@ test("override answer in standard quiz feedback", async ({ page }) => {
   await page.goto("/quiz");
   await getOptionsPromise;
 
+  await page.getByText("Standard").click();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForURL("/quiz/standard");
@@ -438,6 +446,7 @@ test("skip word in standard quiz feedback", async ({ page }) => {
   await page.goto("/quiz");
   await getOptionsPromise;
 
+  await page.getByText("Standard").click();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForURL("/quiz/standard");
@@ -507,6 +516,7 @@ test("change review date in standard quiz feedback", async ({ page }) => {
   await page.goto("/quiz");
   await getOptionsPromise;
 
+  await page.getByText("Standard").click();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForURL("/quiz/standard");
@@ -569,6 +579,7 @@ test("next review date display in standard quiz feedback", async ({ page }) => {
   await page.goto("/quiz");
   await getOptionsPromise;
 
+  await page.getByText("Standard").click();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForURL("/quiz/standard");

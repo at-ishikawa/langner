@@ -56,6 +56,21 @@ func (mr *MockClientMockRecorder) AnswerMeanings(ctx, params any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AnswerMeanings", reflect.TypeOf((*MockClient)(nil).AnswerMeanings), ctx, params)
 }
 
+// GradeEtymologyBreakdown mocks base method.
+func (m *MockClient) GradeEtymologyBreakdown(ctx context.Context, params inference.GradeEtymologyBreakdownRequest) (inference.GradeEtymologyBreakdownResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GradeEtymologyBreakdown", ctx, params)
+	ret0, _ := ret[0].(inference.GradeEtymologyBreakdownResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GradeEtymologyBreakdown indicates an expected call of GradeEtymologyBreakdown.
+func (mr *MockClientMockRecorder) GradeEtymologyBreakdown(ctx, params any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GradeEtymologyBreakdown", reflect.TypeOf((*MockClient)(nil).GradeEtymologyBreakdown), ctx, params)
+}
+
 // LookupWord mocks base method.
 func (m *MockClient) LookupWord(ctx context.Context, params inference.LookupWordRequest) (inference.LookupWordResponse, error) {
 	m.ctrl.T.Helper()

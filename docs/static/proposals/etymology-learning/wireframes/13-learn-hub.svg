@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 812" width="375" height="812">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .body { font-size: 14px; fill: #333; }
+      .muted { font-size: 12px; fill: #999; }
+      .count { font-size: 12px; fill: #666; }
+      .back { font-size: 12px; fill: #2563eb; }
+      .tab-active { font-size: 14px; font-weight: 600; fill: #2563eb; }
+      .tab-inactive { font-size: 14px; fill: #999; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="812" fill="#f8f9fa"/>
+
+  <!-- Status bar -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Header -->
+  <rect y="44" width="375" height="56" fill="#fff"/>
+  <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb"/>
+  <text x="24" y="68" class="back">&lt; Home</text>
+  <text x="187" y="84" text-anchor="middle" class="title">Learn</text>
+
+  <!-- Tabs -->
+  <rect y="100" width="375" height="44" fill="#fff"/>
+  <line x1="0" y1="144" x2="375" y2="144" stroke="#e5e7eb"/>
+  <text x="100" y="128" text-anchor="middle" class="tab-active">Vocabulary</text>
+  <rect x="52" y="138" width="96" height="3" rx="1.5" fill="#2563eb"/>
+  <text x="275" y="128" text-anchor="middle" class="tab-inactive">Etymology</text>
+
+  <!-- Vocabulary tab content -->
+
+  <!-- Notebook card 1 -->
+  <rect x="24" y="164" width="327" height="56" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="40" y="190" class="body">Friends</text>
+  <text x="327" y="190" text-anchor="end" class="count">162 words</text>
+  <text x="335" y="190" font-size="14" fill="#999">&#x203A;</text>
+
+  <!-- Notebook card 2 -->
+  <rect x="24" y="228" width="327" height="56" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="40" y="254" class="body">Speak English Like an American</text>
+  <text x="327" y="254" text-anchor="end" class="count">128 words</text>
+  <text x="335" y="254" font-size="14" fill="#999">&#x203A;</text>
+
+  <!-- Notebook card 3 -->
+  <rect x="24" y="292" width="327" height="56" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="40" y="318" class="body">Tales of Arise</text>
+  <text x="327" y="318" text-anchor="end" class="count">149 words</text>
+  <text x="335" y="318" font-size="14" fill="#999">&#x203A;</text>
+
+  <!-- Notebook card 4 -->
+  <rect x="24" y="356" width="327" height="56" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="40" y="382" class="body">English Idioms</text>
+  <text x="327" y="382" text-anchor="end" class="count">35 words</text>
+  <text x="335" y="382" font-size="14" fill="#999">&#x203A;</text>
+
+  <!-- Notebook card 5 -->
+  <rect x="24" y="420" width="327" height="56" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="40" y="446" class="body">Word Power Made Easy</text>
+  <text x="327" y="446" text-anchor="end" class="count">23 words</text>
+  <text x="335" y="446" font-size="14" fill="#999">&#x203A;</text>
+
+  <!-- More notebooks indicator -->
+  <text x="187" y="504" text-anchor="middle" class="muted">&#x2022; &#x2022; &#x2022;</text>
+
+  <!-- Summary footer -->
+  <rect y="728" width="375" height="84" fill="#fff"/>
+  <line x1="0" y1="728" x2="375" y2="728" stroke="#e5e7eb"/>
+  <text x="187" y="758" text-anchor="middle" font-size="14" fill="#666">10 notebooks &#x00B7; 580 words</text>
+</svg>

@@ -207,12 +207,12 @@ describe("NotebookDetailPage — story list", () => {
     await waitFor(() => expect(screen.getByText("Export PDF")).toBeInTheDocument());
   });
 
-  it("has back to notebooks link", async () => {
+  it("has back to Learn link", async () => {
     vi.mocked(client.notebookClient.getNotebookDetail).mockResolvedValue(mockStoryNotebook);
     renderPage();
     await waitFor(() => {
-      const link = screen.getByText("← Back to notebooks").closest("a");
-      expect(link).toHaveAttribute("href", "/notebooks");
+      const link = screen.getByText("← Back to Learn").closest("a");
+      expect(link).toHaveAttribute("href", "/learn");
     });
   });
 });

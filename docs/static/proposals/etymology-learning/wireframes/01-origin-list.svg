@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 812" width="375" height="812">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .subtitle { font-size: 14px; fill: #666; }
+      .label { font-size: 13px; fill: #333; font-weight: 500; }
+      .body { font-size: 14px; fill: #333; }
+      .muted { font-size: 12px; fill: #999; }
+      .badge { font-size: 11px; fill: #fff; font-weight: 600; }
+      .origin-name { font-size: 16px; font-weight: 600; fill: #2563eb; }
+      .origin-meaning { font-size: 13px; fill: #555; }
+      .origin-lang { font-size: 11px; fill: #999; }
+      .count { font-size: 12px; fill: #666; }
+      .tab-active { font-size: 13px; font-weight: 600; fill: #2563eb; }
+      .tab-inactive { font-size: 13px; fill: #999; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="812" fill="#f8f9fa"/>
+
+  <!-- Status bar -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Header -->
+  <rect y="44" width="375" height="56" fill="#fff"/>
+  <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb"/>
+  <text x="24" y="68" class="muted">&lt; Notebooks</text>
+  <text x="187" y="82" text-anchor="middle" class="title">Etymology</text>
+
+  <!-- Search bar -->
+  <rect x="24" y="112" width="327" height="40" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="48" y="137" class="muted">Search origins or meanings...</text>
+
+  <!-- Filter tabs -->
+  <rect y="164" width="375" height="40" fill="#fff"/>
+  <line x1="0" y1="204" x2="375" y2="204" stroke="#e5e7eb"/>
+  <text x="100" y="190" text-anchor="middle" class="tab-active">All Origins</text>
+  <rect x="52" y="196" width="96" height="3" rx="1.5" fill="#2563eb"/>
+  <text x="275" y="190" text-anchor="middle" class="tab-inactive">By Meaning</text>
+
+  <!-- Origin card 1 -->
+  <rect x="16" y="220" width="343" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="248" class="origin-name">phone</text>
+  <rect x="84" y="236" width="44" height="18" rx="9" fill="#dbeafe"/>
+  <text x="106" y="249" text-anchor="middle" font-size="10" fill="#2563eb" font-weight="500">root</text>
+  <rect x="134" y="236" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="157" y="249" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+  <text x="32" y="270" class="origin-meaning">sound, voice</text>
+  <text x="327" y="256" text-anchor="end" class="count">5 words</text>
+
+  <!-- Origin card 2 -->
+  <rect x="16" y="304" width="343" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="332" class="origin-name">tele</text>
+  <rect x="72" y="320" width="52" height="18" rx="9" fill="#fef3c7"/>
+  <text x="98" y="333" text-anchor="middle" font-size="10" fill="#92400e" font-weight="500">prefix</text>
+  <rect x="130" y="320" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="153" y="333" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+  <text x="32" y="354" class="origin-meaning">far</text>
+  <text x="327" y="340" text-anchor="end" class="count">3 words</text>
+
+  <!-- Origin card 3 -->
+  <rect x="16" y="388" width="343" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="416" class="origin-name">micro</text>
+  <rect x="88" y="404" width="52" height="18" rx="9" fill="#fef3c7"/>
+  <text x="114" y="417" text-anchor="middle" font-size="10" fill="#92400e" font-weight="500">prefix</text>
+  <rect x="146" y="404" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="169" y="417" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+  <text x="32" y="438" class="origin-meaning">small</text>
+  <text x="327" y="424" text-anchor="end" class="count">3 words</text>
+
+  <!-- Origin card 4 -->
+  <rect x="16" y="472" width="343" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="500" class="origin-name">scope</text>
+  <rect x="88" y="488" width="44" height="18" rx="9" fill="#dbeafe"/>
+  <text x="110" y="501" text-anchor="middle" font-size="10" fill="#2563eb" font-weight="500">root</text>
+  <rect x="138" y="488" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="161" y="501" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+  <text x="32" y="522" class="origin-meaning">to look at</text>
+  <text x="327" y="508" text-anchor="end" class="count">2 words</text>
+
+  <!-- Origin card 5 -->
+  <rect x="16" y="556" width="343" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="584" class="origin-name">graphein</text>
+  <rect x="112" y="572" width="44" height="18" rx="9" fill="#dbeafe"/>
+  <text x="134" y="585" text-anchor="middle" font-size="10" fill="#2563eb" font-weight="500">root</text>
+  <rect x="162" y="572" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="185" y="585" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+  <text x="32" y="606" class="origin-meaning">to write</text>
+  <text x="327" y="592" text-anchor="end" class="count">4 words</text>
+
+  <!-- Origin card 6 -->
+  <rect x="16" y="640" width="343" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="32" y="668" class="origin-name">scribere</text>
+  <rect x="112" y="656" width="44" height="18" rx="9" fill="#dbeafe"/>
+  <text x="134" y="669" text-anchor="middle" font-size="10" fill="#2563eb" font-weight="500">root</text>
+  <rect x="162" y="656" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="185" y="669" text-anchor="middle" font-size="10" fill="#666">Latin</text>
+  <text x="32" y="690" class="origin-meaning">to write</text>
+  <text x="327" y="676" text-anchor="end" class="count">3 words</text>
+
+  <!-- Summary footer -->
+  <rect y="728" width="375" height="84" fill="#fff"/>
+  <line x1="0" y1="728" x2="375" y2="728" stroke="#e5e7eb"/>
+  <text x="187" y="758" text-anchor="middle" class="subtitle">12 origins &#x00B7; 28 words</text>
+</svg>

@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 812" width="375" height="812">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .body { font-size: 14px; fill: #333; }
+      .muted { font-size: 12px; fill: #999; }
+      .count { font-size: 12px; fill: #666; }
+      .back { font-size: 12px; fill: #2563eb; }
+      .tab-active { font-size: 14px; font-weight: 600; fill: #2563eb; }
+      .tab-inactive { font-size: 14px; fill: #999; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="812" fill="#f8f9fa"/>
+
+  <!-- Status bar -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Header -->
+  <rect y="44" width="375" height="56" fill="#fff"/>
+  <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb"/>
+  <text x="24" y="68" class="back">&lt; Home</text>
+  <text x="187" y="84" text-anchor="middle" class="title">Learn</text>
+
+  <!-- Tabs -->
+  <rect y="100" width="375" height="44" fill="#fff"/>
+  <line x1="0" y1="144" x2="375" y2="144" stroke="#e5e7eb"/>
+  <text x="100" y="128" text-anchor="middle" class="tab-inactive">Vocabulary</text>
+  <text x="275" y="128" text-anchor="middle" class="tab-active">Etymology</text>
+  <rect x="227" y="138" width="96" height="3" rx="1.5" fill="#2563eb"/>
+
+  <!-- Etymology tab content -->
+
+  <!-- Etymology notebook card 1 -->
+  <rect x="24" y="164" width="327" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="40" y="194" class="body">Word Power Made Easy</text>
+  <text x="40" y="214" class="muted">11 origins  &#x00B7;  23 words</text>
+  <text x="335" y="200" font-size="14" fill="#999">&#x203A;</text>
+
+  <!-- Etymology notebook card 2 -->
+  <rect x="24" y="244" width="327" height="72" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="40" y="274" class="body">Germanic Roots</text>
+  <text x="40" y="294" class="muted">8 origins  &#x00B7;  15 words</text>
+  <text x="335" y="280" font-size="14" fill="#999">&#x203A;</text>
+
+  <!-- Summary footer -->
+  <rect y="728" width="375" height="84" fill="#fff"/>
+  <line x1="0" y1="728" x2="375" y2="728" stroke="#e5e7eb"/>
+  <text x="187" y="758" text-anchor="middle" font-size="14" fill="#666">2 notebooks &#x00B7; 19 origins</text>
+</svg>

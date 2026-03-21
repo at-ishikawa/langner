@@ -1,335 +1,90 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import QuizCardPage from "./standard/page";
-import * as client from "@/lib/client";
-import { useQuizStore } from "@/store/quizStore";
-import type { Flashcard } from "@/store/quizStore";
+import QuizHubPage from "./page";
+
+const mockPush = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
+
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: { children: React.ReactNode; href: string }) => (
+    <a {...props}>{children}</a>
+  ),
+}));
 
 vi.mock("@/lib/client", () => ({
   quizClient: {
-    getQuizOptions: vi.fn(),
-    startQuiz: vi.fn(),
-    submitAnswer: vi.fn(),
-    overrideAnswer: vi.fn(),
-    undoOverrideAnswer: vi.fn(),
-    skipWord: vi.fn(),
+    getQuizOptions: vi.fn().mockResolvedValue({ notebooks: [] }),
   },
-  QuizType: { STANDARD: 0, REVERSE: 1 },
-}));
-
-const pushMock = vi.fn();
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock }),
+  EtymologyQuizMode: { BREAKDOWN: 1, ASSEMBLY: 2 },
 }));
 
 function renderPage() {
   return render(
     <ChakraProvider value={defaultSystem}>
-      <QuizCardPage />
+      <QuizHubPage />
     </ChakraProvider>
   );
 }
 
-const mockFlashcards: Flashcard[] = [
-  {
-    noteId: BigInt(1),
-    entry: "break the ice",
-    examples: [
-      { text: "She told a joke to break the ice.", speaker: "Rachel" },
-      { text: "It was hard to break the ice at the meeting.", speaker: "" },
-    ],
-  },
-  {
-    noteId: BigInt(2),
-    entry: "lose one's temper",
-    examples: [
-      {
-        text: "Try not to lose your temper during the debate.",
-        speaker: "",
-      },
-    ],
-  },
-];
-
-describe("QuizCardPage", () => {
+describe("QuizHubPage", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    useQuizStore.getState().reset();
-    useQuizStore.getState().setQuizType("standard");
-    pushMock.mockReset();
+    mockPush.mockClear();
   });
 
-  it("redirects to / when no flashcards in store", async () => {
+  it("renders Quiz title and back link to Home", async () => {
     renderPage();
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/");
+      expect(screen.getByText("Quiz")).toBeInTheDocument();
     });
+    const backLink = screen.getByText("< Home").closest("a");
+    expect(backLink).toHaveAttribute("href", "/");
   });
 
-  it("redirects to / when quizType is not standard even with flashcards", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    useQuizStore.getState().setQuizType("reverse");
+  it("shows Vocabulary tab with 3 quiz mode cards by default", async () => {
     renderPage();
     await waitFor(() => {
-      expect(pushMock).toHaveBeenCalledWith("/");
+      expect(screen.getByText("Standard")).toBeInTheDocument();
     });
+    expect(screen.getByText("See a word, type its meaning")).toBeInTheDocument();
+    expect(screen.getByText("Reverse")).toBeInTheDocument();
+    expect(screen.getByText("Freeform")).toBeInTheDocument();
   });
 
-  it("renders quiz card with word and examples", () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
+  it("selecting a mode highlights it and shows Start button", async () => {
     renderPage();
-
-    expect(screen.getByText("break the ice")).toBeInTheDocument();
-    expect(
-      screen.getByText('Rachel: "She told a joke to break the ice."')
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText('"It was hard to break the ice at the meeting."')
-    ).toBeInTheDocument();
-    expect(screen.getByText("1 / 2")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Standard")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Standard"));
+    expect(screen.getByText("Start")).toBeInTheDocument();
   });
 
-  it.each([
-    {
-      name: "submits answer and shows correct feedback",
-      mockResponse: {
-        correct: true,
-        meaning: "to initiate social interaction",
-        reason: "The answer captures the core meaning",
-      },
-      userAnswer: "start a conversation",
-      expectedLabel: "\u2713 Correct",
-    },
-    {
-      name: "submits answer and shows incorrect feedback",
-      mockResponse: {
-        correct: false,
-        meaning: "to initiate social interaction",
-        reason: "The answer is not related",
-      },
-      userAnswer: "to freeze something",
-      expectedLabel: "\u2717 Incorrect",
-    },
-  ])("$name", async ({ mockResponse, userAnswer, expectedLabel }) => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue(mockResponse);
-
+  it("switches to Etymology tab and shows etymology quiz modes", async () => {
     renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: userAnswer } });
-    fireEvent.click(screen.getByText("Submit"));
-
     await waitFor(() => {
-      expect(screen.getByText(`Your answer: ${userAnswer}`)).toBeInTheDocument();
+      expect(screen.getByText("Vocabulary")).toBeInTheDocument();
     });
+    fireEvent.click(screen.getByText("Etymology"));
 
-    await waitFor(() => {
-      expect(screen.getByText(expectedLabel)).toBeInTheDocument();
-      expect(screen.getByText(mockResponse.meaning)).toBeInTheDocument();
-      expect(screen.getByText(mockResponse.reason)).toBeInTheDocument();
-    });
-
-    expect(client.quizClient.submitAnswer).toHaveBeenCalledWith({
-      noteId: 1n,
-      answer: userAnswer,
-      responseTimeMs: expect.any(BigInt),
-    });
-
-    const state = useQuizStore.getState();
-    expect(state.results).toHaveLength(1);
-    expect(state.results[0].correct).toBe(mockResponse.correct);
+    expect(screen.getByText("Breakdown")).toBeInTheDocument();
+    expect(screen.getByText("See a word, identify its origins and meanings")).toBeInTheDocument();
+    expect(screen.getByText("Assembly")).toBeInTheDocument();
+    expect(screen.getByText("Freeform")).toBeInTheDocument();
   });
 
-  it("shows error message when submitAnswer fails", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockRejectedValue(
-      new Error("network error")
-    );
-
+  it("deselects mode when clicking it again", async () => {
     renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "some answer" } });
-    fireEvent.click(screen.getByText("Submit"));
-
     await waitFor(() => {
-      expect(screen.getByText("Failed to submit answer")).toBeInTheDocument();
+      expect(screen.getByText("Standard")).toBeInTheDocument();
     });
-  });
+    fireEvent.click(screen.getByText("Standard"));
+    expect(screen.getByText("Start")).toBeInTheDocument();
 
-  it("advances to next card after feedback", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
-      correct: true,
-      meaning: "to initiate social interaction",
-      reason: "correct",
-    });
-
-    renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "start a conversation" } });
-    fireEvent.click(screen.getByText("Submit"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Next")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Next"));
-
-    expect(screen.getByText("lose one's temper")).toBeInTheDocument();
-    expect(screen.getByText("2 / 2")).toBeInTheDocument();
-    expect(
-      screen.getByPlaceholderText("Type your answer")
-    ).toBeInTheDocument();
-  });
-
-  it("feedback phase shows next review date when response includes it", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
-      correct: true,
-      meaning: "to initiate social interaction",
-      reason: "correct",
-      nextReviewDate: "2027-06-15",
-      learnedAt: "2026-03-16T00:00:00Z",
-    });
-
-    renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "start a conversation" } });
-    fireEvent.click(screen.getByText("Submit"));
-
-    await waitFor(() => {
-      expect(screen.getByText(/Next review:/)).toBeInTheDocument();
-      expect(screen.getByText(/June 15, 2027/)).toBeInTheDocument();
-    });
-  });
-
-  it("feedback phase shows Mark as Incorrect button after correct answer", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
-      correct: true,
-      meaning: "to initiate social interaction",
-      reason: "correct",
-    });
-
-    renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "start a conversation" } });
-    fireEvent.click(screen.getByText("Submit"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Mark as Incorrect")).toBeInTheDocument();
-    });
-  });
-
-  it("feedback phase shows Mark as Correct button after incorrect answer", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
-      correct: false,
-      meaning: "to initiate social interaction",
-      reason: "wrong",
-    });
-
-    renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "to freeze something" } });
-    fireEvent.click(screen.getByText("Submit"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Mark as Correct")).toBeInTheDocument();
-    });
-  });
-
-  it("override button calls quizClient.overrideAnswer", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
-      correct: true,
-      meaning: "to initiate social interaction",
-      reason: "correct",
-      learnedAt: "2026-03-16T00:00:00Z",
-    });
-    vi.mocked(client.quizClient.overrideAnswer).mockResolvedValue({
-      nextReviewDate: "2027-06-20",
-      originalQuality: 5,
-      originalStatus: "understood",
-      originalIntervalDays: 10,
-      originalEasinessFactor: 2.5,
-    });
-
-    renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "start a conversation" } });
-    fireEvent.click(screen.getByText("Submit"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Mark as Incorrect")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Mark as Incorrect"));
-
-    await waitFor(() => {
-      expect(client.quizClient.overrideAnswer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          noteId: 1n,
-          markCorrect: false,
-        })
-      );
-    });
-  });
-
-  it("skip button calls quizClient.skipWord immediately", async () => {
-    useQuizStore.getState().setFlashcards(mockFlashcards);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
-      correct: true,
-      meaning: "to initiate social interaction",
-      reason: "correct",
-    });
-    vi.mocked(client.quizClient.skipWord).mockResolvedValue({});
-
-    renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "start a conversation" } });
-    fireEvent.click(screen.getByText("Submit"));
-
-    await waitFor(() => {
-      expect(screen.getByText("Exclude from Quizzes")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("Exclude from Quizzes"));
-
-    await waitFor(() => {
-      expect(client.quizClient.skipWord).toHaveBeenCalledWith({ noteId: 1n });
-    });
-  });
-
-  it("navigates to /quiz/complete after last card", async () => {
-    useQuizStore.getState().setFlashcards([mockFlashcards[0]]);
-    vi.mocked(client.quizClient.submitAnswer).mockResolvedValue({
-      correct: true,
-      meaning: "to initiate social interaction",
-      reason: "correct",
-    });
-
-    renderPage();
-
-    const input = screen.getByPlaceholderText("Type your answer");
-    fireEvent.change(input, { target: { value: "start a conversation" } });
-    fireEvent.click(screen.getByText("Submit"));
-
-    await waitFor(() => {
-      expect(screen.getByText("See Results")).toBeInTheDocument();
-    });
-
-    fireEvent.click(screen.getByText("See Results"));
-
-    expect(pushMock).toHaveBeenCalledWith("/quiz/complete");
+    fireEvent.click(screen.getByText("Standard"));
+    expect(screen.queryByText("Start")).not.toBeInTheDocument();
   });
 });

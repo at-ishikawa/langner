@@ -12,6 +12,7 @@ service NotebookService {
   rpc LookupWord(LookupWordRequest) returns (LookupWordResponse);
   rpc RegisterDefinition(RegisterDefinitionRequest) returns (RegisterDefinitionResponse);
   rpc DeleteDefinition(DeleteDefinitionRequest) returns (DeleteDefinitionResponse);
+  rpc GetEtymologyNotebook(GetEtymologyNotebookRequest) returns (GetEtymologyNotebookResponse);
 }
 
 message GetNotebookDetailRequest {
@@ -131,3 +132,42 @@ message DeleteDefinitionRequest {
 }
 
 message DeleteDefinitionResponse {}
+
+// Etymology Notebook
+message EtymologyOriginPart {
+  string origin = 1;
+  string type = 2;
+  string language = 3;
+  string meaning = 4;
+  int32 word_count = 5;
+}
+
+message EtymologyDefinition {
+  string expression = 1;
+  string meaning = 2;
+  string part_of_speech = 3;
+  string note = 4;
+  repeated EtymologyOriginPart origin_parts = 5;
+  string notebook_name = 6;
+  repeated string examples = 7;
+  repeated string contexts = 8; // statements or conversations from the source scene
+}
+
+message EtymologyMeaningGroup {
+  string meaning = 1;
+  repeated EtymologyOriginPart origins = 2;
+}
+
+message GetEtymologyNotebookRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message GetEtymologyNotebookResponse {
+  repeated EtymologyOriginPart origins = 1;
+  repeated EtymologyDefinition definitions = 2;
+  repeated EtymologyMeaningGroup meaning_groups = 3;
+  int32 origin_count = 4;
+  int32 definition_count = 5;
+}

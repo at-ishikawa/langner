@@ -1,0 +1,4 @@
+id: word-power
+name: "Word Power Made Easy"
+notebooks:
+  - ./session1.yml

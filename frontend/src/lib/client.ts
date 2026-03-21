@@ -38,9 +38,24 @@ export type {
   SkipWordResponse,
   ResumeWordRequest,
   ResumeWordResponse,
+  EtymologyQuizCard,
+  EtymologyQuizOriginPart,
+  EtymologyOriginAnswer,
+  EtymologyOriginGrade,
+  RelatedDefinition,
+  StartEtymologyQuizRequest,
+  StartEtymologyQuizResponse,
+  SubmitEtymologyBreakdownAnswerRequest,
+  SubmitEtymologyBreakdownAnswerResponse,
+  SubmitEtymologyAssemblyAnswerRequest,
+  SubmitEtymologyAssemblyAnswerResponse,
+  StartEtymologyFreeformQuizRequest,
+  StartEtymologyFreeformQuizResponse,
+  SubmitEtymologyFreeformAnswerRequest,
+  SubmitEtymologyFreeformAnswerResponse,
 } from "@/gen-protos/api/v1/quiz_pb";
 
-export { QuizType } from "@/gen-protos/api/v1/quiz_pb";
+export { QuizType, EtymologyQuizMode } from "@/gen-protos/api/v1/quiz_pb";
 
 export type {
   GetNotebookDetailResponse,
@@ -58,4 +73,9 @@ export type {
   RegisterDefinitionResponse,
   DeleteDefinitionRequest,
   DeleteDefinitionResponse,
+  EtymologyOriginPart,
+  EtymologyDefinition,
+  EtymologyMeaningGroup,
+  GetEtymologyNotebookRequest,
+  GetEtymologyNotebookResponse,
 } from "@/gen-protos/api/v1/notebook_pb";

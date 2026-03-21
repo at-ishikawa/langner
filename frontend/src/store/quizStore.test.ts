@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useQuizStore } from "./quizStore";
-import type { Flashcard, QuizResult } from "./quizStore";
+import type { Flashcard, QuizResult, EtymologyCard, EtymologyResult } from "./quizStore";
 
 const mockFlashcards: Flashcard[] = [
   {
@@ -22,6 +22,41 @@ const mockResult: QuizResult = {
   correct: true,
   meaning: "to initiate social interaction",
   reason: "The answer captures the core meaning",
+};
+
+const mockEtymologyCards: EtymologyCard[] = [
+  {
+    cardId: BigInt(10),
+    expression: "biology",
+    meaning: "the study of life",
+    originParts: [
+      { origin: "bio", type: "root", language: "Greek", meaning: "life" },
+      { origin: "logy", type: "suffix", language: "Greek", meaning: "study of" },
+    ],
+    notebookName: "Science Roots",
+  },
+];
+
+const mockEtymologyResult: EtymologyResult = {
+  noteId: BigInt(10),
+  cardId: BigInt(10),
+  expression: "biology",
+  meaning: "the study of life",
+  answer: "bio=life, logy=study of",
+  correct: true,
+  reason: "All origins identified correctly",
+  originGrades: [
+    {
+      userOrigin: "bio",
+      userMeaning: "life",
+      originCorrect: true,
+      meaningCorrect: true,
+    },
+  ],
+  relatedDefinitions: [],
+  originParts: [
+    { origin: "bio", type: "root", language: "Greek", meaning: "life" },
+  ],
 };
 
 describe("useQuizStore", () => {
@@ -145,5 +180,82 @@ describe("useQuizStore", () => {
     expect(state.flashcards).toEqual([]);
     expect(state.currentIndex).toBe(0);
     expect(state.results).toEqual([]);
+  });
+
+  // Etymology quiz store tests
+  it("setEtymologyCards updates etymologyCards", () => {
+    useQuizStore.getState().setEtymologyCards(mockEtymologyCards);
+    expect(useQuizStore.getState().etymologyCards).toEqual(mockEtymologyCards);
+  });
+
+  it("submitEtymologyResult appends result", () => {
+    useQuizStore.getState().submitEtymologyResult(mockEtymologyResult);
+    const state = useQuizStore.getState();
+    expect(state.etymologyResults).toHaveLength(1);
+    expect(state.etymologyResults[0].expression).toBe("biology");
+  });
+
+  it("overrideResult works for etymology-breakdown type", () => {
+    useQuizStore.getState().submitEtymologyResult(mockEtymologyResult);
+
+    useQuizStore.getState().overrideResult(0, "etymology-breakdown", "2027-06-20", {
+      quality: 5,
+      status: "understood",
+      intervalDays: 10,
+      easinessFactor: 2.5,
+    });
+
+    const state = useQuizStore.getState();
+    expect(state.etymologyResults[0].correct).toBe(false);
+    expect(state.etymologyResults[0].isOverridden).toBe(true);
+  });
+
+  it("skipResult works for etymology-assembly type", () => {
+    useQuizStore.getState().submitEtymologyResult(mockEtymologyResult);
+
+    useQuizStore.getState().skipResult(0, "etymology-assembly");
+
+    const state = useQuizStore.getState();
+    expect(state.etymologyResults[0].isSkipped).toBe(true);
+  });
+
+  it("resumeResult clears isSkipped for etymology type", () => {
+    useQuizStore.getState().submitEtymologyResult(mockEtymologyResult);
+    useQuizStore.getState().skipResult(0, "etymology-breakdown");
+    useQuizStore.getState().resumeResult(0, "etymology-breakdown");
+
+    const state = useQuizStore.getState();
+    expect(state.etymologyResults[0].isSkipped).toBe(false);
+  });
+
+  it("updateResultReviewDate works for etymology type", () => {
+    useQuizStore.getState().submitEtymologyResult(mockEtymologyResult);
+
+    useQuizStore.getState().updateResultReviewDate(0, "etymology-breakdown", "2027-12-25");
+
+    const state = useQuizStore.getState();
+    expect(state.etymologyResults[0].nextReviewDate).toBe("2027-12-25");
+  });
+
+  it("reset clears etymology state", () => {
+    useQuizStore.getState().setEtymologyCards(mockEtymologyCards);
+    useQuizStore.getState().submitEtymologyResult(mockEtymologyResult);
+
+    useQuizStore.getState().reset();
+
+    const state = useQuizStore.getState();
+    expect(state.etymologyCards).toEqual([]);
+    expect(state.etymologyResults).toEqual([]);
+  });
+
+  it("setEtymologyFreeformExpressions updates state", () => {
+    useQuizStore.getState().setEtymologyFreeformExpressions(["biology", "geology"]);
+    expect(useQuizStore.getState().etymologyFreeformExpressions).toEqual(["biology", "geology"]);
+  });
+
+  it("setEtymologyFreeformNextReviewDates updates state", () => {
+    const dates = { biology: "2027-06-20" };
+    useQuizStore.getState().setEtymologyFreeformNextReviewDates(dates);
+    expect(useQuizStore.getState().etymologyFreeformNextReviewDates).toEqual(dates);
   });
 });

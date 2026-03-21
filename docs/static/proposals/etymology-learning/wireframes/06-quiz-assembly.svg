@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 375 700" width="375" height="700">
+  <defs>
+    <style>
+      text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+      .title { font-size: 20px; font-weight: 600; fill: #111; }
+      .subtitle { font-size: 14px; fill: #666; }
+      .label { font-size: 13px; fill: #333; font-weight: 500; }
+      .body { font-size: 14px; fill: #333; }
+      .muted { font-size: 12px; fill: #999; }
+      .btn-text { font-size: 15px; font-weight: 600; fill: #fff; }
+      .progress { font-size: 13px; fill: #666; }
+      .origin-part { font-size: 18px; font-weight: 600; fill: #2563eb; }
+      .origin-meaning { font-size: 14px; fill: #666; }
+      .plus { font-size: 18px; fill: #999; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="375" height="700" fill="#f8f9fa"/>
+
+  <!-- Status bar -->
+  <rect width="375" height="44" fill="#fff"/>
+
+  <!-- Header -->
+  <rect y="44" width="375" height="56" fill="#fff"/>
+  <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb"/>
+  <text x="187" y="78" text-anchor="middle" class="title">Assembly</text>
+
+  <!-- Progress -->
+  <text x="187" y="124" text-anchor="middle" class="progress">5 / 18</text>
+  <rect x="24" y="132" width="327" height="4" rx="2" fill="#e5e7eb"/>
+  <rect x="24" y="132" width="91" height="4" rx="2" fill="#2563eb"/>
+
+  <!-- Origins card -->
+  <rect x="16" y="152" width="343" height="160" rx="12" fill="#fff" stroke="#e5e7eb"/>
+  <text x="187" y="180" text-anchor="middle" class="label">What word is made from these origins?</text>
+
+  <!-- Origin 1 -->
+  <rect x="32" y="196" width="311" height="32" rx="6" fill="#eff6ff"/>
+  <text x="44" y="217" class="origin-part">micro</text>
+  <text x="110" y="217" class="origin-meaning">= small</text>
+  <rect x="282" y="200" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="305" y="213" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+
+  <!-- Plus -->
+  <text x="187" y="248" text-anchor="middle" class="plus">+</text>
+
+  <!-- Origin 2 -->
+  <rect x="32" y="256" width="311" height="32" rx="6" fill="#eff6ff"/>
+  <text x="44" y="277" class="origin-part">scope</text>
+  <text x="110" y="277" class="origin-meaning">= to look at</text>
+  <rect x="282" y="260" width="46" height="18" rx="9" fill="#f3f4f6"/>
+  <text x="305" y="273" text-anchor="middle" font-size="10" fill="#666">Greek</text>
+
+  <!-- Equals -->
+  <text x="187" y="328" text-anchor="middle" font-size="20" fill="#999">=</text>
+
+  <!-- Answer input -->
+  <text x="24" y="360" class="label">Your answer</text>
+  <rect x="24" y="370" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="40" y="400" font-size="16" fill="#aaa">type the word...</text>
+
+  <!-- Submit button -->
+  <rect y="630" width="375" height="70" fill="#fff"/>
+  <line x1="0" y1="630" x2="375" y2="630" stroke="#e5e7eb"/>
+  <rect x="24" y="642" width="327" height="46" rx="10" fill="#2563eb"/>
+  <text x="187" y="671" text-anchor="middle" class="btn-text">Submit</text>
+</svg>

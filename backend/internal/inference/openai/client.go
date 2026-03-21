@@ -1058,3 +1058,125 @@ Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTi
 
 	return decoded, nil
 }
+
+const gradeEtymologyBreakdownSystemPrompt = `You are an etymology quiz grader. A user is learning word origins (roots, prefixes, suffixes) and has broken down a word into its constituent parts.
+
+TASK: Match user's origin parts against expected origins. Grade each user answer.
+
+RULES:
+1. ORIGIN MATCHING: Allow spelling variations, transliterations, and minor differences.
+   - "spec" matches "spect" or "specere" (same root family)
+   - "pre" matches "prae" (Latin/English variation)
+   - Case insensitive
+2. MEANING MATCHING: Allow synonyms and equivalent meanings.
+   - "to look" matches "to see" or "to watch"
+   - "before" matches "in front of" or "prior to"
+3. Each user origin should be matched to at most one expected origin.
+4. Unmatched user origins are marked as incorrect.
+5. Overall "correct" is true if user identified the majority of origins correctly (both origin and meaning).
+
+OUTPUT FORMAT (JSON only):
+{
+  "correct": true/false,
+  "reason": "brief explanation",
+  "quality": 1-5,
+  "origin_grades": [
+    {
+      "user_origin": "the user's origin text",
+      "user_meaning": "the user's meaning text",
+      "origin_correct": true/false,
+      "meaning_correct": true/false,
+      "correct_origin": {"origin": "...", "type": "...", "language": "...", "meaning": "..."} // matched expected origin, null if no match
+    }
+  ]
+}
+
+QUALITY:
+- If incorrect overall: quality = 1
+- If correct, fast response: quality = 5
+- If correct, normal response: quality = 4
+- If correct, slow response: quality = 3
+
+Return ONLY valid JSON.`
+
+// GradeEtymologyBreakdown grades a user's etymology breakdown answer
+func (client *Client) GradeEtymologyBreakdown(
+	ctx context.Context,
+	params inference.GradeEtymologyBreakdownRequest,
+) (inference.GradeEtymologyBreakdownResponse, error) {
+	var result inference.GradeEtymologyBreakdownResponse
+	if err := retry.Do(
+		func() error {
+			response, err := client.gradeEtymologyBreakdown(ctx, params)
+			if err != nil {
+				if !isRetryableError(err) {
+					return retry.Unrecoverable(err)
+				}
+				return err
+			}
+			result = response
+			return nil
+		},
+		retry.Context(ctx),
+		retry.Attempts(client.maxRetryAttempts+1),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			return retry.BackOffDelay(n, err, config)
+		}),
+	); err != nil {
+		return inference.GradeEtymologyBreakdownResponse{}, err
+	}
+	return result, nil
+}
+
+func (client *Client) gradeEtymologyBreakdown(
+	ctx context.Context,
+	params inference.GradeEtymologyBreakdownRequest,
+) (inference.GradeEtymologyBreakdownResponse, error) {
+	userJSON, err := json.Marshal(params)
+	if err != nil {
+		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("failed to marshal request: %w", err)
+	}
+
+	requestBody := ChatCompletionRequest{
+		Model:       client.model,
+		Temperature: 0.2,
+		Messages: []Message{
+			{Role: RoleSystem, Content: gradeEtymologyBreakdownSystemPrompt},
+			{Role: RoleUser, Content: string(userJSON)},
+		},
+	}
+
+	response, err := client.httpClient.R().
+		SetContext(ctx).
+		SetBody(requestBody).
+		SetResult(&ChatCompletionResponse{}).
+		Post("/chat/completions")
+	if err != nil {
+		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("httpClient.Post > %w", err)
+	}
+	if response.IsError() {
+		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+	}
+
+	responseBody := response.Result().(*ChatCompletionResponse)
+	if responseBody == nil || len(responseBody.Choices) == 0 {
+		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("empty response body or choices: %s", response.String())
+	}
+
+	content := responseBody.Choices[0].Message.Content
+	if content == "" {
+		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("empty response content: %s", response.String())
+	}
+
+	slog.Default().Debug("gradeEtymologyBreakdown response",
+		"request", requestBody,
+		"response", content,
+	)
+
+	var decoded inference.GradeEtymologyBreakdownResponse
+	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
+		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
+	}
+
+	return decoded, nil
+}

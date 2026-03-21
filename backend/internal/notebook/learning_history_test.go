@@ -1025,6 +1025,171 @@ func containsStr(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && strings.Contains(s, substr))
 }
 
+func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T) {
+	tests := []struct {
+		name       string
+		quizType   QuizType
+		isCorrect  bool
+		wantStatus LearnedStatus
+	}{
+		{
+			name:       "breakdown correct",
+			quizType:   QuizTypeEtymologyBreakdown,
+			isCorrect:  true,
+			wantStatus: LearnedStatusUnderstood,
+		},
+		{
+			name:       "breakdown incorrect",
+			quizType:   QuizTypeEtymologyBreakdown,
+			isCorrect:  false,
+			wantStatus: LearnedStatusMisunderstood,
+		},
+		{
+			name:       "assembly correct",
+			quizType:   QuizTypeEtymologyAssembly,
+			isCorrect:  true,
+			wantStatus: LearnedStatusUnderstood,
+		},
+		{
+			name:       "assembly incorrect",
+			quizType:   QuizTypeEtymologyAssembly,
+			isCorrect:  false,
+			wantStatus: LearnedStatusMisunderstood,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exp := LearningHistoryExpression{
+				Expression: "inspect",
+			}
+
+			quality := 4
+			if !tt.isCorrect {
+				quality = 1
+			}
+
+			exp.AddRecordWithQualityForEtymology(tt.isCorrect, true, quality, 5000, tt.quizType)
+
+			logs := exp.GetLogsForQuizType(tt.quizType)
+			require.Len(t, logs, 1)
+			assert.Equal(t, tt.wantStatus, logs[0].Status)
+			assert.Equal(t, string(tt.quizType), logs[0].QuizType)
+		})
+	}
+}
+
+func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
+	now := time.Now()
+	oneHourAgo := now.Add(-1 * time.Hour)
+	oneDayAgo := now.Add(-25 * time.Hour)
+
+	tests := []struct {
+		name     string
+		expr     LearningHistoryExpression
+		quizType QuizType
+		want     bool
+	}{
+		{
+			name:     "no logs - needs review",
+			expr:     LearningHistoryExpression{Expression: "test"},
+			quizType: QuizTypeEtymologyBreakdown,
+			want:     true,
+		},
+		{
+			name: "misunderstood - needs review",
+			expr: LearningHistoryExpression{
+				Expression: "test",
+				EtymologyBreakdownLogs: []LearningRecord{
+					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 1},
+				},
+			},
+			quizType: QuizTypeEtymologyBreakdown,
+			want:     true,
+		},
+		{
+			name: "recently answered - no review needed",
+			expr: LearningHistoryExpression{
+				Expression: "test",
+				EtymologyBreakdownLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 3},
+				},
+			},
+			quizType: QuizTypeEtymologyBreakdown,
+			want:     false,
+		},
+		{
+			name: "past due - needs review",
+			expr: LearningHistoryExpression{
+				Expression: "test",
+				EtymologyAssemblyLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneDayAgo), IntervalDays: 1},
+				},
+			},
+			quizType: QuizTypeEtymologyAssembly,
+			want:     true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.expr.NeedsEtymologyReview(tt.quizType)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestLearningHistoryExpression_GetLogsForQuizType_Etymology(t *testing.T) {
+	breakdownLogs := []LearningRecord{{Status: LearnedStatusUnderstood, Quality: 4}}
+	assemblyLogs := []LearningRecord{{Status: LearnedStatusMisunderstood, Quality: 1}}
+	learnedLogs := []LearningRecord{{Status: learnedStatusCanBeUsed, Quality: 5}}
+
+	expr := LearningHistoryExpression{
+		LearnedLogs:            learnedLogs,
+		EtymologyBreakdownLogs: breakdownLogs,
+		EtymologyAssemblyLogs:  assemblyLogs,
+	}
+
+	t.Run("etymology breakdown returns breakdown logs", func(t *testing.T) {
+		got := expr.GetLogsForQuizType(QuizTypeEtymologyBreakdown)
+		assert.Equal(t, breakdownLogs, got)
+	})
+
+	t.Run("etymology assembly returns assembly logs", func(t *testing.T) {
+		got := expr.GetLogsForQuizType(QuizTypeEtymologyAssembly)
+		assert.Equal(t, assemblyLogs, got)
+	})
+
+	t.Run("notebook quiz type still returns learned logs", func(t *testing.T) {
+		got := expr.GetLogsForQuizType(QuizTypeNotebook)
+		assert.Equal(t, learnedLogs, got)
+	})
+}
+
+func TestLearningHistoryExpression_GetEasinessFactorForQuizType_Etymology(t *testing.T) {
+	expr := LearningHistoryExpression{
+		EtymologyBreakdownEasinessFactor: 2.1,
+		EtymologyAssemblyEasinessFactor:  2.3,
+		EasinessFactor:                   2.5,
+	}
+
+	t.Run("etymology breakdown returns breakdown EF", func(t *testing.T) {
+		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyBreakdown)
+		assert.InDelta(t, 2.1, got, 0.001)
+	})
+
+	t.Run("etymology assembly returns assembly EF", func(t *testing.T) {
+		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyAssembly)
+		assert.InDelta(t, 2.3, got, 0.001)
+	})
+
+	t.Run("zero etymology EF returns default", func(t *testing.T) {
+		expr2 := LearningHistoryExpression{}
+		got := expr2.GetEasinessFactorForQuizType(QuizTypeEtymologyBreakdown)
+		assert.InDelta(t, DefaultEasinessFactor, got, 0.001)
+	})
+}
+
 func TestLearningHistoryExpression_HasAnyCorrectAnswer(t *testing.T) {
 	tests := []struct {
 		name       string

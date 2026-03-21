@@ -72,7 +72,7 @@ func newNotebookCommand() *cobra.Command {
 			}
 			dictionaryMap := rapidapi.FromResponsesToMap(response)
 
-			reader, err := notebook.NewReader(cfg.Notebooks.StoriesDirectories, nil, cfg.Notebooks.BooksDirectories, cfg.Notebooks.DefinitionsDirectories, dictionaryMap)
+			reader, err := notebook.NewReader(cfg.Notebooks.StoriesDirectories, nil, cfg.Notebooks.BooksDirectories, cfg.Notebooks.DefinitionsDirectories, cfg.Notebooks.EtymologyDirectories, dictionaryMap)
 			if err != nil {
 				return fmt.Errorf("textbook.NewFlashcardReader() > %w", err)
 			}
@@ -111,7 +111,7 @@ func newNotebookCommand() *cobra.Command {
 			}
 			dictionaryMap := rapidapi.FromResponsesToMap(response)
 
-			reader, err := notebook.NewReader(nil, cfg.Notebooks.FlashcardsDirectories, nil, nil, dictionaryMap)
+			reader, err := notebook.NewReader(nil, cfg.Notebooks.FlashcardsDirectories, nil, nil, nil, dictionaryMap)
 			if err != nil {
 				return fmt.Errorf("notebook.NewReader() > %w", err)
 			}

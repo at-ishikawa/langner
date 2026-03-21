@@ -31,16 +31,19 @@ type QuizHandler struct {
 	noteStore      map[int64]quiz.Card
 	reverseStore   map[int64]quiz.ReverseCard
 	freeformCards  []quiz.FreeformCard
+	etymologyStore map[int64]quiz.EtymologyCard
+	etymologyCards []quiz.EtymologyCard // for freeform
 	nextID         int64
 }
 
 // NewQuizHandler creates a new QuizHandler.
 func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 	return &QuizHandler{
-		svc:          svc,
-		noteStore:    make(map[int64]quiz.Card),
-		reverseStore: make(map[int64]quiz.ReverseCard),
-		nextID:       1,
+		svc:            svc,
+		noteStore:      make(map[int64]quiz.Card),
+		reverseStore:   make(map[int64]quiz.ReverseCard),
+		etymologyStore: make(map[int64]quiz.EtymologyCard),
+		nextID:         1,
 	}
 }
 
@@ -71,11 +74,12 @@ func (h *QuizHandler) GetQuizOptions(
 	protoSummaries := make([]*apiv1.NotebookSummary, 0, len(summaries))
 	for _, s := range summaries {
 		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{
-			NotebookId:         s.NotebookID,
-			Name:               s.Name,
-			ReviewCount:        int32(s.ReviewCount),
-			Kind:               s.Kind,
-			ReverseReviewCount: int32(s.ReverseReviewCount),
+			NotebookId:            s.NotebookID,
+			Name:                  s.Name,
+			ReviewCount:           int32(s.ReviewCount),
+			Kind:                  s.Kind,
+			ReverseReviewCount:    int32(s.ReverseReviewCount),
+			EtymologyReviewCount:  int32(s.EtymologyReviewCount),
 		})
 	}
 
@@ -424,6 +428,14 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 		info := quiz.CardInfoFromReverseCard(card)
 		return &info, nil
 	}
+	if ecard, found := h.etymologyStore[noteID]; found {
+		h.mu.Unlock()
+		info := quiz.CardInfo{
+			NotebookName: ecard.NotebookName,
+			Expression:   ecard.Expression,
+		}
+		return &info, nil
+	}
 	h.mu.Unlock()
 
 	// Fall back to DB lookup
@@ -469,6 +481,10 @@ func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
 		return notebook.QuizTypeReverse
 	case apiv1.QuizType_QUIZ_TYPE_FREEFORM:
 		return notebook.QuizTypeFreeform
+	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_BREAKDOWN:
+		return notebook.QuizTypeEtymologyBreakdown
+	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ASSEMBLY:
+		return notebook.QuizTypeEtymologyAssembly
 	default:
 		return notebook.QuizTypeNotebook
 	}
@@ -516,6 +532,342 @@ func (h *QuizHandler) ResumeWord(
 	}
 
 	return connect.NewResponse(&apiv1.ResumeWordResponse{}), nil
+}
+
+// StartEtymologyQuiz starts an etymology quiz session.
+func (h *QuizHandler) StartEtymologyQuiz(
+	ctx context.Context,
+	req *connect.Request[apiv1.StartEtymologyQuizRequest],
+) (*connect.Response[apiv1.StartEtymologyQuizResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	cards, err := h.svc.LoadEtymologyCards(
+		req.Msg.GetEtymologyNotebookIds(),
+		req.Msg.GetDefinitionNotebookIds(),
+		req.Msg.GetIncludeUnstudied(),
+	)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology cards: %w", err))
+	}
+
+	localStore := make(map[int64]quiz.EtymologyCard)
+	var nextID int64 = 1
+
+	var protoCards []*apiv1.EtymologyQuizCard
+	for _, card := range cards {
+		cardID := nextID
+		nextID++
+		localStore[cardID] = card
+
+		var parts []*apiv1.EtymologyQuizOriginPart
+		for _, p := range card.OriginParts {
+			parts = append(parts, &apiv1.EtymologyQuizOriginPart{
+				Origin:   p.Origin,
+				Type:     p.Type,
+				Language: p.Language,
+				Meaning:  p.Meaning,
+			})
+		}
+
+		protoCards = append(protoCards, &apiv1.EtymologyQuizCard{
+			CardId:       cardID,
+			Expression:   card.Expression,
+			Meaning:      card.Meaning,
+			OriginParts:  parts,
+			NotebookName: card.NotebookName,
+		})
+	}
+
+	h.mu.Lock()
+	h.etymologyStore = localStore
+	h.nextID = nextID
+	h.mu.Unlock()
+
+	return connect.NewResponse(&apiv1.StartEtymologyQuizResponse{
+		Cards: protoCards,
+	}), nil
+}
+
+// SubmitEtymologyBreakdownAnswer grades a breakdown answer.
+func (h *QuizHandler) SubmitEtymologyBreakdownAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.SubmitEtymologyBreakdownAnswerRequest],
+) (*connect.Response[apiv1.SubmitEtymologyBreakdownAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	cardID := req.Msg.GetCardId()
+
+	h.mu.Lock()
+	card, ok := h.etymologyStore[cardID]
+	h.mu.Unlock()
+
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found in active etymology quiz session", cardID))
+	}
+
+	var userOrigins []inference.EtymologyUserOrigin
+	for _, a := range req.Msg.GetAnswers() {
+		userOrigins = append(userOrigins, inference.EtymologyUserOrigin{
+			Origin:  a.GetOrigin(),
+			Meaning: a.GetMeaning(),
+		})
+	}
+
+	grade, err := h.svc.GradeEtymologyBreakdownAnswer(ctx, card, userOrigins, req.Msg.GetResponseTimeMs())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology breakdown: %w", err))
+	}
+
+	if err := h.svc.SaveEtymologyResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyBreakdown); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
+	}
+
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeEtymologyBreakdown)
+	reader, err := h.svc.NewReader()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader for related definitions: %w", err))
+	}
+	relatedDefs := h.svc.FindRelatedDefinitions(reader, card)
+
+	var protoGrades []*apiv1.EtymologyOriginGrade
+	for _, g := range grade.OriginGrades {
+		pg := &apiv1.EtymologyOriginGrade{
+			UserOrigin:     g.UserOrigin,
+			UserMeaning:    g.UserMeaning,
+			OriginCorrect:  g.OriginCorrect,
+			MeaningCorrect: g.MeaningCorrect,
+		}
+		if g.CorrectOrigin != nil {
+			pg.CorrectOrigin = &apiv1.EtymologyOriginAnswer{
+				Origin:  g.CorrectOrigin.Origin,
+				Meaning: g.CorrectOrigin.Meaning,
+			}
+		}
+		protoGrades = append(protoGrades, pg)
+	}
+
+	var protoRelated []*apiv1.RelatedDefinition
+	for _, r := range relatedDefs {
+		protoRelated = append(protoRelated, &apiv1.RelatedDefinition{
+			Expression:   r.Expression,
+			Meaning:      r.Meaning,
+			NotebookName: r.NotebookName,
+		})
+	}
+
+	return connect.NewResponse(&apiv1.SubmitEtymologyBreakdownAnswerResponse{
+		Correct:            grade.Correct,
+		Reason:             grade.Reason,
+		OriginGrades:       protoGrades,
+		RelatedDefinitions: protoRelated,
+		NextReviewDate:     nextReviewDate,
+		LearnedAt:          learnedAt,
+		NoteId:             req.Msg.GetCardId(),
+	}), nil
+}
+
+// SubmitEtymologyAssemblyAnswer grades an assembly answer.
+func (h *QuizHandler) SubmitEtymologyAssemblyAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.SubmitEtymologyAssemblyAnswerRequest],
+) (*connect.Response[apiv1.SubmitEtymologyAssemblyAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	cardID := req.Msg.GetCardId()
+
+	h.mu.Lock()
+	card, ok := h.etymologyStore[cardID]
+	h.mu.Unlock()
+
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found in active etymology quiz session", cardID))
+	}
+
+	grade, err := h.svc.GradeEtymologyAssemblyAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology assembly: %w", err))
+	}
+
+	if err := h.svc.SaveEtymologyResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyAssembly); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
+	}
+
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeEtymologyAssembly)
+	reader, err := h.svc.NewReader()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader for related definitions: %w", err))
+	}
+	relatedDefs := h.svc.FindRelatedDefinitions(reader, card)
+
+	var parts []*apiv1.EtymologyQuizOriginPart
+	for _, p := range card.OriginParts {
+		parts = append(parts, &apiv1.EtymologyQuizOriginPart{
+			Origin:   p.Origin,
+			Type:     p.Type,
+			Language: p.Language,
+			Meaning:  p.Meaning,
+		})
+	}
+
+	var protoRelated []*apiv1.RelatedDefinition
+	for _, r := range relatedDefs {
+		protoRelated = append(protoRelated, &apiv1.RelatedDefinition{
+			Expression:   r.Expression,
+			Meaning:      r.Meaning,
+			NotebookName: r.NotebookName,
+		})
+	}
+
+	return connect.NewResponse(&apiv1.SubmitEtymologyAssemblyAnswerResponse{
+		Correct:            grade.Correct,
+		Reason:             grade.Reason,
+		CorrectExpression:  card.Expression,
+		OriginParts:        parts,
+		RelatedDefinitions: protoRelated,
+		NextReviewDate:     nextReviewDate,
+		LearnedAt:          learnedAt,
+		NoteId:             req.Msg.GetCardId(),
+	}), nil
+}
+
+// StartEtymologyFreeformQuiz starts a freeform etymology quiz.
+func (h *QuizHandler) StartEtymologyFreeformQuiz(
+	ctx context.Context,
+	req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest],
+) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	cards, err := h.svc.LoadEtymologyFreeformExpressions(
+		req.Msg.GetEtymologyNotebookIds(),
+		req.Msg.GetDefinitionNotebookIds(),
+	)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology freeform expressions: %w", err))
+	}
+
+	nextReviewDates, err := h.svc.GetEtymologyNextReviewDates(cards)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err))
+	}
+
+	h.mu.Lock()
+	h.etymologyCards = cards
+	h.mu.Unlock()
+
+	seen := make(map[string]struct{})
+	var expressions []string
+	for _, card := range cards {
+		lower := strings.ToLower(card.Expression)
+		if _, ok := seen[lower]; !ok {
+			seen[lower] = struct{}{}
+			expressions = append(expressions, card.Expression)
+		}
+	}
+
+	return connect.NewResponse(&apiv1.StartEtymologyFreeformQuizResponse{
+		Expressions:    expressions,
+		NextReviewDates: nextReviewDates,
+	}), nil
+}
+
+// SubmitEtymologyFreeformAnswer grades a freeform etymology answer.
+func (h *QuizHandler) SubmitEtymologyFreeformAnswer(
+	ctx context.Context,
+	req *connect.Request[apiv1.SubmitEtymologyFreeformAnswerRequest],
+) (*connect.Response[apiv1.SubmitEtymologyFreeformAnswerResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	h.mu.Lock()
+	cards := h.etymologyCards
+	h.mu.Unlock()
+
+	expression := req.Msg.GetExpression()
+
+	// Find matching card
+	var matchedCard *quiz.EtymologyCard
+	for _, card := range cards {
+		if strings.EqualFold(card.Expression, expression) {
+			c := card
+			matchedCard = &c
+			break
+		}
+	}
+
+	if matchedCard == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("expression %q not found", expression))
+	}
+
+	var userOrigins []inference.EtymologyUserOrigin
+	for _, a := range req.Msg.GetAnswers() {
+		userOrigins = append(userOrigins, inference.EtymologyUserOrigin{
+			Origin:  a.GetOrigin(),
+			Meaning: a.GetMeaning(),
+		})
+	}
+
+	grade, err := h.svc.GradeEtymologyBreakdownAnswer(ctx, *matchedCard, userOrigins, req.Msg.GetResponseTimeMs())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology freeform: %w", err))
+	}
+
+	// etymology_freeform shares SM-2 track with etymology_breakdown
+	if err := h.svc.SaveEtymologyResult(*matchedCard, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyBreakdown); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
+	}
+
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(matchedCard.NotebookName, matchedCard.Expression, notebook.QuizTypeEtymologyBreakdown)
+	reader, err := h.svc.NewReader()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create reader for related definitions: %w", err))
+	}
+	relatedDefs := h.svc.FindRelatedDefinitions(reader, *matchedCard)
+
+	var protoGrades []*apiv1.EtymologyOriginGrade
+	for _, g := range grade.OriginGrades {
+		pg := &apiv1.EtymologyOriginGrade{
+			UserOrigin:     g.UserOrigin,
+			UserMeaning:    g.UserMeaning,
+			OriginCorrect:  g.OriginCorrect,
+			MeaningCorrect: g.MeaningCorrect,
+		}
+		if g.CorrectOrigin != nil {
+			pg.CorrectOrigin = &apiv1.EtymologyOriginAnswer{
+				Origin:  g.CorrectOrigin.Origin,
+				Meaning: g.CorrectOrigin.Meaning,
+			}
+		}
+		protoGrades = append(protoGrades, pg)
+	}
+
+	var protoRelated []*apiv1.RelatedDefinition
+	for _, r := range relatedDefs {
+		protoRelated = append(protoRelated, &apiv1.RelatedDefinition{
+			Expression:   r.Expression,
+			Meaning:      r.Meaning,
+			NotebookName: r.NotebookName,
+		})
+	}
+
+	return connect.NewResponse(&apiv1.SubmitEtymologyFreeformAnswerResponse{
+		Correct:            grade.Correct,
+		Reason:             grade.Reason,
+		OriginGrades:       protoGrades,
+		RelatedDefinitions: protoRelated,
+		NextReviewDate:     nextReviewDate,
+		LearnedAt:          learnedAt,
+		NotebookName:       matchedCard.NotebookName,
+		NoteId:             0, // freeform cards are not stored with IDs
+	}), nil
 }
 
 // OverrideAnswer toggles the correctness of the most recent answer for a word.

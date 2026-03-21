@@ -11,6 +11,14 @@ enum QuizType {
   QUIZ_TYPE_STANDARD = 1;
   QUIZ_TYPE_REVERSE = 2;
   QUIZ_TYPE_FREEFORM = 3;
+  QUIZ_TYPE_ETYMOLOGY_BREAKDOWN = 4;
+  QUIZ_TYPE_ETYMOLOGY_ASSEMBLY = 5;
+}
+
+enum EtymologyQuizMode {
+  ETYMOLOGY_QUIZ_MODE_UNSPECIFIED = 0;
+  ETYMOLOGY_QUIZ_MODE_BREAKDOWN = 1;
+  ETYMOLOGY_QUIZ_MODE_ASSEMBLY = 2;
 }
 
 service QuizService {
@@ -25,6 +33,11 @@ service QuizService {
   rpc UndoOverrideAnswer(UndoOverrideAnswerRequest) returns (UndoOverrideAnswerResponse);
   rpc SkipWord(SkipWordRequest) returns (SkipWordResponse);
   rpc ResumeWord(ResumeWordRequest) returns (ResumeWordResponse);
+  rpc StartEtymologyQuiz(StartEtymologyQuizRequest) returns (StartEtymologyQuizResponse);
+  rpc SubmitEtymologyBreakdownAnswer(SubmitEtymologyBreakdownAnswerRequest) returns (SubmitEtymologyBreakdownAnswerResponse);
+  rpc SubmitEtymologyAssemblyAnswer(SubmitEtymologyAssemblyAnswerRequest) returns (SubmitEtymologyAssemblyAnswerResponse);
+  rpc StartEtymologyFreeformQuiz(StartEtymologyFreeformQuizRequest) returns (StartEtymologyFreeformQuizResponse);
+  rpc SubmitEtymologyFreeformAnswer(SubmitEtymologyFreeformAnswerRequest) returns (SubmitEtymologyFreeformAnswerResponse);
 }
 
 message GetQuizOptionsRequest {}
@@ -39,6 +52,7 @@ message NotebookSummary {
   int32 review_count = 3;
   string kind = 4;
   int32 reverse_review_count = 5;
+  int32 etymology_review_count = 6;
 }
 
 message StartQuizRequest {
@@ -241,3 +255,123 @@ message ResumeWordRequest {
 }
 
 message ResumeWordResponse {}
+
+// Etymology Quiz Messages
+message EtymologyOriginAnswer {
+  string origin = 1;
+  string meaning = 2;
+}
+
+message EtymologyOriginGrade {
+  string user_origin = 1;
+  string user_meaning = 2;
+  bool origin_correct = 3;
+  bool meaning_correct = 4;
+  EtymologyOriginAnswer correct_origin = 5;
+}
+
+message EtymologyQuizCard {
+  int64 card_id = 1;
+  string expression = 2;
+  string meaning = 3;
+  repeated EtymologyQuizOriginPart origin_parts = 4;
+  string notebook_name = 5;
+}
+
+message EtymologyQuizOriginPart {
+  string origin = 1;
+  string type = 2;
+  string language = 3;
+  string meaning = 4;
+}
+
+message RelatedDefinition {
+  string expression = 1;
+  string meaning = 2;
+  string notebook_name = 3;
+}
+
+message StartEtymologyQuizRequest {
+  repeated string etymology_notebook_ids = 1;
+  repeated string definition_notebook_ids = 2;
+  EtymologyQuizMode mode = 3;
+  bool include_unstudied = 4;
+}
+
+message StartEtymologyQuizResponse {
+  repeated EtymologyQuizCard cards = 1;
+}
+
+message SubmitEtymologyBreakdownAnswerRequest {
+  int64 card_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  repeated EtymologyOriginAnswer answers = 2;
+  int64 response_time_ms = 3;
+}
+
+message SubmitEtymologyBreakdownAnswerResponse {
+  bool correct = 1;
+  string reason = 2;
+  repeated EtymologyOriginGrade origin_grades = 3;
+  repeated RelatedDefinition related_definitions = 4;
+  string next_review_date = 5;
+  string learned_at = 6;
+  int64 note_id = 7;
+}
+
+message SubmitEtymologyAssemblyAnswerRequest {
+  int64 card_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  string answer = 2 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      pattern: "\\S"
+    }
+  ];
+  int64 response_time_ms = 3;
+}
+
+message SubmitEtymologyAssemblyAnswerResponse {
+  bool correct = 1;
+  string reason = 2;
+  string correct_expression = 3;
+  repeated EtymologyQuizOriginPart origin_parts = 4;
+  repeated RelatedDefinition related_definitions = 5;
+  string next_review_date = 6;
+  string learned_at = 7;
+  int64 note_id = 8;
+}
+
+message StartEtymologyFreeformQuizRequest {
+  repeated string etymology_notebook_ids = 1;
+  repeated string definition_notebook_ids = 2;
+}
+
+message StartEtymologyFreeformQuizResponse {
+  repeated string expressions = 1;
+  map<string, string> next_review_dates = 2;
+}
+
+message SubmitEtymologyFreeformAnswerRequest {
+  string expression = 1 [
+    (buf.validate.field).string = {
+      min_len: 1,
+      pattern: "\\S"
+    }
+  ];
+  repeated EtymologyOriginAnswer answers = 2;
+  int64 response_time_ms = 3;
+}
+
+message SubmitEtymologyFreeformAnswerResponse {
+  bool correct = 1;
+  string reason = 2;
+  repeated EtymologyOriginGrade origin_grades = 3;
+  repeated RelatedDefinition related_definitions = 4;
+  string next_review_date = 5;
+  string learned_at = 6;
+  string notebook_name = 7;
+  int64 note_id = 8;
+}

@@ -10,10 +10,11 @@ import (
 )
 
 type Reader struct {
-	indexes          map[string]Index
-	flashcardIndexes map[string]FlashcardIndex
-	dictionaryMap    map[string]rapidapi.Response
-	definitionsMap   DefinitionsMap
+	indexes           map[string]Index
+	flashcardIndexes  map[string]FlashcardIndex
+	etymologyIndexes  map[string]EtymologyIndex
+	dictionaryMap     map[string]rapidapi.Response
+	definitionsMap    DefinitionsMap
 }
 
 // walkIndexFiles walks a directory and loads index.yml files into the provided map
@@ -48,6 +49,9 @@ func walkIndexFiles[T Index | FlashcardIndex](rootDir string, indexMap map[strin
 		// This works because both Index and FlashcardIndex have a path field
 		switch v := any(&index).(type) {
 		case *Index:
+			if v.Kind == "Etymology" {
+				return nil // Skip etymology notebooks; they are loaded separately
+			}
 			v.Path = filepath.Dir(path)
 			v.IsBook = isBook
 			indexMap[v.ID] = any(*v).(T)
@@ -64,9 +68,23 @@ func NewReader(
 	flashcardDirectories []string,
 	booksDirectories []string,
 	definitionsDirectories []string,
+	etymologyDirectories []string,
 	dictionaryMap map[string]rapidapi.Response,
 ) (*Reader, error) {
 	indexes := make(map[string]Index, 0)
+	etymologyIndexes := make(map[string]EtymologyIndex)
+
+	// Scan all directories for etymology notebooks
+	allDirs := make([]string, 0, len(storyDirectories)+len(flashcardDirectories)+len(etymologyDirectories))
+	allDirs = append(allDirs, storyDirectories...)
+	allDirs = append(allDirs, flashcardDirectories...)
+	allDirs = append(allDirs, etymologyDirectories...)
+	for _, dir := range allDirs {
+		if err := walkEtymologyIndexFiles(dir, etymologyIndexes); err != nil {
+			return nil, fmt.Errorf("walkEtymologyIndexFiles(%s) > %w", dir, err)
+		}
+	}
+
 	for _, dir := range storyDirectories {
 		if err := walkIndexFiles(dir, indexes, false); err != nil {
 			return nil, fmt.Errorf("walkIndexFiles(story, %s) > %w", dir, err)
@@ -91,9 +109,15 @@ func NewReader(
 		return nil, fmt.Errorf("NewDefinitionsMap: %w", err)
 	}
 
+	// Remove etymology indexes from story indexes to avoid parse errors
+	for id := range etymologyIndexes {
+		delete(indexes, id)
+	}
+
 	return &Reader{
 		indexes:          indexes,
 		flashcardIndexes: flashcardIndexes,
+		etymologyIndexes: etymologyIndexes,
 		dictionaryMap:    dictionaryMap,
 		definitionsMap:   definitionsMap,
 	}, nil

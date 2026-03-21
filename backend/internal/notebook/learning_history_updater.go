@@ -316,9 +316,14 @@ func (u *LearningHistoryUpdater) OverrideLog(
 			newInterval := CalculateNextInterval(lastInterval, newEF, logs[i].Quality, correctStreak)
 			logs[i].IntervalDays = newInterval
 
-			if quizType == QuizTypeReverse {
+			switch quizType {
+			case QuizTypeReverse:
 				expr.ReverseEasinessFactor = newEF
-			} else {
+			case QuizTypeEtymologyBreakdown:
+				expr.EtymologyBreakdownEasinessFactor = newEF
+			case QuizTypeEtymologyAssembly:
+				expr.EtymologyAssemblyEasinessFactor = newEF
+			default:
 				expr.EasinessFactor = newEF
 			}
 		}
@@ -336,9 +341,14 @@ func (u *LearningHistoryUpdater) OverrideLog(
 		}
 
 		// Write back the logs
-		if quizType == QuizTypeReverse {
+		switch quizType {
+		case QuizTypeReverse:
 			expr.ReverseLogs = logs
-		} else {
+		case QuizTypeEtymologyBreakdown:
+			expr.EtymologyBreakdownLogs = logs
+		case QuizTypeEtymologyAssembly:
+			expr.EtymologyAssemblyLogs = logs
+		default:
 			expr.LearnedLogs = logs
 		}
 
@@ -375,10 +385,17 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(
 		logs[i].IntervalDays = originalIntervalDays
 		logs[i].OverrideInterval = 0
 
-		if quizType == QuizTypeReverse {
+		switch quizType {
+		case QuizTypeReverse:
 			expr.ReverseEasinessFactor = originalEF
 			expr.ReverseLogs = logs
-		} else {
+		case QuizTypeEtymologyBreakdown:
+			expr.EtymologyBreakdownEasinessFactor = originalEF
+			expr.EtymologyBreakdownLogs = logs
+		case QuizTypeEtymologyAssembly:
+			expr.EtymologyAssemblyEasinessFactor = originalEF
+			expr.EtymologyAssemblyLogs = logs
+		default:
 			expr.EasinessFactor = originalEF
 			expr.LearnedLogs = logs
 		}
@@ -399,6 +416,91 @@ func (u *LearningHistoryUpdater) SetSkippedAt(expression string, skippedAt strin
 	}
 	expr.SkippedAt = skippedAt
 	return true
+}
+
+// UpdateOrCreateExpressionWithQualityForEtymology updates or creates an expression with SM-2 quality assessment for etymology quiz.
+func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
+	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+	quizType QuizType,
+) bool {
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+
+	for hi, h := range u.history {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+
+		if isFlashcard || h.Metadata.Type == "flashcard" {
+			for ei, exp := range h.Expressions {
+				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
+					continue
+				}
+				exp.AddRecordWithQualityForEtymology(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				u.history[hi].Expressions[ei] = exp
+				return true
+			}
+			continue
+		}
+
+		for si, s := range h.Scenes {
+			if s.Metadata.Title != sceneTitle {
+				continue
+			}
+
+			for ei, exp := range s.Expressions {
+				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
+					continue
+				}
+				exp.AddRecordWithQualityForEtymology(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				u.history[hi].Scenes[si].Expressions[ei] = exp
+				return true
+			}
+		}
+	}
+
+	u.createNewExpressionWithQualityForEtymology(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	return false
+}
+
+// createNewExpressionWithQualityForEtymology creates a new expression entry with quality data for etymology quiz
+func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
+	notebookID, storyTitle, sceneTitle, expression string,
+	isCorrect, isKnownWord bool,
+	quality int,
+	responseTimeMs int64,
+	quizType QuizType,
+) {
+	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
+
+	newExpression := LearningHistoryExpression{
+		Expression:     expression,
+		LearnedLogs:    []LearningRecord{},
+		EasinessFactor: DefaultEasinessFactor,
+	}
+	newExpression.AddRecordWithQualityForEtymology(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+
+	logs := newExpression.GetLogsForQuizType(quizType)
+	if len(logs) == 0 {
+		return
+	}
+
+	if isFlashcard || u.history[storyIndex].Metadata.Type == "flashcard" {
+		u.history[storyIndex].Expressions = append(
+			u.history[storyIndex].Expressions,
+			newExpression,
+		)
+		return
+	}
+
+	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
+	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
+		u.history[storyIndex].Scenes[sceneIndex].Expressions,
+		newExpression,
+	)
 }
 
 // ClearSkippedAt clears the skipped_at field on an expression.

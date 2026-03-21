@@ -48,6 +48,9 @@ const (
 	// NotebookServiceDeleteDefinitionProcedure is the fully-qualified name of the NotebookService's
 	// DeleteDefinition RPC.
 	NotebookServiceDeleteDefinitionProcedure = "/api.v1.NotebookService/DeleteDefinition"
+	// NotebookServiceGetEtymologyNotebookProcedure is the fully-qualified name of the NotebookService's
+	// GetEtymologyNotebook RPC.
+	NotebookServiceGetEtymologyNotebookProcedure = "/api.v1.NotebookService/GetEtymologyNotebook"
 )
 
 // NotebookServiceClient is a client for the api.v1.NotebookService service.
@@ -57,6 +60,7 @@ type NotebookServiceClient interface {
 	LookupWord(context.Context, *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error)
 	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
 	DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error)
+	GetEtymologyNotebook(context.Context, *connect.Request[v1.GetEtymologyNotebookRequest]) (*connect.Response[v1.GetEtymologyNotebookResponse], error)
 }
 
 // NewNotebookServiceClient constructs a client for the api.v1.NotebookService service. By default,
@@ -100,16 +104,23 @@ func NewNotebookServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(notebookServiceMethods.ByName("DeleteDefinition")),
 			connect.WithClientOptions(opts...),
 		),
+		getEtymologyNotebook: connect.NewClient[v1.GetEtymologyNotebookRequest, v1.GetEtymologyNotebookResponse](
+			httpClient,
+			baseURL+NotebookServiceGetEtymologyNotebookProcedure,
+			connect.WithSchema(notebookServiceMethods.ByName("GetEtymologyNotebook")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // notebookServiceClient implements NotebookServiceClient.
 type notebookServiceClient struct {
-	getNotebookDetail  *connect.Client[v1.GetNotebookDetailRequest, v1.GetNotebookDetailResponse]
-	exportNotebookPDF  *connect.Client[v1.ExportNotebookPDFRequest, v1.ExportNotebookPDFResponse]
-	lookupWord         *connect.Client[v1.LookupWordRequest, v1.LookupWordResponse]
-	registerDefinition *connect.Client[v1.RegisterDefinitionRequest, v1.RegisterDefinitionResponse]
-	deleteDefinition   *connect.Client[v1.DeleteDefinitionRequest, v1.DeleteDefinitionResponse]
+	getNotebookDetail    *connect.Client[v1.GetNotebookDetailRequest, v1.GetNotebookDetailResponse]
+	exportNotebookPDF    *connect.Client[v1.ExportNotebookPDFRequest, v1.ExportNotebookPDFResponse]
+	lookupWord           *connect.Client[v1.LookupWordRequest, v1.LookupWordResponse]
+	registerDefinition   *connect.Client[v1.RegisterDefinitionRequest, v1.RegisterDefinitionResponse]
+	deleteDefinition     *connect.Client[v1.DeleteDefinitionRequest, v1.DeleteDefinitionResponse]
+	getEtymologyNotebook *connect.Client[v1.GetEtymologyNotebookRequest, v1.GetEtymologyNotebookResponse]
 }
 
 // GetNotebookDetail calls api.v1.NotebookService.GetNotebookDetail.
@@ -137,6 +148,11 @@ func (c *notebookServiceClient) DeleteDefinition(ctx context.Context, req *conne
 	return c.deleteDefinition.CallUnary(ctx, req)
 }
 
+// GetEtymologyNotebook calls api.v1.NotebookService.GetEtymologyNotebook.
+func (c *notebookServiceClient) GetEtymologyNotebook(ctx context.Context, req *connect.Request[v1.GetEtymologyNotebookRequest]) (*connect.Response[v1.GetEtymologyNotebookResponse], error) {
+	return c.getEtymologyNotebook.CallUnary(ctx, req)
+}
+
 // NotebookServiceHandler is an implementation of the api.v1.NotebookService service.
 type NotebookServiceHandler interface {
 	GetNotebookDetail(context.Context, *connect.Request[v1.GetNotebookDetailRequest]) (*connect.Response[v1.GetNotebookDetailResponse], error)
@@ -144,6 +160,7 @@ type NotebookServiceHandler interface {
 	LookupWord(context.Context, *connect.Request[v1.LookupWordRequest]) (*connect.Response[v1.LookupWordResponse], error)
 	RegisterDefinition(context.Context, *connect.Request[v1.RegisterDefinitionRequest]) (*connect.Response[v1.RegisterDefinitionResponse], error)
 	DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error)
+	GetEtymologyNotebook(context.Context, *connect.Request[v1.GetEtymologyNotebookRequest]) (*connect.Response[v1.GetEtymologyNotebookResponse], error)
 }
 
 // NewNotebookServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -183,6 +200,12 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 		connect.WithSchema(notebookServiceMethods.ByName("DeleteDefinition")),
 		connect.WithHandlerOptions(opts...),
 	)
+	notebookServiceGetEtymologyNotebookHandler := connect.NewUnaryHandler(
+		NotebookServiceGetEtymologyNotebookProcedure,
+		svc.GetEtymologyNotebook,
+		connect.WithSchema(notebookServiceMethods.ByName("GetEtymologyNotebook")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.NotebookService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case NotebookServiceGetNotebookDetailProcedure:
@@ -195,6 +218,8 @@ func NewNotebookServiceHandler(svc NotebookServiceHandler, opts ...connect.Handl
 			notebookServiceRegisterDefinitionHandler.ServeHTTP(w, r)
 		case NotebookServiceDeleteDefinitionProcedure:
 			notebookServiceDeleteDefinitionHandler.ServeHTTP(w, r)
+		case NotebookServiceGetEtymologyNotebookProcedure:
+			notebookServiceGetEtymologyNotebookHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -222,4 +247,8 @@ func (UnimplementedNotebookServiceHandler) RegisterDefinition(context.Context, *
 
 func (UnimplementedNotebookServiceHandler) DeleteDefinition(context.Context, *connect.Request[v1.DeleteDefinitionRequest]) (*connect.Response[v1.DeleteDefinitionResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.DeleteDefinition is not implemented"))
+}
+
+func (UnimplementedNotebookServiceHandler) GetEtymologyNotebook(context.Context, *connect.Request[v1.GetEtymologyNotebookRequest]) (*connect.Response[v1.GetEtymologyNotebookResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.NotebookService.GetEtymologyNotebook is not implemented"))
 }

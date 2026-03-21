@@ -51,7 +51,7 @@ func TestYAMLNoteRepository_FindAll(t *testing.T) {
 `
 				env.createCardFile(storyDir, "season01.yml", content)
 
-				reader, err := NewReader([]string{env.tempDir}, nil, nil, nil, nil)
+				reader, err := NewReader([]string{env.tempDir}, nil, nil, nil, nil, nil)
 				require.NoError(t, err)
 				return reader
 			},
@@ -93,7 +93,7 @@ func TestYAMLNoteRepository_FindAll(t *testing.T) {
 `
 				env.createCardFile(flashcardDir, "cards.yml", content)
 
-				reader, err := NewReader(nil, []string{env.tempDir}, nil, nil, nil)
+				reader, err := NewReader(nil, []string{env.tempDir}, nil, nil, nil, nil)
 				require.NoError(t, err)
 				return reader
 			},
@@ -159,7 +159,7 @@ func TestYAMLNoteRepository_FindAll(t *testing.T) {
 				require.NoError(t, err)
 
 				// Use storyDir's parent for stories, flashcardBaseDir for flashcards
-				reader, err := NewReader([]string{env.tempDir}, []string{flashcardBaseDir}, nil, nil, nil)
+				reader, err := NewReader([]string{env.tempDir}, []string{flashcardBaseDir}, nil, nil, nil, nil)
 				require.NoError(t, err)
 				return reader
 			},
@@ -206,7 +206,7 @@ func TestYAMLNoteRepository_FindAll(t *testing.T) {
 				err = os.WriteFile(filepath.Join(bookDir, "chapter01.yml"), []byte(chapterContent), 0644)
 				require.NoError(t, err)
 
-				reader, err := NewReader(nil, nil, []string{booksDir}, nil, nil)
+				reader, err := NewReader(nil, nil, []string{booksDir}, nil, nil, nil)
 				require.NoError(t, err)
 				return reader
 			},
@@ -224,7 +224,7 @@ func TestYAMLNoteRepository_FindAll(t *testing.T) {
 		{
 			name: "empty reader returns empty slice",
 			setup: func(t *testing.T) *Reader {
-				reader, err := NewReader(nil, nil, nil, nil, nil)
+				reader, err := NewReader(nil, nil, nil, nil, nil, nil)
 				require.NoError(t, err)
 				return reader
 			},

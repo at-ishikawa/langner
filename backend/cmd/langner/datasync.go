@@ -210,6 +210,7 @@ func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *d
 		cfg.Notebooks.FlashcardsDirectories,
 		cfg.Notebooks.BooksDirectories,
 		cfg.Notebooks.DefinitionsDirectories,
+		cfg.Notebooks.EtymologyDirectories,
 		nil,
 	)
 	if err != nil {
@@ -237,7 +238,7 @@ func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, wr
 }
 
 func readNotesFromDirs(ctx context.Context, storyDirs, flashcardDirs, bookDirs, definitionDirs []string) ([]notebook.NoteRecord, error) {
-	reader, err := notebook.NewReader(storyDirs, flashcardDirs, bookDirs, definitionDirs, nil)
+	reader, err := notebook.NewReader(storyDirs, flashcardDirs, bookDirs, definitionDirs, nil, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create reader: %w", err)
 	}

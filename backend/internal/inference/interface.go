@@ -11,6 +11,7 @@ type Client interface {
 	AnswerMeanings(ctx context.Context, params AnswerMeaningsRequest) (AnswerMeaningsResponse, error)
 	ValidateWordForm(ctx context.Context, params ValidateWordFormRequest) (ValidateWordFormResponse, error)
 	LookupWord(ctx context.Context, params LookupWordRequest) (LookupWordResponse, error)
+	GradeEtymologyBreakdown(ctx context.Context, params GradeEtymologyBreakdownRequest) (GradeEtymologyBreakdownResponse, error)
 }
 
 // LookupWordRequest holds parameters for looking up a word definition
@@ -80,6 +81,45 @@ type AnswersForContext struct {
 const (
 	DefaultMaxRetryAttempts = 3
 )
+
+// EtymologyExpectedOrigin represents an expected origin part for grading
+type EtymologyExpectedOrigin struct {
+	Origin   string `json:"origin"`
+	Type     string `json:"type"`
+	Language string `json:"language"`
+	Meaning  string `json:"meaning"`
+}
+
+// EtymologyUserOrigin represents a user's answer for an origin part
+type EtymologyUserOrigin struct {
+	Origin  string `json:"origin"`
+	Meaning string `json:"meaning"`
+}
+
+// GradeEtymologyBreakdownRequest holds parameters for grading etymology breakdown answers
+type GradeEtymologyBreakdownRequest struct {
+	Expression      string                    `json:"expression"`
+	ExpectedOrigins []EtymologyExpectedOrigin `json:"expected_origins"`
+	UserOrigins     []EtymologyUserOrigin     `json:"user_origins"`
+	ResponseTimeMs  int64                     `json:"response_time_ms,omitempty"`
+}
+
+// EtymologyOriginGrade represents the grade for a single origin part
+type EtymologyOriginGrade struct {
+	UserOrigin     string                   `json:"user_origin"`
+	UserMeaning    string                   `json:"user_meaning"`
+	OriginCorrect  bool                     `json:"origin_correct"`
+	MeaningCorrect bool                     `json:"meaning_correct"`
+	CorrectOrigin  *EtymologyExpectedOrigin `json:"correct_origin,omitempty"`
+}
+
+// GradeEtymologyBreakdownResponse holds the result of grading etymology breakdown
+type GradeEtymologyBreakdownResponse struct {
+	Correct      bool                   `json:"correct"`
+	Reason       string                 `json:"reason"`
+	Quality      int                    `json:"quality"` // 1-5
+	OriginGrades []EtymologyOriginGrade `json:"origin_grades"`
+}
 
 // ValidateWordFormRequest holds parameters for validating a word form in reverse quiz
 type ValidateWordFormRequest struct {
