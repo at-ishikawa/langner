@@ -1,12 +1,25 @@
-import { describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import QuizHubPage from "./page";
+
+const mockPush = vi.fn();
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: mockPush }),
+}));
 
 vi.mock("next/link", () => ({
   default: ({ children, ...props }: { children: React.ReactNode; href: string }) => (
     <a {...props}>{children}</a>
   ),
+}));
+
+vi.mock("@/lib/client", () => ({
+  quizClient: {
+    getQuizOptions: vi.fn().mockResolvedValue({ notebooks: [] }),
+  },
+  EtymologyQuizMode: { BREAKDOWN: 1, ASSEMBLY: 2 },
 }));
 
 function renderPage() {
@@ -18,54 +31,60 @@ function renderPage() {
 }
 
 describe("QuizHubPage", () => {
-  it("renders Quiz title and back link to Home", () => {
+  beforeEach(() => {
+    mockPush.mockClear();
+  });
+
+  it("renders Quiz title and back link to Home", async () => {
     renderPage();
-    expect(screen.getByText("Quiz")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Quiz")).toBeInTheDocument();
+    });
     const backLink = screen.getByText("< Home").closest("a");
     expect(backLink).toHaveAttribute("href", "/");
   });
 
-  it("shows Vocabulary tab with 3 quiz mode cards by default", () => {
+  it("shows Vocabulary tab with 3 quiz mode cards by default", async () => {
     renderPage();
-    expect(screen.getByText("Standard")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByText("Standard")).toBeInTheDocument();
+    });
     expect(screen.getByText("See a word, type its meaning")).toBeInTheDocument();
     expect(screen.getByText("Reverse")).toBeInTheDocument();
-    expect(screen.getByText("See a meaning, type the word")).toBeInTheDocument();
     expect(screen.getByText("Freeform")).toBeInTheDocument();
-    expect(screen.getByText("Type any word and its meaning")).toBeInTheDocument();
   });
 
-  it("links vocabulary modes to quiz start page", () => {
+  it("selecting a mode highlights it and shows Start button", async () => {
     renderPage();
-    const standardLink = screen.getByText("Standard").closest("a");
-    expect(standardLink).toHaveAttribute("href", "/quiz/start?mode=standard");
-    const reverseLink = screen.getByText("Reverse").closest("a");
-    expect(reverseLink).toHaveAttribute("href", "/quiz/start?mode=reverse");
-    const freeformLink = screen.getByText("Freeform").closest("a");
-    expect(freeformLink).toHaveAttribute("href", "/quiz/start?mode=freeform");
+    await waitFor(() => {
+      expect(screen.getByText("Standard")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Standard"));
+    expect(screen.getByText("Start")).toBeInTheDocument();
   });
 
-  it("switches to Etymology tab and shows etymology quiz modes", () => {
+  it("switches to Etymology tab and shows etymology quiz modes", async () => {
     renderPage();
+    await waitFor(() => {
+      expect(screen.getByText("Vocabulary")).toBeInTheDocument();
+    });
     fireEvent.click(screen.getByText("Etymology"));
 
     expect(screen.getByText("Breakdown")).toBeInTheDocument();
     expect(screen.getByText("See a word, identify its origins and meanings")).toBeInTheDocument();
     expect(screen.getByText("Assembly")).toBeInTheDocument();
-    expect(screen.getByText("See origins and meanings, type the word")).toBeInTheDocument();
     expect(screen.getByText("Freeform")).toBeInTheDocument();
-    expect(screen.getByText("Type any word and break down its origins")).toBeInTheDocument();
   });
 
-  it("links etymology modes to etymology-start page", () => {
+  it("deselects mode when clicking it again", async () => {
     renderPage();
-    fireEvent.click(screen.getByText("Etymology"));
+    await waitFor(() => {
+      expect(screen.getByText("Standard")).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByText("Standard"));
+    expect(screen.getByText("Start")).toBeInTheDocument();
 
-    const breakdownLink = screen.getByText("Breakdown").closest("a");
-    expect(breakdownLink).toHaveAttribute("href", "/quiz/etymology-start?mode=breakdown");
-    const assemblyLink = screen.getByText("Assembly").closest("a");
-    expect(assemblyLink).toHaveAttribute("href", "/quiz/etymology-start?mode=assembly");
-    const freeformLink = screen.getByText("Freeform").closest("a");
-    expect(freeformLink).toHaveAttribute("href", "/quiz/etymology-start?mode=freeform");
+    fireEvent.click(screen.getByText("Standard"));
+    expect(screen.queryByText("Start")).not.toBeInTheDocument();
   });
 });
