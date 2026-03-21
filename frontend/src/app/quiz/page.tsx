@@ -59,8 +59,13 @@ export default function QuizStartPage() {
 
   const isEtymology = quizType === "etymology-breakdown";
 
+  // For etymology quiz, separate etymology notebooks from definition notebooks
+  const etymologyNotebooks = notebooks.filter((n) => n.kind === "Etymology");
+  const definitionNotebooks = notebooks.filter((n) => n.kind !== "Etymology");
+  const displayedNotebooks = isEtymology ? definitionNotebooks : notebooks;
+
   const allSelected =
-    notebooks.length > 0 && selectedIds.size === notebooks.length;
+    displayedNotebooks.length > 0 && displayedNotebooks.every((n) => selectedIds.has(n.notebookId));
 
   const toggleNotebook = (id: string) => {
     setSelectedIds((prev) => {
@@ -78,11 +83,11 @@ export default function QuizStartPage() {
     if (allSelected) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(notebooks.map((n) => n.notebookId)));
+      setSelectedIds(new Set(displayedNotebooks.map((n) => n.notebookId)));
     }
   };
 
-  const totalDue = notebooks
+  const totalDue = displayedNotebooks
     .filter((n) => selectedIds.has(n.notebookId))
     .reduce((sum, n) => {
       if (isEtymology) return sum + n.etymologyReviewCount;
@@ -93,6 +98,7 @@ export default function QuizStartPage() {
   const handleQuizTypeChange = (type: QuizType) => {
     setQuizTypeLocal(type);
     setQuizType(type);
+    setSelectedIds(new Set());
   };
 
   const handleStart = async () => {
@@ -135,12 +141,14 @@ export default function QuizStartPage() {
         setFreeformNextReviewDates(res.expressionNextReviewDate ?? {});
         router.push("/quiz/freeform");
       } else if (isEtymology) {
-        const selectedNotebookIds = Array.from(selectedIds);
+        // User selects definition notebooks; etymology notebooks are auto-included
+        const definitionIds = Array.from(selectedIds);
+        const etymologyIds = etymologyNotebooks.map((n) => n.notebookId);
         if (etymologyMode === "freeform") {
           setQuizType("etymology-freeform" as QuizType);
           const res = await quizClient.startEtymologyFreeformQuiz({
-            etymologyNotebookIds: selectedNotebookIds,
-            definitionNotebookIds: selectedNotebookIds,
+            etymologyNotebookIds: etymologyIds,
+            definitionNotebookIds: definitionIds,
           });
           setEtymologyFreeformExpressions(res.expressions ?? []);
           setEtymologyFreeformNextReviewDates(res.nextReviewDates ?? {});
@@ -154,8 +162,8 @@ export default function QuizStartPage() {
             : "etymology-assembly" as QuizType;
           setQuizType(storeType);
           const res = await quizClient.startEtymologyQuiz({
-            etymologyNotebookIds: selectedNotebookIds,
-            definitionNotebookIds: selectedNotebookIds,
+            etymologyNotebookIds: etymologyIds,
+            definitionNotebookIds: definitionIds,
             mode,
             includeUnstudied,
           });
@@ -287,7 +295,7 @@ export default function QuizStartPage() {
               <Checkbox.Label fontWeight="bold">All notebooks</Checkbox.Label>
             </Checkbox.Root>
 
-            {notebooks.map((notebook) => (
+            {displayedNotebooks.map((notebook) => (
               <Checkbox.Root
                 key={notebook.notebookId}
                 checked={selectedIds.has(notebook.notebookId)}
