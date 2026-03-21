@@ -519,10 +519,22 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 						})
 						originWordCounts[strings.ToLower(ref.Origin)]++
 					}
-					definitions = append(definitions, &apiv1.EtymologyDefinition{
+					// Collect context from the scene (statements, conversations)
+				var contexts []string
+				for _, stmt := range scene.Statements {
+					contexts = append(contexts, stmt)
+				}
+				for _, conv := range scene.Conversations {
+					contexts = append(contexts, conv.Speaker+": "+conv.Quote)
+				}
+
+				definitions = append(definitions, &apiv1.EtymologyDefinition{
 						Expression:   def.Expression,
 						Meaning:      def.Meaning,
 						PartOfSpeech: def.PartOfSpeech,
+						Note:         def.Memo,
+						Examples:     def.Examples,
+						Contexts:     contexts,
 						OriginParts:  parts,
 						NotebookName: nbID,
 					})
@@ -549,6 +561,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 			Expression:   def.GetExpression(),
 			Meaning:      def.Meaning,
 			PartOfSpeech: def.PartOfSpeech,
+			Note:         def.Note,
 			OriginParts:  parts,
 			NotebookName: def.NotebookName,
 		})
@@ -580,6 +593,8 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					Expression:   card.Expression,
 					Meaning:      card.Meaning,
 					PartOfSpeech: card.PartOfSpeech,
+					Note:         card.Memo,
+					Examples:     card.Examples,
 					OriginParts:  parts,
 					NotebookName: nbID,
 				})

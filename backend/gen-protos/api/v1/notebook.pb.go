@@ -1239,6 +1239,8 @@ type EtymologyDefinition struct {
 	Note          string                 `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
 	OriginParts   []*EtymologyOriginPart `protobuf:"bytes,5,rep,name=origin_parts,json=originParts,proto3" json:"origin_parts,omitempty"`
 	NotebookName  string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	Examples      []string               `protobuf:"bytes,7,rep,name=examples,proto3" json:"examples,omitempty"`
+	Contexts      []string               `protobuf:"bytes,8,rep,name=contexts,proto3" json:"contexts,omitempty"` // statements or conversations from the source scene
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1313,6 +1315,20 @@ func (x *EtymologyDefinition) GetNotebookName() string {
 		return x.NotebookName
 	}
 	return ""
+}
+
+func (x *EtymologyDefinition) GetExamples() []string {
+	if x != nil {
+		return x.Examples
+	}
+	return nil
+}
+
+func (x *EtymologyDefinition) GetContexts() []string {
+	if x != nil {
+		return x.Contexts
+	}
+	return nil
 }
 
 type EtymologyMeaningGroup struct {
@@ -1606,7 +1622,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x18\n" +
 	"\ameaning\x18\x04 \x01(\tR\ameaning\x12\x1d\n" +
 	"\n" +
-	"word_count\x18\x05 \x01(\x05R\twordCount\"\xee\x01\n" +
+	"word_count\x18\x05 \x01(\x05R\twordCount\"\xa6\x02\n" +
 	"\x13EtymologyDefinition\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -1615,7 +1631,9 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\x0epart_of_speech\x18\x03 \x01(\tR\fpartOfSpeech\x12\x12\n" +
 	"\x04note\x18\x04 \x01(\tR\x04note\x12>\n" +
 	"\forigin_parts\x18\x05 \x03(\v2\x1b.api.v1.EtymologyOriginPartR\voriginParts\x12#\n" +
-	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\"h\n" +
+	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\x12\x1a\n" +
+	"\bexamples\x18\a \x03(\tR\bexamples\x12\x1a\n" +
+	"\bcontexts\x18\b \x03(\tR\bcontexts\"h\n" +
 	"\x15EtymologyMeaningGroup\x12\x18\n" +
 	"\ameaning\x18\x01 \x01(\tR\ameaning\x125\n" +
 	"\aorigins\x18\x02 \x03(\v2\x1b.api.v1.EtymologyOriginPartR\aorigins\"G\n" +

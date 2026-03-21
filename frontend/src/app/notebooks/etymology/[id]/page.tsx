@@ -194,6 +194,29 @@ function OriginDetailView({
               <Text fontSize="sm" color="#333" mb={2}>
                 {def.meaning}
               </Text>
+              {def.note && (
+                <Text fontSize="xs" color="#666" mb={2} fontStyle="italic">
+                  {def.note}
+                </Text>
+              )}
+              {def.examples && def.examples.length > 0 && (
+                <Box mb={2} pl={3} borderLeftWidth="2px" borderColor="#e5e7eb">
+                  {def.examples.map((ex, k) => (
+                    <Text key={k} fontSize="xs" color="#555" fontStyle="italic">
+                      {ex}
+                    </Text>
+                  ))}
+                </Box>
+              )}
+              {def.contexts && def.contexts.length > 0 && (
+                <Box mb={2} pl={3} borderLeftWidth="2px" borderColor="#dbeafe">
+                  {def.contexts.map((ctx, k) => (
+                    <Text key={k} fontSize="xs" color="#555">
+                      {ctx}
+                    </Text>
+                  ))}
+                </Box>
+              )}
               <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                 {def.originParts.map((part, j) => (
                   <Box key={j} display="flex" alignItems="center" gap={1}>
