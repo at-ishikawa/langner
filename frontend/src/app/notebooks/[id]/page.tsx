@@ -292,9 +292,9 @@ export default function NotebookDetailPage() {
   return (
     <Box p={4} maxW="2xl" mx="auto">
       <Box mb={2}>
-        <Link href="/notebooks">
+        <Link href="/learn">
           <Text color="blue.600" fontSize="sm">
-            &larr; Back to notebooks
+            &larr; Back to Learn
           </Text>
         </Link>
       </Box>

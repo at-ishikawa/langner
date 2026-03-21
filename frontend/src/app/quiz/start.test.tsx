@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import QuizStartPage from "./page";
+import VocabularyQuizStartPage from "./start/page";
 import * as client from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 
@@ -18,6 +18,7 @@ vi.mock("@/lib/client", () => ({
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: pushMock }),
+  useSearchParams: () => new URLSearchParams("mode=standard"),
 }));
 
 vi.mock("next/link", () => ({
@@ -29,7 +30,7 @@ vi.mock("next/link", () => ({
 function renderPage() {
   return render(
     <ChakraProvider value={defaultSystem}>
-      <QuizStartPage />
+      <VocabularyQuizStartPage />
     </ChakraProvider>
   );
 }
@@ -46,7 +47,7 @@ const mockFlashcards = [
   },
 ];
 
-describe("QuizStartPage", () => {
+describe("VocabularyQuizStartPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useQuizStore.getState().reset();
@@ -56,35 +57,38 @@ describe("QuizStartPage", () => {
     } as ReturnType<typeof client.quizClient.getQuizOptions> extends Promise<infer T> ? T : never);
   });
 
-  it("sets quizType to standard in store when starting standard quiz with stale store state", async () => {
-    // Simulate stale store state from a previous reverse quiz session
-    useQuizStore.getState().setQuizType("reverse");
+  it("renders Standard Quiz title and back link to Quiz hub", async () => {
+    renderPage();
 
+    await waitFor(() => {
+      expect(screen.getByText("Standard Quiz")).toBeInTheDocument();
+    });
+
+    const backLink = screen.getByText("< Quiz").closest("a");
+    expect(backLink).toHaveAttribute("href", "/quiz");
+  });
+
+  it("starts standard quiz with selected notebook", async () => {
     vi.mocked(client.quizClient.startQuiz).mockResolvedValue({
       flashcards: mockFlashcards,
     } as ReturnType<typeof client.quizClient.startQuiz> extends Promise<infer T> ? T : never);
 
     renderPage();
 
-    // Wait for notebooks to load
     await waitFor(() => {
       expect(screen.getByText("English Phrases")).toBeInTheDocument();
     });
 
     const user = userEvent.setup();
 
-    // Select a notebook via the checkbox
     const checkbox = screen.getByRole("checkbox", { name: /English Phrases/ });
     await user.click(checkbox);
 
-    // Click Start (with "Standard" as default local state, without clicking the Standard option)
     const startButton = screen.getByRole("button", { name: "Start" });
     await user.click(startButton);
 
     await waitFor(() => {
-      // Verify store quizType was updated to "standard"
       expect(useQuizStore.getState().quizType).toBe("standard");
-      // Verify navigation to /quiz/standard
       expect(pushMock).toHaveBeenCalledWith("/quiz/standard");
     });
   });

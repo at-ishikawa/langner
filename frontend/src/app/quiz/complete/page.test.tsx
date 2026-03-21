@@ -89,7 +89,7 @@ describe("SessionCompletePage", () => {
     }
   });
 
-  it("resets store and navigates to / on Back to Start click", () => {
+  it("resets store and navigates to /quiz on Back to Start click", () => {
     useQuizStore.setState({ results: mockResults });
 
     renderPage();
@@ -100,7 +100,7 @@ describe("SessionCompletePage", () => {
     expect(state.results).toHaveLength(0);
     expect(state.flashcards).toHaveLength(0);
     expect(state.currentIndex).toBe(0);
-    expect(pushMock).toHaveBeenCalledWith("/");
+    expect(pushMock).toHaveBeenCalledWith("/quiz");
   });
 
   it("shows Incorrect section before Correct section", () => {

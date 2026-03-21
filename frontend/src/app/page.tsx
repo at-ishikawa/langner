@@ -5,28 +5,22 @@ import { Box, Heading, Text } from "@chakra-ui/react";
 
 const features = [
   {
-    href: "/quiz",
-    title: "Quiz",
-    description: "Practice vocabulary with spaced repetition",
-    icon: "🧠",
-  },
-  {
-    href: "/notebooks",
-    title: "Notebooks",
-    description: "Browse stories, scenes, and vocabulary",
-    icon: "📖",
-  },
-  {
     href: "/books",
     title: "Books",
     description: "Read books and look up words",
-    icon: "📚",
+    icon: "B",
   },
   {
-    href: "/etymology",
-    title: "Etymology",
-    description: "Explore word origins, roots, and prefixes",
-    icon: "🌳",
+    href: "/learn",
+    title: "Learn",
+    description: "Browse vocabulary notebooks and etymology origins",
+    icon: "L",
+  },
+  {
+    href: "/quiz",
+    title: "Quiz",
+    description: "Practice vocabulary and etymology with spaced repetition",
+    icon: "Q",
   },
 ];
 
@@ -45,7 +39,9 @@ export default function HomePage() {
           <Link key={feature.href} href={feature.href}>
             <Box
               p={5}
+              bg="white"
               borderWidth="1px"
+              borderColor="#e5e7eb"
               borderRadius="lg"
               _hover={{ bg: "bg.muted", borderColor: "blue.400" }}
               cursor="pointer"
@@ -53,8 +49,21 @@ export default function HomePage() {
               alignItems="center"
               gap={4}
             >
-              <Text fontSize="2xl">{feature.icon}</Text>
-              <Box>
+              <Box
+                w="48px"
+                h="48px"
+                borderRadius="10px"
+                bg="#eff6ff"
+                display="flex"
+                alignItems="center"
+                justifyContent="center"
+                flexShrink={0}
+              >
+                <Text fontSize="xl" fontWeight="bold" color="#2563eb">
+                  {feature.icon}
+                </Text>
+              </Box>
+              <Box flex="1">
                 <Text fontWeight="semibold" fontSize="lg">
                   {feature.title}
                 </Text>
@@ -62,6 +71,9 @@ export default function HomePage() {
                   {feature.description}
                 </Text>
               </Box>
+              <Text fontSize="md" color="#999" flexShrink={0}>
+                &rsaquo;
+              </Text>
             </Box>
           </Link>
         ))}

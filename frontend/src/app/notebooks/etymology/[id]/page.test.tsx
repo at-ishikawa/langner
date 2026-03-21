@@ -109,10 +109,10 @@ describe("EtymologyNotebookPage - Origin List", () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText("Etymology")).toBeInTheDocument();
-      expect(screen.getByText("< Notebooks")).toBeInTheDocument();
+      expect(screen.getByText("< Learn")).toBeInTheDocument();
     });
-    const backLink = screen.getByText("< Notebooks").closest("a");
-    expect(backLink).toHaveAttribute("href", "/notebooks");
+    const backLink = screen.getByText("< Learn").closest("a");
+    expect(backLink).toHaveAttribute("href", "/learn");
   });
 
   it("renders origin cards with type and language badges", async () => {

@@ -226,7 +226,7 @@ export default function SessionCompletePage() {
 
   const handleBackToStart = () => {
     reset();
-    router.push("/");
+    router.push("/quiz");
   };
 
   return (

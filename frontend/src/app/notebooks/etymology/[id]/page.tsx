@@ -435,13 +435,13 @@ export default function EtymologyNotebookPage() {
       {/* Header */}
       <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
         <Box px={4} pt={2}>
-          <Link href="/notebooks">
+          <Link href="/learn">
             <Text
               color="#999"
               fontSize="xs"
               _hover={{ textDecoration: "underline" }}
             >
-              &lt; Notebooks
+              &lt; Learn
             </Text>
           </Link>
         </Box>

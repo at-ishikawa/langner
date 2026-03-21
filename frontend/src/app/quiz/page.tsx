@@ -1,372 +1,163 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import Link from "next/link";
-import {
-  Box,
-  Button,
-  Checkbox,
-  Heading,
-  Spinner,
-  Switch,
-  Text,
-  VStack,
-} from "@chakra-ui/react";
-import { quizClient, EtymologyQuizMode, type NotebookSummary } from "@/lib/client";
-import { useQuizStore, type QuizType } from "@/store/quizStore";
+import { Box, Heading, Text } from "@chakra-ui/react";
 
-const quizTypes: { value: QuizType; label: string; description: string }[] = [
-  { value: "standard", label: "Standard", description: "See word -> Type meaning" },
-  { value: "reverse", label: "Reverse", description: "See meaning -> Type word" },
-  { value: "freeform", label: "Freeform", description: "Type any word + meaning" },
-  { value: "etymology-breakdown", label: "Etymology", description: "Practice word origins and roots" },
+type Tab = "vocabulary" | "etymology";
+
+const vocabularyModes = [
+  {
+    href: "/quiz/start?mode=standard",
+    title: "Standard",
+    description: "See a word, type its meaning",
+  },
+  {
+    href: "/quiz/start?mode=reverse",
+    title: "Reverse",
+    description: "See a meaning, type the word",
+  },
+  {
+    href: "/quiz/start?mode=freeform",
+    title: "Freeform",
+    description: "Type any word and its meaning",
+  },
 ];
 
-type EtymologyMode = "breakdown" | "assembly" | "freeform";
+const etymologyModes = [
+  {
+    href: "/quiz/etymology-start?mode=breakdown",
+    title: "Breakdown",
+    description: "See a word, identify its origins and meanings",
+  },
+  {
+    href: "/quiz/etymology-start?mode=assembly",
+    title: "Assembly",
+    description: "See origins and meanings, type the word",
+  },
+  {
+    href: "/quiz/etymology-start?mode=freeform",
+    title: "Freeform",
+    description: "Type any word and break down its origins",
+  },
+];
 
-export default function QuizStartPage() {
-  const router = useRouter();
-  const setFlashcards = useQuizStore((s) => s.setFlashcards);
-  const setReverseFlashcards = useQuizStore((s) => s.setReverseFlashcards);
-  const setWordCount = useQuizStore((s) => s.setWordCount);
-  const setFreeformExpressions = useQuizStore((s) => s.setFreeformExpressions);
-  const setFreeformNextReviewDates = useQuizStore((s) => s.setFreeformNextReviewDates);
-  const setQuizType = useQuizStore((s) => s.setQuizType);
-  const setEtymologyCards = useQuizStore((s) => s.setEtymologyCards);
-  const setEtymologyFreeformExpressions = useQuizStore((s) => s.setEtymologyFreeformExpressions);
-  const setEtymologyFreeformNextReviewDates = useQuizStore((s) => s.setEtymologyFreeformNextReviewDates);
-
-  const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
-  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
-  const [includeUnstudied, setIncludeUnstudied] = useState(false);
-  const [listMissingContext, setListMissingContext] = useState(false);
-  const [quizType, setQuizTypeLocal] = useState<QuizType>("standard");
-  const [etymologyMode, setEtymologyMode] = useState<EtymologyMode>("breakdown");
-  const [loading, setLoading] = useState(true);
-  const [starting, setStarting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    quizClient
-      .getQuizOptions({})
-      .then((res) => {
-        setNotebooks(res.notebooks ?? []);
-      })
-      .catch(() => setError("Failed to load notebooks"))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const isEtymology = quizType === "etymology-breakdown";
-
-  // For etymology quiz, separate etymology notebooks from definition notebooks
-  const etymologyNotebooks = notebooks.filter((n) => n.kind === "Etymology");
-  const definitionNotebooks = notebooks.filter((n) => n.kind !== "Etymology" && n.etymologyReviewCount > 0);
-  const displayedNotebooks = isEtymology ? definitionNotebooks : notebooks;
-
-  const allSelected =
-    displayedNotebooks.length > 0 && displayedNotebooks.every((n) => selectedIds.has(n.notebookId));
-
-  const toggleNotebook = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-      } else {
-        next.add(id);
-      }
-      return next;
-    });
-  };
-
-  const toggleAll = () => {
-    if (allSelected) {
-      setSelectedIds(new Set());
-    } else {
-      setSelectedIds(new Set(displayedNotebooks.map((n) => n.notebookId)));
-    }
-  };
-
-  const totalDue = displayedNotebooks
-    .filter((n) => selectedIds.has(n.notebookId))
-    .reduce((sum, n) => {
-      if (isEtymology) return sum + n.etymologyReviewCount;
-      if (quizType === "reverse") return sum + n.reverseReviewCount;
-      return sum + n.reviewCount;
-    }, 0);
-
-  const handleQuizTypeChange = (type: QuizType) => {
-    setQuizTypeLocal(type);
-    setQuizType(type);
-    setSelectedIds(new Set());
-  };
-
-  const handleStart = async () => {
-    setStarting(true);
-    try {
-      if (quizType === "standard") {
-        setQuizType("standard");
-        const res = await quizClient.startQuiz({
-          notebookIds: Array.from(selectedIds),
-          includeUnstudied,
-        });
-        const flashcards = (res.flashcards ?? []).map((f) => ({
-          noteId: f.noteId,
-          entry: f.entry,
-          examples: f.examples,
-        }));
-        setFlashcards(flashcards);
-        router.push("/quiz/standard");
-      } else if (quizType === "reverse") {
-        setQuizType("reverse");
-        const res = await quizClient.startReverseQuiz({
-          notebookIds: Array.from(selectedIds),
-          listMissingContext,
-        });
-        const flashcards = (res.flashcards ?? []).map((f) => ({
-          noteId: f.noteId,
-          meaning: f.meaning,
-          contexts: f.contexts,
-          notebookName: f.notebookName,
-          storyTitle: f.storyTitle,
-          sceneTitle: f.sceneTitle,
-        }));
-        setReverseFlashcards(flashcards);
-        router.push("/quiz/reverse");
-      } else if (quizType === "freeform") {
-        setQuizType("freeform");
-        const res = await quizClient.startFreeformQuiz({});
-        setWordCount(res.wordCount);
-        setFreeformExpressions(res.expressions ?? []);
-        setFreeformNextReviewDates(res.expressionNextReviewDate ?? {});
-        router.push("/quiz/freeform");
-      } else if (isEtymology) {
-        // User selects definition notebooks; etymology notebooks are auto-included
-        const definitionIds = Array.from(selectedIds);
-        const etymologyIds = etymologyNotebooks.map((n) => n.notebookId);
-        if (etymologyMode === "freeform") {
-          setQuizType("etymology-freeform" as QuizType);
-          const res = await quizClient.startEtymologyFreeformQuiz({
-            etymologyNotebookIds: etymologyIds,
-            definitionNotebookIds: definitionIds,
-          });
-          setEtymologyFreeformExpressions(res.expressions ?? []);
-          setEtymologyFreeformNextReviewDates(res.nextReviewDates ?? {});
-          router.push("/quiz/etymology-freeform");
-        } else {
-          const mode = etymologyMode === "breakdown"
-            ? EtymologyQuizMode.BREAKDOWN
-            : EtymologyQuizMode.ASSEMBLY;
-          const storeType = etymologyMode === "breakdown"
-            ? "etymology-breakdown" as QuizType
-            : "etymology-assembly" as QuizType;
-          setQuizType(storeType);
-          const res = await quizClient.startEtymologyQuiz({
-            etymologyNotebookIds: etymologyIds,
-            definitionNotebookIds: definitionIds,
-            mode,
-            includeUnstudied,
-          });
-          const cards = (res.cards ?? []).map((c) => ({
-            cardId: c.cardId,
-            expression: c.expression,
-            meaning: c.meaning,
-            originParts: c.originParts.map((p) => ({
-              origin: p.origin,
-              type: p.type,
-              language: p.language,
-              meaning: p.meaning,
-            })),
-            notebookName: c.notebookName,
-          }));
-          setEtymologyCards(cards);
-          router.push(etymologyMode === "breakdown" ? "/quiz/etymology-breakdown" : "/quiz/etymology-assembly");
-        }
-      }
-    } finally {
-      setStarting(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <Box p={4} maxW="sm" mx="auto" textAlign="center">
-        <Spinner size="lg" />
-      </Box>
-    );
-  }
-
-  if (error) {
-    return (
-      <Box p={4} maxW="sm" mx="auto">
-        <Text color="red.500">{error}</Text>
-      </Box>
-    );
-  }
-
-  const showNotebookSelection = quizType !== "freeform";
+export default function QuizHubPage() {
+  const [tab, setTab] = useState<Tab>("vocabulary");
+  const modes = tab === "vocabulary" ? vocabularyModes : etymologyModes;
 
   return (
-    <Box p={4} maxW="sm" mx="auto">
-      <Box mb={2}>
-        <Link href="/">
-          <Text color="blue.600" fontSize="sm" _dark={{ color: "blue.300" }}>&larr; Back</Text>
-        </Link>
-      </Box>
-      <Heading size="lg" mb={4}>{isEtymology ? "Etymology Quiz" : "Quiz"}</Heading>
-
-      <Text fontWeight="medium" mb={2}>
-        Select quiz type
-      </Text>
-
-      <VStack align="stretch" gap={2} mb={4}>
-        {quizTypes.map((type) => (
-          <Box
-            key={type.value}
-            p={3}
-            borderWidth="2px"
-            borderRadius="md"
-            cursor="pointer"
-            onClick={() => handleQuizTypeChange(type.value)}
-            bg={quizType === type.value ? "blue.50" : "white"}
-            borderColor={quizType === type.value ? "blue.500" : "gray.200"}
-            _dark={{
-              bg: quizType === type.value ? "blue.900" : "gray.800",
-              borderColor: quizType === type.value ? "blue.400" : "gray.600",
-            }}
-          >
-            <Text fontWeight="medium">{type.label}</Text>
-            <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
-              {type.description}
+    <Box maxW="sm" mx="auto" bg="#f8f9fa" minH="100vh">
+      {/* Header */}
+      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
+        <Box px={4} pt={2}>
+          <Link href="/">
+            <Text color="#2563eb" fontSize="xs">
+              &lt; Home
             </Text>
-          </Box>
-        ))}
-      </VStack>
-
-      {isEtymology && (
-        <Box mb={4}>
-          <Text fontWeight="medium" mb={2}>Quiz mode</Text>
-          <VStack align="stretch" gap={2}>
-            {[
-              { value: "breakdown" as EtymologyMode, label: "Breakdown", desc: "Given a word, type its origins and their meanings" },
-              { value: "assembly" as EtymologyMode, label: "Assembly", desc: "Given origins and meanings, type the word" },
-              { value: "freeform" as EtymologyMode, label: "Freeform", desc: "Type any word and break down its origins" },
-            ].map((m) => (
-              <Box
-                key={m.value}
-                p={3}
-                borderWidth="2px"
-                borderRadius="md"
-                cursor="pointer"
-                onClick={() => setEtymologyMode(m.value)}
-                bg={etymologyMode === m.value ? "blue.50" : "white"}
-                borderColor={etymologyMode === m.value ? "blue.500" : "gray.200"}
-                _dark={{
-                  bg: etymologyMode === m.value ? "blue.900" : "gray.800",
-                  borderColor: etymologyMode === m.value ? "blue.400" : "gray.600",
-                }}
-              >
-                <Text fontWeight="medium">{m.label}</Text>
-                <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>{m.desc}</Text>
-              </Box>
-            ))}
-          </VStack>
+          </Link>
         </Box>
-      )}
+        <Box px={4} pb={3} textAlign="center">
+          <Heading size="md">Quiz</Heading>
+        </Box>
+      </Box>
 
-      {showNotebookSelection && (
-        <>
-          <Text fontWeight="medium" mb={2}>
-            Select notebooks
-          </Text>
-          {isEtymology && (
-            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mb={2}>
-              Only notebooks with etymology data are shown
-            </Text>
-          )}
-
-          <VStack align="stretch" gap={3}>
-            <Checkbox.Root
-              checked={allSelected}
-              onCheckedChange={toggleAll}
-            >
-              <Checkbox.HiddenInput />
-              <Checkbox.Control />
-              <Checkbox.Label fontWeight="bold">All notebooks</Checkbox.Label>
-            </Checkbox.Root>
-
-            {displayedNotebooks.map((notebook) => (
-              <Checkbox.Root
-                key={notebook.notebookId}
-                checked={selectedIds.has(notebook.notebookId)}
-                onCheckedChange={() => toggleNotebook(notebook.notebookId)}
-              >
-                <Checkbox.HiddenInput />
-                <Checkbox.Control />
-                <Checkbox.Label flex="1">
-                  <Box display="flex" justifyContent="space-between" w="full">
-                    <Text>{notebook.name}</Text>
-                    <Text color="gray.500" fontSize="sm">
-                      {isEtymology
-                        ? `${notebook.etymologyReviewCount} words`
-                        : quizType === "reverse"
-                          ? notebook.reverseReviewCount
-                          : notebook.reviewCount}
-                    </Text>
-                  </Box>
-                </Checkbox.Label>
-              </Checkbox.Root>
-            ))}
-          </VStack>
-
-          <Box mt={4}>
-            <Switch.Root
-              checked={includeUnstudied}
-              onCheckedChange={(e) => setIncludeUnstudied(e.checked)}
-            >
-              <Switch.HiddenInput />
-              <Switch.Control />
-              <Switch.Label>Include unstudied words</Switch.Label>
-            </Switch.Root>
-          </Box>
-
-          {quizType === "reverse" && (
-            <Box mt={2}>
-              <Switch.Root
-                checked={listMissingContext}
-                onCheckedChange={(e) => setListMissingContext(e.checked)}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control />
-                <Switch.Label>List words missing context</Switch.Label>
-              </Switch.Root>
-            </Box>
-          )}
-
-          <Text mt={4} fontWeight="bold">
-            {totalDue} words due for review
-          </Text>
-        </>
-      )}
-
-      {quizType === "freeform" && (
-        <Text mt={4} color="gray.600">
-          {notebooks.reduce((sum, n) => sum + n.reviewCount, 0)} words
-          available across all notebooks
-        </Text>
-      )}
-
-      <Button
-        mt={4}
-        w="full"
-        colorPalette="blue"
-        disabled={
-          (showNotebookSelection && selectedIds.size === 0) || starting
-        }
-        onClick={handleStart}
+      {/* Tabs */}
+      <Box
+        bg="white"
+        borderBottomWidth="1px"
+        borderColor="#e5e7eb"
+        display="flex"
       >
-        {starting ? <Spinner size="sm" /> : "Start"}
-      </Button>
+        <Box
+          flex={1}
+          textAlign="center"
+          py={2}
+          cursor="pointer"
+          onClick={() => setTab("vocabulary")}
+          position="relative"
+        >
+          <Text
+            fontSize="sm"
+            fontWeight={tab === "vocabulary" ? "semibold" : "normal"}
+            color={tab === "vocabulary" ? "#2563eb" : "#999"}
+          >
+            Vocabulary
+          </Text>
+          {tab === "vocabulary" && (
+            <Box
+              position="absolute"
+              bottom={0}
+              left="50%"
+              transform="translateX(-50%)"
+              w="60%"
+              h="3px"
+              borderRadius="full"
+              bg="#2563eb"
+            />
+          )}
+        </Box>
+        <Box
+          flex={1}
+          textAlign="center"
+          py={2}
+          cursor="pointer"
+          onClick={() => setTab("etymology")}
+          position="relative"
+        >
+          <Text
+            fontSize="sm"
+            fontWeight={tab === "etymology" ? "semibold" : "normal"}
+            color={tab === "etymology" ? "#2563eb" : "#999"}
+          >
+            Etymology
+          </Text>
+          {tab === "etymology" && (
+            <Box
+              position="absolute"
+              bottom={0}
+              left="50%"
+              transform="translateX(-50%)"
+              w="60%"
+              h="3px"
+              borderRadius="full"
+              bg="#2563eb"
+            />
+          )}
+        </Box>
+      </Box>
+
+      {/* Content */}
+      <Box p={4} display="flex" flexDirection="column" gap={3}>
+        {modes.map((mode) => (
+          <Link key={mode.href} href={mode.href}>
+            <Box
+              p={4}
+              bg="white"
+              borderWidth="1px"
+              borderColor="#e5e7eb"
+              borderRadius="lg"
+              _hover={{ bg: "gray.50" }}
+              cursor="pointer"
+              display="flex"
+              alignItems="center"
+              justifyContent="space-between"
+            >
+              <Box>
+                <Text fontWeight="semibold" fontSize="md">
+                  {mode.title}
+                </Text>
+                <Text fontSize="xs" color="#666">
+                  {mode.description}
+                </Text>
+              </Box>
+              <Text fontSize="sm" color="#999" flexShrink={0}>
+                &rsaquo;
+              </Text>
+            </Box>
+          </Link>
+        ))}
+      </Box>
     </Box>
   );
 }
