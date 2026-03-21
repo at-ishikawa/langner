@@ -666,6 +666,7 @@ func (h *QuizHandler) SubmitEtymologyBreakdownAnswer(
 		RelatedDefinitions: protoRelated,
 		NextReviewDate:     nextReviewDate,
 		LearnedAt:          learnedAt,
+		NoteId:             req.Msg.GetCardId(),
 	}), nil
 }
 
@@ -731,6 +732,7 @@ func (h *QuizHandler) SubmitEtymologyAssemblyAnswer(
 		RelatedDefinitions: protoRelated,
 		NextReviewDate:     nextReviewDate,
 		LearnedAt:          learnedAt,
+		NoteId:             req.Msg.GetCardId(),
 	}), nil
 }
 
@@ -864,6 +866,7 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(
 		NextReviewDate:     nextReviewDate,
 		LearnedAt:          learnedAt,
 		NotebookName:       matchedCard.NotebookName,
+		NoteId:             0, // freeform cards are not stored with IDs
 	}), nil
 }
 

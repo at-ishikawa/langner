@@ -184,9 +184,8 @@ export default function EtymologyBreakdownPage() {
     }
   };
 
-  // Group related definitions by origin for the "Related words" section
-  const groupedRelated = feedback?.relatedDefinitions
-    ? groupRelatedByOrigin(feedback.relatedDefinitions, card.originParts)
+  const relatedExpressions = feedback?.relatedDefinitions
+    ? getRelatedExpressions(feedback.relatedDefinitions)
     : [];
 
   return (
@@ -369,38 +368,14 @@ export default function EtymologyBreakdownPage() {
                 </Box>
               </Box>
 
-              {/* Related words grouped by origin */}
-              {groupedRelated.length > 0 && (
-                <Box>
-                  <Text fontWeight="medium" fontSize="sm" mb={1}>Related words sharing these origins</Text>
-                  <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
-                    <VStack align="stretch" gap={2}>
-                      {groupedRelated.map((group, i) => (
-                        <Box key={i}>
-                          <Text fontSize="xs" color="fg.muted">Also using {group.origin}:</Text>
-                          <Text fontSize="sm" color="#2563eb" fontWeight="medium">
-                            {group.expressions.join(", ")}
-                          </Text>
-                        </Box>
-                      ))}
-                    </VStack>
-                  </Box>
-                </Box>
-              )}
-
-              {/* Fallback: show ungrouped related words if no grouping available */}
-              {groupedRelated.length === 0 && feedback.relatedDefinitions.length > 0 && (
+              {/* Related words */}
+              {relatedExpressions.length > 0 && (
                 <Box>
                   <Text fontWeight="medium" fontSize="sm" mb={1}>Related words</Text>
                   <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
-                    <VStack align="stretch" gap={1}>
-                      {feedback.relatedDefinitions.map((d, i) => (
-                        <Text key={i} fontSize="sm">
-                          <Text as="span" fontWeight="medium" color="#2563eb">{d.expression}</Text>
-                          {" - "}{d.meaning}
-                        </Text>
-                      ))}
-                    </VStack>
+                    <Text fontSize="sm" color="#2563eb" fontWeight="medium">
+                      {relatedExpressions.join(", ")}
+                    </Text>
                   </Box>
                 </Box>
               )}
@@ -471,33 +446,9 @@ export default function EtymologyBreakdownPage() {
   );
 }
 
-/** Group related definitions by origin for display like "Also using tele: telephone, television" */
-function groupRelatedByOrigin(
+/** Get unique related word expressions for display */
+function getRelatedExpressions(
   relatedDefs: Array<{ expression: string; meaning: string; notebookName: string }>,
-  originParts: Array<{ origin: string; type: string; language: string; meaning: string }>,
-): Array<{ origin: string; expressions: string[] }> {
-  if (relatedDefs.length === 0 || originParts.length === 0) return [];
-
-  // Simple approach: show all related definitions grouped by each origin
-  const groups: Array<{ origin: string; expressions: string[] }> = [];
-  const allExpressions = relatedDefs.map((d) => d.expression);
-
-  for (const part of originParts) {
-    if (allExpressions.length > 0) {
-      groups.push({ origin: part.origin, expressions: allExpressions });
-    }
-  }
-
-  // If we have multiple origins but same expressions, deduplicate display
-  if (groups.length > 1) {
-    const seen = new Set<string>();
-    return groups.filter((g) => {
-      const key = g.expressions.join(",");
-      if (seen.has(key) && groups.length > 1) return true; // keep all origin groups
-      seen.add(key);
-      return true;
-    });
-  }
-
-  return groups;
+): string[] {
+  return relatedDefs.map((d) => d.expression);
 }

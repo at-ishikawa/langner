@@ -496,6 +496,37 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		originSet[strings.ToLower(o.Origin)] = true
 	}
 
+	// addDefinition deduplicates and appends a definition
+	seen := make(map[string]bool)
+	addDefinition := func(expr, meaning, partOfSpeech, note string, examples, contexts []string, originParts []notebook.OriginPartRef, nbName string) {
+		key := strings.ToLower(expr) + "|" + nbName
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		if !hasMatchingOriginParts(originParts, originSet) {
+			return
+		}
+		var parts []*apiv1.EtymologyOriginPart
+		for _, ref := range originParts {
+			parts = append(parts, &apiv1.EtymologyOriginPart{
+				Origin:   ref.Origin,
+				Language: ref.Language,
+			})
+			originWordCounts[strings.ToLower(ref.Origin)]++
+		}
+		definitions = append(definitions, &apiv1.EtymologyDefinition{
+			Expression:   expr,
+			Meaning:      meaning,
+			PartOfSpeech: partOfSpeech,
+			Note:         note,
+			Examples:     examples,
+			Contexts:     contexts,
+			OriginParts:  parts,
+			NotebookName: nbName,
+		})
+	}
+
 	// Search story notebooks
 	for nbID := range reader.GetStoryIndexes() {
 		stories, err := reader.ReadStoryNotebooks(nbID)
@@ -508,61 +539,23 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					if len(def.OriginParts) == 0 {
 						continue
 					}
-					if !hasMatchingOriginParts(def.OriginParts, originSet) {
-						continue
-					}
-					var parts []*apiv1.EtymologyOriginPart
-					for _, ref := range def.OriginParts {
-						parts = append(parts, &apiv1.EtymologyOriginPart{
-							Origin:   ref.Origin,
-							Language: ref.Language,
-						})
-						originWordCounts[strings.ToLower(ref.Origin)]++
-					}
-					// Collect context from the scene (statements, conversations)
 					var contexts []string
 					contexts = append(contexts, scene.Statements...)
 					for _, conv := range scene.Conversations {
 						contexts = append(contexts, conv.Speaker+": "+conv.Quote)
 					}
-
-					definitions = append(definitions, &apiv1.EtymologyDefinition{
-						Expression:   def.Expression,
-						Meaning:      def.Meaning,
-						PartOfSpeech: def.PartOfSpeech,
-						Note:         def.Memo,
-						Examples:     def.Examples,
-						Contexts:     contexts,
-						OriginParts:  parts,
-						NotebookName: nbID,
-					})
+					addDefinition(def.Expression, def.Meaning, def.PartOfSpeech, def.Memo, def.Examples, contexts, def.OriginParts, nbID)
 				}
 			}
 		}
 	}
 
-	// Search definitions from all session files (etymology, story, flashcard)
-	// that use the definitions: [...] format with origin_parts
+	// Search definitions from session files (definitions: [...] format)
 	for _, def := range reader.ReadAllEtymologyDefinitions() {
-		if !hasMatchingOriginParts(def.OriginParts, originSet) {
+		if len(def.OriginParts) == 0 {
 			continue
 		}
-		var parts []*apiv1.EtymologyOriginPart
-		for _, ref := range def.OriginParts {
-			parts = append(parts, &apiv1.EtymologyOriginPart{
-				Origin:   ref.Origin,
-				Language: ref.Language,
-			})
-			originWordCounts[strings.ToLower(ref.Origin)]++
-		}
-		definitions = append(definitions, &apiv1.EtymologyDefinition{
-			Expression:   def.GetExpression(),
-			Meaning:      def.Meaning,
-			PartOfSpeech: def.PartOfSpeech,
-			Note:         def.Note,
-			OriginParts:  parts,
-			NotebookName: def.NotebookName,
-		})
+		addDefinition(def.GetExpression(), def.Meaning, def.PartOfSpeech, def.Note, nil, nil, def.OriginParts, def.NotebookName)
 	}
 
 	// Search flashcard notebooks
@@ -576,26 +569,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 				if len(card.OriginParts) == 0 {
 					continue
 				}
-				if !hasMatchingOriginParts(card.OriginParts, originSet) {
-					continue
-				}
-				var parts []*apiv1.EtymologyOriginPart
-				for _, ref := range card.OriginParts {
-					parts = append(parts, &apiv1.EtymologyOriginPart{
-						Origin:   ref.Origin,
-						Language: ref.Language,
-					})
-					originWordCounts[strings.ToLower(ref.Origin)]++
-				}
-				definitions = append(definitions, &apiv1.EtymologyDefinition{
-					Expression:   card.Expression,
-					Meaning:      card.Meaning,
-					PartOfSpeech: card.PartOfSpeech,
-					Note:         card.Memo,
-					Examples:     card.Examples,
-					OriginParts:  parts,
-					NotebookName: nbID,
-				})
+				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples, nil, card.OriginParts, nbID)
 			}
 		}
 	}
