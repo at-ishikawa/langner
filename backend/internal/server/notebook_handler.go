@@ -531,9 +531,9 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		}
 	}
 
-	// Search etymology notebook's own definitions (definitions in session files)
-	etymDefs, _ := reader.ReadEtymologyDefinitions(notebookID)
-	for _, def := range etymDefs {
+	// Search definitions from all session files (etymology, story, flashcard)
+	// that use the definitions: [...] format with origin_parts
+	for _, def := range reader.ReadAllEtymologyDefinitions() {
 		if !hasMatchingOriginParts(def.OriginParts, originSet) {
 			continue
 		}
@@ -550,7 +550,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 			Meaning:      def.Meaning,
 			PartOfSpeech: def.PartOfSpeech,
 			OriginParts:  parts,
-			NotebookName: notebookID,
+			NotebookName: def.NotebookName,
 		})
 	}
 

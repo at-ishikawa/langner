@@ -35,6 +35,7 @@ type EtymologyDefinitionEntry struct {
 	PartOfSpeech string          `yaml:"part_of_speech"`
 	Note         string          `yaml:"note"`
 	OriginParts  []OriginPartRef `yaml:"origin_parts"`
+	NotebookName string          `yaml:"-"` // set at read time
 }
 
 // GetExpression returns the expression, falling back to the definition field.
@@ -87,48 +88,48 @@ func (r *Reader) ReadEtymologyNotebook(etymologyID string) ([]EtymologyOrigin, e
 	return allOrigins, nil
 }
 
-// ReadEtymologyDefinitions reads definitions with origin_parts from an etymology
-// notebook's session files and from matching story notebook session files.
-func (r *Reader) ReadEtymologyDefinitions(etymologyID string) ([]EtymologyDefinitionEntry, error) {
-	index, ok := r.etymologyIndexes[etymologyID]
-	if !ok {
-		return nil, fmt.Errorf("etymology notebook %s not found", etymologyID)
-	}
-
+// ReadAllEtymologyDefinitions reads definitions with origin_parts from ALL
+// notebook session files: etymology notebooks, story notebooks, and flashcard notebooks.
+func (r *Reader) ReadAllEtymologyDefinitions() []EtymologyDefinitionEntry {
 	var allDefs []EtymologyDefinitionEntry
+	seen := make(map[string]bool) // track scanned paths to avoid duplicates
 
-	// Read definitions from etymology notebook session files
-	for _, notebookPath := range index.NotebookPaths {
-		path := filepath.Join(index.Path, notebookPath)
-		wrapped, err := readYamlFile[etymologySessionFile](path)
-		if err != nil {
-			continue
-		}
-		for _, def := range wrapped.Definitions {
-			if len(def.OriginParts) > 0 {
-				allDefs = append(allDefs, def)
+	scanSessionFiles := func(dir string, paths []string, notebookName string) {
+		for _, nbPath := range paths {
+			path := filepath.Join(dir, nbPath)
+			if seen[path] {
+				continue
 			}
-		}
-	}
-
-	// Also read from the story notebook with the same ID (if it exists)
-	// This handles the case where origins and definitions are in separate directories
-	if storyIndex, ok := r.indexes[etymologyID]; ok {
-		for _, notebookPath := range storyIndex.NotebookPaths {
-			path := filepath.Join(storyIndex.Path, notebookPath)
+			seen[path] = true
 			wrapped, err := readYamlFile[etymologySessionFile](path)
 			if err != nil {
 				continue
 			}
 			for _, def := range wrapped.Definitions {
 				if len(def.OriginParts) > 0 {
+					def.NotebookName = notebookName
 					allDefs = append(allDefs, def)
 				}
 			}
 		}
 	}
 
-	return allDefs, nil
+	// Scan etymology notebook session files
+	for _, index := range r.etymologyIndexes {
+		scanSessionFiles(index.Path, index.NotebookPaths, index.Name)
+	}
+
+	// Scan story notebook session files
+	for _, index := range r.indexes {
+		scanSessionFiles(index.Path, index.NotebookPaths, index.Name)
+	}
+
+	// Scan flashcard notebook session files
+	for _, index := range r.flashcardIndexes {
+		scanSessionFiles(index.Path, index.NotebookPaths, index.Name)
+	}
+
+	return allDefs
 }
 
 // GetEtymologyIndexes returns the etymology indexes map.
