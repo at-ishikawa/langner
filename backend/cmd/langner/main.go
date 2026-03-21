@@ -107,7 +107,7 @@ func newRecalculateIntervalsCommand() *cobra.Command {
 			return cli.RecalculateIntervals(
 				cfg.Notebooks.LearningNotesDirectory,
 				cfg.Quiz.Algorithm,
-				cfg.Quiz.ExponentialBase,
+				cfg.Quiz.FixedIntervals,
 			)
 		},
 	}

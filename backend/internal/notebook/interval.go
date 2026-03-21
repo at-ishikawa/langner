@@ -1,9 +1,11 @@
 package notebook
 
 import (
-	"math"
 	"sort"
 )
+
+// DefaultFixedIntervals is the default progression of review intervals in days.
+var DefaultFixedIntervals = []int{1, 3, 7, 14, 30, 60, 120, 365}
 
 // IntervalCalculator computes review intervals for spaced repetition.
 type IntervalCalculator interface {
@@ -99,19 +101,27 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 	return ef, newLogs
 }
 
-// ExponentialCalculator implements the exponential interval algorithm.
-type ExponentialCalculator struct {
-	Base float64
+// FixedLevelCalculator implements fixed interval levels.
+// Correct answers (q >= 3) advance one level, wrong answers (q < 3) go back one level.
+// Levels map to a configurable list of intervals in days.
+type FixedLevelCalculator struct {
+	Intervals []int
 }
 
-// CalculateInterval computes the next interval using exponential scoring.
-// score = max(sum(q - 3) for all logs + (currentQuality - 3), 1)
-// interval = base ^ max(score - 1, 0)
-func (c *ExponentialCalculator) CalculateInterval(logs []LearningRecord, currentQuality int, _ float64) (int, float64) {
-	base := c.base()
+func (c *FixedLevelCalculator) intervals() []int {
+	if len(c.Intervals) == 0 {
+		return DefaultFixedIntervals
+	}
+	return c.Intervals
+}
 
-	// Accumulate score from existing logs (oldest to newest = reverse of storage order)
-	score := 0
+// levelFromLogs derives the current level by replaying quality history.
+func (c *FixedLevelCalculator) levelFromLogs(logs []LearningRecord) int {
+	level := 0
+	intervals := c.intervals()
+	maxLevel := len(intervals) - 1
+
+	// Iterate oldest to newest (logs are stored newest-first)
 	for i := len(logs) - 1; i >= 0; i-- {
 		q := logs[i].Quality
 		if q == 0 {
@@ -121,32 +131,56 @@ func (c *ExponentialCalculator) CalculateInterval(logs []LearningRecord, current
 				q = int(QualityCorrect)
 			}
 		}
-		score += q - 3
+
+		if q >= 3 {
+			level++
+		} else {
+			level--
+		}
+
+		if level < 0 {
+			level = 0
+		}
+		if level > maxLevel {
+			level = maxLevel
+		}
 	}
 
-	// Add current quality
-	score += currentQuality - 3
-
-	if score < 1 {
-		score = 1
-	}
-
-	exponent := score - 1
-	if exponent < 0 {
-		exponent = 0
-	}
-
-	intervalDays := int(math.Pow(base, float64(exponent)))
-	return intervalDays, 0
+	return level
 }
 
-// RecalculateAll replays logs oldest-to-newest and recomputes exponential intervals.
-func (c *ExponentialCalculator) RecalculateAll(logs []LearningRecord) (float64, []LearningRecord) {
+// CalculateInterval computes the next interval using fixed levels.
+func (c *FixedLevelCalculator) CalculateInterval(logs []LearningRecord, currentQuality int, _ float64) (int, float64) {
+	intervals := c.intervals()
+	maxLevel := len(intervals) - 1
+
+	level := c.levelFromLogs(logs)
+
+	// Apply current quality
+	if currentQuality >= 3 {
+		level++
+	} else {
+		level--
+	}
+
+	if level < 0 {
+		level = 0
+	}
+	if level > maxLevel {
+		level = maxLevel
+	}
+
+	return intervals[level], 0
+}
+
+// RecalculateAll replays logs oldest-to-newest and recomputes fixed-level intervals.
+func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, []LearningRecord) {
 	if len(logs) == 0 {
 		return 0, logs
 	}
 
-	base := c.base()
+	intervals := c.intervals()
+	maxLevel := len(intervals) - 1
 
 	newLogs := make([]LearningRecord, len(logs))
 	copy(newLogs, logs)
@@ -156,7 +190,7 @@ func (c *ExponentialCalculator) RecalculateAll(logs []LearningRecord) (float64, 
 		return newLogs[i].LearnedAt.Before(newLogs[j].LearnedAt.Time)
 	})
 
-	score := 0
+	level := 0
 	for i := range newLogs {
 		log := &newLogs[i]
 		q := log.Quality
@@ -169,21 +203,23 @@ func (c *ExponentialCalculator) RecalculateAll(logs []LearningRecord) (float64, 
 			log.Quality = q
 		}
 
-		score += q - 3
-		clampedScore := score
-		if clampedScore < 1 {
-			clampedScore = 1
+		if q >= 3 {
+			level++
+		} else {
+			level--
 		}
 
-		exponent := clampedScore - 1
-		if exponent < 0 {
-			exponent = 0
+		if level < 0 {
+			level = 0
+		}
+		if level > maxLevel {
+			level = maxLevel
 		}
 
 		if log.OverrideInterval > 0 {
 			log.IntervalDays = log.OverrideInterval
 		} else {
-			log.IntervalDays = int(math.Pow(base, float64(exponent)))
+			log.IntervalDays = intervals[level]
 		}
 	}
 
@@ -195,17 +231,10 @@ func (c *ExponentialCalculator) RecalculateAll(logs []LearningRecord) (float64, 
 	return 0, newLogs
 }
 
-func (c *ExponentialCalculator) base() float64 {
-	if c.Base <= 0 {
-		return 4
-	}
-	return c.Base
-}
-
 // NewIntervalCalculator creates an IntervalCalculator based on the algorithm name.
-func NewIntervalCalculator(algorithm string, exponentialBase float64) IntervalCalculator {
-	if algorithm == "exponential" {
-		return &ExponentialCalculator{Base: exponentialBase}
+func NewIntervalCalculator(algorithm string, fixedIntervals []int) IntervalCalculator {
+	if algorithm == "fixed" {
+		return &FixedLevelCalculator{Intervals: fixedIntervals}
 	}
 	return &SM2Calculator{}
 }

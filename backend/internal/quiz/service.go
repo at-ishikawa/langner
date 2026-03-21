@@ -32,7 +32,7 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 		openaiClient:       openaiClient,
 		dictionaryMap:      dictionaryMap,
 		learningRepository: learningRepo,
-		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.ExponentialBase),
+		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
 	}
 }
 

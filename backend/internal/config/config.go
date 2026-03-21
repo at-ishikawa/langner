@@ -33,8 +33,8 @@ type Config struct {
 }
 
 type QuizConfig struct {
-	Algorithm       string  `mapstructure:"algorithm"`
-	ExponentialBase float64 `mapstructure:"exponential_base"`
+	Algorithm      string `mapstructure:"algorithm"`
+	FixedIntervals []int  `mapstructure:"fixed_intervals"`
 }
 
 type DatabaseConfig struct {
@@ -145,7 +145,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000"})
 	v.SetDefault("quiz.algorithm", "modified_sm2")
-	v.SetDefault("quiz.exponential_base", 4.0)
+	v.SetDefault("quiz.fixed_intervals", []int{1, 3, 7, 14, 30, 60, 120, 365})
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {

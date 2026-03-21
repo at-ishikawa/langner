@@ -33,7 +33,7 @@ func NewFreeformQuizCLI(
 		return nil, err
 	}
 
-	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.ExponentialBase)
+	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
 	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	cards, err := svc.LoadAllWords()

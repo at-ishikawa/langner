@@ -82,7 +82,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				},
 				Quiz: QuizConfig{
 					Algorithm:       "modified_sm2",
-					ExponentialBase: 4,
+					FixedIntervals: []int{1, 3, 7, 14, 30, 60, 120, 365},
 				},
 			},
 		},
@@ -137,7 +137,7 @@ outputs:
 				},
 				Quiz: QuizConfig{
 					Algorithm:       "modified_sm2",
-					ExponentialBase: 4,
+					FixedIntervals: []int{1, 3, 7, 14, 30, 60, 120, 365},
 				},
 			},
 		},
@@ -186,7 +186,7 @@ outputs:
 				},
 				Quiz: QuizConfig{
 					Algorithm:       "modified_sm2",
-					ExponentialBase: 4,
+					FixedIntervals: []int{1, 3, 7, 14, 30, 60, 120, 365},
 				},
 			},
 		},

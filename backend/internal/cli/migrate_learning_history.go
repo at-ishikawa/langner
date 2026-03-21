@@ -95,8 +95,8 @@ func recalculateSM2Metrics(exp *notebook.LearningHistoryExpression) {
 
 // RecalculateIntervals recalculates intervals for all learning history files
 // using the configured algorithm.
-func RecalculateIntervals(learningNotesDir string, algorithm string, exponentialBase float64) error {
-	calculator := notebook.NewIntervalCalculator(algorithm, exponentialBase)
+func RecalculateIntervals(learningNotesDir string, algorithm string, fixedIntervals []int) error {
+	calculator := notebook.NewIntervalCalculator(algorithm, fixedIntervals)
 
 	histories, err := notebook.NewLearningHistories(learningNotesDir)
 	if err != nil {

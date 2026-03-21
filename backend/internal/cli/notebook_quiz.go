@@ -40,7 +40,7 @@ func NewNotebookQuizCLI(
 		return nil, err
 	}
 
-	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.ExponentialBase)
+	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
 	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	var cards []quiz.Card
@@ -106,7 +106,7 @@ func NewFlashcardQuizCLI(
 		return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
 	}
 
-	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.ExponentialBase)
+	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
 	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	cards, err := svc.LoadCards([]string{notebookName}, false)

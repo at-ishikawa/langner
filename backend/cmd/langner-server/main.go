@@ -80,7 +80,7 @@ func run(ctx context.Context) error {
 	}))
 
 	// Set up repositories with dual storage when DB is configured
-	calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.ExponentialBase)
+	calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
 	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, calculator)
 	var learningRepo learning.LearningRepository = yamlLearningRepo
 	var noteRepo notebook.NoteRepository
