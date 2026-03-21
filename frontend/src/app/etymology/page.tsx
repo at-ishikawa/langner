@@ -69,7 +69,7 @@ export default function EtymologyListPage() {
               >
                 <Text fontWeight="medium">{notebook.name}</Text>
                 <Text fontSize="sm" color="fg.muted">
-                  {notebook.etymologyReviewCount} origins
+                  {notebook.reviewCount} origins
                 </Text>
               </Box>
             </Link>
