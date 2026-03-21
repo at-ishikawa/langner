@@ -14,13 +14,18 @@ func normalizeTitle(s string) string {
 
 // LearningHistoryUpdater provides methods to update learning history
 type LearningHistoryUpdater struct {
-	history []LearningHistory
+	history    []LearningHistory
+	calculator IntervalCalculator
 }
 
-// NewLearningHistoryUpdater creates a new updater with the given history
-func NewLearningHistoryUpdater(history []LearningHistory) *LearningHistoryUpdater {
+// NewLearningHistoryUpdater creates a new updater with the given history and calculator.
+func NewLearningHistoryUpdater(history []LearningHistory, calculator IntervalCalculator) *LearningHistoryUpdater {
+	if calculator == nil {
+		calculator = &SM2Calculator{}
+	}
 	return &LearningHistoryUpdater{
-		history: history,
+		history:    history,
+		calculator: calculator,
 	}
 }
 
@@ -96,7 +101,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
 				return true
 			}
@@ -112,7 +117,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
 			}
@@ -146,7 +151,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs)
 				u.history[hi].Expressions[ei] = exp
 				return true
 			}
@@ -162,7 +167,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
 			}
@@ -190,7 +195,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 		ReverseLogs:           []LearningRecord{},
 		ReverseEasinessFactor: DefaultEasinessFactor,
 	}
-	newExpression.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+	newExpression.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs)
 
 	if len(newExpression.ReverseLogs) == 0 {
 		return
@@ -227,7 +232,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 		LearnedLogs:    []LearningRecord{},
 		EasinessFactor: DefaultEasinessFactor,
 	}
-	newExpression.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	newExpression.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 
 	if len(newExpression.LearnedLogs) == 0 {
 		return
@@ -306,25 +311,26 @@ func (u *LearningHistoryUpdater) OverrideLog(
 				logs[i].Status = LearnedStatusMisunderstood
 			}
 
-			// Recalculate interval and easiness factor
-			correctStreak := GetCorrectStreak(logs)
-			lastInterval := 0
+			// Recalculate interval and easiness factor using calculator
+			// Pass logs after this entry as the "existing" logs
+			var previousLogs []LearningRecord
 			if i+1 < len(logs) {
-				lastInterval = logs[i+1].IntervalDays
+				previousLogs = logs[i+1:]
 			}
-			newEF := UpdateEasinessFactor(originalEF, logs[i].Quality, correctStreak)
-			newInterval := CalculateNextInterval(lastInterval, newEF, logs[i].Quality, correctStreak)
+			newInterval, newEF := u.calculator.CalculateInterval(previousLogs, logs[i].Quality, originalEF)
 			logs[i].IntervalDays = newInterval
 
-			switch quizType {
-			case QuizTypeReverse:
-				expr.ReverseEasinessFactor = newEF
-			case QuizTypeEtymologyBreakdown:
-				expr.EtymologyBreakdownEasinessFactor = newEF
-			case QuizTypeEtymologyAssembly:
-				expr.EtymologyAssemblyEasinessFactor = newEF
-			default:
-				expr.EasinessFactor = newEF
+			if newEF > 0 {
+				switch quizType {
+				case QuizTypeReverse:
+					expr.ReverseEasinessFactor = newEF
+				case QuizTypeEtymologyBreakdown:
+					expr.EtymologyBreakdownEasinessFactor = newEF
+				case QuizTypeEtymologyAssembly:
+					expr.EtymologyAssemblyEasinessFactor = newEF
+				default:
+					expr.EasinessFactor = newEF
+				}
 			}
 		}
 

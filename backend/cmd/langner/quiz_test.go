@@ -550,6 +550,7 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 				notebooksConfig,
 				dictionaryCacheDir,
 				mockClient,
+				config.QuizConfig{},
 			)
 
 			if tt.wantErr {

@@ -129,7 +129,7 @@ func TestYAMLLearningRepository_FindByNotebookID(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := tt.setupDir(t)
-			repo := NewYAMLLearningRepository(dir)
+			repo := NewYAMLLearningRepository(dir, nil)
 
 			got, err := repo.FindByNotebookID(tt.notebookID)
 			if tt.wantErr {

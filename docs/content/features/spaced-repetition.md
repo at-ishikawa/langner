@@ -59,3 +59,42 @@ Unlike standard SM-2 which resets to day 1 on any mistake, Langner uses **propor
 - Langner: 90 × 0.6 = 54 days, EF drops by only 0.30
 
 This preserves your learning progress while still ensuring you review the word sooner.
+
+## Exponential Algorithm (Alternative)
+
+Langner also supports an **exponential** algorithm as an alternative to Modified SM-2. This algorithm uses a simpler scoring model:
+
+- **Score** = sum of `(quality - 3)` for all review history
+- Score is clamped to a minimum of 1
+- **Interval** = `base ^ max(score - 1, 0)` where base defaults to 4
+
+Example progression with base 4 and quality 4 each time:
+- Review 1: score 1, interval = 4^0 = 1 day
+- Review 2: score 2, interval = 4^1 = 4 days
+- Review 3: score 3, interval = 4^2 = 16 days
+- Review 4: score 4, interval = 4^3 = 64 days
+- Review 5: score 5, interval = 4^4 = 256 days
+
+Wrong answers (quality < 3) subtract from the score, naturally reducing the interval without a separate penalty formula. Quality 5 answers add 2 to the score, accelerating growth.
+
+## Configuration
+
+Choose the algorithm and base in your `config.yaml`:
+
+```yaml
+quiz:
+  algorithm: modified_sm2  # or "exponential"
+  exponential_base: 4      # base for exponential algorithm (default: 4)
+```
+
+The default algorithm is `modified_sm2` for backward compatibility.
+
+## Recalculating Intervals
+
+If you change the algorithm or base, run the recalculate command to update all existing learning history:
+
+```bash
+langner migrate recalculate-intervals
+```
+
+This replays all review history through the configured algorithm and updates stored intervals.

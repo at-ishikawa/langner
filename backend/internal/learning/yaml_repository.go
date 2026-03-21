@@ -13,13 +13,17 @@ import (
 // YAMLLearningRepository reads learning history from YAML files and writes
 // learning logs as LearningHistory YAML files.
 type YAMLLearningRepository struct {
-	directory string
-	outputDir string
+	directory  string
+	outputDir  string
+	calculator notebook.IntervalCalculator
 }
 
 // NewYAMLLearningRepository creates a new YAMLLearningRepository for reading.
-func NewYAMLLearningRepository(directory string) *YAMLLearningRepository {
-	return &YAMLLearningRepository{directory: directory}
+func NewYAMLLearningRepository(directory string, calculator notebook.IntervalCalculator) *YAMLLearningRepository {
+	if calculator == nil {
+		calculator = &notebook.SM2Calculator{}
+	}
+	return &YAMLLearningRepository{directory: directory, calculator: calculator}
 }
 
 // NewYAMLLearningRepositoryWriter creates a new YAMLLearningRepository for writing.
@@ -393,7 +397,7 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	if dir == "" { dir = r.directory }
 	learningHistories, err := notebook.NewLearningHistories(dir)
 	if err != nil { return fmt.Errorf("load learning histories: %w", err) }
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[log.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[log.NotebookName], r.calculator)
 	quizType := notebook.QuizType(log.QuizType)
 	if quizType == notebook.QuizTypeReverse {
 		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs))

@@ -154,15 +154,13 @@ func (exp LearningHistoryExpression) GetEasinessFactorForQuizType(quizType QuizT
 	}
 }
 
-// AddRecordWithQualityForReverse adds a new learning record for reverse quiz with SM-2 quality data
+// AddRecordWithQualityForReverse adds a new learning record for reverse quiz with quality data.
 func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
+	calculator IntervalCalculator,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
 ) {
-	correctStreak := GetCorrectStreak(exp.ReverseLogs)
-	lastInterval := GetLastInterval(exp.ReverseLogs)
-
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
@@ -170,15 +168,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 		} else {
 			status = learnedStatusCanBeUsed
 		}
-		correctStreak++
 	}
 
 	if exp.ReverseEasinessFactor == 0 {
 		exp.ReverseEasinessFactor = DefaultEasinessFactor
 	}
 
-	exp.ReverseEasinessFactor = UpdateEasinessFactor(exp.ReverseEasinessFactor, quality, correctStreak)
-	nextInterval := CalculateNextInterval(lastInterval, exp.ReverseEasinessFactor, quality, correctStreak)
+	nextInterval, newEF := calculator.CalculateInterval(exp.ReverseLogs, quality, exp.ReverseEasinessFactor)
+	if newEF > 0 {
+		exp.ReverseEasinessFactor = newEF
+	}
 
 	newRecord := LearningRecord{
 		Status:         status,
@@ -332,16 +331,14 @@ func (exp LearningHistoryExpression) NeedsReverseReview() bool {
 	return elapsedDays >= threshold
 }
 
-// AddRecordWithQuality adds a new learning record with SM-2 quality data
+// AddRecordWithQuality adds a new learning record with quality data.
 func (exp *LearningHistoryExpression) AddRecordWithQuality(
+	calculator IntervalCalculator,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	correctStreak := GetCorrectStreak(exp.LearnedLogs)
-	lastInterval := GetLastInterval(exp.LearnedLogs)
-
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
@@ -349,15 +346,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 		} else {
 			status = learnedStatusCanBeUsed
 		}
-		correctStreak++
 	}
 
 	if exp.EasinessFactor == 0 {
 		exp.EasinessFactor = DefaultEasinessFactor
 	}
 
-	exp.EasinessFactor = UpdateEasinessFactor(exp.EasinessFactor, quality, correctStreak)
-	nextInterval := CalculateNextInterval(lastInterval, exp.EasinessFactor, quality, correctStreak)
+	nextInterval, newEF := calculator.CalculateInterval(exp.LearnedLogs, quality, exp.EasinessFactor)
+	if newEF > 0 {
+		exp.EasinessFactor = newEF
+	}
 
 	newRecord := LearningRecord{
 		Status:         status,

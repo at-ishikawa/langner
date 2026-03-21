@@ -21,16 +21,18 @@ type Service struct {
 	openaiClient       inference.Client
 	dictionaryMap      map[string]rapidapi.Response
 	learningRepository learning.LearningRepository
+	calculator         notebook.IntervalCalculator
 }
 
 // NewService creates a new Service.
 // learningRepo is optional; pass nil when DB is not configured.
-func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository) *Service {
+func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository, quizCfg config.QuizConfig) *Service {
 	return &Service{
 		notebooksConfig:    notebooksConfig,
 		openaiClient:       openaiClient,
 		dictionaryMap:      dictionaryMap,
 		learningRepository: learningRepo,
+		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.ExponentialBase),
 	}
 }
 
@@ -1200,7 +1202,7 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 		return "", ""
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.calculator)
 	expr := updater.FindExpressionByName(expression)
 	if expr == nil {
 		return "", ""

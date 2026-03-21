@@ -11,6 +11,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/fatih/color"
 )
@@ -31,6 +32,7 @@ func NewNotebookQuizCLI(
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
 	includeNoCorrectAnswers bool,
+	quizCfg config.QuizConfig,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI
 	baseCLI, reader, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
@@ -38,7 +40,8 @@ func NewNotebookQuizCLI(
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
+	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.ExponentialBase)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	var cards []quiz.Card
 
@@ -89,6 +92,7 @@ func NewFlashcardQuizCLI(
 	notebooksConfig config.NotebooksConfig,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
+	quizCfg config.QuizConfig,
 ) (*NotebookQuizCLI, error) {
 	// Initialize base CLI for flashcards
 	baseCLI, _, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
@@ -102,7 +106,8 @@ func NewFlashcardQuizCLI(
 		return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
+	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.ExponentialBase)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	cards, err := svc.LoadCards([]string{notebookName}, false)
 	if err != nil {

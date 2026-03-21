@@ -220,7 +220,7 @@ func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *d
 	}
 
 	yamlRepo := notebook.NewYAMLNoteRepository(reader)
-	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
+	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, nil)
 	jsonDictRepo := rapidapi.NewJSONDictionaryRepository(cfg.Dictionaries.RapidAPI.CacheDirectory)
 
 	return datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, writer)
@@ -248,7 +248,7 @@ func readNotesFromDirs(ctx context.Context, storyDirs, flashcardDirs, bookDirs, 
 
 func readLearningByNotebook(notes []notebook.NoteRecord, learningDir string) map[string][]notebook.LearningHistoryExpression {
 	result := make(map[string][]notebook.LearningHistoryExpression)
-	repo := learning.NewYAMLLearningRepository(learningDir)
+	repo := learning.NewYAMLLearningRepository(learningDir, nil)
 	for _, nbID := range extractNotebookIDs(notes) {
 		exprs, err := repo.FindByNotebookID(nbID)
 		if err != nil || len(exprs) == 0 {

@@ -93,6 +93,7 @@ func TestService_LoadEtymologyCards(t *testing.T) {
 		nil, // openaiClient not needed for loading
 		nil, // dictionaryMap not needed
 		nil, // learningRepo not needed
+		config.QuizConfig{},
 	)
 
 	cards, err := svc.LoadEtymologyCards(
@@ -163,6 +164,7 @@ notebooks:
 			LearningNotesDirectory: learningDir,
 		},
 		nil, nil, nil,
+		config.QuizConfig{},
 	)
 
 	cards, err := svc.LoadEtymologyCards([]string{"test-roots"}, []string{"simple"}, true)

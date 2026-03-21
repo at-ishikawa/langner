@@ -29,6 +29,12 @@ type Config struct {
 	OpenAI       OpenAIConfig       `mapstructure:"openai"`
 	Books        BooksConfig        `mapstructure:"books"`
 	Database     DatabaseConfig     `mapstructure:"database"`
+	Quiz         QuizConfig         `mapstructure:"quiz"`
+}
+
+type QuizConfig struct {
+	Algorithm       string  `mapstructure:"algorithm"`
+	ExponentialBase float64 `mapstructure:"exponential_base"`
 }
 
 type DatabaseConfig struct {
@@ -138,6 +144,8 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("database.username", "user")
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000"})
+	v.SetDefault("quiz.algorithm", "modified_sm2")
+	v.SetDefault("quiz.exponential_base", 4.0)
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {

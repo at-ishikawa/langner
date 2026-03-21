@@ -369,7 +369,7 @@ func (s *Service) SaveEtymologyResult(card EtymologyCard, quality int, correct b
 		return fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName], s.calculator)
 	updater.UpdateOrCreateExpressionWithQualityForEtymology(
 		card.NotebookName,
 		card.StoryTitle,

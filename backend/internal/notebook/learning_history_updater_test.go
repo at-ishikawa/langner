@@ -316,7 +316,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			updater := NewLearningHistoryUpdater(tc.initialHistory)
+			updater := NewLearningHistoryUpdater(tc.initialHistory, nil)
 
 			found := updater.UpdateOrCreateExpressionWithQualityForReverse(
 				tc.notebookID,
@@ -881,7 +881,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			updater := NewLearningHistoryUpdater(tc.initialHistory)
+			updater := NewLearningHistoryUpdater(tc.initialHistory, nil)
 
 			found := updater.UpdateOrCreateExpressionWithQuality(
 				tc.notebookID,

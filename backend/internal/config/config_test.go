@@ -80,6 +80,10 @@ func TestConfigLoader_Load(t *testing.T) {
 					Username: "user",
 					TLS:      false,
 				},
+				Quiz: QuizConfig{
+					Algorithm:       "modified_sm2",
+					ExponentialBase: 4,
+				},
 			},
 		},
 		{
@@ -131,6 +135,10 @@ outputs:
 					Username: "user",
 					TLS:      false,
 				},
+				Quiz: QuizConfig{
+					Algorithm:       "modified_sm2",
+					ExponentialBase: 4,
+				},
 			},
 		},
 		{
@@ -175,6 +183,10 @@ outputs:
 					Database: "local",
 					Username: "user",
 					TLS:      false,
+				},
+				Quiz: QuizConfig{
+					Algorithm:       "modified_sm2",
+					ExponentialBase: 4,
 				},
 			},
 		},

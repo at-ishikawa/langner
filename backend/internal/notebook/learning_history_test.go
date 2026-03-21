@@ -694,7 +694,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exp := tt.expression
-			exp.AddRecordWithQualityForReverse(tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs)
+			exp.AddRecordWithQualityForReverse(&SM2Calculator{}, tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs)
 
 			assert.Len(t, exp.ReverseLogs, 1)
 			assert.Equal(t, tt.wantStatus, exp.ReverseLogs[0].Status)
@@ -774,7 +774,7 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exp := tt.expression
-			exp.AddRecordWithQuality(tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs, tt.quizType)
+			exp.AddRecordWithQuality(&SM2Calculator{}, tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs, tt.quizType)
 
 			assert.Len(t, exp.LearnedLogs, 1)
 			assert.Equal(t, tt.wantStatus, exp.LearnedLogs[0].Status)

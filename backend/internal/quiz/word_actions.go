@@ -61,7 +61,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 		intervalDays = 3650 // ~10 years
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 
 	if quizType == notebook.QuizTypeReverse {
 		if !s.setSkipInterval(updater, info, intervalDays, true) {
@@ -164,7 +164,7 @@ func (s *Service) ResumeWord(info CardInfo, quizType notebook.QuizType) error {
 		return fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 	isReverse := quizType == notebook.QuizTypeReverse
 	s.setSkipInterval(updater, info, 0, isReverse)
 
@@ -183,7 +183,7 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (str
 		return "", fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 	isReverse := quizType == notebook.QuizTypeReverse
 	nextReview := s.toggleLastAnswer(updater, info, isReverse)
 
@@ -214,7 +214,7 @@ func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, inf
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				return toggleLogs(&h.Expressions[ei], isReverse)
+				return toggleLogs(&h.Expressions[ei], isReverse, s.calculator)
 			}
 			continue
 		}
@@ -227,14 +227,14 @@ func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, inf
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				return toggleLogs(&scene.Expressions[ei], isReverse)
+				return toggleLogs(&scene.Expressions[ei], isReverse, s.calculator)
 			}
 		}
 	}
 	return ""
 }
 
-func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool) string {
+func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool, calculator notebook.IntervalCalculator) string {
 	var logs []notebook.LearningRecord
 	if isReverse {
 		logs = expr.ReverseLogs
@@ -255,8 +255,7 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool) string
 		log.Quality = 1
 	}
 
-	// Recalculate interval
-	correctStreak := notebook.GetCorrectStreak(logs)
+	// Recalculate interval using calculator
 	ef := expr.EasinessFactor
 	if isReverse {
 		ef = expr.ReverseEasinessFactor
@@ -264,20 +263,24 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool) string
 	if ef == 0 {
 		ef = notebook.DefaultEasinessFactor
 	}
-	ef = notebook.UpdateEasinessFactor(ef, log.Quality, correctStreak)
-	newInterval := notebook.CalculateNextInterval(
-		notebook.GetLastInterval(logs[1:]),
-		ef,
-		log.Quality,
-		correctStreak,
-	)
+	var previousLogs []notebook.LearningRecord
+	if len(logs) > 1 {
+		previousLogs = logs[1:]
+	}
+	newInterval, newEF := calculator.CalculateInterval(previousLogs, log.Quality, ef)
 	log.IntervalDays = newInterval
 
+	if newEF > 0 {
+		if isReverse {
+			expr.ReverseEasinessFactor = newEF
+		} else {
+			expr.EasinessFactor = newEF
+		}
+	}
+
 	if isReverse {
-		expr.ReverseEasinessFactor = ef
 		expr.ReverseLogs = logs
 	} else {
-		expr.EasinessFactor = ef
 		expr.LearnedLogs = logs
 	}
 

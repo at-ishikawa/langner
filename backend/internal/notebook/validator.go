@@ -1146,53 +1146,32 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 // to compute the correct easiness factor and interval_days from the merged logs.
 // Returns the new easiness factor, updated logs, and whether any values changed.
 func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord, bool) {
-	// Sort by date ascending (oldest first) for replay
-	sort.Slice(logs, func(i, j int) bool {
-		return logs[i].LearnedAt.Before(logs[j].LearnedAt.Time)
-	})
-
-	// Replay SM-2 to recalculate easiness factor and interval_days
-	ef := DefaultEasinessFactor
-	correctStreak := 0
-	lastInterval := 0
-	changed := false
+	calculator := &SM2Calculator{}
+	oldIntervals := make([]int, len(logs))
+	oldQualities := make([]int, len(logs))
 	for i, log := range logs {
-		quality := log.Quality
-		// Fix inconsistency: misunderstood status must have quality < 3
-		if log.Status == LearnedStatusMisunderstood && quality >= 3 {
-			quality = 2
-			logs[i].Quality = quality
-			changed = true
-		}
-		if quality >= 3 {
-			correctStreak++
-		} else {
-			correctStreak = 0
-		}
-		ef = UpdateEasinessFactor(ef, quality, correctStreak)
-		if logs[i].OverrideInterval > 0 {
-			// User manually set this interval; preserve it
-			lastInterval = logs[i].OverrideInterval
-			if logs[i].IntervalDays != logs[i].OverrideInterval {
-				logs[i].IntervalDays = logs[i].OverrideInterval
-				changed = true
-			}
-		} else {
-			nextInterval := CalculateNextInterval(lastInterval, ef, quality, correctStreak)
-			if logs[i].IntervalDays != nextInterval {
-				logs[i].IntervalDays = nextInterval
-				changed = true
-			}
-			lastInterval = nextInterval
+		oldIntervals[i] = log.IntervalDays
+		oldQualities[i] = log.Quality
+	}
+
+	// Fix inconsistency: misunderstood status must have quality < 3
+	for i := range logs {
+		if logs[i].Status == LearnedStatusMisunderstood && logs[i].Quality >= 3 {
+			logs[i].Quality = 2
 		}
 	}
 
-	// Re-sort by date descending (newest first) for storage
-	sort.Slice(logs, func(i, j int) bool {
-		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
-	})
+	ef, newLogs := calculator.RecalculateAll(logs)
 
-	return ef, logs, changed
+	changed := false
+	for i := range newLogs {
+		if newLogs[i].IntervalDays != oldIntervals[i] || newLogs[i].Quality != oldQualities[i] {
+			changed = true
+			break
+		}
+	}
+
+	return ef, newLogs, changed
 }
 
 // fixIntervalDays recalculates interval_days for all expressions in all learning histories.

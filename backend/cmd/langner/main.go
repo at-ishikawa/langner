@@ -71,6 +71,7 @@ func newMigrateCommand() *cobra.Command {
 	migrateCmd.AddCommand(newMigrateImportDBCommand())
 	migrateCmd.AddCommand(newExportDBCommand())
 	migrateCmd.AddCommand(newValidateDBCommand())
+	migrateCmd.AddCommand(newRecalculateIntervalsCommand())
 
 	return migrateCmd
 }
@@ -90,5 +91,25 @@ func newMigrateLearningHistoryCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&recalculateSM2, "recalculate-sm2", false, "Force recalculation of SM-2 metrics (EF and intervals) for all learning history entries")
+	return cmd
+}
+
+func newRecalculateIntervalsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "recalculate-intervals",
+		Short: "Recalculate intervals for all learning history using the configured algorithm",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			return cli.RecalculateIntervals(
+				cfg.Notebooks.LearningNotesDirectory,
+				cfg.Quiz.Algorithm,
+				cfg.Quiz.ExponentialBase,
+			)
+		},
+	}
 	return cmd
 }
