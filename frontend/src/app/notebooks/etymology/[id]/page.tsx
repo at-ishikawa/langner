@@ -381,14 +381,12 @@ function EtymologyNotebookPage() {
   const selectOrigin = useCallback(
     (origin: string) => {
       router.push(`/notebooks/etymology/${id}?origin=${encodeURIComponent(origin)}`);
-      window.scrollTo(0, 0);
     },
     [router, id],
   );
 
   const clearOrigin = useCallback(() => {
     router.push(`/notebooks/etymology/${id}`);
-    window.scrollTo(0, 0);
   }, [router, id]);
 
   useEffect(() => {
