@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { Suspense, useEffect, useMemo, useState, useCallback } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Box,
@@ -351,9 +351,20 @@ function ByMeaningView({
   );
 }
 
-export default function EtymologyNotebookPage() {
+export default function EtymologyNotebookPageWrapper() {
+  return (
+    <Suspense fallback={<Box p={4} maxW="sm" mx="auto" textAlign="center"><Spinner size="lg" /></Box>}>
+      <EtymologyNotebookPage />
+    </Suspense>
+  );
+}
+
+function EtymologyNotebookPage() {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const id = params.id as string;
+  const selectedOrigin = searchParams.get("origin");
 
   const [origins, setOrigins] = useState<EtymologyOriginPart[]>([]);
   const [definitions, setDefinitions] = useState<EtymologyDefinition[]>([]);
@@ -366,7 +377,19 @@ export default function EtymologyNotebookPage() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [tab, setTab] = useState<Tab>("origins");
-  const [selectedOrigin, setSelectedOrigin] = useState<string | null>(null);
+
+  const selectOrigin = useCallback(
+    (origin: string) => {
+      router.push(`/notebooks/etymology/${id}?origin=${encodeURIComponent(origin)}`);
+      window.scrollTo(0, 0);
+    },
+    [router, id],
+  );
+
+  const clearOrigin = useCallback(() => {
+    router.push(`/notebooks/etymology/${id}`);
+    window.scrollTo(0, 0);
+  }, [router, id]);
 
   useEffect(() => {
     notebookClient
@@ -377,13 +400,6 @@ export default function EtymologyNotebookPage() {
         setMeaningGroups(res.meaningGroups ?? []);
         setOriginCount(res.originCount);
         setDefinitionCount(res.definitionCount);
-
-        // Check URL for origin query param
-        const url = new URL(window.location.href);
-        const originParam = url.searchParams.get("origin");
-        if (originParam) {
-          setSelectedOrigin(originParam);
-        }
       })
       .catch(() => setError("Failed to load etymology notebook"))
       .finally(() => setLoading(false));
@@ -423,8 +439,8 @@ export default function EtymologyNotebookPage() {
         origins={origins}
         definitions={definitions}
         notebookId={id}
-        onBack={() => setSelectedOrigin(null)}
-        onSelectOrigin={setSelectedOrigin}
+        onBack={clearOrigin}
+        onSelectOrigin={selectOrigin}
       />
     );
   }
@@ -536,7 +552,7 @@ export default function EtymologyNotebookPage() {
               <OriginCard
                 key={i}
                 origin={origin}
-                onClick={() => setSelectedOrigin(origin.origin)}
+                onClick={() => selectOrigin(origin.origin)}
               />
             ))}
             {filteredOrigins.length === 0 && (
@@ -549,7 +565,7 @@ export default function EtymologyNotebookPage() {
           <ByMeaningView
             meaningGroups={meaningGroups}
             search={search}
-            onSelectOrigin={setSelectedOrigin}
+            onSelectOrigin={selectOrigin}
           />
         )}
       </Box>

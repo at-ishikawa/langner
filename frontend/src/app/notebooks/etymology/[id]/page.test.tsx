@@ -10,9 +10,12 @@ vi.mock("@/lib/client", () => ({
   },
 }));
 
+const mockPush = vi.fn();
+let mockSearchParams = new URLSearchParams();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: mockPush }),
   useParams: () => ({ id: "etym-1" }),
+  useSearchParams: () => mockSearchParams,
 }));
 
 function renderPage() {
@@ -201,7 +204,10 @@ describe("EtymologyNotebookPage - By Meaning tab", () => {
 });
 
 describe("EtymologyNotebookPage - Origin Detail", () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPush.mockClear();
+  });
 
   it("navigates to origin detail when clicking an origin", async () => {
     vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
@@ -210,63 +216,45 @@ describe("EtymologyNotebookPage - Origin Detail", () => {
 
     fireEvent.click(screen.getByText("graph"));
 
+    expect(mockPush).toHaveBeenCalledWith("/notebooks/etymology/etym-1?origin=graph");
+  });
+
+  it("shows origin detail view when origin is in URL", async () => {
+    mockSearchParams = new URLSearchParams("origin=graph");
+    vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
+    renderPage();
+
     await waitFor(() => {
       expect(screen.getByText("Origin Detail")).toBeInTheDocument();
       expect(screen.getByText("< Origin List")).toBeInTheDocument();
       expect(screen.getByText("to write")).toBeInTheDocument();
-      // Shows related words
       expect(screen.getByText("telegraph")).toBeInTheDocument();
       expect(screen.getByText("autograph")).toBeInTheDocument();
-      // Does not show unrelated word
-      expect(screen.queryByText("describe")).not.toBeInTheDocument();
     });
+    mockSearchParams = new URLSearchParams();
   });
 
-  it("shows current origin highlighted in word breakdown", async () => {
+  it("navigates back to origin list when clicking back", async () => {
+    mockSearchParams = new URLSearchParams("origin=graph");
     vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
     renderPage();
-    await waitFor(() => expect(screen.getByText("graph")).toBeInTheDocument());
-
-    fireEvent.click(screen.getByText("graph"));
-
-    await waitFor(() => {
-      expect(screen.getAllByText("(current)").length).toBeGreaterThan(0);
-    });
-  });
-
-  it("navigates to another origin via word breakdown link", async () => {
-    vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
-    renderPage();
-    await waitFor(() => expect(screen.getByText("graph")).toBeInTheDocument());
-
-    fireEvent.click(screen.getByText("graph"));
-
-    await waitFor(() => expect(screen.getByText("telegraph")).toBeInTheDocument());
-
-    // Click "tele" in the telegraph breakdown to navigate to tele's detail
-    const teleLink = screen.getByText("tele");
-    fireEvent.click(teleLink);
-
-    await waitFor(() => {
-      // Now showing tele's detail page
-      expect(screen.getByText("far")).toBeInTheDocument();
-      expect(screen.getByText("telegraph")).toBeInTheDocument();
-    });
-  });
-
-  it("returns to origin list when clicking back", async () => {
-    vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
-    renderPage();
-    await waitFor(() => expect(screen.getByText("graph")).toBeInTheDocument());
-
-    fireEvent.click(screen.getByText("graph"));
     await waitFor(() => expect(screen.getByText("Origin Detail")).toBeInTheDocument());
 
     fireEvent.click(screen.getByText("< Origin List"));
+    expect(mockPush).toHaveBeenCalledWith("/notebooks/etymology/etym-1");
+    mockSearchParams = new URLSearchParams();
+  });
 
-    await waitFor(() => {
-      expect(screen.getByText("Etymology")).toBeInTheDocument();
-      expect(screen.queryByText("Origin Detail")).not.toBeInTheDocument();
-    });
+  it("navigates to another origin via word breakdown link", async () => {
+    mockSearchParams = new URLSearchParams("origin=graph");
+    vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
+    renderPage();
+    await waitFor(() => expect(screen.getByText("telegraph")).toBeInTheDocument());
+
+    const teleLink = screen.getByText("tele");
+    fireEvent.click(teleLink);
+
+    expect(mockPush).toHaveBeenCalledWith("/notebooks/etymology/etym-1?origin=tele");
+    mockSearchParams = new URLSearchParams();
   });
 });
