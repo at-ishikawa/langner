@@ -86,13 +86,15 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			}
 		}
 		reverseCount := countReverseStoryDefinitions(stories, learningHistories[id])
+		etymCount := countStoryEtymologyDefinitions(stories)
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:         id,
-			Name:               index.Name,
-			ReviewCount:        countStoryDefinitions(filtered),
-			ReverseReviewCount: reverseCount,
-			LatestStoryDate:    latestDate,
-			Kind:               kindFromIndex(index),
+			NotebookID:            id,
+			Name:                  index.Name,
+			ReviewCount:           countStoryDefinitions(filtered),
+			ReverseReviewCount:    reverseCount,
+			EtymologyReviewCount:  etymCount,
+			LatestStoryDate:       latestDate,
+			Kind:                  kindFromIndex(index),
 		})
 	}
 
@@ -110,11 +112,13 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		}
 
 		reverseCount := countReverseFlashcardCards(notebooks, learningHistories[id])
+		etymCount := countFlashcardEtymologyCards(notebooks)
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:         id,
-			Name:               index.Name,
-			ReviewCount:        countFlashcardCards(filtered),
-			ReverseReviewCount: reverseCount,
+			NotebookID:            id,
+			Name:                  index.Name,
+			ReviewCount:           countFlashcardCards(filtered),
+			ReverseReviewCount:    reverseCount,
+			EtymologyReviewCount:  etymCount,
 		})
 	}
 
@@ -372,6 +376,32 @@ func countStoryDefinitions(stories []notebook.StoryNotebook) int {
 		}
 	}
 	return len(seen)
+}
+
+func countStoryEtymologyDefinitions(stories []notebook.StoryNotebook) int {
+	count := 0
+	for _, story := range stories {
+		for _, scene := range story.Scenes {
+			for _, def := range scene.Definitions {
+				if len(def.OriginParts) > 0 {
+					count++
+				}
+			}
+		}
+	}
+	return count
+}
+
+func countFlashcardEtymologyCards(notebooks []notebook.FlashcardNotebook) int {
+	count := 0
+	for _, nb := range notebooks {
+		for _, card := range nb.Cards {
+			if len(card.OriginParts) > 0 {
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []notebook.LearningHistory) int {
