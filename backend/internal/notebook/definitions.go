@@ -56,6 +56,48 @@ func ReadDefinitionsFromBytes(data []byte) ([]Definitions, error) {
 // DefinitionsMap is a map of book ID -> notebook file -> scene index -> definitions
 type DefinitionsMap map[string]map[string]map[int][]Note
 
+// definitionsIndex represents an index.yml for a definitions directory.
+type definitionsIndex struct {
+	ID        string   `yaml:"id"`
+	Notebooks []string `yaml:"notebooks"`
+}
+
+// loadDefinitionsFile loads a single definitions YAML file into the result map.
+func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) error {
+	definitions, err := readYamlFile[[]Definitions](path)
+	if err != nil {
+		return fmt.Errorf("readYamlFile(%s): %w", path, err)
+	}
+
+	if result[bookID] == nil {
+		result[bookID] = make(map[string]map[int][]Note)
+	}
+
+	for _, def := range definitions {
+		key := def.Metadata.Notebook
+		if key == "" {
+			key = def.Metadata.Title
+		}
+		if key == "" {
+			continue
+		}
+
+		if result[bookID][key] == nil {
+			result[bookID][key] = make(map[int][]Note)
+		}
+
+		for _, scene := range def.Scenes {
+			sceneIndex := scene.Metadata.GetIndex()
+			result[bookID][key][sceneIndex] = append(
+				result[bookID][key][sceneIndex],
+				scene.Expressions...,
+			)
+		}
+	}
+
+	return nil
+}
+
 // NewDefinitionsMap loads definitions from the given directories
 func NewDefinitionsMap(directories []string) (DefinitionsMap, error) {
 	result := make(DefinitionsMap)
@@ -65,70 +107,63 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, error) {
 			continue
 		}
 
-		// Skip if directory doesn't exist
 		if _, err := os.Stat(dir); os.IsNotExist(err) {
 			continue
 		}
 
+		// Track directories with index.yml so we skip them in the walk
+		indexedDirs := make(map[string]bool)
+
+		// First pass: find directories with index.yml
 		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() || filepath.Base(path) != "index.yml" {
+				return nil
+			}
+
+			idx, err := readYamlFile[definitionsIndex](path)
+			if err != nil || idx.ID == "" {
+				return nil // skip invalid index files
+			}
+
+			indexDir := filepath.Dir(path)
+			indexedDirs[indexDir] = true
+
+			for _, nbPath := range idx.Notebooks {
+				nbFullPath := filepath.Join(indexDir, nbPath)
+				if err := loadDefinitionsFile(nbFullPath, idx.ID, result); err != nil {
+					return err
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, fmt.Errorf("walk definitions directory %s (index pass): %w", dir, err)
+		}
+
+		// Second pass: load standalone .yml files (not in indexed directories)
+		err = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
 			}
 			if info.IsDir() {
 				return nil
 			}
-			if filepath.Ext(path) != ".yml" {
+			if filepath.Ext(path) != ".yml" || filepath.Base(path) == "index.yml" {
 				return nil
 			}
 
-			// Get the book ID from the path relative to the definitions directory.
-			// Single file:  definitions/books/frankenstein.yml -> bookID = "frankenstein"
-			// Directory:    definitions/books/frankenstein/session1.yml -> bookID = "frankenstein"
-			relPath, _ := filepath.Rel(dir, path)
-			parts := strings.Split(filepath.ToSlash(relPath), "/")
-			var bookID string
-			if len(parts) >= 2 {
-				// File is inside a subdirectory — use the parent directory name
-				bookID = parts[len(parts)-2]
-			} else {
-				// File is directly in the definitions directory
-				bookID = parts[0]
-			}
-			bookID = strings.TrimSuffix(bookID, filepath.Ext(bookID))
-
-			definitions, err := readYamlFile[[]Definitions](path)
-			if err != nil {
-				return fmt.Errorf("readYamlFile(%s): %w", path, err)
+			// Skip files in directories that have index.yml
+			if indexedDirs[filepath.Dir(path)] {
+				return nil
 			}
 
-			if result[bookID] == nil {
-				result[bookID] = make(map[string]map[int][]Note)
-			}
-
-			for _, def := range definitions {
-				// Use notebook filename as key if provided, otherwise use title
-				key := def.Metadata.Notebook
-				if key == "" {
-					key = def.Metadata.Title
-				}
-				if key == "" {
-					continue // skip if neither is provided
-				}
-
-				if result[bookID][key] == nil {
-					result[bookID][key] = make(map[int][]Note)
-				}
-
-				for _, scene := range def.Scenes {
-					sceneIndex := scene.Metadata.GetIndex()
-					result[bookID][key][sceneIndex] = append(
-						result[bookID][key][sceneIndex],
-						scene.Expressions...,
-					)
-				}
-			}
-
-			return nil
+			// Book ID from filename
+			bookID := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
+			return loadDefinitionsFile(path, bookID, result)
 		})
 
 		if err != nil {
