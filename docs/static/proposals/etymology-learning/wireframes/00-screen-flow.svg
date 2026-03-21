@@ -1,105 +1,189 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 580" width="900" height="580">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1060 780" width="1060" height="780">
   <defs>
     <style>
       text { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
       .screen-title { font-size: 13px; font-weight: 600; fill: #111; }
       .screen-desc { font-size: 10px; fill: #666; }
       .arrow-label { font-size: 10px; fill: #2563eb; }
+      .section-label { font-size: 12px; font-weight: 600; fill: #666; }
     </style>
     <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
       <path d="M0,0 L8,3 L0,6" fill="#2563eb"/>
     </marker>
   </defs>
 
-  <rect width="900" height="580" fill="#f8f9fa"/>
+  <rect width="1060" height="780" fill="#f8f9fa"/>
 
-  <text x="450" y="30" text-anchor="middle" font-size="16" font-weight="600" fill="#111">Screen Flow</text>
+  <text x="530" y="30" text-anchor="middle" font-size="16" font-weight="600" fill="#111">Screen Flow</text>
 
-  <!-- Row 1: Browse Flow -->
-  <text x="20" y="65" font-size="12" font-weight="600" fill="#666">Browse</text>
+  <!-- HOME -->
+  <rect x="430" y="50" width="160" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="510" y="80" text-anchor="middle" class="screen-title">Home</text>
+  <text x="510" y="98" text-anchor="middle" class="screen-desc">3 cards: Books, Learn, Quiz</text>
 
-  <!-- Notebook List -->
-  <rect x="20" y="80" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="90" y="110" text-anchor="middle" class="screen-title">Notebooks</text>
-  <text x="90" y="128" text-anchor="middle" class="screen-desc">Select etymology notebook</text>
+  <!-- Arrows from Home -->
+  <!-- Home -> Books -->
+  <line x1="430" y1="85" x2="200" y2="85" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="310" y="78" text-anchor="middle" class="arrow-label">Books</text>
 
-  <line x1="160" y1="120" x2="200" y2="120" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- Home -> Learn Hub -->
+  <line x1="470" y1="120" x2="340" y2="180" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="385" y="148" class="arrow-label">Learn</text>
+
+  <!-- Home -> Quiz Hub -->
+  <line x1="550" y1="120" x2="680" y2="180" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="630" y="148" class="arrow-label">Quiz</text>
+
+  <!-- BOOKS (simplified, out of scope) -->
+  <rect x="50" y="55" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="125" y="82" text-anchor="middle" class="screen-title">Books</text>
+  <text x="125" y="98" text-anchor="middle" class="screen-desc">Read books, look up words</text>
+
+  <!-- ===== LEARN HUB ===== -->
+  <text x="20" y="190" class="section-label">Learn</text>
+
+  <rect x="200" y="195" width="160" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="280" y="222" text-anchor="middle" class="screen-title">Learn Hub</text>
+  <text x="280" y="240" text-anchor="middle" class="screen-desc">Vocabulary + Etymology sections</text>
+
+  <!-- Learn Hub -> Notebooks (Vocabulary) -->
+  <line x1="200" y1="230" x2="140" y2="310" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="148" y="268" class="arrow-label">Vocabulary</text>
+
+  <!-- Learn Hub -> Etymology List -->
+  <line x1="360" y1="230" x2="420" y2="310" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="398" y="268" class="arrow-label">Etymology</text>
+
+  <!-- Vocabulary Notebooks -->
+  <rect x="30" y="315" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="105" y="340" text-anchor="middle" class="screen-title">Notebooks</text>
+  <text x="105" y="356" text-anchor="middle" class="screen-desc">Stories, flashcards, books</text>
+
+  <!-- Etymology notebook list -->
+  <rect x="200" y="315" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="275" y="340" text-anchor="middle" class="screen-title">Etymology List</text>
+  <text x="275" y="356" text-anchor="middle" class="screen-desc">Select etymology notebook</text>
+
+  <!-- Etymology notebook list -> Origin List -->
+  <line x1="350" y1="345" x2="390" y2="345" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
   <!-- Origin List -->
-  <rect x="205" y="80" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="275" y="110" text-anchor="middle" class="screen-title">Origin List</text>
-  <text x="275" y="128" text-anchor="middle" class="screen-desc">All Origins / By Meaning</text>
+  <rect x="395" y="315" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="470" y="340" text-anchor="middle" class="screen-title">Origin List</text>
+  <text x="470" y="356" text-anchor="middle" class="screen-desc">All Origins / By Meaning</text>
 
-  <line x1="345" y1="120" x2="385" y2="120" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- Origin List -> Origin Detail -->
+  <line x1="545" y1="345" x2="585" y2="345" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
   <!-- Origin Detail -->
-  <rect x="390" y="80" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="460" y="110" text-anchor="middle" class="screen-title">Origin Detail</text>
-  <text x="460" y="128" text-anchor="middle" class="screen-desc">Words using this origin</text>
+  <rect x="590" y="315" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="665" y="340" text-anchor="middle" class="screen-title">Origin Detail</text>
+  <text x="665" y="356" text-anchor="middle" class="screen-desc">Words using this origin</text>
 
   <!-- Self-loop for origin navigation -->
-  <path d="M530,100 C580,70 580,150 530,130" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <text x="575" y="110" class="arrow-label">click origin</text>
+  <path d="M740,330 C790,305 790,370 740,355" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="785" y="345" class="arrow-label">click origin</text>
 
-  <!-- Arrow to By Meaning -->
-  <line x1="275" y1="160" x2="275" y2="195" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <text x="280" y="185" class="arrow-label">tab</text>
+  <!-- Origin List -> By Meaning -->
+  <line x1="470" y1="375" x2="470" y2="410" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="478" y="400" class="arrow-label">tab</text>
 
   <!-- By Meaning -->
-  <rect x="205" y="200" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="275" y="230" text-anchor="middle" class="screen-title">Browse by Meaning</text>
-  <text x="275" y="248" text-anchor="middle" class="screen-desc">Origins grouped by meaning</text>
+  <rect x="395" y="415" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="470" y="440" text-anchor="middle" class="screen-title">Browse by Meaning</text>
+  <text x="470" y="456" text-anchor="middle" class="screen-desc">Origins grouped by meaning</text>
 
-  <line x1="345" y1="240" x2="450" y2="160" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="545" y1="445" x2="655" y2="375" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-  <!-- Row 2: Structured Quiz Flow -->
-  <text x="20" y="340" font-size="12" font-weight="600" fill="#666">Structured Quiz (Breakdown / Assembly)</text>
+  <!-- ===== QUIZ HUB ===== -->
+  <text x="20" y="520" class="section-label">Quiz</text>
 
-  <rect x="20" y="355" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="90" y="385" text-anchor="middle" class="screen-title">Quiz Start</text>
-  <text x="90" y="403" text-anchor="middle" class="screen-desc">Select notebooks + mode</text>
+  <rect x="430" y="195" width="160" height="70" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="510" y="222" text-anchor="middle" class="screen-title">Quiz Hub</text>
+  <text x="510" y="240" text-anchor="middle" class="screen-desc">Vocabulary + Etymology sections</text>
 
-  <line x1="160" y1="395" x2="200" y2="395" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- Quiz Hub -> Vocabulary Quiz Start -->
+  <line x1="430" y1="250" x2="180" y2="530" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="285" y="400" class="arrow-label">Vocabulary</text>
 
-  <rect x="205" y="355" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="275" y="385" text-anchor="middle" class="screen-title">Quiz Card</text>
-  <text x="275" y="403" text-anchor="middle" class="screen-desc">Breakdown or Assembly</text>
+  <!-- Quiz Hub -> Etymology Quiz Start -->
+  <line x1="530" y1="265" x2="530" y2="530" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="540" y="410" class="arrow-label">Etymology</text>
 
-  <line x1="345" y1="395" x2="385" y2="395" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <!-- Vocabulary Quiz Start -->
+  <rect x="30" y="535" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="105" y="560" text-anchor="middle" class="screen-title">Vocab Quiz Start</text>
+  <text x="105" y="576" text-anchor="middle" class="screen-desc">Notebooks + mode + start</text>
 
-  <rect x="390" y="355" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="460" y="385" text-anchor="middle" class="screen-title">Feedback</text>
-  <text x="460" y="403" text-anchor="middle" class="screen-desc">Correct/incorrect + review</text>
+  <!-- Vocab Quiz Start -> Quiz Card -->
+  <line x1="180" y1="565" x2="220" y2="565" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-  <path d="M460,435 L460,455 L275,455 L275,435" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <text x="367" y="470" text-anchor="middle" class="arrow-label">next word</text>
+  <rect x="225" y="535" width="130" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="290" y="560" text-anchor="middle" class="screen-title">Quiz Card</text>
+  <text x="290" y="576" text-anchor="middle" class="screen-desc">Standard/Reverse/Free</text>
 
-  <line x1="530" y1="395" x2="570" y2="395" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="355" y1="565" x2="395" y2="565" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-  <rect x="575" y="355" width="140" height="80" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="645" y="385" text-anchor="middle" class="screen-title">Session Complete</text>
-  <text x="645" y="403" text-anchor="middle" class="screen-desc">Results summary</text>
-
-  <!-- Row 3: Freeform Quiz Flow -->
-  <text x="20" y="510" font-size="12" font-weight="600" fill="#666">Freeform Quiz</text>
-
-  <rect x="20" y="525" width="140" height="55" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="90" y="550" text-anchor="middle" class="screen-title">Freeform</text>
-  <text x="90" y="566" text-anchor="middle" class="screen-desc">Type any word</text>
-
-  <line x1="160" y1="552" x2="200" y2="552" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-
-  <rect x="205" y="525" width="140" height="55" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="275" y="550" text-anchor="middle" class="screen-title">Feedback</text>
-  <text x="275" y="566" text-anchor="middle" class="screen-desc">Breakdown + related words</text>
+  <rect x="400" y="535" width="130" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="465" y="560" text-anchor="middle" class="screen-title">Feedback</text>
+  <text x="465" y="576" text-anchor="middle" class="screen-desc">Correct/incorrect</text>
 
   <!-- Loop back -->
-  <path d="M275,580 L275,595 L90,595 L90,580" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
-  <text x="182" y="608" text-anchor="middle" class="arrow-label">next word</text>
+  <path d="M465,595 L465,615 L290,615 L290,595" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="377" y="630" text-anchor="middle" class="arrow-label">next word</text>
 
-  <line x1="345" y1="552" x2="385" y2="552" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <line x1="530" y1="565" x2="570" y2="565" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
 
-  <rect x="390" y="525" width="140" height="55" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="460" y="550" text-anchor="middle" class="screen-title">See Results</text>
-  <text x="460" y="566" text-anchor="middle" class="screen-desc">Session summary</text>
+  <rect x="575" y="535" width="140" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="645" y="560" text-anchor="middle" class="screen-title">Session Complete</text>
+  <text x="645" y="576" text-anchor="middle" class="screen-desc">Results summary</text>
+
+  <!-- Etymology Quiz Start -->
+  <rect x="450" y="535" width="150" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="525" y="560" text-anchor="middle" class="screen-title">Etym Quiz Start</text>
+  <text x="525" y="576" text-anchor="middle" class="screen-desc">Notebooks + mode + start</text>
+
+  <!-- Etymology structured quiz flow -->
+  <text x="20" y="660" class="section-label">Etymology Structured Quiz (Breakdown / Assembly)</text>
+
+  <rect x="30" y="675" width="140" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="100" y="700" text-anchor="middle" class="screen-title">Quiz Card</text>
+  <text x="100" y="716" text-anchor="middle" class="screen-desc">Breakdown or Assembly</text>
+
+  <line x1="170" y1="705" x2="210" y2="705" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <rect x="215" y="675" width="140" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="285" y="700" text-anchor="middle" class="screen-title">Feedback</text>
+  <text x="285" y="716" text-anchor="middle" class="screen-desc">Breakdown + related words</text>
+
+  <path d="M285,735 L285,755 L100,755 L100,735" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="192" y="770" text-anchor="middle" class="arrow-label">next word</text>
+
+  <line x1="355" y1="705" x2="395" y2="705" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <rect x="400" y="675" width="140" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="470" y="700" text-anchor="middle" class="screen-title">Session Complete</text>
+  <text x="470" y="716" text-anchor="middle" class="screen-desc">Results summary</text>
+
+  <!-- Etymology freeform -->
+  <text x="600" y="660" class="section-label">Etymology Freeform Quiz</text>
+
+  <rect x="600" y="675" width="140" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="670" y="700" text-anchor="middle" class="screen-title">Freeform</text>
+  <text x="670" y="716" text-anchor="middle" class="screen-desc">Type any word</text>
+
+  <line x1="740" y1="705" x2="780" y2="705" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <rect x="785" y="675" width="140" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="855" y="700" text-anchor="middle" class="screen-title">Feedback</text>
+  <text x="855" y="716" text-anchor="middle" class="screen-desc">Breakdown + related</text>
+
+  <path d="M855,735 L855,755 L670,755 L670,735" fill="none" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+  <text x="762" y="770" text-anchor="middle" class="arrow-label">next word</text>
+
+  <line x1="925" y1="705" x2="965" y2="705" stroke="#2563eb" stroke-width="1.5" marker-end="url(#arrowhead)"/>
+
+  <rect x="785" y="675" width="140" height="60" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="855" y="700" text-anchor="middle" class="screen-title">Feedback</text>
+  <text x="855" y="716" text-anchor="middle" class="screen-desc">Breakdown + related</text>
 </svg>

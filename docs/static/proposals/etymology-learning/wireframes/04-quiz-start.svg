@@ -11,6 +11,7 @@
       .count { font-size: 13px; fill: #666; }
       .radio-label { font-size: 14px; fill: #333; }
       .radio-desc { font-size: 12px; fill: #888; }
+      .back { font-size: 12px; fill: #2563eb; }
     </style>
   </defs>
 
@@ -23,57 +24,69 @@
   <!-- Header -->
   <rect y="44" width="375" height="56" fill="#fff"/>
   <line x1="0" y1="100" x2="375" y2="100" stroke="#e5e7eb"/>
+  <text x="24" y="68" class="back">&lt; Quiz</text>
   <text x="187" y="78" text-anchor="middle" class="title">Etymology Quiz</text>
 
-  <!-- Notebook Selection Section -->
-  <text x="24" y="136" class="label">Select notebooks</text>
-  <text x="24" y="152" class="muted">Only notebooks with etymology data are shown</text>
-
-  <!-- Notebook with checkbox (selected) -->
-  <rect x="24" y="164" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <rect x="40" y="180" width="18" height="18" rx="4" fill="#2563eb"/>
-  <path d="M44 189 L48 193 L54 185" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-  <text x="68" y="194" class="body">vocabulary</text>
-  <text x="310" y="194" text-anchor="end" class="count">28 words</text>
-
-  <!-- Notebook (unselected) -->
-  <rect x="24" y="220" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <rect x="40" y="236" width="18" height="18" rx="4" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
-  <text x="68" y="250" class="body">frankenstein</text>
-  <text x="310" y="250" text-anchor="end" class="count">5 words</text>
-
-  <!-- Notebook (unselected) -->
-  <rect x="24" y="276" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <rect x="40" y="292" width="18" height="18" rx="4" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
-  <text x="68" y="306" class="body">english idioms</text>
-  <text x="310" y="306" text-anchor="end" class="count">12 words</text>
-
   <!-- Quiz Mode Section -->
-  <text x="24" y="368" class="label">Quiz mode</text>
+  <text x="24" y="136" class="label">Quiz mode</text>
 
   <!-- Breakdown mode (selected) -->
-  <rect x="24" y="380" width="327" height="64" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
-  <circle cx="44" cy="404" r="9" fill="#fff" stroke="#2563eb" stroke-width="2"/>
-  <circle cx="44" cy="404" r="5" fill="#2563eb"/>
-  <text x="64" y="408" class="radio-label">Breakdown</text>
-  <text x="64" y="426" class="radio-desc">Given a word, type its origins and their meanings</text>
+  <rect x="24" y="148" width="327" height="64" rx="8" fill="#eff6ff" stroke="#2563eb" stroke-width="1.5"/>
+  <circle cx="44" cy="172" r="9" fill="#fff" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="44" cy="172" r="5" fill="#2563eb"/>
+  <text x="64" y="176" class="radio-label">Breakdown</text>
+  <text x="64" y="194" class="radio-desc">Given a word, type its origins and their meanings</text>
 
   <!-- Assembly mode -->
-  <rect x="24" y="456" width="327" height="64" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <circle cx="44" cy="480" r="9" fill="#fff" stroke="#d1d5db" stroke-width="2"/>
-  <text x="64" y="484" class="radio-label">Assembly</text>
-  <text x="64" y="502" class="radio-desc">Given origins and meanings, type the word</text>
+  <rect x="24" y="220" width="327" height="64" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <circle cx="44" cy="244" r="9" fill="#fff" stroke="#d1d5db" stroke-width="2"/>
+  <text x="64" y="248" class="radio-label">Assembly</text>
+  <text x="64" y="266" class="radio-desc">Given origins and meanings, type the word</text>
+
+  <!-- Freeform mode -->
+  <rect x="24" y="292" width="327" height="64" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <circle cx="44" cy="316" r="9" fill="#fff" stroke="#d1d5db" stroke-width="2"/>
+  <text x="64" y="320" class="radio-label">Freeform</text>
+  <text x="64" y="338" class="radio-desc">Type any word and break down its origins</text>
+
+  <!-- Notebook Selection Section -->
+  <text x="24" y="400" class="label">Select notebooks</text>
+  <text x="24" y="416" class="muted">Only notebooks with etymology data are shown</text>
+
+  <!-- Select All -->
+  <rect x="24" y="428" width="327" height="44" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <rect x="40" y="442" width="18" height="18" rx="4" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="68" y="456" class="body" font-weight="600">All notebooks</text>
+
+  <!-- Notebook with checkbox (selected) -->
+  <rect x="24" y="480" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <rect x="40" y="496" width="18" height="18" rx="4" fill="#2563eb"/>
+  <path d="M44 505 L48 509 L54 501" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="68" y="510" class="body">English Vocabulary</text>
+  <text x="310" y="510" text-anchor="end" class="count">28 words</text>
+
+  <!-- Notebook (unselected) -->
+  <rect x="24" y="536" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <rect x="40" y="552" width="18" height="18" rx="4" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="68" y="566" class="body">Frankenstein</text>
+  <text x="310" y="566" text-anchor="end" class="count">5 words</text>
+
+  <!-- Notebook (unselected) -->
+  <rect x="24" y="592" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <rect x="40" y="608" width="18" height="18" rx="4" fill="#fff" stroke="#d1d5db" stroke-width="1.5"/>
+  <text x="68" y="622" class="body">English Idioms</text>
+  <text x="310" y="622" text-anchor="end" class="count">12 words</text>
 
   <!-- Toggle: Include unstudied -->
-  <rect x="24" y="552" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
-  <text x="40" y="581" class="label">Include unstudied words</text>
-  <rect x="301" y="566" width="36" height="20" rx="10" fill="#d1d5db"/>
-  <circle cx="313" cy="576" r="8" fill="#fff"/>
+  <rect x="24" y="668" width="327" height="48" rx="8" fill="#fff" stroke="#d1d5db"/>
+  <text x="40" y="697" class="label">Include unstudied words</text>
+  <rect x="301" y="684" width="36" height="20" rx="10" fill="#d1d5db"/>
+  <circle cx="313" cy="694" r="8" fill="#fff"/>
 
   <!-- Words due -->
-  <text x="187" y="642" text-anchor="middle" class="subtitle">18 words due for review</text>
+  <text x="187" y="750" text-anchor="middle" class="subtitle">18 words due for review</text>
 
   <!-- Start button -->
-  <rect x="24" y="666" width="327" height="52" rx="10" fill="#2563eb"/>
-  <text x="187" y="698" text-anchor="middle" class="btn-text">Start</text>
+  <rect x="24" y="766" width="327" height="52" rx="10" fill="#2563eb"/>
+  <text x="187" y="798" text-anchor="middle" class="btn-text">Start</text>
 </svg>
