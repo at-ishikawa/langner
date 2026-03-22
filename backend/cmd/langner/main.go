@@ -72,8 +72,32 @@ func newMigrateCommand() *cobra.Command {
 	migrateCmd.AddCommand(newExportDBCommand())
 	migrateCmd.AddCommand(newValidateDBCommand())
 	migrateCmd.AddCommand(newRecalculateIntervalsCommand())
+	migrateCmd.AddCommand(newExtractDefinitionsCommand())
 
 	return migrateCmd
+}
+
+func newExtractDefinitionsCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "extract-definitions",
+		Short: "Extract definitions from story notebooks into separate definition files",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			if len(cfg.Notebooks.DefinitionsDirectories) == 0 {
+				return fmt.Errorf("no definitions_directories configured")
+			}
+
+			return cli.ExtractDefinitions(
+				cfg.Notebooks.StoriesDirectories,
+				cfg.Notebooks.DefinitionsDirectories[0],
+			)
+		},
+	}
+	return cmd
 }
 
 func newMigrateLearningHistoryCommand() *cobra.Command {
