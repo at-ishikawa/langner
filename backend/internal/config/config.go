@@ -145,7 +145,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000"})
 	v.SetDefault("quiz.algorithm", "modified_sm2")
-	v.SetDefault("quiz.fixed_intervals", []int{1, 3, 7, 14, 30, 60, 120, 365})
+	v.SetDefault("quiz.fixed_intervals", []int{1, 7, 30, 90, 365})
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {

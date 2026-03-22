@@ -5,7 +5,7 @@ import (
 )
 
 // DefaultFixedIntervals is the default progression of review intervals in days.
-var DefaultFixedIntervals = []int{1, 3, 7, 14, 30, 60, 120, 365}
+var DefaultFixedIntervals = []int{1, 7, 30, 90, 365}
 
 // IntervalCalculator computes review intervals for spaced repetition.
 type IntervalCalculator interface {
@@ -102,10 +102,22 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 }
 
 // FixedLevelCalculator implements fixed interval levels.
-// Correct answers (q >= 3) advance one level, wrong answers (q < 3) go back one level.
+// Fast correct (q=5) advances two levels, other correct (q >= 3) advances one level,
+// wrong answers (q < 3) go back one level.
 // Levels map to a configurable list of intervals in days.
 type FixedLevelCalculator struct {
 	Intervals []int
+}
+
+// qualityToLevelDelta returns the level change for a given quality grade.
+func qualityToLevelDelta(quality int) int {
+	if quality >= 5 {
+		return 2
+	}
+	if quality >= 3 {
+		return 1
+	}
+	return -1
 }
 
 func (c *FixedLevelCalculator) intervals() []int {
@@ -132,11 +144,7 @@ func (c *FixedLevelCalculator) levelFromLogs(logs []LearningRecord) int {
 			}
 		}
 
-		if q >= 3 {
-			level++
-		} else {
-			level--
-		}
+		level += qualityToLevelDelta(q)
 
 		if level < 0 {
 			level = 0
@@ -157,11 +165,7 @@ func (c *FixedLevelCalculator) CalculateInterval(logs []LearningRecord, currentQ
 	level := c.levelFromLogs(logs)
 
 	// Apply current quality
-	if currentQuality >= 3 {
-		level++
-	} else {
-		level--
-	}
+	level += qualityToLevelDelta(currentQuality)
 
 	if level < 0 {
 		level = 0
@@ -203,11 +207,7 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 			log.Quality = q
 		}
 
-		if q >= 3 {
-			level++
-		} else {
-			level--
-		}
+		level += qualityToLevelDelta(q)
 
 		if level < 0 {
 			level = 0

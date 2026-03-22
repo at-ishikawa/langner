@@ -150,9 +150,17 @@ func TestSM2Calculator_RecalculateAll(t *testing.T) {
 	}
 }
 
+func TestQualityToLevelDelta(t *testing.T) {
+	assert.Equal(t, 2, qualityToLevelDelta(5))
+	assert.Equal(t, 1, qualityToLevelDelta(4))
+	assert.Equal(t, 1, qualityToLevelDelta(3))
+	assert.Equal(t, -1, qualityToLevelDelta(1))
+	assert.Equal(t, -1, qualityToLevelDelta(2))
+}
+
 func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
-	// Default intervals: [1, 3, 7, 14, 30, 60, 120, 365]
-	// correct (q >= 3): level += 1, wrong (q < 3): level -= 1
+	// Default intervals: [1, 7, 30, 90, 365]
+	// q >= 5: level +2, q >= 3: level +1, q < 3: level -1
 	tests := []struct {
 		name     string
 		logs     []LearningRecord
@@ -160,10 +168,10 @@ func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
 		wantDays int
 	}{
 		{
-			name:     "first correct: level 0->1 = 3 days",
+			name:     "first correct q=4: level 0->1 = 7 days",
 			logs:     nil,
 			quality:  4,
-			wantDays: 3,
+			wantDays: 7,
 		},
 		{
 			name:     "first wrong: level stays 0 = 1 day",
@@ -172,44 +180,55 @@ func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
 			wantDays: 1,
 		},
 		{
-			name: "two correct: level 1->2 = 7 days",
+			name: "two correct q=4: level 1->2 = 30 days",
 			logs: []LearningRecord{
 				{Quality: 4},
 			},
 			quality:  4,
+			wantDays: 30,
+		},
+		{
+			name: "three correct q=4: level 2->3 = 90 days",
+			logs: []LearningRecord{
+				{Quality: 4},
+				{Quality: 4},
+			},
+			quality:  4,
+			wantDays: 90,
+		},
+		{
+			name:     "first q=5: level 0->2 = 30 days (skips a level)",
+			logs:     nil,
+			quality:  5,
+			wantDays: 30,
+		},
+		{
+			name: "q=5 after one correct: level 1->3 = 90 days",
+			logs: []LearningRecord{
+				{Quality: 4},
+			},
+			quality:  5,
+			wantDays: 90,
+		},
+		{
+			name:     "slow correct q=3 still advances: level 0->1 = 7 days",
+			logs:     nil,
+			quality:  3,
 			wantDays: 7,
 		},
 		{
-			name: "three correct: level 2->3 = 14 days",
-			logs: []LearningRecord{
-				{Quality: 4},
-				{Quality: 4},
-			},
-			quality:  4,
-			wantDays: 14,
-		},
-		{
-			name: "slow correct still advances: level 0->1 = 3 days",
-			logs: nil,
-			quality:  3,
-			wantDays: 3,
-		},
-		{
-			name: "correct then wrong then correct: level 1->0->1 = 3 days",
+			name: "correct then wrong then correct: level 1->0->1 = 7 days",
 			logs: []LearningRecord{
 				// Newest first
 				{Quality: 1},
 				{Quality: 4},
 			},
 			quality:  4,
-			wantDays: 3,
+			wantDays: 7,
 		},
 		{
-			name: "eight correct answers caps at max level: 365 days",
+			name: "five correct q=4 caps at max level: 365 days",
 			logs: []LearningRecord{
-				{Quality: 4},
-				{Quality: 4},
-				{Quality: 4},
 				{Quality: 4},
 				{Quality: 4},
 				{Quality: 4},
@@ -221,9 +240,6 @@ func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
 		{
 			name: "at max level, another correct stays at max: 365 days",
 			logs: []LearningRecord{
-				{Quality: 4},
-				{Quality: 4},
-				{Quality: 4},
 				{Quality: 4},
 				{Quality: 4},
 				{Quality: 4},
@@ -309,16 +325,16 @@ func TestFixedLevelCalculator_RecalculateAll(t *testing.T) {
 			logs: nil,
 		},
 		{
-			name: "single correct: level 1 = 3 days",
+			name: "single correct q=4: level 1 = 7 days",
 			logs: []LearningRecord{
 				{Quality: 4, LearnedAt: Date{Time: baseTime}},
 			},
 			validate: func(t *testing.T, logs []LearningRecord) {
-				assert.Equal(t, 3, logs[0].IntervalDays)
+				assert.Equal(t, 7, logs[0].IntervalDays)
 			},
 		},
 		{
-			name: "three correct: intervals grow through levels",
+			name: "three correct q=4: intervals grow through levels",
 			logs: []LearningRecord{
 				// Newest first
 				{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 5)}},
@@ -326,11 +342,23 @@ func TestFixedLevelCalculator_RecalculateAll(t *testing.T) {
 				{Quality: 4, LearnedAt: Date{Time: baseTime}},
 			},
 			validate: func(t *testing.T, logs []LearningRecord) {
-				// Oldest to newest: level 1=3, level 2=7, level 3=14
-				// Logs returned newest first
-				assert.Equal(t, 14, logs[0].IntervalDays) // newest
-				assert.Equal(t, 7, logs[1].IntervalDays)
-				assert.Equal(t, 3, logs[2].IntervalDays) // oldest
+				// Oldest to newest: level 1=7, level 2=30, level 3=90
+				assert.Equal(t, 90, logs[0].IntervalDays) // newest
+				assert.Equal(t, 30, logs[1].IntervalDays)
+				assert.Equal(t, 7, logs[2].IntervalDays) // oldest
+			},
+		},
+		{
+			name: "q=5 skips a level",
+			logs: []LearningRecord{
+				// Newest first
+				{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 1)}},
+				{Quality: 5, LearnedAt: Date{Time: baseTime}},
+			},
+			validate: func(t *testing.T, logs []LearningRecord) {
+				// q=5: level 0->2 = 30 days, then q=4: level 2->3 = 90 days
+				assert.Equal(t, 90, logs[0].IntervalDays) // newest
+				assert.Equal(t, 30, logs[1].IntervalDays) // oldest (q=5)
 			},
 		},
 		{
@@ -343,11 +371,11 @@ func TestFixedLevelCalculator_RecalculateAll(t *testing.T) {
 				{Quality: 4, LearnedAt: Date{Time: baseTime}},
 			},
 			validate: func(t *testing.T, logs []LearningRecord) {
-				// Oldest to newest: q=4 level 1=3, q=4 level 2=7, q=1 level 1=3, q=4 level 2=7
-				assert.Equal(t, 7, logs[0].IntervalDays) // newest
-				assert.Equal(t, 3, logs[1].IntervalDays) // wrong
-				assert.Equal(t, 7, logs[2].IntervalDays)
-				assert.Equal(t, 3, logs[3].IntervalDays) // oldest
+				// q=4 level 1=7, q=4 level 2=30, q=1 level 1=7, q=4 level 2=30
+				assert.Equal(t, 30, logs[0].IntervalDays) // newest
+				assert.Equal(t, 7, logs[1].IntervalDays)  // wrong
+				assert.Equal(t, 30, logs[2].IntervalDays)
+				assert.Equal(t, 7, logs[3].IntervalDays) // oldest
 			},
 		},
 		{
@@ -366,7 +394,7 @@ func TestFixedLevelCalculator_RecalculateAll(t *testing.T) {
 			},
 			validate: func(t *testing.T, logs []LearningRecord) {
 				assert.Equal(t, int(QualityWrong), logs[0].Quality)
-				assert.Equal(t, 1, logs[0].IntervalDays) // wrong: level -1 clamped to 0
+				assert.Equal(t, 1, logs[0].IntervalDays)
 			},
 		},
 	}

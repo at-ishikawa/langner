@@ -24,19 +24,22 @@ Your response quality (1-5) is automatically determined by OpenAI based on:
 
 A simple level-based system with configurable interval steps. Each correct answer advances one level, each wrong answer drops one level.
 
-Default levels: `[1, 3, 7, 14, 30, 60, 120, 365]` days
+Default levels: `[1, 7, 30, 90, 365]` days
+
+| Quality | Level Change |
+|---------|-------------|
+| 5 (fast correct) | +2 (skip a level) |
+| 3-4 (correct) | +1 |
+| 1 (wrong) | -1 |
 
 | Review # | Interval |
 |----------|----------|
-| 1st correct | 3 days |
-| 2nd correct | 7 days |
-| 3rd correct | 14 days |
-| 4th correct | 30 days |
-| 5th correct | 60 days |
-| 6th correct | 120 days |
-| 7th correct | 365 days |
+| 1st correct | 7 days |
+| 2nd correct | 30 days |
+| 3rd correct | 90 days |
+| 4th correct | 365 days |
 
-Wrong answers drop one level. For example, at level 5 (60 days), a wrong answer drops to level 4 (30 days). Level never drops below 0 (1 day).
+Wrong answers drop one level. For example, at level 3 (90 days), a wrong answer drops to level 2 (30 days). Level never drops below 0 (1 day). A fast correct answer (quality 5) skips a level, reaching 365 days in just 3 reviews.
 
 ## Modified SM-2 Algorithm (Default)
 
@@ -72,7 +75,7 @@ Choose the algorithm in your `config.yaml`:
 ```yaml
 quiz:
   algorithm: fixed  # or "modified_sm2"
-  fixed_intervals: [1, 3, 7, 14, 30, 60, 120, 365]
+  fixed_intervals: [1, 7, 30, 90, 365]
 ```
 
 The default algorithm is `modified_sm2` for backward compatibility.
