@@ -403,6 +403,10 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs))
 	} else {
 		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), quizType)
+		// Freeform quiz tests word recall (similar to reverse), so also update reverse logs
+		if quizType == notebook.QuizTypeFreeform {
+			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs))
+		}
 	}
 	notePath := filepath.Join(dir, log.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil { return fmt.Errorf("write learning history for %q: %w", log.NotebookName, err) }
