@@ -32,8 +32,9 @@ type DefinitionsScene struct {
 
 // DefinitionsSceneMetadata contains metadata to identify a scene
 type DefinitionsSceneMetadata struct {
-	Index int  `yaml:"index"` // 0-based scene index
-	Scene *int `yaml:"scene"` // alternative field name for index (pointer to distinguish unset from zero)
+	Index int    `yaml:"index"`           // 0-based scene index
+	Scene *int   `yaml:"scene,omitempty"` // alternative field name for index (pointer to distinguish unset from zero)
+	Title string `yaml:"title,omitempty"` // scene title for human readability
 }
 
 // GetIndex returns the scene index, preferring Scene if set, otherwise Index

@@ -150,6 +150,7 @@ func processStoryFile(filePath, filename string, markerPattern *regexp.Regexp) (
 				defScene := notebook.DefinitionsScene{
 					Metadata: notebook.DefinitionsSceneMetadata{
 						Index: j,
+						Title: scene.Title,
 					},
 					Expressions: scene.Definitions,
 				}
