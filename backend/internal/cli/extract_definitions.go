@@ -75,8 +75,8 @@ func extractDefinitionsFromStory(storyDir, storyID, definitionsDirectory string,
 			continue
 		}
 
-		if len(defs.Scenes) > 0 {
-			allDefinitions = append(allDefinitions, defs)
+		if len(defs) > 0 {
+			allDefinitions = append(allDefinitions, defs...)
 			hasDefinitions = true
 		}
 
@@ -120,26 +120,29 @@ func extractDefinitionsFromStory(storyDir, storyID, definitionsDirectory string,
 }
 
 // processStoryFile reads a story file, extracts definitions, removes markers and definitions sections.
-// Returns the extracted definitions and whether the file was modified.
-func processStoryFile(filePath, filename string, markerPattern *regexp.Regexp) (notebook.Definitions, bool, error) {
+// Returns one Definitions entry per event (StoryNotebook) and whether the file was modified.
+// Each event's definitions are keyed by the event title so MergeDefinitionsIntoNotebooks can match them.
+func processStoryFile(filePath, filename string, markerPattern *regexp.Regexp) ([]notebook.Definitions, bool, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
-		return notebook.Definitions{}, false, fmt.Errorf("read file %s: %w", filePath, err)
+		return nil, false, fmt.Errorf("read file %s: %w", filePath, err)
 	}
 
 	var notebooks []notebook.StoryNotebook
 	if err := yaml.Unmarshal(data, &notebooks); err != nil {
-		return notebook.Definitions{}, false, fmt.Errorf("unmarshal %s: %w", filePath, err)
+		return nil, false, fmt.Errorf("unmarshal %s: %w", filePath, err)
 	}
 
-	defs := notebook.Definitions{
-		Metadata: notebook.DefinitionsMetadata{
-			Notebook: filename,
-		},
-	}
-
+	var allDefs []notebook.Definitions
 	modified := false
+
 	for i := range notebooks {
+		defs := notebook.Definitions{
+			Metadata: notebook.DefinitionsMetadata{
+				Title: notebooks[i].Event,
+			},
+		}
+
 		for j := range notebooks[i].Scenes {
 			scene := &notebooks[i].Scenes[j]
 
@@ -175,15 +178,19 @@ func processStoryFile(filePath, filename string, markerPattern *regexp.Regexp) (
 				}
 			}
 		}
+
+		if len(defs.Scenes) > 0 {
+			allDefs = append(allDefs, defs)
+		}
 	}
 
 	if modified {
 		if err := writeYamlToFile(filePath, notebooks); err != nil {
-			return notebook.Definitions{}, false, fmt.Errorf("write modified file %s: %w", filePath, err)
+			return nil, false, fmt.Errorf("write modified file %s: %w", filePath, err)
 		}
 	}
 
-	return defs, modified, nil
+	return allDefs, modified, nil
 }
 
 // definitionsIndexFile represents the index.yml structure for definitions

@@ -302,7 +302,7 @@ func TestProcessStoryFile(t *testing.T) {
 	tests := []struct {
 		name            string
 		content         string
-		wantScenes      int
+		wantEvents      int // number of Definitions entries (one per event)
 		wantModified    bool
 		wantExpressions []string
 		wantErr         bool
@@ -320,7 +320,7 @@ func TestProcessStoryFile(t *testing.T) {
       definitions:
         - expression: get the ball rolling
           meaning: to start an activity or process`,
-			wantScenes:      1,
+			wantEvents:      1,
 			wantModified:    true,
 			wantExpressions: []string{"get the ball rolling"},
 		},
@@ -334,7 +334,7 @@ func TestProcessStoryFile(t *testing.T) {
       conversations:
         - speaker: Alice
           quote: Hello there.`,
-			wantScenes:   0,
+			wantEvents:   0,
 			wantModified: false,
 		},
 		{
@@ -358,11 +358,9 @@ func TestProcessStoryFile(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantModified, modified)
-			assert.Equal(t, tt.wantScenes, len(defs.Scenes))
+			assert.Equal(t, tt.wantEvents, len(defs))
 
 			if tt.wantModified {
-				assert.Equal(t, "test.yml", defs.Metadata.Notebook)
-
 				// Verify markers were removed from the written file
 				data, err := os.ReadFile(filePath)
 				require.NoError(t, err)
@@ -370,17 +368,21 @@ func TestProcessStoryFile(t *testing.T) {
 				assert.NotContains(t, string(data), "}}")
 			}
 
-			// Verify expressions
-			for i, scene := range defs.Scenes {
-				if i < len(tt.wantExpressions) {
-					found := false
-					for _, expr := range scene.Expressions {
-						if expr.Expression == tt.wantExpressions[i] {
-							found = true
-							break
+			// Verify expressions across all events
+			exprIdx := 0
+			for _, d := range defs {
+				for _, scene := range d.Scenes {
+					if exprIdx < len(tt.wantExpressions) {
+						found := false
+						for _, expr := range scene.Expressions {
+							if expr.Expression == tt.wantExpressions[exprIdx] {
+								found = true
+								break
+							}
 						}
+						assert.True(t, found, "expected expression %q", tt.wantExpressions[exprIdx])
+						exprIdx++
 					}
-					assert.True(t, found, "expected expression %q in scene %d", tt.wantExpressions[i], i)
 				}
 			}
 		})
