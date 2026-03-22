@@ -127,42 +127,43 @@ func (c *FixedLevelCalculator) intervals() []int {
 	return c.Intervals
 }
 
-// levelFromLogs derives the current level by replaying quality history.
-func (c *FixedLevelCalculator) levelFromLogs(logs []LearningRecord) int {
-	level := 0
+// levelFromInterval finds the level index for a stored interval.
+// Returns the highest level where intervals[level] <= lastInterval.
+func (c *FixedLevelCalculator) levelFromInterval(lastInterval int) int {
 	intervals := c.intervals()
-	maxLevel := len(intervals) - 1
-
-	// Iterate oldest to newest (logs are stored newest-first)
-	for i := len(logs) - 1; i >= 0; i-- {
-		q := logs[i].Quality
-		if q == 0 {
-			if logs[i].Status == LearnedStatusMisunderstood {
-				q = int(QualityWrong)
-			} else {
-				q = int(QualityCorrect)
-			}
-		}
-
-		level += qualityToLevelDelta(q)
-
-		if level < 0 {
-			level = 0
-		}
-		if level > maxLevel {
-			level = maxLevel
+	level := 0
+	for i, iv := range intervals {
+		if iv <= lastInterval {
+			level = i
 		}
 	}
-
 	return level
 }
 
+// snapToNextLevel returns the smallest fixed interval >= the given interval.
+func (c *FixedLevelCalculator) snapToNextLevel(interval int) int {
+	for _, iv := range c.intervals() {
+		if iv >= interval {
+			return iv
+		}
+	}
+	// If interval exceeds all levels, return max
+	intervals := c.intervals()
+	return intervals[len(intervals)-1]
+}
+
 // CalculateInterval computes the next interval using fixed levels.
+// Derives current level from the most recent log's stored interval,
+// then advances by the quality delta.
 func (c *FixedLevelCalculator) CalculateInterval(logs []LearningRecord, currentQuality int, _ float64) (int, float64) {
 	intervals := c.intervals()
 	maxLevel := len(intervals) - 1
 
-	level := c.levelFromLogs(logs)
+	// Derive current level from the most recent log's interval
+	level := 0
+	if len(logs) > 0 {
+		level = c.levelFromInterval(logs[0].IntervalDays)
+	}
 
 	// Apply current quality
 	level += qualityToLevelDelta(currentQuality)
@@ -177,24 +178,16 @@ func (c *FixedLevelCalculator) CalculateInterval(logs []LearningRecord, currentQ
 	return intervals[level], 0
 }
 
-// RecalculateAll replays logs oldest-to-newest and recomputes fixed-level intervals.
+// RecalculateAll snaps each log's interval to the nearest fixed level.
+// Each log's interval is set to the smallest fixed level >= its original interval.
 func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, []LearningRecord) {
 	if len(logs) == 0 {
 		return 0, logs
 	}
 
-	intervals := c.intervals()
-	maxLevel := len(intervals) - 1
-
 	newLogs := make([]LearningRecord, len(logs))
 	copy(newLogs, logs)
 
-	// Sort ascending (oldest first) for replay
-	sort.Slice(newLogs, func(i, j int) bool {
-		return newLogs[i].LearnedAt.Before(newLogs[j].LearnedAt.Time)
-	})
-
-	level := 0
 	for i := range newLogs {
 		log := &newLogs[i]
 		q := log.Quality
@@ -207,26 +200,12 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 			log.Quality = q
 		}
 
-		level += qualityToLevelDelta(q)
-
-		if level < 0 {
-			level = 0
-		}
-		if level > maxLevel {
-			level = maxLevel
-		}
-
 		if log.OverrideInterval > 0 {
 			log.IntervalDays = log.OverrideInterval
 		} else {
-			log.IntervalDays = intervals[level]
+			log.IntervalDays = c.snapToNextLevel(log.IntervalDays)
 		}
 	}
-
-	// Re-sort newest first for storage
-	sort.Slice(newLogs, func(i, j int) bool {
-		return newLogs[i].LearnedAt.After(newLogs[j].LearnedAt.Time)
-	})
 
 	return 0, newLogs
 }
