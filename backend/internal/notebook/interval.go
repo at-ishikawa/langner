@@ -5,7 +5,7 @@ import (
 )
 
 // DefaultFixedIntervals is the default progression of review intervals in days.
-var DefaultFixedIntervals = []int{1, 7, 30, 90, 365}
+var DefaultFixedIntervals = []int{1, 7, 30, 90, 365, 1095, 1825}
 
 // IntervalCalculator computes review intervals for spaced repetition.
 type IntervalCalculator interface {

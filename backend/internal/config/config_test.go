@@ -82,7 +82,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				},
 				Quiz: QuizConfig{
 					Algorithm:       "modified_sm2",
-					FixedIntervals: []int{1, 7, 30, 90, 365},
+					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
 		},
@@ -137,7 +137,7 @@ outputs:
 				},
 				Quiz: QuizConfig{
 					Algorithm:       "modified_sm2",
-					FixedIntervals: []int{1, 7, 30, 90, 365},
+					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
 		},
@@ -186,7 +186,7 @@ outputs:
 				},
 				Quiz: QuizConfig{
 					Algorithm:       "modified_sm2",
-					FixedIntervals: []int{1, 7, 30, 90, 365},
+					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
 		},

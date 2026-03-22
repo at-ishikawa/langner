@@ -227,7 +227,7 @@ func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
 			wantDays: 7,
 		},
 		{
-			name: "five correct q=4 caps at max level: 365 days",
+			name: "five correct q=4: level 4->5 = 1095 days",
 			logs: []LearningRecord{
 				{Quality: 4},
 				{Quality: 4},
@@ -235,11 +235,12 @@ func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
 				{Quality: 4},
 			},
 			quality:  4,
-			wantDays: 365,
+			wantDays: 1095,
 		},
 		{
-			name: "at max level, another correct stays at max: 365 days",
+			name: "seven correct q=4 caps at max level: 1825 days",
 			logs: []LearningRecord{
+				{Quality: 4},
 				{Quality: 4},
 				{Quality: 4},
 				{Quality: 4},
@@ -247,7 +248,7 @@ func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
 				{Quality: 4},
 			},
 			quality:  4,
-			wantDays: 365,
+			wantDays: 1825,
 		},
 		{
 			name: "multiple wrongs clamp at level 0: 1 day",
