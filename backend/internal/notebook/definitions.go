@@ -229,6 +229,22 @@ func MergeDefinitionsIntoNotebooks(
 	return notebooks
 }
 
+// GetDefinitionsNotes returns the definitions for a given book ID from the definitions map.
+// The returned map is keyed by title/notebook name, then by scene index.
+func (r Reader) GetDefinitionsNotes(bookID string) (map[string]map[int][]Note, bool) {
+	defs, ok := r.definitionsMap[bookID]
+	return defs, ok
+}
+
+// GetDefinitionsBookIDs returns all book IDs that have definitions in the definitions map.
+func (r Reader) GetDefinitionsBookIDs() []string {
+	var ids []string
+	for id := range r.definitionsMap {
+		ids = append(ids, id)
+	}
+	return ids
+}
+
 // addExpressionMarker adds {{ }} markers around an expression in text (case-insensitive)
 func addExpressionMarker(text, expression string) string {
 	// Skip if already has markers (case-insensitive check to match replacement behavior)

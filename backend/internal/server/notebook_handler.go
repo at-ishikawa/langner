@@ -144,7 +144,6 @@ func (h *NotebookHandler) GetNotebookDetail(
 					Antonyms:       def.Antonyms,
 					LearningStatus: string(info.status),
 					LearnedLogs:    convertLogsToProto(logs),
-					EasinessFactor: info.easinessFactor,
 					NextReviewDate: info.nextReviewDate,
 					Origin:         def.Origin,
 					IsSkipped:      info.isSkipped,
@@ -233,7 +232,6 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 				Antonyms:       card.Antonyms,
 				LearningStatus: string(info.status),
 				LearnedLogs:    convertLogsToProto(logs),
-				EasinessFactor: info.easinessFactor,
 				NextReviewDate: info.nextReviewDate,
 				Origin:         card.Origin,
 				IsSkipped:      info.isSkipped,
@@ -262,7 +260,6 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 // learningInfo holds learning status details for a definition.
 type learningInfo struct {
 	status         notebook.LearnedStatus
-	easinessFactor float64
 	nextReviewDate string
 	isSkipped      bool
 }
@@ -285,7 +282,6 @@ func (h *NotebookHandler) findLearningInfoFull(
 		}
 		return learningInfo{
 			status:         expr.GetLatestStatus(),
-			easinessFactor: expr.EasinessFactor,
 			nextReviewDate: nextReview,
 			isSkipped:      expr.SkippedAt != "",
 		}
@@ -570,6 +566,32 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					continue
 				}
 				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples, nil, card.OriginParts, nbID)
+			}
+		}
+	}
+
+	// Search definitions-only books
+	storyIndexes := reader.GetStoryIndexes()
+	flashcardIndexes := reader.GetFlashcardIndexes()
+	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		if _, isStory := storyIndexes[nbID]; isStory {
+			continue
+		}
+		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
+			continue
+		}
+		defs, ok := reader.GetDefinitionsNotes(nbID)
+		if !ok {
+			continue
+		}
+		for _, sceneDefs := range defs {
+			for _, notes := range sceneDefs {
+				for _, note := range notes {
+					if len(note.OriginParts) == 0 {
+						continue
+					}
+					addDefinition(note.Expression, note.Meaning, note.PartOfSpeech, note.Memo, note.Examples, nil, note.OriginParts, nbID)
+				}
 			}
 		}
 	}

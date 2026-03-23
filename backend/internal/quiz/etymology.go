@@ -102,6 +102,13 @@ func (s *Service) LoadEtymologyCards(
 		}
 	}
 
+	// Also load from definitions-only books (not in story or flashcard indexes)
+	defBookIDs := collectDefinitionsOnlyBookIDs(reader, storyIndexes, flashcardIndexes, definitionNotebookIDs)
+	for _, nbID := range defBookIDs {
+		defCards := loadEtymologyDefinitionsCards(reader, nbID, originMap, learningHistories, includeUnstudied)
+		cards = append(cards, defCards...)
+	}
+
 	cards = deduplicateEtymologyCards(cards)
 	rand.Shuffle(len(cards), func(i, j int) {
 		cards[i], cards[j] = cards[j], cards[i]
@@ -274,6 +281,81 @@ func needsEtymologyFlashcardReview(
 		}
 	}
 	return true
+}
+
+func collectDefinitionsOnlyBookIDs(
+	reader *notebook.Reader,
+	storyIndexes map[string]notebook.Index,
+	flashcardIndexes map[string]notebook.FlashcardIndex,
+	definitionNotebookIDs []string,
+) []string {
+	wanted := make(map[string]bool)
+	if len(definitionNotebookIDs) > 0 {
+		for _, id := range definitionNotebookIDs {
+			wanted[id] = true
+		}
+	}
+
+	var ids []string
+	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		// Skip if already covered by story or flashcard indexes
+		if _, isStory := storyIndexes[nbID]; isStory {
+			continue
+		}
+		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
+			continue
+		}
+		// If specific IDs requested, only include those
+		if len(wanted) > 0 && !wanted[nbID] {
+			continue
+		}
+		ids = append(ids, nbID)
+	}
+	return ids
+}
+
+func loadEtymologyDefinitionsCards(
+	reader *notebook.Reader,
+	bookID string,
+	originMap map[string]EtymologyOriginPart,
+	learningHistories map[string][]notebook.LearningHistory,
+	includeUnstudied bool,
+) []EtymologyCard {
+	defs, ok := reader.GetDefinitionsNotes(bookID)
+	if !ok {
+		return nil
+	}
+
+	var cards []EtymologyCard
+	for title, sceneDefs := range defs {
+		for _, notes := range sceneDefs {
+			for _, note := range notes {
+				if len(note.OriginParts) == 0 {
+					continue
+				}
+
+				parts := resolveOriginParts(note.OriginParts, originMap)
+				if len(parts) == 0 {
+					continue
+				}
+
+				if !includeUnstudied {
+					if !needsEtymologyReview(learningHistories[bookID], title, "", &note, notebook.QuizTypeEtymologyBreakdown) {
+						continue
+					}
+				}
+
+				cards = append(cards, EtymologyCard{
+					NotebookName: bookID,
+					StoryTitle:   title,
+					Expression:   note.Expression,
+					Meaning:      note.Meaning,
+					OriginParts:  parts,
+				})
+			}
+		}
+	}
+	return cards
 }
 
 func deduplicateEtymologyCards(cards []EtymologyCard) []EtymologyCard {
@@ -449,6 +531,34 @@ func (s *Service) FindRelatedDefinitions(reader *notebook.Reader, card Etymology
 							Meaning:      c.Meaning,
 							NotebookName: nbID,
 						})
+					}
+				}
+			}
+		}
+	}
+
+	// Search definitions-only books
+	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		defs, ok := reader.GetDefinitionsNotes(nbID)
+		if !ok {
+			continue
+		}
+		for _, sceneDefs := range defs {
+			for _, notes := range sceneDefs {
+				for _, note := range notes {
+					if strings.EqualFold(note.Expression, card.Expression) {
+						continue
+					}
+					if hasMatchingOrigin(note.OriginParts, originSet) {
+						key := strings.ToLower(note.Expression)
+						if !seen[key] {
+							seen[key] = true
+							related = append(related, RelatedDefinition{
+								Expression:   note.Expression,
+								Meaning:      note.Meaning,
+								NotebookName: nbID,
+							})
+						}
 					}
 				}
 			}

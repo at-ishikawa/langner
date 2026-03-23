@@ -124,6 +124,41 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		})
 	}
 
+	// Add definitions-only books (not already in story or flashcard indexes)
+	storyIndexes := reader.GetStoryIndexes()
+	flashcardIndexes := reader.GetFlashcardIndexes()
+	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		if _, isStory := storyIndexes[nbID]; isStory {
+			continue
+		}
+		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
+			continue
+		}
+		defs, ok := reader.GetDefinitionsNotes(nbID)
+		if !ok {
+			continue
+		}
+		etymCount := 0
+		for _, sceneDefs := range defs {
+			for _, notes := range sceneDefs {
+				for _, note := range notes {
+					if len(note.OriginParts) > 0 {
+						etymCount++
+					}
+				}
+			}
+		}
+		if etymCount == 0 {
+			continue
+		}
+		summaries = append(summaries, NotebookSummary{
+			NotebookID:           nbID,
+			Name:                 nbID,
+			EtymologyReviewCount: etymCount,
+			Kind:                 "Books",
+		})
+	}
+
 	// Add etymology notebooks
 	etymSummaries, err := s.LoadEtymologyNotebookSummaries()
 	if err != nil {

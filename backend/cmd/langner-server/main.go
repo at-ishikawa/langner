@@ -54,14 +54,15 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("loadConfig() > %w", err)
 	}
 
-	if cfg.OpenAI.APIKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+	var openaiClient *openai.Client
+	if cfg.OpenAI.APIKey != "" {
+		openaiClient = openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+		defer func() {
+			_ = openaiClient.Close()
+		}()
+	} else {
+		slog.Warn("OPENAI_API_KEY is not set; quiz grading features will be unavailable")
 	}
-
-	openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
-	defer func() {
-		_ = openaiClient.Close()
-	}()
 
 	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
 	if err != nil {
