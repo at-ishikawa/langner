@@ -1178,61 +1178,6 @@ func recalculateLearningLogs(logs []LearningRecord, calculator IntervalCalculato
 	return ef, newLogs, changed
 }
 
-// fixIntervalDays recalculates interval_days for all expressions in all learning histories.
-func (v *Validator) fixIntervalDays(learningFiles []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
-	for fileIdx := range learningFiles {
-		file := &learningFiles[fileIdx]
-		changed := 0
-		for histIdx := range file.contents {
-			hist := &file.contents[histIdx]
-			for exprIdx := range hist.Expressions {
-				expr := &hist.Expressions[exprIdx]
-				if len(expr.LearnedLogs) > 0 {
-					_, newLogs, c := recalculateLearningLogs(expr.LearnedLogs, v.calculator)
-					if c {
-						changed++
-					}
-					expr.LearnedLogs = newLogs
-				}
-				if len(expr.ReverseLogs) > 0 {
-					_, newLogs, c := recalculateLearningLogs(expr.ReverseLogs, v.calculator)
-					if c {
-						changed++
-					}
-					expr.ReverseLogs = newLogs
-				}
-			}
-			for sceneIdx := range hist.Scenes {
-				scene := &hist.Scenes[sceneIdx]
-				for exprIdx := range scene.Expressions {
-					expr := &scene.Expressions[exprIdx]
-					if len(expr.LearnedLogs) > 0 {
-						_, newLogs, c := recalculateLearningLogs(expr.LearnedLogs, v.calculator)
-						if c {
-							changed++
-						}
-						expr.LearnedLogs = newLogs
-					}
-					if len(expr.ReverseLogs) > 0 {
-						_, newLogs, c := recalculateLearningLogs(expr.ReverseLogs, v.calculator)
-						if c {
-							changed++
-						}
-						expr.ReverseLogs = newLogs
-					}
-				}
-			}
-		}
-		if changed > 0 {
-			result.AddWarning(ValidationError{
-				File:    file.path,
-				Message: fmt.Sprintf("Recalculated interval_days for %d expression(s) in %s", changed, file.path),
-			})
-		}
-	}
-	return learningFiles
-}
-
 // validateFlashcardNotebooks validates all flashcard notebook files
 func (v *Validator) validateFlashcardNotebooks(files []flashcardNotebookFile, result *ValidationResult) {
 	for _, file := range files {

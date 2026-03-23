@@ -152,48 +152,6 @@ func recalculateExpression(exp *notebook.LearningHistoryExpression, calculator n
 	return modified
 }
 
-// calculateEasinessFactor calculates EF from learning history pattern
-func calculateEasinessFactor(logs []notebook.LearningRecord) float64 {
-	if len(logs) == 0 {
-		return notebook.DefaultEasinessFactor
-	}
-
-	ef := notebook.DefaultEasinessFactor
-
-	// Process logs from oldest to newest (reverse order since newest is first)
-	for i := len(logs) - 1; i >= 0; i-- {
-		log := logs[i]
-
-		quality := log.Quality
-		if quality == 0 {
-			if log.Status == notebook.LearnedStatusMisunderstood {
-				quality = int(notebook.QualityWrong)
-			} else {
-				quality = int(notebook.QualityCorrect)
-			}
-		}
-
-		correctStreak := countCorrectFromIndex(logs, i)
-		ef = notebook.UpdateEasinessFactor(ef, quality, correctStreak)
-	}
-
-	return ef
-}
-
-// countCorrectFromIndex counts consecutive correct answers from the given index to the end (oldest)
-func countCorrectFromIndex(logs []notebook.LearningRecord, fromIndex int) int {
-	count := 0
-	for j := fromIndex + 1; j < len(logs); j++ {
-		if logs[j].Status == notebook.LearnedStatusMisunderstood {
-			break
-		}
-		if logs[j].Status != "" && logs[j].Status != notebook.LearnedStatusLearning { // Fix typo: LearnedStatusLearning
-			count++
-		}
-	}
-	return count
-}
-
 // calculateLegacyInterval calculates interval for old records based on position
 func calculateLegacyInterval(logIndex int, logs []notebook.LearningRecord) int {
 	count := 0
