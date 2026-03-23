@@ -28,6 +28,16 @@ func CardInfoFromCard(card Card) CardInfo {
 	}
 }
 
+// CardInfoFromFreeformCard converts a FreeformCard to CardInfo.
+func CardInfoFromFreeformCard(card FreeformCard) CardInfo {
+	return CardInfo{
+		NotebookName: card.NotebookName,
+		StoryTitle:   card.StoryTitle,
+		SceneTitle:   card.SceneTitle,
+		Expression:   card.Expression,
+	}
+}
+
 // CardInfoFromReverseCard converts a ReverseCard to CardInfo.
 func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 	return CardInfo{
@@ -76,6 +86,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 				true,
 				5,     // high quality so it gets a large interval
 				0,
+				notebook.QuizTypeReverse,
 			)
 			// Now set the interval on the newly created record
 			s.setSkipInterval(updater, info, intervalDays, true)
@@ -255,28 +266,14 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool, calcul
 		log.Quality = 1
 	}
 
-	// Recalculate interval using calculator
-	ef := expr.EasinessFactor
-	if isReverse {
-		ef = expr.ReverseEasinessFactor
-	}
-	if ef == 0 {
-		ef = notebook.DefaultEasinessFactor
-	}
+	// Derive EF from logs before this entry and recalculate interval
 	var previousLogs []notebook.LearningRecord
 	if len(logs) > 1 {
 		previousLogs = logs[1:]
 	}
-	newInterval, newEF := calculator.CalculateInterval(previousLogs, log.Quality, ef)
+	derivedEF := calculator.DeriveEF(previousLogs)
+	newInterval, _ := calculator.CalculateInterval(previousLogs, log.Quality, derivedEF)
 	log.IntervalDays = newInterval
-
-	if newEF > 0 {
-		if isReverse {
-			expr.ReverseEasinessFactor = newEF
-		} else {
-			expr.EasinessFactor = newEF
-		}
-	}
 
 	if isReverse {
 		expr.ReverseLogs = logs
