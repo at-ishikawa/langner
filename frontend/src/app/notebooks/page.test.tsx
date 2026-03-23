@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import LearnHubPage from "../learn/page";
@@ -28,9 +28,20 @@ function renderPage() {
   );
 }
 
+function renderPageDark() {
+  document.documentElement.classList.add("dark");
+  document.documentElement.setAttribute("data-theme", "dark");
+  return renderPage();
+}
+
 describe("LearnHubPage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
   });
 
   it("renders Learn title and back link to Home", async () => {
@@ -130,6 +141,21 @@ describe("LearnHubPage", () => {
     await waitFor(() => {
       expect(screen.getByText(/2 notebooks/)).toBeInTheDocument();
       expect(screen.getByText(/15 words/)).toBeInTheDocument();
+    });
+  });
+
+  it("renders in dark mode without errors", async () => {
+    vi.mocked(client.quizClient.getQuizOptions).mockResolvedValue({
+      notebooks: [
+        { notebookId: "nb-1", name: "Vocabulary A", reviewCount: 10, kind: "Flashcard" },
+      ],
+    });
+
+    renderPageDark();
+
+    await waitFor(() => {
+      expect(screen.getByText("Learn")).toBeInTheDocument();
+      expect(screen.getByText("Vocabulary A")).toBeInTheDocument();
     });
   });
 });

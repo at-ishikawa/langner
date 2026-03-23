@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import EtymologyNotebookPage from "./page";
@@ -24,6 +24,12 @@ function renderPage() {
       <EtymologyNotebookPage />
     </ChakraProvider>,
   );
+}
+
+function renderPageDark() {
+  document.documentElement.classList.add("dark");
+  document.documentElement.setAttribute("data-theme", "dark");
+  return renderPage();
 }
 
 const mockEtymologyResponse = {
@@ -107,6 +113,11 @@ const mockEtymologyResponse = {
 describe("EtymologyNotebookPage - Origin List", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
+  });
+
   it("renders origin list with back link and title", async () => {
     vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
     renderPage();
@@ -181,6 +192,16 @@ describe("EtymologyNotebookPage - Origin List", () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText("Failed to load etymology notebook")).toBeInTheDocument();
+    });
+  });
+
+  it("renders origin list in dark mode without errors", async () => {
+    vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
+    renderPageDark();
+    await waitFor(() => {
+      expect(screen.getByText("Etymology")).toBeInTheDocument();
+      expect(screen.getByText("graph")).toBeInTheDocument();
+      expect(screen.getByText("tele")).toBeInTheDocument();
     });
   });
 });

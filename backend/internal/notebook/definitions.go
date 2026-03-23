@@ -54,8 +54,8 @@ func ReadDefinitionsFromBytes(data []byte) ([]Definitions, error) {
 	return result, nil
 }
 
-// DefinitionsMap is a map of book ID -> notebook file -> scene index -> definitions
-type DefinitionsMap map[string]map[string]map[int][]Note
+// DefinitionsMap is a map of book ID -> notebook file -> scene title -> definitions
+type DefinitionsMap map[string]map[string]map[string][]Note
 
 // definitionsIndex represents an index.yml for a definitions directory.
 type definitionsIndex struct {
@@ -71,7 +71,7 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) erro
 	}
 
 	if result[bookID] == nil {
-		result[bookID] = make(map[string]map[int][]Note)
+		result[bookID] = make(map[string]map[string][]Note)
 	}
 
 	for _, def := range definitions {
@@ -84,13 +84,13 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) erro
 		}
 
 		if result[bookID][key] == nil {
-			result[bookID][key] = make(map[int][]Note)
+			result[bookID][key] = make(map[string][]Note)
 		}
 
 		for _, scene := range def.Scenes {
-			sceneIndex := scene.Metadata.GetIndex()
-			result[bookID][key][sceneIndex] = append(
-				result[bookID][key][sceneIndex],
+			sceneTitle := normalizeTitle(scene.Metadata.Title)
+			result[bookID][key][sceneTitle] = append(
+				result[bookID][key][sceneTitle],
 				scene.Expressions...,
 			)
 		}
@@ -204,9 +204,10 @@ func MergeDefinitionsIntoNotebooks(
 			}
 		}
 
-		// Merge definitions into each scene
+		// Merge definitions into each scene by matching scene title
 		for j := range notebook.Scenes {
-			sceneDefs, ok := notebookDefs[j]
+			sceneTitle := normalizeTitle(notebook.Scenes[j].Title)
+			sceneDefs, ok := notebookDefs[sceneTitle]
 			if !ok {
 				continue
 			}
@@ -230,8 +231,8 @@ func MergeDefinitionsIntoNotebooks(
 }
 
 // GetDefinitionsNotes returns the definitions for a given book ID from the definitions map.
-// The returned map is keyed by title/notebook name, then by scene index.
-func (r Reader) GetDefinitionsNotes(bookID string) (map[string]map[int][]Note, bool) {
+// The returned map is keyed by title/notebook name, then by scene title.
+func (r Reader) GetDefinitionsNotes(bookID string) (map[string]map[string][]Note, bool) {
 	defs, ok := r.definitionsMap[bookID]
 	return defs, ok
 }

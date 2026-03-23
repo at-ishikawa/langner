@@ -20,16 +20,18 @@ import {
 
 type Tab = "origins" | "meanings";
 
-const typeBadgeColors: Record<string, { bg: string; color: string }> = {
-  root: { bg: "#dbeafe", color: "#1e40af" },
-  prefix: { bg: "#fef3c7", color: "#92400e" },
-  suffix: { bg: "#dcfce7", color: "#166534" },
+const typeBadgeColors: Record<string, { bg: string; darkBg: string; color: string; darkColor: string }> = {
+  root: { bg: "blue.100", darkBg: "blue.900", color: "blue.800", darkColor: "blue.200" },
+  prefix: { bg: "yellow.100", darkBg: "yellow.900", color: "yellow.800", darkColor: "yellow.200" },
+  suffix: { bg: "green.100", darkBg: "green.900", color: "green.800", darkColor: "green.200" },
 };
 
 function TypeBadge({ type }: { type: string }) {
   const colors = typeBadgeColors[type.toLowerCase()] ?? {
-    bg: "#f3f4f6",
-    color: "#374151",
+    bg: "gray.100",
+    darkBg: "gray.700",
+    color: "gray.700",
+    darkColor: "gray.300",
   };
   return (
     <Box
@@ -42,6 +44,7 @@ function TypeBadge({ type }: { type: string }) {
       fontWeight="medium"
       bg={colors.bg}
       color={colors.color}
+      _dark={{ bg: colors.darkBg, color: colors.darkColor }}
     >
       {type}
     </Box>
@@ -58,8 +61,9 @@ function LanguageBadge({ language }: { language: string }) {
       py={0.5}
       borderRadius="full"
       fontSize="xs"
-      bg="#f3f4f6"
-      color="#666"
+      bg="gray.100"
+      color="gray.600"
+      _dark={{ bg: "gray.700", color: "gray.300" }}
     >
       {language}
     </Box>
@@ -79,6 +83,7 @@ function OriginCard({
       borderWidth="1px"
       borderRadius="lg"
       bg="white"
+      _dark={{ bg: "gray.800", borderColor: "gray.600" }}
       _hover={{ bg: "gray.50" }}
       cursor="pointer"
       onClick={onClick}
@@ -93,18 +98,19 @@ function OriginCard({
           <Text
             fontSize="md"
             fontWeight="semibold"
-            color="#2563eb"
+            color="blue.600"
+            _dark={{ color: "blue.300" }}
           >
             {origin.origin}
           </Text>
           {origin.type && <TypeBadge type={origin.type} />}
           <LanguageBadge language={origin.language} />
         </Box>
-        <Text fontSize="xs" color="#666" flexShrink={0}>
+        <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }} flexShrink={0}>
           {origin.wordCount} {origin.wordCount === 1 ? "word" : "words"}
         </Text>
       </Box>
-      <Text fontSize="sm" color="#555">
+      <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
         {origin.meaning}
       </Text>
     </Box>
@@ -132,12 +138,13 @@ function OriginDetailView({
   );
 
   return (
-    <Box maxW="sm" mx="auto" bg="#f8f9fa" minH="100vh">
+    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh">
       {/* Header */}
-      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
+      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
         <Box px={4} pt={2}>
           <Text
-            color="#999"
+            color="gray.500"
+            _dark={{ color: "gray.400" }}
             fontSize="xs"
             cursor="pointer"
             onClick={onBack}
@@ -160,7 +167,8 @@ function OriginDetailView({
             borderRadius="lg"
             mb={4}
             bg="white"
-            borderColor="#e5e7eb"
+            _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+            borderColor="gray.200"
           >
             <Heading size="lg" mb={2}>
               {originData.origin}
@@ -169,12 +177,12 @@ function OriginDetailView({
               {originData.type && <TypeBadge type={originData.type} />}
               <LanguageBadge language={originData.language} />
             </Box>
-            <Text color="#666">{originData.meaning}</Text>
+            <Text color="gray.600" _dark={{ color: "gray.400" }}>{originData.meaning}</Text>
           </Box>
         )}
 
         {/* Words section */}
-        <Text fontSize="sm" fontWeight="medium" color="#333" mb={3}>
+        <Text fontSize="sm" fontWeight="medium" color="gray.700" _dark={{ color: "gray.300" }} mb={3}>
           Words using this origin ({relatedDefs.length})
         </Text>
 
@@ -186,32 +194,33 @@ function OriginDetailView({
               borderWidth="1px"
               borderRadius="lg"
               bg="white"
-              borderColor="#e5e7eb"
+              _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+              borderColor="gray.200"
             >
               <Text fontSize="md" fontWeight="semibold" mb={1}>
                 {def.expression}
               </Text>
-              <Text fontSize="sm" color="#333" mb={2}>
+              <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.300" }} mb={2}>
                 {def.meaning}
               </Text>
               {def.note && (
-                <Text fontSize="xs" color="#666" mb={2} fontStyle="italic">
+                <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }} mb={2} fontStyle="italic">
                   {def.note}
                 </Text>
               )}
               {def.examples && def.examples.length > 0 && (
-                <Box mb={2} pl={3} borderLeftWidth="2px" borderColor="#e5e7eb">
+                <Box mb={2} pl={3} borderLeftWidth="2px" borderColor="gray.200" _dark={{ borderColor: "gray.600" }}>
                   {def.examples.map((ex, k) => (
-                    <Text key={k} fontSize="xs" color="#555" fontStyle="italic">
+                    <Text key={k} fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
                       {ex}
                     </Text>
                   ))}
                 </Box>
               )}
               {def.contexts && def.contexts.length > 0 && (
-                <Box mb={2} pl={3} borderLeftWidth="2px" borderColor="#dbeafe">
+                <Box mb={2} pl={3} borderLeftWidth="2px" borderColor="blue.100" _dark={{ borderColor: "blue.800" }}>
                   {def.contexts.map((ctx, k) => (
-                    <Text key={k} fontSize="xs" color="#555">
+                    <Text key={k} fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>
                       {ctx}
                     </Text>
                   ))}
@@ -221,7 +230,7 @@ function OriginDetailView({
                 {def.originParts.map((part, j) => (
                   <Box key={j} display="flex" alignItems="center" gap={1}>
                     {j > 0 && (
-                      <Text fontSize="sm" color="#999">
+                      <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
                         +
                       </Text>
                     )}
@@ -231,12 +240,14 @@ function OriginDetailView({
                         py={0.5}
                         borderRadius="sm"
                         borderWidth="1px"
-                        borderColor="#2563eb"
-                        bg="#eff6ff"
+                        borderColor="blue.600"
+                        bg="blue.50"
+                        _dark={{ bg: "blue.900", borderColor: "blue.400" }}
                       >
                         <Text
                           fontSize="sm"
-                          color="#2563eb"
+                          color="blue.600"
+                          _dark={{ color: "blue.300" }}
                           fontWeight="semibold"
                         >
                           {part.origin}
@@ -245,7 +256,8 @@ function OriginDetailView({
                     ) : (
                       <Text
                         fontSize="sm"
-                        color="#2563eb"
+                        color="blue.600"
+                        _dark={{ color: "blue.300" }}
                         fontWeight="medium"
                         cursor="pointer"
                         _hover={{ textDecoration: "underline" }}
@@ -255,7 +267,7 @@ function OriginDetailView({
                       </Text>
                     )}
                     {part.origin === selectedOrigin && (
-                      <Text fontSize="xs" color="#999">
+                      <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
                         (current)
                       </Text>
                     )}
@@ -269,7 +281,8 @@ function OriginDetailView({
         {relatedDefs.length > 0 && (
           <Text
             fontSize="xs"
-            color="#999"
+            color="gray.500"
+            _dark={{ color: "gray.400" }}
             textAlign="center"
             mt={4}
           >
@@ -309,7 +322,8 @@ function ByMeaningView({
           borderWidth="1px"
           borderRadius="lg"
           bg="white"
-          borderColor="#e5e7eb"
+          _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+          borderColor="gray.200"
         >
           <Text fontSize="md" fontWeight="semibold" mb={2}>
             &ldquo;{group.meaning}&rdquo;
@@ -326,14 +340,15 @@ function ByMeaningView({
               >
                 <Text
                   fontSize="sm"
-                  color="#2563eb"
+                  color="blue.600"
+                  _dark={{ color: "blue.300" }}
                   fontWeight="medium"
                   _hover={{ textDecoration: "underline" }}
                 >
                   {origin.origin}
                 </Text>
                 <LanguageBadge language={origin.language} />
-                <Text fontSize="xs" color="#999">
+                <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
                   {origin.wordCount}{" "}
                   {origin.wordCount === 1 ? "word" : "words"}
                 </Text>
@@ -445,13 +460,14 @@ function EtymologyNotebookPage() {
 
   // Origin list view
   return (
-    <Box maxW="sm" mx="auto" bg="#f8f9fa" minH="100vh">
+    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh">
       {/* Header */}
-      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
+      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
         <Box px={4} pt={2}>
           <Link href="/learn">
             <Text
-              color="#999"
+              color="gray.500"
+              _dark={{ color: "gray.400" }}
               fontSize="xs"
               _hover={{ textDecoration: "underline" }}
             >
@@ -472,16 +488,18 @@ function EtymologyNotebookPage() {
           onChange={(e) => setSearch(e.target.value)}
           borderRadius="lg"
           bg="white"
-          borderColor="#d1d5db"
+          borderColor="gray.300"
+          _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         />
       </Box>
 
       {/* Tabs */}
       <Box
         bg="white"
+        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         mt={3}
         borderBottomWidth="1px"
-        borderColor="#e5e7eb"
+        borderColor="gray.200"
         display="flex"
       >
         <Box
@@ -495,7 +513,8 @@ function EtymologyNotebookPage() {
           <Text
             fontSize="sm"
             fontWeight={tab === "origins" ? "semibold" : "normal"}
-            color={tab === "origins" ? "#2563eb" : "#999"}
+            color={tab === "origins" ? "blue.600" : "gray.500"}
+            _dark={{ color: tab === "origins" ? "blue.300" : "gray.400" }}
           >
             All Origins
           </Text>
@@ -508,7 +527,8 @@ function EtymologyNotebookPage() {
               w="60%"
               h="3px"
               borderRadius="full"
-              bg="#2563eb"
+              bg="blue.600"
+              _dark={{ bg: "blue.300" }}
             />
           )}
         </Box>
@@ -523,7 +543,8 @@ function EtymologyNotebookPage() {
           <Text
             fontSize="sm"
             fontWeight={tab === "meanings" ? "semibold" : "normal"}
-            color={tab === "meanings" ? "#2563eb" : "#999"}
+            color={tab === "meanings" ? "blue.600" : "gray.500"}
+            _dark={{ color: tab === "meanings" ? "blue.300" : "gray.400" }}
           >
             By Meaning
           </Text>
@@ -536,7 +557,8 @@ function EtymologyNotebookPage() {
               w="60%"
               h="3px"
               borderRadius="full"
-              bg="#2563eb"
+              bg="blue.600"
+              _dark={{ bg: "blue.300" }}
             />
           )}
         </Box>
@@ -571,12 +593,13 @@ function EtymologyNotebookPage() {
       {/* Summary footer */}
       <Box
         bg="white"
+        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         borderTopWidth="1px"
-        borderColor="#e5e7eb"
+        borderColor="gray.200"
         py={3}
         textAlign="center"
       >
-        <Text fontSize="sm" color="#666">
+        <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
           {originCount} origins &middot; {definitionCount} words
         </Text>
       </Box>

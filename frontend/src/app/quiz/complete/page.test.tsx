@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import SessionCompletePage from "./page";
@@ -55,11 +55,22 @@ const mockResults: QuizResult[] = [
   },
 ];
 
+function renderPageDark() {
+  document.documentElement.classList.add("dark");
+  document.documentElement.setAttribute("data-theme", "dark");
+  return renderPage();
+}
+
 describe("SessionCompletePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useQuizStore.getState().reset();
     pushMock.mockReset();
+  });
+
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
   });
 
   it("redirects to / when no results in store", () => {
@@ -174,7 +185,6 @@ describe("SessionCompletePage", () => {
         originalQuality: 5,
         originalStatus: "understood",
         originalIntervalDays: 10,
-        originalEasinessFactor: 2.5,
       });
       useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
       renderPage();
@@ -224,7 +234,6 @@ describe("SessionCompletePage", () => {
         originalQuality: 5,
         originalStatus: "understood",
         originalIntervalDays: 10,
-        originalEasinessFactor: 2.5,
       });
       vi.mocked(client.quizClient.undoOverrideAnswer).mockResolvedValue({
         correct: false,
@@ -307,7 +316,6 @@ describe("SessionCompletePage", () => {
         originalQuality: 5,
         originalStatus: "understood",
         originalIntervalDays: 10,
-        originalEasinessFactor: 2.5,
       });
       useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
       renderPage();
@@ -327,6 +335,14 @@ describe("SessionCompletePage", () => {
         );
       });
     });
+  });
+
+  it("renders in dark mode without errors", () => {
+    useQuizStore.setState({ results: mockResults });
+    renderPageDark();
+    expect(screen.getByText("Session Complete")).toBeInTheDocument();
+    expect(screen.getByText("Total: 3 words")).toBeInTheDocument();
+    expect(screen.getByText("break the ice")).toBeInTheDocument();
   });
 
   describe("freeform results", () => {

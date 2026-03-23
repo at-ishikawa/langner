@@ -25,6 +25,9 @@ func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 		return "", fmt.Errorf("os.ReadFile(%s) > %w", markdownPath, err)
 	}
 
+	// Preprocess: normalize smart punctuation to ASCII (default PDF fonts don't support Unicode)
+	content = normalizeSmartPunctuation(content)
+
 	// Preprocess: remove bold markers in blockquotes (mdtopdf doesn't handle them well)
 	content = convertBoldToItalicInBlockquotes(content)
 
@@ -42,6 +45,21 @@ func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 	}
 
 	return absPath, nil
+}
+
+// normalizeSmartPunctuation replaces Unicode smart quotes/punctuation with ASCII equivalents.
+// The default PDF fonts (Latin-1) don't support these characters, causing garbled output.
+func normalizeSmartPunctuation(content []byte) []byte {
+	replacer := strings.NewReplacer(
+		"\u2018", "'", // LEFT SINGLE QUOTATION MARK
+		"\u2019", "'", // RIGHT SINGLE QUOTATION MARK
+		"\u201C", "\"", // LEFT DOUBLE QUOTATION MARK
+		"\u201D", "\"", // RIGHT DOUBLE QUOTATION MARK
+		"\u2013", "-", // EN DASH
+		"\u2014", "--", // EM DASH
+		"\u2026", "...", // HORIZONTAL ELLIPSIS
+	)
+	return []byte(replacer.Replace(string(content)))
 }
 
 // convertBoldToItalicInBlockquotes removes **bold** markers in blockquote lines

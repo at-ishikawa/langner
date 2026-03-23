@@ -40,10 +40,11 @@ export default function HomePage() {
             <Box
               p={5}
               bg="white"
+              _dark={{ bg: "gray.800" }}
               borderWidth="1px"
-              borderColor="#e5e7eb"
-              borderRadius="lg"
+              borderColor="gray.200"
               _hover={{ bg: "bg.muted", borderColor: "blue.400" }}
+              borderRadius="lg"
               cursor="pointer"
               display="flex"
               alignItems="center"
@@ -53,13 +54,14 @@ export default function HomePage() {
                 w="48px"
                 h="48px"
                 borderRadius="10px"
-                bg="#eff6ff"
+                bg="blue.50"
+                _dark={{ bg: "blue.900" }}
                 display="flex"
                 alignItems="center"
                 justifyContent="center"
                 flexShrink={0}
               >
-                <Text fontSize="xl" fontWeight="bold" color="#2563eb">
+                <Text fontSize="xl" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
                   {feature.icon}
                 </Text>
               </Box>
@@ -71,7 +73,7 @@ export default function HomePage() {
                   {feature.description}
                 </Text>
               </Box>
-              <Text fontSize="md" color="#999" flexShrink={0}>
+              <Text fontSize="md" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>
                 &rsaquo;
               </Text>
             </Box>

@@ -149,7 +149,6 @@ func processStoryFile(filePath, filename string, markerPattern *regexp.Regexp) (
 			if len(scene.Definitions) > 0 {
 				defScene := notebook.DefinitionsScene{
 					Metadata: notebook.DefinitionsSceneMetadata{
-						Index: j,
 						Title: scene.Title,
 					},
 					Expressions: scene.Definitions,

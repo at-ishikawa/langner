@@ -325,7 +325,7 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 						Scenes: []notebook.DefinitionsScene{
 							{
 								Metadata: notebook.DefinitionsSceneMetadata{
-									Index: 0,
+									Title: "Opening",
 								},
 								Expressions: []notebook.Note{
 									{
@@ -470,7 +470,7 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 						Metadata: notebook.DefinitionsMetadata{Notebook: "chapter1.yml"},
 						Scenes: []notebook.DefinitionsScene{
 							{
-								Metadata:    notebook.DefinitionsSceneMetadata{Index: 0},
+								Metadata:    notebook.DefinitionsSceneMetadata{Title: "Opening"},
 								Expressions: []notebook.Note{{Expression: "arduous", Meaning: "involving great effort"}},
 							},
 						},
