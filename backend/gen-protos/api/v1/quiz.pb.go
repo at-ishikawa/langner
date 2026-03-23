@@ -653,6 +653,7 @@ type SubmitAnswerResponse struct {
 	WordDetail     *WordDetail            `protobuf:"bytes,4,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
 	NextReviewDate string                 `protobuf:"bytes,5,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,6,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	Images         []string               `protobuf:"bytes,7,rep,name=images,proto3" json:"images,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -727,6 +728,13 @@ func (x *SubmitAnswerResponse) GetLearnedAt() string {
 		return x.LearnedAt
 	}
 	return ""
+}
+
+func (x *SubmitAnswerResponse) GetImages() []string {
+	if x != nil {
+		return x.Images
+	}
+	return nil
 }
 
 type StartReverseQuizRequest struct {
@@ -1032,6 +1040,7 @@ type SubmitReverseAnswerResponse struct {
 	Classification string                 `protobuf:"bytes,7,opt,name=classification,proto3" json:"classification,omitempty"`
 	NextReviewDate string                 `protobuf:"bytes,8,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	Images         []string               `protobuf:"bytes,10,rep,name=images,proto3" json:"images,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1127,6 +1136,13 @@ func (x *SubmitReverseAnswerResponse) GetLearnedAt() string {
 		return x.LearnedAt
 	}
 	return ""
+}
+
+func (x *SubmitReverseAnswerResponse) GetImages() []string {
+	if x != nil {
+		return x.Images
+	}
+	return nil
 }
 
 type StartFreeformQuizRequest struct {
@@ -1296,6 +1312,8 @@ type SubmitFreeformAnswerResponse struct {
 	WordDetail     *WordDetail            `protobuf:"bytes,7,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
 	NextReviewDate string                 `protobuf:"bytes,8,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	NoteId         int64                  `protobuf:"varint,10,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Images         []string               `protobuf:"bytes,11,rep,name=images,proto3" json:"images,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1393,6 +1411,20 @@ func (x *SubmitFreeformAnswerResponse) GetLearnedAt() string {
 	return ""
 }
 
+func (x *SubmitFreeformAnswerResponse) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *SubmitFreeformAnswerResponse) GetImages() []string {
+	if x != nil {
+		return x.Images
+	}
+	return nil
+}
+
 // Override Answer
 type OverrideAnswerRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -1471,14 +1503,13 @@ func (x *OverrideAnswerRequest) GetNextReviewDate() string {
 }
 
 type OverrideAnswerResponse struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	NextReviewDate         string                 `protobuf:"bytes,1,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
-	OriginalQuality        int32                  `protobuf:"varint,2,opt,name=original_quality,json=originalQuality,proto3" json:"original_quality,omitempty"`
-	OriginalStatus         string                 `protobuf:"bytes,3,opt,name=original_status,json=originalStatus,proto3" json:"original_status,omitempty"`
-	OriginalIntervalDays   int32                  `protobuf:"varint,4,opt,name=original_interval_days,json=originalIntervalDays,proto3" json:"original_interval_days,omitempty"`
-	OriginalEasinessFactor float64                `protobuf:"fixed64,5,opt,name=original_easiness_factor,json=originalEasinessFactor,proto3" json:"original_easiness_factor,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	NextReviewDate       string                 `protobuf:"bytes,1,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	OriginalQuality      int32                  `protobuf:"varint,2,opt,name=original_quality,json=originalQuality,proto3" json:"original_quality,omitempty"`
+	OriginalStatus       string                 `protobuf:"bytes,3,opt,name=original_status,json=originalStatus,proto3" json:"original_status,omitempty"`
+	OriginalIntervalDays int32                  `protobuf:"varint,4,opt,name=original_interval_days,json=originalIntervalDays,proto3" json:"original_interval_days,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *OverrideAnswerResponse) Reset() {
@@ -1539,25 +1570,17 @@ func (x *OverrideAnswerResponse) GetOriginalIntervalDays() int32 {
 	return 0
 }
 
-func (x *OverrideAnswerResponse) GetOriginalEasinessFactor() float64 {
-	if x != nil {
-		return x.OriginalEasinessFactor
-	}
-	return 0
-}
-
 // Undo Override Answer
 type UndoOverrideAnswerRequest struct {
-	state                  protoimpl.MessageState `protogen:"open.v1"`
-	NoteId                 int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	QuizType               QuizType               `protobuf:"varint,2,opt,name=quiz_type,json=quizType,proto3,enum=api.v1.QuizType" json:"quiz_type,omitempty"`
-	LearnedAt              string                 `protobuf:"bytes,3,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
-	OriginalQuality        int32                  `protobuf:"varint,4,opt,name=original_quality,json=originalQuality,proto3" json:"original_quality,omitempty"`
-	OriginalStatus         string                 `protobuf:"bytes,5,opt,name=original_status,json=originalStatus,proto3" json:"original_status,omitempty"`
-	OriginalIntervalDays   int32                  `protobuf:"varint,6,opt,name=original_interval_days,json=originalIntervalDays,proto3" json:"original_interval_days,omitempty"`
-	OriginalEasinessFactor float64                `protobuf:"fixed64,7,opt,name=original_easiness_factor,json=originalEasinessFactor,proto3" json:"original_easiness_factor,omitempty"`
-	unknownFields          protoimpl.UnknownFields
-	sizeCache              protoimpl.SizeCache
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	NoteId               int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	QuizType             QuizType               `protobuf:"varint,2,opt,name=quiz_type,json=quizType,proto3,enum=api.v1.QuizType" json:"quiz_type,omitempty"`
+	LearnedAt            string                 `protobuf:"bytes,3,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	OriginalQuality      int32                  `protobuf:"varint,4,opt,name=original_quality,json=originalQuality,proto3" json:"original_quality,omitempty"`
+	OriginalStatus       string                 `protobuf:"bytes,5,opt,name=original_status,json=originalStatus,proto3" json:"original_status,omitempty"`
+	OriginalIntervalDays int32                  `protobuf:"varint,6,opt,name=original_interval_days,json=originalIntervalDays,proto3" json:"original_interval_days,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *UndoOverrideAnswerRequest) Reset() {
@@ -1628,13 +1651,6 @@ func (x *UndoOverrideAnswerRequest) GetOriginalStatus() string {
 func (x *UndoOverrideAnswerRequest) GetOriginalIntervalDays() int32 {
 	if x != nil {
 		return x.OriginalIntervalDays
-	}
-	return 0
-}
-
-func (x *UndoOverrideAnswerRequest) GetOriginalEasinessFactor() float64 {
-	if x != nil {
-		return x.OriginalEasinessFactor
 	}
 	return 0
 }
@@ -2391,6 +2407,7 @@ type SubmitEtymologyBreakdownAnswerResponse struct {
 	NextReviewDate     string                  `protobuf:"bytes,5,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt          string                  `protobuf:"bytes,6,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	NoteId             int64                   `protobuf:"varint,7,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Images             []string                `protobuf:"bytes,8,rep,name=images,proto3" json:"images,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -2474,6 +2491,13 @@ func (x *SubmitEtymologyBreakdownAnswerResponse) GetNoteId() int64 {
 	return 0
 }
 
+func (x *SubmitEtymologyBreakdownAnswerResponse) GetImages() []string {
+	if x != nil {
+		return x.Images
+	}
+	return nil
+}
+
 type SubmitEtymologyAssemblyAnswerRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	CardId         int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
@@ -2544,6 +2568,7 @@ type SubmitEtymologyAssemblyAnswerResponse struct {
 	NextReviewDate     string                     `protobuf:"bytes,6,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt          string                     `protobuf:"bytes,7,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	NoteId             int64                      `protobuf:"varint,8,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Images             []string                   `protobuf:"bytes,9,rep,name=images,proto3" json:"images,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -2632,6 +2657,13 @@ func (x *SubmitEtymologyAssemblyAnswerResponse) GetNoteId() int64 {
 		return x.NoteId
 	}
 	return 0
+}
+
+func (x *SubmitEtymologyAssemblyAnswerResponse) GetImages() []string {
+	if x != nil {
+		return x.Images
+	}
+	return nil
 }
 
 type StartEtymologyFreeformQuizRequest struct {
@@ -2808,6 +2840,7 @@ type SubmitEtymologyFreeformAnswerResponse struct {
 	LearnedAt          string                  `protobuf:"bytes,6,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	NotebookName       string                  `protobuf:"bytes,7,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
 	NoteId             int64                   `protobuf:"varint,8,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Images             []string                `protobuf:"bytes,9,rep,name=images,proto3" json:"images,omitempty"`
 	unknownFields      protoimpl.UnknownFields
 	sizeCache          protoimpl.SizeCache
 }
@@ -2898,6 +2931,13 @@ func (x *SubmitEtymologyFreeformAnswerResponse) GetNoteId() int64 {
 	return 0
 }
 
+func (x *SubmitEtymologyFreeformAnswerResponse) GetImages() []string {
+	if x != nil {
+		return x.Images
+	}
+	return nil
+}
+
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
@@ -2939,7 +2979,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x13SubmitAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xe0\x01\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xf8\x01\n" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -2948,7 +2988,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"wordDetail\x12(\n" +
 	"\x10next_review_date\x18\x05 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
-	"learned_at\x18\x06 \x01(\tR\tlearnedAt\"x\n" +
+	"learned_at\x18\x06 \x01(\tR\tlearnedAt\x12\x16\n" +
+	"\x06images\x18\a \x03(\tR\x06images\"x\n" +
 	"\x17StartReverseQuizRequest\x12+\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\vnotebookIds\x120\n" +
 	"\x14list_missing_context\x18\x02 \x01(\bR\x12listMissingContext\"T\n" +
@@ -2971,7 +3012,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x1aSubmitReverseAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xcb\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xe3\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +
@@ -2985,7 +3026,9 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x0eclassification\x18\a \x01(\tR\x0eclassification\x12(\n" +
 	"\x10next_review_date\x18\b \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
-	"learned_at\x18\t \x01(\tR\tlearnedAt\"\x1a\n" +
+	"learned_at\x18\t \x01(\tR\tlearnedAt\x12\x16\n" +
+	"\x06images\x18\n" +
+	" \x03(\tR\x06images\"\x1a\n" +
 	"\x18StartFreeformQuizRequest\"\xa9\x02\n" +
 	"\x19StartFreeformQuizResponse\x12\x1d\n" +
 	"\n" +
@@ -2998,7 +3041,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x1bSubmitFreeformAnswerRequest\x12\x1f\n" +
 	"\x04word\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x04word\x12%\n" +
 	"\ameaning\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\ameaning\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xbb\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xec\x02\n" +
 	"\x1cSubmitFreeformAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x18\n" +
@@ -3010,7 +3053,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"wordDetail\x12(\n" +
 	"\x10next_review_date\x18\b \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
-	"learned_at\x18\t \x01(\tR\tlearnedAt\"\x8d\x02\n" +
+	"learned_at\x18\t \x01(\tR\tlearnedAt\x12\x17\n" +
+	"\anote_id\x18\n" +
+	" \x01(\x03R\x06noteId\x12\x16\n" +
+	"\x06images\x18\v \x03(\tR\x06images\"\x8d\x02\n" +
 	"\x15OverrideAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
 	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\x12&\n" +
@@ -3020,13 +3066,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\fmark_correct\x18\x04 \x01(\bH\x00R\vmarkCorrect\x88\x01\x01\x12-\n" +
 	"\x10next_review_date\x18\x05 \x01(\tH\x01R\x0enextReviewDate\x88\x01\x01B\x0f\n" +
 	"\r_mark_correctB\x13\n" +
-	"\x11_next_review_date\"\x86\x02\n" +
+	"\x11_next_review_date\"\xd2\x01\n" +
 	"\x16OverrideAnswerResponse\x12(\n" +
 	"\x10next_review_date\x18\x01 \x01(\tR\x0enextReviewDate\x12)\n" +
 	"\x10original_quality\x18\x02 \x01(\x05R\x0foriginalQuality\x12'\n" +
 	"\x0foriginal_status\x18\x03 \x01(\tR\x0eoriginalStatus\x124\n" +
-	"\x16original_interval_days\x18\x04 \x01(\x05R\x14originalIntervalDays\x128\n" +
-	"\x18original_easiness_factor\x18\x05 \x01(\x01R\x16originalEasinessFactor\"\xd8\x02\n" +
+	"\x16original_interval_days\x18\x04 \x01(\x05R\x14originalIntervalDaysJ\x04\b\x05\x10\x06\"\xa4\x02\n" +
 	"\x19UndoOverrideAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
 	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\x12&\n" +
@@ -3035,8 +3080,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"R\tlearnedAt\x12)\n" +
 	"\x10original_quality\x18\x04 \x01(\x05R\x0foriginalQuality\x12'\n" +
 	"\x0foriginal_status\x18\x05 \x01(\tR\x0eoriginalStatus\x124\n" +
-	"\x16original_interval_days\x18\x06 \x01(\x05R\x14originalIntervalDays\x128\n" +
-	"\x18original_easiness_factor\x18\a \x01(\x01R\x16originalEasinessFactor\"`\n" +
+	"\x16original_interval_days\x18\x06 \x01(\x05R\x14originalIntervalDaysJ\x04\b\a\x10\b\"`\n" +
 	"\x1aUndoOverrideAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12(\n" +
 	"\x10next_review_date\x18\x02 \x01(\tR\x0enextReviewDate\"\x81\x01\n" +
@@ -3089,7 +3133,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"%SubmitEtymologyBreakdownAnswerRequest\x12 \n" +
 	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x127\n" +
 	"\aanswers\x18\x02 \x03(\v2\x1d.api.v1.EtymologyOriginAnswerR\aanswers\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xcb\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xe3\x02\n" +
 	"&SubmitEtymologyBreakdownAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12A\n" +
@@ -3098,11 +3142,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10next_review_date\x18\x05 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
 	"learned_at\x18\x06 \x01(\tR\tlearnedAt\x12\x17\n" +
-	"\anote_id\x18\a \x01(\x03R\x06noteId\"\x97\x01\n" +
+	"\anote_id\x18\a \x01(\x03R\x06noteId\x12\x16\n" +
+	"\x06images\x18\b \x03(\tR\x06images\"\x97\x01\n" +
 	"$SubmitEtymologyAssemblyAnswerRequest\x12 \n" +
 	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xfa\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x92\x03\n" +
 	"%SubmitEtymologyAssemblyAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12-\n" +
@@ -3112,7 +3157,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10next_review_date\x18\x06 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
 	"learned_at\x18\a \x01(\tR\tlearnedAt\x12\x17\n" +
-	"\anote_id\x18\b \x01(\x03R\x06noteId\"\x91\x01\n" +
+	"\anote_id\x18\b \x01(\x03R\x06noteId\x12\x16\n" +
+	"\x06images\x18\t \x03(\tR\x06images\"\x91\x01\n" +
 	"!StartEtymologyFreeformQuizRequest\x124\n" +
 	"\x16etymology_notebook_ids\x18\x01 \x03(\tR\x14etymologyNotebookIds\x126\n" +
 	"\x17definition_notebook_ids\x18\x02 \x03(\tR\x15definitionNotebookIds\"\xf7\x01\n" +
@@ -3127,7 +3173,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"expression\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\n" +
 	"expression\x127\n" +
 	"\aanswers\x18\x02 \x03(\v2\x1d.api.v1.EtymologyOriginAnswerR\aanswers\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xef\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x87\x03\n" +
 	"%SubmitEtymologyFreeformAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12A\n" +
@@ -3137,7 +3183,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
 	"learned_at\x18\x06 \x01(\tR\tlearnedAt\x12#\n" +
 	"\rnotebook_name\x18\a \x01(\tR\fnotebookName\x12\x17\n" +
-	"\anote_id\x18\b \x01(\x03R\x06noteId*\xb1\x01\n" +
+	"\anote_id\x18\b \x01(\x03R\x06noteId\x12\x16\n" +
+	"\x06images\x18\t \x03(\tR\x06images*\xb1\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +

@@ -26,6 +26,7 @@ interface FeedbackData {
   contexts: string[];
   nextReviewDate?: string;
   learnedAt?: string;
+  images?: string[];
 }
 
 export default function ReverseQuizPage() {
@@ -51,7 +52,6 @@ export default function ReverseQuizPage() {
     quality: number;
     status: string;
     intervalDays: number;
-    easinessFactor: number;
   } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -123,6 +123,7 @@ export default function ReverseQuizPage() {
         contexts: res.contexts ?? [],
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(correct);
       storeSubmitResult({
@@ -138,6 +139,7 @@ export default function ReverseQuizPage() {
         wordDetail: res.wordDetail,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -170,6 +172,7 @@ export default function ReverseQuizPage() {
         contexts: res.contexts ?? [],
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -183,6 +186,7 @@ export default function ReverseQuizPage() {
         wordDetail: res.wordDetail,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -369,7 +373,6 @@ export default function ReverseQuizPage() {
                           originalQuality: overrideOriginals?.quality ?? 0,
                           originalStatus: overrideOriginals?.status ?? "",
                           originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                          originalEasinessFactor: overrideOriginals?.easinessFactor ?? 0,
                         });
                         setOverridden(false);
                         setOverrideOriginals(null);
@@ -424,6 +427,14 @@ export default function ReverseQuizPage() {
                 </Box>
               )}
 
+              {feedback.images && feedback.images.length > 0 && (
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  {feedback.images.map((src, i) => (
+                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                  ))}
+                </Box>
+              )}
+
               {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
@@ -447,7 +458,6 @@ export default function ReverseQuizPage() {
                       quality: res.originalQuality,
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,
-                      easinessFactor: res.originalEasinessFactor,
                     });
                     setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                   } catch { /* silently fail */ }

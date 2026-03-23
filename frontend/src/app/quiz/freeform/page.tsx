@@ -12,7 +12,7 @@ import {
   Textarea,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient } from "@/lib/client";
+import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
 
@@ -38,8 +38,13 @@ export default function FreeformQuizPage() {
     context?: string;
     nextReviewDate?: string;
     learnedAt?: string;
+    noteId?: bigint;
+    images?: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [overridden, setOverridden] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const [displayCorrect, setDisplayCorrect] = useState(false);
   const startTimeRef = useRef(Date.now());
   const wordInputRef = useRef<HTMLInputElement>(null);
 
@@ -86,7 +91,10 @@ export default function FreeformQuizPage() {
         context: res.context,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        noteId: res.noteId || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
+      setDisplayCorrect(res.correct);
       storeSubmitResult({
         word: res.word,
         answer: meaning.trim(),
@@ -98,6 +106,7 @@ export default function FreeformQuizPage() {
         wordDetail: res.wordDetail,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -111,6 +120,8 @@ export default function FreeformQuizPage() {
     setMeaning("");
     setFeedback(null);
     setError(null);
+    setOverridden(false);
+    setSkipped(false);
     startTimeRef.current = Date.now();
     wordInputRef.current?.focus();
   };
@@ -156,11 +167,11 @@ export default function FreeformQuizPage() {
           <Box
             p={4}
             borderRadius="md"
-            bg={feedback.correct ? "green.100" : "red.100"}
-            _dark={{ bg: feedback.correct ? "green.900" : "red.900" }}
+            bg={displayCorrect ? "green.100" : "red.100"}
+            _dark={{ bg: displayCorrect ? "green.900" : "red.900" }}
           >
             <Text fontWeight="bold" fontSize="lg">
-              {feedback.correct ? "\u2713 Correct!" : "\u2717 Incorrect"}
+              {displayCorrect ? "\u2713 Correct!" : "\u2717 Incorrect"}
             </Text>
           </Box>
 
@@ -194,18 +205,55 @@ export default function FreeformQuizPage() {
             </Box>
           )}
 
-          {/* Next review date, Next button, Override/Skip disabled for freeform.
-              The SubmitFreeformAnswerResponse proto does not include noteId,
-              so override/skip RPCs cannot be called. A proto change is needed
-              to return noteId from SubmitFreeformAnswer to enable these. */}
+          {feedback.images && feedback.images.length > 0 && (
+            <Box display="flex" gap={2} flexWrap="wrap">
+              {feedback.images.map((src, i) => (
+                <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+              ))}
+            </Box>
+          )}
+
           <FeedbackActions
-            isCorrect={feedback.correct}
-            noteId={undefined}
+            isCorrect={displayCorrect}
+            noteId={feedback.noteId}
             nextReviewDate={feedback.nextReviewDate}
-            isOverridden={false}
-            isSkipped={false}
+            isOverridden={overridden}
+            isSkipped={skipped}
             nextLabel="Next Word"
             onNext={handleNext}
+            onOverride={async () => {
+              if (!feedback.noteId || !feedback.learnedAt) return;
+              try {
+                const res = await quizClient.overrideAnswer({
+                  noteId: feedback.noteId,
+                  quizType: ProtoQuizType.FREEFORM,
+                  learnedAt: feedback.learnedAt,
+                  markCorrect: !displayCorrect,
+                });
+                setOverridden(true);
+                setDisplayCorrect(!displayCorrect);
+                setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
+              } catch { /* silently fail */ }
+            }}
+            onSkip={async () => {
+              if (!feedback.noteId) return;
+              try {
+                await quizClient.skipWord({ noteId: feedback.noteId });
+                setSkipped(true);
+              } catch { /* silently fail */ }
+            }}
+            onChangeReviewDate={async (newDate) => {
+              if (!feedback.noteId || !feedback.learnedAt) return;
+              try {
+                await quizClient.overrideAnswer({
+                  noteId: feedback.noteId,
+                  quizType: ProtoQuizType.FREEFORM,
+                  learnedAt: feedback.learnedAt,
+                  nextReviewDate: newDate,
+                });
+                setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
+              } catch { /* silently fail */ }
+            }}
           />
 
           {freeformResults.length > 0 && (

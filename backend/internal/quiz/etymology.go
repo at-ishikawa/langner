@@ -19,6 +19,7 @@ type EtymologyCard struct {
 	Expression   string
 	Meaning      string
 	OriginParts  []EtymologyOriginPart
+	Images       []string
 }
 
 // EtymologyOriginPart represents an origin part attached to a card.
@@ -170,6 +171,7 @@ func (s *Service) loadEtymologyStoryCards(
 					Expression:   def.Expression,
 					Meaning:      def.Meaning,
 					OriginParts:  parts,
+					Images:       def.Images,
 				})
 			}
 		}
@@ -213,6 +215,7 @@ func (s *Service) loadEtymologyFlashcardCards(
 				Expression:   card.Expression,
 				Meaning:      card.Meaning,
 				OriginParts:  parts,
+				Images:       card.Images,
 			})
 		}
 	}
@@ -351,6 +354,7 @@ func loadEtymologyDefinitionsCards(
 					Expression:   note.Expression,
 					Meaning:      note.Meaning,
 					OriginParts:  parts,
+					Images:       note.Images,
 				})
 			}
 		}

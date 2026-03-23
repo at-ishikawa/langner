@@ -287,6 +287,7 @@ func (s *Service) loadStoryCards(
 						Antonyms:      definition.Antonyms,
 						Memo:          definition.Memo,
 					},
+					Images: definition.Images,
 				})
 			}
 		}
@@ -344,6 +345,7 @@ func (s *Service) loadFlashcardCards(
 					Antonyms:      card.Antonyms,
 					Memo:          card.Memo,
 				},
+				Images: card.Images,
 			})
 		}
 	}
@@ -559,6 +561,7 @@ type ReverseCard struct {
 	Contexts     []ReverseContext
 	Expression   string // original expression to guess
 	WordDetail   WordDetail
+	Images       []string
 }
 
 // ReverseContext represents a context sentence with masking info.
@@ -686,6 +689,7 @@ func (s *Service) loadStoryReverseCards(
 						Antonyms:      definition.Antonyms,
 						Memo:          definition.Memo,
 					},
+					Images: definition.Images,
 				})
 			}
 		}
@@ -755,6 +759,7 @@ func (s *Service) loadFlashcardReverseCards(
 					Antonyms:      card.Antonyms,
 					Memo:          card.Memo,
 				},
+				Images: card.Images,
 			})
 		}
 	}
@@ -922,6 +927,7 @@ type FreeformCard struct {
 	Meaning            string
 	Contexts           []inference.Context
 	WordDetail         WordDetail
+	Images             []string
 }
 
 // LoadAllWords loads all words from all notebooks for freeform quiz.
@@ -998,6 +1004,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 						Antonyms:      definition.Antonyms,
 						Memo:          definition.Memo,
 					},
+					Images: definition.Images,
 				})
 			}
 		}
@@ -1053,6 +1060,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string)
 					Antonyms:      card.Antonyms,
 					Memo:          card.Memo,
 				},
+				Images: card.Images,
 			})
 		}
 	}

@@ -29,6 +29,7 @@ interface ResultItem {
   originalCorrect: boolean;
   originBreakdown?: OriginPartDisplay[];
   userAnswer?: string;
+  images?: string[];
 }
 
 function getProtoQuizType(qt: QuizType): ProtoQuizType {
@@ -40,16 +41,16 @@ function getProtoQuizType(qt: QuizType): ProtoQuizType {
   return ProtoQuizType.STANDARD;
 }
 
-function getTypeBadgeColors(type: string): { bg: string; color: string } {
+function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
   switch (type.toLowerCase()) {
     case "root":
-      return { bg: "#dbeafe", color: "#2563eb" };
+      return { bg: "blue.100", darkBg: "blue.900", color: "blue.600", darkColor: "blue.300" };
     case "prefix":
-      return { bg: "#fef3c7", color: "#92400e" };
+      return { bg: "yellow.100", darkBg: "yellow.900", color: "yellow.800", darkColor: "yellow.200" };
     case "suffix":
-      return { bg: "#dcfce7", color: "#166534" };
+      return { bg: "green.100", darkBg: "green.900", color: "green.800", darkColor: "green.200" };
     default:
-      return { bg: "#f3f4f6", color: "#666" };
+      return { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300" };
   }
 }
 
@@ -84,6 +85,7 @@ export default function SessionCompletePage() {
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
+        images: r.images,
       }));
     }
     if (reverseResults.length > 0) {
@@ -100,6 +102,7 @@ export default function SessionCompletePage() {
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
+        images: r.images,
       }));
     }
     if (freeformResults.length > 0) {
@@ -115,6 +118,7 @@ export default function SessionCompletePage() {
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
+        images: r.images,
       }));
     }
     if (etymologyResults.length > 0) {
@@ -137,6 +141,7 @@ export default function SessionCompletePage() {
           type: p.type,
         })),
         userAnswer: r.answer,
+        images: r.images,
       }));
     }
     return [];
@@ -171,7 +176,6 @@ export default function SessionCompletePage() {
         quality: res.originalQuality,
         status: res.originalStatus,
         intervalDays: res.originalIntervalDays,
-        easinessFactor: res.originalEasinessFactor,
       });
     } catch { /* silently fail */ }
   };
@@ -189,7 +193,6 @@ export default function SessionCompletePage() {
         originalQuality: original.originalValues.quality,
         originalStatus: original.originalValues.status,
         originalIntervalDays: original.originalValues.intervalDays,
-        originalEasinessFactor: original.originalValues.easinessFactor,
       });
       undoOverrideResult(item.index, quizType, res.correct, res.nextReviewDate || item.nextReviewDate || "");
     } catch { /* silently fail */ }
@@ -351,10 +354,10 @@ function ResultCard({
       : "red.200";
 
   const topBarColor = item.isSkipped
-    ? "#d1d5db"
+    ? "gray.300"
     : item.correct
-      ? "#16a34a"
-      : "#dc2626";
+      ? "green.600"
+      : "red.600";
 
   return (
     <Box
@@ -383,6 +386,15 @@ function ResultCard({
           </Text>
         ))}
 
+        {/* Images */}
+        {item.images && item.images.length > 0 && (
+          <Box display="flex" gap={2} mt={2} flexWrap="wrap">
+            {item.images.map((src, i) => (
+              <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+            ))}
+          </Box>
+        )}
+
         {/* Etymology origin breakdown with badges */}
         {isEtymology && item.originBreakdown && item.originBreakdown.length > 0 && (
           <Box mt={2}>
@@ -392,7 +404,7 @@ function ResultCard({
                 Your answer: {item.userAnswer}
               </Text>
             )}
-            <Text fontSize="xs" color={item.correct ? "#16a34a" : "fg.muted"} mb={1}>
+            <Text fontSize="xs" color={item.correct ? "green.600" : "fg.muted"} mb={1}>
               {item.correct ? "Breakdown:" : "Correct:"}
             </Text>
             <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
@@ -401,16 +413,16 @@ function ResultCard({
                 return (
                   <Box key={i} display="flex" alignItems="center" gap={1}>
                     {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-                    <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
+                    <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
                     <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
                     {p.language && (
-                      <Box px={1.5} py={0} borderRadius="full" bg="#f3f4f6">
-                        <Text fontSize="2xs" color="#666">{p.language}</Text>
+                      <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                        <Text fontSize="2xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
                       </Box>
                     )}
                     {typeBadge && p.type && (
-                      <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg}>
-                        <Text fontSize="2xs" color={typeBadge.color}>{p.type}</Text>
+                      <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg} _dark={{ bg: typeBadge.darkBg }}>
+                        <Text fontSize="2xs" color={typeBadge.color} _dark={{ color: typeBadge.darkColor }}>{p.type}</Text>
                       </Box>
                     )}
                   </Box>
@@ -426,7 +438,7 @@ function ResultCard({
             {item.originBreakdown.map((p, i) => (
               <Box key={i} display="flex" alignItems="center" gap={1}>
                 {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-                <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
+                <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
                 <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
               </Box>
             ))}

@@ -24,6 +24,7 @@ interface FeedbackData {
   reason: string;
   nextReviewDate?: string;
   learnedAt?: string;
+  images?: string[];
 }
 
 export default function QuizCardPage() {
@@ -48,7 +49,6 @@ export default function QuizCardPage() {
     quality: number;
     status: string;
     intervalDays: number;
-    easinessFactor: number;
   } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -105,6 +105,7 @@ export default function QuizCardPage() {
         reason: res.reason,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -118,6 +119,7 @@ export default function QuizCardPage() {
         wordDetail: res.wordDetail,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -148,6 +150,7 @@ export default function QuizCardPage() {
         reason: res.reason,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -161,6 +164,7 @@ export default function QuizCardPage() {
         wordDetail: res.wordDetail,
         nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -295,7 +299,6 @@ export default function QuizCardPage() {
                           originalQuality: overrideOriginals?.quality ?? 0,
                           originalStatus: overrideOriginals?.status ?? "",
                           originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                          originalEasinessFactor: overrideOriginals?.easinessFactor ?? 0,
                         });
                         setOverridden(false);
                         setOverrideOriginals(null);
@@ -350,6 +353,14 @@ export default function QuizCardPage() {
                 </Box>
               )}
 
+              {feedback.images && feedback.images.length > 0 && (
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  {feedback.images.map((src, i) => (
+                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                  ))}
+                </Box>
+              )}
+
               {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
@@ -373,7 +384,6 @@ export default function QuizCardPage() {
                       quality: res.originalQuality,
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,
-                      easinessFactor: res.originalEasinessFactor,
                     });
                     setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                   } catch { /* silently fail */ }
