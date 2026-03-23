@@ -88,19 +88,19 @@ type LearningRecord struct {
 type LearningHistoryExpression struct {
 	Expression     string           `yaml:"expression"`
 	LearnedLogs    []LearningRecord `yaml:"learned_logs"`
-	EasinessFactor float64          `yaml:"easiness_factor,omitempty"` // default 2.5
+	EasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
 	// Reverse quiz fields - track separately from regular quiz
 	ReverseLogs           []LearningRecord `yaml:"reverse_logs,omitempty"`
-	ReverseEasinessFactor float64          `yaml:"reverse_easiness_factor,omitempty"` // default 2.5
+	ReverseEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
 	// Etymology breakdown quiz fields - track separately
 	EtymologyBreakdownLogs           []LearningRecord `yaml:"etymology_breakdown_logs,omitempty"`
-	EtymologyBreakdownEasinessFactor float64          `yaml:"etymology_breakdown_easiness_factor,omitempty"`
+	EtymologyBreakdownEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
 	// Etymology assembly quiz fields - track separately
 	EtymologyAssemblyLogs           []LearningRecord `yaml:"etymology_assembly_logs,omitempty"`
-	EtymologyAssemblyEasinessFactor float64          `yaml:"etymology_assembly_easiness_factor,omitempty"`
+	EtymologyAssemblyEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
 	SkippedAt string `yaml:"skipped_at,omitempty"` // RFC3339 date when skipped
 }
@@ -160,6 +160,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
+	quizType QuizType,
 ) {
 	status := LearnedStatusMisunderstood
 	if isCorrect {
@@ -170,21 +171,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 		}
 	}
 
-	if exp.ReverseEasinessFactor == 0 {
-		exp.ReverseEasinessFactor = DefaultEasinessFactor
-	}
+	currentEF := calculator.DeriveEF(exp.ReverseLogs)
 
-	nextInterval, newEF := calculator.CalculateInterval(exp.ReverseLogs, quality, exp.ReverseEasinessFactor)
-	if newEF > 0 {
-		exp.ReverseEasinessFactor = newEF
-	}
+	nextInterval, _ := calculator.CalculateInterval(exp.ReverseLogs, quality, currentEF)
 
 	newRecord := LearningRecord{
 		Status:         status,
 		LearnedAt:      NewDate(),
 		Quality:        quality,
 		ResponseTimeMs: responseTimeMs,
-		QuizType:       string(QuizTypeReverse),
+		QuizType:       string(quizType),
 		IntervalDays:   nextInterval,
 	}
 
@@ -193,27 +189,22 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 
 // AddRecordWithQualityForEtymology adds a new learning record for etymology quiz with SM-2 quality data
 func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
+	calculator IntervalCalculator,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
 	var logs []LearningRecord
-	var ef float64
 
 	switch quizType {
 	case QuizTypeEtymologyBreakdown:
 		logs = exp.EtymologyBreakdownLogs
-		ef = exp.EtymologyBreakdownEasinessFactor
 	case QuizTypeEtymologyAssembly:
 		logs = exp.EtymologyAssemblyLogs
-		ef = exp.EtymologyAssemblyEasinessFactor
 	default:
 		return
 	}
-
-	correctStreak := GetCorrectStreak(logs)
-	lastInterval := GetLastInterval(logs)
 
 	status := LearnedStatusMisunderstood
 	if isCorrect {
@@ -222,15 +213,10 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 		} else {
 			status = learnedStatusCanBeUsed
 		}
-		correctStreak++
 	}
 
-	if ef == 0 {
-		ef = DefaultEasinessFactor
-	}
-
-	ef = UpdateEasinessFactor(ef, quality, correctStreak)
-	nextInterval := CalculateNextInterval(lastInterval, ef, quality, correctStreak)
+	currentEF := calculator.DeriveEF(logs)
+	nextInterval, _ := calculator.CalculateInterval(logs, quality, currentEF)
 
 	newRecord := LearningRecord{
 		Status:         status,
@@ -243,10 +229,8 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 
 	switch quizType {
 	case QuizTypeEtymologyBreakdown:
-		exp.EtymologyBreakdownEasinessFactor = ef
 		exp.EtymologyBreakdownLogs = append([]LearningRecord{newRecord}, exp.EtymologyBreakdownLogs...)
 	case QuizTypeEtymologyAssembly:
-		exp.EtymologyAssemblyEasinessFactor = ef
 		exp.EtymologyAssemblyLogs = append([]LearningRecord{newRecord}, exp.EtymologyAssemblyLogs...)
 	}
 }
@@ -348,14 +332,9 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 		}
 	}
 
-	if exp.EasinessFactor == 0 {
-		exp.EasinessFactor = DefaultEasinessFactor
-	}
+	currentEF := calculator.DeriveEF(exp.LearnedLogs)
 
-	nextInterval, newEF := calculator.CalculateInterval(exp.LearnedLogs, quality, exp.EasinessFactor)
-	if newEF > 0 {
-		exp.EasinessFactor = newEF
-	}
+	nextInterval, _ := calculator.CalculateInterval(exp.LearnedLogs, quality, currentEF)
 
 	newRecord := LearningRecord{
 		Status:         status,

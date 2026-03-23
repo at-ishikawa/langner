@@ -84,7 +84,7 @@ func TestMigrateLearningHistory(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			err := MigrateLearningHistory(tempDir, false)
+			err := MigrateLearningHistory(tempDir, false, nil)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -95,7 +95,7 @@ func TestMigrateLearningHistory(t *testing.T) {
 }
 
 func TestMigrateLearningHistory_NonexistentDirectory(t *testing.T) {
-	err := MigrateLearningHistory("/nonexistent/directory", false)
+	err := MigrateLearningHistory("/nonexistent/directory", false, nil)
 	assert.Error(t, err)
 }
 
@@ -305,17 +305,16 @@ func TestMigrateExpression(t *testing.T) {
 		want bool // whether modified
 	}{
 		{
-			name: "no logs and no EF - sets default EF",
+			name: "no logs - no change",
 			exp: notebook.LearningHistoryExpression{
 				Expression: "break the ice",
 			},
-			want: true,
+			want: false,
 		},
 		{
-			name: "already has EF and all logs have quality and interval - no change",
+			name: "all logs have quality and interval - no change",
 			exp: notebook.LearningHistoryExpression{
-				Expression:     "lose one's temper",
-				EasinessFactor: 2.5,
+				Expression: "lose one's temper",
 				LearnedLogs: []notebook.LearningRecord{
 					{
 						Status:       "understood",
@@ -330,7 +329,6 @@ func TestMigrateExpression(t *testing.T) {
 			name: "logs missing quality - sets quality from status",
 			exp: notebook.LearningHistoryExpression{
 				Expression:     "hit the road",
-				EasinessFactor: 2.5,
 				LearnedLogs: []notebook.LearningRecord{
 					{Status: notebook.LearnedStatusMisunderstood, IntervalDays: 1},
 					{Status: "understood", IntervalDays: 3},
@@ -342,7 +340,6 @@ func TestMigrateExpression(t *testing.T) {
 			name: "logs missing interval - sets interval from legacy calculation",
 			exp: notebook.LearningHistoryExpression{
 				Expression:     "piece of cake",
-				EasinessFactor: 2.5,
 				LearnedLogs: []notebook.LearningRecord{
 					{Status: "understood", Quality: int(notebook.QualityCorrect)},
 				},
@@ -354,13 +351,10 @@ func TestMigrateExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exp := tt.exp
-			got := migrateExpression(&exp, false)
+			got := migrateExpression(&exp, false, nil)
 			assert.Equal(t, tt.want, got)
 
 			if tt.want {
-				// Verify EF was set
-				assert.NotZero(t, exp.EasinessFactor)
-
 				// Verify all logs have quality and interval
 				for _, log := range exp.LearnedLogs {
 					assert.NotZero(t, log.Quality)
@@ -383,16 +377,7 @@ func TestRecalculateSM2Metrics(t *testing.T) {
 		},
 	}
 
-	recalculateSM2Metrics(exp)
-
-	// Expected EF:
-	// 1. Start: 2.5
-	// 2. q=4, streak=0 -> 2.5 + 0.1 = 2.6
-	// 3. q=4, streak=1 -> 2.6 + 0.1 = 2.7
-	// 4. q=1, streak=2 -> 2.7 + (-0.32) = 2.38
-	// 5. q=4, streak=0 -> 2.38 + 0.1 = 2.48
-	// 6. q=4, streak=1 -> 2.48 + 0.1 = 2.58
-	assert.InDelta(t, 2.58, exp.EasinessFactor, 0.001)
+	recalculateMetrics(exp, &notebook.SM2Calculator{})
 
 	// Expected Intervals (newest to oldest):
 	expectedIntervals := []int{34, 13, 5, 9, 3}

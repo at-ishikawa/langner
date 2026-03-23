@@ -38,10 +38,10 @@ func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, erro
 
 // Create inserts a single learning log.
 func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) error {
-	query := `INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, easiness_factor, source_notebook_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.db.ExecContext(ctx, query,
-		log.NoteID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.EasinessFactor, log.SourceNotebookID)
+		log.NoteID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID)
 	if err != nil {
 		return fmt.Errorf("insert learning log: %w", err)
 	}
@@ -55,8 +55,8 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 		return nil
 	}
 
-	columns := []string{"note_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "easiness_factor", "source_notebook_id"}
-	const chunkSize = 5000 // 5000 * 9 columns = 45000 placeholders, well under 65535
+	columns := []string{"note_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id"}
+	const chunkSize = 5000 // 5000 * 8 columns = 40000 placeholders, well under 65535
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for i := 0; i < len(logs); i += chunkSize {
@@ -69,7 +69,7 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 			query := database.BuildMultiRowInsert("learning_logs", columns, len(chunk))
 			var args []interface{}
 			for _, l := range chunk {
-				args = append(args, l.NoteID, l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.EasinessFactor, l.SourceNotebookID)
+				args = append(args, l.NoteID, l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID)
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return fmt.Errorf("insert learning logs: %w", err)

@@ -82,6 +82,42 @@ func TestSM2Calculator_RecalculateAll(t *testing.T) {
 	})
 }
 
+func TestSM2Calculator_DeriveEF(t *testing.T) {
+	calc := &SM2Calculator{}
+	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("empty logs returns default EF", func(t *testing.T) {
+		ef := calc.DeriveEF(nil)
+		assert.InDelta(t, DefaultEasinessFactor, ef, 0.001)
+	})
+
+	t.Run("single correct answer", func(t *testing.T) {
+		ef := calc.DeriveEF([]LearningRecord{
+			{Quality: 4, LearnedAt: Date{Time: baseTime}, Status: LearnedStatusUnderstood},
+		})
+		assert.Greater(t, ef, MinEasinessFactor)
+	})
+
+	t.Run("matches RecalculateAll EF", func(t *testing.T) {
+		logs := []LearningRecord{
+			{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 3)}, Status: LearnedStatusUnderstood},
+			{Quality: 1, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 1)}, Status: LearnedStatusMisunderstood},
+			{Quality: 4, LearnedAt: Date{Time: baseTime}, Status: LearnedStatusUnderstood},
+		}
+		derivedEF := calc.DeriveEF(logs)
+		recalcEF, _ := calc.RecalculateAll(logs)
+		assert.InDelta(t, recalcEF, derivedEF, 0.001)
+	})
+}
+
+func TestFixedLevelCalculator_DeriveEF(t *testing.T) {
+	calc := &FixedLevelCalculator{}
+	ef := calc.DeriveEF([]LearningRecord{
+		{Quality: 4},
+	})
+	assert.Equal(t, 0.0, ef)
+}
+
 func TestQualityToLevelDelta(t *testing.T) {
 	assert.Equal(t, 2, qualityToLevelDelta(5))
 	assert.Equal(t, 1, qualityToLevelDelta(4))

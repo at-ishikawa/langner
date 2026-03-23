@@ -62,16 +62,21 @@ type Validator struct {
 	flashcardsDirs     []string
 	definitionsDirs    []string
 	dictionaryDir      string
+	calculator         IntervalCalculator
 }
 
 // NewValidator creates a new validator
-func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, definitionsDirs []string, dictionaryDir string) *Validator {
+func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, definitionsDirs []string, dictionaryDir string, calculator IntervalCalculator) *Validator {
+	if calculator == nil {
+		calculator = &SM2Calculator{}
+	}
 	return &Validator{
 		learningNotesDir:   learningNotesDir,
 		storyNotebooksDirs: storyNotebooksDirs,
 		flashcardsDirs:     flashcardsDirs,
 		definitionsDirs:    definitionsDirs,
 		dictionaryDir:      dictionaryDir,
+		calculator:         calculator,
 	}
 }
 
@@ -151,9 +156,6 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// Create missing learning note entries
 	fixedLearning = v.createMissingLearningNotes(fixedLearning, storyNotebooks, result)
 
-	// Recalculate interval_days for all expressions
-	fixedLearning = v.fixIntervalDays(fixedLearning, result)
-
 	// Fix dictionary reference issues
 	fixedStory := v.fixDictionaryReferences(storyNotebooks, result)
 
@@ -192,7 +194,7 @@ func (v *Validator) loadLearningHistories() ([]learningHistoryFile, error) {
 func (v *Validator) loadStoryNotebooks() ([]storyNotebookFile, error) {
 	var allFiles []storyNotebookFile
 	for _, dir := range v.storyNotebooksDirs {
-		files, err := loadYamlFiles[[]StoryNotebook](dir, func(path string, info os.FileInfo) bool {
+		files, err := loadYamlFilesSkipErrors[[]StoryNotebook](dir, func(path string, info os.FileInfo) bool {
 			return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
 		})
 		if err != nil {
@@ -484,11 +486,11 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						// Merge learning logs into the existing expression
 						if len(expr.LearnedLogs) > 0 {
 							mergedExpressions[existingIdx].LearnedLogs = append(mergedExpressions[existingIdx].LearnedLogs, expr.LearnedLogs...)
-							mergedExpressions[existingIdx].EasinessFactor, mergedExpressions[existingIdx].LearnedLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].LearnedLogs)
+							_, mergedExpressions[existingIdx].LearnedLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].LearnedLogs, v.calculator)
 						}
 						if len(expr.ReverseLogs) > 0 {
 							mergedExpressions[existingIdx].ReverseLogs = append(mergedExpressions[existingIdx].ReverseLogs, expr.ReverseLogs...)
-							mergedExpressions[existingIdx].ReverseEasinessFactor, mergedExpressions[existingIdx].ReverseLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].ReverseLogs)
+							_, mergedExpressions[existingIdx].ReverseLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].ReverseLogs, v.calculator)
 						}
 						result.AddWarning(ValidationError{
 							File:    file.path,
@@ -544,14 +546,14 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 										firstScene.Expressions[firstExprIdx].LearnedLogs,
 										expr.LearnedLogs...,
 									)
-									firstScene.Expressions[firstExprIdx].EasinessFactor, firstScene.Expressions[firstExprIdx].LearnedLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs)
+									_, firstScene.Expressions[firstExprIdx].LearnedLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs, v.calculator)
 								}
 								if len(expr.ReverseLogs) > 0 {
 									firstScene.Expressions[firstExprIdx].ReverseLogs = append(
 										firstScene.Expressions[firstExprIdx].ReverseLogs,
 										expr.ReverseLogs...,
 									)
-									firstScene.Expressions[firstExprIdx].ReverseEasinessFactor, firstScene.Expressions[firstExprIdx].ReverseLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs)
+									_, firstScene.Expressions[firstExprIdx].ReverseLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs, v.calculator)
 								}
 
 								// Mark this duplicate for removal
@@ -660,9 +662,10 @@ func (v *Validator) fixConsistency(
 					}
 
 					// Only keep expressions that either:
-					// 1. Have learned_logs or reverse_logs, OR
+					// 1. Have any logs (learned, reverse, or etymology), OR
 					// 2. Exist in the story (even with empty logs)
-					if len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || existsInStory {
+					hasLogs := len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || len(expr.EtymologyBreakdownLogs) > 0 || len(expr.EtymologyAssemblyLogs) > 0
+					if hasLogs || existsInStory {
 						validExpressions = append(validExpressions, expr)
 					} else {
 						// Remove orphaned expressions with no logs
@@ -1142,11 +1145,12 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 	}
 }
 
-// recalculateLearningLogs sorts logs newest-first and replays the SM-2 algorithm
-// to compute the correct easiness factor and interval_days from the merged logs.
+// recalculateLearningLogs replays the configured algorithm to recompute interval_days.
 // Returns the new easiness factor, updated logs, and whether any values changed.
-func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord, bool) {
-	calculator := &SM2Calculator{}
+func recalculateLearningLogs(logs []LearningRecord, calculator IntervalCalculator) (float64, []LearningRecord, bool) {
+	if calculator == nil {
+		calculator = &SM2Calculator{}
+	}
 	oldIntervals := make([]int, len(logs))
 	oldQualities := make([]int, len(logs))
 	for i, log := range logs {
@@ -1184,18 +1188,18 @@ func (v *Validator) fixIntervalDays(learningFiles []learningHistoryFile, result 
 			for exprIdx := range hist.Expressions {
 				expr := &hist.Expressions[exprIdx]
 				if len(expr.LearnedLogs) > 0 {
-					newEF, newLogs, c := recalculateLearningLogs(expr.LearnedLogs)
-					if c || newEF != expr.EasinessFactor {
+					_, newLogs, c := recalculateLearningLogs(expr.LearnedLogs, v.calculator)
+					if c {
 						changed++
 					}
-					expr.EasinessFactor, expr.LearnedLogs = newEF, newLogs
+					expr.LearnedLogs = newLogs
 				}
 				if len(expr.ReverseLogs) > 0 {
-					newEF, newLogs, c := recalculateLearningLogs(expr.ReverseLogs)
-					if c || newEF != expr.ReverseEasinessFactor {
+					_, newLogs, c := recalculateLearningLogs(expr.ReverseLogs, v.calculator)
+					if c {
 						changed++
 					}
-					expr.ReverseEasinessFactor, expr.ReverseLogs = newEF, newLogs
+					expr.ReverseLogs = newLogs
 				}
 			}
 			for sceneIdx := range hist.Scenes {
@@ -1203,18 +1207,18 @@ func (v *Validator) fixIntervalDays(learningFiles []learningHistoryFile, result 
 				for exprIdx := range scene.Expressions {
 					expr := &scene.Expressions[exprIdx]
 					if len(expr.LearnedLogs) > 0 {
-						newEF, newLogs, c := recalculateLearningLogs(expr.LearnedLogs)
-						if c || newEF != expr.EasinessFactor {
+						_, newLogs, c := recalculateLearningLogs(expr.LearnedLogs, v.calculator)
+						if c {
 							changed++
 						}
-						expr.EasinessFactor, expr.LearnedLogs = newEF, newLogs
+						expr.LearnedLogs = newLogs
 					}
 					if len(expr.ReverseLogs) > 0 {
-						newEF, newLogs, c := recalculateLearningLogs(expr.ReverseLogs)
-						if c || newEF != expr.ReverseEasinessFactor {
+						_, newLogs, c := recalculateLearningLogs(expr.ReverseLogs, v.calculator)
+						if c {
 							changed++
 						}
-						expr.ReverseEasinessFactor, expr.ReverseLogs = newEF, newLogs
+						expr.ReverseLogs = newLogs
 					}
 				}
 			}

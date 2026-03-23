@@ -76,6 +76,39 @@ func loadYamlFiles[T any](dir string, filter func(path string, info os.FileInfo)
 
 // loadYamlFilesAsMap is a generic function to load YAML files from a directory and return them as a map
 // where the key is the basename (without extension) of each file
+// loadYamlFilesSkipErrors is like loadYamlFiles but silently skips files that
+// fail to parse (e.g., definition-only files in a story notebook directory).
+func loadYamlFilesSkipErrors[T any](dir string, filter func(path string, info os.FileInfo) bool) ([]yamlFile[T], error) {
+	var files []yamlFile[T]
+
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !filter(path, info) {
+			return nil
+		}
+
+		contents, err := readYamlFile[T](path)
+		if err != nil {
+			// Skip files that can't be parsed as T (e.g., definition-only files)
+			return nil
+		}
+
+		files = append(files, yamlFile[T]{
+			path:     path,
+			contents: contents,
+		})
+		return nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("filepath.Walk(%s) > %w", dir, err)
+	}
+
+	return files, nil
+}
+
 func loadYamlFilesAsMap[T any](dir string, filter func(path string, info os.FileInfo) bool) (map[string]T, error) {
 	yamlFiles, err := loadYamlFiles[T](dir, filter)
 	if err != nil {

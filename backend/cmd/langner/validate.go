@@ -27,13 +27,15 @@ func newValidateCommand() *cobra.Command {
 				return err
 			}
 
-			// Create validator
+			// Create validator with configured interval calculator
+			calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
 			validator := notebook.NewValidator(
 				cfg.Notebooks.LearningNotesDirectory,
 				cfg.Notebooks.StoriesDirectories,
 				cfg.Notebooks.FlashcardsDirectories,
 				cfg.Notebooks.DefinitionsDirectories,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
+				calculator,
 			)
 
 			var result *notebook.ValidationResult

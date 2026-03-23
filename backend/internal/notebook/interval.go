@@ -16,6 +16,9 @@ type IntervalCalculator interface {
 	// RecalculateAll replays logs oldest-to-newest and recomputes EF and intervals.
 	// Returns the final EF and updated logs (sorted newest-first).
 	RecalculateAll(logs []LearningRecord) (float64, []LearningRecord)
+
+	// DeriveEF replays logs oldest-to-newest and returns the current easiness factor.
+	DeriveEF(logs []LearningRecord) float64
 }
 
 // SM2Calculator implements the modified SM-2 algorithm.
@@ -37,6 +40,45 @@ func (c *SM2Calculator) CalculateInterval(logs []LearningRecord, currentQuality 
 	newEF := UpdateEasinessFactor(currentEF, currentQuality, correctStreak)
 	intervalDays := CalculateNextInterval(lastInterval, newEF, currentQuality, correctStreak)
 	return intervalDays, newEF
+}
+
+// DeriveEF replays logs oldest-to-newest and returns the current SM-2 easiness factor.
+func (c *SM2Calculator) DeriveEF(logs []LearningRecord) float64 {
+	if len(logs) == 0 {
+		return DefaultEasinessFactor
+	}
+
+	// Sort ascending (oldest first) for replay
+	sorted := make([]LearningRecord, len(logs))
+	copy(sorted, logs)
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].LearnedAt.Before(sorted[j].LearnedAt.Time)
+	})
+
+	ef := DefaultEasinessFactor
+	correctStreak := 0
+
+	for _, log := range sorted {
+		quality := log.Quality
+		if quality == 0 {
+			if log.Status == LearnedStatusMisunderstood {
+				quality = int(QualityWrong)
+			} else {
+				quality = int(QualityCorrect)
+			}
+		}
+		if log.Status == LearnedStatusMisunderstood && quality >= 3 {
+			quality = 2
+		}
+		if quality >= 3 {
+			correctStreak++
+		} else {
+			correctStreak = 0
+		}
+		ef = UpdateEasinessFactor(ef, quality, correctStreak)
+	}
+
+	return ef
 }
 
 // RecalculateAll replays logs oldest-to-newest and recomputes SM-2 metrics.
@@ -150,6 +192,11 @@ func (c *FixedLevelCalculator) snapToNextLevel(interval int) int {
 	// If interval exceeds all levels, return max
 	intervals := c.intervals()
 	return intervals[len(intervals)-1]
+}
+
+// DeriveEF returns 0 for fixed level calculator since it does not use EF.
+func (c *FixedLevelCalculator) DeriveEF(_ []LearningRecord) float64 {
+	return 0
 }
 
 // CalculateInterval computes the next interval using fixed levels.

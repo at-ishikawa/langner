@@ -1,199 +1,187 @@
 - metadata:
     id: friends
-    title: 'Friends S01E01 - The Pilot'
+    title: Friends S01E01 - The Pilot
   scenes:
     - metadata:
         title: Central Perk - Morning Coffee
       expressions:
         - expression: break the ice
-          easiness_factor: 2.5
           learned_logs: []
         - expression: hang out
-          easiness_factor: 2.36
           learned_logs:
             - status: misunderstood
-              learned_at: "2026-02-20"
+              learned_at: "2026-02-20T00:00:00Z"
               quality: 1
               response_time_ms: 12000
               quiz_type: notebook
               interval_days: 1
         - expression: get along
-          easiness_factor: 2.5
           learned_logs:
             - status: understood
-              learned_at: "2026-02-18"
+              learned_at: "2026-02-18T00:00:00Z"
               quality: 4
               response_time_ms: 3200
               quiz_type: notebook
-              interval_days: 7
+              interval_days: 3
     - metadata:
         title: Monica's Apartment - Dinner Plans
       expressions:
         - expression: catch up
-          easiness_factor: 2.6
           learned_logs:
             - status: usable
-              learned_at: "2026-03-01"
+              learned_at: "2026-03-01T00:00:00Z"
               quality: 5
               response_time_ms: 1800
               quiz_type: freeform
-              interval_days: 30
+              interval_days: 17
             - status: usable
-              learned_at: "2026-02-10"
+              learned_at: "2026-02-10T00:00:00Z"
               quality: 4
               response_time_ms: 2500
               quiz_type: notebook
-              interval_days: 14
+              interval_days: 7
             - status: understood
-              learned_at: "2026-01-25"
+              learned_at: "2026-01-25T00:00:00Z"
               quality: 3
               response_time_ms: 4500
               quiz_type: notebook
-              interval_days: 7
+              interval_days: 3
             - status: misunderstood
-              learned_at: "2026-01-15"
+              learned_at: "2026-01-15T00:00:00Z"
               quality: 1
               response_time_ms: 14000
               quiz_type: notebook
               interval_days: 1
         - expression: figure out
-          easiness_factor: 2.5
           learned_logs:
             - status: misunderstood
-              learned_at: "2026-02-12"
+              learned_at: "2026-02-12T00:00:00Z"
               quality: 2
               response_time_ms: 9800
               quiz_type: notebook
               interval_days: 1
           reverse_logs:
             - status: understood
-              learned_at: "2026-02-22"
+              learned_at: "2026-02-22T00:00:00Z"
               quality: 3
               response_time_ms: 5200
               quiz_type: reverse
-              interval_days: 7
+              interval_days: 3
         - expression: look forward to
-          easiness_factor: 2.8
           learned_logs:
             - status: intuitive
-              learned_at: "2026-03-05"
+              learned_at: "2026-03-05T00:00:00Z"
               quality: 5
               response_time_ms: 1200
               quiz_type: freeform
-              interval_days: 90
+              interval_days: 76
             - status: usable
-              learned_at: "2026-02-15"
+              learned_at: "2026-02-15T00:00:00Z"
               quality: 5
               response_time_ms: 1500
               quiz_type: freeform
-              interval_days: 30
+              interval_days: 26
             - status: usable
-              learned_at: "2026-01-20"
+              learned_at: "2026-01-20T00:00:00Z"
               quality: 4
               response_time_ms: 2200
               quiz_type: notebook
-              interval_days: 14
+              interval_days: 9
             - status: understood
-              learned_at: "2026-01-05"
+              learned_at: "2026-01-05T00:00:00Z"
               quality: 4
               response_time_ms: 3000
               quiz_type: notebook
-              interval_days: 7
+              interval_days: 3
     - metadata:
         title: Central Perk - Afternoon
       expressions:
         - expression: run into
-          easiness_factor: 2.5
           learned_logs:
             - status: misunderstood
-              learned_at: "2026-02-25"
+              learned_at: "2026-02-25T00:00:00Z"
               quality: 1
               response_time_ms: 13500
               quiz_type: notebook
               interval_days: 1
           reverse_logs:
             - status: misunderstood
-              learned_at: "2026-03-02"
+              learned_at: "2026-03-02T00:00:00Z"
               quality: 2
               response_time_ms: 11000
               quiz_type: reverse
               interval_days: 1
         - expression: keep it down
-          easiness_factor: 2.5
           learned_logs: []
         - expression: put off
-          easiness_factor: 2.46
           learned_logs:
             - status: understood
-              learned_at: "2026-02-28"
+              learned_at: "2026-02-28T00:00:00Z"
               quality: 4
               response_time_ms: 4100
               quiz_type: notebook
-              interval_days: 7
+              interval_days: 3
     - metadata:
         title: Ross's Apartment - Late Night
       expressions:
         - expression: get over
-          easiness_factor: 2.7
           learned_logs:
             - status: usable
-              learned_at: "2026-03-06"
+              learned_at: "2026-03-06T00:00:00Z"
               quality: 5
               response_time_ms: 1600
               quiz_type: notebook
-              interval_days: 30
+              interval_days: 9
             - status: understood
-              learned_at: "2026-02-20"
+              learned_at: "2026-02-20T00:00:00Z"
               quality: 4
               response_time_ms: 3800
               quiz_type: notebook
-              interval_days: 7
+              interval_days: 3
           reverse_logs:
             - status: understood
-              learned_at: "2026-02-05"
+              learned_at: "2026-02-05T00:00:00Z"
               quality: 3
               response_time_ms: 5000
               quiz_type: reverse
-              interval_days: 7
+              interval_days: 3
         - expression: move on
-          easiness_factor: 2.5
           learned_logs:
             - status: understood
-              learned_at: "2026-02-14"
+              learned_at: "2026-02-14T00:00:00Z"
               quality: 3
               response_time_ms: 6200
               quiz_type: freeform
-              interval_days: 7
+              interval_days: 3
         - expression: let go
-          easiness_factor: 2.9
           learned_logs:
             - status: intuitive
-              learned_at: "2026-03-07"
+              learned_at: "2026-03-07T00:00:00Z"
               quality: 5
               response_time_ms: 1000
               quiz_type: notebook
               interval_days: 180
             - status: intuitive
-              learned_at: "2026-02-20"
+              learned_at: "2026-02-20T00:00:00Z"
               quality: 5
               response_time_ms: 1100
               quiz_type: freeform
-              interval_days: 90
+              interval_days: 62
             - status: usable
-              learned_at: "2026-01-25"
+              learned_at: "2026-01-25T00:00:00Z"
               quality: 5
               response_time_ms: 1500
               quiz_type: notebook
-              interval_days: 30
+              interval_days: 22
             - status: usable
-              learned_at: "2026-01-10"
+              learned_at: "2026-01-10T00:00:00Z"
               quality: 4
               response_time_ms: 2000
               quiz_type: notebook
-              interval_days: 14
+              interval_days: 8
             - status: understood
-              learned_at: "2025-12-20"
+              learned_at: "2025-12-20T00:00:00Z"
               quality: 3
               response_time_ms: 4000
               quiz_type: notebook
-              interval_days: 7
+              interval_days: 3

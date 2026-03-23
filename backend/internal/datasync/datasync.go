@@ -371,7 +371,6 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 				ResponseTimeMs:   int(rec.ResponseTimeMs),
 				QuizType:         quizType,
 				IntervalDays:     rec.IntervalDays,
-				EasinessFactor:   expr.EasinessFactor,
 				SourceNotebookID: expr.notebookID,
 			})
 			result.LearningNew++
@@ -392,7 +391,6 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 				ResponseTimeMs:   int(rec.ResponseTimeMs),
 				QuizType:         quizType,
 				IntervalDays:     rec.IntervalDays,
-				EasinessFactor:   expr.ReverseEasinessFactor,
 				SourceNotebookID: expr.notebookID,
 			})
 			result.LearningNew++

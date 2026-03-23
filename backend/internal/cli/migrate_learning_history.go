@@ -7,8 +7,9 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// MigrateLearningHistory migrates all learning history files to the new SM-2 format
-func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error {
+// MigrateLearningHistory migrates all learning history files to the current format.
+// When recalculate is true, intervals are recalculated using the provided calculator.
+func MigrateLearningHistory(learningNotesDir string, recalculate bool, calculator notebook.IntervalCalculator) error {
 	histories, err := notebook.NewLearningHistories(learningNotesDir)
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
@@ -21,7 +22,7 @@ func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error 
 
 			if hist.Metadata.Type == "flashcard" {
 				for exprIdx := range hist.Expressions {
-					if migrateExpression(&hist.Expressions[exprIdx], recalculateSM2) {
+					if migrateExpression(&hist.Expressions[exprIdx], recalculate, calculator) {
 						modified = true
 					}
 				}
@@ -30,7 +31,7 @@ func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error 
 
 			for sceneIdx := range hist.Scenes {
 				for exprIdx := range hist.Scenes[sceneIdx].Expressions {
-					if migrateExpression(&hist.Scenes[sceneIdx].Expressions[exprIdx], recalculateSM2) {
+					if migrateExpression(&hist.Scenes[sceneIdx].Expressions[exprIdx], recalculate, calculator) {
 						modified = true
 					}
 				}
@@ -51,18 +52,13 @@ func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error 
 }
 
 // migrateExpression migrates a single expression to the new format
-func migrateExpression(exp *notebook.LearningHistoryExpression, recalculateSM2 bool) bool {
+func migrateExpression(exp *notebook.LearningHistoryExpression, recalculate bool, calculator notebook.IntervalCalculator) bool {
 	modified := false
 
-	if recalculateSM2 {
-		recalculateSM2Metrics(exp)
+	if recalculate {
+		recalculateMetrics(exp, calculator)
 		modified = true
 		return modified
-	}
-
-	if exp.EasinessFactor == 0 {
-		exp.EasinessFactor = calculateEasinessFactor(exp.LearnedLogs)
-		modified = true
 	}
 
 	for logIdx := range exp.LearnedLogs {
@@ -86,11 +82,10 @@ func migrateExpression(exp *notebook.LearningHistoryExpression, recalculateSM2 b
 	return modified
 }
 
-// recalculateSM2Metrics forces a full recalculation of EF and IntervalDays for all logs
-func recalculateSM2Metrics(exp *notebook.LearningHistoryExpression) {
-	calculator := &notebook.SM2Calculator{}
-	exp.EasinessFactor, exp.LearnedLogs = calculator.RecalculateAll(exp.LearnedLogs)
-	exp.ReverseEasinessFactor, exp.ReverseLogs = calculator.RecalculateAll(exp.ReverseLogs)
+// recalculateMetrics forces a full recalculation of IntervalDays for all logs
+func recalculateMetrics(exp *notebook.LearningHistoryExpression, calculator notebook.IntervalCalculator) {
+	_, exp.LearnedLogs = calculator.RecalculateAll(exp.LearnedLogs)
+	_, exp.ReverseLogs = calculator.RecalculateAll(exp.ReverseLogs)
 }
 
 // RecalculateIntervals recalculates intervals for all learning history files

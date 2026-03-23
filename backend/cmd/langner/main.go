@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/at-ishikawa/langner/internal/cli"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/spf13/cobra"
 )
 
@@ -101,20 +102,21 @@ func newExtractDefinitionsCommand() *cobra.Command {
 }
 
 func newMigrateLearningHistoryCommand() *cobra.Command {
-	var recalculateSM2 bool
+	var recalculate bool
 	cmd := &cobra.Command{
 		Use:   "learning-history",
-		Short: "Migrate learning history files to new SM-2 format",
+		Short: "Migrate learning history files to current format",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, err := loadConfig()
 			if err != nil {
 				return err
 			}
 
-			return cli.MigrateLearningHistory(cfg.Notebooks.LearningNotesDirectory, recalculateSM2)
+			calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
+			return cli.MigrateLearningHistory(cfg.Notebooks.LearningNotesDirectory, recalculate, calculator)
 		},
 	}
-	cmd.Flags().BoolVar(&recalculateSM2, "recalculate-sm2", false, "Force recalculation of SM-2 metrics (EF and intervals) for all learning history entries")
+	cmd.Flags().BoolVar(&recalculate, "recalculate", false, "Force recalculation of intervals for all learning history entries using the configured algorithm")
 	return cmd
 }
 

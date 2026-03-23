@@ -6,32 +6,54 @@
     - expression: serendipity
       learned_logs:
         - status: usable
-          learned_at: "2025-12-13"
+          learned_at: "2025-12-13T00:00:00Z"
+          quality: 4
+          interval_days: 26
         - status: usable
-          learned_at: "2025-01-12"
+          learned_at: "2025-01-12T00:00:00Z"
+          quality: 4
+          interval_days: 9
         - status: understood
-          learned_at: "2025-01-10"
+          learned_at: "2025-01-10T00:00:00Z"
+          quality: 4
+          interval_days: 3
     - expression: ephemeral
       learned_logs:
         - status: misunderstood
-          learned_at: "2025-12-13"
+          learned_at: "2025-12-13T00:00:00Z"
+          quality: 1
+          interval_days: 2
         - status: understood
-          learned_at: "2025-01-11"
+          learned_at: "2025-01-11T00:00:00Z"
+          quality: 4
+          interval_days: 3
         - status: misunderstood
-          learned_at: "2025-01-08"
+          learned_at: "2025-01-08T00:00:00Z"
+          quality: 1
+          interval_days: 1
     - expression: ubiquitous
       learned_logs:
         - status: understood
-          learned_at: "2025-01-09"
+          learned_at: "2025-01-09T00:00:00Z"
+          quality: 4
+          interval_days: 3
     - expression: juxtapose
       learned_logs:
         - status: misunderstood
-          learned_at: "2025-12-13"
+          learned_at: "2025-12-13T00:00:00Z"
+          quality: 1
+          interval_days: 1
     - expression: ameliorate
       learned_logs:
         - status: misunderstood
-          learned_at: "2025-12-13"
+          learned_at: "2025-12-13T00:00:00Z"
+          quality: 1
+          interval_days: 5
         - status: intuitive
-          learned_at: "2025-01-13"
+          learned_at: "2025-01-13T00:00:00Z"
+          quality: 4
+          interval_days: 9
         - status: usable
-          learned_at: "2025-01-07"
+          learned_at: "2025-01-07T00:00:00Z"
+          quality: 4
+          interval_days: 3

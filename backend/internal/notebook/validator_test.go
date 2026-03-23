@@ -771,7 +771,7 @@ func TestValidator_validateDefinitionsInConversations(t *testing.T) {
 			errorMessageContains: []string{"not found in any conversation"},
 		},
 		{
-			name: "expression found without markers",
+			name: "expression found without markers - valid",
 			storyFiles: []storyNotebookFile{
 				{
 					path: "story.yml",
@@ -793,8 +793,7 @@ func TestValidator_validateDefinitionsInConversations(t *testing.T) {
 					},
 				},
 			},
-			expectedErrorCount:   1,
-			errorMessageContains: []string{"missing {{ }} markers"},
+			expectedErrorCount: 0,
 		},
 		{
 			name: "expression marked as not_used - no error",
@@ -1059,7 +1058,7 @@ func TestValidator_Fix(t *testing.T) {
 			require.NoError(t, WriteYamlFile(storyPath, tt.storyNotebook))
 
 			// Create validator
-			validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir)
+			validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir, nil)
 
 			// Run Fix
 			result, err := validator.Fix()
@@ -1346,7 +1345,7 @@ func TestValidator_Validate(t *testing.T) {
 	}
 	require.NoError(t, WriteYamlFile(filepath.Join(flashcardsDir, "idioms.yml"), flashcardContent))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{flashcardsDir}, []string{}, dictionaryDir)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{flashcardsDir}, []string{}, dictionaryDir, nil)
 
 	result, err := v.Validate()
 	require.NoError(t, err)
@@ -1899,7 +1898,7 @@ func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {
 	// Create dictionary file for "eager" only
 	require.NoError(t, os.WriteFile(filepath.Join(dictionaryDir, "eager.json"), []byte(`{}`), 0644))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir, nil)
 	result, err := v.Fix()
 	require.NoError(t, err)
 
@@ -1959,7 +1958,7 @@ func TestValidator_Fix_WithMismatchedScenes(t *testing.T) {
 		},
 	}))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir, nil)
 	result, err := v.Fix()
 	require.NoError(t, err)
 
@@ -2041,7 +2040,6 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 								Expressions: []LearningHistoryExpression{
 									{
 										Expression:     "break the ice",
-										EasinessFactor: 2.7,
 										LearnedLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2064,12 +2062,9 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 		fixed := validator.fixLearningNotesStructure(files, result)
 
 		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
-		// EasinessFactor should be preserved (not recalculated) since no new LearnedLogs were added
-		assert.Equal(t, 2.7, expr.EasinessFactor)
 		assert.Len(t, expr.LearnedLogs, 1)
 		// ReverseLogs should be merged and ReverseEasinessFactor recalculated
 		assert.Len(t, expr.ReverseLogs, 1)
-		assert.NotZero(t, expr.ReverseEasinessFactor)
 	})
 
 	t.Run("preserves ReverseEasinessFactor when duplicate has only LearnedLogs", func(t *testing.T) {
@@ -2085,7 +2080,6 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 								Expressions: []LearningHistoryExpression{
 									{
 										Expression:            "lose one's temper",
-										ReverseEasinessFactor: 2.8,
 										ReverseLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2108,12 +2102,9 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 		fixed := validator.fixLearningNotesStructure(files, result)
 
 		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
-		// ReverseEasinessFactor should be preserved since no new ReverseLogs were added
-		assert.Equal(t, 2.8, expr.ReverseEasinessFactor)
 		assert.Len(t, expr.ReverseLogs, 1)
 		// LearnedLogs should be merged and EasinessFactor recalculated
 		assert.Len(t, expr.LearnedLogs, 1)
-		assert.NotZero(t, expr.EasinessFactor)
 	})
 
 	t.Run("merges both ReverseLogs and LearnedLogs", func(t *testing.T) {
@@ -2161,8 +2152,6 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 		assert.Equal(t, "hit the road", expr.Expression)
 		assert.Len(t, expr.LearnedLogs, 2)
 		assert.Len(t, expr.ReverseLogs, 2)
-		assert.NotZero(t, expr.EasinessFactor)
-		assert.NotZero(t, expr.ReverseEasinessFactor)
 
 		// Both logs should be sorted newest first
 		assert.True(t, expr.LearnedLogs[0].LearnedAt.After(expr.LearnedLogs[1].LearnedAt.Time) || expr.LearnedLogs[0].LearnedAt.Equal(expr.LearnedLogs[1].LearnedAt.Time))
@@ -2186,7 +2175,6 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 								Expressions: []LearningHistoryExpression{
 									{
 										Expression:     "break the ice",
-										EasinessFactor: 2.7,
 										LearnedLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2216,12 +2204,9 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 		// Expression should be merged into Scene A
 		require.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
 		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
-		// EasinessFactor should be preserved since no new LearnedLogs were added from the duplicate
-		assert.Equal(t, 2.7, expr.EasinessFactor)
 		assert.Len(t, expr.LearnedLogs, 1)
 		// ReverseLogs should be merged
 		assert.Len(t, expr.ReverseLogs, 1)
-		assert.NotZero(t, expr.ReverseEasinessFactor)
 
 		// Scene B should be empty
 		assert.Len(t, fixed[0].contents[0].Scenes[1].Expressions, 0)
@@ -2240,7 +2225,6 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 								Expressions: []LearningHistoryExpression{
 									{
 										Expression:            "lose one's temper",
-										ReverseEasinessFactor: 2.8,
 										ReverseLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2270,12 +2254,9 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 		// Expression should be merged into Scene A
 		require.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1)
 		expr := fixed[0].contents[0].Scenes[0].Expressions[0]
-		// ReverseEasinessFactor should be preserved since no new ReverseLogs were added
-		assert.Equal(t, 2.8, expr.ReverseEasinessFactor)
 		assert.Len(t, expr.ReverseLogs, 1)
 		// LearnedLogs should be merged and EasinessFactor recalculated
 		assert.Len(t, expr.LearnedLogs, 1)
-		assert.NotZero(t, expr.EasinessFactor)
 
 		// Scene B should be empty
 		assert.Len(t, fixed[0].contents[0].Scenes[1].Expressions, 0)
