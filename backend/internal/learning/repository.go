@@ -37,7 +37,16 @@ func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, erro
 }
 
 // Create inserts a single learning log.
+// If NoteID is 0 and Expression is set, it will find or create the note on demand.
 func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) error {
+	if log.NoteID == 0 && log.Expression != "" {
+		noteID, err := r.ensureNoteExists(ctx, log)
+		if err != nil {
+			return fmt.Errorf("ensure note exists: %w", err)
+		}
+		log.NoteID = noteID
+	}
+
 	query := `INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.db.ExecContext(ctx, query,
@@ -46,6 +55,36 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 		return fmt.Errorf("insert learning log: %w", err)
 	}
 	return nil
+}
+
+// ensureNoteExists finds an existing note by usage/entry or creates one.
+// Uses Definition as entry if set, otherwise Expression. Stores Expression as usage.
+func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *LearningLog) (int64, error) {
+	entry := log.OriginalExpression
+	if entry == "" {
+		entry = log.Expression
+	}
+	usage := log.Expression
+
+	// Try to find existing note
+	var noteID int64
+	err := r.db.GetContext(ctx, &noteID, "SELECT id FROM notes WHERE `usage` = ? AND entry = ?", usage, entry)
+	if err == nil {
+		return noteID, nil
+	}
+
+	// Create the note
+	result, err := r.db.ExecContext(ctx,
+		"INSERT INTO notes (`usage`, entry, meaning) VALUES (?, ?, ?)",
+		usage, entry, "")
+	if err != nil {
+		return 0, fmt.Errorf("insert note: %w", err)
+	}
+	noteID, err = result.LastInsertId()
+	if err != nil {
+		return 0, fmt.Errorf("get note insert ID: %w", err)
+	}
+	return noteID, nil
 }
 
 // BatchCreate inserts multiple learning logs in a single transaction using multi-row INSERTs.

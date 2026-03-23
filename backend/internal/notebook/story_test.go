@@ -389,7 +389,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			wantErrMsg:              "empty definition.Expression",
 		},
 		{
-			name: "empty conversations and statements returns error",
+			name: "empty conversations and statements skips scene",
 			storyNotebooks: []StoryNotebook{
 				{
 					Event: "Story 1",
@@ -403,8 +403,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			},
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     true,
-			wantErr:                 true,
-			wantErrMsg:              "empty scene.Conversations and Statements",
+			expectedWordCount:       0,
 		},
 		{
 			name: "notebook with no scenes is skipped",

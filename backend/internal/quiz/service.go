@@ -443,15 +443,25 @@ func countFlashcardEtymologyCards(notebooks []notebook.FlashcardNotebook) int {
 	return count
 }
 
+// isEligibleForReverseQuiz returns true if a note has the data needed for reverse quiz
+// (shows meaning, asks for the word — requires a non-empty meaning and non-unusable level).
+func isEligibleForReverseQuiz(note *notebook.Note) bool {
+	return note.Meaning != "" && note.Level != notebook.ExpressionLevelUnusable
+}
+
 func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []notebook.LearningHistory) int {
 	seen := make(map[string]struct{})
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for i := range scene.Definitions {
-				if needsReverseReview(histories, story.Event, scene.Title, &scene.Definitions[i]) {
-					expr := scene.Definitions[i].Expression
-					if scene.Definitions[i].Definition != "" {
-						expr = scene.Definitions[i].Definition
+				def := &scene.Definitions[i]
+				if !isEligibleForReverseQuiz(def) {
+					continue
+				}
+				if needsReverseReview(histories, story.Event, scene.Title, def) {
+					expr := def.Expression
+					if def.Definition != "" {
+						expr = def.Definition
 					}
 					seen[strings.ToLower(expr)] = struct{}{}
 				}
@@ -465,10 +475,14 @@ func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, historie
 	seen := make(map[string]struct{})
 	for _, nb := range notebooks {
 		for i := range nb.Cards {
-			if needsReverseFlashcardReview(histories, nb.Title, &nb.Cards[i]) {
-				expr := nb.Cards[i].Expression
-				if nb.Cards[i].Definition != "" {
-					expr = nb.Cards[i].Definition
+			card := &nb.Cards[i]
+			if !isEligibleForReverseQuiz(card) {
+				continue
+			}
+			if needsReverseFlashcardReview(histories, nb.Title, card) {
+				expr := card.Expression
+				if card.Definition != "" {
+					expr = card.Definition
 				}
 				seen[strings.ToLower(expr)] = struct{}{}
 			}
@@ -651,6 +665,10 @@ func (s *Service) loadStoryReverseCards(
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
+				if !isEligibleForReverseQuiz(&definition) {
+					continue
+				}
+
 				expression := definition.Expression
 				if definition.Definition != "" {
 					expression = definition.Definition
@@ -712,6 +730,10 @@ func (s *Service) loadFlashcardReverseCards(
 	var cards []ReverseCard
 	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
+			if !isEligibleForReverseQuiz(&card) {
+				continue
+			}
+
 			expression := card.Expression
 			if card.Definition != "" {
 				expression = card.Definition

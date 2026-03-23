@@ -323,7 +323,8 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 
 			scene.Definitions = definitions
 			if len(scene.Conversations) == 0 && len(scene.Statements) == 0 {
-				return nil, fmt.Errorf("empty scene.Conversations and Statements: %v in story %s", scene, notebook.Event)
+				// Skip scenes with definitions but no context (e.g., definitions-only books)
+				continue
 			}
 			scenes = append(scenes, scene)
 		}
