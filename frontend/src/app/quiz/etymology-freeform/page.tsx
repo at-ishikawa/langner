@@ -58,7 +58,6 @@ export default function EtymologyFreeformQuizPage() {
     }>;
     originParts?: Array<{ origin: string; type: string; language: string; meaning: string }>;
     relatedDefinitions: Array<{ expression: string; meaning: string; notebookName: string }>;
-    nextReviewDate?: string;
     learnedAt?: string;
     noteId?: bigint;
     notebookName?: string;
@@ -142,7 +141,6 @@ export default function EtymologyFreeformQuizPage() {
           meaning: d.meaning,
           notebookName: d.notebookName,
         })),
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId ? BigInt(res.noteId) : undefined,
         notebookName: res.notebookName || undefined,
@@ -160,7 +158,6 @@ export default function EtymologyFreeformQuizPage() {
         originGrades: fb.originGrades,
         relatedDefinitions: fb.relatedDefinitions,
         originParts: fb.originParts,
-        nextReviewDate: fb.nextReviewDate,
         learnedAt: fb.learnedAt,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -341,7 +338,6 @@ export default function EtymologyFreeformQuizPage() {
           <FeedbackActions
             isCorrect={feedback.correct}
             noteId={feedback.noteId}
-            nextReviewDate={feedback.nextReviewDate}
             isOverridden={false}
             isSkipped={false}
             nextLabel="Next Word"

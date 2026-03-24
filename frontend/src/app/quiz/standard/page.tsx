@@ -22,7 +22,6 @@ interface FeedbackData {
   correct: boolean;
   meaning: string;
   reason: string;
-  nextReviewDate?: string;
   learnedAt?: string;
   images?: string[];
 }
@@ -103,7 +102,6 @@ export default function QuizCardPage() {
         correct: res.correct,
         meaning: res.meaning,
         reason: res.reason,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -117,7 +115,6 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -148,7 +145,6 @@ export default function QuizCardPage() {
         correct: false,
         meaning: res.meaning,
         reason: res.reason,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -162,7 +158,6 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -303,7 +298,6 @@ export default function QuizCardPage() {
                         setOverridden(false);
                         setOverrideOriginals(null);
                         setDisplayCorrect(res.correct);
-                        setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                       } catch {
                         setOverridden(false);
                         setOverrideOriginals(null);
@@ -365,7 +359,6 @@ export default function QuizCardPage() {
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
-                nextReviewDate={feedback.nextReviewDate}
                 isOverridden={overridden}
                 isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
@@ -385,7 +378,6 @@ export default function QuizCardPage() {
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,
                     });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                   } catch { /* silently fail */ }
                 }}
                 onSkip={async () => {
@@ -393,17 +385,6 @@ export default function QuizCardPage() {
                     await quizClient.skipWord({ noteId: card.noteId });
                     setSkipped(true);
                     storeSkipResult(currentIndex, "standard");
-                  } catch { /* silently fail */ }
-                }}
-                onChangeReviewDate={async (newDate) => {
-                  try {
-                    await quizClient.overrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.STANDARD,
-                      learnedAt: feedback.learnedAt!,
-                      nextReviewDate: newDate,
-                    });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
                   } catch { /* silently fail */ }
                 }}
               />

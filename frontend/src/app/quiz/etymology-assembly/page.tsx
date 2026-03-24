@@ -50,7 +50,6 @@ export default function EtymologyAssemblyPage() {
     reason: string;
     correctExpression: string;
     relatedDefinitions: Array<{ expression: string; meaning: string; notebookName: string }>;
-    nextReviewDate?: string;
     learnedAt?: string;
     noteId?: bigint;
     images?: string[];
@@ -112,7 +111,6 @@ export default function EtymologyAssemblyPage() {
           meaning: d.meaning,
           notebookName: d.notebookName,
         })),
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId ? BigInt(res.noteId) : undefined,
         images: res.images.length > 0 ? res.images : undefined,
@@ -131,7 +129,6 @@ export default function EtymologyAssemblyPage() {
         originGrades: [],
         relatedDefinitions: fb.relatedDefinitions,
         originParts: card.originParts,
-        nextReviewDate: fb.nextReviewDate,
         learnedAt: fb.learnedAt,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -367,7 +364,6 @@ export default function EtymologyAssemblyPage() {
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={feedback.noteId}
-                nextReviewDate={feedback.nextReviewDate}
                 isOverridden={overridden}
                 isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
@@ -382,7 +378,6 @@ export default function EtymologyAssemblyPage() {
                     });
                     setOverridden(true);
                     setDisplayCorrect(!displayCorrect);
-                    setFeedback((prev) => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                   } catch { /* silently fail */ }
                 } : undefined}
                 onSkip={feedback.noteId ? async () => {
@@ -390,17 +385,6 @@ export default function EtymologyAssemblyPage() {
                     await quizClient.skipWord({ noteId: feedback.noteId! });
                     setSkipped(true);
                     storeSkipResult(currentIndex, "etymology-assembly");
-                  } catch { /* silently fail */ }
-                } : undefined}
-                onChangeReviewDate={feedback.noteId && feedback.learnedAt ? async (newDate) => {
-                  try {
-                    await quizClient.overrideAnswer({
-                      noteId: feedback.noteId!,
-                      quizType: ProtoQuizType.ETYMOLOGY_ASSEMBLY,
-                      learnedAt: feedback.learnedAt!,
-                      nextReviewDate: newDate,
-                    });
-                    setFeedback((prev) => prev ? { ...prev, nextReviewDate: newDate } : prev);
                   } catch { /* silently fail */ }
                 } : undefined}
               />

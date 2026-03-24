@@ -36,7 +36,6 @@ export default function FreeformQuizPage() {
     reason: string;
     notebookName: string;
     context?: string;
-    nextReviewDate?: string;
     learnedAt?: string;
     noteId?: bigint;
     images?: string[];
@@ -89,7 +88,6 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         context: res.context,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
         images: res.images.length > 0 ? res.images : undefined,
@@ -104,7 +102,6 @@ export default function FreeformQuizPage() {
         notebookName: res.notebookName,
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -216,7 +213,6 @@ export default function FreeformQuizPage() {
           <FeedbackActions
             isCorrect={displayCorrect}
             noteId={feedback.noteId}
-            nextReviewDate={feedback.nextReviewDate}
             isOverridden={overridden}
             isSkipped={skipped}
             nextLabel="Next Word"
@@ -232,7 +228,6 @@ export default function FreeformQuizPage() {
                 });
                 setOverridden(true);
                 setDisplayCorrect(!displayCorrect);
-                setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
               } catch { /* silently fail */ }
             }}
             onSkip={async () => {
@@ -240,18 +235,6 @@ export default function FreeformQuizPage() {
               try {
                 await quizClient.skipWord({ noteId: feedback.noteId });
                 setSkipped(true);
-              } catch { /* silently fail */ }
-            }}
-            onChangeReviewDate={async (newDate) => {
-              if (!feedback.noteId || !feedback.learnedAt) return;
-              try {
-                await quizClient.overrideAnswer({
-                  noteId: feedback.noteId,
-                  quizType: ProtoQuizType.FREEFORM,
-                  learnedAt: feedback.learnedAt,
-                  nextReviewDate: newDate,
-                });
-                setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
               } catch { /* silently fail */ }
             }}
           />

@@ -24,7 +24,6 @@ interface FeedbackData {
   meaning: string;
   reason: string;
   contexts: string[];
-  nextReviewDate?: string;
   learnedAt?: string;
   images?: string[];
 }
@@ -121,7 +120,6 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -137,7 +135,6 @@ export default function ReverseQuizPage() {
           : res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -170,7 +167,6 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -184,7 +180,6 @@ export default function ReverseQuizPage() {
         reason: res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -377,7 +372,6 @@ export default function ReverseQuizPage() {
                         setOverridden(false);
                         setOverrideOriginals(null);
                         setDisplayCorrect(res.correct);
-                        setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                       } catch {
                         setOverridden(false);
                         setOverrideOriginals(null);
@@ -439,7 +433,6 @@ export default function ReverseQuizPage() {
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
-                nextReviewDate={feedback.nextReviewDate}
                 isOverridden={overridden}
                 isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
@@ -459,7 +452,6 @@ export default function ReverseQuizPage() {
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,
                     });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                   } catch { /* silently fail */ }
                 }}
                 onSkip={async () => {
@@ -467,17 +459,6 @@ export default function ReverseQuizPage() {
                     await quizClient.skipWord({ noteId: card.noteId });
                     setSkipped(true);
                     storeSkipResult(currentIndex, "reverse");
-                  } catch { /* silently fail */ }
-                }}
-                onChangeReviewDate={async (newDate) => {
-                  try {
-                    await quizClient.overrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.REVERSE,
-                      learnedAt: feedback.learnedAt!,
-                      nextReviewDate: newDate,
-                    });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
                   } catch { /* silently fail */ }
                 }}
               />

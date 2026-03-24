@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
 import { useQuizStore, type QuizType } from "@/store/quizStore";
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
-import { formatReviewDate } from "@/lib/formatReviewDate";
 
 interface OriginPartDisplay {
   origin: string;
@@ -21,7 +20,6 @@ interface ResultItem {
   meaning: string;
   correct: boolean;
   contexts?: string[];
-  nextReviewDate?: string;
   noteId?: bigint;
   learnedAt?: string;
   isOverridden?: boolean;
@@ -66,8 +64,6 @@ export default function SessionCompletePage() {
   const undoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
   const skipResult = useQuizStore((s) => s.skipResult);
   const resumeResult = useQuizStore((s) => s.resumeResult);
-  const updateResultReviewDate = useQuizStore((s) => s.updateResultReviewDate);
-
   const isEtymologyQuiz = quizType === "etymology-breakdown" || quizType === "etymology-assembly" || quizType === "etymology-freeform";
 
   const allResults = useMemo((): ResultItem[] => {
@@ -79,7 +75,6 @@ export default function SessionCompletePage() {
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
-        nextReviewDate: r.nextReviewDate,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
@@ -96,7 +91,6 @@ export default function SessionCompletePage() {
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
-        nextReviewDate: r.nextReviewDate,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
@@ -128,7 +122,6 @@ export default function SessionCompletePage() {
         entry: r.expression,
         meaning: r.meaning,
         correct: r.correct,
-        nextReviewDate: r.nextReviewDate,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
@@ -172,7 +165,7 @@ export default function SessionCompletePage() {
         learnedAt: item.learnedAt,
         markCorrect: !item.correct,
       });
-      overrideResult(item.index, quizType, res.nextReviewDate || item.nextReviewDate || "", {
+      overrideResult(item.index, quizType, res.nextReviewDate || "", {
         quality: res.originalQuality,
         status: res.originalStatus,
         intervalDays: res.originalIntervalDays,
@@ -194,7 +187,7 @@ export default function SessionCompletePage() {
         originalStatus: original.originalValues.status,
         originalIntervalDays: original.originalValues.intervalDays,
       });
-      undoOverrideResult(item.index, quizType, res.correct, res.nextReviewDate || item.nextReviewDate || "");
+      undoOverrideResult(item.index, quizType, res.correct, res.nextReviewDate || "");
     } catch { /* silently fail */ }
   };
 
@@ -211,19 +204,6 @@ export default function SessionCompletePage() {
     try {
       await quizClient.resumeWord({ noteId: item.noteId });
       resumeResult(item.index, quizType);
-    } catch { /* silently fail */ }
-  };
-
-  const handleChangeReviewDate = async (item: ResultItem, newDate: string) => {
-    if (!item.noteId || !item.learnedAt) return;
-    try {
-      await quizClient.overrideAnswer({
-        noteId: item.noteId,
-        quizType: protoQt,
-        learnedAt: item.learnedAt,
-        nextReviewDate: newDate,
-      });
-      updateResultReviewDate(item.index, quizType, newDate);
     } catch { /* silently fail */ }
   };
 
@@ -263,7 +243,6 @@ export default function SessionCompletePage() {
                 onUndo={handleUndo}
                 onSkip={handleSkip}
                 onResume={handleResume}
-                onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
           </VStack>
@@ -285,7 +264,6 @@ export default function SessionCompletePage() {
                 onUndo={handleUndo}
                 onSkip={handleSkip}
                 onResume={handleResume}
-                onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
           </VStack>
@@ -307,7 +285,6 @@ export default function SessionCompletePage() {
                 onUndo={handleUndo}
                 onSkip={handleSkip}
                 onResume={handleResume}
-                onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
           </VStack>
@@ -328,7 +305,6 @@ function ResultCard({
   onUndo,
   onSkip,
   onResume,
-  onChangeReviewDate,
 }: {
   item: ResultItem;
   isEtymology: boolean;
@@ -336,16 +312,7 @@ function ResultCard({
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
   onResume: (item: ResultItem) => void;
-  onChangeReviewDate: (item: ResultItem, newDate: string) => void;
 }) {
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [customDate, setCustomDate] = useState("");
-
-  const tomorrowStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
-  }, []);
 
   const borderColor = item.isSkipped
     ? "gray.200"
@@ -442,75 +409,6 @@ function ResultCard({
                 <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
               </Box>
             ))}
-          </Box>
-        )}
-
-        {/* Review date */}
-        {item.nextReviewDate && (
-          <Box
-            mt={2}
-            bg="blue.50"
-            _dark={{ bg: "blue.900/20", borderColor: "blue.700" }}
-            borderWidth="1px"
-            borderColor="blue.200"
-            borderRadius="md"
-            p={2}
-          >
-            {showDatePicker ? (
-              <VStack align="stretch" gap={2}>
-                <Text fontSize="xs" fontWeight="medium">
-                  Pick a new review date:
-                </Text>
-                <Input
-                  type="date"
-                  size="sm"
-                  value={customDate}
-                  min={tomorrowStr}
-                  onChange={(e) => setCustomDate(e.target.value)}
-                />
-                <Box display="flex" gap={2} justifyContent="flex-end">
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setShowDatePicker(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="xs"
-                    colorPalette="blue"
-                    onClick={() => {
-                      if (customDate) {
-                        onChangeReviewDate(item, customDate);
-                      }
-                      setShowDatePicker(false);
-                    }}
-                  >
-                    Save
-                  </Button>
-                </Box>
-              </VStack>
-            ) : (
-              <>
-                <Text fontSize="xs" fontWeight="medium">
-                  Next review: {formatReviewDate(item.nextReviewDate)}
-                </Text>
-                {item.noteId && item.learnedAt && (
-                  <Text
-                    fontSize="xs"
-                    color="blue.600"
-                    _dark={{ color: "blue.300" }}
-                    cursor="pointer"
-                    onClick={() => {
-                      setCustomDate(item.nextReviewDate!);
-                      setShowDatePicker(true);
-                    }}
-                  >
-                    Change
-                  </Text>
-                )}
-              </>
-            )}
           </Box>
         )}
 
