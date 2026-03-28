@@ -122,11 +122,11 @@ func preDownloadImages(content []byte) ([]byte, func()) {
 
 // downloadImage downloads a URL to a local file path.
 func downloadImage(url, destPath string) error {
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) //nolint:gosec // URLs come from user's notebook data
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
@@ -136,7 +136,7 @@ func downloadImage(url, destPath string) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	_, err = io.Copy(f, resp.Body)
 	return err
