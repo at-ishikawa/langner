@@ -124,7 +124,7 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						"Scene A": []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word"},
 						},
 					},
@@ -159,10 +159,10 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						"First Scene": []Note{
+						"__index_0": []Note{
 							{Expression: "first", Meaning: "first word"},
 						},
-						"Second Scene": []Note{
+						"__index_1": []Note{
 							{Expression: "second", Meaning: "second word"},
 						},
 					},
@@ -191,7 +191,7 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"Chapter I": {
-						"Scene A": []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word"},
 						},
 					},
@@ -245,7 +245,7 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"Chapter I": {
-						"Scene A": []Note{
+						"__index_0": []Note{
 							{Expression: "colossal", DictionaryNumber: 1},
 							{Expression: "test", Meaning: "a test meaning", DictionaryNumber: 2},
 						},
@@ -310,7 +310,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						"Scene 1": []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word", },
 						},
 					},
@@ -349,7 +349,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						"Scene 1": []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word", },
 						},
 					},
@@ -378,7 +378,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						"Scene 1": []Note{{Expression: "test", Meaning: "a test word"}},
+						"__index_0": []Note{{Expression: "test", Meaning: "a test word"}},
 					},
 				},
 			},
@@ -403,7 +403,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						"Scene 1": []Note{{Expression: "test", Meaning: "a test word"}},
+						"__index_0": []Note{{Expression: "test", Meaning: "a test word"}},
 					},
 				},
 			},
@@ -435,7 +435,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"Chapter I": {
-						"Scene 1": []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word", },
 						},
 					},

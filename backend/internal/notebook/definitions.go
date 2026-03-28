@@ -54,7 +54,9 @@ func ReadDefinitionsFromBytes(data []byte) ([]Definitions, error) {
 	return result, nil
 }
 
-// DefinitionsMap is a map of book ID -> notebook file -> scene title -> definitions
+// DefinitionsMap is a map of book ID -> notebook file -> scene key -> definitions
+// Scene keys use index-based format (__index_N) to avoid duplication when
+// multiple scenes share the same title (e.g., "In Monica's apartment").
 type DefinitionsMap map[string]map[string]map[string][]Note
 
 // definitionsIndex represents an index.yml for a definitions directory.
@@ -88,15 +90,9 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) erro
 		}
 
 		for i, scene := range def.Scenes {
-			sceneKey := normalizeTitle(scene.Metadata.Title)
-			if sceneKey == "" {
-				// Fall back to index-based key when title is empty
-				sceneKey = fmt.Sprintf("__index_%d", scene.Metadata.GetIndex())
-				// If index is also 0 and there are multiple scenes, use position
-				if scene.Metadata.GetIndex() == 0 && i > 0 {
-					sceneKey = fmt.Sprintf("__index_%d", i)
-				}
-			}
+			// Use array position as key to avoid duplication when multiple
+			// scenes share the same title (e.g., "In Monica's apartment")
+			sceneKey := fmt.Sprintf("__index_%d", i)
 			result[bookID][key][sceneKey] = append(
 				result[bookID][key][sceneKey],
 				scene.Expressions...,
@@ -212,12 +208,9 @@ func MergeDefinitionsIntoNotebooks(
 			}
 		}
 
-		// Merge definitions into each scene by matching scene title (or index when title is empty)
+		// Merge definitions into each scene by index
 		for j := range notebook.Scenes {
-			sceneKey := normalizeTitle(notebook.Scenes[j].Title)
-			if sceneKey == "" {
-				sceneKey = fmt.Sprintf("__index_%d", j)
-			}
+			sceneKey := fmt.Sprintf("__index_%d", j)
 			sceneDefs, ok := notebookDefs[sceneKey]
 			if !ok {
 				continue
