@@ -87,10 +87,18 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) erro
 			result[bookID][key] = make(map[string][]Note)
 		}
 
-		for _, scene := range def.Scenes {
-			sceneTitle := normalizeTitle(scene.Metadata.Title)
-			result[bookID][key][sceneTitle] = append(
-				result[bookID][key][sceneTitle],
+		for i, scene := range def.Scenes {
+			sceneKey := normalizeTitle(scene.Metadata.Title)
+			if sceneKey == "" {
+				// Fall back to index-based key when title is empty
+				sceneKey = fmt.Sprintf("__index_%d", scene.Metadata.GetIndex())
+				// If index is also 0 and there are multiple scenes, use position
+				if scene.Metadata.GetIndex() == 0 && i > 0 {
+					sceneKey = fmt.Sprintf("__index_%d", i)
+				}
+			}
+			result[bookID][key][sceneKey] = append(
+				result[bookID][key][sceneKey],
 				scene.Expressions...,
 			)
 		}
@@ -204,10 +212,13 @@ func MergeDefinitionsIntoNotebooks(
 			}
 		}
 
-		// Merge definitions into each scene by matching scene title
+		// Merge definitions into each scene by matching scene title (or index when title is empty)
 		for j := range notebook.Scenes {
-			sceneTitle := normalizeTitle(notebook.Scenes[j].Title)
-			sceneDefs, ok := notebookDefs[sceneTitle]
+			sceneKey := normalizeTitle(notebook.Scenes[j].Title)
+			if sceneKey == "" {
+				sceneKey = fmt.Sprintf("__index_%d", j)
+			}
+			sceneDefs, ok := notebookDefs[sceneKey]
 			if !ok {
 				continue
 			}
