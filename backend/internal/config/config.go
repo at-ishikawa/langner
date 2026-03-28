@@ -62,11 +62,13 @@ type NotebooksConfig struct {
 type TemplatesConfig struct {
 	StoryNotebookTemplate     string `mapstructure:"story_notebook_template" validate:"omitempty,file"`
 	FlashcardNotebookTemplate string `mapstructure:"flashcard_notebook_template" validate:"omitempty,file"`
+	EtymologyNotebookTemplate string `mapstructure:"etymology_notebook_template" validate:"omitempty,file"`
 }
 
 type OutputsConfig struct {
 	StoryDirectory     string `mapstructure:"story_directory"`
 	FlashcardDirectory string `mapstructure:"flashcard_directory"`
+	EtymologyDirectory string `mapstructure:"etymology_directory"`
 }
 
 type DictionariesConfig struct {
@@ -130,8 +132,10 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	// Template is optional - if not specified, will use embedded fallback template
 	v.SetDefault("templates.story_notebook_template", "")
 	v.SetDefault("templates.flashcard_notebook_template", "")
+	v.SetDefault("templates.etymology_notebook_template", "")
 	v.SetDefault("outputs.story_directory", filepath.Join("outputs", "story"))
 	v.SetDefault("outputs.flashcard_directory", filepath.Join("outputs", "flashcard"))
+	v.SetDefault("outputs.etymology_directory", filepath.Join("outputs", "etymology"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
 	v.SetDefault("notebooks.books_directories", []string{filepath.Join("notebooks", "books")})
 	v.SetDefault("notebooks.definitions_directories", []string{filepath.Join("notebooks", "definitions")})

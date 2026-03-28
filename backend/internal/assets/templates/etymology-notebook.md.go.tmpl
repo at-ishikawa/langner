@@ -1,0 +1,28 @@
+# {{ .Name }}
+
+{{ range $chapter := .Chapters }}
+## {{ $chapter.Title }}
+
+{{ if $chapter.Origins -}}
+### Origins
+
+{{ range $origin := $chapter.Origins -}}
+- **{{ $origin.Origin }}**{{ if $origin.Language }} [{{ $origin.Language }}]{{ end }}: {{ $origin.Meaning }}
+{{ end }}
+{{ end -}}
+
+{{ if $chapter.Words -}}
+### Words
+
+{{ range $word := $chapter.Words -}}
+{{ $display := $word.Expression }}{{ if $word.Definition }}{{ $display = $word.Definition }}{{ end -}}
+- **{{ $display }}**{{ if $word.Pronunciation }} /{{ $word.Pronunciation }}/{{ end }}{{ if $word.PartOfSpeech }} [{{ $word.PartOfSpeech }}]{{ end }}{{ if $word.Meaning }}: {{ $word.Meaning }}{{ end }}
+{{- if $word.OriginParts }}
+    - Origins: {{ range $i, $ref := $word.OriginParts }}{{ if $i }} + {{ end }}*{{ $ref.Origin }}*{{ if $ref.Meaning }} ({{ $ref.Meaning }}){{ end }}{{ end }}
+{{- end }}
+{{- if $word.Note }}
+    - Note: {{ $word.Note }}
+{{- end }}
+{{ end }}
+{{ end -}}
+{{ end }}

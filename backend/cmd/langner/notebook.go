@@ -131,5 +131,34 @@ func newNotebookCommand() *cobra.Command {
 
 	notebookCommands.AddCommand(flashcardsCmd)
 
+	var etymologyGeneratePDF bool
+	etymologyCmd := &cobra.Command{
+		Use:   "etymology <etymology id>",
+		Short: "Generate markdown/PDF output from etymology notebooks",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+
+			etymologyID := args[0]
+
+			reader, err := notebook.NewReader(nil, nil, nil, cfg.Notebooks.DefinitionsDirectories, cfg.Notebooks.EtymologyDirectories, nil)
+			if err != nil {
+				return fmt.Errorf("notebook.NewReader() > %w", err)
+			}
+
+			writer := notebook.NewEtymologyNotebookWriter(reader, cfg.Templates.EtymologyNotebookTemplate, cfg.Notebooks.DefinitionsDirectories)
+			if err := writer.OutputEtymologyNotebook(etymologyID, cfg.Outputs.EtymologyDirectory, etymologyGeneratePDF); err != nil {
+				return fmt.Errorf("writer.OutputEtymologyNotebook > %w", err)
+			}
+			return nil
+		},
+	}
+	etymologyCmd.Flags().BoolVar(&etymologyGeneratePDF, "pdf", false, "Generate PDF output in addition to markdown")
+
+	notebookCommands.AddCommand(etymologyCmd)
+
 	return notebookCommands
 }
