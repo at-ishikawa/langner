@@ -22,6 +22,8 @@ interface FeedbackData {
   correct: boolean;
   meaning: string;
   reason: string;
+  pronunciation?: string;
+  partOfSpeech?: string;
   learnedAt?: string;
   images?: string[];
 }
@@ -102,6 +104,8 @@ export default function QuizCardPage() {
         correct: res.correct,
         meaning: res.meaning,
         reason: res.reason,
+        pronunciation: res.wordDetail?.pronunciation || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -145,6 +149,8 @@ export default function QuizCardPage() {
         correct: false,
         meaning: res.meaning,
         reason: res.reason,
+        pronunciation: res.wordDetail?.pronunciation || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -321,7 +327,15 @@ export default function QuizCardPage() {
                 </Text>
               )}
 
-              {/* 3. Meaning, reason, examples */}
+              {/* 3. Pronunciation, part of speech, meaning, reason, examples */}
+              {(feedback.pronunciation || feedback.partOfSpeech) && (
+                <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                  {feedback.pronunciation && `/${feedback.pronunciation}/`}
+                  {feedback.pronunciation && feedback.partOfSpeech && " "}
+                  {feedback.partOfSpeech && `[${feedback.partOfSpeech}]`}
+                </Text>
+              )}
+
               <Box>
                 <Text fontWeight="bold">Meaning</Text>
                 <Text>{feedback.meaning}</Text>

@@ -24,6 +24,8 @@ interface FeedbackData {
   meaning: string;
   reason: string;
   contexts: string[];
+  pronunciation?: string;
+  partOfSpeech?: string;
   learnedAt?: string;
   images?: string[];
 }
@@ -120,6 +122,8 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
+        pronunciation: res.wordDetail?.pronunciation || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -167,6 +171,8 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
+        pronunciation: res.wordDetail?.pronunciation || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -411,11 +417,19 @@ export default function ReverseQuizPage() {
                 </Text>
               )}
 
-              {/* 3. Meaning, reason, examples */}
+              {/* 3. Word, pronunciation, part of speech, reason, examples */}
               <Box>
                 <Text fontWeight="bold">Word</Text>
                 <Text fontStyle="italic">{feedback.expression}</Text>
               </Box>
+
+              {(feedback.pronunciation || feedback.partOfSpeech) && (
+                <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                  {feedback.pronunciation && `/${feedback.pronunciation}/`}
+                  {feedback.pronunciation && feedback.partOfSpeech && " "}
+                  {feedback.partOfSpeech && `[${feedback.partOfSpeech}]`}
+                </Text>
+              )}
 
               {feedback.reason && (
                 <Box>

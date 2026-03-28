@@ -36,6 +36,8 @@ export default function FreeformQuizPage() {
     reason: string;
     notebookName: string;
     context?: string;
+    pronunciation?: string;
+    partOfSpeech?: string;
     learnedAt?: string;
     noteId?: bigint;
     images?: string[];
@@ -88,6 +90,8 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         context: res.context,
+        pronunciation: res.wordDetail?.pronunciation || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
         images: res.images.length > 0 ? res.images : undefined,
@@ -176,6 +180,14 @@ export default function FreeformQuizPage() {
             <Text fontWeight="bold">Word</Text>
             <Text fontSize="xl">{feedback.word}</Text>
           </Box>
+
+          {(feedback.pronunciation || feedback.partOfSpeech) && (
+            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+              {feedback.pronunciation && `/${feedback.pronunciation}/`}
+              {feedback.pronunciation && feedback.partOfSpeech && " "}
+              {feedback.partOfSpeech && `[${feedback.partOfSpeech}]`}
+            </Text>
+          )}
 
           <Box>
             <Text fontWeight="bold">Correct meaning</Text>

@@ -63,6 +63,7 @@ type Note struct {
 	PartOfSpeech  string   `yaml:"part_of_speech,omitempty"`
 	Pronunciation string   `yaml:"pronunciation,omitempty"`
 	Memo          string   `yaml:"memo,omitempty"`
+	Note          string   `yaml:"note,omitempty"`
 
 	// Deprecated: Use References
 	Reference string `yaml:"reference,omitempty"`

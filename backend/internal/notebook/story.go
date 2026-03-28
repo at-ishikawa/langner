@@ -565,6 +565,7 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 			Pronunciation: note.Pronunciation,
 			PartOfSpeech:  note.PartOfSpeech,
 			Origin:        note.Origin,
+			Note:          note.Note,
 			Synonyms:      note.Synonyms,
 			Antonyms:      note.Antonyms,
 			Images:        note.Images,

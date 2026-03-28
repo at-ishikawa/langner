@@ -31,6 +31,9 @@
 {{- end -}}
 
 - **{{ $def }}**{{ if $definition.Pronunciation }} /{{ $definition.Pronunciation }}/{{ end }}{{ if $definition.PartOfSpeech }} [{{ $definition.PartOfSpeech }}]{{ end }}: {{ $definition.Meaning -}}
+{{- if $definition.Note }}
+    - Note: {{ $definition.Note }}
+{{- end -}}
 {{ if $definition.Examples }}
     - Examples:
     {{- range $index, $example := $definition.Examples }}
