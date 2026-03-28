@@ -1198,15 +1198,38 @@ func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]s
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
+	// Track which expressions have at least one due (or never-studied) card.
+	// If any card for an expression is due, the expression should be available.
+	due := make(map[string]bool)
 	result := make(map[string]string)
 	for _, card := range cards {
+		exprKey := strings.ToLower(card.Expression)
+		origKey := strings.ToLower(card.OriginalExpression)
+
 		nextDate := freeformNextReviewDate(learningHistories[card.NotebookName], card)
-		if nextDate != "" {
-			result[strings.ToLower(card.Expression)] = nextDate
-			if card.OriginalExpression != "" {
-				result[strings.ToLower(card.OriginalExpression)] = nextDate
+		if nextDate == "" {
+			// This card is due or never studied — mark the expression as due
+			due[exprKey] = true
+			if origKey != "" {
+				due[origKey] = true
+			}
+		} else if !due[exprKey] {
+			// Only record the not-due date if no card for this expression is due
+			existing, ok := result[exprKey]
+			if !ok || nextDate > existing {
+				result[exprKey] = nextDate
+			}
+			if origKey != "" && !due[origKey] {
+				existingOrig, okOrig := result[origKey]
+				if !okOrig || nextDate > existingOrig {
+					result[origKey] = nextDate
+				}
 			}
 		}
+	}
+	// Remove any not-due dates for expressions that have at least one due card
+	for key := range due {
+		delete(result, key)
 	}
 	return result, nil
 }

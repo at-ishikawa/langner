@@ -244,6 +244,22 @@ export default function ReverseQuizPage() {
             </Text>
           </Box>
 
+          {card.contexts.length > 0 && (
+            <VStack align="stretch" gap={2}>
+              {card.contexts.map((ctx, i) => (
+                <Text
+                  key={i}
+                  fontSize="md"
+                  color="gray.600"
+                  _dark={{ color: "gray.400" }}
+                  fontStyle="italic"
+                >
+                  {ctx.maskedContext}
+                </Text>
+              ))}
+            </VStack>
+          )}
+
           <Box>
             <Text fontWeight="medium" mb={1}>
               Word

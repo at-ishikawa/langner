@@ -119,8 +119,11 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 	// Validate dictionary references
 	v.validateDictionaryReferences(storyNotebooks, result)
 
-	// Validate definitions appear in conversations
+	// Validate definitions appear in conversations (inline definitions)
 	v.validateDefinitionsInConversations(storyNotebooks, result)
+
+	// Validate definitions from separate definitions files appear in conversations
+	v.validateSeparateDefinitionsInConversations(storyNotebooks, result)
 
 	return result, nil
 }
@@ -1140,6 +1143,86 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 			for _, err := range errors {
 				err.File = file.path
 				result.AddError("consistency", err)
+			}
+		}
+	}
+}
+
+// validateSeparateDefinitionsInConversations checks that definitions from separate
+// definitions files appear in the matching story notebook conversations/statements.
+func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []storyNotebookFile, result *ValidationResult) {
+	defsMap, err := NewDefinitionsMap(v.definitionsDirs)
+	if err != nil {
+		return
+	}
+
+	// Build a lookup: bookID -> event -> scene title -> StoryScene
+	type sceneKey struct {
+		bookID, event, sceneTitle string
+	}
+	sceneMap := make(map[sceneKey]*StoryScene)
+
+	for _, file := range storyFiles {
+		// Derive bookID from file path (parent directory name)
+		bookID := filepath.Base(filepath.Dir(file.path))
+		for nbIdx := range file.contents {
+			nb := &file.contents[nbIdx]
+			for scIdx := range nb.Scenes {
+				scene := &nb.Scenes[scIdx]
+				key := sceneKey{bookID: bookID, event: nb.Event, sceneTitle: normalizeTitle(scene.Title)}
+				sceneMap[key] = scene
+			}
+		}
+	}
+
+	// Check each definition from definitions files
+	for bookID, notebookDefs := range defsMap {
+		for eventTitle, sceneDefs := range notebookDefs {
+			for sceneTitle, notes := range sceneDefs {
+				normalizedSceneTitle := normalizeTitle(sceneTitle)
+				scene, ok := sceneMap[sceneKey{bookID: bookID, event: eventTitle, sceneTitle: normalizedSceneTitle}]
+				if !ok {
+					// Scene not found — skip (could be a different notebook file mapping)
+					continue
+				}
+
+				for _, note := range notes {
+					if note.NotUsed {
+						continue
+					}
+					expression := strings.TrimSpace(note.Expression)
+					if expression == "" {
+						continue
+					}
+
+					lowerExpr := strings.ToLower(expression)
+					found := false
+					for _, conv := range scene.Conversations {
+						if strings.Contains(strings.ToLower(conv.Quote), lowerExpr) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						for _, stmt := range scene.Statements {
+							if strings.Contains(strings.ToLower(stmt), lowerExpr) {
+								found = true
+								break
+							}
+						}
+					}
+
+					if !found {
+						result.AddError("consistency", ValidationError{
+							Location: fmt.Sprintf("%s -> %s -> %s", eventTitle, sceneTitle, expression),
+							Message:  fmt.Sprintf("expression %q from definitions file not found in any conversation or statement", expression),
+							Suggestions: []string{
+								"fix the expression to match the text in the conversation",
+								"or mark it as not_used: true",
+							},
+						})
+					}
+				}
 			}
 		}
 	}
