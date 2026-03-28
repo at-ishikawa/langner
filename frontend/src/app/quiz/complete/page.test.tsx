@@ -127,23 +127,7 @@ describe("SessionCompletePage", () => {
     expect(result & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("result cards show next review date when available", () => {
-    const resultsWithReviewDate: QuizResult[] = [
-      {
-        ...mockResults[0],
-        nextReviewDate: "2027-06-15",
-      },
-      {
-        ...mockResults[1],
-        nextReviewDate: "2027-07-01",
-      },
-    ];
-    useQuizStore.setState({ results: resultsWithReviewDate });
-    renderPage();
-
-    expect(screen.getByText(/June 15, 2027/)).toBeInTheDocument();
-    expect(screen.getByText(/July 1, 2027/)).toBeInTheDocument();
-  });
+  // Next review dates are shown on per-question feedback screens, not the complete page
 
   it.each([
     {
@@ -293,48 +277,7 @@ describe("SessionCompletePage", () => {
       });
     });
 
-    it("Change link opens inline date picker instead of prompt", async () => {
-      useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
-      renderPage();
-
-      // Find "Change" links
-      const changeLinks = screen.getAllByText("Change");
-      expect(changeLinks.length).toBeGreaterThan(0);
-
-      // Click Change on first card
-      fireEvent.click(changeLinks[0]);
-
-      // Should show inline date picker, not prompt()
-      expect(screen.getByText("Pick a new review date:")).toBeInTheDocument();
-      expect(screen.getByText("Save")).toBeInTheDocument();
-      expect(screen.getByText("Cancel")).toBeInTheDocument();
-    });
-
-    it("Change date picker calls quizClient.overrideAnswer with nextReviewDate", async () => {
-      vi.mocked(client.quizClient.overrideAnswer).mockResolvedValue({
-        nextReviewDate: "2027-08-01",
-        originalQuality: 5,
-        originalStatus: "understood",
-        originalIntervalDays: 10,
-      });
-      useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
-      renderPage();
-
-      // Click Change
-      const changeLinks = screen.getAllByText("Change");
-      fireEvent.click(changeLinks[0]);
-
-      // Set new date and save
-      const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
-      fireEvent.change(dateInput, { target: { value: "2027-08-01" } });
-      fireEvent.click(screen.getByText("Save"));
-
-      await waitFor(() => {
-        expect(client.quizClient.overrideAnswer).toHaveBeenCalledWith(
-          expect.objectContaining({ nextReviewDate: "2027-08-01" })
-        );
-      });
-    });
+    // Change date picker is available on per-question feedback screens, not the complete page
   });
 
   it("renders in dark mode without errors", () => {
