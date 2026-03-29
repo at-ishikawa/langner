@@ -258,6 +258,14 @@ export default function QuizCardPage() {
           <Heading size="xl" textAlign="center">
             {card.entry}
           </Heading>
+          {feedback && (feedback.pronunciation || feedback.partOfSpeech) && (
+            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center">
+              {[
+                feedback.pronunciation && `/${feedback.pronunciation}/`,
+                feedback.partOfSpeech,
+              ].filter(Boolean).join(" · ")}
+            </Text>
+          )}
 
           {loading ? (
             <Box textAlign="center" py={8}>
@@ -328,20 +336,8 @@ export default function QuizCardPage() {
                 </Text>
               )}
 
-              {/* 3. Meaning with pronunciation/part of speech */}
               <Box>
-                <Text fontWeight="bold">
-                  Meaning
-                  {(feedback.pronunciation || feedback.partOfSpeech) && (
-                    <Text as="span" fontSize="sm" fontWeight="normal" color="gray.500" _dark={{ color: "gray.400" }}>
-                      {" "}
-                      {[
-                        feedback.pronunciation && `/${feedback.pronunciation}/`,
-                        feedback.partOfSpeech,
-                      ].filter(Boolean).join(" · ")}
-                    </Text>
-                  )}
-                </Text>
+                <Text fontWeight="bold">Meaning</Text>
                 <Text>{feedback.meaning}</Text>
               </Box>
 
