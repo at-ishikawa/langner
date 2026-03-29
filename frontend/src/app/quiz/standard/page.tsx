@@ -105,8 +105,8 @@ export default function QuizCardPage() {
         correct: res.correct,
         meaning: res.meaning,
         reason: res.reason,
-        pronunciation: res.wordDetail?.pronunciation || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -150,8 +150,8 @@ export default function QuizCardPage() {
         correct: false,
         meaning: res.meaning,
         reason: res.reason,
-        pronunciation: res.wordDetail?.pronunciation || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -329,11 +329,14 @@ export default function QuizCardPage() {
               )}
 
               {/* 3. Pronunciation, part of speech, meaning, reason, examples */}
-              {(feedback.pronunciation || feedback.partOfSpeech) && (
+              {feedback.pronunciation && (
                 <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                  {feedback.pronunciation && `/${feedback.pronunciation}/`}
-                  {feedback.pronunciation && feedback.partOfSpeech && " "}
-                  {feedback.partOfSpeech && `[${feedback.partOfSpeech}]`}
+                  /{feedback.pronunciation}/
+                </Text>
+              )}
+              {feedback.partOfSpeech && (
+                <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                  {feedback.partOfSpeech}
                 </Text>
               )}
 

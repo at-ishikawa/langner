@@ -91,8 +91,8 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         context: res.context,
-        pronunciation: res.wordDetail?.pronunciation || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
         images: res.images.length > 0 ? res.images : undefined,
@@ -182,11 +182,14 @@ export default function FreeformQuizPage() {
             <Text fontSize="xl">{feedback.word}</Text>
           </Box>
 
-          {(feedback.pronunciation || feedback.partOfSpeech) && (
+          {feedback.pronunciation && (
             <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-              {feedback.pronunciation && `/${feedback.pronunciation}/`}
-              {feedback.pronunciation && feedback.partOfSpeech && " "}
-              {feedback.partOfSpeech && `[${feedback.partOfSpeech}]`}
+              /{feedback.pronunciation}/
+            </Text>
+          )}
+          {feedback.partOfSpeech && (
+            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+              {feedback.partOfSpeech}
             </Text>
           )}
 
