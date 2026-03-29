@@ -29,7 +29,7 @@ func NewLearningHistories(directory string) (map[string][]LearningHistory, error
 func (h LearningHistory) GetLogs(
 	notebookTitle, sceneTitle string, definition Note,
 ) []LearningRecord {
-	if h.Metadata.Title != notebookTitle {
+	if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(notebookTitle) {
 		return nil
 	}
 
@@ -47,8 +47,9 @@ func (h LearningHistory) GetLogs(
 	}
 
 	// Search through scenes for the matching scene title
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 	for _, scene := range h.Scenes {
-		if scene.Metadata.Title != sceneTitle {
+		if normalizeQuotes(scene.Metadata.Title) != normalizedSceneTitle {
 			continue
 		}
 

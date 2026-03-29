@@ -12,6 +12,15 @@ func normalizeTitle(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
+// normalizeQuotes replaces smart quotes with ASCII equivalents for comparison.
+func normalizeQuotes(s string) string {
+	r := strings.NewReplacer(
+		"\u2018", "'", "\u2019", "'", // smart single quotes
+		"\u201C", "\"", "\u201D", "\"", // smart double quotes
+	)
+	return r.Replace(s)
+}
+
 // LearningHistoryUpdater provides methods to update learning history
 type LearningHistoryUpdater struct {
 	history    []LearningHistory
