@@ -112,13 +112,13 @@ func TestHighlightDefinitionsInText(t *testing.T) {
 			expected:        "The **eager** student arrived.",
 		},
 		{
-			name: "Markdown - no partial match for single word",
+			name: "Markdown - single word extends to full word with suffix",
 			text: "She was eagerly waiting.",
 			definitions: []Note{
 				{Expression: "eager", Meaning: "wanting to do something"},
 			},
 			conversionStyle: ConversionStyleMarkdown,
-			expected:        "She was eagerly waiting.",
+			expected:        "She was **eagerly** waiting.",
 		},
 		{
 			name: "Markdown - multi-word expression",

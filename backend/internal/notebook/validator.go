@@ -1156,20 +1156,21 @@ func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []stor
 		return
 	}
 
-	// Build a lookup: bookID -> event -> scene title -> StoryScene
+	// Build a lookup: bookID -> event -> scene index -> StoryScene
 	type sceneKey struct {
-		bookID, event, sceneTitle string
+		bookID string
+		event  string
+		index  int
 	}
 	sceneMap := make(map[sceneKey]*StoryScene)
 
 	for _, file := range storyFiles {
-		// Derive bookID from file path (parent directory name)
 		bookID := filepath.Base(filepath.Dir(file.path))
 		for nbIdx := range file.contents {
 			nb := &file.contents[nbIdx]
 			for scIdx := range nb.Scenes {
 				scene := &nb.Scenes[scIdx]
-				key := sceneKey{bookID: bookID, event: nb.Event, sceneTitle: normalizeTitle(scene.Title)}
+				key := sceneKey{bookID: bookID, event: nb.Event, index: scIdx}
 				sceneMap[key] = scene
 			}
 		}
@@ -1178,11 +1179,15 @@ func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []stor
 	// Check each definition from definitions files
 	for bookID, notebookDefs := range defsMap {
 		for eventTitle, sceneDefs := range notebookDefs {
-			for sceneTitle, notes := range sceneDefs {
-				normalizedSceneTitle := normalizeTitle(sceneTitle)
-				scene, ok := sceneMap[sceneKey{bookID: bookID, event: eventTitle, sceneTitle: normalizedSceneTitle}]
+			for sceneIdxKey, notes := range sceneDefs {
+				// Parse index from key (format: "__index_N")
+				var sceneIdx int
+				if _, err := fmt.Sscanf(sceneIdxKey, "__index_%d", &sceneIdx); err != nil {
+					continue
+				}
+				scene, ok := sceneMap[sceneKey{bookID: bookID, event: eventTitle, index: sceneIdx}]
 				if !ok {
-					// Scene not found — skip (could be a different notebook file mapping)
+					// Scene not found — skip
 					continue
 				}
 
@@ -1214,7 +1219,7 @@ func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []stor
 
 					if !found {
 						result.AddError("consistency", ValidationError{
-							Location: fmt.Sprintf("%s -> %s -> %s", eventTitle, sceneTitle, expression),
+							Location: fmt.Sprintf("%s -> scene[%d] -> %s", eventTitle, sceneIdx, expression),
 							Message:  fmt.Sprintf("expression %q from definitions file not found in any conversation or statement", expression),
 							Suggestions: []string{
 								"fix the expression to match the text in the conversation",

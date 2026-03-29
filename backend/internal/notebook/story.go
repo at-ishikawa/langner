@@ -185,21 +185,18 @@ func HighlightDefinitionsInText(text string, definitions []Note, conversionStyle
 		escaped := regexp.QuoteMeta(expr)
 		var patternStr string
 		if strings.Contains(expr, " ") {
-			// Multi-word: case-insensitive substring match
-			patternStr = `(?i)` + escaped
+			// Multi-word: case-insensitive match, extending to word boundary
+			// so "bargain hunter" matches all of "bargain hunters"
+			patternStr = `(?i)` + escaped + `\w*`
 		} else {
 			// Single-word: use word boundaries to avoid partial matches.
 			// Only apply \b where the expression starts/ends with a word character,
 			// since \b requires a transition between word and non-word characters.
 			prefix := ""
-			suffix := ""
 			if len(expr) > 0 && isWordChar(expr[0]) {
 				prefix = `\b`
 			}
-			if len(expr) > 0 && isWordChar(expr[len(expr)-1]) {
-				suffix = `\b`
-			}
-			patternStr = `(?i)` + prefix + escaped + suffix
+			patternStr = `(?i)` + prefix + escaped + `\w*`
 		}
 		compiled, err := regexp.Compile(patternStr)
 		if err != nil {
