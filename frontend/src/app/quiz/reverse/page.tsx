@@ -424,14 +424,12 @@ export default function ReverseQuizPage() {
                 <Text fontStyle="italic">{feedback.expression}</Text>
               </Box>
 
-              {feedback.pronunciation && (
+              {(feedback.pronunciation || feedback.partOfSpeech) && (
                 <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                  /{feedback.pronunciation}/
-                </Text>
-              )}
-              {feedback.partOfSpeech && (
-                <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                  {feedback.partOfSpeech}
+                  {[
+                    feedback.pronunciation && `/${feedback.pronunciation}/`,
+                    feedback.partOfSpeech,
+                  ].filter(Boolean).join(" · ")}
                 </Text>
               )}
 
