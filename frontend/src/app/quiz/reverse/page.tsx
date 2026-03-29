@@ -498,6 +498,16 @@ export default function ReverseQuizPage() {
                   } catch { /* silently fail */ }
                 }}
               />
+
+              {currentIndex + 1 < total && (
+                <Button
+                  colorPalette="green"
+                  variant="outline"
+                  onClick={() => router.push("/quiz/complete")}
+                >
+                  See Results
+                </Button>
+              )}
             </>
           ) : error ? (
             <>
