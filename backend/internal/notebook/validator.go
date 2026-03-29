@@ -1200,17 +1200,17 @@ func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []stor
 						continue
 					}
 
-					lowerExpr := strings.ToLower(expression)
+					exprPattern := buildValidatePattern(expression)
 					found := false
 					for _, conv := range scene.Conversations {
-						if strings.Contains(strings.ToLower(conv.Quote), lowerExpr) {
+						if exprPattern.MatchString(conv.Quote) {
 							found = true
 							break
 						}
 					}
 					if !found {
 						for _, stmt := range scene.Statements {
-							if strings.Contains(strings.ToLower(stmt), lowerExpr) {
+							if exprPattern.MatchString(stmt) {
 								found = true
 								break
 							}

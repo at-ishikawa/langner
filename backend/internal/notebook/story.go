@@ -244,6 +244,32 @@ func HighlightDefinitionsInText(text string, definitions []Note, conversionStyle
 	return text
 }
 
+// buildValidatePattern builds a regex for validation that matches the expression
+// as complete words. Uses \b word boundaries so "bargain hunter" won't match
+// "bargain hunters" — the expression must match the full word forms in the text.
+// Punctuation (quotes, periods, commas) adjacent to the match is fine since
+// \b sits between a word char and a non-word char.
+func buildValidatePattern(expression string) *regexp.Regexp {
+	escaped := regexp.QuoteMeta(expression)
+
+	prefix := ""
+	suffix := ""
+	if len(expression) > 0 && isWordChar(expression[0]) {
+		prefix = `\b`
+	}
+	if len(expression) > 0 && isWordChar(expression[len(expression)-1]) {
+		suffix = `\b`
+	}
+
+	pattern := `(?i)` + prefix + escaped + suffix
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		// Fallback to simple contains
+		compiled = regexp.MustCompile(`(?i)` + escaped)
+	}
+	return compiled
+}
+
 // isWordChar returns true if the byte is a word character (letter, digit, or underscore),
 // matching the behavior of \b in regular expressions.
 func isWordChar(b byte) bool {
@@ -438,14 +464,17 @@ func (scene *StoryScene) Validate(location string) []ValidationError {
 
 		defLocation := fmt.Sprintf("%s -> definition[%d]: %s", location, defIdx, expression)
 
-		// Check if expression appears in any conversation quote or statement (case-insensitive)
+		// Build a regex that matches the expression as complete words.
+		// Word boundaries at start/end ensure "bargain hunter" doesn't match
+		// inside "bargain hunters" (the trailing 's' makes it a different word form).
+		// Non-word characters (punctuation, quotes) adjacent to the match are OK.
+		exprPattern := buildValidatePattern(expression)
+
 		found := false
-		lowerExpression := strings.ToLower(expression)
 
 		// Check conversations
 		for _, conv := range scene.Conversations {
-			lowerQuote := strings.ToLower(conv.Quote)
-			if strings.Contains(lowerQuote, lowerExpression) {
+			if exprPattern.MatchString(conv.Quote) {
 				found = true
 				break
 			}
@@ -454,8 +483,7 @@ func (scene *StoryScene) Validate(location string) []ValidationError {
 		// Check statements if not already found
 		if !found {
 			for _, statement := range scene.Statements {
-				lowerStatement := strings.ToLower(statement)
-				if strings.Contains(lowerStatement, lowerExpression) {
+				if exprPattern.MatchString(statement) {
 					found = true
 					break
 				}
