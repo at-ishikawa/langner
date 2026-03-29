@@ -179,17 +179,19 @@ export default function FreeformQuizPage() {
 
           <Box>
             <Text fontWeight="bold">Word</Text>
-            <Text fontSize="xl">{feedback.word}</Text>
-          </Box>
-
-          {(feedback.pronunciation || feedback.partOfSpeech) && (
-            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-              {[
-                feedback.pronunciation && `/${feedback.pronunciation}/`,
-                feedback.partOfSpeech,
-              ].filter(Boolean).join(" · ")}
+            <Text fontSize="xl">
+              {feedback.word}
+              {(feedback.pronunciation || feedback.partOfSpeech) && (
+                <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                  {" "}
+                  {[
+                    feedback.pronunciation && `/${feedback.pronunciation}/`,
+                    feedback.partOfSpeech,
+                  ].filter(Boolean).join(" · ")}
+                </Text>
+              )}
             </Text>
-          )}
+          </Box>
 
           <Box>
             <Text fontWeight="bold">Correct meaning</Text>

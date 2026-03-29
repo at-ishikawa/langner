@@ -421,17 +421,19 @@ export default function ReverseQuizPage() {
               {/* 3. Word, pronunciation, part of speech, reason, examples */}
               <Box>
                 <Text fontWeight="bold">Word</Text>
-                <Text fontStyle="italic">{feedback.expression}</Text>
-              </Box>
-
-              {(feedback.pronunciation || feedback.partOfSpeech) && (
-                <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                  {[
-                    feedback.pronunciation && `/${feedback.pronunciation}/`,
-                    feedback.partOfSpeech,
-                  ].filter(Boolean).join(" · ")}
+                <Text fontStyle="italic">
+                  {feedback.expression}
+                  {(feedback.pronunciation || feedback.partOfSpeech) && (
+                    <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="normal">
+                      {" "}
+                      {[
+                        feedback.pronunciation && `/${feedback.pronunciation}/`,
+                        feedback.partOfSpeech,
+                      ].filter(Boolean).join(" · ")}
+                    </Text>
+                  )}
                 </Text>
-              )}
+              </Box>
 
               {feedback.reason && (
                 <Box>

@@ -328,18 +328,20 @@ export default function QuizCardPage() {
                 </Text>
               )}
 
-              {/* 3. Pronunciation, part of speech, meaning, reason, examples */}
-              {(feedback.pronunciation || feedback.partOfSpeech) && (
-                <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                  {[
-                    feedback.pronunciation && `/${feedback.pronunciation}/`,
-                    feedback.partOfSpeech,
-                  ].filter(Boolean).join(" · ")}
-                </Text>
-              )}
-
+              {/* 3. Meaning with pronunciation/part of speech */}
               <Box>
-                <Text fontWeight="bold">Meaning</Text>
+                <Text fontWeight="bold">
+                  Meaning
+                  {(feedback.pronunciation || feedback.partOfSpeech) && (
+                    <Text as="span" fontSize="sm" fontWeight="normal" color="gray.500" _dark={{ color: "gray.400" }}>
+                      {" "}
+                      {[
+                        feedback.pronunciation && `/${feedback.pronunciation}/`,
+                        feedback.partOfSpeech,
+                      ].filter(Boolean).join(" · ")}
+                    </Text>
+                  )}
+                </Text>
                 <Text>{feedback.meaning}</Text>
               </Box>
 
