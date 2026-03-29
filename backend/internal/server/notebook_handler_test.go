@@ -214,7 +214,6 @@ func TestNotebookHandler_GetNotebookDetail_WithLearningHistory(t *testing.T) {
 	word := definitions[0]
 	assert.Equal(t, "preposterous", word.GetExpression())
 	assert.Equal(t, "understood", word.GetLearningStatus())
-	assert.Equal(t, 2.3, word.GetEasinessFactor())
 	assert.Equal(t, "2025-01-27", word.GetNextReviewDate())
 
 	logs := word.GetLearnedLogs()

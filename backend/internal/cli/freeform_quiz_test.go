@@ -247,7 +247,8 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 				},
 				mockClient,
 				nil,
-				learning.NewYAMLLearningRepository(tmpDir),
+				learning.NewYAMLLearningRepository(tmpDir, nil),
+				config.QuizConfig{},
 			)
 
 			cli := &FreeformQuizCLI{
@@ -470,7 +471,8 @@ func TestFreeformQuizCLI_session(t *testing.T) {
 				},
 				mockClient,
 				nil,
-				learning.NewYAMLLearningRepository(tmpDir),
+				learning.NewYAMLLearningRepository(tmpDir, nil),
+				config.QuizConfig{},
 			)
 
 			cli := &FreeformQuizCLI{
@@ -591,6 +593,7 @@ func TestNewFreeformQuizCLI(t *testing.T) {
 				},
 				dictionaryCacheDir,
 				mockClient,
+				config.QuizConfig{},
 			)
 
 			if tt.wantErr {

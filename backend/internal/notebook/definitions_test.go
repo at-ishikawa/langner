@@ -111,7 +111,7 @@ func TestNewDefinitionsMap(t *testing.T) {
     notebook: chapter-1.yml
   scenes:
     - metadata:
-        index: 0
+        title: Scene A
       expressions:
         - expression: test
           meaning: a test word
@@ -124,8 +124,8 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						0: []Note{
-							{Expression: "test", Meaning: "a test word", },
+						"__index_0": []Note{
+							{Expression: "test", Meaning: "a test word"},
 						},
 					},
 				},
@@ -140,12 +140,12 @@ func TestNewDefinitionsMap(t *testing.T) {
     notebook: chapter-1.yml
   scenes:
     - metadata:
-        index: 0
+        title: First Scene
       expressions:
         - expression: first
           meaning: first word
     - metadata:
-        index: 2
+        title: Second Scene
       expressions:
         - expression: second
           meaning: second word
@@ -159,11 +159,11 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						0: []Note{
-							{Expression: "first", Meaning: "first word", },
+						"__index_0": []Note{
+							{Expression: "first", Meaning: "first word"},
 						},
-						2: []Note{
-							{Expression: "second", Meaning: "second word", },
+						"__index_1": []Note{
+							{Expression: "second", Meaning: "second word"},
 						},
 					},
 				},
@@ -178,7 +178,7 @@ func TestNewDefinitionsMap(t *testing.T) {
     title: Chapter I
   scenes:
     - metadata:
-        index: 0
+        title: Scene A
       expressions:
         - expression: test
           meaning: a test word
@@ -191,8 +191,8 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"Chapter I": {
-						0: []Note{
-							{Expression: "test", Meaning: "a test word", },
+						"__index_0": []Note{
+							{Expression: "test", Meaning: "a test word"},
 						},
 					},
 				},
@@ -206,7 +206,7 @@ func TestNewDefinitionsMap(t *testing.T) {
 				content := `- metadata: {}
   scenes:
     - metadata:
-        index: 0
+        title: Scene A
       expressions:
         - expression: test
           meaning: a test word
@@ -229,7 +229,7 @@ func TestNewDefinitionsMap(t *testing.T) {
     title: Chapter I
   scenes:
     - metadata:
-        index: 0
+        title: Scene A
       expressions:
         - expression: colossal
           dictionary_number: 1
@@ -245,38 +245,9 @@ func TestNewDefinitionsMap(t *testing.T) {
 			want: DefinitionsMap{
 				"mybook": {
 					"Chapter I": {
-						0: []Note{
+						"__index_0": []Note{
 							{Expression: "colossal", DictionaryNumber: 1},
 							{Expression: "test", Meaning: "a test meaning", DictionaryNumber: 2},
-						},
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "definitions with scene field instead of index",
-			setup: func(t *testing.T) string {
-				dir := t.TempDir()
-				content := `- metadata:
-    title: Chapter I
-  scenes:
-    - metadata:
-        scene: 5
-      expressions:
-        - expression: word
-          meaning: a word
-`
-				err := os.WriteFile(filepath.Join(dir, "mybook.yml"), []byte(content), 0644)
-				require.NoError(t, err)
-				return dir
-			},
-			directories: nil,
-			want: DefinitionsMap{
-				"mybook": {
-					"Chapter I": {
-						5: []Note{
-							{Expression: "word", Meaning: "a word"},
 						},
 					},
 				},
@@ -339,7 +310,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						0: []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word", },
 						},
 					},
@@ -378,7 +349,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						0: []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word", },
 						},
 					},
@@ -407,7 +378,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						0: []Note{{Expression: "test", Meaning: "a test word"}},
+						"__index_0": []Note{{Expression: "test", Meaning: "a test word"}},
 					},
 				},
 			},
@@ -417,7 +388,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			},
 		},
 		{
-			name:   "scene index not in definitions is skipped",
+			name:   "scene title not in definitions is skipped",
 			bookID: "mybook",
 			notebooks: []StoryNotebook{
 				{
@@ -432,7 +403,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"chapter-1.yml": {
-						0: []Note{{Expression: "test", Meaning: "a test word"}},
+						"__index_0": []Note{{Expression: "test", Meaning: "a test word"}},
 					},
 				},
 			},
@@ -464,7 +435,7 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 			definitionsMap: DefinitionsMap{
 				"mybook": {
 					"Chapter I": {
-						0: []Note{
+						"__index_0": []Note{
 							{Expression: "test", Meaning: "a test word", },
 						},
 					},

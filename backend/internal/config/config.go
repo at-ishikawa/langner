@@ -29,6 +29,12 @@ type Config struct {
 	OpenAI       OpenAIConfig       `mapstructure:"openai"`
 	Books        BooksConfig        `mapstructure:"books"`
 	Database     DatabaseConfig     `mapstructure:"database"`
+	Quiz         QuizConfig         `mapstructure:"quiz"`
+}
+
+type QuizConfig struct {
+	Algorithm      string `mapstructure:"algorithm"`
+	FixedIntervals []int  `mapstructure:"fixed_intervals"`
 }
 
 type DatabaseConfig struct {
@@ -56,11 +62,13 @@ type NotebooksConfig struct {
 type TemplatesConfig struct {
 	StoryNotebookTemplate     string `mapstructure:"story_notebook_template" validate:"omitempty,file"`
 	FlashcardNotebookTemplate string `mapstructure:"flashcard_notebook_template" validate:"omitempty,file"`
+	EtymologyNotebookTemplate string `mapstructure:"etymology_notebook_template" validate:"omitempty,file"`
 }
 
 type OutputsConfig struct {
 	StoryDirectory     string `mapstructure:"story_directory"`
 	FlashcardDirectory string `mapstructure:"flashcard_directory"`
+	EtymologyDirectory string `mapstructure:"etymology_directory"`
 }
 
 type DictionariesConfig struct {
@@ -124,8 +132,10 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	// Template is optional - if not specified, will use embedded fallback template
 	v.SetDefault("templates.story_notebook_template", "")
 	v.SetDefault("templates.flashcard_notebook_template", "")
+	v.SetDefault("templates.etymology_notebook_template", "")
 	v.SetDefault("outputs.story_directory", filepath.Join("outputs", "story"))
 	v.SetDefault("outputs.flashcard_directory", filepath.Join("outputs", "flashcard"))
+	v.SetDefault("outputs.etymology_directory", filepath.Join("outputs", "etymology"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
 	v.SetDefault("notebooks.books_directories", []string{filepath.Join("notebooks", "books")})
 	v.SetDefault("notebooks.definitions_directories", []string{filepath.Join("notebooks", "definitions")})
@@ -138,6 +148,8 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("database.username", "user")
 	v.SetDefault("server.port", 8080)
 	v.SetDefault("server.cors.allowed_origins", []string{"http://localhost:3000"})
+	v.SetDefault("quiz.algorithm", "modified_sm2")
+	v.SetDefault("quiz.fixed_intervals", []int{1, 7, 30, 90, 365, 1095, 1825})
 
 	// Bind RapidAPI config to environment variables only (not from config file)
 	if err := v.BindEnv("dictionaries.rapidapi.host", "RAPID_API_HOST"); err != nil {

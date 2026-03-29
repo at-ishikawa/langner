@@ -290,7 +290,7 @@ func TestReverseQuizCLI_ValidateAnswer(t *testing.T) {
 					Return(tt.mockResponse, tt.mockError)
 			}
 
-			svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(""))
+			svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository("", nil), config.QuizConfig{})
 
 			cli := &ReverseQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
@@ -417,7 +417,7 @@ func TestReverseQuizCLI_Session(t *testing.T) {
 			notebooksConfig := config.NotebooksConfig{
 				LearningNotesDirectory: learningNotesDir,
 			}
-			svc := quiz.NewService(notebooksConfig, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
+			svc := quiz.NewService(notebooksConfig, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, nil), config.QuizConfig{})
 
 			cli := &ReverseQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{
@@ -632,6 +632,7 @@ func TestNewReverseQuizCLI(t *testing.T) {
 				dictionaryCacheDir,
 				mockClient,
 				tt.listMissingContext,
+				config.QuizConfig{},
 			)
 			require.NoError(t, err)
 
@@ -733,6 +734,7 @@ func TestNewReverseQuizCLI_MultiLineSceneTitle(t *testing.T) {
 		t.TempDir(),
 		mockClient,
 		false,
+		config.QuizConfig{},
 	)
 	require.NoError(t, err)
 
@@ -851,6 +853,7 @@ func TestNewReverseQuizCLI_YAMLRoundTrip(t *testing.T) {
 				t.TempDir(),
 				mockClient,
 				false,
+				config.QuizConfig{},
 			)
 			require.NoError(t, err)
 
@@ -934,6 +937,7 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 		t.TempDir(),
 		mockClient,
 		false,
+		config.QuizConfig{},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 1, cli1.GetCardCount(), "First quiz should have 1 card")
@@ -968,6 +972,7 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 		t.TempDir(),
 		mockClient,
 		false,
+		config.QuizConfig{},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 0, cli2.GetCardCount(), "Second quiz should have 0 cards - word was answered today")
@@ -1177,6 +1182,7 @@ func TestNewReverseQuizCLI_AllNotebooks(t *testing.T) {
 		dictionaryCacheDir,
 		mockClient,
 		false,
+		config.QuizConfig{},
 	)
 	require.NoError(t, err)
 	assert.GreaterOrEqual(t, cli.GetCardCount(), 1)
@@ -1225,6 +1231,7 @@ func TestNewReverseQuizCLI_FlashcardNotebook(t *testing.T) {
 		dictionaryCacheDir,
 		mockClient,
 		false,
+		config.QuizConfig{},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 1, cli.GetCardCount())
@@ -1248,6 +1255,7 @@ func TestNewReverseQuizCLI_NotebookNotFound(t *testing.T) {
 		dictionaryCacheDir,
 		mockClient,
 		false,
+		config.QuizConfig{},
 	)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "not found")
@@ -1293,6 +1301,7 @@ func TestNewReverseQuizCLI_NoLearningNote(t *testing.T) {
 		dictionaryCacheDir,
 		mockClient,
 		false,
+		config.QuizConfig{},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 0, cli.GetCardCount())
@@ -1342,6 +1351,7 @@ func TestNewReverseQuizCLI_ListMissingContext(t *testing.T) {
 		dictionaryCacheDir,
 		mockClient,
 		true,
+		config.QuizConfig{},
 	)
 	require.NoError(t, err)
 	assert.Equal(t, 1, cli.GetCardCount())
@@ -1368,7 +1378,7 @@ func TestReverseQuizCLI_ValidateAnswer_SynonymRetry(t *testing.T) {
 	retryInput := "correct-word\n"
 	stdinReader := bufio.NewReader(strings.NewReader(retryInput))
 
-	svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(""))
+	svc := quiz.NewService(config.NotebooksConfig{}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository("", nil), config.QuizConfig{})
 
 	cli := &ReverseQuizCLI{
 		InteractiveQuizCLI: &InteractiveQuizCLI{

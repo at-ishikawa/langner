@@ -50,7 +50,6 @@ export interface OriginalValues {
   quality: number;
   status: string;
   intervalDays: number;
-  easinessFactor: number;
 }
 
 export interface QuizResult {
@@ -67,6 +66,7 @@ export interface QuizResult {
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
+  images?: string[];
 }
 
 export interface ReverseQuizResult {
@@ -83,6 +83,7 @@ export interface ReverseQuizResult {
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
+  images?: string[];
 }
 
 export interface FreeformResult {
@@ -99,6 +100,7 @@ export interface FreeformResult {
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
+  images?: string[];
 }
 
 export interface OriginGrade {
@@ -125,6 +127,7 @@ export interface EtymologyResult {
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
+  images?: string[];
 }
 
 interface QuizState {

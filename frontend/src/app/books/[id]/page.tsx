@@ -32,7 +32,7 @@ function renderBookText(
     if (i % 2 === 1) {
       // This is a marked word
       nodes.push(
-        <Text as="span" key={`m-${i}`} fontWeight="bold" color="blue.600">
+        <Text as="span" key={`m-${i}`} fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
           {markerParts[i].trim()}
         </Text>,
       );
@@ -80,6 +80,7 @@ function renderBookText(
               key={`t-${i}-${j}`}
               fontWeight="bold"
               color="blue.600"
+              _dark={{ color: "blue.300" }}
             >
               {seg}
             </Text>,
@@ -360,7 +361,7 @@ export default function BookReaderPage() {
       {/* Header navigation */}
       <Box mb={2}>
         <Link href="/books">
-          <Text color="blue.600" fontSize="sm">
+          <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="sm">
             &larr; Back to books
           </Text>
         </Link>
@@ -434,6 +435,7 @@ export default function BookReaderPage() {
           bg="bg.panel"
           borderTopWidth="2px"
           borderColor="blue.400"
+          _dark={{ borderColor: "blue.600" }}
           p={4}
           maxH="50vh"
           overflowY="auto"
@@ -585,7 +587,7 @@ export default function BookReaderPage() {
               )}
 
               {lookup.saved && (
-                <Text color="green.600" fontSize="sm" mb={2}>
+                <Text color="green.600" _dark={{ color: "green.300" }} fontSize="sm" mb={2}>
                   Definition saved.
                 </Text>
               )}

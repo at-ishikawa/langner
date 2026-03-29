@@ -12,7 +12,7 @@ import {
   Textarea,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient } from "@/lib/client";
+import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
 
@@ -22,6 +22,7 @@ export default function FreeformQuizPage() {
   const wordCount = useQuizStore((s) => s.wordCount);
   const storeSubmitResult = useQuizStore((s) => s.submitFreeformResult);
   const freeformResults = useQuizStore((s) => s.freeformResults);
+  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
   const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
   const reset = useQuizStore((s) => s.reset);
@@ -36,10 +37,16 @@ export default function FreeformQuizPage() {
     reason: string;
     notebookName: string;
     context?: string;
-    nextReviewDate?: string;
+    pronunciation?: string;
+    partOfSpeech?: string;
     learnedAt?: string;
+    noteId?: bigint;
+    images?: string[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [overridden, setOverridden] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const [displayCorrect, setDisplayCorrect] = useState(false);
   const startTimeRef = useRef(Date.now());
   const wordInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,9 +91,13 @@ export default function FreeformQuizPage() {
         reason: res.reason,
         notebookName: res.notebookName,
         context: res.context,
-        nextReviewDate: res.nextReviewDate || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
+        noteId: res.noteId || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
+      setDisplayCorrect(res.correct);
       storeSubmitResult({
         word: res.word,
         answer: meaning.trim(),
@@ -96,8 +107,8 @@ export default function FreeformQuizPage() {
         notebookName: res.notebookName,
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -111,6 +122,8 @@ export default function FreeformQuizPage() {
     setMeaning("");
     setFeedback(null);
     setError(null);
+    setOverridden(false);
+    setSkipped(false);
     startTimeRef.current = Date.now();
     wordInputRef.current?.focus();
   };
@@ -156,17 +169,28 @@ export default function FreeformQuizPage() {
           <Box
             p={4}
             borderRadius="md"
-            bg={feedback.correct ? "green.100" : "red.100"}
-            _dark={{ bg: feedback.correct ? "green.900" : "red.900" }}
+            bg={displayCorrect ? "green.100" : "red.100"}
+            _dark={{ bg: displayCorrect ? "green.900" : "red.900" }}
           >
             <Text fontWeight="bold" fontSize="lg">
-              {feedback.correct ? "\u2713 Correct!" : "\u2717 Incorrect"}
+              {displayCorrect ? "\u2713 Correct!" : "\u2717 Incorrect"}
             </Text>
           </Box>
 
           <Box>
             <Text fontWeight="bold">Word</Text>
-            <Text fontSize="xl">{feedback.word}</Text>
+            <Text fontSize="xl">
+              {feedback.word}
+              {(feedback.pronunciation || feedback.partOfSpeech) && (
+                <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                  {" "}
+                  {[
+                    feedback.pronunciation && `/${feedback.pronunciation}/`,
+                    feedback.partOfSpeech,
+                  ].filter(Boolean).join(" · ")}
+                </Text>
+              )}
+            </Text>
           </Box>
 
           <Box>
@@ -194,18 +218,46 @@ export default function FreeformQuizPage() {
             </Box>
           )}
 
-          {/* Next review date, Next button, Override/Skip disabled for freeform.
-              The SubmitFreeformAnswerResponse proto does not include noteId,
-              so override/skip RPCs cannot be called. A proto change is needed
-              to return noteId from SubmitFreeformAnswer to enable these. */}
+          {feedback.images && feedback.images.length > 0 && (
+            <Box display="flex" gap={2} flexWrap="wrap">
+              {feedback.images.map((src, i) => (
+                <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+              ))}
+            </Box>
+          )}
+
           <FeedbackActions
-            isCorrect={feedback.correct}
-            noteId={undefined}
-            nextReviewDate={feedback.nextReviewDate}
-            isOverridden={false}
-            isSkipped={false}
+            isCorrect={displayCorrect}
+            noteId={feedback.noteId}
+            isOverridden={overridden}
+            isSkipped={skipped}
             nextLabel="Next Word"
             onNext={handleNext}
+            onOverride={async () => {
+              if (!feedback.noteId || !feedback.learnedAt) return;
+              try {
+                const res = await quizClient.overrideAnswer({
+                  noteId: feedback.noteId,
+                  quizType: ProtoQuizType.FREEFORM,
+                  learnedAt: feedback.learnedAt,
+                  markCorrect: !displayCorrect,
+                });
+                setOverridden(true);
+                setDisplayCorrect(!displayCorrect);
+                storeOverrideResult(freeformResults.length - 1, "freeform", res.nextReviewDate || "", {
+                  quality: res.originalQuality,
+                  status: res.originalStatus,
+                  intervalDays: res.originalIntervalDays,
+                });
+              } catch { /* silently fail */ }
+            }}
+            onSkip={async () => {
+              if (!feedback.noteId) return;
+              try {
+                await quizClient.skipWord({ noteId: feedback.noteId });
+                setSkipped(true);
+              } catch { /* silently fail */ }
+            }}
           />
 
           {freeformResults.length > 0 && (

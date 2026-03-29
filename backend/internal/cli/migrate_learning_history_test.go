@@ -84,7 +84,7 @@ func TestMigrateLearningHistory(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			err := MigrateLearningHistory(tempDir, false)
+			err := MigrateLearningHistory(tempDir, false, nil)
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -95,153 +95,8 @@ func TestMigrateLearningHistory(t *testing.T) {
 }
 
 func TestMigrateLearningHistory_NonexistentDirectory(t *testing.T) {
-	err := MigrateLearningHistory("/nonexistent/directory", false)
+	err := MigrateLearningHistory("/nonexistent/directory", false, nil)
 	assert.Error(t, err)
-}
-
-func TestCalculateEasinessFactor(t *testing.T) {
-	tests := []struct {
-		name string
-		logs []notebook.LearningRecord
-		want float64
-	}{
-		{
-			name: "empty logs returns default",
-			logs: nil,
-			want: notebook.DefaultEasinessFactor,
-		},
-		{
-			name: "single correct log",
-			logs: []notebook.LearningRecord{
-				{Status: "understood", Quality: int(notebook.QualityCorrect)},
-			},
-			want: func() float64 {
-				return notebook.UpdateEasinessFactor(notebook.DefaultEasinessFactor, int(notebook.QualityCorrect), 0)
-			}(),
-		},
-		{
-			name: "single misunderstood log",
-			logs: []notebook.LearningRecord{
-				{Status: notebook.LearnedStatusMisunderstood, Quality: int(notebook.QualityWrong)},
-			},
-			want: func() float64 {
-				return notebook.UpdateEasinessFactor(notebook.DefaultEasinessFactor, int(notebook.QualityWrong), 0)
-			}(),
-		},
-		{
-			name: "logs without quality field infer from status - misunderstood",
-			logs: []notebook.LearningRecord{
-				{Status: notebook.LearnedStatusMisunderstood},
-			},
-			want: func() float64 {
-				return notebook.UpdateEasinessFactor(notebook.DefaultEasinessFactor, int(notebook.QualityWrong), 0)
-			}(),
-		},
-		{
-			name: "logs without quality field infer from status - understood",
-			logs: []notebook.LearningRecord{
-				{Status: "understood"},
-			},
-			want: func() float64 {
-				return notebook.UpdateEasinessFactor(notebook.DefaultEasinessFactor, int(notebook.QualityCorrect), 0)
-			}(),
-		},
-		{
-			name: "multiple logs processed oldest to newest",
-			logs: []notebook.LearningRecord{
-				{Status: "understood", Quality: int(notebook.QualityCorrect)},
-				{Status: "understood", Quality: int(notebook.QualityCorrect)},
-			},
-			want: func() float64 {
-				// Logs are processed from oldest (index 1) to newest (index 0)
-				// Process log at index 1 first (oldest)
-				ef := notebook.UpdateEasinessFactor(notebook.DefaultEasinessFactor, int(notebook.QualityCorrect), 0)
-				// Process log at index 0 (newest), with correctStreak counting from index 1 onward
-				ef = notebook.UpdateEasinessFactor(ef, int(notebook.QualityCorrect), 1)
-				return ef
-			}(),
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := calculateEasinessFactor(tt.logs)
-			assert.InDelta(t, tt.want, got, 0.001)
-		})
-	}
-}
-
-func TestCountCorrectFromIndex(t *testing.T) {
-	tests := []struct {
-		name      string
-		logs      []notebook.LearningRecord
-		fromIndex int
-		want      int
-	}{
-		{
-			name:      "empty logs",
-			logs:      nil,
-			fromIndex: 0,
-			want:      0,
-		},
-		{
-			name: "single log - counts from next index",
-			logs: []notebook.LearningRecord{
-				{Status: "understood"},
-			},
-			fromIndex: 0,
-			want:      0,
-		},
-		{
-			name: "consecutive correct after index",
-			logs: []notebook.LearningRecord{
-				{Status: "understood"},
-				{Status: "understood"},
-				{Status: "understood"},
-			},
-			fromIndex: 0,
-			want:      2,
-		},
-		{
-			name: "stops at misunderstood",
-			logs: []notebook.LearningRecord{
-				{Status: "understood"},
-				{Status: "understood"},
-				{Status: notebook.LearnedStatusMisunderstood},
-				{Status: "understood"},
-			},
-			fromIndex: 0,
-			want:      1,
-		},
-		{
-			name: "skips empty status",
-			logs: []notebook.LearningRecord{
-				{Status: "understood"},
-				{Status: ""},
-				{Status: "understood"},
-			},
-			fromIndex: 0,
-			want:      1,
-		},
-		{
-			name: "from middle index",
-			logs: []notebook.LearningRecord{
-				{Status: "understood"},
-				{Status: "understood"},
-				{Status: "understood"},
-				{Status: "understood"},
-			},
-			fromIndex: 2,
-			want:      1,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := countCorrectFromIndex(tt.logs, tt.fromIndex)
-			assert.Equal(t, tt.want, got)
-		})
-	}
 }
 
 func TestCalculateLegacyInterval(t *testing.T) {
@@ -305,17 +160,16 @@ func TestMigrateExpression(t *testing.T) {
 		want bool // whether modified
 	}{
 		{
-			name: "no logs and no EF - sets default EF",
+			name: "no logs - no change",
 			exp: notebook.LearningHistoryExpression{
 				Expression: "break the ice",
 			},
-			want: true,
+			want: false,
 		},
 		{
-			name: "already has EF and all logs have quality and interval - no change",
+			name: "all logs have quality and interval - no change",
 			exp: notebook.LearningHistoryExpression{
-				Expression:     "lose one's temper",
-				EasinessFactor: 2.5,
+				Expression: "lose one's temper",
 				LearnedLogs: []notebook.LearningRecord{
 					{
 						Status:       "understood",
@@ -330,7 +184,6 @@ func TestMigrateExpression(t *testing.T) {
 			name: "logs missing quality - sets quality from status",
 			exp: notebook.LearningHistoryExpression{
 				Expression:     "hit the road",
-				EasinessFactor: 2.5,
 				LearnedLogs: []notebook.LearningRecord{
 					{Status: notebook.LearnedStatusMisunderstood, IntervalDays: 1},
 					{Status: "understood", IntervalDays: 3},
@@ -342,7 +195,6 @@ func TestMigrateExpression(t *testing.T) {
 			name: "logs missing interval - sets interval from legacy calculation",
 			exp: notebook.LearningHistoryExpression{
 				Expression:     "piece of cake",
-				EasinessFactor: 2.5,
 				LearnedLogs: []notebook.LearningRecord{
 					{Status: "understood", Quality: int(notebook.QualityCorrect)},
 				},
@@ -354,13 +206,10 @@ func TestMigrateExpression(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exp := tt.exp
-			got := migrateExpression(&exp, false)
+			got := migrateExpression(&exp, false, nil)
 			assert.Equal(t, tt.want, got)
 
 			if tt.want {
-				// Verify EF was set
-				assert.NotZero(t, exp.EasinessFactor)
-
 				// Verify all logs have quality and interval
 				for _, log := range exp.LearnedLogs {
 					assert.NotZero(t, log.Quality)
@@ -383,16 +232,7 @@ func TestRecalculateSM2Metrics(t *testing.T) {
 		},
 	}
 
-	recalculateSM2Metrics(exp)
-
-	// Expected EF:
-	// 1. Start: 2.5
-	// 2. q=4, streak=0 -> 2.5 + 0.1 = 2.6
-	// 3. q=4, streak=1 -> 2.6 + 0.1 = 2.7
-	// 4. q=1, streak=2 -> 2.7 + (-0.32) = 2.38
-	// 5. q=4, streak=0 -> 2.38 + 0.1 = 2.48
-	// 6. q=4, streak=1 -> 2.48 + 0.1 = 2.58
-	assert.InDelta(t, 2.58, exp.EasinessFactor, 0.001)
+	recalculateMetrics(exp, &notebook.SM2Calculator{})
 
 	// Expected Intervals (newest to oldest):
 	expectedIntervals := []int{34, 13, 5, 9, 3}

@@ -64,7 +64,7 @@ message NotebookWord {
   repeated string antonyms = 8;
   string learning_status = 9;
   repeated LearningLogEntry learned_logs = 10;
-  double easiness_factor = 11;
+  reserved 11;
   string next_review_date = 12;
   string origin = 13;
   bool is_skipped = 14;

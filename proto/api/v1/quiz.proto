@@ -106,6 +106,7 @@ message SubmitAnswerResponse {
   WordDetail word_detail = 4;
   string next_review_date = 5;
   string learned_at = 6;
+  repeated string images = 7;
 }
 
 message StartReverseQuizRequest {
@@ -156,6 +157,7 @@ message SubmitReverseAnswerResponse {
   string classification = 7;
   string next_review_date = 8;
   string learned_at = 9;
+  repeated string images = 10;
 }
 
 message StartFreeformQuizRequest {}
@@ -192,6 +194,8 @@ message SubmitFreeformAnswerResponse {
   WordDetail word_detail = 7;
   string next_review_date = 8;
   string learned_at = 9;
+  int64 note_id = 10;
+  repeated string images = 11;
 }
 
 // Override Answer
@@ -212,7 +216,7 @@ message OverrideAnswerResponse {
   int32 original_quality = 2;
   string original_status = 3;
   int32 original_interval_days = 4;
-  double original_easiness_factor = 5;
+  reserved 5;
 }
 
 // Undo Override Answer
@@ -227,7 +231,7 @@ message UndoOverrideAnswerRequest {
   int32 original_quality = 4;
   string original_status = 5;
   int32 original_interval_days = 6;
-  double original_easiness_factor = 7;
+  reserved 7;
 }
 
 message UndoOverrideAnswerResponse {
@@ -318,6 +322,7 @@ message SubmitEtymologyBreakdownAnswerResponse {
   string next_review_date = 5;
   string learned_at = 6;
   int64 note_id = 7;
+  repeated string images = 8;
 }
 
 message SubmitEtymologyAssemblyAnswerRequest {
@@ -342,6 +347,7 @@ message SubmitEtymologyAssemblyAnswerResponse {
   string next_review_date = 6;
   string learned_at = 7;
   int64 note_id = 8;
+  repeated string images = 9;
 }
 
 message StartEtymologyFreeformQuizRequest {
@@ -374,4 +380,5 @@ message SubmitEtymologyFreeformAnswerResponse {
   string learned_at = 6;
   string notebook_name = 7;
   int64 note_id = 8;
+  repeated string images = 9;
 }

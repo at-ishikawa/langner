@@ -115,7 +115,6 @@ describe("useQuizStore", () => {
       quality: 5,
       status: "understood",
       intervalDays: 10,
-      easinessFactor: 2.5,
     });
 
     const state = useQuizStore.getState();
@@ -126,7 +125,6 @@ describe("useQuizStore", () => {
       quality: 5,
       status: "understood",
       intervalDays: 10,
-      easinessFactor: 2.5,
     });
   });
 
@@ -138,7 +136,6 @@ describe("useQuizStore", () => {
       quality: 5,
       status: "understood",
       intervalDays: 10,
-      easinessFactor: 2.5,
     });
 
     // Then undo
@@ -202,7 +199,6 @@ describe("useQuizStore", () => {
       quality: 5,
       status: "understood",
       intervalDays: 10,
-      easinessFactor: 2.5,
     });
 
     const state = useQuizStore.getState();

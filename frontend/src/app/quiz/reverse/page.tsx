@@ -24,8 +24,10 @@ interface FeedbackData {
   meaning: string;
   reason: string;
   contexts: string[];
-  nextReviewDate?: string;
+  pronunciation?: string;
+  partOfSpeech?: string;
   learnedAt?: string;
+  images?: string[];
 }
 
 export default function ReverseQuizPage() {
@@ -35,6 +37,7 @@ export default function ReverseQuizPage() {
   const currentIndex = useQuizStore((s) => s.currentIndex);
   const storeSubmitResult = useQuizStore((s) => s.submitReverseResult);
   const storeSkipResult = useQuizStore((s) => s.skipResult);
+  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
@@ -51,7 +54,6 @@ export default function ReverseQuizPage() {
     quality: number;
     status: string;
     intervalDays: number;
-    easinessFactor: number;
   } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -121,8 +123,10 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
-        nextReviewDate: res.nextReviewDate || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(correct);
       storeSubmitResult({
@@ -136,8 +140,8 @@ export default function ReverseQuizPage() {
           : res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -168,8 +172,10 @@ export default function ReverseQuizPage() {
         meaning: res.meaning,
         reason: res.reason,
         contexts: res.contexts ?? [],
-        nextReviewDate: res.nextReviewDate || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -181,8 +187,8 @@ export default function ReverseQuizPage() {
         reason: res.reason,
         contexts: res.contexts ?? [],
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -244,6 +250,22 @@ export default function ReverseQuizPage() {
               Your word &quot;{synonymAnswer}&quot; means the same thing. Try the exact word.
             </Text>
           </Box>
+
+          {card.contexts.length > 0 && (
+            <VStack align="stretch" gap={2}>
+              {card.contexts.map((ctx, i) => (
+                <Text
+                  key={i}
+                  fontSize="md"
+                  color="gray.600"
+                  _dark={{ color: "gray.400" }}
+                  fontStyle="italic"
+                >
+                  {ctx.maskedContext}
+                </Text>
+              ))}
+            </VStack>
+          )}
 
           <Box>
             <Text fontWeight="medium" mb={1}>
@@ -369,12 +391,10 @@ export default function ReverseQuizPage() {
                           originalQuality: overrideOriginals?.quality ?? 0,
                           originalStatus: overrideOriginals?.status ?? "",
                           originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                          originalEasinessFactor: overrideOriginals?.easinessFactor ?? 0,
                         });
                         setOverridden(false);
                         setOverrideOriginals(null);
                         setDisplayCorrect(res.correct);
-                        setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                       } catch {
                         setOverridden(false);
                         setOverrideOriginals(null);
@@ -398,10 +418,21 @@ export default function ReverseQuizPage() {
                 </Text>
               )}
 
-              {/* 3. Meaning, reason, examples */}
+              {/* 3. Word, pronunciation, part of speech, reason, examples */}
               <Box>
                 <Text fontWeight="bold">Word</Text>
-                <Text fontStyle="italic">{feedback.expression}</Text>
+                <Text fontStyle="italic">
+                  {feedback.expression}
+                  {(feedback.pronunciation || feedback.partOfSpeech) && (
+                    <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="normal">
+                      {" "}
+                      {[
+                        feedback.pronunciation && `/${feedback.pronunciation}/`,
+                        feedback.partOfSpeech,
+                      ].filter(Boolean).join(" · ")}
+                    </Text>
+                  )}
+                </Text>
               </Box>
 
               {feedback.reason && (
@@ -424,11 +455,18 @@ export default function ReverseQuizPage() {
                 </Box>
               )}
 
+              {feedback.images && feedback.images.length > 0 && (
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  {feedback.images.map((src, i) => (
+                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                  ))}
+                </Box>
+              )}
+
               {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
-                nextReviewDate={feedback.nextReviewDate}
                 isOverridden={overridden}
                 isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
@@ -447,9 +485,12 @@ export default function ReverseQuizPage() {
                       quality: res.originalQuality,
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,
-                      easinessFactor: res.originalEasinessFactor,
                     });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
+                    storeOverrideResult(currentIndex, "reverse", res.nextReviewDate || "", {
+                      quality: res.originalQuality,
+                      status: res.originalStatus,
+                      intervalDays: res.originalIntervalDays,
+                    });
                   } catch { /* silently fail */ }
                 }}
                 onSkip={async () => {
@@ -459,18 +500,17 @@ export default function ReverseQuizPage() {
                     storeSkipResult(currentIndex, "reverse");
                   } catch { /* silently fail */ }
                 }}
-                onChangeReviewDate={async (newDate) => {
-                  try {
-                    await quizClient.overrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.REVERSE,
-                      learnedAt: feedback.learnedAt!,
-                      nextReviewDate: newDate,
-                    });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
-                  } catch { /* silently fail */ }
-                }}
               />
+
+              {currentIndex + 1 < total && (
+                <Button
+                  colorPalette="green"
+                  variant="outline"
+                  onClick={() => router.push("/quiz/complete")}
+                >
+                  See Results
+                </Button>
+              )}
             </>
           ) : error ? (
             <>

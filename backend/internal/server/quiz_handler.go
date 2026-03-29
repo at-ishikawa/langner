@@ -31,6 +31,7 @@ type QuizHandler struct {
 	noteStore      map[int64]quiz.Card
 	reverseStore   map[int64]quiz.ReverseCard
 	freeformCards  []quiz.FreeformCard
+	freeformStore  map[int64]quiz.FreeformCard
 	etymologyStore map[int64]quiz.EtymologyCard
 	etymologyCards []quiz.EtymologyCard // for freeform
 	nextID         int64
@@ -42,6 +43,7 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		svc:            svc,
 		noteStore:      make(map[int64]quiz.Card),
 		reverseStore:   make(map[int64]quiz.ReverseCard),
+		freeformStore:  make(map[int64]quiz.FreeformCard),
 		etymologyStore: make(map[int64]quiz.EtymologyCard),
 		nextID:         1,
 	}
@@ -178,6 +180,7 @@ func (h *QuizHandler) SubmitAnswer(
 		WordDetail:     toProtoWordDetail(card.WordDetail),
 		NextReviewDate: nextReviewDate,
 		LearnedAt:      learnedAt,
+		Images:         card.Images,
 	}), nil
 }
 
@@ -322,6 +325,7 @@ func (h *QuizHandler) SubmitReverseAnswer(
 		Classification: grade.Classification,
 		NextReviewDate: nextReviewDate,
 		LearnedAt:      learnedAt,
+		Images:         card.Images,
 	}), nil
 }
 
@@ -392,8 +396,15 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 	}
 
 	var learnedAt, nextReviewDate string
+	var noteID int64
 	if grade.MatchedCard != nil {
 		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
+
+		h.mu.Lock()
+		noteID = h.nextID
+		h.nextID++
+		h.freeformStore[noteID] = *grade.MatchedCard
+		h.mu.Unlock()
 	}
 
 	return connect.NewResponse(&apiv1.SubmitFreeformAnswerResponse{
@@ -411,6 +422,13 @@ func (h *QuizHandler) SubmitFreeformAnswer(
 		}(),
 		NextReviewDate: nextReviewDate,
 		LearnedAt:      learnedAt,
+		NoteId:         noteID,
+		Images: func() []string {
+			if grade.MatchedCard != nil {
+				return grade.MatchedCard.Images
+			}
+			return nil
+		}(),
 	}), nil
 }
 
@@ -426,6 +444,11 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 	if card, ok := h.reverseStore[noteID]; ok {
 		h.mu.Unlock()
 		info := quiz.CardInfoFromReverseCard(card)
+		return &info, nil
+	}
+	if fcard, ok := h.freeformStore[noteID]; ok {
+		h.mu.Unlock()
+		info := quiz.CardInfoFromFreeformCard(fcard)
 		return &info, nil
 	}
 	if ecard, found := h.etymologyStore[noteID]; found {
@@ -667,6 +690,7 @@ func (h *QuizHandler) SubmitEtymologyBreakdownAnswer(
 		NextReviewDate:     nextReviewDate,
 		LearnedAt:          learnedAt,
 		NoteId:             req.Msg.GetCardId(),
+		Images:             card.Images,
 	}), nil
 }
 
@@ -733,6 +757,7 @@ func (h *QuizHandler) SubmitEtymologyAssemblyAnswer(
 		NextReviewDate:     nextReviewDate,
 		LearnedAt:          learnedAt,
 		NoteId:             req.Msg.GetCardId(),
+		Images:             card.Images,
 	}), nil
 }
 
@@ -867,6 +892,7 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(
 		LearnedAt:          learnedAt,
 		NotebookName:       matchedCard.NotebookName,
 		NoteId:             0, // freeform cards are not stored with IDs
+		Images:             matchedCard.Images,
 	}), nil
 }
 

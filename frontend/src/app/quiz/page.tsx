@@ -214,12 +214,12 @@ export default function QuizHubPage() {
   }
 
   return (
-    <Box maxW="sm" mx="auto" bg="#f8f9fa" minH="100vh">
+    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh">
       {/* Header */}
-      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
+      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
         <Box px={4} pt={2}>
           <Link href="/">
-            <Text color="#2563eb" fontSize="xs">&lt; Home</Text>
+            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">&lt; Home</Text>
           </Link>
         </Box>
         <Box px={4} pb={3} textAlign="center">
@@ -228,7 +228,7 @@ export default function QuizHubPage() {
       </Box>
 
       {/* Tabs */}
-      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb" display="flex">
+      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200" display="flex">
         {(["vocabulary", "etymology"] as Tab[]).map((t) => (
           <Box
             key={t}
@@ -242,7 +242,8 @@ export default function QuizHubPage() {
             <Text
               fontSize="sm"
               fontWeight={tab === t ? "semibold" : "normal"}
-              color={tab === t ? "#2563eb" : "#999"}
+              color={tab === t ? "blue.600" : "gray.500"}
+              _dark={{ color: tab === t ? "blue.300" : "gray.400" }}
             >
               {t === "vocabulary" ? "Vocabulary" : "Etymology"}
             </Text>
@@ -255,7 +256,8 @@ export default function QuizHubPage() {
                 w="60%"
                 h="3px"
                 borderRadius="full"
-                bg="#2563eb"
+                bg="blue.600"
+                _dark={{ bg: "blue.300" }}
               />
             )}
           </Box>
@@ -272,7 +274,8 @@ export default function QuizHubPage() {
               p={4}
               bg="white"
               borderWidth={isSelected ? "2px" : "1px"}
-              borderColor={isSelected ? "#2563eb" : "#e5e7eb"}
+              borderColor={isSelected ? "blue.600" : "gray.200"}
+              _dark={{ bg: "gray.800", borderColor: isSelected ? "blue.400" : "gray.600" }}
               borderRadius="lg"
               cursor="pointer"
               onClick={() => handleModeSelect(mode.key)}
@@ -280,10 +283,10 @@ export default function QuizHubPage() {
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Text fontWeight="semibold" fontSize="md">{mode.title}</Text>
-                  <Text fontSize="xs" color="#666">{mode.description}</Text>
+                  <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>{mode.description}</Text>
                 </Box>
                 {!isSelected && (
-                  <Text fontSize="sm" color="#999" flexShrink={0}>&rsaquo;</Text>
+                  <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>&rsaquo;</Text>
                 )}
               </Box>
             </Box>
@@ -363,15 +366,15 @@ export default function QuizHubPage() {
           </Box>
         )}
 
-        {/* Freeform vocab — no notebook selection needed */}
+        {/* Freeform vocab -- no notebook selection needed */}
         {tab === "vocabulary" && selectedVocabMode === "freeform" && (
-          <Text color="gray.600" textAlign="center">
+          <Text color="gray.600" _dark={{ color: "gray.400" }} textAlign="center">
             {notebooks.reduce((sum, n) => sum + n.reviewCount, 0)} words
             available across all notebooks
           </Text>
         )}
 
-        {/* Start button — only show when a mode is selected */}
+        {/* Start button -- only show when a mode is selected */}
         {selectedMode !== null && (
           <Button
             mt={2}

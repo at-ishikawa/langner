@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import QuizHubPage from "./page";
@@ -30,9 +30,20 @@ function renderPage() {
   );
 }
 
+function renderPageDark() {
+  document.documentElement.classList.add("dark");
+  document.documentElement.setAttribute("data-theme", "dark");
+  return renderPage();
+}
+
 describe("QuizHubPage", () => {
   beforeEach(() => {
     mockPush.mockClear();
+  });
+
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
   });
 
   it("renders Quiz title and back link to Home", async () => {
@@ -86,5 +97,15 @@ describe("QuizHubPage", () => {
 
     fireEvent.click(screen.getByText("Standard"));
     expect(screen.queryByText("Start")).not.toBeInTheDocument();
+  });
+
+  it("renders in dark mode without errors", async () => {
+    renderPageDark();
+    await waitFor(() => {
+      expect(screen.getByText("Quiz")).toBeInTheDocument();
+      expect(screen.getByText("Standard")).toBeInTheDocument();
+      expect(screen.getByText("Reverse")).toBeInTheDocument();
+      expect(screen.getByText("Freeform")).toBeInTheDocument();
+    });
   });
 });

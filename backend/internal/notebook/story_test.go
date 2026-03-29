@@ -94,37 +94,173 @@ func TestConvertMarkersInText(t *testing.T) {
 	}
 }
 
-func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
-	testDate := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
-	notebooks := []StoryNotebook{
+func TestHighlightDefinitionsInText(t *testing.T) {
+	tests := []struct {
+		name            string
+		text            string
+		definitions     []Note
+		conversionStyle ConversionStyle
+		expected        string
+	}{
 		{
-			Event: "Test Story",
-			Date:  testDate,
-			Metadata: Metadata{
-				Series:  "Test Series",
-				Season:  1,
-				Episode: 1,
+			name: "Markdown - single word with word boundary",
+			text: "The eager student arrived.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
 			},
-			Scenes: []StoryScene{
-				{
-					Title: "Scene 1",
-					Conversations: []Conversation{
-						{Speaker: "A", Quote: "This is a {{ test phrase }} here."},
-					},
-					Definitions: []Note{
-						{Expression: "test phrase", Meaning: "A phrase for testing"},
-					},
-				},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "The **eager** student arrived.",
+		},
+		{
+			name: "Markdown - single word extends to full word with suffix",
+			text: "She was eagerly waiting.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
 			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "She was **eagerly** waiting.",
+		},
+		{
+			name: "Markdown - multi-word expression",
+			text: "Let me break the ice at the party.",
+			definitions: []Note{
+				{Expression: "break the ice", Meaning: "initiate conversation"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "Let me **break the ice** at the party.",
+		},
+		{
+			name: "Markdown - case insensitive match preserves original case",
+			text: "She was EAGER to start.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "She was **EAGER** to start.",
+		},
+		{
+			name: "Markdown - Definition field also matched",
+			text: "She broke the ice quickly.",
+			definitions: []Note{
+				{Expression: "broke the ice", Definition: "break the ice", Meaning: "initiate conversation"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "She **broke the ice** quickly.",
+		},
+		{
+			name: "Plain - no formatting applied",
+			text: "The eager student arrived.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
+			},
+			conversionStyle: ConversionStylePlain,
+			expected:        "The eager student arrived.",
+		},
+		{
+			name: "Terminal - bold formatting",
+			text: "The eager student arrived.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
+			},
+			conversionStyle: ConversionStyleTerminal,
+			expected:        "The \x1b[1meager\x1b[22m student arrived.",
+		},
+		{
+			name: "Multiple definitions highlighted",
+			text: "The eager student felt happy today.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
+				{Expression: "happy", Meaning: "feeling pleasure"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "The **eager** student felt **happy** today.",
+		},
+		{
+			name: "No match returns text unchanged",
+			text: "A completely different sentence.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "A completely different sentence.",
+		},
+		{
+			name: "Empty definitions returns text unchanged",
+			text: "The eager student arrived.",
+			definitions: []Note{},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "The eager student arrived.",
+		},
+		{
+			name: "Already highlighted text is not double-highlighted",
+			text: "The **eager** student arrived.",
+			definitions: []Note{
+				{Expression: "eager", Meaning: "wanting to do something"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "The **eager** student arrived.",
+		},
+		{
+			name: "Regex special characters in expression",
+			text: "The price was $10.00 total.",
+			definitions: []Note{
+				{Expression: "$10.00", Meaning: "ten dollars"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "The price was **$10.00** total.",
+		},
+		{
+			name: "Longer expression matched before shorter substring",
+			text: "She needed to break the ice at the event.",
+			definitions: []Note{
+				{Expression: "break", Meaning: "to fracture"},
+				{Expression: "break the ice", Meaning: "initiate conversation"},
+			},
+			conversionStyle: ConversionStyleMarkdown,
+			expected:        "She needed to **break the ice** at the event.",
 		},
 	}
 
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := HighlightDefinitionsInText(tc.text, tc.definitions, tc.conversionStyle)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
+	testDate := time.Date(2025, 1, 1, 12, 0, 0, 0, time.UTC)
+
 	tests := []struct {
-		name string
-		want assets.StoryTemplate
+		name      string
+		notebooks []StoryNotebook
+		want      assets.StoryTemplate
 	}{
 		{
-			name: "Markdown conversion",
+			name: "Markdown conversion with markers (backward compat)",
+			notebooks: []StoryNotebook{
+				{
+					Event: "Test Story",
+					Date:  testDate,
+					Metadata: Metadata{
+						Series:  "Test Series",
+						Season:  1,
+						Episode: 1,
+					},
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a {{ test phrase }} here."},
+							},
+							Definitions: []Note{
+								{Expression: "test phrase", Meaning: "A phrase for testing"},
+							},
+						},
+					},
+				},
+			},
 			want: assets.StoryTemplate{
 				Notebooks: []assets.StoryNotebook{
 					{
@@ -146,7 +282,59 @@ func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
 									{
 										Expression: "test phrase",
 										Meaning:    "A phrase for testing",
-										// Other fields will be empty strings/nil
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "Markdown conversion without markers (new behavior)",
+			notebooks: []StoryNotebook{
+				{
+					Event: "Test Story",
+					Date:  testDate,
+					Metadata: Metadata{
+						Series:  "Test Series",
+						Season:  1,
+						Episode: 1,
+					},
+					Scenes: []StoryScene{
+						{
+							Title: "Scene 1",
+							Conversations: []Conversation{
+								{Speaker: "A", Quote: "This is a test phrase here."},
+							},
+							Definitions: []Note{
+								{Expression: "test phrase", Meaning: "A phrase for testing"},
+							},
+						},
+					},
+				},
+			},
+			want: assets.StoryTemplate{
+				Notebooks: []assets.StoryNotebook{
+					{
+						Event: "Test Story",
+						Date:  testDate,
+						Metadata: assets.Metadata{
+							Series:  "Test Series",
+							Season:  1,
+							Episode: 1,
+						},
+						Scenes: []assets.StoryScene{
+							{
+								Title: "Scene 1",
+								Conversations: []assets.Conversation{
+									{Speaker: "A", Quote: "This is a **test phrase** here."},
+								},
+								Statements: []string{},
+								Definitions: []assets.StoryNote{
+									{
+										Expression: "test phrase",
+										Meaning:    "A phrase for testing",
 									},
 								},
 							},
@@ -160,7 +348,7 @@ func TestAssetsStoryConverter_convertToAssetsStoryTemplate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			converter := newAssetsStoryConverter()
-			result := converter.convertToAssetsStoryTemplate(notebooks)
+			result := converter.convertToAssetsStoryTemplate(tt.notebooks)
 			assert.Equal(t, tt.want, result)
 		})
 	}
@@ -201,7 +389,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			wantErrMsg:              "empty definition.Expression",
 		},
 		{
-			name: "empty conversations and statements returns error",
+			name: "empty conversations and statements skips scene",
 			storyNotebooks: []StoryNotebook{
 				{
 					Event: "Story 1",
@@ -215,8 +403,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			},
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     true,
-			wantErr:                 true,
-			wantErrMsg:              "empty scene.Conversations and Statements",
+			expectedWordCount:       0,
 		},
 		{
 			name: "notebook with no scenes is skipped",
@@ -1017,23 +1204,13 @@ func TestStoryScene_Validate(t *testing.T) {
 		wantMsg    string
 	}{
 		{
-			name: "expression found with marker in conversation",
-			scene: StoryScene{
-				Conversations: []Conversation{{Speaker: "A", Quote: "The {{ eager }} student."}},
-				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
-			},
-			location:   "test",
-			wantErrors: 0,
-		},
-		{
-			name: "expression found without marker in conversation",
+			name: "expression found in conversation",
 			scene: StoryScene{
 				Conversations: []Conversation{{Speaker: "A", Quote: "The eager student."}},
 				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
 			},
 			location:   "test",
-			wantErrors: 1,
-			wantMsg:    "missing {{ }} markers",
+			wantErrors: 0,
 		},
 		{
 			name: "expression not found at all",
@@ -1064,23 +1241,13 @@ func TestStoryScene_Validate(t *testing.T) {
 			wantErrors: 0,
 		},
 		{
-			name: "expression found with marker in statement",
-			scene: StoryScene{
-				Statements:  []string{"The {{ eager }} student arrived."},
-				Definitions: []Note{{Expression: "eager", Meaning: "wanting to do something"}},
-			},
-			location:   "test",
-			wantErrors: 0,
-		},
-		{
-			name: "expression found without marker in statement",
+			name: "expression found in statement",
 			scene: StoryScene{
 				Statements:  []string{"The eager student arrived."},
 				Definitions: []Note{{Expression: "eager", Meaning: "wanting to do something"}},
 			},
 			location:   "test",
-			wantErrors: 1,
-			wantMsg:    "missing {{ }} markers",
+			wantErrors: 0,
 		},
 		{
 			name: "expression not found in statement either",
@@ -1093,7 +1260,7 @@ func TestStoryScene_Validate(t *testing.T) {
 			wantMsg:    "not found in any conversation",
 		},
 		{
-			name: "expression with {{}} no-space markers",
+			name: "expression with legacy markers still validates",
 			scene: StoryScene{
 				Conversations: []Conversation{{Speaker: "A", Quote: "The {{eager}} student."}},
 				Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
@@ -1121,7 +1288,7 @@ func TestStoryNotebook_Validate(t *testing.T) {
 			Scenes: []StoryScene{
 				{
 					Title:         "Scene 1",
-					Conversations: []Conversation{{Speaker: "A", Quote: "The {{ eager }} student."}},
+					Conversations: []Conversation{{Speaker: "A", Quote: "The eager student."}},
 					Definitions:   []Note{{Expression: "eager", Meaning: "wanting to do something"}},
 				},
 			},

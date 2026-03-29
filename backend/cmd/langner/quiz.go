@@ -49,6 +49,7 @@ func newQuizFreeformCommand() *cobra.Command {
 				cfg.Notebooks,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
 				openaiClient,
+				cfg.Quiz,
 			)
 			if err != nil {
 				return err
@@ -125,6 +126,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 			cfg.Dictionaries.RapidAPI.CacheDirectory,
 			openaiClient,
 			includeNoCorrectAnswers,
+			cfg.Quiz,
 		)
 		if err != nil {
 			return err
@@ -156,6 +158,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 			cfg.Notebooks,
 			cfg.Dictionaries.RapidAPI.CacheDirectory,
 			openaiClient,
+			cfg.Quiz,
 		)
 		if err != nil {
 			return err
@@ -173,6 +176,7 @@ func runRecognitionQuiz(cfg *config.Config, openaiClient inference.Client, noteb
 		cfg.Dictionaries.RapidAPI.CacheDirectory,
 		openaiClient,
 		includeNoCorrectAnswers,
+		cfg.Quiz,
 	)
 	if err != nil {
 		return err
@@ -190,6 +194,7 @@ func runReverseQuiz(cfg *config.Config, openaiClient inference.Client, notebookN
 		cfg.Dictionaries.RapidAPI.CacheDirectory,
 		openaiClient,
 		listMissingContext,
+		cfg.Quiz,
 	)
 	if err != nil {
 		return err

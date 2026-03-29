@@ -65,6 +65,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				Outputs: OutputsConfig{
 					StoryDirectory:     filepath.Join("outputs", "story"),
 					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
+					EtymologyDirectory: filepath.Join("outputs", "etymology"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
@@ -79,6 +80,10 @@ func TestConfigLoader_Load(t *testing.T) {
 					Database: "local",
 					Username: "user",
 					TLS:      false,
+				},
+				Quiz: QuizConfig{
+					Algorithm:       "modified_sm2",
+					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
 		},
@@ -116,6 +121,7 @@ outputs:
 				Outputs: OutputsConfig{
 					StoryDirectory:     "custom/outputs",
 					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
+					EtymologyDirectory: filepath.Join("outputs", "etymology"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
@@ -130,6 +136,10 @@ outputs:
 					Database: "local",
 					Username: "user",
 					TLS:      false,
+				},
+				Quiz: QuizConfig{
+					Algorithm:       "modified_sm2",
+					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
 		},
@@ -161,6 +171,7 @@ outputs:
 				Outputs: OutputsConfig{
 					StoryDirectory:     filepath.Join("outputs", "story"),
 					FlashcardDirectory: filepath.Join("outputs", "flashcard"),
+					EtymologyDirectory: filepath.Join("outputs", "etymology"),
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
@@ -175,6 +186,10 @@ outputs:
 					Database: "local",
 					Username: "user",
 					TLS:      false,
+				},
+				Quiz: QuizConfig{
+					Algorithm:       "modified_sm2",
+					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
 		},

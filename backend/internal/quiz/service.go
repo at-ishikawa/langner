@@ -21,16 +21,18 @@ type Service struct {
 	openaiClient       inference.Client
 	dictionaryMap      map[string]rapidapi.Response
 	learningRepository learning.LearningRepository
+	calculator         notebook.IntervalCalculator
 }
 
 // NewService creates a new Service.
 // learningRepo is optional; pass nil when DB is not configured.
-func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository) *Service {
+func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository, quizCfg config.QuizConfig) *Service {
 	return &Service{
 		notebooksConfig:    notebooksConfig,
 		openaiClient:       openaiClient,
 		dictionaryMap:      dictionaryMap,
 		learningRepository: learningRepo,
+		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
 	}
 }
 
@@ -119,6 +121,41 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			ReviewCount:           countFlashcardCards(filtered),
 			ReverseReviewCount:    reverseCount,
 			EtymologyReviewCount:  etymCount,
+		})
+	}
+
+	// Add definitions-only books (not already in story or flashcard indexes)
+	storyIndexes := reader.GetStoryIndexes()
+	flashcardIndexes := reader.GetFlashcardIndexes()
+	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		if _, isStory := storyIndexes[nbID]; isStory {
+			continue
+		}
+		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
+			continue
+		}
+		defs, ok := reader.GetDefinitionsNotes(nbID)
+		if !ok {
+			continue
+		}
+		etymCount := 0
+		for _, sceneDefs := range defs {
+			for _, notes := range sceneDefs {
+				for _, note := range notes {
+					if len(note.OriginParts) > 0 {
+						etymCount++
+					}
+				}
+			}
+		}
+		if etymCount == 0 {
+			continue
+		}
+		summaries = append(summaries, NotebookSummary{
+			NotebookID:           nbID,
+			Name:                 nbID,
+			EtymologyReviewCount: etymCount,
+			Kind:                 "Books",
 		})
 	}
 
@@ -250,6 +287,7 @@ func (s *Service) loadStoryCards(
 						Antonyms:      definition.Antonyms,
 						Memo:          definition.Memo,
 					},
+					Images: definition.Images,
 				})
 			}
 		}
@@ -307,6 +345,7 @@ func (s *Service) loadFlashcardCards(
 					Antonyms:      card.Antonyms,
 					Memo:          card.Memo,
 				},
+				Images: card.Images,
 			})
 		}
 	}
@@ -404,15 +443,25 @@ func countFlashcardEtymologyCards(notebooks []notebook.FlashcardNotebook) int {
 	return count
 }
 
+// isEligibleForReverseQuiz returns true if a note has the data needed for reverse quiz
+// (shows meaning, asks for the word — requires a non-empty meaning and non-unusable level).
+func isEligibleForReverseQuiz(note *notebook.Note) bool {
+	return note.Meaning != "" && note.Level != notebook.ExpressionLevelUnusable
+}
+
 func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []notebook.LearningHistory) int {
 	seen := make(map[string]struct{})
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for i := range scene.Definitions {
-				if needsReverseReview(histories, story.Event, scene.Title, &scene.Definitions[i]) {
-					expr := scene.Definitions[i].Expression
-					if scene.Definitions[i].Definition != "" {
-						expr = scene.Definitions[i].Definition
+				def := &scene.Definitions[i]
+				if !isEligibleForReverseQuiz(def) {
+					continue
+				}
+				if needsReverseReview(histories, story.Event, scene.Title, def) {
+					expr := def.Expression
+					if def.Definition != "" {
+						expr = def.Definition
 					}
 					seen[strings.ToLower(expr)] = struct{}{}
 				}
@@ -426,10 +475,14 @@ func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, historie
 	seen := make(map[string]struct{})
 	for _, nb := range notebooks {
 		for i := range nb.Cards {
-			if needsReverseFlashcardReview(histories, nb.Title, &nb.Cards[i]) {
-				expr := nb.Cards[i].Expression
-				if nb.Cards[i].Definition != "" {
-					expr = nb.Cards[i].Definition
+			card := &nb.Cards[i]
+			if !isEligibleForReverseQuiz(card) {
+				continue
+			}
+			if needsReverseFlashcardReview(histories, nb.Title, card) {
+				expr := card.Expression
+				if card.Definition != "" {
+					expr = card.Definition
 				}
 				seen[strings.ToLower(expr)] = struct{}{}
 			}
@@ -522,6 +575,7 @@ type ReverseCard struct {
 	Contexts     []ReverseContext
 	Expression   string // original expression to guess
 	WordDetail   WordDetail
+	Images       []string
 }
 
 // ReverseContext represents a context sentence with masking info.
@@ -611,6 +665,10 @@ func (s *Service) loadStoryReverseCards(
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
+				if !isEligibleForReverseQuiz(&definition) {
+					continue
+				}
+
 				expression := definition.Expression
 				if definition.Definition != "" {
 					expression = definition.Definition
@@ -649,6 +707,7 @@ func (s *Service) loadStoryReverseCards(
 						Antonyms:      definition.Antonyms,
 						Memo:          definition.Memo,
 					},
+					Images: definition.Images,
 				})
 			}
 		}
@@ -671,6 +730,10 @@ func (s *Service) loadFlashcardReverseCards(
 	var cards []ReverseCard
 	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
+			if !isEligibleForReverseQuiz(&card) {
+				continue
+			}
+
 			expression := card.Expression
 			if card.Definition != "" {
 				expression = card.Definition
@@ -718,6 +781,7 @@ func (s *Service) loadFlashcardReverseCards(
 					Antonyms:      card.Antonyms,
 					Memo:          card.Memo,
 				},
+				Images: card.Images,
 			})
 		}
 	}
@@ -885,6 +949,7 @@ type FreeformCard struct {
 	Meaning            string
 	Contexts           []inference.Context
 	WordDetail         WordDetail
+	Images             []string
 }
 
 // LoadAllWords loads all words from all notebooks for freeform quiz.
@@ -961,6 +1026,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 						Antonyms:      definition.Antonyms,
 						Memo:          definition.Memo,
 					},
+					Images: definition.Images,
 				})
 			}
 		}
@@ -1016,6 +1082,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string)
 					Antonyms:      card.Antonyms,
 					Memo:          card.Memo,
 				},
+				Images: card.Images,
 			})
 		}
 	}
@@ -1131,15 +1198,38 @@ func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]s
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
+	// Track which expressions have at least one due (or never-studied) card.
+	// If any card for an expression is due, the expression should be available.
+	due := make(map[string]bool)
 	result := make(map[string]string)
 	for _, card := range cards {
+		exprKey := strings.ToLower(card.Expression)
+		origKey := strings.ToLower(card.OriginalExpression)
+
 		nextDate := freeformNextReviewDate(learningHistories[card.NotebookName], card)
-		if nextDate != "" {
-			result[strings.ToLower(card.Expression)] = nextDate
-			if card.OriginalExpression != "" {
-				result[strings.ToLower(card.OriginalExpression)] = nextDate
+		if nextDate == "" {
+			// This card is due or never studied — mark the expression as due
+			due[exprKey] = true
+			if origKey != "" {
+				due[origKey] = true
+			}
+		} else if !due[exprKey] {
+			// Only record the not-due date if no card for this expression is due
+			existing, ok := result[exprKey]
+			if !ok || nextDate > existing {
+				result[exprKey] = nextDate
+			}
+			if origKey != "" && !due[origKey] {
+				existingOrig, okOrig := result[origKey]
+				if !okOrig || nextDate > existingOrig {
+					result[origKey] = nextDate
+				}
 			}
 		}
+	}
+	// Remove any not-due dates for expressions that have at least one due card
+	for key := range due {
+		delete(result, key)
 	}
 	return result, nil
 }
@@ -1200,7 +1290,7 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 		return "", ""
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.calculator)
 	expr := updater.FindExpressionByName(expression)
 	if expr == nil {
 		return "", ""

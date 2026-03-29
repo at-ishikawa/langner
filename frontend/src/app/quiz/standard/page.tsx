@@ -22,8 +22,10 @@ interface FeedbackData {
   correct: boolean;
   meaning: string;
   reason: string;
-  nextReviewDate?: string;
+  pronunciation?: string;
+  partOfSpeech?: string;
   learnedAt?: string;
+  images?: string[];
 }
 
 export default function QuizCardPage() {
@@ -33,6 +35,7 @@ export default function QuizCardPage() {
   const currentIndex = useQuizStore((s) => s.currentIndex);
   const storeSubmitResult = useQuizStore((s) => s.submitResult);
   const storeSkipResult = useQuizStore((s) => s.skipResult);
+  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
@@ -48,7 +51,6 @@ export default function QuizCardPage() {
     quality: number;
     status: string;
     intervalDays: number;
-    easinessFactor: number;
   } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
@@ -103,8 +105,10 @@ export default function QuizCardPage() {
         correct: res.correct,
         meaning: res.meaning,
         reason: res.reason,
-        nextReviewDate: res.nextReviewDate || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -116,8 +120,8 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -146,8 +150,10 @@ export default function QuizCardPage() {
         correct: false,
         meaning: res.meaning,
         reason: res.reason,
-        nextReviewDate: res.nextReviewDate || undefined,
+        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
+        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -159,8 +165,8 @@ export default function QuizCardPage() {
         reason: res.reason,
         contexts: card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
         wordDetail: res.wordDetail,
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -252,6 +258,14 @@ export default function QuizCardPage() {
           <Heading size="xl" textAlign="center">
             {card.entry}
           </Heading>
+          {feedback && (feedback.pronunciation || feedback.partOfSpeech) && (
+            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center">
+              {[
+                feedback.pronunciation && `/${feedback.pronunciation}/`,
+                feedback.partOfSpeech,
+              ].filter(Boolean).join(" · ")}
+            </Text>
+          )}
 
           {loading ? (
             <Box textAlign="center" py={8}>
@@ -295,12 +309,10 @@ export default function QuizCardPage() {
                           originalQuality: overrideOriginals?.quality ?? 0,
                           originalStatus: overrideOriginals?.status ?? "",
                           originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                          originalEasinessFactor: overrideOriginals?.easinessFactor ?? 0,
                         });
                         setOverridden(false);
                         setOverrideOriginals(null);
                         setDisplayCorrect(res.correct);
-                        setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                       } catch {
                         setOverridden(false);
                         setOverrideOriginals(null);
@@ -324,7 +336,6 @@ export default function QuizCardPage() {
                 </Text>
               )}
 
-              {/* 3. Meaning, reason, examples */}
               <Box>
                 <Text fontWeight="bold">Meaning</Text>
                 <Text>{feedback.meaning}</Text>
@@ -350,11 +361,18 @@ export default function QuizCardPage() {
                 </Box>
               )}
 
+              {feedback.images && feedback.images.length > 0 && (
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  {feedback.images.map((src, i) => (
+                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                  ))}
+                </Box>
+              )}
+
               {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
-                nextReviewDate={feedback.nextReviewDate}
                 isOverridden={overridden}
                 isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
@@ -373,9 +391,12 @@ export default function QuizCardPage() {
                       quality: res.originalQuality,
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,
-                      easinessFactor: res.originalEasinessFactor,
                     });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
+                    storeOverrideResult(currentIndex, "standard", res.nextReviewDate || "", {
+                      quality: res.originalQuality,
+                      status: res.originalStatus,
+                      intervalDays: res.originalIntervalDays,
+                    });
                   } catch { /* silently fail */ }
                 }}
                 onSkip={async () => {
@@ -385,18 +406,17 @@ export default function QuizCardPage() {
                     storeSkipResult(currentIndex, "standard");
                   } catch { /* silently fail */ }
                 }}
-                onChangeReviewDate={async (newDate) => {
-                  try {
-                    await quizClient.overrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.STANDARD,
-                      learnedAt: feedback.learnedAt!,
-                      nextReviewDate: newDate,
-                    });
-                    setFeedback(prev => prev ? { ...prev, nextReviewDate: newDate } : prev);
-                  } catch { /* silently fail */ }
-                }}
               />
+
+              {currentIndex + 1 < total && (
+                <Button
+                  colorPalette="green"
+                  variant="outline"
+                  onClick={() => router.push("/quiz/complete")}
+                >
+                  See Results
+                </Button>
+              )}
             </>
           ) : error ? (
             <>

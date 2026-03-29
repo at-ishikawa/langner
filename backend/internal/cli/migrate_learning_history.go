@@ -7,8 +7,9 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// MigrateLearningHistory migrates all learning history files to the new SM-2 format
-func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error {
+// MigrateLearningHistory migrates all learning history files to the current format.
+// When recalculate is true, intervals are recalculated using the provided calculator.
+func MigrateLearningHistory(learningNotesDir string, recalculate bool, calculator notebook.IntervalCalculator) error {
 	histories, err := notebook.NewLearningHistories(learningNotesDir)
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
@@ -21,7 +22,7 @@ func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error 
 
 			if hist.Metadata.Type == "flashcard" {
 				for exprIdx := range hist.Expressions {
-					if migrateExpression(&hist.Expressions[exprIdx], recalculateSM2) {
+					if migrateExpression(&hist.Expressions[exprIdx], recalculate, calculator) {
 						modified = true
 					}
 				}
@@ -30,7 +31,7 @@ func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error 
 
 			for sceneIdx := range hist.Scenes {
 				for exprIdx := range hist.Scenes[sceneIdx].Expressions {
-					if migrateExpression(&hist.Scenes[sceneIdx].Expressions[exprIdx], recalculateSM2) {
+					if migrateExpression(&hist.Scenes[sceneIdx].Expressions[exprIdx], recalculate, calculator) {
 						modified = true
 					}
 				}
@@ -51,18 +52,13 @@ func MigrateLearningHistory(learningNotesDir string, recalculateSM2 bool) error 
 }
 
 // migrateExpression migrates a single expression to the new format
-func migrateExpression(exp *notebook.LearningHistoryExpression, recalculateSM2 bool) bool {
+func migrateExpression(exp *notebook.LearningHistoryExpression, recalculate bool, calculator notebook.IntervalCalculator) bool {
 	modified := false
 
-	if recalculateSM2 {
-		recalculateSM2Metrics(exp)
+	if recalculate {
+		recalculateMetrics(exp, calculator)
 		modified = true
 		return modified
-	}
-
-	if exp.EasinessFactor == 0 {
-		exp.EasinessFactor = calculateEasinessFactor(exp.LearnedLogs)
-		modified = true
 	}
 
 	for logIdx := range exp.LearnedLogs {
@@ -86,91 +82,74 @@ func migrateExpression(exp *notebook.LearningHistoryExpression, recalculateSM2 b
 	return modified
 }
 
-// recalculateSM2Metrics forces a full recalculation of EF and IntervalDays for all logs
-func recalculateSM2Metrics(exp *notebook.LearningHistoryExpression) {
-	recalculateLogs := func(logs []notebook.LearningRecord) (float64, []notebook.LearningRecord) {
-		if len(logs) == 0 {
-			return notebook.DefaultEasinessFactor, logs
-		}
+// recalculateMetrics forces a full recalculation of IntervalDays for all logs
+func recalculateMetrics(exp *notebook.LearningHistoryExpression, calculator notebook.IntervalCalculator) {
+	_, exp.LearnedLogs = calculator.RecalculateAll(exp.LearnedLogs)
+	_, exp.ReverseLogs = calculator.RecalculateAll(exp.ReverseLogs)
+}
 
-		newLogs := make([]notebook.LearningRecord, len(logs))
-		copy(newLogs, logs)
+// RecalculateIntervals recalculates intervals for all learning history files
+// using the configured algorithm.
+func RecalculateIntervals(learningNotesDir string, algorithm string, fixedIntervals []int) error {
+	calculator := notebook.NewIntervalCalculator(algorithm, fixedIntervals)
 
-		currentEF := notebook.DefaultEasinessFactor
-		lastInterval := 0
-		correctStreak := 0
+	histories, err := notebook.NewLearningHistories(learningNotesDir)
+	if err != nil {
+		return fmt.Errorf("failed to load learning histories: %w", err)
+	}
 
-		// Logs are stored newest first, so we process them in reverse (oldest to newest)
-		for i := len(newLogs) - 1; i >= 0; i-- {
-			log := &newLogs[i]
+	for notebookName, historyList := range histories {
+		modified := false
+		for histIdx := range historyList {
+			hist := &historyList[histIdx]
 
-			if log.Quality == 0 {
-				if log.Status == notebook.LearnedStatusMisunderstood {
-					log.Quality = int(notebook.QualityWrong)
-				} else {
-					log.Quality = int(notebook.QualityCorrect)
+			if hist.Metadata.Type == "flashcard" {
+				for exprIdx := range hist.Expressions {
+					if recalculateExpression(&hist.Expressions[exprIdx], calculator) {
+						modified = true
+					}
+				}
+				continue
+			}
+
+			for sceneIdx := range hist.Scenes {
+				for exprIdx := range hist.Scenes[sceneIdx].Expressions {
+					if recalculateExpression(&hist.Scenes[sceneIdx].Expressions[exprIdx], calculator) {
+						modified = true
+					}
 				}
 			}
-
-			streakForEF := correctStreak
-			if log.Quality >= int(notebook.QualityCorrectSlow) {
-				correctStreak++
-			} else {
-				correctStreak = 0
-			}
-
-			currentEF = notebook.UpdateEasinessFactor(currentEF, log.Quality, streakForEF)
-			intervalForThisLog := notebook.CalculateNextInterval(lastInterval, currentEF, log.Quality, correctStreak)
-			log.IntervalDays = intervalForThisLog
-			lastInterval = intervalForThisLog
 		}
-		return currentEF, newLogs
+
+		if modified {
+			notePath := filepath.Join(learningNotesDir, notebookName+".yml")
+			if err := notebook.WriteYamlFile(notePath, historyList); err != nil {
+				return fmt.Errorf("failed to write %s: %w", notePath, err)
+			}
+			fmt.Printf("Recalculated: %s\n", notebookName)
+		}
 	}
 
-	exp.EasinessFactor, exp.LearnedLogs = recalculateLogs(exp.LearnedLogs)
-	exp.ReverseEasinessFactor, exp.ReverseLogs = recalculateLogs(exp.ReverseLogs)
+	fmt.Printf("Recalculation complete (algorithm: %s)\n", algorithm)
+	return nil
 }
 
-// calculateEasinessFactor calculates EF from learning history pattern
-func calculateEasinessFactor(logs []notebook.LearningRecord) float64 {
-	if len(logs) == 0 {
-		return notebook.DefaultEasinessFactor
+// recalculateExpression recalculates intervals for a single expression using the given calculator.
+func recalculateExpression(exp *notebook.LearningHistoryExpression, calculator notebook.IntervalCalculator) bool {
+	modified := false
+	if len(exp.LearnedLogs) > 0 {
+		newEF, newLogs := calculator.RecalculateAll(exp.LearnedLogs)
+		exp.EasinessFactor = newEF
+		exp.LearnedLogs = newLogs
+		modified = true
 	}
-
-	ef := notebook.DefaultEasinessFactor
-
-	// Process logs from oldest to newest (reverse order since newest is first)
-	for i := len(logs) - 1; i >= 0; i-- {
-		log := logs[i]
-
-		quality := log.Quality
-		if quality == 0 {
-			if log.Status == notebook.LearnedStatusMisunderstood {
-				quality = int(notebook.QualityWrong)
-			} else {
-				quality = int(notebook.QualityCorrect)
-			}
-		}
-
-		correctStreak := countCorrectFromIndex(logs, i)
-		ef = notebook.UpdateEasinessFactor(ef, quality, correctStreak)
+	if len(exp.ReverseLogs) > 0 {
+		newEF, newLogs := calculator.RecalculateAll(exp.ReverseLogs)
+		exp.ReverseEasinessFactor = newEF
+		exp.ReverseLogs = newLogs
+		modified = true
 	}
-
-	return ef
-}
-
-// countCorrectFromIndex counts consecutive correct answers from the given index to the end (oldest)
-func countCorrectFromIndex(logs []notebook.LearningRecord, fromIndex int) int {
-	count := 0
-	for j := fromIndex + 1; j < len(logs); j++ {
-		if logs[j].Status == notebook.LearnedStatusMisunderstood {
-			break
-		}
-		if logs[j].Status != "" && logs[j].Status != notebook.LearnedStatusLearning { // Fix typo: LearnedStatusLearning
-			count++
-		}
-	}
-	return count
+	return modified
 }
 
 // calculateLegacyInterval calculates interval for old records based on position

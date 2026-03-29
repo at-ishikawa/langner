@@ -555,14 +555,14 @@ function WordCard({
         </Text>
         {etymologyData && (
           <Box mt={2}>
-            <Text fontSize="xs" color="#999" mb={1}>
+            <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>
               Origins:
             </Text>
             <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
               {etymologyData.parts.map((part, j) => (
                 <Box key={j} display="flex" alignItems="center" gap={1}>
                   {j > 0 && (
-                    <Text fontSize="xs" color="#999">
+                    <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
                       +
                     </Text>
                   )}
@@ -577,12 +577,13 @@ function WordCard({
                       py={0.5}
                       borderRadius="full"
                       borderWidth="1px"
-                      borderColor="#2563eb"
-                      bg="#eff6ff"
+                      borderColor="blue.600"
+                      bg="blue.50"
+                      _dark={{ bg: "blue.900", borderColor: "blue.400" }}
                       cursor="pointer"
-                      _hover={{ bg: "#dbeafe" }}
+                      _hover={{ bg: "blue.100" }}
                     >
-                      <Text fontSize="xs" color="#2563eb" fontWeight="medium">
+                      <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">
                         {part.origin}
                       </Text>
                       {part.language && (
@@ -590,9 +591,10 @@ function WordCard({
                           px={1.5}
                           py={0}
                           borderRadius="full"
-                          bg="#f3f4f6"
+                          bg="gray.100"
+                          _dark={{ bg: "gray.700", color: "gray.300" }}
                           fontSize="2xs"
-                          color="#666"
+                          color="gray.600"
                         >
                           {part.language}
                         </Box>

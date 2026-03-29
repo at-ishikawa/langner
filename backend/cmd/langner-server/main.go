@@ -54,14 +54,15 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("loadConfig() > %w", err)
 	}
 
-	if cfg.OpenAI.APIKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+	var openaiClient *openai.Client
+	if cfg.OpenAI.APIKey != "" {
+		openaiClient = openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+		defer func() {
+			_ = openaiClient.Close()
+		}()
+	} else {
+		slog.Warn("OPENAI_API_KEY is not set; quiz grading features will be unavailable")
 	}
-
-	openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
-	defer func() {
-		_ = openaiClient.Close()
-	}()
 
 	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
 	if err != nil {
@@ -80,7 +81,8 @@ func run(ctx context.Context) error {
 	}))
 
 	// Set up repositories with dual storage when DB is configured
-	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory)
+	calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
+	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, calculator)
 	var learningRepo learning.LearningRepository = yamlLearningRepo
 	var noteRepo notebook.NoteRepository
 	var defsDir string
@@ -104,7 +106,7 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap, learningRepo)
+	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap, learningRepo, cfg.Quiz)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,

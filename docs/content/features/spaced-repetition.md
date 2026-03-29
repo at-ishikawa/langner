@@ -3,15 +3,9 @@ title: "Spaced Repetition"
 weight: 3
 ---
 
-# Spaced Repetition (Modified SM-2 Algorithm)
+# Spaced Repetition
 
-Langner uses a modified SM-2 algorithm to optimize vocabulary retention. The algorithm adapts review intervals based on your performance and provides gentler penalties for well-learned words.
-
-## How It Works
-
-Each word has two key metrics:
-- **Easiness Factor (EF)**: Starts at 2.5, adjusts based on performance (range: 1.3 to 3.0+)
-- **Interval**: Days until next review, grows with consecutive correct answers
+Langner supports two spaced repetition algorithms: **Modified SM-2** (default) and **Fixed Levels**.
 
 ## Quality Grades
 
@@ -26,9 +20,36 @@ Your response quality (1-5) is automatically determined by OpenAI based on:
 | 4 | Correct at normal speed |
 | 5 | Correct and fast (instant recall) |
 
-## Interval Growth (Correct Answers)
+## Fixed Levels Algorithm
 
-For correct answers (quality ≥ 3):
+A simple level-based system with configurable interval steps. Each correct answer advances one level, each wrong answer drops one level.
+
+Default levels: `[1, 7, 30, 90, 365]` days
+
+| Quality | Level Change |
+|---------|-------------|
+| 5 (fast correct) | +2 (skip a level) |
+| 3-4 (correct) | +1 |
+| 1 (wrong) | -1 |
+
+| Review # | Interval |
+|----------|----------|
+| 1st correct | 7 days |
+| 2nd correct | 30 days |
+| 3rd correct | 90 days |
+| 4th correct | 365 days |
+
+Wrong answers drop one level. For example, at level 3 (90 days), a wrong answer drops to level 2 (30 days). Level never drops below 0 (1 day). A fast correct answer (quality 5) skips a level, reaching 365 days in just 3 reviews.
+
+## Modified SM-2 Algorithm (Default)
+
+A modified version of the SuperMemo 2 algorithm with gentler penalties for well-learned words.
+
+Each word has two key metrics:
+- **Easiness Factor (EF)**: Starts at 2.5, adjusts based on performance (range: 1.3 to 3.0+)
+- **Interval**: Days until next review, grows with consecutive correct answers
+
+### Interval Growth (Correct Answers)
 
 | Review # | Interval Calculation |
 |----------|---------------------|
@@ -36,14 +57,7 @@ For correct answers (quality ≥ 3):
 | 2nd correct | 6 days |
 | 3rd+ correct | Previous interval × EF |
 
-Example progression with EF = 2.5:
-- Review 1: 1 day
-- Review 2: 6 days
-- Review 3: 6 × 2.5 = 15 days
-- Review 4: 15 × 2.5 = 38 days
-- Review 5: 38 × 2.5 = 95 days
-
-## Gentler Penalties (Wrong Answers)
+### Gentler Penalties (Wrong Answers)
 
 Unlike standard SM-2 which resets to day 1 on any mistake, Langner uses **proportional reduction** based on your learning progress:
 
@@ -54,8 +68,24 @@ Unlike standard SM-2 which resets to day 1 on any mistake, Langner uses **propor
 | 6-9 reviews | × 0.6 | -0.30 |
 | 10+ reviews | × 0.7 | -0.20 |
 
-**Example**: If you have a 90-day interval after 8 correct reviews and get one wrong:
-- Standard SM-2: Reset to 1 day (harsh!)
-- Langner: 90 × 0.6 = 54 days, EF drops by only 0.30
+## Configuration
 
-This preserves your learning progress while still ensuring you review the word sooner.
+Choose the algorithm in your `config.yaml`:
+
+```yaml
+quiz:
+  algorithm: fixed  # or "modified_sm2"
+  fixed_intervals: [1, 7, 30, 90, 365]
+```
+
+The default algorithm is `modified_sm2` for backward compatibility.
+
+## Recalculating Intervals
+
+If you change the algorithm or intervals, run the recalculate command to update all existing learning history:
+
+```bash
+langner migrate recalculate-intervals
+```
+
+This replays all review history through the configured algorithm and updates stored intervals.

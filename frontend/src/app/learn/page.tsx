@@ -52,12 +52,12 @@ export default function LearnHubPage() {
   );
 
   return (
-    <Box maxW="sm" mx="auto" bg="#f8f9fa" minH="100vh">
+    <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh">
       {/* Header */}
-      <Box bg="white" borderBottomWidth="1px" borderColor="#e5e7eb">
+      <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
         <Box px={4} pt={2}>
           <Link href="/">
-            <Text color="#2563eb" fontSize="xs">
+            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
               &lt; Home
             </Text>
           </Link>
@@ -70,8 +70,9 @@ export default function LearnHubPage() {
       {/* Tabs */}
       <Box
         bg="white"
+        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         borderBottomWidth="1px"
-        borderColor="#e5e7eb"
+        borderColor="gray.200"
         display="flex"
       >
         <Box
@@ -85,7 +86,8 @@ export default function LearnHubPage() {
           <Text
             fontSize="sm"
             fontWeight={tab === "vocabulary" ? "semibold" : "normal"}
-            color={tab === "vocabulary" ? "#2563eb" : "#999"}
+            color={tab === "vocabulary" ? "blue.600" : "gray.500"}
+            _dark={{ color: tab === "vocabulary" ? "blue.300" : "gray.400" }}
           >
             Vocabulary
           </Text>
@@ -98,7 +100,8 @@ export default function LearnHubPage() {
               w="60%"
               h="3px"
               borderRadius="full"
-              bg="#2563eb"
+              bg="blue.600"
+              _dark={{ bg: "blue.300" }}
             />
           )}
         </Box>
@@ -113,7 +116,8 @@ export default function LearnHubPage() {
           <Text
             fontSize="sm"
             fontWeight={tab === "etymology" ? "semibold" : "normal"}
-            color={tab === "etymology" ? "#2563eb" : "#999"}
+            color={tab === "etymology" ? "blue.600" : "gray.500"}
+            _dark={{ color: tab === "etymology" ? "blue.300" : "gray.400" }}
           >
             Etymology
           </Text>
@@ -126,7 +130,8 @@ export default function LearnHubPage() {
               w="60%"
               h="3px"
               borderRadius="full"
-              bg="#2563eb"
+              bg="blue.600"
+              _dark={{ bg: "blue.300" }}
             />
           )}
         </Box>
@@ -149,8 +154,9 @@ export default function LearnHubPage() {
                   <Box
                     p={4}
                     bg="white"
+                    _dark={{ bg: "gray.800", borderColor: "gray.600" }}
                     borderWidth="1px"
-                    borderColor="#e5e7eb"
+                    borderColor="gray.200"
                     borderRadius="10px"
                     _hover={{ bg: "gray.50" }}
                     cursor="pointer"
@@ -162,10 +168,10 @@ export default function LearnHubPage() {
                       {notebook.name}
                     </Text>
                     <Box display="flex" alignItems="center" gap={2}>
-                      <Text fontSize="xs" color="#666">
+                      <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>
                         {notebook.reviewCount} words
                       </Text>
-                      <Text fontSize="sm" color="#999">
+                      <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
                         &rsaquo;
                       </Text>
                     </Box>
@@ -188,8 +194,9 @@ export default function LearnHubPage() {
                 <Box
                   p={4}
                   bg="white"
+                  _dark={{ bg: "gray.800", borderColor: "gray.600" }}
                   borderWidth="1px"
-                  borderColor="#e5e7eb"
+                  borderColor="gray.200"
                   borderRadius="10px"
                   _hover={{ bg: "gray.50" }}
                   cursor="pointer"
@@ -201,11 +208,11 @@ export default function LearnHubPage() {
                     <Text fontWeight="medium" fontSize="sm">
                       {notebook.name}
                     </Text>
-                    <Text fontSize="xs" color="#999">
+                    <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
                       {notebook.reviewCount} origins
                     </Text>
                   </Box>
-                  <Text fontSize="sm" color="#999">
+                  <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
                     &rsaquo;
                   </Text>
                 </Box>
@@ -218,8 +225,9 @@ export default function LearnHubPage() {
       {/* Summary footer */}
       <Box
         bg="white"
+        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         borderTopWidth="1px"
-        borderColor="#e5e7eb"
+        borderColor="gray.200"
         py={3}
         textAlign="center"
         position="fixed"
@@ -229,7 +237,7 @@ export default function LearnHubPage() {
         maxW="sm"
         mx="auto"
       >
-        <Text fontSize="sm" color="#666">
+        <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
           {tab === "vocabulary"
             ? `${vocabularyNotebooks.length} notebooks \u00B7 ${totalVocabWords} words`
             : `${etymologyNotebooks.length} notebooks \u00B7 ${totalEtymologyOrigins} origins`}

@@ -18,16 +18,16 @@ import { FeedbackActions } from "@/components/FeedbackActions";
 
 type QuizPhase = "answering" | "feedback";
 
-function getTypeBadgeColors(type: string): { bg: string; color: string } {
+function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
   switch (type.toLowerCase()) {
     case "root":
-      return { bg: "#dbeafe", color: "#2563eb" };
+      return { bg: "blue.100", darkBg: "blue.900", color: "blue.600", darkColor: "blue.300" };
     case "prefix":
-      return { bg: "#fef3c7", color: "#92400e" };
+      return { bg: "yellow.100", darkBg: "yellow.900", color: "yellow.800", darkColor: "yellow.200" };
     case "suffix":
-      return { bg: "#dcfce7", color: "#166534" };
+      return { bg: "green.100", darkBg: "green.900", color: "green.800", darkColor: "green.200" };
     default:
-      return { bg: "#f3f4f6", color: "#666" };
+      return { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300" };
   }
 }
 
@@ -50,9 +50,9 @@ export default function EtymologyAssemblyPage() {
     reason: string;
     correctExpression: string;
     relatedDefinitions: Array<{ expression: string; meaning: string; notebookName: string }>;
-    nextReviewDate?: string;
     learnedAt?: string;
     noteId?: bigint;
+    images?: string[];
   } | null>(null);
   const [overridden, setOverridden] = useState(false);
   const [skipped, setSkipped] = useState(false);
@@ -111,9 +111,9 @@ export default function EtymologyAssemblyPage() {
           meaning: d.meaning,
           notebookName: d.notebookName,
         })),
-        nextReviewDate: res.nextReviewDate || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId ? BigInt(res.noteId) : undefined,
+        images: res.images.length > 0 ? res.images : undefined,
       };
 
       setFeedback(fb);
@@ -129,8 +129,8 @@ export default function EtymologyAssemblyPage() {
         originGrades: [],
         relatedDefinitions: fb.relatedDefinitions,
         originParts: card.originParts,
-        nextReviewDate: fb.nextReviewDate,
         learnedAt: fb.learnedAt,
+        images: res.images.length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
@@ -198,10 +198,10 @@ export default function EtymologyAssemblyPage() {
                     gap={2}
                     flexWrap="wrap"
                   >
-                    <Text fontWeight="semibold" color="#2563eb" fontSize="lg">{p.origin}</Text>
+                    <Text fontWeight="semibold" color="blue.600" _dark={{ color: "blue.300" }} fontSize="lg">{p.origin}</Text>
                     <Text fontSize="sm" color="fg.muted">= {p.meaning}</Text>
-                    <Box ml="auto" px={2} py={0.5} borderRadius="full" bg="#f3f4f6">
-                      <Text fontSize="xs" color="#666">{p.language}</Text>
+                    <Box ml="auto" px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                      <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
                     </Box>
                   </Box>
                 </Box>
@@ -277,7 +277,7 @@ export default function EtymologyAssemblyPage() {
                     p={3}
                     borderWidth="1.5px"
                     borderRadius="lg"
-                    borderColor={displayCorrect ? "#16a34a" : "#dc2626"}
+                    borderColor={displayCorrect ? "green.600" : "red.600"}
                     bg="white"
                     _dark={{ bg: "gray.800" }}
                     display="flex"
@@ -286,13 +286,13 @@ export default function EtymologyAssemblyPage() {
                   >
                     <Text
                       textDecoration={displayCorrect ? "none" : "line-through"}
-                      color={displayCorrect ? undefined : "#dc2626"}
+                      color={displayCorrect ? undefined : "red.600"}
                     >
                       {submittedAnswer}
                     </Text>
                     <Text
                       fontWeight="medium"
-                      color={displayCorrect ? "#16a34a" : "#dc2626"}
+                      color={displayCorrect ? "green.600" : "red.600"}
                     >
                       {displayCorrect ? "\u2713" : "\u2717"}
                     </Text>
@@ -319,14 +319,14 @@ export default function EtymologyAssemblyPage() {
                       const typeBadge = getTypeBadgeColors(p.type);
                       return (
                         <Box key={i} display="flex" gap={2} alignItems="center" flexWrap="wrap">
-                          <Text color="#2563eb" fontWeight="medium" fontSize="sm">{p.origin}</Text>
+                          <Text color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium" fontSize="sm">{p.origin}</Text>
                           <Text fontSize="sm" color="fg.muted">= {p.meaning}</Text>
-                          <Box px={2} py={0.5} borderRadius="full" bg="#f3f4f6">
-                            <Text fontSize="xs" color="#666">{p.language}</Text>
+                          <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                            <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
                           </Box>
                           {p.type && (
-                            <Box px={2} py={0.5} borderRadius="full" bg={typeBadge.bg}>
-                              <Text fontSize="xs" color={typeBadge.color}>{p.type}</Text>
+                            <Box px={2} py={0.5} borderRadius="full" bg={typeBadge.bg} _dark={{ bg: typeBadge.darkBg }}>
+                              <Text fontSize="xs" color={typeBadge.color} _dark={{ color: typeBadge.darkColor }}>{p.type}</Text>
                             </Box>
                           )}
                         </Box>
@@ -344,7 +344,7 @@ export default function EtymologyAssemblyPage() {
                     <VStack align="stretch" gap={1}>
                       {feedback.relatedDefinitions.map((d, i) => (
                         <Text key={i} fontSize="sm">
-                          <Text as="span" fontWeight="medium" color="#2563eb">{d.expression}</Text>
+                          <Text as="span" fontWeight="medium" color="blue.600" _dark={{ color: "blue.300" }}>{d.expression}</Text>
                           {" - "}{d.meaning}
                         </Text>
                       ))}
@@ -353,10 +353,17 @@ export default function EtymologyAssemblyPage() {
                 </Box>
               )}
 
+              {feedback.images && feedback.images.length > 0 && (
+                <Box display="flex" gap={2} flexWrap="wrap">
+                  {feedback.images.map((src, i) => (
+                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                  ))}
+                </Box>
+              )}
+
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={feedback.noteId}
-                nextReviewDate={feedback.nextReviewDate}
                 isOverridden={overridden}
                 isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
@@ -371,7 +378,6 @@ export default function EtymologyAssemblyPage() {
                     });
                     setOverridden(true);
                     setDisplayCorrect(!displayCorrect);
-                    setFeedback((prev) => prev ? { ...prev, nextReviewDate: res.nextReviewDate || undefined } : prev);
                   } catch { /* silently fail */ }
                 } : undefined}
                 onSkip={feedback.noteId ? async () => {
@@ -379,17 +385,6 @@ export default function EtymologyAssemblyPage() {
                     await quizClient.skipWord({ noteId: feedback.noteId! });
                     setSkipped(true);
                     storeSkipResult(currentIndex, "etymology-assembly");
-                  } catch { /* silently fail */ }
-                } : undefined}
-                onChangeReviewDate={feedback.noteId && feedback.learnedAt ? async (newDate) => {
-                  try {
-                    await quizClient.overrideAnswer({
-                      noteId: feedback.noteId!,
-                      quizType: ProtoQuizType.ETYMOLOGY_ASSEMBLY,
-                      learnedAt: feedback.learnedAt!,
-                      nextReviewDate: newDate,
-                    });
-                    setFeedback((prev) => prev ? { ...prev, nextReviewDate: newDate } : prev);
                   } catch { /* silently fail */ }
                 } : undefined}
               />

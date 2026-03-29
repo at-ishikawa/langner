@@ -27,6 +27,7 @@ type Card struct {
 	Examples      []Example
 	Contexts      []inference.Context
 	WordDetail    WordDetail
+	Images        []string
 }
 
 // Example is a usage sentence for a card.

@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import SessionCompletePage from "./page";
@@ -55,11 +55,22 @@ const mockResults: QuizResult[] = [
   },
 ];
 
+function renderPageDark() {
+  document.documentElement.classList.add("dark");
+  document.documentElement.setAttribute("data-theme", "dark");
+  return renderPage();
+}
+
 describe("SessionCompletePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     useQuizStore.getState().reset();
     pushMock.mockReset();
+  });
+
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
   });
 
   it("redirects to / when no results in store", () => {
@@ -116,23 +127,7 @@ describe("SessionCompletePage", () => {
     expect(result & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it("result cards show next review date when available", () => {
-    const resultsWithReviewDate: QuizResult[] = [
-      {
-        ...mockResults[0],
-        nextReviewDate: "2027-06-15",
-      },
-      {
-        ...mockResults[1],
-        nextReviewDate: "2027-07-01",
-      },
-    ];
-    useQuizStore.setState({ results: resultsWithReviewDate });
-    renderPage();
-
-    expect(screen.getByText(/June 15, 2027/)).toBeInTheDocument();
-    expect(screen.getByText(/July 1, 2027/)).toBeInTheDocument();
-  });
+  // Next review dates are shown on per-question feedback screens, not the complete page
 
   it.each([
     {
@@ -174,7 +169,6 @@ describe("SessionCompletePage", () => {
         originalQuality: 5,
         originalStatus: "understood",
         originalIntervalDays: 10,
-        originalEasinessFactor: 2.5,
       });
       useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
       renderPage();
@@ -224,7 +218,6 @@ describe("SessionCompletePage", () => {
         originalQuality: 5,
         originalStatus: "understood",
         originalIntervalDays: 10,
-        originalEasinessFactor: 2.5,
       });
       vi.mocked(client.quizClient.undoOverrideAnswer).mockResolvedValue({
         correct: false,
@@ -284,49 +277,15 @@ describe("SessionCompletePage", () => {
       });
     });
 
-    it("Change link opens inline date picker instead of prompt", async () => {
-      useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
-      renderPage();
+    // Change date picker is available on per-question feedback screens, not the complete page
+  });
 
-      // Find "Change" links
-      const changeLinks = screen.getAllByText("Change");
-      expect(changeLinks.length).toBeGreaterThan(0);
-
-      // Click Change on first card
-      fireEvent.click(changeLinks[0]);
-
-      // Should show inline date picker, not prompt()
-      expect(screen.getByText("Pick a new review date:")).toBeInTheDocument();
-      expect(screen.getByText("Save")).toBeInTheDocument();
-      expect(screen.getByText("Cancel")).toBeInTheDocument();
-    });
-
-    it("Change date picker calls quizClient.overrideAnswer with nextReviewDate", async () => {
-      vi.mocked(client.quizClient.overrideAnswer).mockResolvedValue({
-        nextReviewDate: "2027-08-01",
-        originalQuality: 5,
-        originalStatus: "understood",
-        originalIntervalDays: 10,
-        originalEasinessFactor: 2.5,
-      });
-      useQuizStore.setState({ results: resultsWithLearnedAt, quizType: "standard" });
-      renderPage();
-
-      // Click Change
-      const changeLinks = screen.getAllByText("Change");
-      fireEvent.click(changeLinks[0]);
-
-      // Set new date and save
-      const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
-      fireEvent.change(dateInput, { target: { value: "2027-08-01" } });
-      fireEvent.click(screen.getByText("Save"));
-
-      await waitFor(() => {
-        expect(client.quizClient.overrideAnswer).toHaveBeenCalledWith(
-          expect.objectContaining({ nextReviewDate: "2027-08-01" })
-        );
-      });
-    });
+  it("renders in dark mode without errors", () => {
+    useQuizStore.setState({ results: mockResults });
+    renderPageDark();
+    expect(screen.getByText("Session Complete")).toBeInTheDocument();
+    expect(screen.getByText("Total: 3 words")).toBeInTheDocument();
+    expect(screen.getByText("break the ice")).toBeInTheDocument();
   });
 
   describe("freeform results", () => {

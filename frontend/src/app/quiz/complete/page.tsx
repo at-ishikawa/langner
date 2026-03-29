@@ -1,11 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Input, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
 import { useQuizStore, type QuizType } from "@/store/quizStore";
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
-import { formatReviewDate } from "@/lib/formatReviewDate";
 
 interface OriginPartDisplay {
   origin: string;
@@ -21,7 +20,6 @@ interface ResultItem {
   meaning: string;
   correct: boolean;
   contexts?: string[];
-  nextReviewDate?: string;
   noteId?: bigint;
   learnedAt?: string;
   isOverridden?: boolean;
@@ -29,6 +27,7 @@ interface ResultItem {
   originalCorrect: boolean;
   originBreakdown?: OriginPartDisplay[];
   userAnswer?: string;
+  images?: string[];
 }
 
 function getProtoQuizType(qt: QuizType): ProtoQuizType {
@@ -40,16 +39,16 @@ function getProtoQuizType(qt: QuizType): ProtoQuizType {
   return ProtoQuizType.STANDARD;
 }
 
-function getTypeBadgeColors(type: string): { bg: string; color: string } {
+function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
   switch (type.toLowerCase()) {
     case "root":
-      return { bg: "#dbeafe", color: "#2563eb" };
+      return { bg: "blue.100", darkBg: "blue.900", color: "blue.600", darkColor: "blue.300" };
     case "prefix":
-      return { bg: "#fef3c7", color: "#92400e" };
+      return { bg: "yellow.100", darkBg: "yellow.900", color: "yellow.800", darkColor: "yellow.200" };
     case "suffix":
-      return { bg: "#dcfce7", color: "#166534" };
+      return { bg: "green.100", darkBg: "green.900", color: "green.800", darkColor: "green.200" };
     default:
-      return { bg: "#f3f4f6", color: "#666" };
+      return { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300" };
   }
 }
 
@@ -65,8 +64,6 @@ export default function SessionCompletePage() {
   const undoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
   const skipResult = useQuizStore((s) => s.skipResult);
   const resumeResult = useQuizStore((s) => s.resumeResult);
-  const updateResultReviewDate = useQuizStore((s) => s.updateResultReviewDate);
-
   const isEtymologyQuiz = quizType === "etymology-breakdown" || quizType === "etymology-assembly" || quizType === "etymology-freeform";
 
   const allResults = useMemo((): ResultItem[] => {
@@ -78,12 +75,12 @@ export default function SessionCompletePage() {
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
-        nextReviewDate: r.nextReviewDate,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
+        images: r.images,
       }));
     }
     if (reverseResults.length > 0) {
@@ -94,12 +91,12 @@ export default function SessionCompletePage() {
         meaning: r.meaning,
         correct: r.correct,
         contexts: r.contexts,
-        nextReviewDate: r.nextReviewDate,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
+        images: r.images,
       }));
     }
     if (freeformResults.length > 0) {
@@ -115,6 +112,7 @@ export default function SessionCompletePage() {
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
+        images: r.images,
       }));
     }
     if (etymologyResults.length > 0) {
@@ -124,7 +122,6 @@ export default function SessionCompletePage() {
         entry: r.expression,
         meaning: r.meaning,
         correct: r.correct,
-        nextReviewDate: r.nextReviewDate,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
@@ -137,6 +134,7 @@ export default function SessionCompletePage() {
           type: p.type,
         })),
         userAnswer: r.answer,
+        images: r.images,
       }));
     }
     return [];
@@ -167,11 +165,10 @@ export default function SessionCompletePage() {
         learnedAt: item.learnedAt,
         markCorrect: !item.correct,
       });
-      overrideResult(item.index, quizType, res.nextReviewDate || item.nextReviewDate || "", {
+      overrideResult(item.index, quizType, res.nextReviewDate || "", {
         quality: res.originalQuality,
         status: res.originalStatus,
         intervalDays: res.originalIntervalDays,
-        easinessFactor: res.originalEasinessFactor,
       });
     } catch { /* silently fail */ }
   };
@@ -189,9 +186,8 @@ export default function SessionCompletePage() {
         originalQuality: original.originalValues.quality,
         originalStatus: original.originalValues.status,
         originalIntervalDays: original.originalValues.intervalDays,
-        originalEasinessFactor: original.originalValues.easinessFactor,
       });
-      undoOverrideResult(item.index, quizType, res.correct, res.nextReviewDate || item.nextReviewDate || "");
+      undoOverrideResult(item.index, quizType, res.correct, res.nextReviewDate || "");
     } catch { /* silently fail */ }
   };
 
@@ -208,19 +204,6 @@ export default function SessionCompletePage() {
     try {
       await quizClient.resumeWord({ noteId: item.noteId });
       resumeResult(item.index, quizType);
-    } catch { /* silently fail */ }
-  };
-
-  const handleChangeReviewDate = async (item: ResultItem, newDate: string) => {
-    if (!item.noteId || !item.learnedAt) return;
-    try {
-      await quizClient.overrideAnswer({
-        noteId: item.noteId,
-        quizType: protoQt,
-        learnedAt: item.learnedAt,
-        nextReviewDate: newDate,
-      });
-      updateResultReviewDate(item.index, quizType, newDate);
     } catch { /* silently fail */ }
   };
 
@@ -260,7 +243,6 @@ export default function SessionCompletePage() {
                 onUndo={handleUndo}
                 onSkip={handleSkip}
                 onResume={handleResume}
-                onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
           </VStack>
@@ -282,7 +264,6 @@ export default function SessionCompletePage() {
                 onUndo={handleUndo}
                 onSkip={handleSkip}
                 onResume={handleResume}
-                onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
           </VStack>
@@ -304,7 +285,6 @@ export default function SessionCompletePage() {
                 onUndo={handleUndo}
                 onSkip={handleSkip}
                 onResume={handleResume}
-                onChangeReviewDate={handleChangeReviewDate}
               />
             ))}
           </VStack>
@@ -325,7 +305,6 @@ function ResultCard({
   onUndo,
   onSkip,
   onResume,
-  onChangeReviewDate,
 }: {
   item: ResultItem;
   isEtymology: boolean;
@@ -333,16 +312,7 @@ function ResultCard({
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
   onResume: (item: ResultItem) => void;
-  onChangeReviewDate: (item: ResultItem, newDate: string) => void;
 }) {
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [customDate, setCustomDate] = useState("");
-
-  const tomorrowStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() + 1);
-    return d.toISOString().split("T")[0];
-  }, []);
 
   const borderColor = item.isSkipped
     ? "gray.200"
@@ -351,10 +321,10 @@ function ResultCard({
       : "red.200";
 
   const topBarColor = item.isSkipped
-    ? "#d1d5db"
+    ? "gray.300"
     : item.correct
-      ? "#16a34a"
-      : "#dc2626";
+      ? "green.600"
+      : "red.600";
 
   return (
     <Box
@@ -383,6 +353,15 @@ function ResultCard({
           </Text>
         ))}
 
+        {/* Images */}
+        {item.images && item.images.length > 0 && (
+          <Box display="flex" gap={2} mt={2} flexWrap="wrap">
+            {item.images.map((src, i) => (
+              <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+            ))}
+          </Box>
+        )}
+
         {/* Etymology origin breakdown with badges */}
         {isEtymology && item.originBreakdown && item.originBreakdown.length > 0 && (
           <Box mt={2}>
@@ -392,7 +371,7 @@ function ResultCard({
                 Your answer: {item.userAnswer}
               </Text>
             )}
-            <Text fontSize="xs" color={item.correct ? "#16a34a" : "fg.muted"} mb={1}>
+            <Text fontSize="xs" color={item.correct ? "green.600" : "fg.muted"} mb={1}>
               {item.correct ? "Breakdown:" : "Correct:"}
             </Text>
             <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
@@ -401,16 +380,16 @@ function ResultCard({
                 return (
                   <Box key={i} display="flex" alignItems="center" gap={1}>
                     {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-                    <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
+                    <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
                     <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
                     {p.language && (
-                      <Box px={1.5} py={0} borderRadius="full" bg="#f3f4f6">
-                        <Text fontSize="2xs" color="#666">{p.language}</Text>
+                      <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                        <Text fontSize="2xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
                       </Box>
                     )}
                     {typeBadge && p.type && (
-                      <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg}>
-                        <Text fontSize="2xs" color={typeBadge.color}>{p.type}</Text>
+                      <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg} _dark={{ bg: typeBadge.darkBg }}>
+                        <Text fontSize="2xs" color={typeBadge.color} _dark={{ color: typeBadge.darkColor }}>{p.type}</Text>
                       </Box>
                     )}
                   </Box>
@@ -426,79 +405,10 @@ function ResultCard({
             {item.originBreakdown.map((p, i) => (
               <Box key={i} display="flex" alignItems="center" gap={1}>
                 {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-                <Text fontSize="xs" color="#2563eb" fontWeight="medium">{p.origin}</Text>
+                <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
                 <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
               </Box>
             ))}
-          </Box>
-        )}
-
-        {/* Review date */}
-        {item.nextReviewDate && (
-          <Box
-            mt={2}
-            bg="blue.50"
-            _dark={{ bg: "blue.900/20", borderColor: "blue.700" }}
-            borderWidth="1px"
-            borderColor="blue.200"
-            borderRadius="md"
-            p={2}
-          >
-            {showDatePicker ? (
-              <VStack align="stretch" gap={2}>
-                <Text fontSize="xs" fontWeight="medium">
-                  Pick a new review date:
-                </Text>
-                <Input
-                  type="date"
-                  size="sm"
-                  value={customDate}
-                  min={tomorrowStr}
-                  onChange={(e) => setCustomDate(e.target.value)}
-                />
-                <Box display="flex" gap={2} justifyContent="flex-end">
-                  <Button
-                    size="xs"
-                    variant="ghost"
-                    onClick={() => setShowDatePicker(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button
-                    size="xs"
-                    colorPalette="blue"
-                    onClick={() => {
-                      if (customDate) {
-                        onChangeReviewDate(item, customDate);
-                      }
-                      setShowDatePicker(false);
-                    }}
-                  >
-                    Save
-                  </Button>
-                </Box>
-              </VStack>
-            ) : (
-              <>
-                <Text fontSize="xs" fontWeight="medium">
-                  Next review: {formatReviewDate(item.nextReviewDate)}
-                </Text>
-                {item.noteId && item.learnedAt && (
-                  <Text
-                    fontSize="xs"
-                    color="blue.600"
-                    _dark={{ color: "blue.300" }}
-                    cursor="pointer"
-                    onClick={() => {
-                      setCustomDate(item.nextReviewDate!);
-                      setShowDatePicker(true);
-                    }}
-                  >
-                    Change
-                  </Text>
-                )}
-              </>
-            )}
           </Box>
         )}
 

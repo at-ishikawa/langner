@@ -28,6 +28,16 @@ func CardInfoFromCard(card Card) CardInfo {
 	}
 }
 
+// CardInfoFromFreeformCard converts a FreeformCard to CardInfo.
+func CardInfoFromFreeformCard(card FreeformCard) CardInfo {
+	return CardInfo{
+		NotebookName: card.NotebookName,
+		StoryTitle:   card.StoryTitle,
+		SceneTitle:   card.SceneTitle,
+		Expression:   card.Expression,
+	}
+}
+
 // CardInfoFromReverseCard converts a ReverseCard to CardInfo.
 func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 	return CardInfo{
@@ -61,7 +71,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 		intervalDays = 3650 // ~10 years
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 
 	if quizType == notebook.QuizTypeReverse {
 		if !s.setSkipInterval(updater, info, intervalDays, true) {
@@ -76,6 +86,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 				true,
 				5,     // high quality so it gets a large interval
 				0,
+				notebook.QuizTypeReverse,
 			)
 			// Now set the interval on the newly created record
 			s.setSkipInterval(updater, info, intervalDays, true)
@@ -164,7 +175,7 @@ func (s *Service) ResumeWord(info CardInfo, quizType notebook.QuizType) error {
 		return fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 	isReverse := quizType == notebook.QuizTypeReverse
 	s.setSkipInterval(updater, info, 0, isReverse)
 
@@ -183,7 +194,7 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (str
 		return "", fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 	isReverse := quizType == notebook.QuizTypeReverse
 	nextReview := s.toggleLastAnswer(updater, info, isReverse)
 
@@ -214,7 +225,7 @@ func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, inf
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				return toggleLogs(&h.Expressions[ei], isReverse)
+				return toggleLogs(&h.Expressions[ei], isReverse, s.calculator)
 			}
 			continue
 		}
@@ -227,14 +238,14 @@ func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, inf
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				return toggleLogs(&scene.Expressions[ei], isReverse)
+				return toggleLogs(&scene.Expressions[ei], isReverse, s.calculator)
 			}
 		}
 	}
 	return ""
 }
 
-func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool) string {
+func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool, calculator notebook.IntervalCalculator) string {
 	var logs []notebook.LearningRecord
 	if isReverse {
 		logs = expr.ReverseLogs
@@ -255,29 +266,18 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool) string
 		log.Quality = 1
 	}
 
-	// Recalculate interval
-	correctStreak := notebook.GetCorrectStreak(logs)
-	ef := expr.EasinessFactor
-	if isReverse {
-		ef = expr.ReverseEasinessFactor
+	// Derive EF from logs before this entry and recalculate interval
+	var previousLogs []notebook.LearningRecord
+	if len(logs) > 1 {
+		previousLogs = logs[1:]
 	}
-	if ef == 0 {
-		ef = notebook.DefaultEasinessFactor
-	}
-	ef = notebook.UpdateEasinessFactor(ef, log.Quality, correctStreak)
-	newInterval := notebook.CalculateNextInterval(
-		notebook.GetLastInterval(logs[1:]),
-		ef,
-		log.Quality,
-		correctStreak,
-	)
+	derivedEF := calculator.DeriveEF(previousLogs)
+	newInterval, _ := calculator.CalculateInterval(previousLogs, log.Quality, derivedEF)
 	log.IntervalDays = newInterval
 
 	if isReverse {
-		expr.ReverseEasinessFactor = ef
 		expr.ReverseLogs = logs
 	} else {
-		expr.EasinessFactor = ef
 		expr.LearnedLogs = logs
 	}
 

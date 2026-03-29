@@ -9,6 +9,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/fatih/color"
 )
@@ -25,13 +26,15 @@ func NewFreeformQuizCLI(
 	notebooksConfig config.NotebooksConfig,
 	dictionaryCacheDir string,
 	openaiClient inference.Client,
+	quizCfg config.QuizConfig,
 ) (*FreeformQuizCLI, error) {
 	baseCLI, _, err := initializeQuizCLI(notebooksConfig, dictionaryCacheDir, openaiClient)
 	if err != nil {
 		return nil, err
 	}
 
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory))
+	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
+	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	cards, err := svc.LoadAllWords()
 	if err != nil {

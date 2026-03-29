@@ -49,7 +49,7 @@ func TestNewMigrateLearningHistoryCommand(t *testing.T) {
 	cmd := newMigrateLearningHistoryCommand()
 
 	assert.Equal(t, "learning-history", cmd.Use)
-	assert.Equal(t, "Migrate learning history files to new SM-2 format", cmd.Short)
+	assert.Equal(t, "Migrate learning history files to current format", cmd.Short)
 	assert.NotNil(t, cmd.RunE)
 }
 

@@ -13,13 +13,17 @@ import (
 // YAMLLearningRepository reads learning history from YAML files and writes
 // learning logs as LearningHistory YAML files.
 type YAMLLearningRepository struct {
-	directory string
-	outputDir string
+	directory  string
+	outputDir  string
+	calculator notebook.IntervalCalculator
 }
 
 // NewYAMLLearningRepository creates a new YAMLLearningRepository for reading.
-func NewYAMLLearningRepository(directory string) *YAMLLearningRepository {
-	return &YAMLLearningRepository{directory: directory}
+func NewYAMLLearningRepository(directory string, calculator notebook.IntervalCalculator) *YAMLLearningRepository {
+	if calculator == nil {
+		calculator = &notebook.SM2Calculator{}
+	}
+	return &YAMLLearningRepository{directory: directory, calculator: calculator}
 }
 
 // NewYAMLLearningRepositoryWriter creates a new YAMLLearningRepository for writing.
@@ -355,14 +359,6 @@ func buildExpression(
 		Expression: entry,
 	}
 
-	// Extract easiness factor from the latest log for each quiz type
-	if len(learnedLogs) > 0 {
-		expr.EasinessFactor = learnedLogs[0].EasinessFactor
-	}
-	if len(reverseLogs) > 0 {
-		expr.ReverseEasinessFactor = reverseLogs[0].EasinessFactor
-	}
-
 	// Convert to LearningRecord
 	expr.LearnedLogs = convertToRecords(learnedLogs)
 	expr.ReverseLogs = convertToRecords(reverseLogs)
@@ -393,12 +389,16 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	if dir == "" { dir = r.directory }
 	learningHistories, err := notebook.NewLearningHistories(dir)
 	if err != nil { return fmt.Errorf("load learning histories: %w", err) }
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[log.NotebookName])
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[log.NotebookName], r.calculator)
 	quizType := notebook.QuizType(log.QuizType)
 	if quizType == notebook.QuizTypeReverse {
-		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs))
+		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeReverse)
 	} else {
 		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), quizType)
+		// Freeform quiz tests word recall (similar to reverse), so also update reverse logs
+		if quizType == notebook.QuizTypeFreeform {
+			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeFreeform)
+		}
 	}
 	notePath := filepath.Join(dir, log.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil { return fmt.Errorf("write learning history for %q: %w", log.NotebookName, err) }

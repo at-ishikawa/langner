@@ -140,6 +140,142 @@ func ConvertMarkersInText(text string, definitions []Note, conversionStyle Conve
 	})
 }
 
+// HighlightDefinitionsInText highlights definition expressions found in text
+// without relying on {{ }} markers. It matches definition Expression (and Definition
+// if set) against the text using case-insensitive matching.
+// For single-word expressions, word boundary matching is used to avoid partial matches.
+// For multi-word expressions, exact substring matching is used.
+func HighlightDefinitionsInText(text string, definitions []Note, conversionStyle ConversionStyle) string {
+	if conversionStyle == ConversionStylePlain {
+		return text
+	}
+
+	color.NoColor = false
+	bold := color.New(color.Bold)
+
+	// Collect all expressions to match, longest first to avoid partial replacements
+	type exprEntry struct {
+		pattern *regexp.Regexp
+	}
+	var entries []exprEntry
+
+	// Deduplicate and sort expressions longest-first
+	seen := make(map[string]bool)
+	var expressions []string
+	for _, def := range definitions {
+		expr := strings.TrimSpace(def.Expression)
+		if expr != "" && !seen[strings.ToLower(expr)] {
+			seen[strings.ToLower(expr)] = true
+			expressions = append(expressions, expr)
+		}
+		if def.Definition != "" && !strings.EqualFold(def.Definition, expr) {
+			defStr := strings.TrimSpace(def.Definition)
+			if defStr != "" && !seen[strings.ToLower(defStr)] {
+				seen[strings.ToLower(defStr)] = true
+				expressions = append(expressions, defStr)
+			}
+		}
+	}
+	// Sort longest first so longer expressions are matched before shorter substrings
+	sort.Slice(expressions, func(i, j int) bool {
+		return len(expressions[i]) > len(expressions[j])
+	})
+
+	for _, expr := range expressions {
+		escaped := regexp.QuoteMeta(expr)
+		var patternStr string
+		if strings.Contains(expr, " ") {
+			// Multi-word: case-insensitive match, extending to word boundary
+			// so "bargain hunter" matches all of "bargain hunters"
+			patternStr = `(?i)` + escaped + `\w*`
+		} else {
+			// Single-word: use word boundaries to avoid partial matches.
+			// Only apply \b where the expression starts/ends with a word character,
+			// since \b requires a transition between word and non-word characters.
+			prefix := ""
+			if len(expr) > 0 && isWordChar(expr[0]) {
+				prefix = `\b`
+			}
+			patternStr = `(?i)` + prefix + escaped + `\w*`
+		}
+		compiled, err := regexp.Compile(patternStr)
+		if err != nil {
+			continue
+		}
+		entries = append(entries, exprEntry{pattern: compiled})
+	}
+
+	// Apply replacements sequentially, using a placeholder to prevent
+	// double-highlighting of already-replaced text.
+	type replacement struct {
+		start int
+		end   int
+		text  string
+	}
+
+	for _, entry := range entries {
+		var replacements []replacement
+		matches := entry.pattern.FindAllStringIndex(text, -1)
+		for _, loc := range matches {
+			matched := text[loc[0]:loc[1]]
+			// Skip if this match is already inside a highlighted region
+			// Check for surrounding ** (markdown) or ANSI codes (terminal)
+			if loc[0] >= 2 && text[loc[0]-2:loc[0]] == "**" {
+				continue
+			}
+			var highlighted string
+			switch conversionStyle {
+			case ConversionStyleMarkdown:
+				highlighted = fmt.Sprintf("**%s**", matched)
+			case ConversionStyleTerminal:
+				highlighted = bold.Sprint(matched)
+			default:
+				highlighted = matched
+			}
+			replacements = append(replacements, replacement{start: loc[0], end: loc[1], text: highlighted})
+		}
+		// Apply replacements from end to start so indices remain valid
+		for i := len(replacements) - 1; i >= 0; i-- {
+			r := replacements[i]
+			text = text[:r.start] + r.text + text[r.end:]
+		}
+	}
+
+	return text
+}
+
+// buildValidatePattern builds a regex for validation that matches the expression
+// as complete words. Uses \b word boundaries so "bargain hunter" won't match
+// "bargain hunters" — the expression must match the full word forms in the text.
+// Punctuation (quotes, periods, commas) adjacent to the match is fine since
+// \b sits between a word char and a non-word char.
+func buildValidatePattern(expression string) *regexp.Regexp {
+	escaped := regexp.QuoteMeta(expression)
+
+	prefix := ""
+	suffix := ""
+	if len(expression) > 0 && isWordChar(expression[0]) {
+		prefix = `\b`
+	}
+	if len(expression) > 0 && isWordChar(expression[len(expression)-1]) {
+		suffix = `\b`
+	}
+
+	pattern := `(?i)` + prefix + escaped + suffix
+	compiled, err := regexp.Compile(pattern)
+	if err != nil {
+		// Fallback to simple contains
+		compiled = regexp.MustCompile(`(?i)` + escaped)
+	}
+	return compiled
+}
+
+// isWordChar returns true if the byte is a word character (letter, digit, or underscore),
+// matching the behavior of \b in regular expressions.
+func isWordChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
+}
+
 // ConversionStyle defines how {{ expression }} markers should be converted
 type ConversionStyle int
 
@@ -210,7 +346,8 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 
 			scene.Definitions = definitions
 			if len(scene.Conversations) == 0 && len(scene.Statements) == 0 {
-				return nil, fmt.Errorf("empty scene.Conversations and Statements: %v in story %s", scene, notebook.Event)
+				// Skip scenes with definitions but no context (e.g., definitions-only books)
+				continue
 			}
 			scenes = append(scenes, scene)
 		}
@@ -327,64 +464,40 @@ func (scene *StoryScene) Validate(location string) []ValidationError {
 
 		defLocation := fmt.Sprintf("%s -> definition[%d]: %s", location, defIdx, expression)
 
-		// Check if expression appears in any conversation quote or statement (case-insensitive)
-		foundWithMarker := false
-		foundWithoutMarker := false
-		lowerExpression := strings.ToLower(expression)
+		// Build a regex that matches the expression as complete words.
+		// Word boundaries at start/end ensure "bargain hunter" doesn't match
+		// inside "bargain hunters" (the trailing 's' makes it a different word form).
+		// Non-word characters (punctuation, quotes) adjacent to the match are OK.
+		exprPattern := buildValidatePattern(expression)
+
+		found := false
 
 		// Check conversations
 		for _, conv := range scene.Conversations {
-			lowerQuote := strings.ToLower(conv.Quote)
-
-			// Check for {{ expression }} marker (case-insensitive)
-			if strings.Contains(lowerQuote, fmt.Sprintf("{{ %s }}", lowerExpression)) ||
-				strings.Contains(lowerQuote, fmt.Sprintf("{{%s}}", lowerExpression)) {
-				foundWithMarker = true
+			if exprPattern.MatchString(conv.Quote) {
+				found = true
 				break
-			}
-
-			// Check case-insensitive in plain text (without markers)
-			if strings.Contains(lowerQuote, lowerExpression) {
-				foundWithoutMarker = true
 			}
 		}
 
-		// Check statements if not already found with marker
-		if !foundWithMarker {
+		// Check statements if not already found
+		if !found {
 			for _, statement := range scene.Statements {
-				lowerStatement := strings.ToLower(statement)
-
-				// Check for {{ expression }} marker (case-insensitive)
-				if strings.Contains(lowerStatement, fmt.Sprintf("{{ %s }}", lowerExpression)) ||
-					strings.Contains(lowerStatement, fmt.Sprintf("{{%s}}", lowerExpression)) {
-					foundWithMarker = true
+				if exprPattern.MatchString(statement) {
+					found = true
 					break
-				}
-
-				// Check case-insensitive in plain text (without markers)
-				if strings.Contains(lowerStatement, lowerExpression) {
-					foundWithoutMarker = true
 				}
 			}
 		}
 
 		// If not found at all, report error
-		if !foundWithMarker && !foundWithoutMarker {
+		if !found {
 			errors = append(errors, ValidationError{
 				Location: defLocation,
 				Message:  fmt.Sprintf("expression %q not found in any conversation quote or statement", expression),
 				Suggestions: []string{
 					"add the expression to a conversation quote or statement",
 					"or mark it as not_used: true",
-				},
-			})
-		} else if foundWithoutMarker && !foundWithMarker {
-			// Found without marker - report as error
-			errors = append(errors, ValidationError{
-				Location: defLocation,
-				Message:  fmt.Sprintf("expression %q found in conversation or statement but missing {{ }} markers", expression),
-				Suggestions: []string{
-					"run highlight-expressions command to add {{ }} markers",
 				},
 			})
 		}
@@ -451,18 +564,20 @@ func (converter assetsStoryConverter) convertStoryNotebook(nb StoryNotebook) ass
 func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets.StoryScene {
 	assetsConversations := make([]assets.Conversation, len(scene.Conversations))
 	for i, conv := range scene.Conversations {
-		// Apply marker conversion to the quote text
+		// First strip any remaining {{ }} markers (backward compat), then highlight definitions
 		convertedQuote := ConvertMarkersInText(conv.Quote, scene.Definitions, ConversionStyleMarkdown, "")
+		convertedQuote = HighlightDefinitionsInText(convertedQuote, scene.Definitions, ConversionStyleMarkdown)
 		assetsConversations[i] = assets.Conversation{
 			Speaker: conv.Speaker,
 			Quote:   convertedQuote,
 		}
 	}
 
-	// Convert statements with marker processing
+	// Convert statements: strip markers then highlight definitions
 	assetsStatements := make([]string, len(scene.Statements))
 	for i, statement := range scene.Statements {
-		assetsStatements[i] = ConvertMarkersInText(statement, scene.Definitions, ConversionStyleMarkdown, "")
+		converted := ConvertMarkersInText(statement, scene.Definitions, ConversionStyleMarkdown, "")
+		assetsStatements[i] = HighlightDefinitionsInText(converted, scene.Definitions, ConversionStyleMarkdown)
 	}
 
 	assetsNotes := make([]assets.StoryNote, len(scene.Definitions))
@@ -475,6 +590,7 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 			Pronunciation: note.Pronunciation,
 			PartOfSpeech:  note.PartOfSpeech,
 			Origin:        note.Origin,
+			Note:          note.Note,
 			Synonyms:      note.Synonyms,
 			Antonyms:      note.Antonyms,
 			Images:        note.Images,

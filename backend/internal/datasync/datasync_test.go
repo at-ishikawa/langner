@@ -493,7 +493,6 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 						assert.Equal(t, 1500, logs[0].ResponseTimeMs)
 						assert.Equal(t, "notebook", logs[0].QuizType)
 						assert.Equal(t, 7, logs[0].IntervalDays)
-						assert.Equal(t, 2.5, logs[0].EasinessFactor)
 						return nil
 					})
 			},
@@ -612,7 +611,6 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
 						require.Len(t, logs, 1)
 						assert.Equal(t, "reverse", logs[0].QuizType)
-						assert.Equal(t, 2.3, logs[0].EasinessFactor)
 						return nil
 					})
 			},

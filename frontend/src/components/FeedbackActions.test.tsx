@@ -22,17 +22,6 @@ function renderComponent(props: Partial<Parameters<typeof FeedbackActions>[0]> =
 }
 
 describe("FeedbackActions", () => {
-  it("renders next review date in blue box with formatted date when nextReviewDate is provided", () => {
-    renderComponent({ nextReviewDate: "2027-06-15" });
-    expect(screen.getByText(/Next review:/)).toBeInTheDocument();
-    expect(screen.getByText(/June 15, 2027/)).toBeInTheDocument();
-  });
-
-  it("does not render review date box when nextReviewDate is undefined", () => {
-    renderComponent({ nextReviewDate: undefined });
-    expect(screen.queryByText(/Next review:/)).not.toBeInTheDocument();
-  });
-
   it("renders Next button with correct label", () => {
     renderComponent({ nextLabel: "Next" });
     expect(screen.getByText("Next")).toBeInTheDocument();
@@ -99,60 +88,5 @@ describe("FeedbackActions", () => {
     renderComponent({ onSkip, noteId: BigInt(1) });
     fireEvent.click(screen.getByText("Exclude from Quizzes"));
     expect(onSkip).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows Change link next to review date when onChangeReviewDate is provided", () => {
-    renderComponent({ nextReviewDate: "2027-06-15", onChangeReviewDate: vi.fn() });
-    expect(screen.getByText("Change")).toBeInTheDocument();
-  });
-
-  it("does not show Change link when onChangeReviewDate is not provided", () => {
-    renderComponent({ nextReviewDate: "2027-06-15" });
-    expect(screen.queryByText("Change")).not.toBeInTheDocument();
-  });
-
-  it("opens date picker when Change link is clicked", () => {
-    renderComponent({ nextReviewDate: "2027-06-15", onChangeReviewDate: vi.fn() });
-    fireEvent.click(screen.getByText("Change"));
-    expect(screen.getByText("Pick a new review date:")).toBeInTheDocument();
-    expect(screen.getByText("Save")).toBeInTheDocument();
-    expect(screen.getByText("Cancel")).toBeInTheDocument();
-  });
-
-  it("calls onChangeReviewDate with new date when Save is clicked", () => {
-    const onChangeReviewDate = vi.fn();
-    renderComponent({ nextReviewDate: "2027-06-15", onChangeReviewDate });
-    fireEvent.click(screen.getByText("Change"));
-
-    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
-    fireEvent.change(dateInput, { target: { value: "2027-07-01" } });
-    fireEvent.click(screen.getByText("Save"));
-
-    expect(onChangeReviewDate).toHaveBeenCalledWith("2027-07-01");
-  });
-
-  it("closes date picker when Cancel is clicked without calling onChangeReviewDate", () => {
-    const onChangeReviewDate = vi.fn();
-    renderComponent({ nextReviewDate: "2027-06-15", onChangeReviewDate });
-    fireEvent.click(screen.getByText("Change"));
-    expect(screen.getByText("Pick a new review date:")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByText("Cancel"));
-    expect(screen.queryByText("Pick a new review date:")).not.toBeInTheDocument();
-    expect(screen.getByText(/Next review:/)).toBeInTheDocument();
-    expect(onChangeReviewDate).not.toHaveBeenCalled();
-  });
-
-  it("date picker has min set to tomorrow", () => {
-    renderComponent({ nextReviewDate: "2027-06-15", onChangeReviewDate: vi.fn() });
-    fireEvent.click(screen.getByText("Change"));
-
-    const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement;
-    expect(dateInput).toBeTruthy();
-
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowStr = tomorrow.toISOString().split("T")[0];
-    expect(dateInput.min).toBe(tomorrowStr);
   });
 });

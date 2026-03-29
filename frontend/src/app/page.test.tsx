@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import HomePage from "./page";
@@ -11,7 +11,18 @@ function renderPage() {
   );
 }
 
+function renderPageDark() {
+  document.documentElement.classList.add("dark");
+  document.documentElement.setAttribute("data-theme", "dark");
+  return renderPage();
+}
+
 describe("HomePage", () => {
+  afterEach(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.removeAttribute("data-theme");
+  });
+
   it("renders app title", () => {
     renderPage();
     expect(screen.getByText("Langner")).toBeInTheDocument();
@@ -45,5 +56,14 @@ describe("HomePage", () => {
     renderPage();
     const links = screen.getAllByRole("link");
     expect(links).toHaveLength(3);
+  });
+
+  it("renders in dark mode without errors", () => {
+    renderPageDark();
+    expect(screen.getByText("Langner")).toBeInTheDocument();
+    expect(screen.getByText("Books")).toBeInTheDocument();
+    expect(screen.getByText("Learn")).toBeInTheDocument();
+    expect(screen.getByText("Quiz")).toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(3);
   });
 });

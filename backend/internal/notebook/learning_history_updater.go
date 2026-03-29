@@ -12,15 +12,29 @@ func normalizeTitle(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// LearningHistoryUpdater provides methods to update learning history
-type LearningHistoryUpdater struct {
-	history []LearningHistory
+// normalizeQuotes replaces smart quotes with ASCII equivalents for comparison.
+func normalizeQuotes(s string) string {
+	r := strings.NewReplacer(
+		"\u2018", "'", "\u2019", "'", // smart single quotes
+		"\u201C", "\"", "\u201D", "\"", // smart double quotes
+	)
+	return r.Replace(s)
 }
 
-// NewLearningHistoryUpdater creates a new updater with the given history
-func NewLearningHistoryUpdater(history []LearningHistory) *LearningHistoryUpdater {
+// LearningHistoryUpdater provides methods to update learning history
+type LearningHistoryUpdater struct {
+	history    []LearningHistory
+	calculator IntervalCalculator
+}
+
+// NewLearningHistoryUpdater creates a new updater with the given history and calculator.
+func NewLearningHistoryUpdater(history []LearningHistory, calculator IntervalCalculator) *LearningHistoryUpdater {
+	if calculator == nil {
+		calculator = &SM2Calculator{}
+	}
 	return &LearningHistoryUpdater{
-		history: history,
+		history:    history,
+		calculator: calculator,
 	}
 }
 
@@ -96,7 +110,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
 				return true
 			}
@@ -112,7 +126,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
 			}
@@ -132,6 +146,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
+	quizType QuizType,
 ) bool {
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
 	normalizedSceneTitle := normalizeTitle(sceneTitle)
@@ -146,7 +161,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
 				return true
 			}
@@ -162,14 +177,14 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
 			}
 		}
 	}
 
-	u.createNewExpressionWithQualityForReverse(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs)
+	u.createNewExpressionWithQualityForReverse(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 	return false
 }
 
@@ -179,18 +194,17 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
+	quizType QuizType,
 ) {
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
 
 	newExpression := LearningHistoryExpression{
-		Expression:            expression,
-		LearnedLogs:           []LearningRecord{},
-		EasinessFactor:        DefaultEasinessFactor,
-		ReverseLogs:           []LearningRecord{},
-		ReverseEasinessFactor: DefaultEasinessFactor,
+		Expression:  expression,
+		LearnedLogs: []LearningRecord{},
+		ReverseLogs: []LearningRecord{},
 	}
-	newExpression.AddRecordWithQualityForReverse(isCorrect, isKnownWord, quality, responseTimeMs)
+	newExpression.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 
 	if len(newExpression.ReverseLogs) == 0 {
 		return
@@ -223,11 +237,10 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
 
 	newExpression := LearningHistoryExpression{
-		Expression:     expression,
-		LearnedLogs:    []LearningRecord{},
-		EasinessFactor: DefaultEasinessFactor,
+		Expression:  expression,
+		LearnedLogs: []LearningRecord{},
 	}
-	newExpression.AddRecordWithQuality(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	newExpression.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 
 	if len(newExpression.LearnedLogs) == 0 {
 		return
@@ -280,10 +293,10 @@ func (u *LearningHistoryUpdater) OverrideLog(
 	learnedAt string,
 	markCorrect *bool,
 	nextReviewDate string,
-) (originalQuality int, originalStatus string, originalIntervalDays int, originalEF float64, newNextReview string, found bool) {
+) (originalQuality int, originalStatus string, originalIntervalDays int, newNextReview string, found bool) {
 	expr := u.FindExpressionByName(expression)
 	if expr == nil {
-		return 0, "", 0, 0, "", false
+		return 0, "", 0, "", false
 	}
 
 	logs := expr.GetLogsForQuizType(quizType)
@@ -295,7 +308,6 @@ func (u *LearningHistoryUpdater) OverrideLog(
 		originalQuality = log.Quality
 		originalStatus = string(log.Status)
 		originalIntervalDays = log.IntervalDays
-		originalEF = expr.GetEasinessFactorForQuizType(quizType)
 
 		if markCorrect != nil {
 			if *markCorrect {
@@ -306,26 +318,14 @@ func (u *LearningHistoryUpdater) OverrideLog(
 				logs[i].Status = LearnedStatusMisunderstood
 			}
 
-			// Recalculate interval and easiness factor
-			correctStreak := GetCorrectStreak(logs)
-			lastInterval := 0
+			// Derive EF from logs before this entry
+			var previousLogs []LearningRecord
 			if i+1 < len(logs) {
-				lastInterval = logs[i+1].IntervalDays
+				previousLogs = logs[i+1:]
 			}
-			newEF := UpdateEasinessFactor(originalEF, logs[i].Quality, correctStreak)
-			newInterval := CalculateNextInterval(lastInterval, newEF, logs[i].Quality, correctStreak)
+			derivedEF := u.calculator.DeriveEF(previousLogs)
+			newInterval, _ := u.calculator.CalculateInterval(previousLogs, logs[i].Quality, derivedEF)
 			logs[i].IntervalDays = newInterval
-
-			switch quizType {
-			case QuizTypeReverse:
-				expr.ReverseEasinessFactor = newEF
-			case QuizTypeEtymologyBreakdown:
-				expr.EtymologyBreakdownEasinessFactor = newEF
-			case QuizTypeEtymologyAssembly:
-				expr.EtymologyAssemblyEasinessFactor = newEF
-			default:
-				expr.EasinessFactor = newEF
-			}
 		}
 
 		if nextReviewDate != "" {
@@ -353,10 +353,10 @@ func (u *LearningHistoryUpdater) OverrideLog(
 		}
 
 		newNextReview = logs[i].LearnedAt.AddDate(0, 0, logs[i].IntervalDays).Format("2006-01-02")
-		return originalQuality, originalStatus, originalIntervalDays, originalEF, newNextReview, true
+		return originalQuality, originalStatus, originalIntervalDays, newNextReview, true
 	}
 
-	return 0, "", 0, 0, "", false
+	return 0, "", 0, "", false
 }
 
 // UndoOverrideLog restores original values for a learning log entry.
@@ -367,7 +367,6 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(
 	originalQuality int,
 	originalStatus string,
 	originalIntervalDays int,
-	originalEF float64,
 ) (correct bool, nextReview string, found bool) {
 	expr := u.FindExpressionByName(expression)
 	if expr == nil {
@@ -387,16 +386,12 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(
 
 		switch quizType {
 		case QuizTypeReverse:
-			expr.ReverseEasinessFactor = originalEF
 			expr.ReverseLogs = logs
 		case QuizTypeEtymologyBreakdown:
-			expr.EtymologyBreakdownEasinessFactor = originalEF
 			expr.EtymologyBreakdownLogs = logs
 		case QuizTypeEtymologyAssembly:
-			expr.EtymologyAssemblyEasinessFactor = originalEF
 			expr.EtymologyAssemblyLogs = logs
 		default:
-			expr.EasinessFactor = originalEF
 			expr.LearnedLogs = logs
 		}
 
@@ -438,7 +433,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQualityForEtymology(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				exp.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
 				return true
 			}
@@ -454,7 +449,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
-				exp.AddRecordWithQualityForEtymology(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+				exp.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
 			}
@@ -477,11 +472,10 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
 
 	newExpression := LearningHistoryExpression{
-		Expression:     expression,
-		LearnedLogs:    []LearningRecord{},
-		EasinessFactor: DefaultEasinessFactor,
+		Expression:  expression,
+		LearnedLogs: []LearningRecord{},
 	}
-	newExpression.AddRecordWithQualityForEtymology(isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 
 	logs := newExpression.GetLogsForQuizType(quizType)
 	if len(logs) == 0 {

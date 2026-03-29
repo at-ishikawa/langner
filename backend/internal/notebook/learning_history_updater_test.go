@@ -95,7 +95,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 								{
 									Expression:            "test-word",
 									LearnedLogs:           []LearningRecord{},
-									ReverseEasinessFactor: DefaultEasinessFactor,
 								},
 							},
 						},
@@ -125,8 +124,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 						{
 							Expression:            "test-word",
 							LearnedLogs:           []LearningRecord{},
-							ReverseEasinessFactor: DefaultEasinessFactor,
-						},
+							},
 					},
 				},
 			},
@@ -166,8 +164,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 						{
 							Expression:            "existing-word",
 							LearnedLogs:           []LearningRecord{},
-							ReverseEasinessFactor: DefaultEasinessFactor,
-						},
+							},
 					},
 				},
 			},
@@ -197,7 +194,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 								{
 									Expression:            "word-a",
 									LearnedLogs:           []LearningRecord{},
-									ReverseEasinessFactor: DefaultEasinessFactor,
 								},
 							},
 						},
@@ -230,7 +226,6 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 								{
 									Expression:            "word-a",
 									LearnedLogs:           []LearningRecord{},
-									ReverseEasinessFactor: DefaultEasinessFactor,
 								},
 							},
 						},
@@ -263,9 +258,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 								{
 									Expression:            "break the ice",
 									LearnedLogs:           []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-									EasinessFactor:        2.5,
-									ReverseEasinessFactor: DefaultEasinessFactor,
-								},
+																	},
 							},
 						},
 					},
@@ -295,9 +288,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 						{
 							Expression:            "lose one's temper",
 							LearnedLogs:           []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-							EasinessFactor:        2.5,
-							ReverseEasinessFactor: DefaultEasinessFactor,
-						},
+														},
 					},
 				},
 			},
@@ -316,7 +307,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			updater := NewLearningHistoryUpdater(tc.initialHistory)
+			updater := NewLearningHistoryUpdater(tc.initialHistory, nil)
 
 			found := updater.UpdateOrCreateExpressionWithQualityForReverse(
 				tc.notebookID,
@@ -328,6 +319,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 				tc.isKnownWord,
 				tc.quality,
 				tc.responseTimeMs,
+				QuizTypeReverse,
 			)
 
 			assert.Equal(t, tc.wantFound, found)
@@ -822,8 +814,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 								{
 									Expression:     "break the ice",
 									LearnedLogs:    []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-									EasinessFactor: 2.5,
-								},
+																	},
 							},
 						},
 					},
@@ -857,8 +848,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 						{
 							Expression:     "lose one's temper",
 							LearnedLogs:    []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-							EasinessFactor: 2.5,
-						},
+													},
 					},
 				},
 			},
@@ -881,7 +871,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			updater := NewLearningHistoryUpdater(tc.initialHistory)
+			updater := NewLearningHistoryUpdater(tc.initialHistory, nil)
 
 			found := updater.UpdateOrCreateExpressionWithQuality(
 				tc.notebookID,

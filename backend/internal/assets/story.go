@@ -55,6 +55,7 @@ type StoryNote struct {
 	Pronunciation string
 	PartOfSpeech  string
 	Origin        string
+	Note          string
 	Synonyms      []string
 	Antonyms      []string
 	Images        []string

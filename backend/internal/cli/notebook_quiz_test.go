@@ -297,6 +297,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 				dictionaryCacheDir,
 				mockClient,
 				true, // includeNoCorrectAnswers
+				config.QuizConfig{},
 			)
 			require.NoError(t, err)
 
@@ -374,6 +375,7 @@ func TestNewFlashcardQuizCLI(t *testing.T) {
 				},
 				dictionaryCacheDir,
 				mockClient,
+				config.QuizConfig{},
 			)
 
 			if tt.wantErr {
@@ -774,7 +776,7 @@ func TestNotebookQuizCLI_session(t *testing.T) {
 			// Set up CLI with mocks - use a real quiz.Service backed by temp dirs
 			svc := quiz.NewService(config.NotebooksConfig{
 				LearningNotesDirectory: learningDir,
-			}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+			}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 			cli := &NotebookQuizCLI{
 				InteractiveQuizCLI: &InteractiveQuizCLI{

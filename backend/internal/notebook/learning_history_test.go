@@ -644,8 +644,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 		{
 			name: "correct known word",
 			expression: LearningHistoryExpression{
-				Expression:            "hello",
-				ReverseEasinessFactor: DefaultEasinessFactor,
+				Expression: "hello",
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
@@ -656,8 +655,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 		{
 			name: "correct unknown word",
 			expression: LearningHistoryExpression{
-				Expression:            "hello",
-				ReverseEasinessFactor: DefaultEasinessFactor,
+				Expression: "hello",
 			},
 			isCorrect:      true,
 			isKnownWord:    false,
@@ -668,8 +666,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 		{
 			name: "incorrect",
 			expression: LearningHistoryExpression{
-				Expression:            "hello",
-				ReverseEasinessFactor: DefaultEasinessFactor,
+				Expression: "hello",
 			},
 			isCorrect:      false,
 			isKnownWord:    false,
@@ -678,10 +675,9 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 			wantStatus:     LearnedStatusMisunderstood,
 		},
 		{
-			name: "zero easiness factor gets set to default",
+			name: "no prior logs derives default EF",
 			expression: LearningHistoryExpression{
-				Expression:            "hello",
-				ReverseEasinessFactor: 0,
+				Expression: "hello",
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
@@ -694,14 +690,13 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exp := tt.expression
-			exp.AddRecordWithQualityForReverse(tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs)
+			exp.AddRecordWithQualityForReverse(&SM2Calculator{}, tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs, QuizTypeReverse)
 
 			assert.Len(t, exp.ReverseLogs, 1)
 			assert.Equal(t, tt.wantStatus, exp.ReverseLogs[0].Status)
 			assert.Equal(t, tt.quality, exp.ReverseLogs[0].Quality)
 			assert.Equal(t, tt.responseTimeMs, exp.ReverseLogs[0].ResponseTimeMs)
 			assert.Equal(t, string(QuizTypeReverse), exp.ReverseLogs[0].QuizType)
-			assert.NotZero(t, exp.ReverseEasinessFactor)
 		})
 	}
 }
@@ -720,8 +715,7 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 		{
 			name: "correct known word",
 			expression: LearningHistoryExpression{
-				Expression:     "hello",
-				EasinessFactor: DefaultEasinessFactor,
+				Expression: "hello",
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
@@ -733,8 +727,7 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 		{
 			name: "correct unknown word",
 			expression: LearningHistoryExpression{
-				Expression:     "hello",
-				EasinessFactor: DefaultEasinessFactor,
+				Expression: "hello",
 			},
 			isCorrect:      true,
 			isKnownWord:    false,
@@ -746,8 +739,7 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 		{
 			name: "incorrect",
 			expression: LearningHistoryExpression{
-				Expression:     "hello",
-				EasinessFactor: DefaultEasinessFactor,
+				Expression: "hello",
 			},
 			isCorrect:      false,
 			isKnownWord:    false,
@@ -757,10 +749,9 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 			wantStatus:     LearnedStatusMisunderstood,
 		},
 		{
-			name: "zero easiness factor gets set to default",
+			name: "no prior logs derives default EF",
 			expression: LearningHistoryExpression{
-				Expression:     "hello",
-				EasinessFactor: 0,
+				Expression: "hello",
 			},
 			isCorrect:      true,
 			isKnownWord:    true,
@@ -774,13 +765,12 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			exp := tt.expression
-			exp.AddRecordWithQuality(tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs, tt.quizType)
+			exp.AddRecordWithQuality(&SM2Calculator{}, tt.isCorrect, tt.isKnownWord, tt.quality, tt.responseTimeMs, tt.quizType)
 
 			assert.Len(t, exp.LearnedLogs, 1)
 			assert.Equal(t, tt.wantStatus, exp.LearnedLogs[0].Status)
 			assert.Equal(t, tt.quality, exp.LearnedLogs[0].Quality)
 			assert.Equal(t, string(tt.quizType), exp.LearnedLogs[0].QuizType)
-			assert.NotZero(t, exp.EasinessFactor)
 		})
 	}
 }
@@ -1069,7 +1059,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T
 				quality = 1
 			}
 
-			exp.AddRecordWithQualityForEtymology(tt.isCorrect, true, quality, 5000, tt.quizType)
+			exp.AddRecordWithQualityForEtymology(&SM2Calculator{}, tt.isCorrect, true, quality, 5000, tt.quizType)
 
 			logs := exp.GetLogsForQuizType(tt.quizType)
 			require.Len(t, logs, 1)

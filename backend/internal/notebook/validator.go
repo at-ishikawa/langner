@@ -62,16 +62,21 @@ type Validator struct {
 	flashcardsDirs     []string
 	definitionsDirs    []string
 	dictionaryDir      string
+	calculator         IntervalCalculator
 }
 
 // NewValidator creates a new validator
-func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, definitionsDirs []string, dictionaryDir string) *Validator {
+func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, definitionsDirs []string, dictionaryDir string, calculator IntervalCalculator) *Validator {
+	if calculator == nil {
+		calculator = &SM2Calculator{}
+	}
 	return &Validator{
 		learningNotesDir:   learningNotesDir,
 		storyNotebooksDirs: storyNotebooksDirs,
 		flashcardsDirs:     flashcardsDirs,
 		definitionsDirs:    definitionsDirs,
 		dictionaryDir:      dictionaryDir,
+		calculator:         calculator,
 	}
 }
 
@@ -114,8 +119,11 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 	// Validate dictionary references
 	v.validateDictionaryReferences(storyNotebooks, result)
 
-	// Validate definitions appear in conversations
+	// Validate definitions appear in conversations (inline definitions)
 	v.validateDefinitionsInConversations(storyNotebooks, result)
+
+	// Validate definitions from separate definitions files appear in conversations
+	v.validateSeparateDefinitionsInConversations(storyNotebooks, result)
 
 	return result, nil
 }
@@ -150,9 +158,6 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 
 	// Create missing learning note entries
 	fixedLearning = v.createMissingLearningNotes(fixedLearning, storyNotebooks, result)
-
-	// Recalculate interval_days for all expressions
-	fixedLearning = v.fixIntervalDays(fixedLearning, result)
 
 	// Fix dictionary reference issues
 	fixedStory := v.fixDictionaryReferences(storyNotebooks, result)
@@ -192,7 +197,7 @@ func (v *Validator) loadLearningHistories() ([]learningHistoryFile, error) {
 func (v *Validator) loadStoryNotebooks() ([]storyNotebookFile, error) {
 	var allFiles []storyNotebookFile
 	for _, dir := range v.storyNotebooksDirs {
-		files, err := loadYamlFiles[[]StoryNotebook](dir, func(path string, info os.FileInfo) bool {
+		files, err := loadYamlFilesSkipErrors[[]StoryNotebook](dir, func(path string, info os.FileInfo) bool {
 			return !info.IsDir() && filepath.Ext(path) == ".yml" && filepath.Base(path) != "index.yml"
 		})
 		if err != nil {
@@ -484,11 +489,11 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						// Merge learning logs into the existing expression
 						if len(expr.LearnedLogs) > 0 {
 							mergedExpressions[existingIdx].LearnedLogs = append(mergedExpressions[existingIdx].LearnedLogs, expr.LearnedLogs...)
-							mergedExpressions[existingIdx].EasinessFactor, mergedExpressions[existingIdx].LearnedLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].LearnedLogs)
+							_, mergedExpressions[existingIdx].LearnedLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].LearnedLogs, v.calculator)
 						}
 						if len(expr.ReverseLogs) > 0 {
 							mergedExpressions[existingIdx].ReverseLogs = append(mergedExpressions[existingIdx].ReverseLogs, expr.ReverseLogs...)
-							mergedExpressions[existingIdx].ReverseEasinessFactor, mergedExpressions[existingIdx].ReverseLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].ReverseLogs)
+							_, mergedExpressions[existingIdx].ReverseLogs, _ = recalculateLearningLogs(mergedExpressions[existingIdx].ReverseLogs, v.calculator)
 						}
 						result.AddWarning(ValidationError{
 							File:    file.path,
@@ -544,14 +549,14 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 										firstScene.Expressions[firstExprIdx].LearnedLogs,
 										expr.LearnedLogs...,
 									)
-									firstScene.Expressions[firstExprIdx].EasinessFactor, firstScene.Expressions[firstExprIdx].LearnedLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs)
+									_, firstScene.Expressions[firstExprIdx].LearnedLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs, v.calculator)
 								}
 								if len(expr.ReverseLogs) > 0 {
 									firstScene.Expressions[firstExprIdx].ReverseLogs = append(
 										firstScene.Expressions[firstExprIdx].ReverseLogs,
 										expr.ReverseLogs...,
 									)
-									firstScene.Expressions[firstExprIdx].ReverseEasinessFactor, firstScene.Expressions[firstExprIdx].ReverseLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs)
+									_, firstScene.Expressions[firstExprIdx].ReverseLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs, v.calculator)
 								}
 
 								// Mark this duplicate for removal
@@ -660,9 +665,10 @@ func (v *Validator) fixConsistency(
 					}
 
 					// Only keep expressions that either:
-					// 1. Have learned_logs or reverse_logs, OR
+					// 1. Have any logs (learned, reverse, or etymology), OR
 					// 2. Exist in the story (even with empty logs)
-					if len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || existsInStory {
+					hasLogs := len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || len(expr.EtymologyBreakdownLogs) > 0 || len(expr.EtymologyAssemblyLogs) > 0
+					if hasLogs || existsInStory {
 						validExpressions = append(validExpressions, expr)
 					} else {
 						// Remove orphaned expressions with no logs
@@ -1142,112 +1148,122 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 	}
 }
 
-// recalculateLearningLogs sorts logs newest-first and replays the SM-2 algorithm
-// to compute the correct easiness factor and interval_days from the merged logs.
-// Returns the new easiness factor, updated logs, and whether any values changed.
-func recalculateLearningLogs(logs []LearningRecord) (float64, []LearningRecord, bool) {
-	// Sort by date ascending (oldest first) for replay
-	sort.Slice(logs, func(i, j int) bool {
-		return logs[i].LearnedAt.Before(logs[j].LearnedAt.Time)
-	})
+// validateSeparateDefinitionsInConversations checks that definitions from separate
+// definitions files appear in the matching story notebook conversations/statements.
+func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []storyNotebookFile, result *ValidationResult) {
+	defsMap, err := NewDefinitionsMap(v.definitionsDirs)
+	if err != nil {
+		return
+	}
 
-	// Replay SM-2 to recalculate easiness factor and interval_days
-	ef := DefaultEasinessFactor
-	correctStreak := 0
-	lastInterval := 0
-	changed := false
-	for i, log := range logs {
-		quality := log.Quality
-		// Fix inconsistency: misunderstood status must have quality < 3
-		if log.Status == LearnedStatusMisunderstood && quality >= 3 {
-			quality = 2
-			logs[i].Quality = quality
-			changed = true
-		}
-		if quality >= 3 {
-			correctStreak++
-		} else {
-			correctStreak = 0
-		}
-		ef = UpdateEasinessFactor(ef, quality, correctStreak)
-		if logs[i].OverrideInterval > 0 {
-			// User manually set this interval; preserve it
-			lastInterval = logs[i].OverrideInterval
-			if logs[i].IntervalDays != logs[i].OverrideInterval {
-				logs[i].IntervalDays = logs[i].OverrideInterval
-				changed = true
+	// Build a lookup: bookID -> event -> scene index -> StoryScene
+	type sceneKey struct {
+		bookID string
+		event  string
+		index  int
+	}
+	sceneMap := make(map[sceneKey]*StoryScene)
+
+	for _, file := range storyFiles {
+		bookID := filepath.Base(filepath.Dir(file.path))
+		for nbIdx := range file.contents {
+			nb := &file.contents[nbIdx]
+			for scIdx := range nb.Scenes {
+				scene := &nb.Scenes[scIdx]
+				key := sceneKey{bookID: bookID, event: nb.Event, index: scIdx}
+				sceneMap[key] = scene
 			}
-		} else {
-			nextInterval := CalculateNextInterval(lastInterval, ef, quality, correctStreak)
-			if logs[i].IntervalDays != nextInterval {
-				logs[i].IntervalDays = nextInterval
-				changed = true
-			}
-			lastInterval = nextInterval
 		}
 	}
 
-	// Re-sort by date descending (newest first) for storage
-	sort.Slice(logs, func(i, j int) bool {
-		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
-	})
+	// Check each definition from definitions files
+	for bookID, notebookDefs := range defsMap {
+		for eventTitle, sceneDefs := range notebookDefs {
+			for sceneIdxKey, notes := range sceneDefs {
+				// Parse index from key (format: "__index_N")
+				var sceneIdx int
+				if _, err := fmt.Sscanf(sceneIdxKey, "__index_%d", &sceneIdx); err != nil {
+					continue
+				}
+				scene, ok := sceneMap[sceneKey{bookID: bookID, event: eventTitle, index: sceneIdx}]
+				if !ok {
+					// Scene not found — skip
+					continue
+				}
 
-	return ef, logs, changed
+				for _, note := range notes {
+					if note.NotUsed {
+						continue
+					}
+					expression := strings.TrimSpace(note.Expression)
+					if expression == "" {
+						continue
+					}
+
+					exprPattern := buildValidatePattern(expression)
+					found := false
+					for _, conv := range scene.Conversations {
+						if exprPattern.MatchString(conv.Quote) {
+							found = true
+							break
+						}
+					}
+					if !found {
+						for _, stmt := range scene.Statements {
+							if exprPattern.MatchString(stmt) {
+								found = true
+								break
+							}
+						}
+					}
+
+					if !found {
+						result.AddError("consistency", ValidationError{
+							Location: fmt.Sprintf("%s -> scene[%d] -> %s", eventTitle, sceneIdx, expression),
+							Message:  fmt.Sprintf("expression %q from definitions file not found in any conversation or statement", expression),
+							Suggestions: []string{
+								"fix the expression to match the text in the conversation",
+								"or mark it as not_used: true",
+							},
+						})
+					}
+				}
+			}
+		}
+	}
 }
 
-// fixIntervalDays recalculates interval_days for all expressions in all learning histories.
-func (v *Validator) fixIntervalDays(learningFiles []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
-	for fileIdx := range learningFiles {
-		file := &learningFiles[fileIdx]
-		changed := 0
-		for histIdx := range file.contents {
-			hist := &file.contents[histIdx]
-			for exprIdx := range hist.Expressions {
-				expr := &hist.Expressions[exprIdx]
-				if len(expr.LearnedLogs) > 0 {
-					newEF, newLogs, c := recalculateLearningLogs(expr.LearnedLogs)
-					if c || newEF != expr.EasinessFactor {
-						changed++
-					}
-					expr.EasinessFactor, expr.LearnedLogs = newEF, newLogs
-				}
-				if len(expr.ReverseLogs) > 0 {
-					newEF, newLogs, c := recalculateLearningLogs(expr.ReverseLogs)
-					if c || newEF != expr.ReverseEasinessFactor {
-						changed++
-					}
-					expr.ReverseEasinessFactor, expr.ReverseLogs = newEF, newLogs
-				}
-			}
-			for sceneIdx := range hist.Scenes {
-				scene := &hist.Scenes[sceneIdx]
-				for exprIdx := range scene.Expressions {
-					expr := &scene.Expressions[exprIdx]
-					if len(expr.LearnedLogs) > 0 {
-						newEF, newLogs, c := recalculateLearningLogs(expr.LearnedLogs)
-						if c || newEF != expr.EasinessFactor {
-							changed++
-						}
-						expr.EasinessFactor, expr.LearnedLogs = newEF, newLogs
-					}
-					if len(expr.ReverseLogs) > 0 {
-						newEF, newLogs, c := recalculateLearningLogs(expr.ReverseLogs)
-						if c || newEF != expr.ReverseEasinessFactor {
-							changed++
-						}
-						expr.ReverseEasinessFactor, expr.ReverseLogs = newEF, newLogs
-					}
-				}
-			}
-		}
-		if changed > 0 {
-			result.AddWarning(ValidationError{
-				File:    file.path,
-				Message: fmt.Sprintf("Recalculated interval_days for %d expression(s) in %s", changed, file.path),
-			})
+// recalculateLearningLogs replays the configured algorithm to recompute interval_days.
+// Returns the new easiness factor, updated logs, and whether any values changed.
+func recalculateLearningLogs(logs []LearningRecord, calculator IntervalCalculator) (float64, []LearningRecord, bool) {
+	if calculator == nil {
+		calculator = &SM2Calculator{}
+	}
+	oldIntervals := make([]int, len(logs))
+	oldQualities := make([]int, len(logs))
+	for i, log := range logs {
+		oldIntervals[i] = log.IntervalDays
+		oldQualities[i] = log.Quality
+	}
+
+	// Fix inconsistency: misunderstood status must have quality < 3
+	for i := range logs {
+		if logs[i].Status == LearnedStatusMisunderstood && logs[i].Quality >= 3 {
+			logs[i].Quality = 2
 		}
 	}
-	return learningFiles
+
+	ef, newLogs := calculator.RecalculateAll(logs)
+
+	changed := false
+	for i := range newLogs {
+		if newLogs[i].IntervalDays != oldIntervals[i] || newLogs[i].Quality != oldQualities[i] {
+			changed = true
+			break
+		}
+	}
+
+	return ef, newLogs, changed
 }
 
 // validateFlashcardNotebooks validates all flashcard notebook files

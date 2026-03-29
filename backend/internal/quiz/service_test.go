@@ -90,7 +90,7 @@ func newTestService(t *testing.T, openaiClient inference.Client) *Service {
 	return NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 }
 
 func newTestServiceWithFixtures(t *testing.T, openaiClient inference.Client) (*Service, string) {
@@ -104,7 +104,7 @@ func newTestServiceWithFixtures(t *testing.T, openaiClient inference.Client) (*S
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	return svc, learningDir
 }
 
@@ -229,7 +229,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	summaries, err := svc.LoadNotebookSummaries()
 	require.NoError(t, err)
@@ -255,7 +255,7 @@ func TestService_LoadNotebookSummaries_LearningHistoryError(t *testing.T) {
 
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	_, err := svc.LoadNotebookSummaries()
 	require.Error(t, err)
@@ -272,7 +272,7 @@ func TestService_LoadCards_StoryNotebook(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards([]string{"test-story"}, true)
 	require.NoError(t, err)
@@ -294,7 +294,7 @@ func TestService_LoadCards_FlashcardNotebook(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards([]string{"test-vocab"}, true)
 	require.NoError(t, err)
@@ -356,7 +356,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards([]string{"test-story"}, true)
 	require.NoError(t, err)
@@ -465,7 +465,7 @@ func TestService_SaveResult_WritesFile(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	card := Card{
 		NotebookName: "test-vocab",
@@ -490,7 +490,7 @@ func TestService_SaveResult_MalformedYAMLError(t *testing.T) {
 
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir))
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	card := Card{
 		NotebookName: "test-notebook",
