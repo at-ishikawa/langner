@@ -35,6 +35,7 @@ export default function QuizCardPage() {
   const currentIndex = useQuizStore((s) => s.currentIndex);
   const storeSubmitResult = useQuizStore((s) => s.submitResult);
   const storeSkipResult = useQuizStore((s) => s.skipResult);
+  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
@@ -388,6 +389,11 @@ export default function QuizCardPage() {
                     setOverridden(true);
                     setDisplayCorrect(!displayCorrect);
                     setOverrideOriginals({
+                      quality: res.originalQuality,
+                      status: res.originalStatus,
+                      intervalDays: res.originalIntervalDays,
+                    });
+                    storeOverrideResult(currentIndex, "standard", res.nextReviewDate || "", {
                       quality: res.originalQuality,
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,

@@ -22,6 +22,7 @@ export default function FreeformQuizPage() {
   const wordCount = useQuizStore((s) => s.wordCount);
   const storeSubmitResult = useQuizStore((s) => s.submitFreeformResult);
   const freeformResults = useQuizStore((s) => s.freeformResults);
+  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
   const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
   const reset = useQuizStore((s) => s.reset);
@@ -240,6 +241,11 @@ export default function FreeformQuizPage() {
                 });
                 setOverridden(true);
                 setDisplayCorrect(!displayCorrect);
+                storeOverrideResult(freeformResults.length - 1, "freeform", res.nextReviewDate || "", {
+                  quality: res.originalQuality,
+                  status: res.originalStatus,
+                  intervalDays: res.originalIntervalDays,
+                });
               } catch { /* silently fail */ }
             }}
             onSkip={async () => {

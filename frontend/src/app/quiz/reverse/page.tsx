@@ -37,6 +37,7 @@ export default function ReverseQuizPage() {
   const currentIndex = useQuizStore((s) => s.currentIndex);
   const storeSubmitResult = useQuizStore((s) => s.submitReverseResult);
   const storeSkipResult = useQuizStore((s) => s.skipResult);
+  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
@@ -478,6 +479,11 @@ export default function ReverseQuizPage() {
                     setOverridden(true);
                     setDisplayCorrect(!displayCorrect);
                     setOverrideOriginals({
+                      quality: res.originalQuality,
+                      status: res.originalStatus,
+                      intervalDays: res.originalIntervalDays,
+                    });
+                    storeOverrideResult(currentIndex, "reverse", res.nextReviewDate || "", {
                       quality: res.originalQuality,
                       status: res.originalStatus,
                       intervalDays: res.originalIntervalDays,
