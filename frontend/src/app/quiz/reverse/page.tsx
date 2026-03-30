@@ -26,6 +26,8 @@ interface FeedbackData {
   contexts: string[];
   pronunciation?: string;
   partOfSpeech?: string;
+  origin?: string;
+  memo?: string;
   learnedAt?: string;
   images?: string[];
 }
@@ -125,6 +127,8 @@ export default function ReverseQuizPage() {
         contexts: res.contexts ?? [],
         pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
+        origin: res.wordDetail?.origin?.trim() || undefined,
+        memo: res.wordDetail?.memo?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -174,6 +178,8 @@ export default function ReverseQuizPage() {
         contexts: res.contexts ?? [],
         pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
+        origin: res.wordDetail?.origin?.trim() || undefined,
+        memo: res.wordDetail?.memo?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -452,6 +458,20 @@ export default function ReverseQuizPage() {
                       </Text>
                     ))}
                   </VStack>
+                </Box>
+              )}
+
+              {feedback.origin && (
+                <Box>
+                  <Text fontWeight="bold">Origin</Text>
+                  <Text>{feedback.origin}</Text>
+                </Box>
+              )}
+
+              {feedback.memo && (
+                <Box>
+                  <Text fontWeight="bold">Note</Text>
+                  <Text>{feedback.memo}</Text>
                 </Box>
               )}
 

@@ -39,6 +39,8 @@ export default function FreeformQuizPage() {
     context?: string;
     pronunciation?: string;
     partOfSpeech?: string;
+    origin?: string;
+    memo?: string;
     learnedAt?: string;
     noteId?: bigint;
     images?: string[];
@@ -93,6 +95,8 @@ export default function FreeformQuizPage() {
         context: res.context,
         pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
+        origin: res.wordDetail?.origin?.trim() || undefined,
+        memo: res.wordDetail?.memo?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
         images: res.images.length > 0 ? res.images : undefined,
@@ -215,6 +219,20 @@ export default function FreeformQuizPage() {
             <Box>
               <Text fontWeight="bold">Context</Text>
               <Text fontStyle="italic">{feedback.context}</Text>
+            </Box>
+          )}
+
+          {feedback.origin && (
+            <Box>
+              <Text fontWeight="bold">Origin</Text>
+              <Text>{feedback.origin}</Text>
+            </Box>
+          )}
+
+          {feedback.memo && (
+            <Box>
+              <Text fontWeight="bold">Note</Text>
+              <Text>{feedback.memo}</Text>
             </Box>
           )}
 
