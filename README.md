@@ -54,6 +54,12 @@ langner ebook list
 langner ebook remove <id>
 ```
 
+## Building Your Notebook
+
+As you read a book in the web UI, select any word or phrase to look it up. When you save a definition, it's added to a vocabulary notebook for that book. These saved words appear in the Learn section and become available for quizzes.
+
+You build your notebook naturally as you read — no manual data entry needed.
+
 ## Features
 
 ### Books
