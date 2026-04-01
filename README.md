@@ -56,9 +56,16 @@ langner ebook remove <id>
 
 ## Building Your Notebook
 
-As you read a book in the web UI, select any word or phrase to look it up. When you save a definition, it's added to a vocabulary notebook for that book. These saved words appear in the Learn section and become available for quizzes.
+There are two ways to build vocabulary notebooks:
 
-You build your notebook naturally as you read — no manual data entry needed.
+**From books** - As you read a book in the web UI, select any word to look it up. Save the definition and it's added to a notebook for that book automatically.
+
+**From YAML files** - Create your own notebooks as YAML files for vocabulary from any source (TV shows, articles, podcasts, etc.). Place them in the directories configured in `config.yml`. See the `examples/` directory for the supported formats:
+
+- `examples/stories/` - Story notebooks with conversations and scenes
+- `examples/flashcards/` - Simple vocabulary card lists
+
+Saved words from both sources appear in the Learn section and are available for quizzes.
 
 ## Features
 
