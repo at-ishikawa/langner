@@ -80,29 +80,6 @@ At the end of a session, a results page shows your score and lets you review inc
 
 From any notebook page, export a formatted PDF with all your words, definitions, examples, and pronunciations. Useful for offline review or printing.
 
-## Notebook Format
-
-Langner uses YAML files to store your vocabulary notebooks. Create a file in your stories directory:
-
-```yaml
-- event: 'Meeting a friend at a coffee shop'
-  date: 2025-11-08T00:00:00Z
-  scenes:
-    - scene: At the coffee shop
-      conversations:
-        - speaker: Alice
-          quote: I'm {{ excited }} about the new project
-        - speaker: Bob
-          quote: Me too! We should {{ discuss }} the details
-      definitions:
-        - expression: excited
-          meaning: Feeling enthusiastic and eager
-        - expression: discuss
-          meaning: To talk about something with someone
-```
-
-Mark words you want to learn with `{{ }}` in the conversation quotes.
-
 ## Configuration
 
 Edit `config.yml` to set your directories for notebooks, dictionaries, templates, and outputs. See `config.example.yml` for all available options.
