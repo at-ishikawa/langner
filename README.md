@@ -39,6 +39,23 @@ make dev
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:8080
 
+## Adding Books
+
+Langner uses books from [Standard Ebooks](https://standardebooks.org/). Add a book with the CLI:
+
+```bash
+langner ebook clone https://standardebooks.org/ebooks/mary-shelley/frankenstein
+```
+
+This clones the ebook and automatically generates chapter notebooks. Once added, the book appears in the web UI.
+
+You can also list and remove books:
+
+```bash
+langner ebook list
+langner ebook remove <id>
+```
+
 ## Features
 
 ### Books
