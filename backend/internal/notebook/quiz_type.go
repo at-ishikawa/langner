@@ -7,8 +7,8 @@ const (
 	QuizTypeFreeform            QuizType = "freeform"
 	QuizTypeNotebook            QuizType = "notebook"
 	QuizTypeReverse             QuizType = "reverse"
-	QuizTypeEtymologyBreakdown  QuizType = "etymology_breakdown"
-	QuizTypeEtymologyAssembly   QuizType = "etymology_assembly"
+	QuizTypeEtymologyStandard  QuizType = "etymology_breakdown"
+	QuizTypeEtymologyReverse   QuizType = "etymology_assembly"
 )
 
 // Quality represents the quality of a response in the SM-2 algorithm

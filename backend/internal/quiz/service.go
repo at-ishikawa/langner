@@ -138,24 +138,17 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		if !ok {
 			continue
 		}
-		etymCount := 0
-		for _, sceneDefs := range defs {
-			for _, notes := range sceneDefs {
-				for _, note := range notes {
-					if len(note.OriginParts) > 0 {
-						etymCount++
-					}
-				}
-			}
-		}
-		if etymCount == 0 {
+		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false)
+		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true)
+		if reviewCount == 0 && reverseCount == 0 {
 			continue
 		}
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:           nbID,
-			Name:                 nbID,
-			EtymologyReviewCount: etymCount,
-			Kind:                 "Books",
+			NotebookID:         nbID,
+			Name:               nbID,
+			ReviewCount:        reviewCount,
+			ReverseReviewCount: reverseCount,
+			Kind:               "Books",
 		})
 	}
 
@@ -192,6 +185,12 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		_, isFlashcard := flashcardIndexes[notebookID]
 
 		if !isStory && !isFlashcard {
+			// Try definitions-only book as fallback
+			defCards := loadDefinitionCards(reader, notebookID, learningHistories)
+			if len(defCards) > 0 {
+				cards = append(cards, defCards...)
+				continue
+			}
 			return nil, &NotFoundError{NotebookID: notebookID}
 		}
 
@@ -606,6 +605,12 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		_, isFlashcard := flashcardIndexes[notebookID]
 
 		if !isStory && !isFlashcard {
+			// Try definitions-only book as fallback
+			defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories)
+			if len(defCards) > 0 {
+				cards = append(cards, defCards...)
+				continue
+			}
 			return nil, &NotFoundError{NotebookID: notebookID}
 		}
 
@@ -980,6 +985,18 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 		cards = append(cards, words...)
 	}
 
+	// Also load from definitions-only books
+	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		if _, isStory := storyIndexes[nbID]; isStory {
+			continue
+		}
+		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
+			continue
+		}
+		defWords := loadDefinitionWords(reader, nbID)
+		cards = append(cards, defWords...)
+	}
+
 	return cards, nil
 }
 
@@ -1312,4 +1329,189 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 // isExpressionSkippedInHistory checks if a note is marked as skipped in the learning history.
 func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note) bool {
 	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition)
+}
+
+// countDefinitionNotes counts notes in definitions-only books that need review.
+func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories []notebook.LearningHistory, isReverse bool) int {
+	count := 0
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for i := range notes {
+				note := &notes[i]
+				if note.Meaning == "" {
+					continue
+				}
+				if isReverse {
+					if needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note) {
+						count++
+					}
+				} else {
+					if needsDefinitionReview(histories, storyTitle, sceneTitle, note) {
+						count++
+					}
+				}
+			}
+		}
+	}
+	return count
+}
+
+// loadDefinitionCards loads standard quiz cards from definitions-only books.
+func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory) []Card {
+	defs, ok := reader.GetDefinitionsNotes(bookID)
+	if !ok {
+		return nil
+	}
+
+	var cards []Card
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for _, note := range notes {
+				if note.Meaning == "" {
+					continue
+				}
+				if !needsDefinitionReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
+					continue
+				}
+				entry := note.Definition
+				originalEntry := ""
+				if entry == "" {
+					entry = note.Expression
+				} else {
+					originalEntry = note.Expression
+				}
+				cards = append(cards, Card{
+					NotebookName:  bookID,
+					StoryTitle:    storyTitle,
+					SceneTitle:    sceneTitle,
+					Entry:         entry,
+					OriginalEntry: originalEntry,
+					Meaning:       note.Meaning,
+				})
+			}
+		}
+	}
+	return cards
+}
+
+// loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
+func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory) []ReverseCard {
+	defs, ok := reader.GetDefinitionsNotes(bookID)
+	if !ok {
+		return nil
+	}
+
+	var cards []ReverseCard
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for _, note := range notes {
+				if note.Meaning == "" {
+					continue
+				}
+				if !needsDefinitionReverseReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
+					continue
+				}
+				expression := note.Expression
+				if note.Definition != "" {
+					expression = note.Definition
+				}
+				cards = append(cards, ReverseCard{
+					NotebookName: bookID,
+					StoryTitle:   storyTitle,
+					SceneTitle:   sceneTitle,
+					Meaning:      note.Meaning,
+					Expression:   expression,
+				})
+			}
+		}
+	}
+	return cards
+}
+
+// loadDefinitionWords loads freeform cards from definitions-only books.
+func loadDefinitionWords(reader *notebook.Reader, bookID string) []FreeformCard {
+	defs, ok := reader.GetDefinitionsNotes(bookID)
+	if !ok {
+		return nil
+	}
+
+	var cards []FreeformCard
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for _, note := range notes {
+				if note.Meaning == "" {
+					continue
+				}
+				expression := note.Expression
+				if note.Definition != "" {
+					expression = note.Definition
+				}
+				cards = append(cards, FreeformCard{
+					NotebookName:       bookID,
+					StoryTitle:         storyTitle,
+					SceneTitle:         sceneTitle,
+					Expression:         expression,
+					OriginalExpression: note.Expression,
+					Meaning:            note.Meaning,
+				})
+			}
+		}
+	}
+	return cards
+}
+
+// needsDefinitionReview checks if a definition note needs forward quiz review.
+func needsDefinitionReview(
+	histories []notebook.LearningHistory,
+	storyTitle, sceneTitle string,
+	note *notebook.Note,
+) bool {
+	for _, h := range histories {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if expr.Expression != note.Expression && expr.Expression != note.Definition {
+					continue
+				}
+				return expr.NeedsForwardReview()
+			}
+		}
+	}
+	return true
+}
+
+// needsDefinitionReverseReview checks if a definition note needs reverse quiz review.
+func needsDefinitionReverseReview(
+	histories []notebook.LearningHistory,
+	storyTitle, sceneTitle string,
+	note *notebook.Note,
+) bool {
+	for _, h := range histories {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if expr.Expression != note.Expression && expr.Expression != note.Definition {
+					continue
+				}
+				if !expr.HasAnyCorrectAnswer() {
+					continue
+				}
+				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
+					return false
+				}
+				return true
+			}
+		}
+	}
+	return false
 }

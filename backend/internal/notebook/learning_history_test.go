@@ -1024,25 +1024,25 @@ func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T
 	}{
 		{
 			name:       "breakdown correct",
-			quizType:   QuizTypeEtymologyBreakdown,
+			quizType:   QuizTypeEtymologyStandard,
 			isCorrect:  true,
 			wantStatus: LearnedStatusUnderstood,
 		},
 		{
 			name:       "breakdown incorrect",
-			quizType:   QuizTypeEtymologyBreakdown,
+			quizType:   QuizTypeEtymologyStandard,
 			isCorrect:  false,
 			wantStatus: LearnedStatusMisunderstood,
 		},
 		{
 			name:       "assembly correct",
-			quizType:   QuizTypeEtymologyAssembly,
+			quizType:   QuizTypeEtymologyReverse,
 			isCorrect:  true,
 			wantStatus: LearnedStatusUnderstood,
 		},
 		{
 			name:       "assembly incorrect",
-			quizType:   QuizTypeEtymologyAssembly,
+			quizType:   QuizTypeEtymologyReverse,
 			isCorrect:  false,
 			wantStatus: LearnedStatusMisunderstood,
 		},
@@ -1083,7 +1083,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 		{
 			name:     "no logs - needs review",
 			expr:     LearningHistoryExpression{Expression: "test"},
-			quizType: QuizTypeEtymologyBreakdown,
+			quizType: QuizTypeEtymologyStandard,
 			want:     true,
 		},
 		{
@@ -1094,7 +1094,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 1},
 				},
 			},
-			quizType: QuizTypeEtymologyBreakdown,
+			quizType: QuizTypeEtymologyStandard,
 			want:     true,
 		},
 		{
@@ -1105,7 +1105,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 3},
 				},
 			},
-			quizType: QuizTypeEtymologyBreakdown,
+			quizType: QuizTypeEtymologyStandard,
 			want:     false,
 		},
 		{
@@ -1116,7 +1116,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneDayAgo), IntervalDays: 1},
 				},
 			},
-			quizType: QuizTypeEtymologyAssembly,
+			quizType: QuizTypeEtymologyReverse,
 			want:     true,
 		},
 	}
@@ -1141,12 +1141,12 @@ func TestLearningHistoryExpression_GetLogsForQuizType_Etymology(t *testing.T) {
 	}
 
 	t.Run("etymology breakdown returns breakdown logs", func(t *testing.T) {
-		got := expr.GetLogsForQuizType(QuizTypeEtymologyBreakdown)
+		got := expr.GetLogsForQuizType(QuizTypeEtymologyStandard)
 		assert.Equal(t, breakdownLogs, got)
 	})
 
 	t.Run("etymology assembly returns assembly logs", func(t *testing.T) {
-		got := expr.GetLogsForQuizType(QuizTypeEtymologyAssembly)
+		got := expr.GetLogsForQuizType(QuizTypeEtymologyReverse)
 		assert.Equal(t, assemblyLogs, got)
 	})
 
@@ -1164,18 +1164,18 @@ func TestLearningHistoryExpression_GetEasinessFactorForQuizType_Etymology(t *tes
 	}
 
 	t.Run("etymology breakdown returns breakdown EF", func(t *testing.T) {
-		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyBreakdown)
+		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyStandard)
 		assert.InDelta(t, 2.1, got, 0.001)
 	})
 
 	t.Run("etymology assembly returns assembly EF", func(t *testing.T) {
-		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyAssembly)
+		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyReverse)
 		assert.InDelta(t, 2.3, got, 0.001)
 	})
 
 	t.Run("zero etymology EF returns default", func(t *testing.T) {
 		expr2 := LearningHistoryExpression{}
-		got := expr2.GetEasinessFactorForQuizType(QuizTypeEtymologyBreakdown)
+		got := expr2.GetEasinessFactorForQuizType(QuizTypeEtymologyStandard)
 		assert.InDelta(t, DefaultEasinessFactor, got, 0.001)
 	})
 }
