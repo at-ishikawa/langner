@@ -73,7 +73,8 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 
-	if quizType == notebook.QuizTypeReverse {
+	switch quizType {
+	case notebook.QuizTypeReverse:
 		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
 			updater.UpdateOrCreateExpressionWithQualityForReverse(
 				info.NotebookName,
@@ -89,7 +90,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 			)
 			s.setSkipInterval(updater, info, intervalDays, quizType)
 		}
-	} else if quizType == notebook.QuizTypeEtymologyStandard || quizType == notebook.QuizTypeEtymologyReverse {
+	case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse:
 		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
 			updater.UpdateOrCreateExpressionWithQualityForEtymology(
 				info.NotebookName,
@@ -105,7 +106,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 			)
 			s.setSkipInterval(updater, info, intervalDays, quizType)
 		}
-	} else {
+	default:
 		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
 			updater.UpdateOrCreateExpressionWithQuality(
 				info.NotebookName,
