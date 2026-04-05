@@ -100,7 +100,7 @@ export default function FreeformQuizPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
+        images: (res.images ?? []).length > 0 ? res.images : undefined,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -113,7 +113,7 @@ export default function FreeformQuizPage() {
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
         learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
+        images: (res.images ?? []).length > 0 ? res.images : undefined,
       });
     } catch {
       setError("Failed to submit answer");
