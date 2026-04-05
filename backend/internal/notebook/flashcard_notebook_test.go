@@ -212,7 +212,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 							Expression: "hello",
 							LearnedLogs: []LearningRecord{
 								// Recent correct answer - should NOT need learning
-								{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
+								{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
 							},
 						},
 					},
@@ -241,7 +241,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 						{
 							Expression: "hello",
 							LearnedLogs: []LearningRecord{
-								{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
+								{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-1 * time.Hour))},
 							},
 						},
 					},

@@ -254,7 +254,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 							{
 								Expression: "break someone's ice",
 								LearnedLogs: []LearningRecord{
-									{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+									{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
 								},
 							},
 						},
@@ -265,7 +265,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			sceneTitle:    "Scene 1",
 			definition:    Note{Expression: "break the ice", Definition: "break someone's ice"},
 			expected: []LearningRecord{
-				{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+				{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
 			},
 		},
 		{
@@ -284,7 +284,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 					{
 						Expression: "lose someone's temper",
 						LearnedLogs: []LearningRecord{
-							{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+							{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
 						},
 					},
 				},
@@ -293,7 +293,7 @@ func TestLearningHistory_GetLogs(t *testing.T) {
 			sceneTitle:    "",
 			definition:    Note{Expression: "lose one's temper", Definition: "lose someone's temper"},
 			expected: []LearningRecord{
-				{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
+				{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(fixedTime), Quality: 4, IntervalDays: 1},
 			},
 		},
 	}
@@ -661,7 +661,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForReverse(t *testing.T) 
 			isKnownWord:    false,
 			quality:        int(QualityCorrect),
 			responseTimeMs: 5000,
-			wantStatus:     learnedStatusCanBeUsed,
+			wantStatus:     LearnedStatusCanBeUsed,
 		},
 		{
 			name: "incorrect",
@@ -734,7 +734,7 @@ func TestLearningHistoryExpression_AddRecordWithQuality(t *testing.T) {
 			quality:        int(QualityCorrect),
 			responseTimeMs: 5000,
 			quizType:       QuizTypeNotebook,
-			wantStatus:     learnedStatusCanBeUsed,
+			wantStatus:     LearnedStatusCanBeUsed,
 		},
 		{
 			name: "incorrect",
@@ -1132,7 +1132,7 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 func TestLearningHistoryExpression_GetLogsForQuizType_Etymology(t *testing.T) {
 	breakdownLogs := []LearningRecord{{Status: LearnedStatusUnderstood, Quality: 4}}
 	assemblyLogs := []LearningRecord{{Status: LearnedStatusMisunderstood, Quality: 1}}
-	learnedLogs := []LearningRecord{{Status: learnedStatusCanBeUsed, Quality: 5}}
+	learnedLogs := []LearningRecord{{Status: LearnedStatusCanBeUsed, Quality: 5}}
 
 	expr := LearningHistoryExpression{
 		LearnedLogs:            learnedLogs,
@@ -1221,7 +1221,7 @@ func TestLearningHistoryExpression_HasAnyCorrectAnswer(t *testing.T) {
 			expression: LearningHistoryExpression{
 				Expression: "test",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed},
+					{Status: LearnedStatusCanBeUsed},
 				},
 			},
 			want: true,

@@ -33,7 +33,7 @@ const (
 	LearnedStatusLearning        LearnedStatus = ""
 	LearnedStatusMisunderstood   LearnedStatus = "misunderstood"
 	LearnedStatusUnderstood      LearnedStatus = "understood"
-	learnedStatusCanBeUsed       LearnedStatus = "usable"
+	LearnedStatusCanBeUsed       LearnedStatus = "usable"
 	learnedStatusIntuitivelyUsed LearnedStatus = "intuitive"
 )
 
@@ -141,7 +141,7 @@ func (note Note) getLearnScore() int {
 			score -= 5
 		case LearnedStatusUnderstood:
 			score += 10
-		case learnedStatusCanBeUsed:
+		case LearnedStatusCanBeUsed:
 			score += 1_000
 		case learnedStatusIntuitivelyUsed:
 			score += 100_000
@@ -263,7 +263,7 @@ func (note Note) hasAnyCorrectAnswer() bool {
 
 	for _, log := range note.LearnedLogs {
 		if log.Status == LearnedStatusUnderstood ||
-			log.Status == learnedStatusCanBeUsed ||
+			log.Status == LearnedStatusCanBeUsed ||
 			log.Status == learnedStatusIntuitivelyUsed {
 			return true
 		}

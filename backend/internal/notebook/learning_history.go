@@ -223,7 +223,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 		if isKnownWord {
 			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
@@ -256,7 +256,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 		if isKnownWord {
 			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
@@ -320,7 +320,7 @@ func (exp LearningHistoryExpression) NeedsEtymologyReview(quizType QuizType) boo
 func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
 	for _, log := range exp.LearnedLogs {
 		if log.Status == LearnedStatusUnderstood ||
-			log.Status == learnedStatusCanBeUsed ||
+			log.Status == LearnedStatusCanBeUsed ||
 			log.Status == learnedStatusIntuitivelyUsed {
 			return true
 		}
@@ -378,7 +378,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 		if isKnownWord {
 			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
@@ -449,7 +449,7 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 		LearnedStatusLearning:        true,
 		LearnedStatusMisunderstood:   true,
 		LearnedStatusUnderstood:      true,
-		learnedStatusCanBeUsed:       true,
+		LearnedStatusCanBeUsed:       true,
 		learnedStatusIntuitivelyUsed: true,
 	}
 

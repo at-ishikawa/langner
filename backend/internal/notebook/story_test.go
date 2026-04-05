@@ -590,7 +590,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
 									},
 								},
 							},
@@ -637,7 +637,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
 										// 1 correct answer, threshold is 3 days, 4 days ago - should need learning
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-4 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-4 * 24 * time.Hour))},
 									},
 								},
 							},
@@ -684,7 +684,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
 										// 1 correct answer, threshold is 3 days, 1 day ago - should NOT need learning
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
 									},
 								},
 							},
@@ -878,7 +878,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "break someone's ice",
 									LearnedLogs: []LearningRecord{
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
 									},
 								},
 							},
@@ -1178,7 +1178,7 @@ func TestOutputStoryNotebooks(t *testing.T) {
 								{
 									Expression: "tricky",
 									LearnedLogs: []LearningRecord{
-										{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
 									},
 								},
 							},

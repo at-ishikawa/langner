@@ -495,7 +495,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusCanBeUsed,
+			wantStatus:      LearnedStatusCanBeUsed,
 		},
 		{
 			name: "Create new story in existing history",
@@ -575,7 +575,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 										{
-											Status:    learnedStatusCanBeUsed,
+											Status:    LearnedStatusCanBeUsed,
 											LearnedAt: Date{Time: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)},
 										},
 									},
@@ -626,7 +626,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 									Expression: "word2",
 									LearnedLogs: []LearningRecord{
 										{
-											Status:    learnedStatusCanBeUsed,
+											Status:    LearnedStatusCanBeUsed,
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 									},
@@ -683,7 +683,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusCanBeUsed,
+			wantStatus:      LearnedStatusCanBeUsed,
 			wantLogs:        1,
 		},
 		{
@@ -796,7 +796,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusCanBeUsed,
+			wantStatus:      LearnedStatusCanBeUsed,
 			wantScenesLen:   2,
 		},
 		{

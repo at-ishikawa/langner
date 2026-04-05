@@ -258,7 +258,11 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, quizType notebook.Quiz
 
 	log := &logs[0]
 	if log.Status == notebook.LearnedStatusMisunderstood {
-		log.Status = notebook.LearnedStatusUnderstood
+		if quizType == notebook.QuizTypeEtymologyFreeform || quizType == notebook.QuizTypeFreeform {
+			log.Status = notebook.LearnedStatusCanBeUsed
+		} else {
+			log.Status = notebook.LearnedStatusUnderstood
+		}
 		log.Quality = 4
 	} else {
 		log.Status = notebook.LearnedStatusMisunderstood
