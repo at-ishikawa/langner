@@ -196,13 +196,13 @@ INPUT UNDERSTANDING
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===
 
 STEP 1: SELF-DEFINITION CHECK - DO THIS BEFORE ANYTHING ELSE
-Ask: "Does the user's meaning contain the expression word itself as the definition?"
-- If user meaning = expression word (same word, any form), IMMEDIATELY mark INCORRECT
-- "X" meaning "X" is ALWAYS wrong - this is circular, not a definition
-- "X" meaning "something X" is ALSO wrong - still uses the word
-- This applies even for adjectives: "stylish" -> "stylish" = INCORRECT
-- This applies for any word: "fast" -> "fast" = INCORRECT
-- STOP HERE and mark INCORRECT if self-definition detected
+Ask: "Is the user's ENTIRE answer just the expression word itself (or a trivial rephrasing using that exact word)?"
+- ONLY trigger if the user's answer is essentially just the expression word repeated
+- "fast" meaning "fast" = INCORRECT (exact repetition)
+- "fast" meaning "being fast" = INCORRECT (trivial rephrasing with the word)
+- "fast" meaning "quick, speedy" = CORRECT (genuine synonym, NOT self-definition)
+- Using a DIFFERENT form of the word in a longer definition is NOT self-definition
+- STOP HERE and mark INCORRECT only if the answer is clearly circular
 
 === ABSOLUTE RULES - NEVER VIOLATE THESE ===
 
