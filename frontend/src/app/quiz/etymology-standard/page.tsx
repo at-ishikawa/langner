@@ -30,6 +30,11 @@ export default function EtymologyStandardPage() {
   const [overridden, setOverridden] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [displayCorrect, setDisplayCorrect] = useState(false);
+  const [overrideOriginals, setOverrideOriginals] = useState<{
+    quality: number;
+    status: string;
+    intervalDays: number;
+  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -101,26 +106,38 @@ export default function EtymologyStandardPage() {
           {loading ? (<Box textAlign="center" py={8}><Spinner size="lg" mb={4} /><Text>Checking your answer...</Text></Box>
           ) : feedback ? (
             <>
-              <Box p={3} borderRadius="md" bg={displayCorrect ? "green.100" : "red.100"} color={displayCorrect ? "green.800" : "red.800"} _dark={{ bg: displayCorrect ? "green.900" : "red.900", color: displayCorrect ? "green.200" : "red.200" }} textAlign="center">
-                <Text fontWeight="bold" fontSize="md">{displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}{overridden && <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>}</Text>
-              </Box>
-              <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
-                <Text fontSize="xl" fontWeight="bold">{card.origin} = {feedback.correctMeaning}</Text>
-                <Box display="flex" gap={2} mt={1}>
-                  {card.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{card.type}</Text></Box>}
-                  {card.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{card.language}</Text></Box>}
-                </Box>
-              </Box>
-              {submittedAnswer && <Box><Text fontWeight="medium" fontSize="sm" mb={1}>Your answer</Text>
-                <Box p={3} borderWidth="1.5px" borderRadius="lg" borderColor={displayCorrect ? "green.600" : "red.600"} bg="white" _dark={{ bg: "gray.800" }} display="flex" justifyContent="space-between" alignItems="center">
-                  <Text textDecoration={displayCorrect ? "none" : "line-through"} color={displayCorrect ? undefined : "red.600"}>{submittedAnswer}</Text>
-                  <Text fontWeight="medium" color={displayCorrect ? "green.600" : "red.600"}>{displayCorrect ? "\u2713" : "\u2717"}</Text>
-                </Box></Box>}
-              {feedback.reason && <Box><Text fontWeight="bold">Reason</Text><Text>{feedback.reason}</Text></Box>}
               <FeedbackActions isCorrect={displayCorrect} noteId={feedback.noteId} isOverridden={overridden} isSkipped={skipped}
                 nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"} onNext={handleNext}
-                onOverride={feedback.noteId ? async () => { try { await quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_STANDARD, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect }); setOverridden(true); setDisplayCorrect(!displayCorrect); } catch {} } : undefined}
-                onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId! }); setSkipped(true); storeSkipResult(currentIndex, "etymology-standard"); } catch {} } : undefined} />
+                onOverride={feedback.noteId ? async () => {
+                  try {
+                    const res = await quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_STANDARD, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect });
+                    setOverridden(true); setDisplayCorrect(!displayCorrect);
+                    setOverrideOriginals({ quality: res.originalQuality, status: res.originalStatus, intervalDays: res.originalIntervalDays });
+                  } catch {}
+                } : undefined}
+                onUndo={feedback.noteId ? async () => {
+                  try {
+                    const res = await quizClient.undoOverrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_STANDARD, learnedAt: feedback.learnedAt!, originalQuality: overrideOriginals?.quality ?? 0, originalStatus: overrideOriginals?.status ?? "", originalIntervalDays: overrideOriginals?.intervalDays ?? 0 });
+                    setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(res.correct);
+                  } catch { setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(feedback.correct); }
+                } : undefined}
+                onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId! }); setSkipped(true); storeSkipResult(currentIndex, "etymology-standard"); } catch {} } : undefined}
+                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
+              >
+                <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                  <Text fontSize="xl" fontWeight="bold">{card.origin} = {feedback.correctMeaning}</Text>
+                  <Box display="flex" gap={2} mt={1}>
+                    {card.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{card.type}</Text></Box>}
+                    {card.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{card.language}</Text></Box>}
+                  </Box>
+                </Box>
+                {submittedAnswer && <Box><Text fontWeight="medium" fontSize="sm" mb={1}>Your answer</Text>
+                  <Box p={3} borderWidth="1.5px" borderRadius="lg" borderColor={displayCorrect ? "green.600" : "red.600"} bg="white" _dark={{ bg: "gray.800" }} display="flex" justifyContent="space-between" alignItems="center">
+                    <Text textDecoration={displayCorrect ? "none" : "line-through"} color={displayCorrect ? undefined : "red.600"}>{submittedAnswer}</Text>
+                    <Text fontWeight="medium" color={displayCorrect ? "green.600" : "red.600"}>{displayCorrect ? "\u2713" : "\u2717"}</Text>
+                  </Box></Box>}
+                {feedback.reason && <Box><Text fontWeight="bold">Reason</Text><Text>{feedback.reason}</Text></Box>}
+              </FeedbackActions>
             </>
           ) : error ? (<><Text color="red.500">{error}</Text>
             <Button w="full" colorPalette="blue" variant="outline" onClick={() => { setPhase("answering"); setError(null); setAnswer(submittedAnswer); setTimeout(() => inputRef.current?.focus(), 50); }}>Retry</Button>
