@@ -26,8 +26,6 @@ interface FeedbackData {
   contexts: string[];
   pronunciation?: string;
   partOfSpeech?: string;
-  origin?: string;
-  memo?: string;
   learnedAt?: string;
   images?: string[];
 }
@@ -127,8 +125,6 @@ export default function ReverseQuizPage() {
         contexts: res.contexts ?? [],
         pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        origin: res.wordDetail?.origin?.trim() || undefined,
-        memo: res.wordDetail?.memo?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -178,8 +174,6 @@ export default function ReverseQuizPage() {
         contexts: res.contexts ?? [],
         pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        origin: res.wordDetail?.origin?.trim() || undefined,
-        memo: res.wordDetail?.memo?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
@@ -236,28 +230,26 @@ export default function ReverseQuizPage() {
         </Progress.Root>
       </Box>
 
-      {phase === "answering" || phase === "synonym-retry" ? (
+      {phase === "synonym-retry" ? (
         <VStack align="stretch" gap={4}>
           <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
             {card.meaning}
           </Heading>
 
-          {phase === "synonym-retry" && (
-            <Box
-              p={3}
-              borderRadius="md"
-              bg="orange.100"
-              color="orange.800"
-              _dark={{ bg: "orange.900", color: "orange.200" }}
-            >
-              <Text fontWeight="bold">
-                That&apos;s a valid synonym! But we&apos;re looking for a specific word.
-              </Text>
-              <Text fontSize="sm" mt={1}>
-                Your word &quot;{synonymAnswer}&quot; means the same thing. Try the exact word.
-              </Text>
-            </Box>
-          )}
+          <Box
+            p={3}
+            borderRadius="md"
+            bg="orange.100"
+            color="orange.800"
+            _dark={{ bg: "orange.900", color: "orange.200" }}
+          >
+            <Text fontWeight="bold">
+              That&apos;s a valid synonym! But we&apos;re looking for a specific word.
+            </Text>
+            <Text fontSize="sm" mt={1}>
+              Your word &quot;{synonymAnswer}&quot; means the same thing. Try the exact word.
+            </Text>
+          </Box>
 
           {card.contexts.length > 0 && (
             <VStack align="stretch" gap={2}>
@@ -284,14 +276,59 @@ export default function ReverseQuizPage() {
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={phase === "synonym-retry" ? "Try again..." : "Type the word"}
+              placeholder="Try again..."
               size="lg"
             />
           </Box>
 
           <Button
             colorPalette="blue"
-            onClick={() => handleSubmit(phase === "synonym-retry")}
+            onClick={() => handleSubmit(true)}
+            disabled={!answer.trim()}
+            size="lg"
+          >
+            Submit
+          </Button>
+        </VStack>
+      ) : phase === "answering" ? (
+        <VStack align="stretch" gap={4}>
+          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
+            {card.meaning}
+          </Heading>
+
+          {card.contexts.length > 0 && (
+            <VStack align="stretch" gap={2}>
+              {card.contexts.map((ctx, i) => (
+                <Text
+                  key={i}
+                  fontSize="md"
+                  color="gray.600"
+                  _dark={{ color: "gray.400" }}
+                  fontStyle="italic"
+                >
+                  {ctx.maskedContext}
+                </Text>
+              ))}
+            </VStack>
+          )}
+
+          <Box>
+            <Text fontWeight="medium" mb={1}>
+              Word
+            </Text>
+            <Input
+              ref={inputRef}
+              value={answer}
+              onChange={(e) => setAnswer(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Type the word"
+              size="lg"
+            />
+          </Box>
+
+          <Button
+            colorPalette="blue"
+            onClick={() => handleSubmit()}
             disabled={!answer.trim()}
             size="lg"
           >
@@ -319,128 +356,6 @@ export default function ReverseQuizPage() {
             </Box>
           ) : feedback ? (
             <>
-              {/* 1. Correct/Incorrect indicator with override/undo labels */}
-              <Box
-                p={3}
-                borderRadius="md"
-                bg={displayCorrect ? "green.100" : "red.100"}
-                color={displayCorrect ? "green.800" : "red.800"}
-                _dark={{
-                  bg: displayCorrect ? "green.900" : "red.900",
-                  color: displayCorrect ? "green.200" : "red.200",
-                }}
-                display="flex"
-                justifyContent="space-between"
-                alignItems="center"
-              >
-                <Text fontWeight="bold">
-                  {displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}
-                  {overridden && (
-                    <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
-                  )}
-                </Text>
-                {overridden && (
-                  <Text
-                    as="span"
-                    fontSize="sm"
-                    cursor="pointer"
-                    textDecoration="underline"
-                    onClick={async () => {
-                      try {
-                        const res = await quizClient.undoOverrideAnswer({
-                          noteId: card.noteId,
-                          quizType: ProtoQuizType.REVERSE,
-                          learnedAt: feedback.learnedAt!,
-                          originalQuality: overrideOriginals?.quality ?? 0,
-                          originalStatus: overrideOriginals?.status ?? "",
-                          originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                        });
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(res.correct);
-                      } catch {
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(feedback.correct);
-                      }
-                    }}
-                  >
-                    Undo
-                  </Text>
-                )}
-              </Box>
-
-              {/* 2. Your answer */}
-              {submittedAnswer ? (
-                <Text textDecoration={displayCorrect ? "none" : "line-through"}>
-                  Your answer: {submittedAnswer}
-                </Text>
-              ) : (
-                <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                  Skipped
-                </Text>
-              )}
-
-              {/* 3. Word, pronunciation, part of speech, reason, examples */}
-              <Box>
-                <Text fontWeight="bold">Word</Text>
-                <Text fontStyle="italic">
-                  {feedback.expression}
-                  {(feedback.pronunciation || feedback.partOfSpeech) && (
-                    <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="normal">
-                      {" "}
-                      {[
-                        feedback.pronunciation && `/${feedback.pronunciation}/`,
-                        feedback.partOfSpeech,
-                      ].filter(Boolean).join(" · ")}
-                    </Text>
-                  )}
-                </Text>
-              </Box>
-
-              {feedback.reason && (
-                <Box>
-                  <Text fontWeight="bold">Reason</Text>
-                  <Text>{feedback.reason}</Text>
-                </Box>
-              )}
-
-              {feedback.contexts.length > 0 && (
-                <Box>
-                  <Text fontWeight="bold">Context</Text>
-                  <VStack align="stretch" gap={1} mt={1}>
-                    {feedback.contexts.map((ctx, i) => (
-                      <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
-                        {i + 1}. {ctx}
-                      </Text>
-                    ))}
-                  </VStack>
-                </Box>
-              )}
-
-              {feedback.origin && (
-                <Box>
-                  <Text fontWeight="bold">Origin</Text>
-                  <Text>{feedback.origin}</Text>
-                </Box>
-              )}
-
-              {feedback.memo && (
-                <Box>
-                  <Text fontWeight="bold">Note</Text>
-                  <Text>{feedback.memo}</Text>
-                </Box>
-              )}
-
-              {feedback.images && feedback.images.length > 0 && (
-                <Box display="flex" gap={2} flexWrap="wrap">
-                  {feedback.images.map((src, i) => (
-                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-                  ))}
-                </Box>
-              )}
-
-              {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
@@ -470,6 +385,25 @@ export default function ReverseQuizPage() {
                     });
                   } catch { /* silently fail */ }
                 }}
+                onUndo={async () => {
+                  try {
+                    const res = await quizClient.undoOverrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.REVERSE,
+                      learnedAt: feedback.learnedAt!,
+                      originalQuality: overrideOriginals?.quality ?? 0,
+                      originalStatus: overrideOriginals?.status ?? "",
+                      originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                    });
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(res.correct);
+                  } catch {
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(feedback.correct);
+                  }
+                }}
                 onSkip={async () => {
                   try {
                     await quizClient.skipWord({ noteId: card.noteId });
@@ -478,7 +412,63 @@ export default function ReverseQuizPage() {
                   } catch { /* silently fail */ }
                 }}
                 onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
-              />
+              >
+                {/* Your answer */}
+                {submittedAnswer ? (
+                  <Text textDecoration={displayCorrect ? "none" : "line-through"}>
+                    Your answer: {submittedAnswer}
+                  </Text>
+                ) : (
+                  <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                    Skipped
+                  </Text>
+                )}
+
+                {/* Word, pronunciation, part of speech, reason, examples */}
+                <Box>
+                  <Text fontWeight="bold">Word</Text>
+                  <Text fontStyle="italic">
+                    {feedback.expression}
+                    {(feedback.pronunciation || feedback.partOfSpeech) && (
+                      <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="normal">
+                        {" "}
+                        {[
+                          feedback.pronunciation && `/${feedback.pronunciation}/`,
+                          feedback.partOfSpeech,
+                        ].filter(Boolean).join(" · ")}
+                      </Text>
+                    )}
+                  </Text>
+                </Box>
+
+                {feedback.reason && (
+                  <Box>
+                    <Text fontWeight="bold">Reason</Text>
+                    <Text>{feedback.reason}</Text>
+                  </Box>
+                )}
+
+                {feedback.contexts.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold">Context</Text>
+                    <VStack align="stretch" gap={1} mt={1}>
+                      {feedback.contexts.map((ctx, i) => (
+                        <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
+                          {i + 1}. {ctx}
+                        </Text>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
+                {feedback.images && feedback.images.length > 0 && (
+                  <Box display="flex" gap={2} flexWrap="wrap">
+                    {feedback.images.map((src, i) => (
+                      <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                    ))}
+                  </Box>
+                )}
+              </FeedbackActions>
             </>
           ) : error ? (
             <>

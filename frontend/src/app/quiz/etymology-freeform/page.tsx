@@ -25,6 +25,14 @@ export default function EtymologyFreeformQuizPage() {
     type: string; language: string; notebookName?: string;
     learnedAt?: string; noteId?: bigint;
   } | null>(null);
+  const [overridden, setOverridden] = useState(false);
+  const [skipped, setSkipped] = useState(false);
+  const [displayCorrect, setDisplayCorrect] = useState(false);
+  const [overrideOriginals, setOverrideOriginals] = useState<{
+    quality: number;
+    status: string;
+    intervalDays: number;
+  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const originInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,6 +71,7 @@ export default function EtymologyFreeformQuizPage() {
         noteId: res.noteId ? BigInt(res.noteId) : undefined,
       };
       setFeedback(fb);
+      setDisplayCorrect(fb.correct);
       storeSubmitResult({
         noteId: fb.noteId, origin: origin.trim(), answer: meaning.trim(),
         correct: res.correct, reason: res.reason, correctAnswer: res.correctMeaning,
@@ -74,6 +83,7 @@ export default function EtymologyFreeformQuizPage() {
 
   const handleNext = () => {
     setOrigin(""); setMeaning(""); setFeedback(null); setError(null);
+    setOverridden(false); setSkipped(false); setDisplayCorrect(false); setOverrideOriginals(null);
     startTimeRef.current = Date.now(); originInputRef.current?.focus();
   };
 
@@ -92,20 +102,40 @@ export default function EtymologyFreeformQuizPage() {
         </VStack>
       ) : feedback ? (
         <VStack align="stretch" gap={4}>
-          <Box p={4} borderRadius="md" bg={feedback.correct ? "green.100" : "red.100"} _dark={{ bg: feedback.correct ? "green.900" : "red.900" }} textAlign="center">
-            <Text fontWeight="bold" fontSize="lg">{feedback.correct ? "\u2713 Correct!" : "\u2717 Incorrect"}</Text>
-          </Box>
-          <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
-            <Text fontSize="xl" fontWeight="bold">{origin} = {feedback.correctMeaning}</Text>
-            <Box display="flex" gap={2} mt={1}>
-              {feedback.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{feedback.type}</Text></Box>}
-              {feedback.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{feedback.language}</Text></Box>}
+          <FeedbackActions isCorrect={displayCorrect} noteId={feedback.noteId} isOverridden={overridden} isSkipped={skipped}
+            nextLabel="Next Origin" onNext={handleNext}
+            onOverride={feedback.noteId ? async () => {
+              try {
+                const [res] = await Promise.all([
+                  quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_STANDARD, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect }),
+                  quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_REVERSE, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect }),
+                ]);
+                setOverridden(true); setDisplayCorrect(!displayCorrect);
+                setOverrideOriginals({ quality: res.originalQuality, status: res.originalStatus, intervalDays: res.originalIntervalDays });
+              } catch {}
+            } : undefined}
+            onUndo={feedback.noteId ? async () => {
+              try {
+                const [res] = await Promise.all([
+                  quizClient.undoOverrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_STANDARD, learnedAt: feedback.learnedAt!, originalQuality: overrideOriginals?.quality ?? 0, originalStatus: overrideOriginals?.status ?? "", originalIntervalDays: overrideOriginals?.intervalDays ?? 0 }),
+                  quizClient.undoOverrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_REVERSE, learnedAt: feedback.learnedAt!, originalQuality: overrideOriginals?.quality ?? 0, originalStatus: overrideOriginals?.status ?? "", originalIntervalDays: overrideOriginals?.intervalDays ?? 0 }),
+                ]);
+                setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(res.correct);
+              } catch { setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(feedback.correct); }
+            } : undefined}
+            onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId! }); setSkipped(true); } catch {} } : undefined}
+            onSeeResults={etymologyOriginResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
+          >
+            <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+              <Text fontSize="xl" fontWeight="bold">{origin} = {feedback.correctMeaning}</Text>
+              <Box display="flex" gap={2} mt={1}>
+                {feedback.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{feedback.type}</Text></Box>}
+                {feedback.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{feedback.language}</Text></Box>}
+              </Box>
             </Box>
-          </Box>
-          {feedback.reason && <Box><Text fontWeight="bold">Reason</Text><Text>{feedback.reason}</Text></Box>}
-          {feedback.notebookName && <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>Found in: {feedback.notebookName}</Text>}
-          <FeedbackActions isCorrect={feedback.correct} noteId={feedback.noteId} isOverridden={false} isSkipped={false} nextLabel="Next Origin" onNext={handleNext} />
-          {etymologyOriginResults.length > 0 && <Button colorPalette="green" variant="outline" onClick={() => router.push("/quiz/complete")}>See Results</Button>}
+            {feedback.reason && <Box><Text fontWeight="bold">Reason</Text><Text>{feedback.reason}</Text></Box>}
+            {feedback.notebookName && <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>Found in: {feedback.notebookName}</Text>}
+          </FeedbackActions>
           <Button variant="ghost" onClick={() => { reset(); router.push("/"); }}>Back to Start</Button>
         </VStack>
       ) : (

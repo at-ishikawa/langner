@@ -274,102 +274,6 @@ export default function QuizCardPage() {
             </Box>
           ) : feedback ? (
             <>
-              {/* 1. Correct/Incorrect indicator with override/undo labels */}
-              <Box
-                p={3}
-                borderRadius="md"
-                bg={displayCorrect ? "green.100" : "red.100"}
-                color={displayCorrect ? "green.800" : "red.800"}
-                _dark={{
-                  bg: displayCorrect ? "green.900" : "red.900",
-                  color: displayCorrect ? "green.200" : "red.200",
-                }}
-                display="flex"
-                justifyContent="space-between"
-                alignItems="center"
-              >
-                <Text fontWeight="bold">
-                  {displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}
-                  {overridden && (
-                    <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
-                  )}
-                </Text>
-                {overridden && (
-                  <Text
-                    as="span"
-                    fontSize="sm"
-                    cursor="pointer"
-                    textDecoration="underline"
-                    onClick={async () => {
-                      try {
-                        const res = await quizClient.undoOverrideAnswer({
-                          noteId: card.noteId,
-                          quizType: ProtoQuizType.STANDARD,
-                          learnedAt: feedback.learnedAt!,
-                          originalQuality: overrideOriginals?.quality ?? 0,
-                          originalStatus: overrideOriginals?.status ?? "",
-                          originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                        });
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(res.correct);
-                      } catch {
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(feedback.correct);
-                      }
-                    }}
-                  >
-                    Undo
-                  </Text>
-                )}
-              </Box>
-
-              {/* 2. Your answer */}
-              {submittedAnswer ? (
-                <Text textDecoration={displayCorrect ? "none" : "line-through"}>
-                  Your answer: {submittedAnswer}
-                </Text>
-              ) : (
-                <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                  Skipped
-                </Text>
-              )}
-
-              <Box>
-                <Text fontWeight="bold">Meaning</Text>
-                <Text>{feedback.meaning}</Text>
-              </Box>
-
-              {feedback.reason && (
-                <Box>
-                  <Text fontWeight="bold">Reason</Text>
-                  <Text>{feedback.reason}</Text>
-                </Box>
-              )}
-
-              {card.examples.length > 0 && (
-                <Box>
-                  <Text fontWeight="bold">Examples</Text>
-                  <VStack align="stretch" gap={1} mt={1}>
-                    {card.examples.map((ex, i) => (
-                      <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
-                        {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
-                      </Text>
-                    ))}
-                  </VStack>
-                </Box>
-              )}
-
-              {feedback.images && feedback.images.length > 0 && (
-                <Box display="flex" gap={2} flexWrap="wrap">
-                  {feedback.images.map((src, i) => (
-                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-                  ))}
-                </Box>
-              )}
-
-              {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
@@ -399,6 +303,25 @@ export default function QuizCardPage() {
                     });
                   } catch { /* silently fail */ }
                 }}
+                onUndo={async () => {
+                  try {
+                    const res = await quizClient.undoOverrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.STANDARD,
+                      learnedAt: feedback.learnedAt!,
+                      originalQuality: overrideOriginals?.quality ?? 0,
+                      originalStatus: overrideOriginals?.status ?? "",
+                      originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                    });
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(res.correct);
+                  } catch {
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(feedback.correct);
+                  }
+                }}
                 onSkip={async () => {
                   try {
                     await quizClient.skipWord({ noteId: card.noteId });
@@ -407,7 +330,51 @@ export default function QuizCardPage() {
                   } catch { /* silently fail */ }
                 }}
                 onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
-              />
+              >
+                {/* Your answer */}
+                {submittedAnswer ? (
+                  <Text textDecoration={displayCorrect ? "none" : "line-through"}>
+                    Your answer: {submittedAnswer}
+                  </Text>
+                ) : (
+                  <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                    Skipped
+                  </Text>
+                )}
+
+                <Box>
+                  <Text fontWeight="bold">Meaning</Text>
+                  <Text>{feedback.meaning}</Text>
+                </Box>
+
+                {feedback.reason && (
+                  <Box>
+                    <Text fontWeight="bold">Reason</Text>
+                    <Text>{feedback.reason}</Text>
+                  </Box>
+                )}
+
+                {card.examples.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold">Examples</Text>
+                    <VStack align="stretch" gap={1} mt={1}>
+                      {card.examples.map((ex, i) => (
+                        <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
+                          {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
+                        </Text>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
+                {feedback.images && feedback.images.length > 0 && (
+                  <Box display="flex" gap={2} flexWrap="wrap">
+                    {feedback.images.map((src, i) => (
+                      <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                    ))}
+                  </Box>
+                )}
+              </FeedbackActions>
             </>
           ) : error ? (
             <>

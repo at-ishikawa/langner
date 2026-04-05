@@ -39,8 +39,6 @@ export default function FreeformQuizPage() {
     context?: string;
     pronunciation?: string;
     partOfSpeech?: string;
-    origin?: string;
-    memo?: string;
     learnedAt?: string;
     noteId?: bigint;
     images?: string[];
@@ -49,6 +47,11 @@ export default function FreeformQuizPage() {
   const [overridden, setOverridden] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [displayCorrect, setDisplayCorrect] = useState(false);
+  const [overrideOriginals, setOverrideOriginals] = useState<{
+    quality: number;
+    status: string;
+    intervalDays: number;
+  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const wordInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,8 +98,6 @@ export default function FreeformQuizPage() {
         context: res.context,
         pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        origin: res.wordDetail?.origin?.trim() || undefined,
-        memo: res.wordDetail?.memo?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
         images: res.images.length > 0 ? res.images : undefined,
@@ -128,6 +129,7 @@ export default function FreeformQuizPage() {
     setError(null);
     setOverridden(false);
     setSkipped(false);
+    setOverrideOriginals(null);
     startTimeRef.current = Date.now();
     wordInputRef.current?.focus();
   };
@@ -170,80 +172,6 @@ export default function FreeformQuizPage() {
         </VStack>
       ) : feedback ? (
         <VStack align="stretch" gap={4}>
-          <Box
-            p={4}
-            borderRadius="md"
-            bg={displayCorrect ? "green.100" : "red.100"}
-            _dark={{ bg: displayCorrect ? "green.900" : "red.900" }}
-          >
-            <Text fontWeight="bold" fontSize="lg">
-              {displayCorrect ? "\u2713 Correct!" : "\u2717 Incorrect"}
-            </Text>
-          </Box>
-
-          <Box>
-            <Text fontWeight="bold">Word</Text>
-            <Text fontSize="xl">
-              {feedback.word}
-              {(feedback.pronunciation || feedback.partOfSpeech) && (
-                <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                  {" "}
-                  {[
-                    feedback.pronunciation && `/${feedback.pronunciation}/`,
-                    feedback.partOfSpeech,
-                  ].filter(Boolean).join(" · ")}
-                </Text>
-              )}
-            </Text>
-          </Box>
-
-          <Box>
-            <Text fontWeight="bold">Correct meaning</Text>
-            <Text fontStyle="italic">{feedback.meaning}</Text>
-          </Box>
-
-          {feedback.reason && (
-            <Box>
-              <Text fontWeight="bold">Reason</Text>
-              <Text>{feedback.reason}</Text>
-            </Box>
-          )}
-
-          {feedback.notebookName && (
-            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-              Found in: {feedback.notebookName}
-            </Text>
-          )}
-
-          {feedback.context && (
-            <Box>
-              <Text fontWeight="bold">Context</Text>
-              <Text fontStyle="italic">{feedback.context}</Text>
-            </Box>
-          )}
-
-          {feedback.origin && (
-            <Box>
-              <Text fontWeight="bold">Origin</Text>
-              <Text>{feedback.origin}</Text>
-            </Box>
-          )}
-
-          {feedback.memo && (
-            <Box>
-              <Text fontWeight="bold">Note</Text>
-              <Text>{feedback.memo}</Text>
-            </Box>
-          )}
-
-          {feedback.images && feedback.images.length > 0 && (
-            <Box display="flex" gap={2} flexWrap="wrap">
-              {feedback.images.map((src, i) => (
-                <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-              ))}
-            </Box>
-          )}
-
           <FeedbackActions
             isCorrect={displayCorrect}
             noteId={feedback.noteId}
@@ -262,12 +190,37 @@ export default function FreeformQuizPage() {
                 });
                 setOverridden(true);
                 setDisplayCorrect(!displayCorrect);
+                setOverrideOriginals({
+                  quality: res.originalQuality,
+                  status: res.originalStatus,
+                  intervalDays: res.originalIntervalDays,
+                });
                 storeOverrideResult(freeformResults.length - 1, "freeform", res.nextReviewDate || "", {
                   quality: res.originalQuality,
                   status: res.originalStatus,
                   intervalDays: res.originalIntervalDays,
                 });
               } catch { /* silently fail */ }
+            }}
+            onUndo={async () => {
+              if (!feedback.noteId || !feedback.learnedAt) return;
+              try {
+                const res = await quizClient.undoOverrideAnswer({
+                  noteId: feedback.noteId,
+                  quizType: ProtoQuizType.FREEFORM,
+                  learnedAt: feedback.learnedAt,
+                  originalQuality: overrideOriginals?.quality ?? 0,
+                  originalStatus: overrideOriginals?.status ?? "",
+                  originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                });
+                setOverridden(false);
+                setOverrideOriginals(null);
+                setDisplayCorrect(res.correct);
+              } catch {
+                setOverridden(false);
+                setOverrideOriginals(null);
+                setDisplayCorrect(feedback.correct);
+              }
             }}
             onSkip={async () => {
               if (!feedback.noteId) return;
@@ -277,7 +230,56 @@ export default function FreeformQuizPage() {
               } catch { /* silently fail */ }
             }}
             onSeeResults={freeformResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
-          />
+          >
+            <Box>
+              <Text fontWeight="bold">Word</Text>
+              <Text fontSize="xl">
+                {feedback.word}
+                {(feedback.pronunciation || feedback.partOfSpeech) && (
+                  <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                    {" "}
+                    {[
+                      feedback.pronunciation && `/${feedback.pronunciation}/`,
+                      feedback.partOfSpeech,
+                    ].filter(Boolean).join(" · ")}
+                  </Text>
+                )}
+              </Text>
+            </Box>
+
+            <Box>
+              <Text fontWeight="bold">Correct meaning</Text>
+              <Text fontStyle="italic">{feedback.meaning}</Text>
+            </Box>
+
+            {feedback.reason && (
+              <Box>
+                <Text fontWeight="bold">Reason</Text>
+                <Text>{feedback.reason}</Text>
+              </Box>
+            )}
+
+            {feedback.notebookName && (
+              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                Found in: {feedback.notebookName}
+              </Text>
+            )}
+
+            {feedback.context && (
+              <Box>
+                <Text fontWeight="bold">Context</Text>
+                <Text fontStyle="italic">{feedback.context}</Text>
+              </Box>
+            )}
+
+            {feedback.images && feedback.images.length > 0 && (
+              <Box display="flex" gap={2} flexWrap="wrap">
+                {feedback.images.map((src, i) => (
+                  <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                ))}
+              </Box>
+            )}
+          </FeedbackActions>
 
           <Button
             variant="ghost"
