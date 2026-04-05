@@ -35,7 +35,7 @@ function getProtoQuizType(qt: QuizType): ProtoQuizType {
   if (qt === "freeform") return ProtoQuizType.FREEFORM;
   if (qt === "etymology-standard") return ProtoQuizType.ETYMOLOGY_STANDARD;
   if (qt === "etymology-reverse") return ProtoQuizType.ETYMOLOGY_REVERSE;
-  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_STANDARD;
+  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_FREEFORM;
   return ProtoQuizType.STANDARD;
 }
 

@@ -90,7 +90,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 			)
 			s.setSkipInterval(updater, info, intervalDays, quizType)
 		}
-	case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse:
+	case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse, notebook.QuizTypeEtymologyFreeform:
 		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
 			updater.UpdateOrCreateExpressionWithQualityForEtymology(
 				info.NotebookName,

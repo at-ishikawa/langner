@@ -248,6 +248,7 @@ func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
 	case apiv1.QuizType_QUIZ_TYPE_FREEFORM: return notebook.QuizTypeFreeform
 	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_STANDARD: return notebook.QuizTypeEtymologyStandard
 	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_REVERSE: return notebook.QuizTypeEtymologyReverse
+	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM: return notebook.QuizTypeEtymologyFreeform
 	default: return notebook.QuizTypeNotebook
 	}
 }
@@ -342,13 +343,10 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *co
 	if matchedCard == nil { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("origin %q not found", origin)) }
 	grade, err := h.svc.GradeEtymologyStandardAnswer(ctx, *matchedCard, meaning, req.Msg.GetResponseTimeMs())
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology freeform: %w", err)) }
-	if err := h.svc.SaveEtymologyOriginResult(*matchedCard, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, false); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology standard result: %w", err))
+	if err := h.svc.SaveEtymologyOriginResult(*matchedCard, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyFreeform, false); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology freeform result: %w", err))
 	}
-	if err := h.svc.SaveEtymologyOriginResult(*matchedCard, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, false); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology reverse result: %w", err))
-	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(matchedCard.NotebookName, matchedCard.Origin, notebook.QuizTypeEtymologyStandard)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(matchedCard.NotebookName, matchedCard.Origin, notebook.QuizTypeEtymologyFreeform)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = *matchedCard; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.SubmitEtymologyFreeformAnswerResponse{
 		Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: matchedCard.Meaning,

@@ -106,20 +106,14 @@ export default function EtymologyFreeformQuizPage() {
             nextLabel="Next Origin" onNext={handleNext}
             onOverride={feedback.noteId ? async () => {
               try {
-                const [res] = await Promise.all([
-                  quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_STANDARD, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect }),
-                  quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_REVERSE, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect }),
-                ]);
+                const res = await quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_FREEFORM, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect });
                 setOverridden(true); setDisplayCorrect(!displayCorrect);
                 setOverrideOriginals({ quality: res.originalQuality, status: res.originalStatus, intervalDays: res.originalIntervalDays });
               } catch {}
             } : undefined}
             onUndo={feedback.noteId ? async () => {
               try {
-                const [res] = await Promise.all([
-                  quizClient.undoOverrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_STANDARD, learnedAt: feedback.learnedAt!, originalQuality: overrideOriginals?.quality ?? 0, originalStatus: overrideOriginals?.status ?? "", originalIntervalDays: overrideOriginals?.intervalDays ?? 0 }),
-                  quizClient.undoOverrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_REVERSE, learnedAt: feedback.learnedAt!, originalQuality: overrideOriginals?.quality ?? 0, originalStatus: overrideOriginals?.status ?? "", originalIntervalDays: overrideOriginals?.intervalDays ?? 0 }),
-                ]);
+                const res = await quizClient.undoOverrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_FREEFORM, learnedAt: feedback.learnedAt!, originalQuality: overrideOriginals?.quality ?? 0, originalStatus: overrideOriginals?.status ?? "", originalIntervalDays: overrideOriginals?.intervalDays ?? 0 });
                 setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(res.correct);
               } catch { setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(feedback.correct); }
             } : undefined}

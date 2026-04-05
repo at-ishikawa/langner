@@ -31,6 +31,7 @@ const (
 	QuizType_QUIZ_TYPE_FREEFORM           QuizType = 3
 	QuizType_QUIZ_TYPE_ETYMOLOGY_STANDARD QuizType = 4
 	QuizType_QUIZ_TYPE_ETYMOLOGY_REVERSE  QuizType = 5
+	QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM QuizType = 6
 )
 
 // Enum value maps for QuizType.
@@ -42,6 +43,7 @@ var (
 		3: "QUIZ_TYPE_FREEFORM",
 		4: "QUIZ_TYPE_ETYMOLOGY_STANDARD",
 		5: "QUIZ_TYPE_ETYMOLOGY_REVERSE",
+		6: "QUIZ_TYPE_ETYMOLOGY_FREEFORM",
 	}
 	QuizType_value = map[string]int32{
 		"QUIZ_TYPE_UNSPECIFIED":        0,
@@ -50,6 +52,7 @@ var (
 		"QUIZ_TYPE_FREEFORM":           3,
 		"QUIZ_TYPE_ETYMOLOGY_STANDARD": 4,
 		"QUIZ_TYPE_ETYMOLOGY_REVERSE":  5,
+		"QUIZ_TYPE_ETYMOLOGY_FREEFORM": 6,
 	}
 )
 
@@ -2867,14 +2870,15 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10next_review_date\x18\a \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
 	"learned_at\x18\b \x01(\tR\tlearnedAt\x12\x17\n" +
-	"\anote_id\x18\t \x01(\x03R\x06noteId*\xaf\x01\n" +
+	"\anote_id\x18\t \x01(\x03R\x06noteId*\xd1\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +
 	"\x11QUIZ_TYPE_REVERSE\x10\x02\x12\x16\n" +
 	"\x12QUIZ_TYPE_FREEFORM\x10\x03\x12 \n" +
 	"\x1cQUIZ_TYPE_ETYMOLOGY_STANDARD\x10\x04\x12\x1f\n" +
-	"\x1bQUIZ_TYPE_ETYMOLOGY_REVERSE\x10\x05*{\n" +
+	"\x1bQUIZ_TYPE_ETYMOLOGY_REVERSE\x10\x05\x12 \n" +
+	"\x1cQUIZ_TYPE_ETYMOLOGY_FREEFORM\x10\x06*{\n" +
 	"\x11EtymologyQuizMode\x12#\n" +
 	"\x1fETYMOLOGY_QUIZ_MODE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cETYMOLOGY_QUIZ_MODE_STANDARD\x10\x01\x12\x1f\n" +

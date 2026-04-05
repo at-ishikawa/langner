@@ -115,12 +115,13 @@ func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	return lastLog.Status
 }
 
-// GetLogsForQuizType returns learning logs for the specified quiz type
+// GetLogsForQuizType returns learning logs for the specified quiz type.
+// For etymology freeform, returns breakdown logs (the primary track).
 func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []LearningRecord {
 	switch quizType {
 	case QuizTypeReverse:
 		return exp.ReverseLogs
-	case QuizTypeEtymologyStandard:
+	case QuizTypeEtymologyStandard, QuizTypeEtymologyFreeform:
 		return exp.EtymologyBreakdownLogs
 	case QuizTypeEtymologyReverse:
 		return exp.EtymologyAssemblyLogs
@@ -129,7 +130,8 @@ func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []Lea
 	}
 }
 
-// SetLogsForQuizType sets learning logs for the specified quiz type
+// SetLogsForQuizType sets learning logs for the specified quiz type.
+// For etymology freeform, sets BOTH breakdown and assembly logs.
 func (exp *LearningHistoryExpression) SetLogsForQuizType(quizType QuizType, logs []LearningRecord) {
 	switch quizType {
 	case QuizTypeReverse:
@@ -137,6 +139,9 @@ func (exp *LearningHistoryExpression) SetLogsForQuizType(quizType QuizType, logs
 	case QuizTypeEtymologyStandard:
 		exp.EtymologyBreakdownLogs = logs
 	case QuizTypeEtymologyReverse:
+		exp.EtymologyAssemblyLogs = logs
+	case QuizTypeEtymologyFreeform:
+		exp.EtymologyBreakdownLogs = logs
 		exp.EtymologyAssemblyLogs = logs
 	default:
 		exp.LearnedLogs = logs
@@ -246,17 +251,6 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	var logs []LearningRecord
-
-	switch quizType {
-	case QuizTypeEtymologyStandard:
-		logs = exp.EtymologyBreakdownLogs
-	case QuizTypeEtymologyReverse:
-		logs = exp.EtymologyAssemblyLogs
-	default:
-		return
-	}
-
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
@@ -266,23 +260,28 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 		}
 	}
 
-	currentEF := calculator.DeriveEF(logs)
-	nextInterval, _ := calculator.CalculateInterval(logs, quality, currentEF)
-
-	newRecord := LearningRecord{
-		Status:         status,
-		LearnedAt:      NewDate(),
-		Quality:        quality,
-		ResponseTimeMs: responseTimeMs,
-		QuizType:       string(quizType),
-		IntervalDays:   nextInterval,
+	addRecord := func(logs []LearningRecord) []LearningRecord {
+		currentEF := calculator.DeriveEF(logs)
+		nextInterval, _ := calculator.CalculateInterval(logs, quality, currentEF)
+		newRecord := LearningRecord{
+			Status:         status,
+			LearnedAt:      NewDate(),
+			Quality:        quality,
+			ResponseTimeMs: responseTimeMs,
+			QuizType:       string(quizType),
+			IntervalDays:   nextInterval,
+		}
+		return append([]LearningRecord{newRecord}, logs...)
 	}
 
 	switch quizType {
 	case QuizTypeEtymologyStandard:
-		exp.EtymologyBreakdownLogs = append([]LearningRecord{newRecord}, exp.EtymologyBreakdownLogs...)
+		exp.EtymologyBreakdownLogs = addRecord(exp.EtymologyBreakdownLogs)
 	case QuizTypeEtymologyReverse:
-		exp.EtymologyAssemblyLogs = append([]LearningRecord{newRecord}, exp.EtymologyAssemblyLogs...)
+		exp.EtymologyAssemblyLogs = addRecord(exp.EtymologyAssemblyLogs)
+	case QuizTypeEtymologyFreeform:
+		exp.EtymologyBreakdownLogs = addRecord(exp.EtymologyBreakdownLogs)
+		exp.EtymologyAssemblyLogs = addRecord(exp.EtymologyAssemblyLogs)
 	}
 }
 
