@@ -415,6 +415,7 @@ export default function EtymologyBreakdownPage() {
                     storeSkipResult(currentIndex, "etymology-breakdown");
                   } catch { /* silently fail */ }
                 } : undefined}
+                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
               />
             </>
           ) : error ? (

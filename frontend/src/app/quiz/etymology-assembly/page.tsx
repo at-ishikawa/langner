@@ -387,6 +387,7 @@ export default function EtymologyAssemblyPage() {
                     storeSkipResult(currentIndex, "etymology-assembly");
                   } catch { /* silently fail */ }
                 } : undefined}
+                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
               />
             </>
           ) : error ? (

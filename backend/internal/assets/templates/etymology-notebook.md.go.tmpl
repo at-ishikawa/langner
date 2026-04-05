@@ -11,7 +11,22 @@
 {{ end }}
 {{ end -}}
 
-{{ if $chapter.Words -}}
+{{ if $chapter.Sections -}}
+{{ range $section := $chapter.Sections -}}
+### {{ $section.Title }}
+
+{{ range $word := $section.Words -}}
+{{ $display := $word.Expression }}{{ if $word.Definition }}{{ $display = $word.Definition }}{{ end -}}
+- **{{ $display }}**{{ if $word.Pronunciation }} /{{ $word.Pronunciation }}/{{ end }}{{ if $word.PartOfSpeech }} [{{ $word.PartOfSpeech }}]{{ end }}{{ if $word.Meaning }}: {{ $word.Meaning }}{{ end }}
+{{- if $word.OriginParts }}
+    - Origins: {{ range $i, $ref := $word.OriginParts }}{{ if $i }} + {{ end }}*{{ $ref.Origin }}*{{ if $ref.Meaning }} ({{ $ref.Meaning }}){{ end }}{{ end }}
+{{- end }}
+{{- if $word.Note }}
+    - Note: {{ $word.Note }}
+{{- end }}
+{{ end }}
+{{ end -}}
+{{ else if $chapter.Words -}}
 ### Words
 
 {{ range $word := $chapter.Words -}}

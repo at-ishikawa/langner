@@ -17,9 +17,16 @@ type EtymologyTemplate struct {
 
 // EtymologyChapter represents a chapter/session with origins and words
 type EtymologyChapter struct {
-	Title   string
-	Origins []EtymologyOriginEntry
-	Words   []EtymologyWordEntry
+	Title    string
+	Origins  []EtymologyOriginEntry
+	Words    []EtymologyWordEntry
+	Sections []EtymologySection
+}
+
+// EtymologySection represents a named group of words within a chapter (e.g., an origin topic)
+type EtymologySection struct {
+	Title string
+	Words []EtymologyWordEntry
 }
 
 // EtymologyOriginEntry represents a single etymology origin for template rendering

@@ -406,17 +406,8 @@ export default function QuizCardPage() {
                     storeSkipResult(currentIndex, "standard");
                   } catch { /* silently fail */ }
                 }}
+                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
               />
-
-              {currentIndex + 1 < total && (
-                <Button
-                  colorPalette="green"
-                  variant="outline"
-                  onClick={() => router.push("/quiz/complete")}
-                >
-                  See Results
-                </Button>
-              )}
             </>
           ) : error ? (
             <>

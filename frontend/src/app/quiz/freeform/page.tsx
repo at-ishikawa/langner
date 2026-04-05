@@ -276,17 +276,8 @@ export default function FreeformQuizPage() {
                 setSkipped(true);
               } catch { /* silently fail */ }
             }}
+            onSeeResults={freeformResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
           />
-
-          {freeformResults.length > 0 && (
-            <Button
-              colorPalette="green"
-              variant="outline"
-              onClick={() => router.push("/quiz/complete")}
-            >
-              See Results
-            </Button>
-          )}
 
           <Button
             variant="ghost"

@@ -39,7 +39,7 @@ export default function BooksListPage() {
   return (
     <Box p={4} maxW="md" mx="auto">
       <Box mb={2}>
-        <Link href="/notebooks">
+        <Link href="/learn">
           <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="sm">
             &larr; Back to notebooks
           </Text>

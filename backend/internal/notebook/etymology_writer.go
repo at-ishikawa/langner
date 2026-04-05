@@ -121,7 +121,7 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		if len(defChapters) > 0 {
 			for i := range defChapters {
 				// Only include origins that are referenced by words in this chapter
-				defChapters[i].Origins = filterOriginsForChapter(templateOrigins, defChapters[i].Words)
+				defChapters[i].Origins = filterOriginsForChapter(templateOrigins, defChapters[i])
 			}
 			chapters = append(chapters, defChapters...)
 		} else {
@@ -214,12 +214,20 @@ func (writer EtymologyNotebookWriter) findDefinitionsDir(etymIndex EtymologyInde
 	return ""
 }
 
-// filterOriginsForChapter returns only the origins that are referenced by any word's origin parts.
-func filterOriginsForChapter(allOrigins []assets.EtymologyOriginEntry, words []assets.EtymologyWordEntry) []assets.EtymologyOriginEntry {
+// filterOriginsForChapter returns only the origins that are referenced by any word's origin parts,
+// including words inside sections.
+func filterOriginsForChapter(allOrigins []assets.EtymologyOriginEntry, chapter assets.EtymologyChapter) []assets.EtymologyOriginEntry {
 	used := make(map[string]bool)
-	for _, w := range words {
+	for _, w := range chapter.Words {
 		for _, op := range w.OriginParts {
 			used[op.Origin] = true
+		}
+	}
+	for _, s := range chapter.Sections {
+		for _, w := range s.Words {
+			for _, op := range w.OriginParts {
+				used[op.Origin] = true
+			}
 		}
 	}
 	var filtered []assets.EtymologyOriginEntry
@@ -244,6 +252,8 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 		return nil
 	}
 
+	// Group definitions by title so entries with the same session name merge into one chapter
+	chapterMap := make(map[string]int) // title -> index in chapters
 	var chapters []assets.EtymologyChapter
 	for _, def := range definitions {
 		title := def.Metadata.Title
@@ -254,8 +264,10 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 			continue
 		}
 
-		var words []assets.EtymologyWordEntry
+		var allWords []assets.EtymologyWordEntry
+		var sections []assets.EtymologySection
 		for _, scene := range def.Scenes {
+			var sceneWords []assets.EtymologyWordEntry
 			for _, note := range scene.Expressions {
 				word := assets.EtymologyWordEntry{
 					Expression:    note.Expression,
@@ -274,14 +286,33 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 					word.OriginParts = append(word.OriginParts, ref)
 				}
 
-				words = append(words, word)
+				sceneWords = append(sceneWords, word)
+			}
+			allWords = append(allWords, sceneWords...)
+			if scene.Metadata.Title != "" {
+				sections = append(sections, assets.EtymologySection{
+					Title: scene.Metadata.Title,
+					Words: sceneWords,
+				})
 			}
 		}
 
-		chapters = append(chapters, assets.EtymologyChapter{
-			Title: title,
-			Words: words,
-		})
+		// Merge into existing chapter with the same title, or create a new one
+		if idx, exists := chapterMap[title]; exists {
+			chapters[idx].Words = append(chapters[idx].Words, allWords...)
+			chapters[idx].Sections = append(chapters[idx].Sections, sections...)
+		} else {
+			chapter := assets.EtymologyChapter{
+				Title: title,
+			}
+			if len(sections) > 0 {
+				chapter.Sections = sections
+			} else {
+				chapter.Words = allWords
+			}
+			chapterMap[title] = len(chapters)
+			chapters = append(chapters, chapter)
+		}
 	}
 
 	return chapters

@@ -20,6 +20,8 @@ interface FeedbackActionsProps {
   onOverride?: () => void;
   /** Called when the user skips the word. */
   onSkip?: () => void;
+  /** Called when the user wants to see results early (before finishing all cards). */
+  onSeeResults?: () => void;
 }
 
 export function FeedbackActions({
@@ -31,6 +33,7 @@ export function FeedbackActions({
   onNext,
   onOverride,
   onSkip,
+  onSeeResults,
 }: FeedbackActionsProps) {
   const canOverrideOrSkip = noteId !== undefined && !isOverridden && !isSkipped;
 
@@ -69,6 +72,18 @@ export function FeedbackActions({
           Exclude from Quizzes
         </Button>
       ) : null}
+
+      {/* Early exit to results */}
+      {onSeeResults && (
+        <Button
+          w="full"
+          colorPalette="green"
+          variant="outline"
+          onClick={onSeeResults}
+        >
+          See Results
+        </Button>
+      )}
     </VStack>
   );
 }

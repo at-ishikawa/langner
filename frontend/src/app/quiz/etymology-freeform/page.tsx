@@ -342,17 +342,8 @@ export default function EtymologyFreeformQuizPage() {
             isSkipped={false}
             nextLabel="Next Word"
             onNext={handleNext}
+            onSeeResults={etymologyResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
           />
-
-          {etymologyResults.length > 0 && (
-            <Button
-              colorPalette="green"
-              variant="outline"
-              onClick={() => router.push("/quiz/complete")}
-            >
-              See Results
-            </Button>
-          )}
 
           <Button
             variant="ghost"

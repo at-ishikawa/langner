@@ -178,6 +178,23 @@ function OriginDetailView({
               <LanguageBadge language={originData.language} />
             </Box>
             <Text color="gray.600" _dark={{ color: "gray.400" }}>{originData.meaning}</Text>
+            <Link href={`/notebooks/etymology/${notebookId}/mindmap?origin=${encodeURIComponent(selectedOrigin)}`}>
+              <Box
+                mt={3}
+                px={4}
+                py={2}
+                bg="blue.600"
+                _dark={{ bg: "blue.500" }}
+                color="white"
+                borderRadius="md"
+                textAlign="center"
+                fontSize="sm"
+                fontWeight="medium"
+                _hover={{ bg: "blue.700", _dark: { bg: "blue.600" } }}
+              >
+                View Mindmap
+              </Box>
+            </Link>
           </Box>
         )}
 

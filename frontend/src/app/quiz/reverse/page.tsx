@@ -236,26 +236,28 @@ export default function ReverseQuizPage() {
         </Progress.Root>
       </Box>
 
-      {phase === "synonym-retry" ? (
+      {phase === "answering" || phase === "synonym-retry" ? (
         <VStack align="stretch" gap={4}>
           <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
             {card.meaning}
           </Heading>
 
-          <Box
-            p={3}
-            borderRadius="md"
-            bg="orange.100"
-            color="orange.800"
-            _dark={{ bg: "orange.900", color: "orange.200" }}
-          >
-            <Text fontWeight="bold">
-              That&apos;s a valid synonym! But we&apos;re looking for a specific word.
-            </Text>
-            <Text fontSize="sm" mt={1}>
-              Your word &quot;{synonymAnswer}&quot; means the same thing. Try the exact word.
-            </Text>
-          </Box>
+          {phase === "synonym-retry" && (
+            <Box
+              p={3}
+              borderRadius="md"
+              bg="orange.100"
+              color="orange.800"
+              _dark={{ bg: "orange.900", color: "orange.200" }}
+            >
+              <Text fontWeight="bold">
+                That&apos;s a valid synonym! But we&apos;re looking for a specific word.
+              </Text>
+              <Text fontSize="sm" mt={1}>
+                Your word &quot;{synonymAnswer}&quot; means the same thing. Try the exact word.
+              </Text>
+            </Box>
+          )}
 
           {card.contexts.length > 0 && (
             <VStack align="stretch" gap={2}>
@@ -282,59 +284,14 @@ export default function ReverseQuizPage() {
               value={answer}
               onChange={(e) => setAnswer(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Try again..."
+              placeholder={phase === "synonym-retry" ? "Try again..." : "Type the word"}
               size="lg"
             />
           </Box>
 
           <Button
             colorPalette="blue"
-            onClick={() => handleSubmit(true)}
-            disabled={!answer.trim()}
-            size="lg"
-          >
-            Submit
-          </Button>
-        </VStack>
-      ) : phase === "answering" ? (
-        <VStack align="stretch" gap={4}>
-          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
-            {card.meaning}
-          </Heading>
-
-          {card.contexts.length > 0 && (
-            <VStack align="stretch" gap={2}>
-              {card.contexts.map((ctx, i) => (
-                <Text
-                  key={i}
-                  fontSize="md"
-                  color="gray.600"
-                  _dark={{ color: "gray.400" }}
-                  fontStyle="italic"
-                >
-                  {ctx.maskedContext}
-                </Text>
-              ))}
-            </VStack>
-          )}
-
-          <Box>
-            <Text fontWeight="medium" mb={1}>
-              Word
-            </Text>
-            <Input
-              ref={inputRef}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type the word"
-              size="lg"
-            />
-          </Box>
-
-          <Button
-            colorPalette="blue"
-            onClick={() => handleSubmit()}
+            onClick={() => handleSubmit(phase === "synonym-retry")}
             disabled={!answer.trim()}
             size="lg"
           >
@@ -520,17 +477,8 @@ export default function ReverseQuizPage() {
                     storeSkipResult(currentIndex, "reverse");
                   } catch { /* silently fail */ }
                 }}
+                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
               />
-
-              {currentIndex + 1 < total && (
-                <Button
-                  colorPalette="green"
-                  variant="outline"
-                  onClick={() => router.push("/quiz/complete")}
-                >
-                  See Results
-                </Button>
-              )}
             </>
           ) : error ? (
             <>

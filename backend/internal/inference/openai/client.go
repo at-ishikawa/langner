@@ -962,24 +962,21 @@ CLASSIFICATION RULES:
    - Minor typos: transposed letters, missing/extra letter, or small spelling errors that clearly show the user knows the word
    - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
 
-2. "synonym" - For SINGLE WORDS only: a different word with the same core meaning:
-   - "joyful" when expected "happy" (different single words, same meaning)
-   - "big" when expected "large" (different single words, same meaning)
-   - This applies when BOTH the expected word AND user's answer are single words
-   - If they genuinely mean the same thing, classify as "synonym"
+2. "synonym" - A different word or expression with the same or very similar meaning:
+   - Single words: "joyful" when expected "happy", "big" when expected "large"
+   - Multi-word expressions: a different idiom/phrase with similar meaning (e.g., "give up" when expected "throw in the towel")
+   - The user clearly knows the meaning but produced a different word/expression
+   - Classify as "synonym" so the user gets a chance to retry with the specific expected word
 
 3. "wrong" - The user's answer is incorrect:
    - Wrong definition entirely
    - Antonym (opposite meaning)
-   - Unrelated word
+   - Unrelated word or expression
    - Gibberish or empty
-   - A DIFFERENT multi-word expression/phrase/idiom even if it has similar meaning
 
-CRITICAL RULE FOR MULTI-WORD EXPRESSIONS:
-- For phrasal verbs, idioms, and multi-word expressions, ONLY accept morphological variants of the SAME expression
-- A completely different expression with similar meaning is "wrong", NOT "synonym"
-- The goal is to learn the SPECIFIC expression, not just any expression with similar meaning
-- However, minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should still be classified as "same_word"
+NOTE ON MULTI-WORD EXPRESSIONS:
+- Minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should be classified as "same_word"
+- A completely different expression with similar meaning should be classified as "synonym", NOT "wrong"
 
 QUALITY ASSESSMENT:
 Also assess response speed quality (1-5) based on response time and expression complexity:
