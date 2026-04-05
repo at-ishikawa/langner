@@ -85,6 +85,14 @@ message WordDetail {
   repeated string synonyms = 4;
   repeated string antonyms = 5;
   string memo = 6;
+  repeated WordOriginPart origin_parts = 7;
+}
+
+message WordOriginPart {
+  string origin = 1;
+  string type = 2;
+  string language = 3;
+  string meaning = 4;
 }
 
 message SubmitAnswerRequest {

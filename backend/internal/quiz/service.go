@@ -162,6 +162,57 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 	return summaries, nil
 }
 
+// buildOriginMap builds a map of origin|language -> EtymologyOrigin from all etymology notebooks.
+func buildOriginMap(reader *notebook.Reader) map[string]notebook.EtymologyOrigin {
+	originMap := make(map[string]notebook.EtymologyOrigin)
+	for id := range reader.GetEtymologyIndexes() {
+		origins, err := reader.ReadEtymologyNotebook(id)
+		if err != nil {
+			continue
+		}
+		for _, o := range origins {
+			key := strings.ToLower(o.Origin + "|" + o.Language)
+			originMap[key] = o
+		}
+	}
+	return originMap
+}
+
+// resolveOriginParts resolves OriginPartRef references to full WordOriginPart data.
+func resolveOriginParts(refs []notebook.OriginPartRef, originMap map[string]notebook.EtymologyOrigin) []WordOriginPart {
+	if len(refs) == 0 || len(originMap) == 0 {
+		return nil
+	}
+	var parts []WordOriginPart
+	for _, ref := range refs {
+		key := strings.ToLower(ref.Origin + "|" + ref.Language)
+		if o, ok := originMap[key]; ok {
+			parts = append(parts, WordOriginPart{Origin: o.Origin, Type: o.Type, Language: o.Language, Meaning: o.Meaning})
+		} else {
+			// Try matching by origin only
+			for k, o := range originMap {
+				if strings.HasPrefix(k, strings.ToLower(ref.Origin)+"|") {
+					parts = append(parts, WordOriginPart{Origin: o.Origin, Type: o.Type, Language: o.Language, Meaning: o.Meaning})
+					break
+				}
+			}
+		}
+	}
+	return parts
+}
+
+func buildWordDetail(note *notebook.Note, originMap map[string]notebook.EtymologyOrigin) WordDetail {
+	return WordDetail{
+		Origin:        note.Origin,
+		Pronunciation: note.Pronunciation,
+		PartOfSpeech:  note.PartOfSpeech,
+		Synonyms:      note.Synonyms,
+		Antonyms:      note.Antonyms,
+		Memo:          note.Memo,
+		OriginParts:   resolveOriginParts(note.OriginParts, originMap),
+	}
+}
+
 // LoadCards returns filtered quiz cards for the given notebooks.
 // Returns *NotFoundError if any notebook ID does not exist.
 func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card, error) {
@@ -177,6 +228,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
+	originMap := buildOriginMap(reader)
 
 	var cards []Card
 
@@ -186,7 +238,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 
 		if !isStory && !isFlashcard {
 			// Try definitions-only book as fallback
-			defCards := loadDefinitionCards(reader, notebookID, learningHistories)
+			defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap)
 			if len(defCards) > 0 {
 				cards = append(cards, defCards...)
 				continue
@@ -195,7 +247,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		}
 
 		if isStory {
-			storyCards, err := s.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied)
+			storyCards, err := s.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story cards for notebook %q: %w", notebookID, err)
 			}
@@ -203,7 +255,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		}
 
 		if isFlashcard {
-			flashCards, err := s.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied)
+			flashCards, err := s.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load flashcard cards for notebook %q: %w", notebookID, err)
 			}
@@ -241,6 +293,7 @@ func (s *Service) loadStoryCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]Card, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
@@ -278,15 +331,8 @@ func (s *Service) loadStoryCards(
 					Meaning:       definition.Meaning,
 					Examples:      examples,
 					Contexts:      contexts,
-					WordDetail: WordDetail{
-						Origin:        definition.Origin,
-						Pronunciation: definition.Pronunciation,
-						PartOfSpeech:  definition.PartOfSpeech,
-						Synonyms:      definition.Synonyms,
-						Antonyms:      definition.Antonyms,
-						Memo:          definition.Memo,
-					},
-					Images: definition.Images,
+					WordDetail:    buildWordDetail(&definition, originMap),
+					Images:        definition.Images,
 				})
 			}
 		}
@@ -300,6 +346,7 @@ func (s *Service) loadFlashcardCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]Card, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
@@ -336,15 +383,8 @@ func (s *Service) loadFlashcardCards(
 				OriginalEntry: originalEntry,
 				Meaning:       card.Meaning,
 				Examples:      examples,
-				WordDetail: WordDetail{
-					Origin:        card.Origin,
-					Pronunciation: card.Pronunciation,
-					PartOfSpeech:  card.PartOfSpeech,
-					Synonyms:      card.Synonyms,
-					Antonyms:      card.Antonyms,
-					Memo:          card.Memo,
-				},
-				Images: card.Images,
+				WordDetail:    buildWordDetail(&card, originMap),
+				Images:        card.Images,
 			})
 		}
 	}
@@ -597,6 +637,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
+	originMap := buildOriginMap(reader)
 
 	var cards []ReverseCard
 
@@ -606,7 +647,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 
 		if !isStory && !isFlashcard {
 			// Try definitions-only book as fallback
-			defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories)
+			defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap)
 			if len(defCards) > 0 {
 				cards = append(cards, defCards...)
 				continue
@@ -615,7 +656,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 
 		if isStory {
-			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext)
+			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -623,7 +664,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 
 		if isFlashcard {
-			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext)
+			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load flashcard reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -660,6 +701,7 @@ func (s *Service) loadStoryReverseCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]ReverseCard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
@@ -704,15 +746,8 @@ func (s *Service) loadStoryReverseCards(
 					Meaning:      definition.Meaning,
 					Contexts:     contexts,
 					Expression:   expression,
-					WordDetail: WordDetail{
-						Origin:        definition.Origin,
-						Pronunciation: definition.Pronunciation,
-						PartOfSpeech:  definition.PartOfSpeech,
-						Synonyms:      definition.Synonyms,
-						Antonyms:      definition.Antonyms,
-						Memo:          definition.Memo,
-					},
-					Images: definition.Images,
+					WordDetail:   buildWordDetail(&definition, originMap),
+					Images:       definition.Images,
 				})
 			}
 		}
@@ -726,6 +761,7 @@ func (s *Service) loadFlashcardReverseCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]ReverseCard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
@@ -778,15 +814,8 @@ func (s *Service) loadFlashcardReverseCards(
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
 				Expression:   expression,
-				WordDetail: WordDetail{
-					Origin:        card.Origin,
-					Pronunciation: card.Pronunciation,
-					PartOfSpeech:  card.PartOfSpeech,
-					Synonyms:      card.Synonyms,
-					Antonyms:      card.Antonyms,
-					Memo:          card.Memo,
-				},
-				Images: card.Images,
+				WordDetail:   buildWordDetail(&card, originMap),
+				Images:       card.Images,
 			})
 		}
 	}
@@ -966,11 +995,12 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
+	originMap := buildOriginMap(reader)
 
 	var cards []FreeformCard
 
 	for notebookID := range storyIndexes {
-		words, err := s.loadStoryWords(reader, notebookID)
+		words, err := s.loadStoryWords(reader, notebookID, originMap)
 		if err != nil {
 			continue
 		}
@@ -978,7 +1008,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	}
 
 	for notebookID := range flashcardIndexes {
-		words, err := s.loadFlashcardWords(reader, notebookID)
+		words, err := s.loadFlashcardWords(reader, notebookID, originMap)
 		if err != nil {
 			continue
 		}
@@ -993,14 +1023,14 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
 			continue
 		}
-		defWords := loadDefinitionWords(reader, nbID)
+		defWords := loadDefinitionWords(reader, nbID, originMap)
 		cards = append(cards, defWords...)
 	}
 
 	return cards, nil
 }
 
-func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]FreeformCard, error) {
+func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
 		return nil, err
@@ -1035,15 +1065,8 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 					OriginalExpression: definition.Expression,
 					Meaning:            definition.Meaning,
 					Contexts:           contexts,
-					WordDetail: WordDetail{
-						Origin:        definition.Origin,
-						Pronunciation: definition.Pronunciation,
-						PartOfSpeech:  definition.PartOfSpeech,
-						Synonyms:      definition.Synonyms,
-						Antonyms:      definition.Antonyms,
-						Memo:          definition.Memo,
-					},
-					Images: definition.Images,
+					WordDetail:         buildWordDetail(&definition, originMap),
+					Images:             definition.Images,
 				})
 			}
 		}
@@ -1052,7 +1075,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 	return cards, nil
 }
 
-func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string) ([]FreeformCard, error) {
+func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		return nil, err
@@ -1091,15 +1114,8 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string)
 				Expression:   expression,
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
-				WordDetail: WordDetail{
-					Origin:        card.Origin,
-					Pronunciation: card.Pronunciation,
-					PartOfSpeech:  card.PartOfSpeech,
-					Synonyms:      card.Synonyms,
-					Antonyms:      card.Antonyms,
-					Memo:          card.Memo,
-				},
-				Images: card.Images,
+				WordDetail:   buildWordDetail(&card, originMap),
+				Images:       card.Images,
 			})
 		}
 	}
@@ -1357,7 +1373,7 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 }
 
 // loadDefinitionCards loads standard quiz cards from definitions-only books.
-func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory) []Card {
+func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin) []Card {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
@@ -1387,6 +1403,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 					Entry:         entry,
 					OriginalEntry: originalEntry,
 					Meaning:       note.Meaning,
+					WordDetail:    buildWordDetail(&note, originMap),
 				})
 			}
 		}
@@ -1395,7 +1412,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 }
 
 // loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
-func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory) []ReverseCard {
+func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin) []ReverseCard {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
@@ -1421,6 +1438,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					SceneTitle:   sceneTitle,
 					Meaning:      note.Meaning,
 					Expression:   expression,
+					WordDetail:   buildWordDetail(&note, originMap),
 				})
 			}
 		}
@@ -1429,7 +1447,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 }
 
 // loadDefinitionWords loads freeform cards from definitions-only books.
-func loadDefinitionWords(reader *notebook.Reader, bookID string) []FreeformCard {
+func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[string]notebook.EtymologyOrigin) []FreeformCard {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
@@ -1453,6 +1471,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string) []FreeformCard 
 					Expression:         expression,
 					OriginalExpression: note.Expression,
 					Meaning:            note.Meaning,
+					WordDetail:         buildWordDetail(&note, originMap),
 				})
 			}
 		}

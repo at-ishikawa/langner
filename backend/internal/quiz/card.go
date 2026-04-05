@@ -6,6 +6,14 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 )
 
+// WordOriginPart holds a resolved etymology origin with full details.
+type WordOriginPart struct {
+	Origin   string
+	Type     string
+	Language string
+	Meaning  string
+}
+
 // WordDetail holds rich metadata about a word.
 type WordDetail struct {
 	Origin        string
@@ -14,6 +22,7 @@ type WordDetail struct {
 	Synonyms      []string
 	Antonyms      []string
 	Memo          string
+	OriginParts   []WordOriginPart
 }
 
 // Card represents a single quiz card shared between CLI and RPC.

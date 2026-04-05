@@ -115,8 +115,12 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 }
 
 func toProtoWordDetail(wd quiz.WordDetail) *apiv1.WordDetail {
-	if wd.Origin == "" && wd.Pronunciation == "" && wd.PartOfSpeech == "" && len(wd.Synonyms) == 0 && len(wd.Antonyms) == 0 && wd.Memo == "" { return nil }
-	return &apiv1.WordDetail{Origin: wd.Origin, Pronunciation: wd.Pronunciation, PartOfSpeech: wd.PartOfSpeech, Synonyms: wd.Synonyms, Antonyms: wd.Antonyms, Memo: wd.Memo}
+	if wd.Origin == "" && wd.Pronunciation == "" && wd.PartOfSpeech == "" && len(wd.Synonyms) == 0 && len(wd.Antonyms) == 0 && wd.Memo == "" && len(wd.OriginParts) == 0 { return nil }
+	var parts []*apiv1.WordOriginPart
+	for _, p := range wd.OriginParts {
+		parts = append(parts, &apiv1.WordOriginPart{Origin: p.Origin, Type: p.Type, Language: p.Language, Meaning: p.Meaning})
+	}
+	return &apiv1.WordDetail{Origin: wd.Origin, Pronunciation: wd.Pronunciation, PartOfSpeech: wd.PartOfSpeech, Synonyms: wd.Synonyms, Antonyms: wd.Antonyms, Memo: wd.Memo, OriginParts: parts}
 }
 
 func validateRequest(msg proto.Message) *connect.Error {

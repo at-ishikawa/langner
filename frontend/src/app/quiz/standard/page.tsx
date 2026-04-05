@@ -26,6 +26,7 @@ interface FeedbackData {
   partOfSpeech?: string;
   learnedAt?: string;
   images?: string[];
+  originParts?: { origin: string; type: string; language: string; meaning: string }[];
 }
 
 export default function QuizCardPage() {
@@ -109,6 +110,7 @@ export default function QuizCardPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
+        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -154,6 +156,7 @@ export default function QuizCardPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
+        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -372,6 +375,26 @@ export default function QuizCardPage() {
                     {feedback.images.map((src, i) => (
                       <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
                     ))}
+                  </Box>
+                )}
+
+                {feedback.originParts && feedback.originParts.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold" fontSize="sm">Etymology</Text>
+                    <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                      {feedback.originParts.map((p, i) => (
+                        <Box key={i} display="flex" alignItems="center" gap={1}>
+                          {i > 0 && <Text color="fg.muted">+</Text>}
+                          <Text color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium" fontSize="sm">{p.origin}</Text>
+                          <Text fontSize="sm" color="fg.muted">({p.meaning})</Text>
+                          {p.language && (
+                            <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                              <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
+                            </Box>
+                          )}
+                        </Box>
+                      ))}
+                    </Box>
                   </Box>
                 )}
               </FeedbackActions>

@@ -9,6 +9,7 @@ export interface WordDetail {
   synonyms?: string[];
   antonyms?: string[];
   memo?: string;
+  originParts?: { origin: string; type: string; language: string; meaning: string }[];
 }
 
 interface Example {
