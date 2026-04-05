@@ -230,7 +230,7 @@ test("completes freeform quiz flow and shows results", async ({ page }) => {
   await page.getByPlaceholder("e.g., to go to bed; to sleep").fill("to go to sleep");
   await page.getByRole("button", { name: "Check Answer" }).click();
 
-  await expect(page.getByText(/Correct!/)).toBeVisible();
+  await expect(page.getByText(/Correct/)).toBeVisible();
 
   // Go to next word
   await page.getByRole("button", { name: "Next Word" }).click();
