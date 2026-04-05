@@ -120,13 +120,63 @@ func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []Lea
 	switch quizType {
 	case QuizTypeReverse:
 		return exp.ReverseLogs
-	case QuizTypeEtymologyBreakdown:
+	case QuizTypeEtymologyStandard:
 		return exp.EtymologyBreakdownLogs
-	case QuizTypeEtymologyAssembly:
+	case QuizTypeEtymologyReverse:
 		return exp.EtymologyAssemblyLogs
 	default:
 		return exp.LearnedLogs
 	}
+}
+
+// SetLogsForQuizType sets learning logs for the specified quiz type
+func (exp *LearningHistoryExpression) SetLogsForQuizType(quizType QuizType, logs []LearningRecord) {
+	switch quizType {
+	case QuizTypeReverse:
+		exp.ReverseLogs = logs
+	case QuizTypeEtymologyStandard:
+		exp.EtymologyBreakdownLogs = logs
+	case QuizTypeEtymologyReverse:
+		exp.EtymologyAssemblyLogs = logs
+	default:
+		exp.LearnedLogs = logs
+	}
+}
+
+// NeedsForwardReview returns true if the expression needs forward quiz review
+// based on spaced repetition algorithm
+func (exp LearningHistoryExpression) NeedsForwardReview() bool {
+	if len(exp.LearnedLogs) == 0 {
+		return true
+	}
+
+	lastLog := exp.LearnedLogs[0]
+
+	// Always include misunderstood expressions for review
+	if lastLog.Status == LearnedStatusMisunderstood {
+		return true
+	}
+
+	// Use stored interval if available
+	threshold := lastLog.IntervalDays
+	if threshold == 0 {
+		// Fallback: calculate based on correct streak
+		correctCount := 0
+		for _, log := range exp.LearnedLogs {
+			if log.Status != LearnedStatusMisunderstood && log.Status != LearnedStatusLearning {
+				correctCount++
+			}
+		}
+		threshold = GetThresholdDaysFromCount(correctCount)
+	}
+
+	// Calculate elapsed days since last review
+	now := time.Now()
+	elapsed := now.Sub(lastLog.LearnedAt.Time)
+	elapsedDays := int(elapsed.Hours() / 24)
+
+	// Need review if elapsed days >= threshold
+	return elapsedDays >= threshold
 }
 
 // GetEasinessFactorForQuizType returns the easiness factor for the specified quiz type
@@ -137,12 +187,12 @@ func (exp LearningHistoryExpression) GetEasinessFactorForQuizType(quizType QuizT
 			return DefaultEasinessFactor
 		}
 		return exp.ReverseEasinessFactor
-	case QuizTypeEtymologyBreakdown:
+	case QuizTypeEtymologyStandard:
 		if exp.EtymologyBreakdownEasinessFactor == 0 {
 			return DefaultEasinessFactor
 		}
 		return exp.EtymologyBreakdownEasinessFactor
-	case QuizTypeEtymologyAssembly:
+	case QuizTypeEtymologyReverse:
 		if exp.EtymologyAssemblyEasinessFactor == 0 {
 			return DefaultEasinessFactor
 		}
@@ -199,9 +249,9 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	var logs []LearningRecord
 
 	switch quizType {
-	case QuizTypeEtymologyBreakdown:
+	case QuizTypeEtymologyStandard:
 		logs = exp.EtymologyBreakdownLogs
-	case QuizTypeEtymologyAssembly:
+	case QuizTypeEtymologyReverse:
 		logs = exp.EtymologyAssemblyLogs
 	default:
 		return
@@ -229,9 +279,9 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	}
 
 	switch quizType {
-	case QuizTypeEtymologyBreakdown:
+	case QuizTypeEtymologyStandard:
 		exp.EtymologyBreakdownLogs = append([]LearningRecord{newRecord}, exp.EtymologyBreakdownLogs...)
-	case QuizTypeEtymologyAssembly:
+	case QuizTypeEtymologyReverse:
 		exp.EtymologyAssemblyLogs = append([]LearningRecord{newRecord}, exp.EtymologyAssemblyLogs...)
 	}
 }

@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type QuizType = "standard" | "reverse" | "freeform" | "etymology-breakdown" | "etymology-assembly" | "etymology-freeform";
+export type QuizType = "standard" | "reverse" | "freeform" | "etymology-standard" | "etymology-reverse" | "etymology-freeform";
 
 export interface WordDetail {
   origin?: string;
@@ -31,19 +31,13 @@ export interface ReverseFlashcard {
   sceneTitle: string;
 }
 
-export interface EtymologyCard {
+export interface EtymologyOriginCard {
   cardId: bigint;
-  expression: string;
-  meaning: string;
-  originParts: EtymologyQuizOrigin[];
-  notebookName: string;
-}
-
-export interface EtymologyQuizOrigin {
   origin: string;
   type: string;
   language: string;
   meaning: string;
+  notebookName: string;
 }
 
 export interface OriginalValues {
@@ -103,61 +97,52 @@ export interface FreeformResult {
   images?: string[];
 }
 
-export interface OriginGrade {
-  userOrigin: string;
-  userMeaning: string;
-  originCorrect: boolean;
-  meaningCorrect: boolean;
-  correctOrigin?: { origin: string; meaning: string };
-}
-
-export interface EtymologyResult {
+export interface EtymologyOriginResult {
   noteId?: bigint;
   cardId?: bigint;
-  expression: string;
-  meaning: string;
+  origin: string;
   answer: string;
   correct: boolean;
   reason: string;
-  originGrades: OriginGrade[];
-  relatedDefinitions: { expression: string; meaning: string; notebookName: string }[];
-  originParts?: EtymologyQuizOrigin[];
+  correctAnswer: string;
+  type: string;
+  language: string;
+  notebookName?: string;
   nextReviewDate?: string;
   learnedAt?: string;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
-  images?: string[];
 }
 
 interface QuizState {
   quizType: QuizType;
   flashcards: Flashcard[];
   reverseFlashcards: ReverseFlashcard[];
-  etymologyCards: EtymologyCard[];
+  etymologyOriginCards: EtymologyOriginCard[];
   currentIndex: number;
   results: QuizResult[];
   reverseResults: ReverseQuizResult[];
   freeformResults: FreeformResult[];
-  etymologyResults: EtymologyResult[];
+  etymologyOriginResults: EtymologyOriginResult[];
   wordCount: number;
   freeformExpressions: string[];
   freeformNextReviewDates: Record<string, string>;
-  etymologyFreeformExpressions: string[];
+  etymologyFreeformOrigins: string[];
   etymologyFreeformNextReviewDates: Record<string, string>;
   setQuizType: (type: QuizType) => void;
   setFlashcards: (flashcards: Flashcard[]) => void;
   setReverseFlashcards: (flashcards: ReverseFlashcard[]) => void;
-  setEtymologyCards: (cards: EtymologyCard[]) => void;
+  setEtymologyOriginCards: (cards: EtymologyOriginCard[]) => void;
   setWordCount: (count: number) => void;
   setFreeformExpressions: (expressions: string[]) => void;
   setFreeformNextReviewDates: (dates: Record<string, string>) => void;
-  setEtymologyFreeformExpressions: (expressions: string[]) => void;
+  setEtymologyFreeformOrigins: (origins: string[]) => void;
   setEtymologyFreeformNextReviewDates: (dates: Record<string, string>) => void;
   submitResult: (result: QuizResult) => void;
   submitReverseResult: (result: ReverseQuizResult) => void;
   submitFreeformResult: (result: FreeformResult) => void;
-  submitEtymologyResult: (result: EtymologyResult) => void;
+  submitEtymologyOriginResult: (result: EtymologyOriginResult) => void;
   nextCard: () => void;
   reset: () => void;
   overrideResult: (index: number, quizType: QuizType, nextReviewDate: string, originalValues: OriginalValues) => void;
@@ -171,16 +156,16 @@ const initialState = {
   quizType: "standard" as QuizType,
   flashcards: [] as Flashcard[],
   reverseFlashcards: [] as ReverseFlashcard[],
-  etymologyCards: [] as EtymologyCard[],
+  etymologyOriginCards: [] as EtymologyOriginCard[],
   currentIndex: 0,
   results: [] as QuizResult[],
   reverseResults: [] as ReverseQuizResult[],
   freeformResults: [] as FreeformResult[],
-  etymologyResults: [] as EtymologyResult[],
+  etymologyOriginResults: [] as EtymologyOriginResult[],
   wordCount: 0,
   freeformExpressions: [] as string[],
   freeformNextReviewDates: {} as Record<string, string>,
-  etymologyFreeformExpressions: [] as string[],
+  etymologyFreeformOrigins: [] as string[],
   etymologyFreeformNextReviewDates: {} as Record<string, string>,
 };
 
@@ -189,7 +174,7 @@ function updateArrayItem<T>(arr: T[], index: number, patch: Partial<T>): T[] {
 }
 
 function isEtymologyType(qt: QuizType): boolean {
-  return qt === "etymology-breakdown" || qt === "etymology-assembly" || qt === "etymology-freeform";
+  return qt === "etymology-standard" || qt === "etymology-reverse" || qt === "etymology-freeform";
 }
 
 export const useQuizStore = create<QuizState>((set) => ({
@@ -197,11 +182,11 @@ export const useQuizStore = create<QuizState>((set) => ({
   setQuizType: (quizType) => set({ quizType }),
   setFlashcards: (flashcards) => set({ flashcards }),
   setReverseFlashcards: (reverseFlashcards) => set({ reverseFlashcards }),
-  setEtymologyCards: (etymologyCards) => set({ etymologyCards }),
+  setEtymologyOriginCards: (etymologyOriginCards) => set({ etymologyOriginCards }),
   setWordCount: (wordCount) => set({ wordCount }),
   setFreeformExpressions: (freeformExpressions) => set({ freeformExpressions }),
   setFreeformNextReviewDates: (freeformNextReviewDates) => set({ freeformNextReviewDates }),
-  setEtymologyFreeformExpressions: (etymologyFreeformExpressions) => set({ etymologyFreeformExpressions }),
+  setEtymologyFreeformOrigins: (etymologyFreeformOrigins) => set({ etymologyFreeformOrigins }),
   setEtymologyFreeformNextReviewDates: (etymologyFreeformNextReviewDates) => set({ etymologyFreeformNextReviewDates }),
   submitResult: (result) =>
     set((state) => ({ results: [...state.results, result] })),
@@ -209,8 +194,8 @@ export const useQuizStore = create<QuizState>((set) => ({
     set((state) => ({ reverseResults: [...state.reverseResults, result] })),
   submitFreeformResult: (result) =>
     set((state) => ({ freeformResults: [...state.freeformResults, result] })),
-  submitEtymologyResult: (result) =>
-    set((state) => ({ etymologyResults: [...state.etymologyResults, result] })),
+  submitEtymologyOriginResult: (result) =>
+    set((state) => ({ etymologyOriginResults: [...state.etymologyOriginResults, result] })),
   nextCard: () =>
     set((state) => ({ currentIndex: state.currentIndex + 1 })),
   reset: () => set(initialState),
@@ -224,7 +209,7 @@ export const useQuizStore = create<QuizState>((set) => ({
         return { reverseResults: updateArrayItem(state.reverseResults, index, { correct: !state.reverseResults[index].correct, isOverridden: true, nextReviewDate, originalValues }) };
       }
       if (isEtymologyType(quizType)) {
-        return { etymologyResults: updateArrayItem(state.etymologyResults, index, { correct: !state.etymologyResults[index].correct, isOverridden: true, nextReviewDate, originalValues }) };
+        return { etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, { correct: !state.etymologyOriginResults[index].correct, isOverridden: true, nextReviewDate, originalValues }) };
       }
       return { freeformResults: updateArrayItem(state.freeformResults, index, { correct: !state.freeformResults[index].correct, isOverridden: true, nextReviewDate, originalValues }) };
     }),
@@ -238,7 +223,7 @@ export const useQuizStore = create<QuizState>((set) => ({
         return { reverseResults: updateArrayItem(state.reverseResults, index, { correct, isOverridden: false, nextReviewDate, originalValues: undefined }) };
       }
       if (isEtymologyType(quizType)) {
-        return { etymologyResults: updateArrayItem(state.etymologyResults, index, { correct, isOverridden: false, nextReviewDate, originalValues: undefined }) };
+        return { etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, { correct, isOverridden: false, nextReviewDate, originalValues: undefined }) };
       }
       return { freeformResults: updateArrayItem(state.freeformResults, index, { correct, isOverridden: false, nextReviewDate, originalValues: undefined }) };
     }),
@@ -252,7 +237,7 @@ export const useQuizStore = create<QuizState>((set) => ({
         return { reverseResults: updateArrayItem(state.reverseResults, index, { isSkipped: true }) };
       }
       if (isEtymologyType(quizType)) {
-        return { etymologyResults: updateArrayItem(state.etymologyResults, index, { isSkipped: true }) };
+        return { etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, { isSkipped: true }) };
       }
       return { freeformResults: updateArrayItem(state.freeformResults, index, { isSkipped: true }) };
     }),
@@ -266,7 +251,7 @@ export const useQuizStore = create<QuizState>((set) => ({
         return { reverseResults: updateArrayItem(state.reverseResults, index, { isSkipped: false }) };
       }
       if (isEtymologyType(quizType)) {
-        return { etymologyResults: updateArrayItem(state.etymologyResults, index, { isSkipped: false }) };
+        return { etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, { isSkipped: false }) };
       }
       return { freeformResults: updateArrayItem(state.freeformResults, index, { isSkipped: false }) };
     }),
@@ -280,7 +265,7 @@ export const useQuizStore = create<QuizState>((set) => ({
         return { reverseResults: updateArrayItem(state.reverseResults, index, { nextReviewDate: newDate }) };
       }
       if (isEtymologyType(quizType)) {
-        return { etymologyResults: updateArrayItem(state.etymologyResults, index, { nextReviewDate: newDate }) };
+        return { etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, { nextReviewDate: newDate }) };
       }
       return { freeformResults: updateArrayItem(state.freeformResults, index, { nextReviewDate: newDate }) };
     }),

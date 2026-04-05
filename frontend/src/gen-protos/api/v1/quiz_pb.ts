@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/quiz.proto.
  */
 export const file_api_v1_quiz: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkilgEKD05vdGVib29rU3VtbWFyeRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHJldmlld19jb3VudBgDIAEoBRIMCgRraW5kGAQgASgJEhwKFHJldmVyc2VfcmV2aWV3X2NvdW50GAUgASgFEh4KFmV0eW1vbG9neV9yZXZpZXdfY291bnQYBiABKAUiTQoQU3RhcnRRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhkKEWluY2x1ZGVfdW5zdHVkaWVkGAIgASgIIjoKEVN0YXJ0UXVpelJlc3BvbnNlEiUKCmZsYXNoY2FyZHMYASADKAsyES5hcGkudjEuRmxhc2hjYXJkIk4KCUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg0KBWVudHJ5GAIgASgJEiEKCGV4YW1wbGVzGAMgAygLMg8uYXBpLnYxLkV4YW1wbGUiKAoHRXhhbXBsZRIMCgR0ZXh0GAEgASgJEg8KB3NwZWFrZXIYAiABKAkifQoKV29yZERldGFpbBIOCgZvcmlnaW4YASABKAkSFQoNcHJvbnVuY2lhdGlvbhgCIAEoCRIWCg5wYXJ0X29mX3NwZWVjaBgDIAEoCRIQCghzeW5vbnltcxgEIAMoCRIQCghhbnRvbnltcxgFIAMoCRIMCgRtZW1vGAYgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMirwEKFFN1Ym1pdEFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDwoHbWVhbmluZxgCIAEoCRIOCgZyZWFzb24YAyABKAkSJwoLd29yZF9kZXRhaWwYBCABKAsyEi5hcGkudjEuV29yZERldGFpbBIYChBuZXh0X3Jldmlld19kYXRlGAUgASgJEhIKCmxlYXJuZWRfYXQYBiABKAkSDgoGaW1hZ2VzGAcgAygJIlcKF1N0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0Eh4KDG5vdGVib29rX2lkcxgBIAMoCUIIukgFkgECCAESHAoUbGlzdF9taXNzaW5nX2NvbnRleHQYAiABKAgiSAoYU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEiwKCmZsYXNoY2FyZHMYASADKAsyGC5hcGkudjEuUmV2ZXJzZUZsYXNoY2FyZCKgAQoQUmV2ZXJzZUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg8KB21lYW5pbmcYAiABKAkSKQoIY29udGV4dHMYAyADKAsyFy5hcGkudjEuQ29udGV4dFNlbnRlbmNlEhUKDW5vdGVib29rX25hbWUYBCABKAkSEwoLc3RvcnlfdGl0bGUYBSABKAkSEwoLc2NlbmVfdGl0bGUYBiABKAkiOgoPQ29udGV4dFNlbnRlbmNlEg8KB2NvbnRleHQYASABKAkSFgoObWFza2VkX2NvbnRleHQYAiABKAkibQoaU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMi9AEKG1N1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhIKCmV4cHJlc3Npb24YAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSEAoIY29udGV4dHMYBSADKAkSJwoLd29yZF9kZXRhaWwYBiABKAsyEi5hcGkudjEuV29yZERldGFpbBIWCg5jbGFzc2lmaWNhdGlvbhgHIAEoCRIYChBuZXh0X3Jldmlld19kYXRlGAggASgJEhIKCmxlYXJuZWRfYXQYCSABKAkSDgoGaW1hZ2VzGAogAygJIhoKGFN0YXJ0RnJlZWZvcm1RdWl6UmVxdWVzdCLrAQoZU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRISCgp3b3JkX2NvdW50GAEgASgFEhMKC2V4cHJlc3Npb25zGAIgAygJEmQKG2V4cHJlc3Npb25fbmV4dF9yZXZpZXdfZGF0ZRgDIAMoCzI/LmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlc3BvbnNlLkV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5Gj8KHUV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEicAobU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0EhkKBHdvcmQYASABKAlCC7pICHIGEAEyAlxTEhwKB21lYW5pbmcYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMi/gEKHFN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIMCgR3b3JkGAIgASgJEg8KB21lYW5pbmcYAyABKAkSDgoGcmVhc29uGAQgASgJEg8KB2NvbnRleHQYBSABKAkSFQoNbm90ZWJvb2tfbmFtZRgGIAEoCRInCgt3b3JkX2RldGFpbBgHIAEoCzISLmFwaS52MS5Xb3JkRGV0YWlsEhgKEG5leHRfcmV2aWV3X2RhdGUYCCABKAkSEgoKbGVhcm5lZF9hdBgJIAEoCRIPCgdub3RlX2lkGAogASgDEg4KBmltYWdlcxgLIAMoCSLTAQoVT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGQoMbWFya19jb3JyZWN0GAQgASgISACIAQESHQoQbmV4dF9yZXZpZXdfZGF0ZRgFIAEoCUgBiAEBQg8KDV9tYXJrX2NvcnJlY3RCEwoRX25leHRfcmV2aWV3X2RhdGUiiwEKFk92ZXJyaWRlQW5zd2VyUmVzcG9uc2USGAoQbmV4dF9yZXZpZXdfZGF0ZRgBIAEoCRIYChBvcmlnaW5hbF9xdWFsaXR5GAIgASgFEhcKD29yaWdpbmFsX3N0YXR1cxgDIAEoCRIeChZvcmlnaW5hbF9pbnRlcnZhbF9kYXlzGAQgASgFSgQIBRAGItABChlVbmRvT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGAoQb3JpZ2luYWxfcXVhbGl0eRgEIAEoBRIXCg9vcmlnaW5hbF9zdGF0dXMYBSABKAkSHgoWb3JpZ2luYWxfaW50ZXJ2YWxfZGF5cxgGIAEoBUoECAcQCCJHChpVbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhgKEG5leHRfcmV2aWV3X2RhdGUYAiABKAkiZAoPU2tpcFdvcmRSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhIKCnNraXBfdW50aWwYAyABKAkiEgoQU2tpcFdvcmRSZXNwb25zZSJSChFSZXN1bWVXb3JkUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAEiMKCXF1aXpfdHlwZRgCIAEoDjIQLmFwaS52MS5RdWl6VHlwZSIUChJSZXN1bWVXb3JkUmVzcG9uc2UiOAoVRXR5bW9sb2d5T3JpZ2luQW5zd2VyEg4KBm9yaWdpbhgBIAEoCRIPCgdtZWFuaW5nGAIgASgJIqkBChRFdHltb2xvZ3lPcmlnaW5HcmFkZRITCgt1c2VyX29yaWdpbhgBIAEoCRIUCgx1c2VyX21lYW5pbmcYAiABKAkSFgoOb3JpZ2luX2NvcnJlY3QYAyABKAgSFwoPbWVhbmluZ19jb3JyZWN0GAQgASgIEjUKDmNvcnJlY3Rfb3JpZ2luGAUgASgLMh0uYXBpLnYxLkV0eW1vbG9neU9yaWdpbkFuc3dlciKXAQoRRXR5bW9sb2d5UXVpekNhcmQSDwoHY2FyZF9pZBgBIAEoAxISCgpleHByZXNzaW9uGAIgASgJEg8KB21lYW5pbmcYAyABKAkSNQoMb3JpZ2luX3BhcnRzGAQgAygLMh8uYXBpLnYxLkV0eW1vbG9neVF1aXpPcmlnaW5QYXJ0EhUKDW5vdGVib29rX25hbWUYBSABKAkiWgoXRXR5bW9sb2d5UXVpek9yaWdpblBhcnQSDgoGb3JpZ2luGAEgASgJEgwKBHR5cGUYAiABKAkSEAoIbGFuZ3VhZ2UYAyABKAkSDwoHbWVhbmluZxgEIAEoCSJPChFSZWxhdGVkRGVmaW5pdGlvbhISCgpleHByZXNzaW9uGAEgASgJEg8KB21lYW5pbmcYAiABKAkSFQoNbm90ZWJvb2tfbmFtZRgDIAEoCSKgAQoZU3RhcnRFdHltb2xvZ3lRdWl6UmVxdWVzdBIeChZldHltb2xvZ3lfbm90ZWJvb2tfaWRzGAEgAygJEh8KF2RlZmluaXRpb25fbm90ZWJvb2tfaWRzGAIgAygJEicKBG1vZGUYAyABKA4yGS5hcGkudjEuRXR5bW9sb2d5UXVpek1vZGUSGQoRaW5jbHVkZV91bnN0dWRpZWQYBCABKAgiRgoaU3RhcnRFdHltb2xvZ3lRdWl6UmVzcG9uc2USKAoFY2FyZHMYASADKAsyGS5hcGkudjEuRXR5bW9sb2d5UXVpekNhcmQiiwEKJVN1Ym1pdEV0eW1vbG9neUJyZWFrZG93bkFuc3dlclJlcXVlc3QSGAoHY2FyZF9pZBgBIAEoA0IHukgEIgIgABIuCgdhbnN3ZXJzGAIgAygLMh0uYXBpLnYxLkV0eW1vbG9neU9yaWdpbkFuc3dlchIYChByZXNwb25zZV90aW1lX21zGAMgASgDIoUCCiZTdWJtaXRFdHltb2xvZ3lCcmVha2Rvd25BbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEg4KBnJlYXNvbhgCIAEoCRIzCg1vcmlnaW5fZ3JhZGVzGAMgAygLMhwuYXBpLnYxLkV0eW1vbG9neU9yaWdpbkdyYWRlEjYKE3JlbGF0ZWRfZGVmaW5pdGlvbnMYBCADKAsyGS5hcGkudjEuUmVsYXRlZERlZmluaXRpb24SGAoQbmV4dF9yZXZpZXdfZGF0ZRgFIAEoCRISCgpsZWFybmVkX2F0GAYgASgJEg8KB25vdGVfaWQYByABKAMSDgoGaW1hZ2VzGAggAygJIncKJFN1Ym1pdEV0eW1vbG9neUFzc2VtYmx5QW5zd2VyUmVxdWVzdBIYCgdjYXJkX2lkGAEgASgDQge6SAQiAiAAEhsKBmFuc3dlchgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyKiAgolU3VibWl0RXR5bW9sb2d5QXNzZW1ibHlBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEg4KBnJlYXNvbhgCIAEoCRIaChJjb3JyZWN0X2V4cHJlc3Npb24YAyABKAkSNQoMb3JpZ2luX3BhcnRzGAQgAygLMh8uYXBpLnYxLkV0eW1vbG9neVF1aXpPcmlnaW5QYXJ0EjYKE3JlbGF0ZWRfZGVmaW5pdGlvbnMYBSADKAsyGS5hcGkudjEuUmVsYXRlZERlZmluaXRpb24SGAoQbmV4dF9yZXZpZXdfZGF0ZRgGIAEoCRISCgpsZWFybmVkX2F0GAcgASgJEg8KB25vdGVfaWQYCCABKAMSDgoGaW1hZ2VzGAkgAygJImQKIVN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVxdWVzdBIeChZldHltb2xvZ3lfbm90ZWJvb2tfaWRzGAEgAygJEh8KF2RlZmluaXRpb25fbm90ZWJvb2tfaWRzGAIgAygJIs0BCiJTdGFydEV0eW1vbG9neUZyZWVmb3JtUXVpelJlc3BvbnNlEhMKC2V4cHJlc3Npb25zGAEgAygJEloKEW5leHRfcmV2aWV3X2RhdGVzGAIgAygLMj8uYXBpLnYxLlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVzcG9uc2UuTmV4dFJldmlld0RhdGVzRW50cnkaNgoUTmV4dFJldmlld0RhdGVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKRAQokU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0Eh8KCmV4cHJlc3Npb24YASABKAlCC7pICHIGEAEyAlxTEi4KB2Fuc3dlcnMYAiADKAsyHS5hcGkudjEuRXR5bW9sb2d5T3JpZ2luQW5zd2VyEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMimwIKJVN1Ym1pdEV0eW1vbG9neUZyZWVmb3JtQW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIOCgZyZWFzb24YAiABKAkSMwoNb3JpZ2luX2dyYWRlcxgDIAMoCzIcLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5HcmFkZRI2ChNyZWxhdGVkX2RlZmluaXRpb25zGAQgAygLMhkuYXBpLnYxLlJlbGF0ZWREZWZpbml0aW9uEhgKEG5leHRfcmV2aWV3X2RhdGUYBSABKAkSEgoKbGVhcm5lZF9hdBgGIAEoCRIVCg1ub3RlYm9va19uYW1lGAcgASgJEg8KB25vdGVfaWQYCCABKAMSDgoGaW1hZ2VzGAkgAygJKrEBCghRdWl6VHlwZRIZChVRVUlaX1RZUEVfVU5TUEVDSUZJRUQQABIWChJRVUlaX1RZUEVfU1RBTkRBUkQQARIVChFRVUlaX1RZUEVfUkVWRVJTRRACEhYKElFVSVpfVFlQRV9GUkVFRk9STRADEiEKHVFVSVpfVFlQRV9FVFlNT0xPR1lfQlJFQUtET1dOEAQSIAocUVVJWl9UWVBFX0VUWU1PTE9HWV9BU1NFTUJMWRAFKn0KEUV0eW1vbG9neVF1aXpNb2RlEiMKH0VUWU1PTE9HWV9RVUlaX01PREVfVU5TUEVDSUZJRUQQABIhCh1FVFlNT0xPR1lfUVVJWl9NT0RFX0JSRUFLRE9XThABEiAKHEVUWU1PTE9HWV9RVUlaX01PREVfQVNTRU1CTFkQAjLgCwoLUXVpelNlcnZpY2USTwoOR2V0UXVpek9wdGlvbnMSHS5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXF1ZXN0Gh4uYXBpLnYxLkdldFF1aXpPcHRpb25zUmVzcG9uc2USQAoJU3RhcnRRdWl6EhguYXBpLnYxLlN0YXJ0UXVpelJlcXVlc3QaGS5hcGkudjEuU3RhcnRRdWl6UmVzcG9uc2USSQoMU3VibWl0QW5zd2VyEhsuYXBpLnYxLlN1Ym1pdEFuc3dlclJlcXVlc3QaHC5hcGkudjEuU3VibWl0QW5zd2VyUmVzcG9uc2USVQoQU3RhcnRSZXZlcnNlUXVpehIfLmFwaS52MS5TdGFydFJldmVyc2VRdWl6UmVxdWVzdBogLmFwaS52MS5TdGFydFJldmVyc2VRdWl6UmVzcG9uc2USXgoTU3VibWl0UmV2ZXJzZUFuc3dlchIiLmFwaS52MS5TdWJtaXRSZXZlcnNlQW5zd2VyUmVxdWVzdBojLmFwaS52MS5TdWJtaXRSZXZlcnNlQW5zd2VyUmVzcG9uc2USWAoRU3RhcnRGcmVlZm9ybVF1aXoSIC5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXF1ZXN0GiEuYXBpLnYxLlN0YXJ0RnJlZWZvcm1RdWl6UmVzcG9uc2USYQoUU3VibWl0RnJlZWZvcm1BbnN3ZXISIy5hcGkudjEuU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0GiQuYXBpLnYxLlN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVzcG9uc2USTwoOT3ZlcnJpZGVBbnN3ZXISHS5hcGkudjEuT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0Gh4uYXBpLnYxLk92ZXJyaWRlQW5zd2VyUmVzcG9uc2USWwoSVW5kb092ZXJyaWRlQW5zd2VyEiEuYXBpLnYxLlVuZG9PdmVycmlkZUFuc3dlclJlcXVlc3QaIi5hcGkudjEuVW5kb092ZXJyaWRlQW5zd2VyUmVzcG9uc2USPQoIU2tpcFdvcmQSFy5hcGkudjEuU2tpcFdvcmRSZXF1ZXN0GhguYXBpLnYxLlNraXBXb3JkUmVzcG9uc2USQwoKUmVzdW1lV29yZBIZLmFwaS52MS5SZXN1bWVXb3JkUmVxdWVzdBoaLmFwaS52MS5SZXN1bWVXb3JkUmVzcG9uc2USWwoSU3RhcnRFdHltb2xvZ3lRdWl6EiEuYXBpLnYxLlN0YXJ0RXR5bW9sb2d5UXVpelJlcXVlc3QaIi5hcGkudjEuU3RhcnRFdHltb2xvZ3lRdWl6UmVzcG9uc2USfwoeU3VibWl0RXR5bW9sb2d5QnJlYWtkb3duQW5zd2VyEi0uYXBpLnYxLlN1Ym1pdEV0eW1vbG9neUJyZWFrZG93bkFuc3dlclJlcXVlc3QaLi5hcGkudjEuU3VibWl0RXR5bW9sb2d5QnJlYWtkb3duQW5zd2VyUmVzcG9uc2USfAodU3VibWl0RXR5bW9sb2d5QXNzZW1ibHlBbnN3ZXISLC5hcGkudjEuU3VibWl0RXR5bW9sb2d5QXNzZW1ibHlBbnN3ZXJSZXF1ZXN0Gi0uYXBpLnYxLlN1Ym1pdEV0eW1vbG9neUFzc2VtYmx5QW5zd2VyUmVzcG9uc2UScwoaU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXoSKS5hcGkudjEuU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXpSZXF1ZXN0GiouYXBpLnYxLlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVzcG9uc2USfAodU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXISLC5hcGkudjEuU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0Gi0uYXBpLnYxLlN1Ym1pdEV0eW1vbG9neUZyZWVmb3JtQW5zd2VyUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkilgEKD05vdGVib29rU3VtbWFyeRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHJldmlld19jb3VudBgDIAEoBRIMCgRraW5kGAQgASgJEhwKFHJldmVyc2VfcmV2aWV3X2NvdW50GAUgASgFEh4KFmV0eW1vbG9neV9yZXZpZXdfY291bnQYBiABKAUiTQoQU3RhcnRRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhkKEWluY2x1ZGVfdW5zdHVkaWVkGAIgASgIIjoKEVN0YXJ0UXVpelJlc3BvbnNlEiUKCmZsYXNoY2FyZHMYASADKAsyES5hcGkudjEuRmxhc2hjYXJkIk4KCUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg0KBWVudHJ5GAIgASgJEiEKCGV4YW1wbGVzGAMgAygLMg8uYXBpLnYxLkV4YW1wbGUiKAoHRXhhbXBsZRIMCgR0ZXh0GAEgASgJEg8KB3NwZWFrZXIYAiABKAkifQoKV29yZERldGFpbBIOCgZvcmlnaW4YASABKAkSFQoNcHJvbnVuY2lhdGlvbhgCIAEoCRIWCg5wYXJ0X29mX3NwZWVjaBgDIAEoCRIQCghzeW5vbnltcxgEIAMoCRIQCghhbnRvbnltcxgFIAMoCRIMCgRtZW1vGAYgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMirwEKFFN1Ym1pdEFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDwoHbWVhbmluZxgCIAEoCRIOCgZyZWFzb24YAyABKAkSJwoLd29yZF9kZXRhaWwYBCABKAsyEi5hcGkudjEuV29yZERldGFpbBIYChBuZXh0X3Jldmlld19kYXRlGAUgASgJEhIKCmxlYXJuZWRfYXQYBiABKAkSDgoGaW1hZ2VzGAcgAygJIlcKF1N0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0Eh4KDG5vdGVib29rX2lkcxgBIAMoCUIIukgFkgECCAESHAoUbGlzdF9taXNzaW5nX2NvbnRleHQYAiABKAgiSAoYU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEiwKCmZsYXNoY2FyZHMYASADKAsyGC5hcGkudjEuUmV2ZXJzZUZsYXNoY2FyZCKgAQoQUmV2ZXJzZUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg8KB21lYW5pbmcYAiABKAkSKQoIY29udGV4dHMYAyADKAsyFy5hcGkudjEuQ29udGV4dFNlbnRlbmNlEhUKDW5vdGVib29rX25hbWUYBCABKAkSEwoLc3RvcnlfdGl0bGUYBSABKAkSEwoLc2NlbmVfdGl0bGUYBiABKAkiOgoPQ29udGV4dFNlbnRlbmNlEg8KB2NvbnRleHQYASABKAkSFgoObWFza2VkX2NvbnRleHQYAiABKAkibQoaU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMi9AEKG1N1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhIKCmV4cHJlc3Npb24YAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSEAoIY29udGV4dHMYBSADKAkSJwoLd29yZF9kZXRhaWwYBiABKAsyEi5hcGkudjEuV29yZERldGFpbBIWCg5jbGFzc2lmaWNhdGlvbhgHIAEoCRIYChBuZXh0X3Jldmlld19kYXRlGAggASgJEhIKCmxlYXJuZWRfYXQYCSABKAkSDgoGaW1hZ2VzGAogAygJIhoKGFN0YXJ0RnJlZWZvcm1RdWl6UmVxdWVzdCLrAQoZU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRISCgp3b3JkX2NvdW50GAEgASgFEhMKC2V4cHJlc3Npb25zGAIgAygJEmQKG2V4cHJlc3Npb25fbmV4dF9yZXZpZXdfZGF0ZRgDIAMoCzI/LmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlc3BvbnNlLkV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5Gj8KHUV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEicAobU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0EhkKBHdvcmQYASABKAlCC7pICHIGEAEyAlxTEhwKB21lYW5pbmcYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMi/gEKHFN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIMCgR3b3JkGAIgASgJEg8KB21lYW5pbmcYAyABKAkSDgoGcmVhc29uGAQgASgJEg8KB2NvbnRleHQYBSABKAkSFQoNbm90ZWJvb2tfbmFtZRgGIAEoCRInCgt3b3JkX2RldGFpbBgHIAEoCzISLmFwaS52MS5Xb3JkRGV0YWlsEhgKEG5leHRfcmV2aWV3X2RhdGUYCCABKAkSEgoKbGVhcm5lZF9hdBgJIAEoCRIPCgdub3RlX2lkGAogASgDEg4KBmltYWdlcxgLIAMoCSLTAQoVT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGQoMbWFya19jb3JyZWN0GAQgASgISACIAQESHQoQbmV4dF9yZXZpZXdfZGF0ZRgFIAEoCUgBiAEBQg8KDV9tYXJrX2NvcnJlY3RCEwoRX25leHRfcmV2aWV3X2RhdGUiiwEKFk92ZXJyaWRlQW5zd2VyUmVzcG9uc2USGAoQbmV4dF9yZXZpZXdfZGF0ZRgBIAEoCRIYChBvcmlnaW5hbF9xdWFsaXR5GAIgASgFEhcKD29yaWdpbmFsX3N0YXR1cxgDIAEoCRIeChZvcmlnaW5hbF9pbnRlcnZhbF9kYXlzGAQgASgFSgQIBRAGItABChlVbmRvT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGAoQb3JpZ2luYWxfcXVhbGl0eRgEIAEoBRIXCg9vcmlnaW5hbF9zdGF0dXMYBSABKAkSHgoWb3JpZ2luYWxfaW50ZXJ2YWxfZGF5cxgGIAEoBUoECAcQCCJHChpVbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhgKEG5leHRfcmV2aWV3X2RhdGUYAiABKAkiZAoPU2tpcFdvcmRSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhIKCnNraXBfdW50aWwYAyABKAkiEgoQU2tpcFdvcmRSZXNwb25zZSJSChFSZXN1bWVXb3JkUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAEiMKCXF1aXpfdHlwZRgCIAEoDjIQLmFwaS52MS5RdWl6VHlwZSIUChJSZXN1bWVXb3JkUmVzcG9uc2UifAoRRXR5bW9sb2d5UXVpekNhcmQSDwoHY2FyZF9pZBgBIAEoAxIOCgZvcmlnaW4YAiABKAkSDAoEdHlwZRgDIAEoCRIQCghsYW5ndWFnZRgEIAEoCRIPCgdtZWFuaW5nGAUgASgJEhUKDW5vdGVib29rX25hbWUYBiABKAkifwoZU3RhcnRFdHltb2xvZ3lRdWl6UmVxdWVzdBIeChZldHltb2xvZ3lfbm90ZWJvb2tfaWRzGAEgAygJEicKBG1vZGUYAyABKA4yGS5hcGkudjEuRXR5bW9sb2d5UXVpek1vZGUSGQoRaW5jbHVkZV91bnN0dWRpZWQYBCABKAgiRgoaU3RhcnRFdHltb2xvZ3lRdWl6UmVzcG9uc2USKAoFY2FyZHMYASADKAsyGS5hcGkudjEuRXR5bW9sb2d5UXVpekNhcmQidwokU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJSZXF1ZXN0EhgKB2NhcmRfaWQYASABKANCB7pIBCICIAASGwoGYW5zd2VyGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIqABCiVTdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDgoGcmVhc29uGAIgASgJEhcKD2NvcnJlY3RfbWVhbmluZxgDIAEoCRIYChBuZXh0X3Jldmlld19kYXRlGAQgASgJEhIKCmxlYXJuZWRfYXQYBSABKAkSDwoHbm90ZV9pZBgGIAEoAyJ2CiNTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyUmVxdWVzdBIYCgdjYXJkX2lkGAEgASgDQge6SAQiAiAAEhsKBmFuc3dlchgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyK+AQokU3VibWl0RXR5bW9sb2d5UmV2ZXJzZUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDgoGcmVhc29uGAIgASgJEhYKDmNvcnJlY3Rfb3JpZ2luGAMgASgJEgwKBHR5cGUYBCABKAkSEAoIbGFuZ3VhZ2UYBSABKAkSGAoQbmV4dF9yZXZpZXdfZGF0ZRgGIAEoCRISCgpsZWFybmVkX2F0GAcgASgJEg8KB25vdGVfaWQYCCABKAMiQwohU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXpSZXF1ZXN0Eh4KFmV0eW1vbG9neV9ub3RlYm9va19pZHMYASADKAkiyQEKIlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVzcG9uc2USDwoHb3JpZ2lucxgBIAMoCRJaChFuZXh0X3Jldmlld19kYXRlcxgCIAMoCzI/LmFwaS52MS5TdGFydEV0eW1vbG9neUZyZWVmb3JtUXVpelJlc3BvbnNlLk5leHRSZXZpZXdEYXRlc0VudHJ5GjYKFE5leHRSZXZpZXdEYXRlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiewokU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0EhsKBm9yaWdpbhgBIAEoCUILukgIcgYQATICXFMSHAoHbWVhbmluZxgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyLXAQolU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEg4KBnJlYXNvbhgCIAEoCRIXCg9jb3JyZWN0X21lYW5pbmcYAyABKAkSDAoEdHlwZRgEIAEoCRIQCghsYW5ndWFnZRgFIAEoCRIVCg1ub3RlYm9va19uYW1lGAYgASgJEhgKEG5leHRfcmV2aWV3X2RhdGUYByABKAkSEgoKbGVhcm5lZF9hdBgIIAEoCRIPCgdub3RlX2lkGAkgASgDKq8BCghRdWl6VHlwZRIZChVRVUlaX1RZUEVfVU5TUEVDSUZJRUQQABIWChJRVUlaX1RZUEVfU1RBTkRBUkQQARIVChFRVUlaX1RZUEVfUkVWRVJTRRACEhYKElFVSVpfVFlQRV9GUkVFRk9STRADEiAKHFFVSVpfVFlQRV9FVFlNT0xPR1lfU1RBTkRBUkQQBBIfChtRVUlaX1RZUEVfRVRZTU9MT0dZX1JFVkVSU0UQBSp7ChFFdHltb2xvZ3lRdWl6TW9kZRIjCh9FVFlNT0xPR1lfUVVJWl9NT0RFX1VOU1BFQ0lGSUVEEAASIAocRVRZTU9MT0dZX1FVSVpfTU9ERV9TVEFOREFSRBABEh8KG0VUWU1PTE9HWV9RVUlaX01PREVfUkVWRVJTRRACMtoLCgtRdWl6U2VydmljZRJPCg5HZXRRdWl6T3B0aW9ucxIdLmFwaS52MS5HZXRRdWl6T3B0aW9uc1JlcXVlc3QaHi5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXNwb25zZRJACglTdGFydFF1aXoSGC5hcGkudjEuU3RhcnRRdWl6UmVxdWVzdBoZLmFwaS52MS5TdGFydFF1aXpSZXNwb25zZRJJCgxTdWJtaXRBbnN3ZXISGy5hcGkudjEuU3VibWl0QW5zd2VyUmVxdWVzdBocLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXNwb25zZRJVChBTdGFydFJldmVyc2VRdWl6Eh8uYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0GiAuYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXNwb25zZRJeChNTdWJtaXRSZXZlcnNlQW5zd2VyEiIuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0GiMuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRJYChFTdGFydEZyZWVmb3JtUXVpehIgLmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlcXVlc3QaIS5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRJhChRTdWJtaXRGcmVlZm9ybUFuc3dlchIjLmFwaS52MS5TdWJtaXRGcmVlZm9ybUFuc3dlclJlcXVlc3QaJC5hcGkudjEuU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXNwb25zZRJPCg5PdmVycmlkZUFuc3dlchIdLmFwaS52MS5PdmVycmlkZUFuc3dlclJlcXVlc3QaHi5hcGkudjEuT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRJbChJVbmRvT3ZlcnJpZGVBbnN3ZXISIS5hcGkudjEuVW5kb092ZXJyaWRlQW5zd2VyUmVxdWVzdBoiLmFwaS52MS5VbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRI9CghTa2lwV29yZBIXLmFwaS52MS5Ta2lwV29yZFJlcXVlc3QaGC5hcGkudjEuU2tpcFdvcmRSZXNwb25zZRJDCgpSZXN1bWVXb3JkEhkuYXBpLnYxLlJlc3VtZVdvcmRSZXF1ZXN0GhouYXBpLnYxLlJlc3VtZVdvcmRSZXNwb25zZRJbChJTdGFydEV0eW1vbG9neVF1aXoSIS5hcGkudjEuU3RhcnRFdHltb2xvZ3lRdWl6UmVxdWVzdBoiLmFwaS52MS5TdGFydEV0eW1vbG9neVF1aXpSZXNwb25zZRJ8Ch1TdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlchIsLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlclJlcXVlc3QaLS5hcGkudjEuU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJSZXNwb25zZRJ5ChxTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyEisuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJSZXF1ZXN0GiwuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJSZXNwb25zZRJzChpTdGFydEV0eW1vbG9neUZyZWVmb3JtUXVpehIpLmFwaS52MS5TdGFydEV0eW1vbG9neUZyZWVmb3JtUXVpelJlcXVlc3QaKi5hcGkudjEuU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXpSZXNwb25zZRJ8Ch1TdWJtaXRFdHltb2xvZ3lGcmVlZm9ybUFuc3dlchIsLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lGcmVlZm9ybUFuc3dlclJlcXVlc3QaLS5hcGkudjEuU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetQuizOptionsRequest
@@ -834,65 +834,6 @@ export const ResumeWordResponseSchema: GenMessage<ResumeWordResponse> = /*@__PUR
 /**
  * Etymology Quiz Messages
  *
- * @generated from message api.v1.EtymologyOriginAnswer
- */
-export type EtymologyOriginAnswer = Message<"api.v1.EtymologyOriginAnswer"> & {
-  /**
-   * @generated from field: string origin = 1;
-   */
-  origin: string;
-
-  /**
-   * @generated from field: string meaning = 2;
-   */
-  meaning: string;
-};
-
-/**
- * Describes the message api.v1.EtymologyOriginAnswer.
- * Use `create(EtymologyOriginAnswerSchema)` to create a new message.
- */
-export const EtymologyOriginAnswerSchema: GenMessage<EtymologyOriginAnswer> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 28);
-
-/**
- * @generated from message api.v1.EtymologyOriginGrade
- */
-export type EtymologyOriginGrade = Message<"api.v1.EtymologyOriginGrade"> & {
-  /**
-   * @generated from field: string user_origin = 1;
-   */
-  userOrigin: string;
-
-  /**
-   * @generated from field: string user_meaning = 2;
-   */
-  userMeaning: string;
-
-  /**
-   * @generated from field: bool origin_correct = 3;
-   */
-  originCorrect: boolean;
-
-  /**
-   * @generated from field: bool meaning_correct = 4;
-   */
-  meaningCorrect: boolean;
-
-  /**
-   * @generated from field: api.v1.EtymologyOriginAnswer correct_origin = 5;
-   */
-  correctOrigin?: EtymologyOriginAnswer;
-};
-
-/**
- * Describes the message api.v1.EtymologyOriginGrade.
- * Use `create(EtymologyOriginGradeSchema)` to create a new message.
- */
-export const EtymologyOriginGradeSchema: GenMessage<EtymologyOriginGrade> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 29);
-
-/**
  * @generated from message api.v1.EtymologyQuizCard
  */
 export type EtymologyQuizCard = Message<"api.v1.EtymologyQuizCard"> & {
@@ -902,22 +843,27 @@ export type EtymologyQuizCard = Message<"api.v1.EtymologyQuizCard"> & {
   cardId: bigint;
 
   /**
-   * @generated from field: string expression = 2;
+   * @generated from field: string origin = 2;
    */
-  expression: string;
+  origin: string;
 
   /**
-   * @generated from field: string meaning = 3;
+   * @generated from field: string type = 3;
+   */
+  type: string;
+
+  /**
+   * @generated from field: string language = 4;
+   */
+  language: string;
+
+  /**
+   * @generated from field: string meaning = 5;
    */
   meaning: string;
 
   /**
-   * @generated from field: repeated api.v1.EtymologyQuizOriginPart origin_parts = 4;
-   */
-  originParts: EtymologyQuizOriginPart[];
-
-  /**
-   * @generated from field: string notebook_name = 5;
+   * @generated from field: string notebook_name = 6;
    */
   notebookName: string;
 };
@@ -927,66 +873,7 @@ export type EtymologyQuizCard = Message<"api.v1.EtymologyQuizCard"> & {
  * Use `create(EtymologyQuizCardSchema)` to create a new message.
  */
 export const EtymologyQuizCardSchema: GenMessage<EtymologyQuizCard> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 30);
-
-/**
- * @generated from message api.v1.EtymologyQuizOriginPart
- */
-export type EtymologyQuizOriginPart = Message<"api.v1.EtymologyQuizOriginPart"> & {
-  /**
-   * @generated from field: string origin = 1;
-   */
-  origin: string;
-
-  /**
-   * @generated from field: string type = 2;
-   */
-  type: string;
-
-  /**
-   * @generated from field: string language = 3;
-   */
-  language: string;
-
-  /**
-   * @generated from field: string meaning = 4;
-   */
-  meaning: string;
-};
-
-/**
- * Describes the message api.v1.EtymologyQuizOriginPart.
- * Use `create(EtymologyQuizOriginPartSchema)` to create a new message.
- */
-export const EtymologyQuizOriginPartSchema: GenMessage<EtymologyQuizOriginPart> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 31);
-
-/**
- * @generated from message api.v1.RelatedDefinition
- */
-export type RelatedDefinition = Message<"api.v1.RelatedDefinition"> & {
-  /**
-   * @generated from field: string expression = 1;
-   */
-  expression: string;
-
-  /**
-   * @generated from field: string meaning = 2;
-   */
-  meaning: string;
-
-  /**
-   * @generated from field: string notebook_name = 3;
-   */
-  notebookName: string;
-};
-
-/**
- * Describes the message api.v1.RelatedDefinition.
- * Use `create(RelatedDefinitionSchema)` to create a new message.
- */
-export const RelatedDefinitionSchema: GenMessage<RelatedDefinition> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 32);
+  messageDesc(file_api_v1_quiz, 28);
 
 /**
  * @generated from message api.v1.StartEtymologyQuizRequest
@@ -996,11 +883,6 @@ export type StartEtymologyQuizRequest = Message<"api.v1.StartEtymologyQuizReques
    * @generated from field: repeated string etymology_notebook_ids = 1;
    */
   etymologyNotebookIds: string[];
-
-  /**
-   * @generated from field: repeated string definition_notebook_ids = 2;
-   */
-  definitionNotebookIds: string[];
 
   /**
    * @generated from field: api.v1.EtymologyQuizMode mode = 3;
@@ -1018,7 +900,7 @@ export type StartEtymologyQuizRequest = Message<"api.v1.StartEtymologyQuizReques
  * Use `create(StartEtymologyQuizRequestSchema)` to create a new message.
  */
 export const StartEtymologyQuizRequestSchema: GenMessage<StartEtymologyQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 33);
+  messageDesc(file_api_v1_quiz, 29);
 
 /**
  * @generated from message api.v1.StartEtymologyQuizResponse
@@ -1035,91 +917,12 @@ export type StartEtymologyQuizResponse = Message<"api.v1.StartEtymologyQuizRespo
  * Use `create(StartEtymologyQuizResponseSchema)` to create a new message.
  */
 export const StartEtymologyQuizResponseSchema: GenMessage<StartEtymologyQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 34);
+  messageDesc(file_api_v1_quiz, 30);
 
 /**
- * @generated from message api.v1.SubmitEtymologyBreakdownAnswerRequest
+ * @generated from message api.v1.SubmitEtymologyStandardAnswerRequest
  */
-export type SubmitEtymologyBreakdownAnswerRequest = Message<"api.v1.SubmitEtymologyBreakdownAnswerRequest"> & {
-  /**
-   * @generated from field: int64 card_id = 1;
-   */
-  cardId: bigint;
-
-  /**
-   * @generated from field: repeated api.v1.EtymologyOriginAnswer answers = 2;
-   */
-  answers: EtymologyOriginAnswer[];
-
-  /**
-   * @generated from field: int64 response_time_ms = 3;
-   */
-  responseTimeMs: bigint;
-};
-
-/**
- * Describes the message api.v1.SubmitEtymologyBreakdownAnswerRequest.
- * Use `create(SubmitEtymologyBreakdownAnswerRequestSchema)` to create a new message.
- */
-export const SubmitEtymologyBreakdownAnswerRequestSchema: GenMessage<SubmitEtymologyBreakdownAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 35);
-
-/**
- * @generated from message api.v1.SubmitEtymologyBreakdownAnswerResponse
- */
-export type SubmitEtymologyBreakdownAnswerResponse = Message<"api.v1.SubmitEtymologyBreakdownAnswerResponse"> & {
-  /**
-   * @generated from field: bool correct = 1;
-   */
-  correct: boolean;
-
-  /**
-   * @generated from field: string reason = 2;
-   */
-  reason: string;
-
-  /**
-   * @generated from field: repeated api.v1.EtymologyOriginGrade origin_grades = 3;
-   */
-  originGrades: EtymologyOriginGrade[];
-
-  /**
-   * @generated from field: repeated api.v1.RelatedDefinition related_definitions = 4;
-   */
-  relatedDefinitions: RelatedDefinition[];
-
-  /**
-   * @generated from field: string next_review_date = 5;
-   */
-  nextReviewDate: string;
-
-  /**
-   * @generated from field: string learned_at = 6;
-   */
-  learnedAt: string;
-
-  /**
-   * @generated from field: int64 note_id = 7;
-   */
-  noteId: bigint;
-
-  /**
-   * @generated from field: repeated string images = 8;
-   */
-  images: string[];
-};
-
-/**
- * Describes the message api.v1.SubmitEtymologyBreakdownAnswerResponse.
- * Use `create(SubmitEtymologyBreakdownAnswerResponseSchema)` to create a new message.
- */
-export const SubmitEtymologyBreakdownAnswerResponseSchema: GenMessage<SubmitEtymologyBreakdownAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 36);
-
-/**
- * @generated from message api.v1.SubmitEtymologyAssemblyAnswerRequest
- */
-export type SubmitEtymologyAssemblyAnswerRequest = Message<"api.v1.SubmitEtymologyAssemblyAnswerRequest"> & {
+export type SubmitEtymologyStandardAnswerRequest = Message<"api.v1.SubmitEtymologyStandardAnswerRequest"> & {
   /**
    * @generated from field: int64 card_id = 1;
    */
@@ -1137,16 +940,16 @@ export type SubmitEtymologyAssemblyAnswerRequest = Message<"api.v1.SubmitEtymolo
 };
 
 /**
- * Describes the message api.v1.SubmitEtymologyAssemblyAnswerRequest.
- * Use `create(SubmitEtymologyAssemblyAnswerRequestSchema)` to create a new message.
+ * Describes the message api.v1.SubmitEtymologyStandardAnswerRequest.
+ * Use `create(SubmitEtymologyStandardAnswerRequestSchema)` to create a new message.
  */
-export const SubmitEtymologyAssemblyAnswerRequestSchema: GenMessage<SubmitEtymologyAssemblyAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 37);
+export const SubmitEtymologyStandardAnswerRequestSchema: GenMessage<SubmitEtymologyStandardAnswerRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 31);
 
 /**
- * @generated from message api.v1.SubmitEtymologyAssemblyAnswerResponse
+ * @generated from message api.v1.SubmitEtymologyStandardAnswerResponse
  */
-export type SubmitEtymologyAssemblyAnswerResponse = Message<"api.v1.SubmitEtymologyAssemblyAnswerResponse"> & {
+export type SubmitEtymologyStandardAnswerResponse = Message<"api.v1.SubmitEtymologyStandardAnswerResponse"> & {
   /**
    * @generated from field: bool correct = 1;
    */
@@ -1158,19 +961,88 @@ export type SubmitEtymologyAssemblyAnswerResponse = Message<"api.v1.SubmitEtymol
   reason: string;
 
   /**
-   * @generated from field: string correct_expression = 3;
+   * @generated from field: string correct_meaning = 3;
    */
-  correctExpression: string;
+  correctMeaning: string;
 
   /**
-   * @generated from field: repeated api.v1.EtymologyQuizOriginPart origin_parts = 4;
+   * @generated from field: string next_review_date = 4;
    */
-  originParts: EtymologyQuizOriginPart[];
+  nextReviewDate: string;
 
   /**
-   * @generated from field: repeated api.v1.RelatedDefinition related_definitions = 5;
+   * @generated from field: string learned_at = 5;
    */
-  relatedDefinitions: RelatedDefinition[];
+  learnedAt: string;
+
+  /**
+   * @generated from field: int64 note_id = 6;
+   */
+  noteId: bigint;
+};
+
+/**
+ * Describes the message api.v1.SubmitEtymologyStandardAnswerResponse.
+ * Use `create(SubmitEtymologyStandardAnswerResponseSchema)` to create a new message.
+ */
+export const SubmitEtymologyStandardAnswerResponseSchema: GenMessage<SubmitEtymologyStandardAnswerResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 32);
+
+/**
+ * @generated from message api.v1.SubmitEtymologyReverseAnswerRequest
+ */
+export type SubmitEtymologyReverseAnswerRequest = Message<"api.v1.SubmitEtymologyReverseAnswerRequest"> & {
+  /**
+   * @generated from field: int64 card_id = 1;
+   */
+  cardId: bigint;
+
+  /**
+   * @generated from field: string answer = 2;
+   */
+  answer: string;
+
+  /**
+   * @generated from field: int64 response_time_ms = 3;
+   */
+  responseTimeMs: bigint;
+};
+
+/**
+ * Describes the message api.v1.SubmitEtymologyReverseAnswerRequest.
+ * Use `create(SubmitEtymologyReverseAnswerRequestSchema)` to create a new message.
+ */
+export const SubmitEtymologyReverseAnswerRequestSchema: GenMessage<SubmitEtymologyReverseAnswerRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 33);
+
+/**
+ * @generated from message api.v1.SubmitEtymologyReverseAnswerResponse
+ */
+export type SubmitEtymologyReverseAnswerResponse = Message<"api.v1.SubmitEtymologyReverseAnswerResponse"> & {
+  /**
+   * @generated from field: bool correct = 1;
+   */
+  correct: boolean;
+
+  /**
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: string correct_origin = 3;
+   */
+  correctOrigin: string;
+
+  /**
+   * @generated from field: string type = 4;
+   */
+  type: string;
+
+  /**
+   * @generated from field: string language = 5;
+   */
+  language: string;
 
   /**
    * @generated from field: string next_review_date = 6;
@@ -1186,19 +1058,14 @@ export type SubmitEtymologyAssemblyAnswerResponse = Message<"api.v1.SubmitEtymol
    * @generated from field: int64 note_id = 8;
    */
   noteId: bigint;
-
-  /**
-   * @generated from field: repeated string images = 9;
-   */
-  images: string[];
 };
 
 /**
- * Describes the message api.v1.SubmitEtymologyAssemblyAnswerResponse.
- * Use `create(SubmitEtymologyAssemblyAnswerResponseSchema)` to create a new message.
+ * Describes the message api.v1.SubmitEtymologyReverseAnswerResponse.
+ * Use `create(SubmitEtymologyReverseAnswerResponseSchema)` to create a new message.
  */
-export const SubmitEtymologyAssemblyAnswerResponseSchema: GenMessage<SubmitEtymologyAssemblyAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 38);
+export const SubmitEtymologyReverseAnswerResponseSchema: GenMessage<SubmitEtymologyReverseAnswerResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 34);
 
 /**
  * @generated from message api.v1.StartEtymologyFreeformQuizRequest
@@ -1208,11 +1075,6 @@ export type StartEtymologyFreeformQuizRequest = Message<"api.v1.StartEtymologyFr
    * @generated from field: repeated string etymology_notebook_ids = 1;
    */
   etymologyNotebookIds: string[];
-
-  /**
-   * @generated from field: repeated string definition_notebook_ids = 2;
-   */
-  definitionNotebookIds: string[];
 };
 
 /**
@@ -1220,16 +1082,16 @@ export type StartEtymologyFreeformQuizRequest = Message<"api.v1.StartEtymologyFr
  * Use `create(StartEtymologyFreeformQuizRequestSchema)` to create a new message.
  */
 export const StartEtymologyFreeformQuizRequestSchema: GenMessage<StartEtymologyFreeformQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 39);
+  messageDesc(file_api_v1_quiz, 35);
 
 /**
  * @generated from message api.v1.StartEtymologyFreeformQuizResponse
  */
 export type StartEtymologyFreeformQuizResponse = Message<"api.v1.StartEtymologyFreeformQuizResponse"> & {
   /**
-   * @generated from field: repeated string expressions = 1;
+   * @generated from field: repeated string origins = 1;
    */
-  expressions: string[];
+  origins: string[];
 
   /**
    * @generated from field: map<string, string> next_review_dates = 2;
@@ -1242,21 +1104,21 @@ export type StartEtymologyFreeformQuizResponse = Message<"api.v1.StartEtymologyF
  * Use `create(StartEtymologyFreeformQuizResponseSchema)` to create a new message.
  */
 export const StartEtymologyFreeformQuizResponseSchema: GenMessage<StartEtymologyFreeformQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 40);
+  messageDesc(file_api_v1_quiz, 36);
 
 /**
  * @generated from message api.v1.SubmitEtymologyFreeformAnswerRequest
  */
 export type SubmitEtymologyFreeformAnswerRequest = Message<"api.v1.SubmitEtymologyFreeformAnswerRequest"> & {
   /**
-   * @generated from field: string expression = 1;
+   * @generated from field: string origin = 1;
    */
-  expression: string;
+  origin: string;
 
   /**
-   * @generated from field: repeated api.v1.EtymologyOriginAnswer answers = 2;
+   * @generated from field: string meaning = 2;
    */
-  answers: EtymologyOriginAnswer[];
+  meaning: string;
 
   /**
    * @generated from field: int64 response_time_ms = 3;
@@ -1269,7 +1131,7 @@ export type SubmitEtymologyFreeformAnswerRequest = Message<"api.v1.SubmitEtymolo
  * Use `create(SubmitEtymologyFreeformAnswerRequestSchema)` to create a new message.
  */
 export const SubmitEtymologyFreeformAnswerRequestSchema: GenMessage<SubmitEtymologyFreeformAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 41);
+  messageDesc(file_api_v1_quiz, 37);
 
 /**
  * @generated from message api.v1.SubmitEtymologyFreeformAnswerResponse
@@ -1286,39 +1148,39 @@ export type SubmitEtymologyFreeformAnswerResponse = Message<"api.v1.SubmitEtymol
   reason: string;
 
   /**
-   * @generated from field: repeated api.v1.EtymologyOriginGrade origin_grades = 3;
+   * @generated from field: string correct_meaning = 3;
    */
-  originGrades: EtymologyOriginGrade[];
+  correctMeaning: string;
 
   /**
-   * @generated from field: repeated api.v1.RelatedDefinition related_definitions = 4;
+   * @generated from field: string type = 4;
    */
-  relatedDefinitions: RelatedDefinition[];
+  type: string;
 
   /**
-   * @generated from field: string next_review_date = 5;
+   * @generated from field: string language = 5;
    */
-  nextReviewDate: string;
+  language: string;
 
   /**
-   * @generated from field: string learned_at = 6;
-   */
-  learnedAt: string;
-
-  /**
-   * @generated from field: string notebook_name = 7;
+   * @generated from field: string notebook_name = 6;
    */
   notebookName: string;
 
   /**
-   * @generated from field: int64 note_id = 8;
+   * @generated from field: string next_review_date = 7;
    */
-  noteId: bigint;
+  nextReviewDate: string;
 
   /**
-   * @generated from field: repeated string images = 9;
+   * @generated from field: string learned_at = 8;
    */
-  images: string[];
+  learnedAt: string;
+
+  /**
+   * @generated from field: int64 note_id = 9;
+   */
+  noteId: bigint;
 };
 
 /**
@@ -1326,7 +1188,7 @@ export type SubmitEtymologyFreeformAnswerResponse = Message<"api.v1.SubmitEtymol
  * Use `create(SubmitEtymologyFreeformAnswerResponseSchema)` to create a new message.
  */
 export const SubmitEtymologyFreeformAnswerResponseSchema: GenMessage<SubmitEtymologyFreeformAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 42);
+  messageDesc(file_api_v1_quiz, 38);
 
 /**
  * @generated from enum api.v1.QuizType
@@ -1353,14 +1215,14 @@ export enum QuizType {
   FREEFORM = 3,
 
   /**
-   * @generated from enum value: QUIZ_TYPE_ETYMOLOGY_BREAKDOWN = 4;
+   * @generated from enum value: QUIZ_TYPE_ETYMOLOGY_STANDARD = 4;
    */
-  ETYMOLOGY_BREAKDOWN = 4,
+  ETYMOLOGY_STANDARD = 4,
 
   /**
-   * @generated from enum value: QUIZ_TYPE_ETYMOLOGY_ASSEMBLY = 5;
+   * @generated from enum value: QUIZ_TYPE_ETYMOLOGY_REVERSE = 5;
    */
-  ETYMOLOGY_ASSEMBLY = 5,
+  ETYMOLOGY_REVERSE = 5,
 }
 
 /**
@@ -1379,14 +1241,14 @@ export enum EtymologyQuizMode {
   UNSPECIFIED = 0,
 
   /**
-   * @generated from enum value: ETYMOLOGY_QUIZ_MODE_BREAKDOWN = 1;
+   * @generated from enum value: ETYMOLOGY_QUIZ_MODE_STANDARD = 1;
    */
-  BREAKDOWN = 1,
+  STANDARD = 1,
 
   /**
-   * @generated from enum value: ETYMOLOGY_QUIZ_MODE_ASSEMBLY = 2;
+   * @generated from enum value: ETYMOLOGY_QUIZ_MODE_REVERSE = 2;
    */
-  ASSEMBLY = 2,
+  REVERSE = 2,
 }
 
 /**
@@ -1496,20 +1358,20 @@ export const QuizService: GenService<{
     output: typeof StartEtymologyQuizResponseSchema;
   },
   /**
-   * @generated from rpc api.v1.QuizService.SubmitEtymologyBreakdownAnswer
+   * @generated from rpc api.v1.QuizService.SubmitEtymologyStandardAnswer
    */
-  submitEtymologyBreakdownAnswer: {
+  submitEtymologyStandardAnswer: {
     methodKind: "unary";
-    input: typeof SubmitEtymologyBreakdownAnswerRequestSchema;
-    output: typeof SubmitEtymologyBreakdownAnswerResponseSchema;
+    input: typeof SubmitEtymologyStandardAnswerRequestSchema;
+    output: typeof SubmitEtymologyStandardAnswerResponseSchema;
   },
   /**
-   * @generated from rpc api.v1.QuizService.SubmitEtymologyAssemblyAnswer
+   * @generated from rpc api.v1.QuizService.SubmitEtymologyReverseAnswer
    */
-  submitEtymologyAssemblyAnswer: {
+  submitEtymologyReverseAnswer: {
     methodKind: "unary";
-    input: typeof SubmitEtymologyAssemblyAnswerRequestSchema;
-    output: typeof SubmitEtymologyAssemblyAnswerResponseSchema;
+    input: typeof SubmitEtymologyReverseAnswerRequestSchema;
+    output: typeof SubmitEtymologyReverseAnswerResponseSchema;
   },
   /**
    * @generated from rpc api.v1.QuizService.StartEtymologyFreeformQuiz

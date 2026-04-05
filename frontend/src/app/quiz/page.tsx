@@ -22,7 +22,7 @@ import { useQuizStore, type QuizType } from "@/store/quizStore";
 
 type Tab = "vocabulary" | "etymology";
 type VocabMode = "standard" | "reverse" | "freeform";
-type EtyMode = "breakdown" | "assembly" | "freeform";
+type EtyMode = "standard" | "reverse" | "freeform";
 
 const vocabularyModes: { key: VocabMode; title: string; description: string }[] = [
   { key: "standard", title: "Standard", description: "See a word, type its meaning" },
@@ -31,9 +31,9 @@ const vocabularyModes: { key: VocabMode; title: string; description: string }[] 
 ];
 
 const etymologyModes: { key: EtyMode; title: string; description: string }[] = [
-  { key: "breakdown", title: "Breakdown", description: "See a word, identify its origins and meanings" },
-  { key: "assembly", title: "Assembly", description: "See origins and meanings, type the word" },
-  { key: "freeform", title: "Freeform", description: "Type any word and break down its origins" },
+  { key: "standard", title: "Standard", description: "See an origin, type its meaning" },
+  { key: "reverse", title: "Reverse", description: "See a meaning, type the origin" },
+  { key: "freeform", title: "Freeform", description: "Type any origin and its meaning" },
 ];
 
 export default function QuizHubPage() {
@@ -56,8 +56,8 @@ export default function QuizHubPage() {
   const setFreeformExpressions = useQuizStore((s) => s.setFreeformExpressions);
   const setFreeformNextReviewDates = useQuizStore((s) => s.setFreeformNextReviewDates);
   const setQuizType = useQuizStore((s) => s.setQuizType);
-  const setEtymologyCards = useQuizStore((s) => s.setEtymologyCards);
-  const setEtymologyFreeformExpressions = useQuizStore((s) => s.setEtymologyFreeformExpressions);
+  const setEtymologyOriginCards = useQuizStore((s) => s.setEtymologyOriginCards);
+  const setEtymologyFreeformOrigins = useQuizStore((s) => s.setEtymologyFreeformOrigins);
   const setEtymologyFreeformNextReviewDates = useQuizStore((s) => s.setEtymologyFreeformNextReviewDates);
 
   useEffect(() => {
@@ -73,10 +73,7 @@ export default function QuizHubPage() {
   // Notebook lists
   const vocabNotebooks = notebooks.filter((n) => n.kind !== "Etymology");
   const etymologySourceNotebooks = notebooks.filter((n) => n.kind === "Etymology");
-  const etymologyDefNotebooks = notebooks.filter(
-    (n) => n.kind !== "Etymology" && n.etymologyReviewCount > 0,
-  );
-  const displayedNotebooks = tab === "vocabulary" ? vocabNotebooks : etymologyDefNotebooks;
+  const displayedNotebooks = tab === "vocabulary" ? vocabNotebooks : etymologySourceNotebooks;
 
   const allSelected =
     displayedNotebooks.length > 0 &&
@@ -162,40 +159,35 @@ export default function QuizHubPage() {
           router.push("/quiz/freeform");
         }
       } else {
-        const definitionIds = Array.from(selectedIds);
-        const etymologyIds = etymologySourceNotebooks.map((n) => n.notebookId);
+        const etymologyIds = Array.from(selectedIds);
 
         if (selectedEtyMode === "freeform") {
           setQuizType("etymology-freeform" as QuizType);
           const res = await quizClient.startEtymologyFreeformQuiz({
             etymologyNotebookIds: etymologyIds,
-            definitionNotebookIds: definitionIds,
           });
-          setEtymologyFreeformExpressions(res.expressions ?? []);
+          setEtymologyFreeformOrigins(res.origins ?? []);
           setEtymologyFreeformNextReviewDates(res.nextReviewDates ?? {});
           router.push("/quiz/etymology-freeform");
         } else {
-          const quizMode = selectedEtyMode === "breakdown"
-            ? EtymologyQuizMode.BREAKDOWN : EtymologyQuizMode.ASSEMBLY;
-          const storeType = selectedEtyMode === "breakdown"
-            ? "etymology-breakdown" as QuizType : "etymology-assembly" as QuizType;
+          const quizMode = selectedEtyMode === "standard"
+            ? EtymologyQuizMode.STANDARD : EtymologyQuizMode.REVERSE;
+          const storeType = selectedEtyMode === "standard"
+            ? "etymology-standard" as QuizType : "etymology-reverse" as QuizType;
           setQuizType(storeType);
           const res = await quizClient.startEtymologyQuiz({
             etymologyNotebookIds: etymologyIds,
-            definitionNotebookIds: definitionIds,
             mode: quizMode,
             includeUnstudied,
           });
-          setEtymologyCards(
+          setEtymologyOriginCards(
             (res.cards ?? []).map((c) => ({
-              cardId: c.cardId, expression: c.expression, meaning: c.meaning,
-              originParts: c.originParts.map((p) => ({
-                origin: p.origin, type: p.type, language: p.language, meaning: p.meaning,
-              })),
+              cardId: c.cardId, origin: c.origin, type: c.type,
+              language: c.language, meaning: c.meaning,
               notebookName: c.notebookName,
             })),
           );
-          router.push(selectedEtyMode === "breakdown" ? "/quiz/etymology-breakdown" : "/quiz/etymology-assembly");
+          router.push(selectedEtyMode === "standard" ? "/quiz/etymology-standard" : "/quiz/etymology-reverse");
         }
       }
     } finally {

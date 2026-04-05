@@ -74,26 +74,39 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 
 	if quizType == notebook.QuizTypeReverse {
-		if !s.setSkipInterval(updater, info, intervalDays, true) {
-			// Create a new expression with a skip record for reverse
+		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
 			updater.UpdateOrCreateExpressionWithQualityForReverse(
 				info.NotebookName,
 				info.StoryTitle,
 				info.SceneTitle,
 				info.Expression,
 				info.Expression,
-				true,  // mark as correct so it's not treated as misunderstood
 				true,
-				5,     // high quality so it gets a large interval
+				true,
+				5,
 				0,
 				notebook.QuizTypeReverse,
 			)
-			// Now set the interval on the newly created record
-			s.setSkipInterval(updater, info, intervalDays, true)
+			s.setSkipInterval(updater, info, intervalDays, quizType)
+		}
+	} else if quizType == notebook.QuizTypeEtymologyStandard || quizType == notebook.QuizTypeEtymologyReverse {
+		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
+			updater.UpdateOrCreateExpressionWithQualityForEtymology(
+				info.NotebookName,
+				info.StoryTitle,
+				info.SceneTitle,
+				info.Expression,
+				info.Expression,
+				true,
+				true,
+				5,
+				0,
+				quizType,
+			)
+			s.setSkipInterval(updater, info, intervalDays, quizType)
 		}
 	} else {
-		if !s.setSkipInterval(updater, info, intervalDays, false) {
-			// Create a new expression with a skip record
+		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
 			updater.UpdateOrCreateExpressionWithQuality(
 				info.NotebookName,
 				info.StoryTitle,
@@ -106,8 +119,7 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 				0,
 				quizType,
 			)
-			// Now set the interval on the newly created record
-			s.setSkipInterval(updater, info, intervalDays, false)
+			s.setSkipInterval(updater, info, intervalDays, quizType)
 		}
 	}
 
@@ -120,21 +132,18 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 
 // setSkipInterval finds the expression in the learning history and overrides
 // the interval of the most recent log entry. Returns false if not found.
-func (s *Service) setSkipInterval(updater *notebook.LearningHistoryUpdater, info CardInfo, intervalDays int, isReverse bool) bool {
+func (s *Service) setSkipInterval(updater *notebook.LearningHistoryUpdater, info CardInfo, intervalDays int, quizType notebook.QuizType) bool {
 	for _, h := range updater.GetHistory() {
 		if h.Metadata.Title != info.StoryTitle {
 			continue
 		}
 
-		if h.Metadata.Type == "flashcard" || (info.StoryTitle == "flashcards" && info.SceneTitle == "") {
+		if len(h.Expressions) > 0 {
 			for _, expr := range h.Expressions {
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				logs := expr.LearnedLogs
-				if isReverse {
-					logs = expr.ReverseLogs
-				}
+				logs := expr.GetLogsForQuizType(quizType)
 				if len(logs) > 0 {
 					logs[0].IntervalDays = intervalDays
 					return true
@@ -152,10 +161,7 @@ func (s *Service) setSkipInterval(updater *notebook.LearningHistoryUpdater, info
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				logs := expr.LearnedLogs
-				if isReverse {
-					logs = expr.ReverseLogs
-				}
+				logs := expr.GetLogsForQuizType(quizType)
 				if len(logs) > 0 {
 					logs[0].IntervalDays = intervalDays
 					return true
@@ -176,8 +182,7 @@ func (s *Service) ResumeWord(info CardInfo, quizType notebook.QuizType) error {
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
-	isReverse := quizType == notebook.QuizTypeReverse
-	s.setSkipInterval(updater, info, 0, isReverse)
+	s.setSkipInterval(updater, info, 0, quizType)
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
@@ -195,8 +200,7 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (str
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
-	isReverse := quizType == notebook.QuizTypeReverse
-	nextReview := s.toggleLastAnswer(updater, info, isReverse)
+	nextReview := s.toggleLastAnswer(updater, info, quizType)
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
@@ -208,24 +212,23 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (str
 // UndoOverrideAnswer reverts the most recent answer override (toggles back).
 // Returns the new next review date string (YYYY-MM-DD format, empty if none).
 func (s *Service) UndoOverrideAnswer(info CardInfo, quizType notebook.QuizType) (string, error) {
-	// Undo is the same as override: toggle the correctness again.
 	return s.OverrideAnswer(info, quizType)
 }
 
 // toggleLastAnswer toggles the correctness status and quality of the most recent
 // learning log entry. Returns the new next review date.
-func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, info CardInfo, isReverse bool) string {
+func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, info CardInfo, quizType notebook.QuizType) string {
 	for _, h := range updater.GetHistory() {
 		if h.Metadata.Title != info.StoryTitle {
 			continue
 		}
 
-		if h.Metadata.Type == "flashcard" || (info.StoryTitle == "flashcards" && info.SceneTitle == "") {
+		if len(h.Expressions) > 0 {
 			for ei, expr := range h.Expressions {
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				return toggleLogs(&h.Expressions[ei], isReverse, s.calculator)
+				return toggleLogs(&h.Expressions[ei], quizType, s.calculator)
 			}
 			continue
 		}
@@ -238,20 +241,15 @@ func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, inf
 				if !strings.EqualFold(expr.Expression, info.Expression) {
 					continue
 				}
-				return toggleLogs(&scene.Expressions[ei], isReverse, s.calculator)
+				return toggleLogs(&scene.Expressions[ei], quizType, s.calculator)
 			}
 		}
 	}
 	return ""
 }
 
-func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool, calculator notebook.IntervalCalculator) string {
-	var logs []notebook.LearningRecord
-	if isReverse {
-		logs = expr.ReverseLogs
-	} else {
-		logs = expr.LearnedLogs
-	}
+func toggleLogs(expr *notebook.LearningHistoryExpression, quizType notebook.QuizType, calculator notebook.IntervalCalculator) string {
+	logs := expr.GetLogsForQuizType(quizType)
 
 	if len(logs) == 0 {
 		return ""
@@ -275,11 +273,7 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, isReverse bool, calcul
 	newInterval, _ := calculator.CalculateInterval(previousLogs, log.Quality, derivedEF)
 	log.IntervalDays = newInterval
 
-	if isReverse {
-		expr.ReverseLogs = logs
-	} else {
-		expr.LearnedLogs = logs
-	}
+	expr.SetLogsForQuizType(quizType, logs)
 
 	if newInterval > 0 {
 		nextDate := log.LearnedAt.AddDate(0, 0, newInterval)

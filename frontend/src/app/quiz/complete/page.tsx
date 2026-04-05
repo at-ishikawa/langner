@@ -33,9 +33,9 @@ interface ResultItem {
 function getProtoQuizType(qt: QuizType): ProtoQuizType {
   if (qt === "reverse") return ProtoQuizType.REVERSE;
   if (qt === "freeform") return ProtoQuizType.FREEFORM;
-  if (qt === "etymology-breakdown") return ProtoQuizType.ETYMOLOGY_BREAKDOWN;
-  if (qt === "etymology-assembly") return ProtoQuizType.ETYMOLOGY_ASSEMBLY;
-  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_BREAKDOWN;
+  if (qt === "etymology-standard") return ProtoQuizType.ETYMOLOGY_STANDARD;
+  if (qt === "etymology-reverse") return ProtoQuizType.ETYMOLOGY_REVERSE;
+  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_STANDARD;
   return ProtoQuizType.STANDARD;
 }
 
@@ -57,14 +57,14 @@ export default function SessionCompletePage() {
   const results = useQuizStore((s) => s.results);
   const reverseResults = useQuizStore((s) => s.reverseResults);
   const freeformResults = useQuizStore((s) => s.freeformResults);
-  const etymologyResults = useQuizStore((s) => s.etymologyResults);
+  const etymologyResults = useQuizStore((s) => s.etymologyOriginResults);
   const quizType = useQuizStore((s) => s.quizType);
   const reset = useQuizStore((s) => s.reset);
   const overrideResult = useQuizStore((s) => s.overrideResult);
   const undoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
   const skipResult = useQuizStore((s) => s.skipResult);
   const resumeResult = useQuizStore((s) => s.resumeResult);
-  const isEtymologyQuiz = quizType === "etymology-breakdown" || quizType === "etymology-assembly" || quizType === "etymology-freeform";
+  const isEtymologyQuiz = quizType === "etymology-standard" || quizType === "etymology-reverse" || quizType === "etymology-freeform";
 
   const allResults = useMemo((): ResultItem[] => {
     if (results.length > 0) {
@@ -119,22 +119,21 @@ export default function SessionCompletePage() {
       return etymologyResults.map((r, i) => ({
         index: i,
         key: r.noteId ? r.noteId.toString() : `ety-${i}`,
-        entry: r.expression,
-        meaning: r.meaning,
+        entry: r.origin,
+        meaning: r.correctAnswer,
         correct: r.correct,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
-        originBreakdown: r.originParts?.map((p) => ({
-          origin: p.origin,
-          meaning: p.meaning,
-          language: p.language,
-          type: p.type,
-        })),
+        originBreakdown: [{
+          origin: r.origin,
+          meaning: r.correctAnswer,
+          language: r.language,
+          type: r.type,
+        }],
         userAnswer: r.answer,
-        images: r.images,
       }));
     }
     return [];
