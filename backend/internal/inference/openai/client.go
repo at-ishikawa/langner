@@ -196,13 +196,14 @@ INPUT UNDERSTANDING
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===
 
 STEP 1: SELF-DEFINITION CHECK - DO THIS BEFORE ANYTHING ELSE
-Ask: "Is the user's ENTIRE answer just the expression word itself (or a trivial rephrasing using that exact word)?"
-- ONLY trigger if the user's answer is essentially just the expression word repeated
+Ask: "Does the user's answer contain the EXACT expression word (or a trivial inflection of it) as its core?"
+- ONLY trigger if the user's answer literally reuses the expression word itself
 - "fast" meaning "fast" = INCORRECT (exact repetition)
 - "fast" meaning "being fast" = INCORRECT (trivial rephrasing with the word)
 - "fast" meaning "quick, speedy" = CORRECT (genuine synonym, NOT self-definition)
 - Using a DIFFERENT form of the word in a longer definition is NOT self-definition
 - STOP HERE and mark INCORRECT only if the answer is clearly circular
+- NEVER use "self-definition" as a reason when the user's answer does NOT contain the expression word. If the answer is simply wrong or describes a different concept, that is "wrong meaning" or "wrong semantic field", NOT "self-definition".
 
 === ABSOLUTE RULES - NEVER VIOLATE THESE ===
 

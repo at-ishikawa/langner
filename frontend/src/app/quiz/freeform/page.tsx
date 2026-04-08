@@ -250,7 +250,7 @@ export default function FreeformQuizPage() {
             </Box>
 
             <Box>
-              <Text fontWeight="bold">Correct meaning</Text>
+              <Text fontWeight="bold">Expected meaning</Text>
               <Text fontStyle="italic">{feedback.meaning}</Text>
             </Box>
 
