@@ -197,7 +197,7 @@ func TestFreeformQuizCLI_Run(t *testing.T) {
 			name:          "Always saves on correct answer",
 			answerCorrect: true,
 			wantFileSaved: true,
-			wantStatus:    "understood",
+			wantStatus:    "usable",
 		},
 		{
 			name:          "Does not save on incorrect answer",
