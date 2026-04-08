@@ -138,6 +138,7 @@ interface QuizState {
   setWordCount: (count: number) => void;
   setFreeformExpressions: (expressions: string[]) => void;
   setFreeformNextReviewDates: (dates: Record<string, string>) => void;
+  recordFreeformAnswered: (word: string, nextReviewDate: string) => void;
   setEtymologyFreeformOrigins: (origins: string[]) => void;
   setEtymologyFreeformNextReviewDates: (dates: Record<string, string>) => void;
   submitResult: (result: QuizResult) => void;
@@ -187,6 +188,13 @@ export const useQuizStore = create<QuizState>((set) => ({
   setWordCount: (wordCount) => set({ wordCount }),
   setFreeformExpressions: (freeformExpressions) => set({ freeformExpressions }),
   setFreeformNextReviewDates: (freeformNextReviewDates) => set({ freeformNextReviewDates }),
+  recordFreeformAnswered: (word, nextReviewDate) =>
+    set((state) => ({
+      freeformNextReviewDates: {
+        ...state.freeformNextReviewDates,
+        [word.trim().toLowerCase()]: nextReviewDate || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+      },
+    })),
   setEtymologyFreeformOrigins: (etymologyFreeformOrigins) => set({ etymologyFreeformOrigins }),
   setEtymologyFreeformNextReviewDates: (etymologyFreeformNextReviewDates) => set({ etymologyFreeformNextReviewDates }),
   submitResult: (result) =>

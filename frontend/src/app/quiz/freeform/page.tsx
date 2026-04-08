@@ -25,6 +25,7 @@ export default function FreeformQuizPage() {
   const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
   const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
+  const recordFreeformAnswered = useQuizStore((s) => s.recordFreeformAnswered);
   const reset = useQuizStore((s) => s.reset);
 
   const [word, setWord] = useState("");
@@ -117,6 +118,9 @@ export default function FreeformQuizPage() {
         learnedAt: res.learnedAt || undefined,
         images: (res.images ?? []).length > 0 ? res.images : undefined,
       });
+      // Mark this word as answered for the current session so the user
+      // cannot re-submit the same word until its next review date.
+      recordFreeformAnswered(word.trim(), res.nextReviewDate);
     } catch {
       setError("Failed to submit answer");
     } finally {
