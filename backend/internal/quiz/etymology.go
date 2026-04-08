@@ -59,6 +59,15 @@ func (s *Service) LoadEtymologyOriginCards(
 			}
 			seen[key] = true
 
+			// Hard eligibility gate: always enforced, even when the
+			// user has "include unstudied" ticked. Origins must have at
+			// least one etymology_freeform entry AND at least one
+			// correct etymology answer before they become eligible.
+			if !isOriginEligible(learningHistories[etymID], nbTitle, o.Origin) {
+				continue
+			}
+			// Soft SR check: skipped when includeUnstudied is true so
+			// the user can still drill origins that are not due yet.
 			if !includeUnstudied {
 				if !needsOriginReview(learningHistories[etymID], nbTitle, o.Origin, notebook.QuizTypeEtymologyStandard) {
 					continue
@@ -245,6 +254,9 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 
 		dueCount := 0
 		for _, o := range origins {
+			if !isOriginEligible(learningHistories[id], index.Name, o.Origin) {
+				continue
+			}
 			if needsOriginReview(learningHistories[id], index.Name, o.Origin, notebook.QuizTypeEtymologyStandard) {
 				dueCount++
 			}
@@ -261,9 +273,33 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 	return summaries, nil
 }
 
-// needsOriginReview checks if an origin needs review based on learning history.
-// Origins must be answered in etymology freeform mode first before becoming
-// eligible for etymology standard or reverse quizzes.
+// isOriginEligible is the hard gate that must always pass for an origin to
+// appear in etymology standard or reverse quizzes. The user must have (1)
+// attempted the origin in etymology freeform mode at least once, and (2)
+// answered at least one etymology question about it correctly. Both checks
+// are enforced even when "include unstudied" is selected.
+func isOriginEligible(
+	histories []notebook.LearningHistory,
+	notebookTitle, origin string,
+) bool {
+	for _, h := range histories {
+		if h.Metadata.Title != notebookTitle {
+			continue
+		}
+		for _, expr := range h.Expressions {
+			if !strings.EqualFold(expr.Expression, origin) {
+				continue
+			}
+			return expr.HasEtymologyFreeformAnswer() && expr.HasCorrectEtymologyAnswer()
+		}
+	}
+	return false
+}
+
+// needsOriginReview checks whether an origin is DUE for review under the
+// spaced-repetition schedule. Callers must first verify eligibility via
+// isOriginEligible; this function assumes the origin has already cleared
+// the freeform-first and has-correct-answer gates.
 func needsOriginReview(
 	histories []notebook.LearningHistory,
 	notebookTitle, origin string,
@@ -277,11 +313,8 @@ func needsOriginReview(
 			if !strings.EqualFold(expr.Expression, origin) {
 				continue
 			}
-			if !expr.HasEtymologyFreeformAnswer() {
-				return false
-			}
 			return expr.NeedsEtymologyReview(quizType)
 		}
 	}
-	return false // No history found, must answer in freeform first
+	return false
 }

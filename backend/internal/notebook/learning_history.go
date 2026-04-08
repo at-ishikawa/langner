@@ -353,6 +353,22 @@ func (exp LearningHistoryExpression) HasEtymologyFreeformAnswer() bool {
 	return false
 }
 
+// HasCorrectEtymologyAnswer returns true if the expression has at least one
+// correct answer recorded in EtymologyBreakdownLogs. Origins must have been
+// answered correctly at least once (in any etymology mode) before becoming
+// eligible for etymology standard or reverse quizzes — otherwise the user
+// would be drilled on origins they have never actually understood.
+func (exp LearningHistoryExpression) HasCorrectEtymologyAnswer() bool {
+	for _, log := range exp.EtymologyBreakdownLogs {
+		if log.Status == LearnedStatusUnderstood ||
+			log.Status == LearnedStatusCanBeUsed ||
+			log.Status == learnedStatusIntuitivelyUsed {
+			return true
+		}
+	}
+	return false
+}
+
 // NeedsReverseReview returns true if the expression needs reverse quiz review
 // based on spaced repetition algorithm
 func (exp LearningHistoryExpression) NeedsReverseReview() bool {
