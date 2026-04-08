@@ -4,6 +4,8 @@
 
 A vocabulary learning app that helps you learn English words and phrases from stories you enjoy.
 
+![Home](docs/static/screenshots/home.jpg)
+
 ## Why Langner?
 
 Most vocabulary apps give you random word lists with no context. Langner takes a different approach:
@@ -78,6 +80,8 @@ Read books directly in the app. Select any word or phrase in the text to look it
 - Tap any word to see its definition, pronunciation, examples, synonyms, and antonyms
 - Save words to your notebook with one click
 
+![Book Reader](docs/static/screenshots/book-reader.jpg)
+
 ### Learn
 
 Browse your vocabulary and etymology notebooks to review what you've been studying.
@@ -85,6 +89,10 @@ Browse your vocabulary and etymology notebooks to review what you've been studyi
 **Vocabulary** - View all saved words organized by the stories and scenes where you found them. Each word shows its definition, pronunciation, examples, learning status, and next review date.
 
 **Etymology** - Explore word origins (roots, prefixes, suffixes). Browse by origin or by meaning to see how words are related.
+
+![Learn](docs/static/screenshots/learn.jpg)
+
+![Notebook Words](docs/static/screenshots/notebook-words.jpg)
 
 ### Quiz
 
@@ -103,6 +111,10 @@ Test yourself with several quiz modes, all powered by spaced repetition:
 After each answer, you get feedback with the correct answer, examples, and pronunciation. You can override results if you think you were marked incorrectly, or skip words you want to exclude from future quizzes.
 
 At the end of a session, a results page shows your score and lets you review incorrect answers.
+
+![Quiz](docs/static/screenshots/quiz.jpg)
+
+![Quiz Setup](docs/static/screenshots/quiz-setup.jpg)
 
 ### Export PDF
 
