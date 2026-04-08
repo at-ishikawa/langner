@@ -898,6 +898,28 @@ func isWordChar(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
+// containsExpressionWord reports whether the text contains the expression or
+// a close English inflection of it, case-insensitively. It is used to
+// safety-net the grading model: self-definition reasons must never fire when
+// the expression word (or its stem) is absent from the user's answer.
+//
+// For single-word expressions of length >= 5 it drops the last character to
+// form a stem, so "pedagogy" (stem "pedagog") matches both "pedagogy" and
+// "pedagogies". Multi-word expressions and short words are matched literally.
+func containsExpressionWord(text, expression string) bool {
+	text = strings.ToLower(text)
+	expr := strings.ToLower(strings.TrimSpace(expression))
+	if expr == "" {
+		return false
+	}
+	stem := expr
+	if !strings.Contains(expr, " ") && len([]rune(expr)) >= 5 {
+		r := []rune(expr)
+		stem = string(r[:len(r)-1])
+	}
+	return strings.Contains(text, stem)
+}
+
 func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note) []ReverseContext {
 	var contexts []ReverseContext
 	for _, conv := range scene.Conversations {
@@ -1228,6 +1250,20 @@ func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string,
 
 	result := results.Answers[0]
 	isCorrect, reason, quality := extractAnswerResult(result)
+
+	// Safety net: the grading model occasionally flags an answer as
+	// "self-definition" even though the user's meaning does not contain
+	// the expression word at all. Self-definition by definition requires
+	// the user to reuse the expression word itself, so if the expression
+	// word is absent from the meaning, override the model's verdict.
+	if !isCorrect && strings.Contains(strings.ToLower(reason), "self-definition") &&
+		!containsExpressionWord(meaning, word) {
+		isCorrect = true
+		reason = "matches the expected meaning (self-definition reason was overridden: your answer does not contain the expression word)"
+		if quality < 3 {
+			quality = 3
+		}
+	}
 
 	var context string
 	var notebookName string

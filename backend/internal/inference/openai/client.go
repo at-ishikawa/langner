@@ -197,14 +197,19 @@ INPUT UNDERSTANDING
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===
 
 STEP 1: SELF-DEFINITION CHECK - DO THIS BEFORE ANYTHING ELSE
-Ask: "Does the user's answer contain the EXACT expression word (or a trivial inflection of it) as its core?"
-- ONLY trigger if the user's answer literally reuses the expression word itself
+Ask: "Does the user's answer literally contain the EXPRESSION word itself (or a trivial inflection of the same lemma)?"
+- ONLY trigger if the user's answer literally reuses THE EXPRESSION WORD
 - "fast" meaning "fast" = INCORRECT (exact repetition)
 - "fast" meaning "being fast" = INCORRECT (trivial rephrasing with the word)
 - "fast" meaning "quick, speedy" = CORRECT (genuine synonym, NOT self-definition)
 - Using a DIFFERENT form of the word in a longer definition is NOT self-definition
 - STOP HERE and mark INCORRECT only if the answer is clearly circular
-- NEVER use "self-definition" as a reason when the user's answer does NOT contain the expression word. If the answer is simply wrong or describes a different concept, that is "wrong meaning" or "wrong semantic field", NOT "self-definition".
+
+CRITICAL: DO NOT confuse words from the expected meaning with the expression itself.
+- "pedagogy" expected "the principles and methods of teaching" user "the principles of teaching" = CORRECT. "teaching" is in the expected meaning, NOT in the expression. The expression is "pedagogy", and "pedagogy" is absent from the user's answer, so self-definition cannot apply.
+- "epidermis" expected "the outer layer of skin" user "outer layer of skin" = CORRECT. "skin" is in the expected meaning, not the expression.
+- Before writing "self-definition" as a reason, verify that the EXACT expression word (or its trivial inflection) appears in the user's answer. If it does not, choose a different reason such as "wrong meaning", "wrong semantic field", or mark CORRECT.
+- NEVER use "self-definition" as a reason when the user's answer does NOT contain the expression word.
 
 === ABSOLUTE RULES - NEVER VIOLATE THESE ===
 

@@ -967,6 +967,71 @@ func TestApplyForwardMask_AltForm(t *testing.T) {
 	assert.Equal(t, "She likes to run ______.", cards[1].Contexts[0].MaskedContext, "second card masks only itself; the past card's forms are revealed")
 }
 
+func TestContainsExpressionWord(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		expression string
+		want       bool
+	}{
+		{
+			name:       "exact match",
+			text:       "pedagogy",
+			expression: "pedagogy",
+			want:       true,
+		},
+		{
+			name:       "trivial inflection",
+			text:       "pedagogies are important",
+			expression: "pedagogy",
+			want:       true,
+		},
+		{
+			name:       "does not match words that merely appear in the expected meaning",
+			text:       "the principles of teaching",
+			expression: "pedagogy",
+			want:       false,
+		},
+		{
+			name:       "does not match partial substring",
+			text:       "outer layer of skin",
+			expression: "epidermis",
+			want:       false,
+		},
+		{
+			name:       "case insensitive",
+			text:       "Pedagogy in practice",
+			expression: "pedagogy",
+			want:       true,
+		},
+		{
+			name:       "multi-word expression",
+			text:       "she decided to break the ice at the party",
+			expression: "break the ice",
+			want:       true,
+		},
+		{
+			name:       "expression starting with non-word character",
+			text:       "that's the $64,000 question everyone asks",
+			expression: "$64,000 question",
+			want:       true,
+		},
+		{
+			name:       "empty expression",
+			text:       "anything",
+			expression: "",
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := containsExpressionWord(tt.text, tt.expression)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
 func TestMaskWord(t *testing.T) {
 	tests := []struct {
 		name       string
