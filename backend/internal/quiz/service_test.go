@@ -976,32 +976,32 @@ func TestContainsExpressionWord(t *testing.T) {
 	}{
 		{
 			name:       "exact match",
-			text:       "pedagogy",
-			expression: "pedagogy",
+			text:       "happy",
+			expression: "happy",
 			want:       true,
 		},
 		{
 			name:       "trivial inflection",
-			text:       "pedagogies are important",
-			expression: "pedagogy",
+			text:       "happiness and joy",
+			expression: "happy",
 			want:       true,
 		},
 		{
 			name:       "does not match words that merely appear in the expected meaning",
-			text:       "the principles of teaching",
-			expression: "pedagogy",
+			text:       "feeling of great joy",
+			expression: "happy",
 			want:       false,
 		},
 		{
 			name:       "does not match partial substring",
-			text:       "outer layer of skin",
-			expression: "epidermis",
+			text:       "of large size",
+			expression: "huge",
 			want:       false,
 		},
 		{
 			name:       "case insensitive",
-			text:       "Pedagogy in practice",
-			expression: "pedagogy",
+			text:       "Happy feelings",
+			expression: "happy",
 			want:       true,
 		},
 		{
@@ -1012,8 +1012,8 @@ func TestContainsExpressionWord(t *testing.T) {
 		},
 		{
 			name:       "expression starting with non-word character",
-			text:       "that's the $64,000 question everyone asks",
-			expression: "$64,000 question",
+			text:       "she is the #1 fan of that band",
+			expression: "#1 fan",
 			want:       true,
 		},
 		{
@@ -1060,9 +1060,9 @@ func TestMaskWord(t *testing.T) {
 		},
 		{
 			name:       "expression starting with non-word character",
-			context:    "It's the $64,000 question for everyone.",
-			expression: "$64,000 question",
-			want:       "It's the ______ for everyone.",
+			context:    "She is the #1 fan of that band.",
+			expression: "#1 fan",
+			want:       "She is the ______ of that band.",
 		},
 		{
 			name:       "multiple consecutive occurrences",

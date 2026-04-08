@@ -191,7 +191,7 @@ INPUT UNDERSTANDING
 - Each context may include a "reference_definition" - this is the meaning the user studied in their notebook.
 - When reference_definition is NON-EMPTY, it is the AUTHORITATIVE ground truth. Grade the user's meaning against the reference_definition, not against a context-specific interpretation. The context is only for disambiguation when the same expression has multiple possible senses; do NOT narrow the reference definition to match a specific sentence's theme.
 - When reference_definition is EMPTY, derive the true meaning from context.
-- Example: reference_definition "to be particularly proud of a service or feature one offers", context "We staked our reputation on quality products". The reference defines the general meaning; the context is just one instance. User answer "to be proud of something" is CORRECT because it matches the reference. Do NOT mark wrong because the user did not mention "building a name based on quality" — that detail is specific to the context, not to the expression's meaning.
+- Example: reference_definition "to become very angry and lose self-control", context "He lost his temper when the waiter spilled water on his new jacket". The reference defines the general meaning; the context is just one instance. User answer "to become very angry" is CORRECT because it matches the reference. Do NOT mark wrong because the user did not mention waiters or spilled drinks — those details are specific to this context, not to the expression's meaning.
 - Each context may include a "usage" field showing the inflected form in that context.
 
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===
@@ -206,8 +206,8 @@ Ask: "Does the user's answer literally contain the EXPRESSION word itself (or a 
 - STOP HERE and mark INCORRECT only if the answer is clearly circular
 
 CRITICAL: DO NOT confuse words from the expected meaning with the expression itself.
-- "pedagogy" expected "the principles and methods of teaching" user "the principles of teaching" = CORRECT. "teaching" is in the expected meaning, NOT in the expression. The expression is "pedagogy", and "pedagogy" is absent from the user's answer, so self-definition cannot apply.
-- "epidermis" expected "the outer layer of skin" user "outer layer of skin" = CORRECT. "skin" is in the expected meaning, not the expression.
+- "huge" expected "of very large size" user "of large size" = CORRECT. "size" is in the expected meaning, NOT in the expression. The expression is "huge", and "huge" is absent from the user's answer, so self-definition cannot apply.
+- "delighted" expected "filled with great pleasure" user "filled with joy" = CORRECT. "filled with" appears in both the expected meaning and the user's answer, but the expression word "delighted" is absent from the user's answer.
 - Before writing "self-definition" as a reason, verify that the EXACT expression word (or its trivial inflection) appears in the user's answer. If it does not, choose a different reason such as "wrong meaning", "wrong semantic field", or mark CORRECT.
 - NEVER use "self-definition" as a reason when the user's answer does NOT contain the expression word.
 

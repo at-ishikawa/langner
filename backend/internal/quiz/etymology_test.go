@@ -119,53 +119,53 @@ func TestService_LoadEtymologyOriginCards(t *testing.T) {
 // reverse quizzes.
 func TestService_LoadEtymologyOriginCards_FreeformFirstGate(t *testing.T) {
 	tmpDir := t.TempDir()
-	etymDir := filepath.Join(tmpDir, "etymology", "greek-roots")
+	etymDir := filepath.Join(tmpDir, "etymology", "sample-roots")
 	require.NoError(t, os.MkdirAll(etymDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: greek-roots
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: sample-roots
 kind: Etymology
-name: Greek Roots
+name: Sample Roots
 notebooks:
   - ./origins.yml
 `), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`- origin: "misein"
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`- origin: "root-a"
   type: root
-  language: Greek
-  meaning: to hate
-- origin: "phil"
+  language: Latin
+  meaning: first sample meaning
+- origin: "root-b"
   type: root
-  language: Greek
-  meaning: to love
-- origin: "soph"
+  language: Latin
+  meaning: second sample meaning
+- origin: "root-c"
   type: root
-  language: Greek
-  meaning: wisdom
-- origin: "path"
+  language: Latin
+  meaning: third sample meaning
+- origin: "root-d"
   type: root
-  language: Greek
-  meaning: feeling
+  language: Latin
+  meaning: fourth sample meaning
 `), 0644))
 
 	learningDir := filepath.Join(tmpDir, "learning")
 	require.NoError(t, os.MkdirAll(learningDir, 0755))
-	// misein: freeformed but never answered correctly → NOT eligible.
-	// phil:   freeformed and answered correctly → eligible.
-	// soph:   answered correctly in etymology standard (not freeform) → NOT eligible (freeform-first).
-	// path:   no history at all → NOT eligible.
-	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "greek-roots.yml"), []byte(`- metadata:
-    notebook_id: greek-roots
-    title: Greek Roots
+	// root-a: freeformed but never answered correctly → NOT eligible.
+	// root-b: freeformed and answered correctly → eligible.
+	// root-c: answered correctly in etymology standard (not freeform) → NOT eligible (freeform-first).
+	// root-d: no history at all → NOT eligible.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "sample-roots.yml"), []byte(`- metadata:
+    notebook_id: sample-roots
+    title: Sample Roots
   expressions:
-    - expression: misein
+    - expression: root-a
       etymology_breakdown_logs:
         - status: misunderstood
           learned_at: "2025-01-01"
           quiz_type: etymology_freeform
-    - expression: phil
+    - expression: root-b
       etymology_breakdown_logs:
         - status: understood
           learned_at: "2025-01-01"
           quiz_type: etymology_freeform
-    - expression: soph
+    - expression: root-c
       etymology_breakdown_logs:
         - status: understood
           learned_at: "2025-01-01"
@@ -181,11 +181,11 @@ notebooks:
 		config.QuizConfig{},
 	)
 
-	// Even with includeUnstudied=true, only "phil" should be eligible.
-	cards, err := svc.LoadEtymologyOriginCards([]string{"greek-roots"}, true)
+	// Even with includeUnstudied=true, only root-b should be eligible.
+	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true)
 	require.NoError(t, err)
 	require.Len(t, cards, 1, "only origins that were freeformed AND answered correctly should be eligible")
-	assert.Equal(t, "phil", cards[0].Origin)
+	assert.Equal(t, "root-b", cards[0].Origin)
 }
 
 func TestService_LoadEtymologyOriginCards_Deduplicates(t *testing.T) {

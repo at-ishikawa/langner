@@ -867,7 +867,7 @@ func maskWord(context, expression, definition string) string {
 // context with "______". It uses \b for word-character boundaries (so partial
 // matches like "questioning" don't match "question") and falls back to a
 // non-word/start-of-string boundary on either side when target itself starts
-// or ends with a non-word character (e.g. "$64,000 question").
+// or ends with a non-word character (e.g. "#1 fan").
 func maskOccurrences(context, target string) string {
 	if target == "" {
 		return context
@@ -904,8 +904,8 @@ func isWordChar(r rune) bool {
 // the expression word (or its stem) is absent from the user's answer.
 //
 // For single-word expressions of length >= 5 it drops the last character to
-// form a stem, so "pedagogy" (stem "pedagog") matches both "pedagogy" and
-// "pedagogies". Multi-word expressions and short words are matched literally.
+// form a stem, so "happy" (stem "happ") matches both "happy" and "happiness".
+// Multi-word expressions and short words are matched literally.
 func containsExpressionWord(text, expression string) bool {
 	text = strings.ToLower(text)
 	expr := strings.ToLower(strings.TrimSpace(expression))
