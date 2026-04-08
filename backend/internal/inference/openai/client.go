@@ -188,9 +188,10 @@ Return ONLY a JSON array. For each input expression, include:
 STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase. Process ALL expressions in the input array, including duplicates.
 
 INPUT UNDERSTANDING
-- Each context may include a "reference_definition" - this is a hint from a notebook that may be incomplete, incorrect, or empty.
-- When context is PROVIDED: Determine the true meaning from context. The reference_definition is just a hint.
-- When context is EMPTY: Rely on reference_definition. If user's meaning matches it exactly or nearly exactly, mark CORRECT.
+- Each context may include a "reference_definition" - this is the meaning the user studied in their notebook.
+- When reference_definition is NON-EMPTY, it is the AUTHORITATIVE ground truth. Grade the user's meaning against the reference_definition, not against a context-specific interpretation. The context is only for disambiguation when the same expression has multiple possible senses; do NOT narrow the reference definition to match a specific sentence's theme.
+- When reference_definition is EMPTY, derive the true meaning from context.
+- Example: reference_definition "to be particularly proud of a service or feature one offers", context "We staked our reputation on quality products". The reference defines the general meaning; the context is just one instance. User answer "to be proud of something" is CORRECT because it matches the reference. Do NOT mark wrong because the user did not mention "building a name based on quality" — that detail is specific to the context, not to the expression's meaning.
 - Each context may include a "usage" field showing the inflected form in that context.
 
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===

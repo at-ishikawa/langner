@@ -1238,10 +1238,19 @@ func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string,
 		notebookName = matchingCards[0].NotebookName
 	}
 
+	// Prefer the notebook's reference meaning over OpenAI's canonical
+	// meaning. The notebook is what the user studied, and showing the
+	// model's context-derived meaning led to cases where "Expected
+	// meaning" and "Reason" described different interpretations.
+	expectedMeaning := matchingCards[0].Meaning
+	if expectedMeaning == "" {
+		expectedMeaning = result.Meaning
+	}
+
 	return FreeformGradeResult{
 		Correct:      isCorrect,
 		Word:         result.Expression,
-		Meaning:      result.Meaning,
+		Meaning:      expectedMeaning,
 		Reason:       reason,
 		Context:      context,
 		NotebookName: notebookName,
