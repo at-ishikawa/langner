@@ -456,6 +456,16 @@ func TestFilterStoryNotebooks(t *testing.T) {
 					},
 				},
 			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{Title: "Story 1"},
+					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+				},
+				{
+					Metadata: LearningHistoryMetadata{Title: "Story 2"},
+					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+				},
+			},
 			sortDesc:                true,
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     true,
@@ -487,6 +497,16 @@ func TestFilterStoryNotebooks(t *testing.T) {
 							Definitions:   []Note{{Expression: "first", Meaning: "first"}},
 						},
 					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{Title: "Story 1"},
+					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+				},
+				{
+					Metadata: LearningHistoryMetadata{Title: "Story 2"},
+					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 			},
 			includeNoCorrectAnswers: true,
@@ -521,6 +541,16 @@ func TestFilterStoryNotebooks(t *testing.T) {
 					},
 				},
 			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{Title: "Story 1"},
+					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "first", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+				},
+				{
+					Metadata: LearningHistoryMetadata{Title: "Story 2"},
+					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 2"}, Expressions: []LearningHistoryExpression{{Expression: "second", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
+				},
+			},
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     true,
 			preserveOrder:           true,
@@ -543,6 +573,12 @@ func TestFilterStoryNotebooks(t *testing.T) {
 							},
 						},
 					},
+				},
+			},
+			learningHistory: []LearningHistory{
+				{
+					Metadata: LearningHistoryMetadata{Title: "Story 1"},
+					Scenes: []LearningScene{{Metadata: LearningSceneMetadata{Title: "Scene 1"}, Expressions: []LearningHistoryExpression{{Expression: "test", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)}}}}}},
 				},
 			},
 			dictionaryMap: map[string]rapidapi.Response{
@@ -590,7 +626,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour)), QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -637,7 +673,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
 										// 1 correct answer, threshold is 3 days, 4 days ago - should need learning
-										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-4 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-4 * 24 * time.Hour)), QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -684,7 +720,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
 										// 1 correct answer, threshold is 3 days, 1 day ago - should NOT need learning
-										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour)), QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -730,7 +766,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now())},
+										{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -776,7 +812,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now())},
+										{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now()), QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -791,7 +827,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			expectedWords:           []string{"test"},
 		},
 		{
-			name: "Both modes - no learning history always included (useSpacedRepetition=false)",
+			name: "Both modes - no learning history excluded (must answer in freeform first, useSpacedRepetition=false)",
 			storyNotebooks: []StoryNotebook{
 				{
 					Event: "Story 1",
@@ -813,11 +849,11 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			sortDesc:                false,
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     false,
-			expectedWordCount:       1,
-			expectedWords:           []string{"test"},
+			expectedWordCount:       0,
+			expectedWords:           nil,
 		},
 		{
-			name: "Both modes - no learning history always included (useSpacedRepetition=true)",
+			name: "Both modes - no learning history excluded (must answer in freeform first, useSpacedRepetition=true)",
 			storyNotebooks: []StoryNotebook{
 				{
 					Event: "Story 1",
@@ -839,8 +875,8 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			sortDesc:                false,
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     true,
-			expectedWordCount:       1,
-			expectedWords:           []string{"test"},
+			expectedWordCount:       0,
+			expectedWords:           nil,
 		},
 		{
 			name: "duplicate expression entries - first empty, second usable - word NOT included",
@@ -878,7 +914,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "break someone's ice",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour)), QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -1178,7 +1214,7 @@ func TestOutputStoryNotebooks(t *testing.T) {
 								{
 									Expression: "tricky",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour))},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * 24 * time.Hour)), QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},

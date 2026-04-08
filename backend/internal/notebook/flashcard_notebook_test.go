@@ -140,7 +140,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 			wantLen: 0,
 		},
 		{
-			name: "cards with no logs need to learn",
+			name: "cards with no logs are not yet eligible (must answer in freeform first)",
 			notebooks: []FlashcardNotebook{
 				{
 					Title: "Unit 1",
@@ -151,7 +151,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 				},
 			},
 			history: nil,
-			wantLen: 1,
+			wantLen: 0,
 		},
 		{
 			name: "empty expression returns error",
@@ -185,7 +185,16 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 					},
 				},
 			},
-			history:  nil,
+			history: []LearningHistory{
+				{
+					Metadata:    LearningHistoryMetadata{Title: "Newer", Type: "flashcard"},
+					Expressions: []LearningHistoryExpression{{Expression: "hello", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(now), QuizType: string(QuizTypeFreeform)}}}},
+				},
+				{
+					Metadata:    LearningHistoryMetadata{Title: "Older", Type: "flashcard"},
+					Expressions: []LearningHistoryExpression{{Expression: "world", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(longAgo), QuizType: string(QuizTypeFreeform)}}}},
+				},
+			},
 			sortDesc: false,
 			wantLen:  2,
 		},
@@ -267,7 +276,16 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 					},
 				},
 			},
-			history:  nil,
+			history: []LearningHistory{
+				{
+					Metadata:    LearningHistoryMetadata{Title: "Older", Type: "flashcard"},
+					Expressions: []LearningHistoryExpression{{Expression: "hello", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(longAgo), QuizType: string(QuizTypeFreeform)}}}},
+				},
+				{
+					Metadata:    LearningHistoryMetadata{Title: "Newer", Type: "flashcard"},
+					Expressions: []LearningHistoryExpression{{Expression: "world", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(now), QuizType: string(QuizTypeFreeform)}}}},
+				},
+			},
 			sortDesc: true,
 			wantLen:  2,
 		},
@@ -283,6 +301,12 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 							DictionaryNumber: 5, // out of range
 						},
 					},
+				},
+			},
+			history: []LearningHistory{
+				{
+					Metadata:    LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []LearningHistoryExpression{{Expression: "hello", LearnedLogs: []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(now), QuizType: string(QuizTypeFreeform)}}}},
 				},
 			},
 			dictionaryMap: map[string]rapidapi.Response{

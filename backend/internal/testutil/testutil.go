@@ -134,7 +134,7 @@ func CreateStoryNotebook(t *testing.T, storiesDir, learningNotesDir, id string, 
 					Expressions: []notebook.LearningHistoryExpression{
 						{
 							Expression:  "eager",
-							LearnedLogs: []notebook.LearningRecord{{Status: cfg.learningStatus, LearnedAt: notebook.NewDate(time.Now())}},
+							LearnedLogs: []notebook.LearningRecord{{Status: cfg.learningStatus, LearnedAt: notebook.NewDate(time.Now()), QuizType: string(notebook.QuizTypeFreeform)}},
 						},
 					},
 				},
@@ -190,7 +190,7 @@ func CreateFlashcardNotebook(t *testing.T, flashcardsDir, learningNotesDir, id s
 			Expressions: []notebook.LearningHistoryExpression{
 				{
 					Expression:  "break the ice",
-					LearnedLogs: []notebook.LearningRecord{{Status: cfg.learningStatus, LearnedAt: notebook.NewDate(time.Now())}},
+					LearnedLogs: []notebook.LearningRecord{{Status: cfg.learningStatus, LearnedAt: notebook.NewDate(time.Now()), QuizType: string(notebook.QuizTypeFreeform)}},
 				},
 			},
 		},

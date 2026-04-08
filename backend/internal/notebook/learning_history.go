@@ -328,6 +328,31 @@ func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
 	return false
 }
 
+// HasFreeformAnswer returns true if the expression has at least one freeform quiz
+// answer recorded in LearnedLogs. Vocabulary words must be answered in freeform mode
+// first before becoming eligible for standard or reverse quizzes.
+func (exp LearningHistoryExpression) HasFreeformAnswer() bool {
+	for _, log := range exp.LearnedLogs {
+		if log.QuizType == string(QuizTypeFreeform) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasEtymologyFreeformAnswer returns true if the expression has at least one
+// etymology freeform answer recorded in EtymologyBreakdownLogs. Origins must be
+// answered in etymology freeform mode first before becoming eligible for etymology
+// standard or reverse quizzes.
+func (exp LearningHistoryExpression) HasEtymologyFreeformAnswer() bool {
+	for _, log := range exp.EtymologyBreakdownLogs {
+		if log.QuizType == string(QuizTypeEtymologyFreeform) {
+			return true
+		}
+	}
+	return false
+}
+
 // NeedsReverseReview returns true if the expression needs reverse quiz review
 // based on spaced repetition algorithm
 func (exp LearningHistoryExpression) NeedsReverseReview() bool {

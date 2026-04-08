@@ -123,6 +123,12 @@ func FilterFlashcardNotebooks(
 				continue
 			}
 
+			// Words must be answered in freeform mode first before they
+			// become eligible for standard or reverse quizzes.
+			if !card.hasFreeformAnswer() {
+				continue
+			}
+
 			// Check if card needs to be learned based on spaced repetition
 			if !card.needsToLearn() {
 				continue

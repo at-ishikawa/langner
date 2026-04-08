@@ -86,7 +86,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 									{
 										Expression: "test",
 										LearnedLogs: []notebook.LearningRecord{
-											{Status: "usable", LearnedAt: notebook.NewDate(time.Now().Add(-4 * 24 * time.Hour))},
+											{Status: "usable", LearnedAt: notebook.NewDate(time.Now().Add(-4 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)},
 										},
 									},
 								},
@@ -161,7 +161,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 									{
 										Expression: "test",
 										LearnedLogs: []notebook.LearningRecord{
-											{Status: "usable", LearnedAt: notebook.NewDate(time.Now().Add(-1 * 24 * time.Hour))},
+											{Status: "usable", LearnedAt: notebook.NewDate(time.Now().Add(-1 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)},
 										},
 									},
 								},
@@ -193,7 +193,7 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 			},
 		},
 		{
-			name: "No learning history - word included",
+			name: "Has freeform log - word included",
 			setupFunc: func(t *testing.T) (string, string) {
 				storiesDir := t.TempDir()
 				learningNotesDir := t.TempDir()
@@ -245,8 +245,10 @@ func TestNewNotebookQuizCLI(t *testing.T) {
 								Metadata: notebook.LearningSceneMetadata{Title: "Scene 1"},
 								Expressions: []notebook.LearningHistoryExpression{
 									{
-										Expression:  "test",
-										LearnedLogs: []notebook.LearningRecord{},
+										Expression: "test",
+										LearnedLogs: []notebook.LearningRecord{
+											{Status: notebook.LearnedStatusMisunderstood, LearnedAt: notebook.NewDate(time.Now()), QuizType: string(notebook.QuizTypeFreeform)},
+										},
 									},
 								},
 							},

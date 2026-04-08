@@ -262,6 +262,8 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 }
 
 // needsOriginReview checks if an origin needs review based on learning history.
+// Origins must be answered in etymology freeform mode first before becoming
+// eligible for etymology standard or reverse quizzes.
 func needsOriginReview(
 	histories []notebook.LearningHistory,
 	notebookTitle, origin string,
@@ -275,8 +277,11 @@ func needsOriginReview(
 			if !strings.EqualFold(expr.Expression, origin) {
 				continue
 			}
+			if !expr.HasEtymologyFreeformAnswer() {
+				return false
+			}
 			return expr.NeedsEtymologyReview(quizType)
 		}
 	}
-	return true // No history found, needs review
+	return false // No history found, must answer in freeform first
 }

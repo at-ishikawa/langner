@@ -322,6 +322,12 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 					continue
 				}
 
+				// Words must be answered in freeform mode first before they
+				// become eligible for standard or reverse quizzes.
+				if !definition.hasFreeformAnswer() {
+					continue
+				}
+
 				// Filter out words without any correct answers if not included
 				if !includeNoCorrectAnswers && !definition.hasAnyCorrectAnswer() {
 					continue

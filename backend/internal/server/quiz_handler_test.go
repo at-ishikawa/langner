@@ -63,6 +63,22 @@ notebooks:
         - expression: "preposterous"
           meaning: "contrary to reason or common sense"
 `), 0644))
+	// Word must be answered in freeform first to be eligible for standard quiz.
+	// Using "misunderstood" so the word doesn't count toward ReviewCount (which
+	// requires hasAnyCorrectAnswer in addition to freeform-first).
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-story.yml"), []byte(`- metadata:
+    notebook_id: test-story
+    title: "Chapter One"
+  scenes:
+    - metadata:
+        title: "Opening"
+      expressions:
+        - expression: "preposterous"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0644))
 
 	// Create flashcard fixtures
 	vocabDir := filepath.Join(flashcardsDir, "test-vocab")
@@ -79,6 +95,18 @@ notebooks:
       meaning: "a fortunate discovery by accident"
       examples:
         - "It was pure serendipity that they met."
+`), 0644))
+	// Word must be answered in freeform first to be eligible for standard quiz.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-vocab.yml"), []byte(`- metadata:
+    notebook_id: test-vocab
+    title: "Basic Words"
+    type: "flashcard"
+  expressions:
+    - expression: "serendipity"
+      learned_logs:
+        - status: "understood"
+          learned_at: "2025-01-14"
+          quiz_type: "freeform"
 `), 0644))
 
 	svc := quiz.NewService(config.NotebooksConfig{
@@ -287,6 +315,20 @@ notebooks:
           definition: "ran"
           meaning: "to move swiftly on foot"
 `), 0644))
+	// Word must be answered in freeform first to be eligible for standard quiz.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-story.yml"), []byte(`- metadata:
+    notebook_id: test-story
+    title: "Chapter One"
+  scenes:
+    - metadata:
+        title: "Opening"
+      expressions:
+        - expression: "run"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0644))
 
 	// Create flashcard with definition field set
 	vocabDir := filepath.Join(flashcardsDir, "test-vocab")
@@ -304,6 +346,18 @@ notebooks:
       meaning: "to move or travel"
       examples:
         - "She went to the store."
+`), 0644))
+	// Word must be answered in freeform first to be eligible for standard quiz.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-vocab.yml"), []byte(`- metadata:
+    notebook_id: test-vocab
+    title: "Verb Forms"
+    type: "flashcard"
+  expressions:
+    - expression: "go"
+      learned_logs:
+        - status: "misunderstood"
+          learned_at: "2025-01-14"
+          quiz_type: "freeform"
 `), 0644))
 
 	svc := quiz.NewService(config.NotebooksConfig{

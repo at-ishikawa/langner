@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
@@ -613,6 +614,7 @@ type ReverseCard struct {
 	Meaning      string
 	Contexts     []ReverseContext
 	Expression   string // original expression to guess
+	AltForm      string // alternate inflected form (Note.Definition when set), used for masking
 	WordDetail   WordDetail
 	Images       []string
 }
@@ -676,7 +678,31 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 	rand.Shuffle(len(cards), func(i, j int) {
 		cards[i], cards[j] = cards[j], cards[i]
 	})
+	applyForwardMask(cards)
 	return cards, nil
+}
+
+// applyForwardMask updates each card's MaskedContext to also hide the
+// expressions of all cards that come AFTER it in the session order. This
+// prevents shared example sentences from leaking the answers of upcoming
+// cards. Words from cards that have already been asked remain visible.
+func applyForwardMask(cards []ReverseCard) {
+	for i := range cards {
+		for j := range cards[i].Contexts {
+			ctx := cards[i].Contexts[j].Context
+			ctx = maskOccurrences(ctx, cards[i].Expression)
+			if cards[i].AltForm != "" {
+				ctx = maskOccurrences(ctx, cards[i].AltForm)
+			}
+			for k := i + 1; k < len(cards); k++ {
+				ctx = maskOccurrences(ctx, cards[k].Expression)
+				if cards[k].AltForm != "" {
+					ctx = maskOccurrences(ctx, cards[k].AltForm)
+				}
+			}
+			cards[i].Contexts[j].MaskedContext = ctx
+		}
+	}
 }
 
 func deduplicateReverseCards(cards []ReverseCard) []ReverseCard {
@@ -717,8 +743,10 @@ func (s *Service) loadStoryReverseCards(
 				}
 
 				expression := definition.Expression
+				altForm := ""
 				if definition.Definition != "" {
 					expression = definition.Definition
+					altForm = definition.Expression
 				}
 
 				// Skip words marked as skipped
@@ -746,6 +774,7 @@ func (s *Service) loadStoryReverseCards(
 					Meaning:      definition.Meaning,
 					Contexts:     contexts,
 					Expression:   expression,
+					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&definition, originMap),
 					Images:       definition.Images,
 				})
@@ -776,8 +805,10 @@ func (s *Service) loadFlashcardReverseCards(
 			}
 
 			expression := card.Expression
+			altForm := ""
 			if card.Definition != "" {
 				expression = card.Definition
+				altForm = card.Expression
 			}
 
 			// Skip words marked as skipped
@@ -814,6 +845,7 @@ func (s *Service) loadFlashcardReverseCards(
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
 				Expression:   expression,
+				AltForm:      altForm,
 				WordDetail:   buildWordDetail(&card, originMap),
 				Images:       card.Images,
 			})
@@ -824,13 +856,46 @@ func (s *Service) loadFlashcardReverseCards(
 }
 
 func maskWord(context, expression, definition string) string {
-	re := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(expression) + `\b`)
-	context = re.ReplaceAllString(context, "______")
+	context = maskOccurrences(context, expression)
 	if definition != "" {
-		re = regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(definition) + `\b`)
-		context = re.ReplaceAllString(context, "______")
+		context = maskOccurrences(context, definition)
 	}
 	return context
+}
+
+// maskOccurrences replaces every case-insensitive occurrence of target in
+// context with "______". It uses \b for word-character boundaries (so partial
+// matches like "questioning" don't match "question") and falls back to a
+// non-word/start-of-string boundary on either side when target itself starts
+// or ends with a non-word character (e.g. "$64,000 question").
+func maskOccurrences(context, target string) string {
+	if target == "" {
+		return context
+	}
+	runes := []rune(target)
+	left := `\b`
+	if !isWordChar(runes[0]) {
+		left = `(?:^|[^\w])`
+	}
+	right := `\b`
+	if !isWordChar(runes[len(runes)-1]) {
+		right = `(?:[^\w]|$)`
+	}
+	re := regexp.MustCompile(`(?i)` + left + regexp.QuoteMeta(target) + right)
+	targetLower := strings.ToLower(target)
+	return re.ReplaceAllStringFunc(context, func(match string) string {
+		// The match may include leading/trailing characters consumed by the
+		// non-\b boundaries; preserve them around the mask.
+		idx := strings.Index(strings.ToLower(match), targetLower)
+		if idx < 0 {
+			return "______"
+		}
+		return match[:idx] + "______" + match[idx+len(target):]
+	})
+}
+
+func isWordChar(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
 }
 
 func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note) []ReverseContext {
@@ -875,7 +940,10 @@ func needsReverseReview(
 					continue
 				}
 
-				if !expr.HasAnyCorrectAnswer() {
+				// Words must be answered in freeform first AND have at
+				// least one correct answer before becoming eligible for
+				// reverse quiz.
+				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
 					continue
 				}
 
@@ -904,7 +972,10 @@ func needsReverseFlashcardReview(
 				continue
 			}
 
-			if !expr.HasAnyCorrectAnswer() {
+			// Words must be answered in freeform first AND have at
+			// least one correct answer before becoming eligible for
+			// reverse quiz.
+			if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
 				continue
 			}
 
@@ -1429,8 +1500,10 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					continue
 				}
 				expression := note.Expression
+				altForm := ""
 				if note.Definition != "" {
 					expression = note.Definition
+					altForm = note.Expression
 				}
 				cards = append(cards, ReverseCard{
 					NotebookName: bookID,
@@ -1438,6 +1511,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					SceneTitle:   sceneTitle,
 					Meaning:      note.Meaning,
 					Expression:   expression,
+					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&note, originMap),
 				})
 			}
@@ -1497,11 +1571,15 @@ func needsDefinitionReview(
 				if expr.Expression != note.Expression && expr.Expression != note.Definition {
 					continue
 				}
+				// Words must be answered in freeform first.
+				if !expr.HasFreeformAnswer() {
+					return false
+				}
 				return expr.NeedsForwardReview()
 			}
 		}
 	}
-	return true
+	return false
 }
 
 // needsDefinitionReverseReview checks if a definition note needs reverse quiz review.
@@ -1522,7 +1600,10 @@ func needsDefinitionReverseReview(
 				if expr.Expression != note.Expression && expr.Expression != note.Definition {
 					continue
 				}
-				if !expr.HasAnyCorrectAnswer() {
+				// Words must be answered in freeform first AND have at
+				// least one correct answer before becoming eligible for
+				// reverse quiz.
+				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
 					continue
 				}
 				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
