@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   Heading,
-  Input,
   Progress,
   Spinner,
   Text,
@@ -15,6 +14,7 @@ import {
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { AnswerInput } from "@/components/AnswerInput";
 
 type QuizPhase = "answering" | "synonym-retry" | "feedback";
 
@@ -270,28 +270,16 @@ export default function ReverseQuizPage() {
             </VStack>
           )}
 
-          <Box>
-            <Text fontWeight="medium" mb={1}>
-              Word
-            </Text>
-            <Input
-              ref={inputRef}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Try again..."
-              size="lg"
-            />
-          </Box>
-
-          <Button
-            colorPalette="blue"
-            onClick={() => handleSubmit(true)}
-            disabled={!answer.trim()}
-            size="lg"
-          >
-            Submit
-          </Button>
+          <AnswerInput
+            ref={inputRef}
+            label="Word"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={() => handleSubmit(true)}
+            onSkip={handleSkip}
+            placeholder="Try again..."
+          />
         </VStack>
       ) : phase === "answering" ? (
         <VStack align="stretch" gap={4}>
@@ -315,36 +303,16 @@ export default function ReverseQuizPage() {
             </VStack>
           )}
 
-          <Box>
-            <Text fontWeight="medium" mb={1}>
-              Word
-            </Text>
-            <Input
-              ref={inputRef}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type the word"
-              size="lg"
-            />
-          </Box>
-
-          <Button
-            colorPalette="blue"
-            onClick={() => handleSubmit()}
-            disabled={!answer.trim()}
-            size="lg"
-          >
-            Submit
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handleSkip}
-            size="lg"
-          >
-            Don&apos;t Know
-          </Button>
+          <AnswerInput
+            ref={inputRef}
+            label="Word"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={() => handleSubmit()}
+            onSkip={handleSkip}
+            placeholder="Type the word"
+          />
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>

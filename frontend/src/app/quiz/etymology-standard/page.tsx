@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Input, Progress, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Heading, Progress, Spinner, Text, VStack } from "@chakra-ui/react";
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { AnswerInput } from "@/components/AnswerInput";
 
 type QuizPhase = "answering" | "feedback";
 
@@ -75,6 +76,24 @@ export default function EtymologyStandardPage() {
     } catch { setError("Failed to submit answer"); } finally { setLoading(false); }
   };
 
+  const handleSkip = async () => {
+    const responseTimeMs = Date.now() - startTimeRef.current;
+    setSubmittedAnswer(""); setAnswer(""); setPhase("feedback");
+    setLoading(true); setFeedback(null); setError(null);
+    try {
+      const res = await quizClient.submitEtymologyStandardAnswer({
+        cardId: card.cardId, answer: "I don't know", responseTimeMs: BigInt(responseTimeMs),
+      });
+      const fb = { correct: false, reason: res.reason, correctMeaning: res.correctMeaning,
+        learnedAt: res.learnedAt || undefined, noteId: res.noteId ? BigInt(res.noteId) : undefined };
+      setFeedback(fb); setDisplayCorrect(false);
+      storeSubmitResult({ noteId: fb.noteId, cardId: card.cardId, origin: card.origin,
+        answer: "(skipped)", correct: false, reason: res.reason,
+        correctAnswer: res.correctMeaning, type: card.type, language: card.language,
+        learnedAt: fb.learnedAt });
+    } catch { setError("Failed to submit answer"); } finally { setLoading(false); }
+  };
+
   const handleNext = () => { if (currentIndex + 1 >= total) router.push("/quiz/complete"); else nextCard(); };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -96,10 +115,17 @@ export default function EtymologyStandardPage() {
               {card.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{card.language}</Text></Box>}
             </Box>
           </Box>
-          <Box><Text fontWeight="medium" mb={1}>What does this origin mean?</Text>
-            <Input ref={inputRef} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={handleKeyDown} placeholder="type the meaning..." size="lg" />
-          </Box>
-          <Button colorPalette="blue" onClick={handleSubmit} disabled={!answer.trim()} size="lg" position="sticky" bottom={4}>Submit</Button>
+          <AnswerInput
+            ref={inputRef}
+            label="What does this origin mean?"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={handleSubmit}
+            onSkip={handleSkip}
+            placeholder="type the meaning..."
+            stickySubmit
+          />
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>

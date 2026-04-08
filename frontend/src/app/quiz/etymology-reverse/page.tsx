@@ -2,10 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Input, Progress, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Box, Button, Heading, Progress, Spinner, Text, VStack } from "@chakra-ui/react";
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { AnswerInput } from "@/components/AnswerInput";
 
 type QuizPhase = "answering" | "feedback";
 
@@ -76,6 +77,25 @@ export default function EtymologyReversePage() {
     } catch { setError("Failed to submit answer"); } finally { setLoading(false); }
   };
 
+  const handleSkip = async () => {
+    const responseTimeMs = Date.now() - startTimeRef.current;
+    setSubmittedAnswer(""); setAnswer(""); setPhase("feedback");
+    setLoading(true); setFeedback(null); setError(null);
+    try {
+      const res = await quizClient.submitEtymologyReverseAnswer({
+        cardId: card.cardId, answer: "I don't know", responseTimeMs: BigInt(responseTimeMs),
+      });
+      const fb = { correct: false, reason: res.reason, correctOrigin: res.correctOrigin,
+        type: res.type, language: res.language,
+        learnedAt: res.learnedAt || undefined, noteId: res.noteId ? BigInt(res.noteId) : undefined };
+      setFeedback(fb); setDisplayCorrect(false);
+      storeSubmitResult({ noteId: fb.noteId, cardId: card.cardId, origin: card.origin,
+        answer: "(skipped)", correct: false, reason: res.reason,
+        correctAnswer: res.correctOrigin, type: res.type, language: res.language,
+        learnedAt: fb.learnedAt });
+    } catch { setError("Failed to submit answer"); } finally { setLoading(false); }
+  };
+
   const handleNext = () => { if (currentIndex + 1 >= total) router.push("/quiz/complete"); else nextCard(); };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -94,10 +114,17 @@ export default function EtymologyReversePage() {
             <Heading size="lg" color="blue.700" _dark={{ color: "blue.300" }}>{card.meaning}</Heading>
             <Text fontSize="sm" color="fg.muted" mt={1}>What origin has this meaning?</Text>
           </Box>
-          <Box><Text fontWeight="medium" mb={1}>Origin</Text>
-            <Input ref={inputRef} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={handleKeyDown} placeholder="type the origin..." size="lg" />
-          </Box>
-          <Button colorPalette="blue" onClick={handleSubmit} disabled={!answer.trim()} size="lg" position="sticky" bottom={4}>Submit</Button>
+          <AnswerInput
+            ref={inputRef}
+            label="Origin"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={handleSubmit}
+            onSkip={handleSkip}
+            placeholder="type the origin..."
+            stickySubmit
+          />
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
