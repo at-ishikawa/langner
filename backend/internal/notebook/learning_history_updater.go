@@ -5,13 +5,6 @@ import (
 	"time"
 )
 
-// normalizeTitle normalizes a title for comparison by trimming whitespace
-// and normalizing internal whitespace (newlines, multiple spaces -> single space)
-func normalizeTitle(s string) string {
-	s = strings.TrimSpace(s)
-	return strings.Join(strings.Fields(s), " ")
-}
-
 // normalizeQuotes replaces smart quotes with ASCII equivalents for comparison.
 func normalizeQuotes(s string) string {
 	r := strings.NewReplacer(
@@ -105,9 +98,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 	quizType QuizType,
 ) bool {
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
-		if h.Metadata.Title != storyTitle {
+		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
@@ -124,7 +118,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 		}
 
 		for si, s := range h.Scenes {
-			if s.Metadata.Title != sceneTitle {
+			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
 				continue
 			}
 
@@ -155,10 +149,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 	quizType QuizType,
 ) bool {
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
-	normalizedSceneTitle := normalizeTitle(sceneTitle)
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
-		if h.Metadata.Title != storyTitle {
+		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
@@ -175,7 +169,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 		}
 
 		for si, s := range h.Scenes {
-			if normalizeTitle(s.Metadata.Title) != normalizedSceneTitle {
+			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
 				continue
 			}
 
@@ -434,8 +428,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 ) bool {
 	isFlat := sceneTitle == ""
 
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
+
 	for hi, h := range u.history {
-		if h.Metadata.Title != storyTitle {
+		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
@@ -452,7 +448,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 		}
 
 		for si, s := range h.Scenes {
-			if s.Metadata.Title != sceneTitle {
+			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
 				continue
 			}
 

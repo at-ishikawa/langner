@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNormalizeTitle(t *testing.T) {
+func TestNormalizeQuotes(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -20,19 +20,14 @@ func TestNormalizeTitle(t *testing.T) {
 			want:  "Scene Title",
 		},
 		{
-			name:  "leading and trailing whitespace",
-			input: "  Scene Title  ",
-			want:  "Scene Title",
+			name:  "smart single quotes to ASCII",
+			input: "it\u2019s time",
+			want:  "it's time",
 		},
 		{
-			name:  "multiple internal spaces",
-			input: "Scene   Title",
-			want:  "Scene Title",
-		},
-		{
-			name:  "newlines and tabs",
-			input: "Scene\n\tTitle",
-			want:  "Scene Title",
+			name:  "smart double quotes to ASCII",
+			input: "\u201CHello\u201D",
+			want:  "\"Hello\"",
 		},
 		{
 			name:  "empty string",
@@ -43,7 +38,7 @@ func TestNormalizeTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeTitle(tt.input)
+			got := normalizeQuotes(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
 	}
