@@ -107,11 +107,17 @@ func FilterFlashcardNotebooks(
 					"", // flashcards don't have scenes
 					card,
 				)
-				if len(logs) == 0 {
-					continue
+				if len(logs) > 0 {
+					card.LearnedLogs = logs
 				}
-
-				card.LearnedLogs = logs
+				reverseLogs := h.GetReverseLogs(
+					notebook.Title,
+					"",
+					card,
+				)
+				if len(reverseLogs) > 0 {
+					card.ReverseLogs = reverseLogs
+				}
 			}
 
 			if strings.TrimSpace(card.Expression) == "" {

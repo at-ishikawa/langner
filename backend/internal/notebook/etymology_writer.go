@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/assets"
 	"github.com/at-ishikawa/langner/internal/pdf"
@@ -12,17 +13,19 @@ import (
 
 // EtymologyNotebookWriter handles writing etymology notebooks to various output formats
 type EtymologyNotebookWriter struct {
-	reader                *Reader
-	templatePath          string
+	reader                 *Reader
+	templatePath           string
 	definitionsDirectories []string
+	learningHistories      map[string][]LearningHistory
 }
 
 // NewEtymologyNotebookWriter creates a new EtymologyNotebookWriter
-func NewEtymologyNotebookWriter(reader *Reader, templatePath string, definitionsDirectories []string) *EtymologyNotebookWriter {
+func NewEtymologyNotebookWriter(reader *Reader, templatePath string, definitionsDirectories []string, learningHistories map[string][]LearningHistory) *EtymologyNotebookWriter {
 	return &EtymologyNotebookWriter{
-		reader:                reader,
-		templatePath:          templatePath,
+		reader:                 reader,
+		templatePath:           templatePath,
 		definitionsDirectories: definitionsDirectories,
+		learningHistories:      learningHistories,
 	}
 }
 
@@ -104,14 +107,19 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		// Build origin map for resolving origin_parts meanings
 		originMap := buildOriginMap(sessionOrigins)
 
-		// Convert origins to template format
-		templateOrigins := make([]assets.EtymologyOriginEntry, len(sessionOrigins))
-		for i, o := range sessionOrigins {
-			templateOrigins[i] = assets.EtymologyOriginEntry{
+		// Convert origins to template format, filtering by learning status.
+		// Only include origins whose latest etymology log is misunderstood or
+		// that have no correct answer yet (i.e., still need study).
+		var templateOrigins []assets.EtymologyOriginEntry
+		for _, o := range sessionOrigins {
+			if !writer.originNeedsStudy(etymIndex.ID, etymIndex.Name, o.Origin) {
+				continue
+			}
+			templateOrigins = append(templateOrigins, assets.EtymologyOriginEntry{
 				Origin:   o.Origin,
 				Language: o.Language,
 				Meaning:  o.Meaning,
-			}
+			})
 		}
 
 		// Read definitions for this session directly from the definitions file
@@ -212,6 +220,55 @@ func (writer EtymologyNotebookWriter) findDefinitionsDir(etymIndex EtymologyInde
 	}
 
 	return ""
+}
+
+// originNeedsStudy returns true if the origin should be included in the PDF
+// based on learning history. An origin needs study if:
+//   - it has no etymology learning history at all (never encountered), OR
+//   - its latest EtymologyBreakdownLogs entry is misunderstood, OR
+//   - it has freeform entries but no correct answers yet
+//
+// Origins that have been successfully mastered (latest status is understood/usable)
+// and are not yet due for review are excluded.
+func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, nbTitle, origin string) bool {
+	histories := writer.learningHistories[etymID]
+	if len(histories) == 0 {
+		return true // no history → include
+	}
+
+	for _, h := range histories {
+		if h.Metadata.Title != nbTitle {
+			continue
+		}
+		for _, expr := range h.Expressions {
+			if !strings.EqualFold(expr.Expression, origin) {
+				continue
+			}
+			// Found learning record for this origin.
+			logs := expr.EtymologyBreakdownLogs
+			if len(logs) == 0 {
+				return true // no etymology logs → include
+			}
+			// Check latest status — if misunderstood, definitely needs study.
+			latest := logs[0]
+			for _, l := range logs[1:] {
+				if l.LearnedAt.After(latest.LearnedAt.Time) {
+					latest = l
+				}
+			}
+			if latest.Status == LearnedStatusMisunderstood {
+				return true
+			}
+			// Check SR: if the review interval has elapsed, needs study.
+			if latest.IntervalDays > 0 {
+				elapsed := int(time.Since(latest.LearnedAt.Time).Hours() / 24)
+				return elapsed >= latest.IntervalDays
+			}
+			// Has correct answer and no interval → recently reviewed, skip.
+			return false
+		}
+	}
+	return true // not found in history → include
 }
 
 // filterOriginsForChapter returns only the origins that are referenced by any word's origin parts,

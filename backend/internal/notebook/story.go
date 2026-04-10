@@ -305,12 +305,17 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 						scene.Title,
 						definition,
 					)
-					if len(logs) == 0 {
-						continue
+					if len(logs) > 0 {
+						definition.LearnedLogs = logs
 					}
-
-					// todo: Fix this!! temporary mitigation
-					definition.LearnedLogs = logs
+					reverseLogs := h.GetReverseLogs(
+						notebook.Event,
+						scene.Title,
+						definition,
+					)
+					if len(reverseLogs) > 0 {
+						definition.ReverseLogs = reverseLogs
+					}
 				}
 
 				if strings.TrimSpace(definition.Expression) == "" {

@@ -332,7 +332,7 @@ notebooks:
 			reader, err := NewReader(nil, nil, nil, definitionsDirs, etymologyDirs, nil)
 			require.NoError(t, err)
 
-			writer := NewEtymologyNotebookWriter(reader, "", definitionsDirs)
+			writer := NewEtymologyNotebookWriter(reader, "", definitionsDirs, nil)
 			err = writer.OutputEtymologyNotebook(tt.etymologyID, outputDir, false)
 
 			if tt.wantErr != "" {

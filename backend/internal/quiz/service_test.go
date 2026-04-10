@@ -941,7 +941,7 @@ func TestApplyForwardMask(t *testing.T) {
 
 	applyForwardMask(cards)
 
-	assert.Equal(t, "______ and ______ are friends.", cards[0].Contexts[0].MaskedContext, "first card masks both itself and the future card")
+	assert.Equal(t, "______ and [...] are friends.", cards[0].Contexts[0].MaskedContext, "first card masks itself with ______ and future card with [...]")
 	assert.Equal(t, "alpha and ______ are friends.", cards[1].Contexts[0].MaskedContext, "second card masks only itself; the previously-asked first card is visible")
 }
 
@@ -962,7 +962,7 @@ func TestApplyForwardMask_AltForm(t *testing.T) {
 
 	applyForwardMask(cards)
 
-	assert.Equal(t, "She is ______ ______.", cards[0].Contexts[0].MaskedContext, "first card masks itself and the future card 'fast'")
+	assert.Equal(t, "She is ______ [...].", cards[0].Contexts[0].MaskedContext, "first card masks itself with ______ and future card 'fast' with [...]")
 	// Second card only masks itself; the past card's forms ('run', 'running') are now revealed.
 	assert.Equal(t, "She likes to run ______.", cards[1].Contexts[0].MaskedContext, "second card masks only itself; the past card's forms are revealed")
 }

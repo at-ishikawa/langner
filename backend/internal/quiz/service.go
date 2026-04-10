@@ -686,18 +686,25 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 // expressions of all cards that come AFTER it in the session order. This
 // prevents shared example sentences from leaking the answers of upcoming
 // cards. Words from cards that have already been asked remain visible.
+//
+// The current card's expression is masked with "______" (the standard quiz
+// blank), while future cards' expressions use "[...]" so users can
+// distinguish the blank they need to fill from words hidden for spoiler
+// protection.
 func applyForwardMask(cards []ReverseCard) {
 	for i := range cards {
 		for j := range cards[i].Contexts {
 			ctx := cards[i].Contexts[j].Context
+			// Mask the current card's expression with standard blank.
 			ctx = maskOccurrences(ctx, cards[i].Expression)
 			if cards[i].AltForm != "" {
 				ctx = maskOccurrences(ctx, cards[i].AltForm)
 			}
+			// Mask future cards' expressions with a distinct marker.
 			for k := i + 1; k < len(cards); k++ {
-				ctx = maskOccurrences(ctx, cards[k].Expression)
+				ctx = maskOccurrencesAs(ctx, cards[k].Expression, "[...]")
 				if cards[k].AltForm != "" {
-					ctx = maskOccurrences(ctx, cards[k].AltForm)
+					ctx = maskOccurrencesAs(ctx, cards[k].AltForm, "[...]")
 				}
 			}
 			cards[i].Contexts[j].MaskedContext = ctx
@@ -869,6 +876,10 @@ func maskWord(context, expression, definition string) string {
 // non-word/start-of-string boundary on either side when target itself starts
 // or ends with a non-word character (e.g. "#1 fan").
 func maskOccurrences(context, target string) string {
+	return maskOccurrencesAs(context, target, "______")
+}
+
+func maskOccurrencesAs(context, target, replacement string) string {
 	if target == "" {
 		return context
 	}
@@ -884,13 +895,11 @@ func maskOccurrences(context, target string) string {
 	re := regexp.MustCompile(`(?i)` + left + regexp.QuoteMeta(target) + right)
 	targetLower := strings.ToLower(target)
 	return re.ReplaceAllStringFunc(context, func(match string) string {
-		// The match may include leading/trailing characters consumed by the
-		// non-\b boundaries; preserve them around the mask.
 		idx := strings.Index(strings.ToLower(match), targetLower)
 		if idx < 0 {
-			return "______"
+			return replacement
 		}
-		return match[:idx] + "______" + match[idx+len(target):]
+		return match[:idx] + replacement + match[idx+len(target):]
 	})
 }
 

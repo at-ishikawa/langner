@@ -66,6 +66,41 @@ func (h LearningHistory) GetLogs(
 	return nil
 }
 
+// GetReverseLogs returns the reverse-quiz learning logs for the matching
+// expression. Used to hydrate Note.ReverseLogs for PDF/notebook export so the
+// filter can consider both forward and reverse tracks.
+func (h LearningHistory) GetReverseLogs(
+	notebookTitle, sceneTitle string, definition Note,
+) []LearningRecord {
+	if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(notebookTitle) {
+		return nil
+	}
+
+	if h.Metadata.Type == "flashcard" {
+		for _, expression := range h.Expressions {
+			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+				continue
+			}
+			return expression.ReverseLogs
+		}
+		return nil
+	}
+
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
+	for _, scene := range h.Scenes {
+		if normalizeQuotes(scene.Metadata.Title) != normalizedSceneTitle {
+			continue
+		}
+		for _, expression := range scene.Expressions {
+			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+				continue
+			}
+			return expression.ReverseLogs
+		}
+	}
+	return nil
+}
+
 type LearningScene struct {
 	Metadata    LearningSceneMetadata `yaml:"metadata"`
 	Expressions []LearningHistoryExpression
