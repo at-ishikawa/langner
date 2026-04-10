@@ -42,8 +42,9 @@ func NewLearningHistoryUpdater(history []LearningHistory, calculator IntervalCal
 // flatType is a non-empty string (e.g. "flashcard", "etymology") when the
 // history should use top-level Expressions instead of nested Scenes.
 func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle, flatType string) int {
+	normalizedTitle := normalizeQuotes(storyTitle)
 	for i, h := range u.history {
-		if h.Metadata.Title == storyTitle {
+		if normalizeQuotes(h.Metadata.Title) == normalizedTitle {
 			return i
 		}
 	}
@@ -66,10 +67,13 @@ func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle, flatT
 	return len(u.history) - 1
 }
 
-// findOrCreateScene finds an existing scene or creates a new one
+// findOrCreateScene finds an existing scene or creates a new one.
+// Uses normalizeQuotes so that titles with smart quotes (e.g. from book
+// imports) match titles with ASCII apostrophes (from user input).
 func (u *LearningHistoryUpdater) findOrCreateScene(storyIndex int, sceneTitle string) int {
+	normalizedTitle := normalizeQuotes(sceneTitle)
 	for i, s := range u.history[storyIndex].Scenes {
-		if s.Metadata.Title == sceneTitle {
+		if normalizeQuotes(s.Metadata.Title) == normalizedTitle {
 			return i
 		}
 	}
