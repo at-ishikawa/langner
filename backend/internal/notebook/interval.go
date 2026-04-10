@@ -191,18 +191,6 @@ func (c *FixedLevelCalculator) levelFromInterval(lastInterval int) int {
 	return level
 }
 
-// snapToNextLevel returns the smallest fixed interval >= the given interval.
-func (c *FixedLevelCalculator) snapToNextLevel(interval int) int {
-	for _, iv := range c.intervals() {
-		if iv >= interval {
-			return iv
-		}
-	}
-	// If interval exceeds all levels, return max
-	intervals := c.intervals()
-	return intervals[len(intervals)-1]
-}
-
 // DeriveEF returns 0 for fixed level calculator since it does not use EF.
 func (c *FixedLevelCalculator) DeriveEF(_ []LearningRecord) float64 {
 	return 0

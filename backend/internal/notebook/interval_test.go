@@ -184,37 +184,6 @@ func TestFixedLevelCalculator_LevelFromInterval(t *testing.T) {
 	}
 }
 
-func TestFixedLevelCalculator_SnapToNextLevel(t *testing.T) {
-	calc := &FixedLevelCalculator{}
-
-	tests := []struct {
-		interval int
-		want     int
-	}{
-		{0, 1},
-		{1, 1},
-		{3, 7},
-		{7, 7},
-		{10, 30},
-		{25, 30},
-		{30, 30},
-		{63, 90},
-		{75, 90},
-		{90, 90},
-		{158, 365},
-		{365, 365},
-		{395, 1095},
-		{1095, 1095},
-		{1500, 1825},
-		{1825, 1825},
-		{9999, 1825},
-	}
-
-	for _, tt := range tests {
-		assert.Equal(t, tt.want, calc.snapToNextLevel(tt.interval), "interval %d", tt.interval)
-	}
-}
-
 func TestFixedLevelCalculator_CalculateInterval(t *testing.T) {
 	// CalculateInterval derives level from the most recent log's stored interval,
 	// then advances by quality delta.

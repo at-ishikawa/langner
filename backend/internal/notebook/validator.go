@@ -681,9 +681,6 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 func (v *Validator) mergeDuplicateScenes(
 	scenes []LearningScene, filePath, storyTitle string, result *ValidationResult,
 ) []LearningScene {
-	type group struct {
-		index int
-	}
 	groups := make(map[string][]int) // normalized title -> scene indices
 	var order []string               // preserve encounter order
 	for i, s := range scenes {
