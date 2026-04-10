@@ -472,6 +472,12 @@ func (v *Validator) validateDictionaryReferences(files []storyNotebookFile, resu
 func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
 	for _, file := range files {
 		for histIdx := range file.contents {
+			// Merge duplicate scenes whose titles differ only by quote style
+			// (e.g., smart quotes from book imports vs ASCII apostrophes).
+			file.contents[histIdx].Scenes = v.mergeDuplicateScenes(
+				file.contents[histIdx].Scenes, file.path, file.contents[histIdx].Metadata.Title, result,
+			)
+
 			for sceneIdx := range file.contents[histIdx].Scenes {
 				scene := &file.contents[histIdx].Scenes[sceneIdx]
 
@@ -610,7 +616,156 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 		}
 	}
 
+	// Final pass: recalculate intervals for ALL expressions to fix early-review
+	// inflation. This catches cases where interval_days advanced even though
+	// the review happened before the previous interval elapsed.
+	for _, file := range files {
+		for histIdx := range file.contents {
+			for sceneIdx := range file.contents[histIdx].Scenes {
+				scene := &file.contents[histIdx].Scenes[sceneIdx]
+				for exprIdx := range scene.Expressions {
+					expr := &scene.Expressions[exprIdx]
+					for _, logField := range []struct {
+						name string
+						logs *[]LearningRecord
+					}{
+						{"learned_logs", &expr.LearnedLogs},
+						{"reverse_logs", &expr.ReverseLogs},
+						{"etymology_breakdown_logs", &expr.EtymologyBreakdownLogs},
+						{"etymology_assembly_logs", &expr.EtymologyAssemblyLogs},
+					} {
+						if len(*logField.logs) > 1 {
+							_, newLogs, changed := recalculateLearningLogs(*logField.logs, v.calculator)
+							if changed {
+								*logField.logs = newLogs
+								result.AddWarning(ValidationError{
+									File:    file.path,
+									Message: fmt.Sprintf("Recalculated %s for %q in %s", logField.name, expr.Expression, file.contents[histIdx].Metadata.Title),
+								})
+							}
+						}
+					}
+				}
+			}
+			// Also handle flat expressions (flashcard-type histories)
+			for exprIdx := range file.contents[histIdx].Expressions {
+				expr := &file.contents[histIdx].Expressions[exprIdx]
+				for _, logField := range []struct {
+					name string
+					logs *[]LearningRecord
+				}{
+					{"learned_logs", &expr.LearnedLogs},
+					{"reverse_logs", &expr.ReverseLogs},
+				} {
+					if len(*logField.logs) > 1 {
+						_, newLogs, changed := recalculateLearningLogs(*logField.logs, v.calculator)
+						if changed {
+							*logField.logs = newLogs
+							result.AddWarning(ValidationError{
+								File:    file.path,
+								Message: fmt.Sprintf("Recalculated %s for %q in %s", logField.name, expr.Expression, file.contents[histIdx].Metadata.Title),
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return files
+}
+
+// mergeDuplicateScenes merges scenes whose titles match after normalizing
+// quote characters (e.g. smart quotes vs ASCII apostrophes). Expressions in
+// duplicate scenes are merged; logs are combined and recalculated.
+func (v *Validator) mergeDuplicateScenes(
+	scenes []LearningScene, filePath, storyTitle string, result *ValidationResult,
+) []LearningScene {
+	type group struct {
+		index int
+	}
+	groups := make(map[string][]int) // normalized title -> scene indices
+	var order []string               // preserve encounter order
+	for i, s := range scenes {
+		key := normalizeQuotes(strings.TrimSpace(s.Metadata.Title))
+		if _, seen := groups[key]; !seen {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], i)
+	}
+
+	needsMerge := false
+	for _, indices := range groups {
+		if len(indices) > 1 {
+			needsMerge = true
+			break
+		}
+	}
+	if !needsMerge {
+		return scenes
+	}
+
+	var merged []LearningScene
+	for _, key := range order {
+		indices := groups[key]
+		base := scenes[indices[0]]
+		if len(indices) == 1 {
+			merged = append(merged, base)
+			continue
+		}
+
+		// Merge expressions from later scenes into base
+		exprMap := make(map[string]int) // expression -> index in base.Expressions
+		for i, e := range base.Expressions {
+			exprMap[strings.TrimSpace(e.Expression)] = i
+		}
+		for _, si := range indices[1:] {
+			for _, e := range scenes[si].Expressions {
+				ek := strings.TrimSpace(e.Expression)
+				if idx, ok := exprMap[ek]; ok {
+					// Merge logs
+					if len(e.LearnedLogs) > 0 {
+						base.Expressions[idx].LearnedLogs = append(base.Expressions[idx].LearnedLogs, e.LearnedLogs...)
+						_, base.Expressions[idx].LearnedLogs, _ = recalculateLearningLogs(base.Expressions[idx].LearnedLogs, v.calculator)
+					}
+					if len(e.ReverseLogs) > 0 {
+						base.Expressions[idx].ReverseLogs = append(base.Expressions[idx].ReverseLogs, e.ReverseLogs...)
+						_, base.Expressions[idx].ReverseLogs, _ = recalculateLearningLogs(base.Expressions[idx].ReverseLogs, v.calculator)
+					}
+					if len(e.EtymologyBreakdownLogs) > 0 {
+						base.Expressions[idx].EtymologyBreakdownLogs = append(base.Expressions[idx].EtymologyBreakdownLogs, e.EtymologyBreakdownLogs...)
+						_, base.Expressions[idx].EtymologyBreakdownLogs, _ = recalculateLearningLogs(base.Expressions[idx].EtymologyBreakdownLogs, v.calculator)
+					}
+					if len(e.EtymologyAssemblyLogs) > 0 {
+						base.Expressions[idx].EtymologyAssemblyLogs = append(base.Expressions[idx].EtymologyAssemblyLogs, e.EtymologyAssemblyLogs...)
+						_, base.Expressions[idx].EtymologyAssemblyLogs, _ = recalculateLearningLogs(base.Expressions[idx].EtymologyAssemblyLogs, v.calculator)
+					}
+					result.AddWarning(ValidationError{
+						File:    filePath,
+						Message: fmt.Sprintf("Merged duplicate expression %q from duplicate scene in %s", ek, storyTitle),
+					})
+				} else {
+					exprMap[ek] = len(base.Expressions)
+					base.Expressions = append(base.Expressions, e)
+				}
+			}
+		}
+
+		result.AddWarning(ValidationError{
+			File:    filePath,
+			Message: fmt.Sprintf("Merged %d duplicate scene(s) with title %q in %s", len(indices)-1, key[:min(60, len(key))], storyTitle),
+		})
+		merged = append(merged, base)
+	}
+
+	return merged
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (v *Validator) fixConsistency(
