@@ -82,6 +82,35 @@ func TestSM2Calculator_RecalculateAll(t *testing.T) {
 	})
 }
 
+func TestSM2Calculator_RecalculateAll_EarlyReviewGuard(t *testing.T) {
+	calc := &SM2Calculator{}
+	baseTime := time.Date(2025, 3, 23, 0, 0, 0, 0, time.UTC)
+
+	// Simulate: freeform on 3/23, then notebook on 4/1 (9d later), 4/4 (3d), 4/8 (4d).
+	// The 4/4 and 4/8 reviews come before the previous interval has elapsed,
+	// so their intervals should NOT advance beyond the previous interval.
+	logs := []LearningRecord{
+		{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 16)}, Status: LearnedStatusUnderstood, IntervalDays: 90},  // 4/8 (wrong)
+		{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 12)}, Status: LearnedStatusUnderstood, IntervalDays: 30},  // 4/4 (wrong)
+		{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 9)}, Status: LearnedStatusUnderstood, IntervalDays: 7},    // 4/1
+		{Quality: 4, LearnedAt: Date{Time: baseTime}, Status: LearnedStatusUnderstood, QuizType: "freeform", IntervalDays: 7}, // 3/23
+	}
+
+	_, result := calc.RecalculateAll(logs)
+
+	// Result is sorted newest-first: [4/8, 4/4, 4/1, 3/23]
+	require.Len(t, result, 4)
+	// 3/23: first correct → small interval (3 days per SM-2)
+	assert.Equal(t, 3, result[3].IntervalDays, "first correct answer: interval=3")
+	// 4/1: 9 days since 3/23, interval was 3 → elapsed >= interval → advances
+	interval_4_1 := result[2].IntervalDays
+	assert.Greater(t, interval_4_1, 3, "4/1 should advance past 3 days")
+	// 4/4: only 3 days since 4/1, interval was >3 → early review → should NOT advance
+	assert.Equal(t, interval_4_1, result[1].IntervalDays, "4/4 early review: should keep same interval as 4/1")
+	// 4/8: only 4 days since 4/4 → still early → should NOT advance
+	assert.Equal(t, interval_4_1, result[0].IntervalDays, "4/8 early review: should keep same interval")
+}
+
 func TestSM2Calculator_DeriveEF(t *testing.T) {
 	calc := &SM2Calculator{}
 	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -152,37 +181,6 @@ func TestFixedLevelCalculator_LevelFromInterval(t *testing.T) {
 
 	for _, tt := range tests {
 		assert.Equal(t, tt.wantLevel, calc.levelFromInterval(tt.interval), "interval %d", tt.interval)
-	}
-}
-
-func TestFixedLevelCalculator_SnapToNextLevel(t *testing.T) {
-	calc := &FixedLevelCalculator{}
-
-	tests := []struct {
-		interval int
-		want     int
-	}{
-		{0, 1},
-		{1, 1},
-		{3, 7},
-		{7, 7},
-		{10, 30},
-		{25, 30},
-		{30, 30},
-		{63, 90},
-		{75, 90},
-		{90, 90},
-		{158, 365},
-		{365, 365},
-		{395, 1095},
-		{1095, 1095},
-		{1500, 1825},
-		{1825, 1825},
-		{9999, 1825},
-	}
-
-	for _, tt := range tests {
-		assert.Equal(t, tt.want, calc.snapToNextLevel(tt.interval), "interval %d", tt.interval)
 	}
 }
 
@@ -305,9 +303,9 @@ func TestFixedLevelCalculator_RecalculateAll(t *testing.T) {
 		{
 			name: "snaps SM-2 intervals to fixed levels",
 			logs: []LearningRecord{
-				// Newest first
-				{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 5)}, IntervalDays: 63},
-				{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 1)}, IntervalDays: 10},
+				// Newest first, properly spaced so no early review guard fires
+				{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 40)}, IntervalDays: 63},
+				{Quality: 4, LearnedAt: Date{Time: baseTime.AddDate(0, 0, 8)}, IntervalDays: 10},
 				{Quality: 4, LearnedAt: Date{Time: baseTime}, IntervalDays: 3},
 			},
 			validate: func(t *testing.T, logs []LearningRecord) {

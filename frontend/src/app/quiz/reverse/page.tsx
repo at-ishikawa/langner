@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   Heading,
-  Input,
   Progress,
   Spinner,
   Text,
@@ -15,6 +14,7 @@ import {
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { AnswerInput } from "@/components/AnswerInput";
 
 type QuizPhase = "answering" | "synonym-retry" | "feedback";
 
@@ -28,6 +28,7 @@ interface FeedbackData {
   partOfSpeech?: string;
   learnedAt?: string;
   images?: string[];
+  originParts?: { origin: string; type: string; language: string; meaning: string }[];
 }
 
 export default function ReverseQuizPage() {
@@ -127,6 +128,7 @@ export default function ReverseQuizPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
+        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
       });
       setDisplayCorrect(correct);
       storeSubmitResult({
@@ -176,6 +178,7 @@ export default function ReverseQuizPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
+        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -267,28 +270,16 @@ export default function ReverseQuizPage() {
             </VStack>
           )}
 
-          <Box>
-            <Text fontWeight="medium" mb={1}>
-              Word
-            </Text>
-            <Input
-              ref={inputRef}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Try again..."
-              size="lg"
-            />
-          </Box>
-
-          <Button
-            colorPalette="blue"
-            onClick={() => handleSubmit(true)}
-            disabled={!answer.trim()}
-            size="lg"
-          >
-            Submit
-          </Button>
+          <AnswerInput
+            ref={inputRef}
+            label="Word"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={() => handleSubmit(true)}
+            onSkip={handleSkip}
+            placeholder="Try again..."
+          />
         </VStack>
       ) : phase === "answering" ? (
         <VStack align="stretch" gap={4}>
@@ -312,36 +303,16 @@ export default function ReverseQuizPage() {
             </VStack>
           )}
 
-          <Box>
-            <Text fontWeight="medium" mb={1}>
-              Word
-            </Text>
-            <Input
-              ref={inputRef}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type the word"
-              size="lg"
-            />
-          </Box>
-
-          <Button
-            colorPalette="blue"
-            onClick={() => handleSubmit()}
-            disabled={!answer.trim()}
-            size="lg"
-          >
-            Submit
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handleSkip}
-            size="lg"
-          >
-            Don&apos;t Know
-          </Button>
+          <AnswerInput
+            ref={inputRef}
+            label="Word"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={() => handleSubmit()}
+            onSkip={handleSkip}
+            placeholder="Type the word"
+          />
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
@@ -356,114 +327,6 @@ export default function ReverseQuizPage() {
             </Box>
           ) : feedback ? (
             <>
-              {/* 1. Correct/Incorrect indicator with override/undo labels */}
-              <Box
-                p={3}
-                borderRadius="md"
-                bg={displayCorrect ? "green.100" : "red.100"}
-                color={displayCorrect ? "green.800" : "red.800"}
-                _dark={{
-                  bg: displayCorrect ? "green.900" : "red.900",
-                  color: displayCorrect ? "green.200" : "red.200",
-                }}
-                display="flex"
-                justifyContent="space-between"
-                alignItems="center"
-              >
-                <Text fontWeight="bold">
-                  {displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}
-                  {overridden && (
-                    <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
-                  )}
-                </Text>
-                {overridden && (
-                  <Text
-                    as="span"
-                    fontSize="sm"
-                    cursor="pointer"
-                    textDecoration="underline"
-                    onClick={async () => {
-                      try {
-                        const res = await quizClient.undoOverrideAnswer({
-                          noteId: card.noteId,
-                          quizType: ProtoQuizType.REVERSE,
-                          learnedAt: feedback.learnedAt!,
-                          originalQuality: overrideOriginals?.quality ?? 0,
-                          originalStatus: overrideOriginals?.status ?? "",
-                          originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                        });
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(res.correct);
-                      } catch {
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(feedback.correct);
-                      }
-                    }}
-                  >
-                    Undo
-                  </Text>
-                )}
-              </Box>
-
-              {/* 2. Your answer */}
-              {submittedAnswer ? (
-                <Text textDecoration={displayCorrect ? "none" : "line-through"}>
-                  Your answer: {submittedAnswer}
-                </Text>
-              ) : (
-                <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                  Skipped
-                </Text>
-              )}
-
-              {/* 3. Word, pronunciation, part of speech, reason, examples */}
-              <Box>
-                <Text fontWeight="bold">Word</Text>
-                <Text fontStyle="italic">
-                  {feedback.expression}
-                  {(feedback.pronunciation || feedback.partOfSpeech) && (
-                    <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="normal">
-                      {" "}
-                      {[
-                        feedback.pronunciation && `/${feedback.pronunciation}/`,
-                        feedback.partOfSpeech,
-                      ].filter(Boolean).join(" · ")}
-                    </Text>
-                  )}
-                </Text>
-              </Box>
-
-              {feedback.reason && (
-                <Box>
-                  <Text fontWeight="bold">Reason</Text>
-                  <Text>{feedback.reason}</Text>
-                </Box>
-              )}
-
-              {feedback.contexts.length > 0 && (
-                <Box>
-                  <Text fontWeight="bold">Context</Text>
-                  <VStack align="stretch" gap={1} mt={1}>
-                    {feedback.contexts.map((ctx, i) => (
-                      <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
-                        {i + 1}. {ctx}
-                      </Text>
-                    ))}
-                  </VStack>
-                </Box>
-              )}
-
-              {feedback.images && feedback.images.length > 0 && (
-                <Box display="flex" gap={2} flexWrap="wrap">
-                  {feedback.images.map((src, i) => (
-                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-                  ))}
-                </Box>
-              )}
-
-              {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
@@ -493,6 +356,25 @@ export default function ReverseQuizPage() {
                     });
                   } catch { /* silently fail */ }
                 }}
+                onUndo={async () => {
+                  try {
+                    const res = await quizClient.undoOverrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.REVERSE,
+                      learnedAt: feedback.learnedAt!,
+                      originalQuality: overrideOriginals?.quality ?? 0,
+                      originalStatus: overrideOriginals?.status ?? "",
+                      originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                    });
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(res.correct);
+                  } catch {
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(feedback.correct);
+                  }
+                }}
                 onSkip={async () => {
                   try {
                     await quizClient.skipWord({ noteId: card.noteId });
@@ -500,17 +382,84 @@ export default function ReverseQuizPage() {
                     storeSkipResult(currentIndex, "reverse");
                   } catch { /* silently fail */ }
                 }}
-              />
+                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
+              >
+                {/* Your answer */}
+                {submittedAnswer ? (
+                  <Text textDecoration={displayCorrect ? "none" : "line-through"}>
+                    Your answer: {submittedAnswer}
+                  </Text>
+                ) : (
+                  <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                    Skipped
+                  </Text>
+                )}
 
-              {currentIndex + 1 < total && (
-                <Button
-                  colorPalette="green"
-                  variant="outline"
-                  onClick={() => router.push("/quiz/complete")}
-                >
-                  See Results
-                </Button>
-              )}
+                {/* Word, pronunciation, part of speech, reason, examples */}
+                <Box>
+                  <Text fontWeight="bold">Word</Text>
+                  <Text fontStyle="italic">
+                    {feedback.expression}
+                    {(feedback.pronunciation || feedback.partOfSpeech) && (
+                      <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="normal">
+                        {" "}
+                        {[
+                          feedback.pronunciation && `/${feedback.pronunciation}/`,
+                          feedback.partOfSpeech,
+                        ].filter(Boolean).join(" · ")}
+                      </Text>
+                    )}
+                  </Text>
+                </Box>
+
+                {feedback.reason && (
+                  <Box>
+                    <Text fontWeight="bold">Reason</Text>
+                    <Text>{feedback.reason}</Text>
+                  </Box>
+                )}
+
+                {feedback.contexts.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold">Context</Text>
+                    <VStack align="stretch" gap={1} mt={1}>
+                      {feedback.contexts.map((ctx, i) => (
+                        <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
+                          {i + 1}. {ctx}
+                        </Text>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
+                {feedback.images && feedback.images.length > 0 && (
+                  <Box display="flex" gap={2} flexWrap="wrap">
+                    {feedback.images.map((src, i) => (
+                      <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                    ))}
+                  </Box>
+                )}
+
+                {feedback.originParts && feedback.originParts.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold" fontSize="sm">Etymology</Text>
+                    <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                      {feedback.originParts.map((p, i) => (
+                        <Box key={i} display="flex" alignItems="center" gap={1}>
+                          {i > 0 && <Text color="fg.muted">+</Text>}
+                          <Text color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium" fontSize="sm">{p.origin}</Text>
+                          <Text fontSize="sm" color="fg.muted">({p.meaning})</Text>
+                          {p.language && (
+                            <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                              <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
+                            </Box>
+                          )}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+              </FeedbackActions>
             </>
           ) : error ? (
             <>

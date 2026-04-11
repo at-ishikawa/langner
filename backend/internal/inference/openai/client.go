@@ -188,21 +188,28 @@ Return ONLY a JSON array. For each input expression, include:
 STRICT OUTPUT: No text outside the JSON. Booleans are true/false lowercase. Process ALL expressions in the input array, including duplicates.
 
 INPUT UNDERSTANDING
-- Each context may include a "reference_definition" - this is a hint from a notebook that may be incomplete, incorrect, or empty.
-- When context is PROVIDED: Determine the true meaning from context. The reference_definition is just a hint.
-- When context is EMPTY: Rely on reference_definition. If user's meaning matches it exactly or nearly exactly, mark CORRECT.
+- Each context may include a "reference_definition" - this is the meaning the user studied in their notebook.
+- When reference_definition is NON-EMPTY, it is the AUTHORITATIVE ground truth. Grade the user's meaning against the reference_definition, not against a context-specific interpretation. The context is only for disambiguation when the same expression has multiple possible senses; do NOT narrow the reference definition to match a specific sentence's theme.
+- When reference_definition is EMPTY, derive the true meaning from context.
+- Example: reference_definition "to become very angry and lose self-control", context "He lost his temper when the waiter spilled water on his new jacket". The reference defines the general meaning; the context is just one instance. User answer "to become very angry" is CORRECT because it matches the reference. Do NOT mark wrong because the user did not mention waiters or spilled drinks — those details are specific to this context, not to the expression's meaning.
 - Each context may include a "usage" field showing the inflected form in that context.
 
 === MANDATORY PRE-CHECK (MUST DO FIRST) ===
 
 STEP 1: SELF-DEFINITION CHECK - DO THIS BEFORE ANYTHING ELSE
-Ask: "Does the user's meaning contain the expression word itself as the definition?"
-- If user meaning = expression word (same word, any form), IMMEDIATELY mark INCORRECT
-- "X" meaning "X" is ALWAYS wrong - this is circular, not a definition
-- "X" meaning "something X" is ALSO wrong - still uses the word
-- This applies even for adjectives: "stylish" -> "stylish" = INCORRECT
-- This applies for any word: "fast" -> "fast" = INCORRECT
-- STOP HERE and mark INCORRECT if self-definition detected
+Ask: "Does the user's answer literally contain the EXPRESSION word itself (or a trivial inflection of the same lemma)?"
+- ONLY trigger if the user's answer literally reuses THE EXPRESSION WORD
+- "fast" meaning "fast" = INCORRECT (exact repetition)
+- "fast" meaning "being fast" = INCORRECT (trivial rephrasing with the word)
+- "fast" meaning "quick, speedy" = CORRECT (genuine synonym, NOT self-definition)
+- Using a DIFFERENT form of the word in a longer definition is NOT self-definition
+- STOP HERE and mark INCORRECT only if the answer is clearly circular
+
+CRITICAL: DO NOT confuse words from the expected meaning with the expression itself.
+- "huge" expected "of very large size" user "of large size" = CORRECT. "size" is in the expected meaning, NOT in the expression. The expression is "huge", and "huge" is absent from the user's answer, so self-definition cannot apply.
+- "delighted" expected "filled with great pleasure" user "filled with joy" = CORRECT. "filled with" appears in both the expected meaning and the user's answer, but the expression word "delighted" is absent from the user's answer.
+- Before writing "self-definition" as a reason, verify that the EXACT expression word (or its trivial inflection) appears in the user's answer. If it does not, choose a different reason such as "wrong meaning", "wrong semantic field", or mark CORRECT.
+- NEVER use "self-definition" as a reason when the user's answer does NOT contain the expression word.
 
 === ABSOLUTE RULES - NEVER VIOLATE THESE ===
 
@@ -962,24 +969,21 @@ CLASSIFICATION RULES:
    - Minor typos: transposed letters, missing/extra letter, or small spelling errors that clearly show the user knows the word
    - KEY: If the user's answer contains the essential words of the expected expression, classify as "same_word"
 
-2. "synonym" - For SINGLE WORDS only: a different word with the same core meaning:
-   - "joyful" when expected "happy" (different single words, same meaning)
-   - "big" when expected "large" (different single words, same meaning)
-   - This applies when BOTH the expected word AND user's answer are single words
-   - If they genuinely mean the same thing, classify as "synonym"
+2. "synonym" - A different word or expression with the same or very similar meaning:
+   - Single words: "joyful" when expected "happy", "big" when expected "large"
+   - Multi-word expressions: a different idiom/phrase with similar meaning (e.g., "give up" when expected "throw in the towel")
+   - The user clearly knows the meaning but produced a different word/expression
+   - Classify as "synonym" so the user gets a chance to retry with the specific expected word
 
 3. "wrong" - The user's answer is incorrect:
    - Wrong definition entirely
    - Antonym (opposite meaning)
-   - Unrelated word
+   - Unrelated word or expression
    - Gibberish or empty
-   - A DIFFERENT multi-word expression/phrase/idiom even if it has similar meaning
 
-CRITICAL RULE FOR MULTI-WORD EXPRESSIONS:
-- For phrasal verbs, idioms, and multi-word expressions, ONLY accept morphological variants of the SAME expression
-- A completely different expression with similar meaning is "wrong", NOT "synonym"
-- The goal is to learn the SPECIFIC expression, not just any expression with similar meaning
-- However, minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should still be classified as "same_word"
+NOTE ON MULTI-WORD EXPRESSIONS:
+- Minor omissions (missing articles like "a"/"the", optional words), typos, and small spelling errors within the SAME expression should be classified as "same_word"
+- A completely different expression with similar meaning should be classified as "synonym", NOT "wrong"
 
 QUALITY ASSESSMENT:
 Also assess response speed quality (1-5) based on response time and expression complexity:
@@ -1054,128 +1058,6 @@ Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTi
 	var decoded inference.ValidateWordFormResponse
 	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
 		return inference.ValidateWordFormResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
-	}
-
-	return decoded, nil
-}
-
-const gradeEtymologyBreakdownSystemPrompt = `You are an etymology quiz grader. A user is learning word origins (roots, prefixes, suffixes) and has broken down a word into its constituent parts.
-
-TASK: Match user's origin parts against expected origins. Grade each user answer.
-
-RULES:
-1. ORIGIN MATCHING: Allow spelling variations, transliterations, and minor differences.
-   - "spec" matches "spect" or "specere" (same root family)
-   - "pre" matches "prae" (Latin/English variation)
-   - Case insensitive
-2. MEANING MATCHING: Allow synonyms and equivalent meanings.
-   - "to look" matches "to see" or "to watch"
-   - "before" matches "in front of" or "prior to"
-3. Each user origin should be matched to at most one expected origin.
-4. Unmatched user origins are marked as incorrect.
-5. Overall "correct" is true if user identified the majority of origins correctly (both origin and meaning).
-
-OUTPUT FORMAT (JSON only):
-{
-  "correct": true/false,
-  "reason": "brief explanation",
-  "quality": 1-5,
-  "origin_grades": [
-    {
-      "user_origin": "the user's origin text",
-      "user_meaning": "the user's meaning text",
-      "origin_correct": true/false,
-      "meaning_correct": true/false,
-      "correct_origin": {"origin": "...", "type": "...", "language": "...", "meaning": "..."} // matched expected origin, null if no match
-    }
-  ]
-}
-
-QUALITY:
-- If incorrect overall: quality = 1
-- If correct, fast response: quality = 5
-- If correct, normal response: quality = 4
-- If correct, slow response: quality = 3
-
-Return ONLY valid JSON.`
-
-// GradeEtymologyBreakdown grades a user's etymology breakdown answer
-func (client *Client) GradeEtymologyBreakdown(
-	ctx context.Context,
-	params inference.GradeEtymologyBreakdownRequest,
-) (inference.GradeEtymologyBreakdownResponse, error) {
-	var result inference.GradeEtymologyBreakdownResponse
-	if err := retry.Do(
-		func() error {
-			response, err := client.gradeEtymologyBreakdown(ctx, params)
-			if err != nil {
-				if !isRetryableError(err) {
-					return retry.Unrecoverable(err)
-				}
-				return err
-			}
-			result = response
-			return nil
-		},
-		retry.Context(ctx),
-		retry.Attempts(client.maxRetryAttempts+1),
-		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
-			return retry.BackOffDelay(n, err, config)
-		}),
-	); err != nil {
-		return inference.GradeEtymologyBreakdownResponse{}, err
-	}
-	return result, nil
-}
-
-func (client *Client) gradeEtymologyBreakdown(
-	ctx context.Context,
-	params inference.GradeEtymologyBreakdownRequest,
-) (inference.GradeEtymologyBreakdownResponse, error) {
-	userJSON, err := json.Marshal(params)
-	if err != nil {
-		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	requestBody := ChatCompletionRequest{
-		Model:       client.model,
-		Temperature: 0.2,
-		Messages: []Message{
-			{Role: RoleSystem, Content: gradeEtymologyBreakdownSystemPrompt},
-			{Role: RoleUser, Content: string(userJSON)},
-		},
-	}
-
-	response, err := client.httpClient.R().
-		SetContext(ctx).
-		SetBody(requestBody).
-		SetResult(&ChatCompletionResponse{}).
-		Post("/chat/completions")
-	if err != nil {
-		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("httpClient.Post > %w", err)
-	}
-	if response.IsError() {
-		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
-	}
-
-	responseBody := response.Result().(*ChatCompletionResponse)
-	if responseBody == nil || len(responseBody.Choices) == 0 {
-		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("empty response body or choices: %s", response.String())
-	}
-
-	content := responseBody.Choices[0].Message.Content
-	if content == "" {
-		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("empty response content: %s", response.String())
-	}
-
-	slog.Default().Debug("gradeEtymologyBreakdown response",
-		"request", requestBody,
-		"response", content,
-	)
-
-	var decoded inference.GradeEtymologyBreakdownResponse
-	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
-		return inference.GradeEtymologyBreakdownResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
 	}
 
 	return decoded, nil

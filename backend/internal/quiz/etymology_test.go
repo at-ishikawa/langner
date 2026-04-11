@@ -1,6 +1,7 @@
 package quiz
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/at-ishikawa/langner/internal/config"
-	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 func createEtymologyFixtures(t *testing.T) (string, string) {
@@ -44,227 +44,209 @@ notebooks:
 `
 	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(originsYAML), 0644))
 
-	// Create flashcard notebook with origin_parts
-	flashDir := filepath.Join(tmpDir, "flashcards", "vocab")
-	require.NoError(t, os.MkdirAll(flashDir, 0755))
-
-	flashIndex := `id: vocab
-name: Vocabulary
-notebooks:
-  - ./cards.yml
-`
-	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "index.yml"), []byte(flashIndex), 0644))
-
-	cardsYAML := `- title: "Unit 1"
-  cards:
-    - expression: "inspect"
-      meaning: "to look at closely"
-      origin_parts:
-        - origin: "spect"
-          language: "Latin"
-    - expression: "prediction"
-      meaning: "a statement about the future"
-      origin_parts:
-        - origin: "pre"
-          language: "Latin"
-        - origin: "tion"
-          language: "Latin"
-    - expression: "happy"
-      meaning: "feeling pleasure"
-`
-	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "cards.yml"), []byte(cardsYAML), 0644))
-
-	// Create learning notes directory
+	// Create learning notes directory with etymology_freeform history for
+	// each origin so they pass the hard eligibility gate (must be freeformed
+	// first AND have at least one correct etymology answer).
 	learningDir := filepath.Join(tmpDir, "learning")
 	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	learningHistory := `- metadata:
+    notebook_id: latin-roots
+    title: Latin Roots
+  expressions:
+    - expression: spect
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_freeform
+    - expression: pre
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_freeform
+    - expression: tion
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_freeform
+`
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "latin-roots.yml"), []byte(learningHistory), 0644))
 
 	return tmpDir, learningDir
 }
 
-func TestService_LoadEtymologyCards(t *testing.T) {
+func TestService_LoadEtymologyOriginCards(t *testing.T) {
 	tmpDir, learningDir := createEtymologyFixtures(t)
 
 	svc := NewService(
 		config.NotebooksConfig{
 			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
-			FlashcardsDirectories:  []string{filepath.Join(tmpDir, "flashcards")},
-			LearningNotesDirectory: learningDir,
-		},
-		nil, // openaiClient not needed for loading
-		nil, // dictionaryMap not needed
-		nil, // learningRepo not needed
-		config.QuizConfig{},
-	)
-
-	cards, err := svc.LoadEtymologyCards(
-		[]string{"latin-roots"},
-		[]string{"vocab"},
-		true, // include unstudied
-	)
-	require.NoError(t, err)
-
-	// Should find 2 cards (inspect and prediction) which have origin_parts
-	// "happy" should be excluded because it has no origin_parts
-	assert.Len(t, cards, 2)
-
-	// Verify cards have resolved origin parts
-	expressionMap := make(map[string]EtymologyCard)
-	for _, card := range cards {
-		expressionMap[card.Expression] = card
-	}
-
-	inspectCard, ok := expressionMap["inspect"]
-	require.True(t, ok, "should find 'inspect' card")
-	assert.Equal(t, "to look at closely", inspectCard.Meaning)
-	assert.Len(t, inspectCard.OriginParts, 1)
-	assert.Equal(t, "spect", inspectCard.OriginParts[0].Origin)
-	assert.Equal(t, "to look or see", inspectCard.OriginParts[0].Meaning)
-
-	predictionCard, ok := expressionMap["prediction"]
-	require.True(t, ok, "should find 'prediction' card")
-	assert.Len(t, predictionCard.OriginParts, 2)
-}
-
-func TestService_LoadEtymologyCards_NoOriginParts(t *testing.T) {
-	tmpDir := t.TempDir()
-
-	// Create etymology notebook
-	etymDir := filepath.Join(tmpDir, "etymology", "test-roots")
-	require.NoError(t, os.MkdirAll(etymDir, 0755))
-
-	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: test-roots
-kind: Etymology
-name: Test Roots
-notebooks:
-  - ./origins.yml
-`), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte("[]"), 0644))
-
-	// Create flashcard without origin_parts
-	flashDir := filepath.Join(tmpDir, "flashcards", "simple")
-	require.NoError(t, os.MkdirAll(flashDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "index.yml"), []byte(`id: simple
-name: Simple
-notebooks:
-  - ./cards.yml
-`), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "cards.yml"), []byte(`- title: "Words"
-  cards:
-    - expression: "house"
-      meaning: "a building for living in"
-`), 0644))
-
-	learningDir := filepath.Join(tmpDir, "learning")
-	require.NoError(t, os.MkdirAll(learningDir, 0755))
-
-	svc := NewService(
-		config.NotebooksConfig{
-			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
-			FlashcardsDirectories:  []string{filepath.Join(tmpDir, "flashcards")},
 			LearningNotesDirectory: learningDir,
 		},
 		nil, nil, nil,
 		config.QuizConfig{},
 	)
 
-	cards, err := svc.LoadEtymologyCards([]string{"test-roots"}, []string{"simple"}, true)
+	cards, err := svc.LoadEtymologyOriginCards(
+		[]string{"latin-roots"},
+		true,
+	)
 	require.NoError(t, err)
-	assert.Len(t, cards, 0, "should find no cards without origin_parts")
+
+	assert.Len(t, cards, 3)
+
+	originMap := make(map[string]EtymologyOriginCard)
+	for _, card := range cards {
+		originMap[card.Origin] = card
+	}
+
+	spectCard, ok := originMap["spect"]
+	require.True(t, ok, "should find 'spect' card")
+	assert.Equal(t, "to look or see", spectCard.Meaning)
+	assert.Equal(t, "root", spectCard.Type)
+	assert.Equal(t, "Latin", spectCard.Language)
+	assert.Equal(t, "Latin Roots", spectCard.NotebookTitle)
+
+	preCard, ok := originMap["pre"]
+	require.True(t, ok, "should find 'pre' card")
+	assert.Equal(t, "before", preCard.Meaning)
+	assert.Equal(t, "prefix", preCard.Type)
 }
 
-func TestDeduplicateEtymologyCards(t *testing.T) {
-	cards := []EtymologyCard{
-		{Expression: "inspect", Meaning: "to look at"},
-		{Expression: "Inspect", Meaning: "to look at closely"},
-		{Expression: "preview", Meaning: "to see before"},
-	}
+// TestService_LoadEtymologyOriginCards_FreeformFirstGate verifies that the
+// hard eligibility gate is ALWAYS enforced, even when includeUnstudied=true.
+// Origins must have been attempted in etymology freeform mode AND have at
+// least one correct etymology answer before they show up in standard or
+// reverse quizzes.
+func TestService_LoadEtymologyOriginCards_FreeformFirstGate(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "sample-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: sample-roots
+kind: Etymology
+name: Sample Roots
+notebooks:
+  - ./origins.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`- origin: "root-a"
+  type: root
+  language: Latin
+  meaning: first sample meaning
+- origin: "root-b"
+  type: root
+  language: Latin
+  meaning: second sample meaning
+- origin: "root-c"
+  type: root
+  language: Latin
+  meaning: third sample meaning
+- origin: "root-d"
+  type: root
+  language: Latin
+  meaning: fourth sample meaning
+`), 0644))
 
-	result := deduplicateEtymologyCards(cards)
-	assert.Len(t, result, 2)
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	// root-a: freeformed but never answered correctly → NOT eligible.
+	// root-b: freeformed and answered correctly → eligible.
+	// root-c: answered correctly in etymology standard (not freeform) → NOT eligible (freeform-first).
+	// root-d: no history at all → NOT eligible.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "sample-roots.yml"), []byte(`- metadata:
+    notebook_id: sample-roots
+    title: Sample Roots
+  expressions:
+    - expression: root-a
+      etymology_breakdown_logs:
+        - status: misunderstood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_freeform
+    - expression: root-b
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_freeform
+    - expression: root-c
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_breakdown
+`), 0644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{},
+	)
+
+	// Even with includeUnstudied=true, only root-b should be eligible.
+	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true)
+	require.NoError(t, err)
+	require.Len(t, cards, 1, "only origins that were freeformed AND answered correctly should be eligible")
+	assert.Equal(t, "root-b", cards[0].Origin)
 }
 
-func TestResolveOriginParts(t *testing.T) {
-	originMap := map[string]EtymologyOriginPart{
-		"spect|latin": {Origin: "spect", Type: "root", Language: "Latin", Meaning: "to look"},
-		"pre|latin":   {Origin: "pre", Type: "prefix", Language: "Latin", Meaning: "before"},
-	}
+func TestService_LoadEtymologyOriginCards_Deduplicates(t *testing.T) {
+	tmpDir := t.TempDir()
 
-	tests := []struct {
-		name string
-		refs []notebook.OriginPartRef
-		want int
-	}{
-		{
-			name: "exact match",
-			refs: []notebook.OriginPartRef{
-				{Origin: "spect", Language: "Latin"},
-			},
-			want: 1,
-		},
-		{
-			name: "match by origin only",
-			refs: []notebook.OriginPartRef{
-				{Origin: "spect"},
-			},
-			want: 1,
-		},
-		{
-			name: "no match",
-			refs: []notebook.OriginPartRef{
-				{Origin: "unknown", Language: "Latin"},
-			},
-			want: 0,
-		},
-		{
-			name: "multiple matches",
-			refs: []notebook.OriginPartRef{
-				{Origin: "spect", Language: "Latin"},
-				{Origin: "pre", Language: "Latin"},
-			},
-			want: 2,
-		},
-	}
+	etymDir1 := filepath.Join(tmpDir, "etymology", "roots-1")
+	require.NoError(t, os.MkdirAll(etymDir1, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir1, "index.yml"), []byte(`id: roots-1
+kind: Etymology
+name: Roots 1
+notebooks:
+  - ./origins.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir1, "origins.yml"), []byte(`- origin: "spect"
+  type: root
+  language: Latin
+  meaning: to look or see
+`), 0644))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := resolveOriginParts(tt.refs, originMap)
-			assert.Len(t, got, tt.want)
-		})
-	}
-}
+	etymDir2 := filepath.Join(tmpDir, "etymology", "roots-2")
+	require.NoError(t, os.MkdirAll(etymDir2, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir2, "index.yml"), []byte(`id: roots-2
+kind: Etymology
+name: Roots 2
+notebooks:
+  - ./origins.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir2, "origins.yml"), []byte(`- origin: "spect"
+  type: root
+  language: Latin
+  meaning: to see
+`), 0644))
 
-func TestHasMatchingOrigin(t *testing.T) {
-	originSet := map[string]bool{
-		"spect": true,
-		"pre":   true,
-	}
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	// Both notebooks need freeform history so the origin passes the gate.
+	freeformHistory := `- metadata:
+    notebook_id: %s
+    title: %s
+  expressions:
+    - expression: spect
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_freeform
+`
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "roots-1.yml"),
+		[]byte(fmt.Sprintf(freeformHistory, "roots-1", "Roots 1")), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "roots-2.yml"),
+		[]byte(fmt.Sprintf(freeformHistory, "roots-2", "Roots 2")), 0644))
 
-	tests := []struct {
-		name string
-		refs []notebook.OriginPartRef
-		want bool
-	}{
-		{
-			name: "has matching origin",
-			refs: []notebook.OriginPartRef{{Origin: "spect"}},
-			want: true,
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
 		},
-		{
-			name: "no matching origin",
-			refs: []notebook.OriginPartRef{{Origin: "unknown"}},
-			want: false,
-		},
-		{
-			name: "empty refs",
-			refs: nil,
-			want: false,
-		},
-	}
+		nil, nil, nil,
+		config.QuizConfig{},
+	)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := hasMatchingOrigin(tt.refs, originSet)
-			assert.Equal(t, tt.want, got)
-		})
-	}
+	cards, err := svc.LoadEtymologyOriginCards([]string{"roots-1", "roots-2"}, true)
+	require.NoError(t, err)
+	assert.Len(t, cards, 1, "duplicate origins should be deduplicated")
 }

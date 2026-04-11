@@ -28,14 +28,17 @@ interface ResultItem {
   originBreakdown?: OriginPartDisplay[];
   userAnswer?: string;
   images?: string[];
+  reason?: string;
+  pronunciation?: string;
+  partOfSpeech?: string;
 }
 
 function getProtoQuizType(qt: QuizType): ProtoQuizType {
   if (qt === "reverse") return ProtoQuizType.REVERSE;
   if (qt === "freeform") return ProtoQuizType.FREEFORM;
-  if (qt === "etymology-breakdown") return ProtoQuizType.ETYMOLOGY_BREAKDOWN;
-  if (qt === "etymology-assembly") return ProtoQuizType.ETYMOLOGY_ASSEMBLY;
-  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_BREAKDOWN;
+  if (qt === "etymology-standard") return ProtoQuizType.ETYMOLOGY_STANDARD;
+  if (qt === "etymology-reverse") return ProtoQuizType.ETYMOLOGY_REVERSE;
+  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_FREEFORM;
   return ProtoQuizType.STANDARD;
 }
 
@@ -57,14 +60,14 @@ export default function SessionCompletePage() {
   const results = useQuizStore((s) => s.results);
   const reverseResults = useQuizStore((s) => s.reverseResults);
   const freeformResults = useQuizStore((s) => s.freeformResults);
-  const etymologyResults = useQuizStore((s) => s.etymologyResults);
+  const etymologyResults = useQuizStore((s) => s.etymologyOriginResults);
   const quizType = useQuizStore((s) => s.quizType);
   const reset = useQuizStore((s) => s.reset);
   const overrideResult = useQuizStore((s) => s.overrideResult);
   const undoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
   const skipResult = useQuizStore((s) => s.skipResult);
   const resumeResult = useQuizStore((s) => s.resumeResult);
-  const isEtymologyQuiz = quizType === "etymology-breakdown" || quizType === "etymology-assembly" || quizType === "etymology-freeform";
+  const isEtymologyQuiz = quizType === "etymology-standard" || quizType === "etymology-reverse" || quizType === "etymology-freeform";
 
   const allResults = useMemo((): ResultItem[] => {
     if (results.length > 0) {
@@ -81,6 +84,16 @@ export default function SessionCompletePage() {
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
         images: r.images,
+        userAnswer: r.answer,
+        reason: r.reason,
+        pronunciation: r.wordDetail?.pronunciation,
+        partOfSpeech: r.wordDetail?.partOfSpeech,
+        originBreakdown: r.wordDetail?.originParts?.map((p) => ({
+          origin: p.origin,
+          meaning: p.meaning,
+          language: p.language,
+          type: p.type,
+        })),
       }));
     }
     if (reverseResults.length > 0) {
@@ -97,6 +110,16 @@ export default function SessionCompletePage() {
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
         images: r.images,
+        userAnswer: r.answer,
+        reason: r.reason,
+        pronunciation: r.wordDetail?.pronunciation,
+        partOfSpeech: r.wordDetail?.partOfSpeech,
+        originBreakdown: r.wordDetail?.originParts?.map((p) => ({
+          origin: p.origin,
+          meaning: p.meaning,
+          language: p.language,
+          type: p.type,
+        })),
       }));
     }
     if (freeformResults.length > 0) {
@@ -113,28 +136,38 @@ export default function SessionCompletePage() {
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
         images: r.images,
+        userAnswer: r.answer,
+        reason: r.reason,
+        pronunciation: r.wordDetail?.pronunciation,
+        partOfSpeech: r.wordDetail?.partOfSpeech,
+        originBreakdown: r.wordDetail?.originParts?.map((p) => ({
+          origin: p.origin,
+          meaning: p.meaning,
+          language: p.language,
+          type: p.type,
+        })),
       }));
     }
     if (etymologyResults.length > 0) {
       return etymologyResults.map((r, i) => ({
         index: i,
         key: r.noteId ? r.noteId.toString() : `ety-${i}`,
-        entry: r.expression,
-        meaning: r.meaning,
+        entry: r.origin,
+        meaning: r.correctAnswer,
         correct: r.correct,
         noteId: r.noteId,
         learnedAt: r.learnedAt,
         isOverridden: r.isOverridden,
         isSkipped: r.isSkipped,
         originalCorrect: r.isOverridden ? !r.correct : r.correct,
-        originBreakdown: r.originParts?.map((p) => ({
-          origin: p.origin,
-          meaning: p.meaning,
-          language: p.language,
-          type: p.type,
-        })),
+        originBreakdown: [{
+          origin: r.origin,
+          meaning: r.correctAnswer,
+          language: r.language,
+          type: r.type,
+        }],
         userAnswer: r.answer,
-        images: r.images,
+        reason: r.reason,
       }));
     }
     return [];
@@ -339,7 +372,20 @@ function ResultCard({
 
       <Box p={2}>
         <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Text fontWeight="bold">{item.entry}</Text>
+          <Box flex="1" minW={0}>
+            <Text fontWeight="bold">
+              {item.entry}
+              {(item.pronunciation || item.partOfSpeech) && (
+                <Text as="span" fontSize="xs" color="fg.muted" fontWeight="normal">
+                  {" "}
+                  {[
+                    item.pronunciation && `/${item.pronunciation}/`,
+                    item.partOfSpeech,
+                  ].filter(Boolean).join(" · ")}
+                </Text>
+              )}
+            </Text>
+          </Box>
           {item.isSkipped && (
             <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
               <Text fontSize="xs" color="fg.muted" fontStyle="italic">Excluded</Text>
@@ -347,6 +393,29 @@ function ResultCard({
           )}
         </Box>
         <Text fontSize="sm">{item.meaning}</Text>
+
+        {/* User's answer (for non-etymology types — etymology renders below) */}
+        {!isEtymology && item.userAnswer && (
+          <Text fontSize="xs" mt={1}>
+            <Text as="span" color="fg.muted">Your answer: </Text>
+            <Text
+              as="span"
+              textDecoration={item.correct ? "none" : "line-through"}
+              color={item.correct ? undefined : "red.600"}
+              _dark={{ color: item.correct ? undefined : "red.400" }}
+            >
+              {item.userAnswer}
+            </Text>
+          </Text>
+        )}
+
+        {/* Reason / explanation */}
+        {item.reason && (
+          <Text fontSize="xs" color="fg.muted" mt={1}>
+            {item.reason}
+          </Text>
+        )}
+
         {item.contexts?.map((ctx, i) => (
           <Text key={i} fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
             {ctx}
@@ -399,16 +468,32 @@ function ResultCard({
           </Box>
         )}
 
-        {/* Non-etymology origin breakdown (backward compatible) */}
+        {/* Non-etymology origin breakdown (with type/language badges, matching feedback screen) */}
         {!isEtymology && item.originBreakdown && item.originBreakdown.length > 0 && (
-          <Box display="flex" gap={1} alignItems="center" flexWrap="wrap" mt={1}>
-            {item.originBreakdown.map((p, i) => (
-              <Box key={i} display="flex" alignItems="center" gap={1}>
-                {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-                <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
-                <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
-              </Box>
-            ))}
+          <Box mt={2}>
+            <Text fontSize="xs" color="fg.muted" mb={1}>Etymology</Text>
+            <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
+              {item.originBreakdown.map((p, i) => {
+                const typeBadge = p.type ? getTypeBadgeColors(p.type) : null;
+                return (
+                  <Box key={i} display="flex" alignItems="center" gap={1}>
+                    {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
+                    <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
+                    <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
+                    {p.language && (
+                      <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                        <Text fontSize="2xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
+                      </Box>
+                    )}
+                    {typeBadge && p.type && (
+                      <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg} _dark={{ bg: typeBadge.darkBg }}>
+                        <Text fontSize="2xs" color={typeBadge.color} _dark={{ color: typeBadge.darkColor }}>{p.type}</Text>
+                      </Box>
+                    )}
+                  </Box>
+                );
+              })}
+            </Box>
           </Box>
         )}
 

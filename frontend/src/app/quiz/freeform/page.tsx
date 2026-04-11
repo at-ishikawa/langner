@@ -25,6 +25,7 @@ export default function FreeformQuizPage() {
   const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
   const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
+  const recordFreeformAnswered = useQuizStore((s) => s.recordFreeformAnswered);
   const reset = useQuizStore((s) => s.reset);
 
   const [word, setWord] = useState("");
@@ -42,11 +43,17 @@ export default function FreeformQuizPage() {
     learnedAt?: string;
     noteId?: bigint;
     images?: string[];
+    originParts?: { origin: string; type: string; language: string; meaning: string }[];
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [overridden, setOverridden] = useState(false);
   const [skipped, setSkipped] = useState(false);
   const [displayCorrect, setDisplayCorrect] = useState(false);
+  const [overrideOriginals, setOverrideOriginals] = useState<{
+    quality: number;
+    status: string;
+    intervalDays: number;
+  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const wordInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,7 +102,8 @@ export default function FreeformQuizPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
+        images: (res.images ?? []).length > 0 ? res.images : undefined,
+        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -108,8 +116,11 @@ export default function FreeformQuizPage() {
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
         learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
+        images: (res.images ?? []).length > 0 ? res.images : undefined,
       });
+      // Mark this word as answered for the current session so the user
+      // cannot re-submit the same word until its next review date.
+      recordFreeformAnswered(word.trim(), res.nextReviewDate);
     } catch {
       setError("Failed to submit answer");
     } finally {
@@ -124,6 +135,7 @@ export default function FreeformQuizPage() {
     setError(null);
     setOverridden(false);
     setSkipped(false);
+    setOverrideOriginals(null);
     startTimeRef.current = Date.now();
     wordInputRef.current?.focus();
   };
@@ -166,66 +178,6 @@ export default function FreeformQuizPage() {
         </VStack>
       ) : feedback ? (
         <VStack align="stretch" gap={4}>
-          <Box
-            p={4}
-            borderRadius="md"
-            bg={displayCorrect ? "green.100" : "red.100"}
-            _dark={{ bg: displayCorrect ? "green.900" : "red.900" }}
-          >
-            <Text fontWeight="bold" fontSize="lg">
-              {displayCorrect ? "\u2713 Correct!" : "\u2717 Incorrect"}
-            </Text>
-          </Box>
-
-          <Box>
-            <Text fontWeight="bold">Word</Text>
-            <Text fontSize="xl">
-              {feedback.word}
-              {(feedback.pronunciation || feedback.partOfSpeech) && (
-                <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                  {" "}
-                  {[
-                    feedback.pronunciation && `/${feedback.pronunciation}/`,
-                    feedback.partOfSpeech,
-                  ].filter(Boolean).join(" · ")}
-                </Text>
-              )}
-            </Text>
-          </Box>
-
-          <Box>
-            <Text fontWeight="bold">Correct meaning</Text>
-            <Text fontStyle="italic">{feedback.meaning}</Text>
-          </Box>
-
-          {feedback.reason && (
-            <Box>
-              <Text fontWeight="bold">Reason</Text>
-              <Text>{feedback.reason}</Text>
-            </Box>
-          )}
-
-          {feedback.notebookName && (
-            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-              Found in: {feedback.notebookName}
-            </Text>
-          )}
-
-          {feedback.context && (
-            <Box>
-              <Text fontWeight="bold">Context</Text>
-              <Text fontStyle="italic">{feedback.context}</Text>
-            </Box>
-          )}
-
-          {feedback.images && feedback.images.length > 0 && (
-            <Box display="flex" gap={2} flexWrap="wrap">
-              {feedback.images.map((src, i) => (
-                <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-              ))}
-            </Box>
-          )}
-
           <FeedbackActions
             isCorrect={displayCorrect}
             noteId={feedback.noteId}
@@ -244,12 +196,37 @@ export default function FreeformQuizPage() {
                 });
                 setOverridden(true);
                 setDisplayCorrect(!displayCorrect);
+                setOverrideOriginals({
+                  quality: res.originalQuality,
+                  status: res.originalStatus,
+                  intervalDays: res.originalIntervalDays,
+                });
                 storeOverrideResult(freeformResults.length - 1, "freeform", res.nextReviewDate || "", {
                   quality: res.originalQuality,
                   status: res.originalStatus,
                   intervalDays: res.originalIntervalDays,
                 });
               } catch { /* silently fail */ }
+            }}
+            onUndo={async () => {
+              if (!feedback.noteId || !feedback.learnedAt) return;
+              try {
+                const res = await quizClient.undoOverrideAnswer({
+                  noteId: feedback.noteId,
+                  quizType: ProtoQuizType.FREEFORM,
+                  learnedAt: feedback.learnedAt,
+                  originalQuality: overrideOriginals?.quality ?? 0,
+                  originalStatus: overrideOriginals?.status ?? "",
+                  originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                });
+                setOverridden(false);
+                setOverrideOriginals(null);
+                setDisplayCorrect(res.correct);
+              } catch {
+                setOverridden(false);
+                setOverrideOriginals(null);
+                setDisplayCorrect(feedback.correct);
+              }
             }}
             onSkip={async () => {
               if (!feedback.noteId) return;
@@ -258,17 +235,77 @@ export default function FreeformQuizPage() {
                 setSkipped(true);
               } catch { /* silently fail */ }
             }}
-          />
+            onSeeResults={freeformResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
+          >
+            <Box>
+              <Text fontWeight="bold">Word</Text>
+              <Text fontSize="xl">
+                {feedback.word}
+                {(feedback.pronunciation || feedback.partOfSpeech) && (
+                  <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                    {" "}
+                    {[
+                      feedback.pronunciation && `/${feedback.pronunciation}/`,
+                      feedback.partOfSpeech,
+                    ].filter(Boolean).join(" · ")}
+                  </Text>
+                )}
+              </Text>
+            </Box>
 
-          {freeformResults.length > 0 && (
-            <Button
-              colorPalette="green"
-              variant="outline"
-              onClick={() => router.push("/quiz/complete")}
-            >
-              See Results
-            </Button>
-          )}
+            <Box>
+              <Text fontWeight="bold">Expected meaning</Text>
+              <Text fontStyle="italic">{feedback.meaning}</Text>
+            </Box>
+
+            {feedback.reason && (
+              <Box>
+                <Text fontWeight="bold">Reason</Text>
+                <Text>{feedback.reason}</Text>
+              </Box>
+            )}
+
+            {feedback.notebookName && (
+              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                Found in: {feedback.notebookName}
+              </Text>
+            )}
+
+            {feedback.context && (
+              <Box>
+                <Text fontWeight="bold">Context</Text>
+                <Text fontStyle="italic">{feedback.context}</Text>
+              </Box>
+            )}
+
+            {feedback.images && feedback.images.length > 0 && (
+              <Box display="flex" gap={2} flexWrap="wrap">
+                {feedback.images.map((src, i) => (
+                  <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                ))}
+              </Box>
+            )}
+
+            {feedback.originParts && feedback.originParts.length > 0 && (
+              <Box>
+                <Text fontWeight="bold" fontSize="sm">Etymology</Text>
+                <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                  {feedback.originParts.map((p, i) => (
+                    <Box key={i} display="flex" alignItems="center" gap={1}>
+                      {i > 0 && <Text color="fg.muted">+</Text>}
+                      <Text color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium" fontSize="sm">{p.origin}</Text>
+                      <Text fontSize="sm" color="fg.muted">({p.meaning})</Text>
+                      {p.language && (
+                        <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                          <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
+                        </Box>
+                      )}
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
+          </FeedbackActions>
 
           <Button
             variant="ghost"

@@ -5,13 +5,6 @@ import (
 	"time"
 )
 
-// normalizeTitle normalizes a title for comparison by trimming whitespace
-// and normalizing internal whitespace (newlines, multiple spaces -> single space)
-func normalizeTitle(s string) string {
-	s = strings.TrimSpace(s)
-	return strings.Join(strings.Fields(s), " ")
-}
-
 // normalizeQuotes replaces smart quotes with ASCII equivalents for comparison.
 func normalizeQuotes(s string) string {
 	r := strings.NewReplacer(
@@ -38,10 +31,13 @@ func NewLearningHistoryUpdater(history []LearningHistory, calculator IntervalCal
 	}
 }
 
-// findOrCreateStory finds an existing story or creates a new one
-func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle string, isFlashcard bool) int {
+// findOrCreateStory finds an existing story or creates a new one.
+// flatType is a non-empty string (e.g. "flashcard", "etymology") when the
+// history should use top-level Expressions instead of nested Scenes.
+func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle, flatType string) int {
+	normalizedTitle := normalizeQuotes(storyTitle)
 	for i, h := range u.history {
-		if h.Metadata.Title == storyTitle {
+		if normalizeQuotes(h.Metadata.Title) == normalizedTitle {
 			return i
 		}
 	}
@@ -53,8 +49,8 @@ func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle string
 		},
 	}
 
-	if isFlashcard {
-		newStory.Metadata.Type = "flashcard"
+	if flatType != "" {
+		newStory.Metadata.Type = flatType
 		newStory.Expressions = []LearningHistoryExpression{}
 	} else {
 		newStory.Scenes = []LearningScene{}
@@ -64,10 +60,13 @@ func (u *LearningHistoryUpdater) findOrCreateStory(notebookID, storyTitle string
 	return len(u.history) - 1
 }
 
-// findOrCreateScene finds an existing scene or creates a new one
+// findOrCreateScene finds an existing scene or creates a new one.
+// Uses normalizeQuotes so that titles with smart quotes (e.g. from book
+// imports) match titles with ASCII apostrophes (from user input).
 func (u *LearningHistoryUpdater) findOrCreateScene(storyIndex int, sceneTitle string) int {
+	normalizedTitle := normalizeQuotes(sceneTitle)
 	for i, s := range u.history[storyIndex].Scenes {
-		if s.Metadata.Title == sceneTitle {
+		if normalizeQuotes(s.Metadata.Title) == normalizedTitle {
 			return i
 		}
 	}
@@ -99,9 +98,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 	quizType QuizType,
 ) bool {
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
-		if h.Metadata.Title != storyTitle {
+		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
@@ -118,7 +118,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 		}
 
 		for si, s := range h.Scenes {
-			if s.Metadata.Title != sceneTitle {
+			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
 				continue
 			}
 
@@ -149,10 +149,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 	quizType QuizType,
 ) bool {
 	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
-	normalizedSceneTitle := normalizeTitle(sceneTitle)
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
-		if h.Metadata.Title != storyTitle {
+		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
@@ -169,7 +169,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 		}
 
 		for si, s := range h.Scenes {
-			if normalizeTitle(s.Metadata.Title) != normalizedSceneTitle {
+			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
 				continue
 			}
 
@@ -196,8 +196,11 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
-	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
+	flatType := ""
+	if storyTitle == "flashcards" && sceneTitle == "" {
+		flatType = "flashcard"
+	}
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
@@ -210,7 +213,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 		return
 	}
 
-	if isFlashcard || u.history[storyIndex].Metadata.Type == "flashcard" {
+	if flatType != "" || u.history[storyIndex].Metadata.Type == "flashcard" {
 		u.history[storyIndex].Expressions = append(
 			u.history[storyIndex].Expressions,
 			newExpression,
@@ -233,8 +236,11 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
-	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
+	flatType := ""
+	if storyTitle == "flashcards" && sceneTitle == "" {
+		flatType = "flashcard"
+	}
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
@@ -246,7 +252,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 		return
 	}
 
-	if isFlashcard || u.history[storyIndex].Metadata.Type == "flashcard" {
+	if flatType != "" || u.history[storyIndex].Metadata.Type == "flashcard" {
 		u.history[storyIndex].Expressions = append(
 			u.history[storyIndex].Expressions,
 			newExpression,
@@ -266,14 +272,13 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 func (u *LearningHistoryUpdater) FindExpressionByName(expression string) *LearningHistoryExpression {
 	for hi := range u.history {
 		h := &u.history[hi]
-		if h.Metadata.Type == "flashcard" {
-			for ei := range h.Expressions {
-				if strings.EqualFold(h.Expressions[ei].Expression, expression) {
-					return &h.Expressions[ei]
-				}
+		// Always search top-level expressions first (flashcard, etymology, etc.)
+		for ei := range h.Expressions {
+			if strings.EqualFold(h.Expressions[ei].Expression, expression) {
+				return &h.Expressions[ei]
 			}
-			continue
 		}
+		// Then search scenes
 		for si := range h.Scenes {
 			for ei := range h.Scenes[si].Expressions {
 				if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, expression) {
@@ -344,9 +349,9 @@ func (u *LearningHistoryUpdater) OverrideLog(
 		switch quizType {
 		case QuizTypeReverse:
 			expr.ReverseLogs = logs
-		case QuizTypeEtymologyBreakdown:
+		case QuizTypeEtymologyStandard:
 			expr.EtymologyBreakdownLogs = logs
-		case QuizTypeEtymologyAssembly:
+		case QuizTypeEtymologyReverse:
 			expr.EtymologyAssemblyLogs = logs
 		default:
 			expr.LearnedLogs = logs
@@ -387,9 +392,9 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(
 		switch quizType {
 		case QuizTypeReverse:
 			expr.ReverseLogs = logs
-		case QuizTypeEtymologyBreakdown:
+		case QuizTypeEtymologyStandard:
 			expr.EtymologyBreakdownLogs = logs
-		case QuizTypeEtymologyAssembly:
+		case QuizTypeEtymologyReverse:
 			expr.EtymologyAssemblyLogs = logs
 		default:
 			expr.LearnedLogs = logs
@@ -421,14 +426,16 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 	responseTimeMs int64,
 	quizType QuizType,
 ) bool {
-	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	isFlat := sceneTitle == ""
+
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
-		if h.Metadata.Title != storyTitle {
+		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
-		if isFlashcard || h.Metadata.Type == "flashcard" {
+		if isFlat || h.Metadata.Type == "etymology" {
 			for ei, exp := range h.Expressions {
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
@@ -441,7 +448,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 		}
 
 		for si, s := range h.Scenes {
-			if s.Metadata.Title != sceneTitle {
+			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
 				continue
 			}
 
@@ -468,8 +475,11 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
-	storyIndex := u.findOrCreateStory(notebookID, storyTitle, isFlashcard)
+	flatType := ""
+	if sceneTitle == "" {
+		flatType = "etymology"
+	}
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
@@ -482,7 +492,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 		return
 	}
 
-	if isFlashcard || u.history[storyIndex].Metadata.Type == "flashcard" {
+	if flatType != "" || u.history[storyIndex].Metadata.Type == "etymology" {
 		u.history[storyIndex].Expressions = append(
 			u.history[storyIndex].Expressions,
 			newExpression,

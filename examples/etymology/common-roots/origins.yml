@@ -1,0 +1,33 @@
+origins:
+  - origin: bene
+    type: root
+    language: Latin
+    meaning: good, well
+  - origin: mal
+    type: root
+    language: Latin
+    meaning: bad, evil
+  - origin: dict
+    type: root
+    language: Latin
+    meaning: to say, to speak
+  - origin: scrib
+    type: root
+    language: Latin
+    meaning: to write
+  - origin: pre
+    type: prefix
+    language: Latin
+    meaning: before
+  - origin: re
+    type: prefix
+    language: Latin
+    meaning: again, back
+  - origin: tion
+    type: suffix
+    language: Latin
+    meaning: act or process of
+  - origin: able
+    type: suffix
+    language: Latin
+    meaning: capable of

@@ -66,12 +66,12 @@ const (
 	// QuizServiceStartEtymologyQuizProcedure is the fully-qualified name of the QuizService's
 	// StartEtymologyQuiz RPC.
 	QuizServiceStartEtymologyQuizProcedure = "/api.v1.QuizService/StartEtymologyQuiz"
-	// QuizServiceSubmitEtymologyBreakdownAnswerProcedure is the fully-qualified name of the
-	// QuizService's SubmitEtymologyBreakdownAnswer RPC.
-	QuizServiceSubmitEtymologyBreakdownAnswerProcedure = "/api.v1.QuizService/SubmitEtymologyBreakdownAnswer"
-	// QuizServiceSubmitEtymologyAssemblyAnswerProcedure is the fully-qualified name of the
-	// QuizService's SubmitEtymologyAssemblyAnswer RPC.
-	QuizServiceSubmitEtymologyAssemblyAnswerProcedure = "/api.v1.QuizService/SubmitEtymologyAssemblyAnswer"
+	// QuizServiceSubmitEtymologyStandardAnswerProcedure is the fully-qualified name of the
+	// QuizService's SubmitEtymologyStandardAnswer RPC.
+	QuizServiceSubmitEtymologyStandardAnswerProcedure = "/api.v1.QuizService/SubmitEtymologyStandardAnswer"
+	// QuizServiceSubmitEtymologyReverseAnswerProcedure is the fully-qualified name of the QuizService's
+	// SubmitEtymologyReverseAnswer RPC.
+	QuizServiceSubmitEtymologyReverseAnswerProcedure = "/api.v1.QuizService/SubmitEtymologyReverseAnswer"
 	// QuizServiceStartEtymologyFreeformQuizProcedure is the fully-qualified name of the QuizService's
 	// StartEtymologyFreeformQuiz RPC.
 	QuizServiceStartEtymologyFreeformQuizProcedure = "/api.v1.QuizService/StartEtymologyFreeformQuiz"
@@ -94,8 +94,8 @@ type QuizServiceClient interface {
 	SkipWord(context.Context, *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error)
 	ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error)
 	StartEtymologyQuiz(context.Context, *connect.Request[v1.StartEtymologyQuizRequest]) (*connect.Response[v1.StartEtymologyQuizResponse], error)
-	SubmitEtymologyBreakdownAnswer(context.Context, *connect.Request[v1.SubmitEtymologyBreakdownAnswerRequest]) (*connect.Response[v1.SubmitEtymologyBreakdownAnswerResponse], error)
-	SubmitEtymologyAssemblyAnswer(context.Context, *connect.Request[v1.SubmitEtymologyAssemblyAnswerRequest]) (*connect.Response[v1.SubmitEtymologyAssemblyAnswerResponse], error)
+	SubmitEtymologyStandardAnswer(context.Context, *connect.Request[v1.SubmitEtymologyStandardAnswerRequest]) (*connect.Response[v1.SubmitEtymologyStandardAnswerResponse], error)
+	SubmitEtymologyReverseAnswer(context.Context, *connect.Request[v1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[v1.SubmitEtymologyReverseAnswerResponse], error)
 	StartEtymologyFreeformQuiz(context.Context, *connect.Request[v1.StartEtymologyFreeformQuizRequest]) (*connect.Response[v1.StartEtymologyFreeformQuizResponse], error)
 	SubmitEtymologyFreeformAnswer(context.Context, *connect.Request[v1.SubmitEtymologyFreeformAnswerRequest]) (*connect.Response[v1.SubmitEtymologyFreeformAnswerResponse], error)
 }
@@ -183,16 +183,16 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("StartEtymologyQuiz")),
 			connect.WithClientOptions(opts...),
 		),
-		submitEtymologyBreakdownAnswer: connect.NewClient[v1.SubmitEtymologyBreakdownAnswerRequest, v1.SubmitEtymologyBreakdownAnswerResponse](
+		submitEtymologyStandardAnswer: connect.NewClient[v1.SubmitEtymologyStandardAnswerRequest, v1.SubmitEtymologyStandardAnswerResponse](
 			httpClient,
-			baseURL+QuizServiceSubmitEtymologyBreakdownAnswerProcedure,
-			connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyBreakdownAnswer")),
+			baseURL+QuizServiceSubmitEtymologyStandardAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyStandardAnswer")),
 			connect.WithClientOptions(opts...),
 		),
-		submitEtymologyAssemblyAnswer: connect.NewClient[v1.SubmitEtymologyAssemblyAnswerRequest, v1.SubmitEtymologyAssemblyAnswerResponse](
+		submitEtymologyReverseAnswer: connect.NewClient[v1.SubmitEtymologyReverseAnswerRequest, v1.SubmitEtymologyReverseAnswerResponse](
 			httpClient,
-			baseURL+QuizServiceSubmitEtymologyAssemblyAnswerProcedure,
-			connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyAssemblyAnswer")),
+			baseURL+QuizServiceSubmitEtymologyReverseAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyReverseAnswer")),
 			connect.WithClientOptions(opts...),
 		),
 		startEtymologyFreeformQuiz: connect.NewClient[v1.StartEtymologyFreeformQuizRequest, v1.StartEtymologyFreeformQuizResponse](
@@ -212,22 +212,22 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // quizServiceClient implements QuizServiceClient.
 type quizServiceClient struct {
-	getQuizOptions                 *connect.Client[v1.GetQuizOptionsRequest, v1.GetQuizOptionsResponse]
-	startQuiz                      *connect.Client[v1.StartQuizRequest, v1.StartQuizResponse]
-	submitAnswer                   *connect.Client[v1.SubmitAnswerRequest, v1.SubmitAnswerResponse]
-	startReverseQuiz               *connect.Client[v1.StartReverseQuizRequest, v1.StartReverseQuizResponse]
-	submitReverseAnswer            *connect.Client[v1.SubmitReverseAnswerRequest, v1.SubmitReverseAnswerResponse]
-	startFreeformQuiz              *connect.Client[v1.StartFreeformQuizRequest, v1.StartFreeformQuizResponse]
-	submitFreeformAnswer           *connect.Client[v1.SubmitFreeformAnswerRequest, v1.SubmitFreeformAnswerResponse]
-	overrideAnswer                 *connect.Client[v1.OverrideAnswerRequest, v1.OverrideAnswerResponse]
-	undoOverrideAnswer             *connect.Client[v1.UndoOverrideAnswerRequest, v1.UndoOverrideAnswerResponse]
-	skipWord                       *connect.Client[v1.SkipWordRequest, v1.SkipWordResponse]
-	resumeWord                     *connect.Client[v1.ResumeWordRequest, v1.ResumeWordResponse]
-	startEtymologyQuiz             *connect.Client[v1.StartEtymologyQuizRequest, v1.StartEtymologyQuizResponse]
-	submitEtymologyBreakdownAnswer *connect.Client[v1.SubmitEtymologyBreakdownAnswerRequest, v1.SubmitEtymologyBreakdownAnswerResponse]
-	submitEtymologyAssemblyAnswer  *connect.Client[v1.SubmitEtymologyAssemblyAnswerRequest, v1.SubmitEtymologyAssemblyAnswerResponse]
-	startEtymologyFreeformQuiz     *connect.Client[v1.StartEtymologyFreeformQuizRequest, v1.StartEtymologyFreeformQuizResponse]
-	submitEtymologyFreeformAnswer  *connect.Client[v1.SubmitEtymologyFreeformAnswerRequest, v1.SubmitEtymologyFreeformAnswerResponse]
+	getQuizOptions                *connect.Client[v1.GetQuizOptionsRequest, v1.GetQuizOptionsResponse]
+	startQuiz                     *connect.Client[v1.StartQuizRequest, v1.StartQuizResponse]
+	submitAnswer                  *connect.Client[v1.SubmitAnswerRequest, v1.SubmitAnswerResponse]
+	startReverseQuiz              *connect.Client[v1.StartReverseQuizRequest, v1.StartReverseQuizResponse]
+	submitReverseAnswer           *connect.Client[v1.SubmitReverseAnswerRequest, v1.SubmitReverseAnswerResponse]
+	startFreeformQuiz             *connect.Client[v1.StartFreeformQuizRequest, v1.StartFreeformQuizResponse]
+	submitFreeformAnswer          *connect.Client[v1.SubmitFreeformAnswerRequest, v1.SubmitFreeformAnswerResponse]
+	overrideAnswer                *connect.Client[v1.OverrideAnswerRequest, v1.OverrideAnswerResponse]
+	undoOverrideAnswer            *connect.Client[v1.UndoOverrideAnswerRequest, v1.UndoOverrideAnswerResponse]
+	skipWord                      *connect.Client[v1.SkipWordRequest, v1.SkipWordResponse]
+	resumeWord                    *connect.Client[v1.ResumeWordRequest, v1.ResumeWordResponse]
+	startEtymologyQuiz            *connect.Client[v1.StartEtymologyQuizRequest, v1.StartEtymologyQuizResponse]
+	submitEtymologyStandardAnswer *connect.Client[v1.SubmitEtymologyStandardAnswerRequest, v1.SubmitEtymologyStandardAnswerResponse]
+	submitEtymologyReverseAnswer  *connect.Client[v1.SubmitEtymologyReverseAnswerRequest, v1.SubmitEtymologyReverseAnswerResponse]
+	startEtymologyFreeformQuiz    *connect.Client[v1.StartEtymologyFreeformQuizRequest, v1.StartEtymologyFreeformQuizResponse]
+	submitEtymologyFreeformAnswer *connect.Client[v1.SubmitEtymologyFreeformAnswerRequest, v1.SubmitEtymologyFreeformAnswerResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -290,14 +290,14 @@ func (c *quizServiceClient) StartEtymologyQuiz(ctx context.Context, req *connect
 	return c.startEtymologyQuiz.CallUnary(ctx, req)
 }
 
-// SubmitEtymologyBreakdownAnswer calls api.v1.QuizService.SubmitEtymologyBreakdownAnswer.
-func (c *quizServiceClient) SubmitEtymologyBreakdownAnswer(ctx context.Context, req *connect.Request[v1.SubmitEtymologyBreakdownAnswerRequest]) (*connect.Response[v1.SubmitEtymologyBreakdownAnswerResponse], error) {
-	return c.submitEtymologyBreakdownAnswer.CallUnary(ctx, req)
+// SubmitEtymologyStandardAnswer calls api.v1.QuizService.SubmitEtymologyStandardAnswer.
+func (c *quizServiceClient) SubmitEtymologyStandardAnswer(ctx context.Context, req *connect.Request[v1.SubmitEtymologyStandardAnswerRequest]) (*connect.Response[v1.SubmitEtymologyStandardAnswerResponse], error) {
+	return c.submitEtymologyStandardAnswer.CallUnary(ctx, req)
 }
 
-// SubmitEtymologyAssemblyAnswer calls api.v1.QuizService.SubmitEtymologyAssemblyAnswer.
-func (c *quizServiceClient) SubmitEtymologyAssemblyAnswer(ctx context.Context, req *connect.Request[v1.SubmitEtymologyAssemblyAnswerRequest]) (*connect.Response[v1.SubmitEtymologyAssemblyAnswerResponse], error) {
-	return c.submitEtymologyAssemblyAnswer.CallUnary(ctx, req)
+// SubmitEtymologyReverseAnswer calls api.v1.QuizService.SubmitEtymologyReverseAnswer.
+func (c *quizServiceClient) SubmitEtymologyReverseAnswer(ctx context.Context, req *connect.Request[v1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[v1.SubmitEtymologyReverseAnswerResponse], error) {
+	return c.submitEtymologyReverseAnswer.CallUnary(ctx, req)
 }
 
 // StartEtymologyFreeformQuiz calls api.v1.QuizService.StartEtymologyFreeformQuiz.
@@ -324,8 +324,8 @@ type QuizServiceHandler interface {
 	SkipWord(context.Context, *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error)
 	ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error)
 	StartEtymologyQuiz(context.Context, *connect.Request[v1.StartEtymologyQuizRequest]) (*connect.Response[v1.StartEtymologyQuizResponse], error)
-	SubmitEtymologyBreakdownAnswer(context.Context, *connect.Request[v1.SubmitEtymologyBreakdownAnswerRequest]) (*connect.Response[v1.SubmitEtymologyBreakdownAnswerResponse], error)
-	SubmitEtymologyAssemblyAnswer(context.Context, *connect.Request[v1.SubmitEtymologyAssemblyAnswerRequest]) (*connect.Response[v1.SubmitEtymologyAssemblyAnswerResponse], error)
+	SubmitEtymologyStandardAnswer(context.Context, *connect.Request[v1.SubmitEtymologyStandardAnswerRequest]) (*connect.Response[v1.SubmitEtymologyStandardAnswerResponse], error)
+	SubmitEtymologyReverseAnswer(context.Context, *connect.Request[v1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[v1.SubmitEtymologyReverseAnswerResponse], error)
 	StartEtymologyFreeformQuiz(context.Context, *connect.Request[v1.StartEtymologyFreeformQuizRequest]) (*connect.Response[v1.StartEtymologyFreeformQuizResponse], error)
 	SubmitEtymologyFreeformAnswer(context.Context, *connect.Request[v1.SubmitEtymologyFreeformAnswerRequest]) (*connect.Response[v1.SubmitEtymologyFreeformAnswerResponse], error)
 }
@@ -409,16 +409,16 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("StartEtymologyQuiz")),
 		connect.WithHandlerOptions(opts...),
 	)
-	quizServiceSubmitEtymologyBreakdownAnswerHandler := connect.NewUnaryHandler(
-		QuizServiceSubmitEtymologyBreakdownAnswerProcedure,
-		svc.SubmitEtymologyBreakdownAnswer,
-		connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyBreakdownAnswer")),
+	quizServiceSubmitEtymologyStandardAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceSubmitEtymologyStandardAnswerProcedure,
+		svc.SubmitEtymologyStandardAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyStandardAnswer")),
 		connect.WithHandlerOptions(opts...),
 	)
-	quizServiceSubmitEtymologyAssemblyAnswerHandler := connect.NewUnaryHandler(
-		QuizServiceSubmitEtymologyAssemblyAnswerProcedure,
-		svc.SubmitEtymologyAssemblyAnswer,
-		connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyAssemblyAnswer")),
+	quizServiceSubmitEtymologyReverseAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceSubmitEtymologyReverseAnswerProcedure,
+		svc.SubmitEtymologyReverseAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyReverseAnswer")),
 		connect.WithHandlerOptions(opts...),
 	)
 	quizServiceStartEtymologyFreeformQuizHandler := connect.NewUnaryHandler(
@@ -459,10 +459,10 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceResumeWordHandler.ServeHTTP(w, r)
 		case QuizServiceStartEtymologyQuizProcedure:
 			quizServiceStartEtymologyQuizHandler.ServeHTTP(w, r)
-		case QuizServiceSubmitEtymologyBreakdownAnswerProcedure:
-			quizServiceSubmitEtymologyBreakdownAnswerHandler.ServeHTTP(w, r)
-		case QuizServiceSubmitEtymologyAssemblyAnswerProcedure:
-			quizServiceSubmitEtymologyAssemblyAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceSubmitEtymologyStandardAnswerProcedure:
+			quizServiceSubmitEtymologyStandardAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceSubmitEtymologyReverseAnswerProcedure:
+			quizServiceSubmitEtymologyReverseAnswerHandler.ServeHTTP(w, r)
 		case QuizServiceStartEtymologyFreeformQuizProcedure:
 			quizServiceStartEtymologyFreeformQuizHandler.ServeHTTP(w, r)
 		case QuizServiceSubmitEtymologyFreeformAnswerProcedure:
@@ -524,12 +524,12 @@ func (UnimplementedQuizServiceHandler) StartEtymologyQuiz(context.Context, *conn
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartEtymologyQuiz is not implemented"))
 }
 
-func (UnimplementedQuizServiceHandler) SubmitEtymologyBreakdownAnswer(context.Context, *connect.Request[v1.SubmitEtymologyBreakdownAnswerRequest]) (*connect.Response[v1.SubmitEtymologyBreakdownAnswerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitEtymologyBreakdownAnswer is not implemented"))
+func (UnimplementedQuizServiceHandler) SubmitEtymologyStandardAnswer(context.Context, *connect.Request[v1.SubmitEtymologyStandardAnswerRequest]) (*connect.Response[v1.SubmitEtymologyStandardAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitEtymologyStandardAnswer is not implemented"))
 }
 
-func (UnimplementedQuizServiceHandler) SubmitEtymologyAssemblyAnswer(context.Context, *connect.Request[v1.SubmitEtymologyAssemblyAnswerRequest]) (*connect.Response[v1.SubmitEtymologyAssemblyAnswerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitEtymologyAssemblyAnswer is not implemented"))
+func (UnimplementedQuizServiceHandler) SubmitEtymologyReverseAnswer(context.Context, *connect.Request[v1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[v1.SubmitEtymologyReverseAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitEtymologyReverseAnswer is not implemented"))
 }
 
 func (UnimplementedQuizServiceHandler) StartEtymologyFreeformQuiz(context.Context, *connect.Request[v1.StartEtymologyFreeformQuizRequest]) (*connect.Response[v1.StartEtymologyFreeformQuizResponse], error) {

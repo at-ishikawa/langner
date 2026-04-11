@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
@@ -138,24 +139,17 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		if !ok {
 			continue
 		}
-		etymCount := 0
-		for _, sceneDefs := range defs {
-			for _, notes := range sceneDefs {
-				for _, note := range notes {
-					if len(note.OriginParts) > 0 {
-						etymCount++
-					}
-				}
-			}
-		}
-		if etymCount == 0 {
+		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false)
+		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true)
+		if reviewCount == 0 && reverseCount == 0 {
 			continue
 		}
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:           nbID,
-			Name:                 nbID,
-			EtymologyReviewCount: etymCount,
-			Kind:                 "Books",
+			NotebookID:         nbID,
+			Name:               nbID,
+			ReviewCount:        reviewCount,
+			ReverseReviewCount: reverseCount,
+			Kind:               "Books",
 		})
 	}
 
@@ -167,6 +161,57 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 	summaries = append(summaries, etymSummaries...)
 
 	return summaries, nil
+}
+
+// buildOriginMap builds a map of origin|language -> EtymologyOrigin from all etymology notebooks.
+func buildOriginMap(reader *notebook.Reader) map[string]notebook.EtymologyOrigin {
+	originMap := make(map[string]notebook.EtymologyOrigin)
+	for id := range reader.GetEtymologyIndexes() {
+		origins, err := reader.ReadEtymologyNotebook(id)
+		if err != nil {
+			continue
+		}
+		for _, o := range origins {
+			key := strings.ToLower(o.Origin + "|" + o.Language)
+			originMap[key] = o
+		}
+	}
+	return originMap
+}
+
+// resolveOriginParts resolves OriginPartRef references to full WordOriginPart data.
+func resolveOriginParts(refs []notebook.OriginPartRef, originMap map[string]notebook.EtymologyOrigin) []WordOriginPart {
+	if len(refs) == 0 || len(originMap) == 0 {
+		return nil
+	}
+	var parts []WordOriginPart
+	for _, ref := range refs {
+		key := strings.ToLower(ref.Origin + "|" + ref.Language)
+		if o, ok := originMap[key]; ok {
+			parts = append(parts, WordOriginPart{Origin: o.Origin, Type: o.Type, Language: o.Language, Meaning: o.Meaning})
+		} else {
+			// Try matching by origin only
+			for k, o := range originMap {
+				if strings.HasPrefix(k, strings.ToLower(ref.Origin)+"|") {
+					parts = append(parts, WordOriginPart{Origin: o.Origin, Type: o.Type, Language: o.Language, Meaning: o.Meaning})
+					break
+				}
+			}
+		}
+	}
+	return parts
+}
+
+func buildWordDetail(note *notebook.Note, originMap map[string]notebook.EtymologyOrigin) WordDetail {
+	return WordDetail{
+		Origin:        note.Origin,
+		Pronunciation: note.Pronunciation,
+		PartOfSpeech:  note.PartOfSpeech,
+		Synonyms:      note.Synonyms,
+		Antonyms:      note.Antonyms,
+		Memo:          note.Memo,
+		OriginParts:   resolveOriginParts(note.OriginParts, originMap),
+	}
 }
 
 // LoadCards returns filtered quiz cards for the given notebooks.
@@ -184,6 +229,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
+	originMap := buildOriginMap(reader)
 
 	var cards []Card
 
@@ -192,11 +238,17 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		_, isFlashcard := flashcardIndexes[notebookID]
 
 		if !isStory && !isFlashcard {
+			// Try definitions-only book as fallback
+			defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap)
+			if len(defCards) > 0 {
+				cards = append(cards, defCards...)
+				continue
+			}
 			return nil, &NotFoundError{NotebookID: notebookID}
 		}
 
 		if isStory {
-			storyCards, err := s.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied)
+			storyCards, err := s.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story cards for notebook %q: %w", notebookID, err)
 			}
@@ -204,7 +256,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		}
 
 		if isFlashcard {
-			flashCards, err := s.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied)
+			flashCards, err := s.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load flashcard cards for notebook %q: %w", notebookID, err)
 			}
@@ -242,6 +294,7 @@ func (s *Service) loadStoryCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]Card, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
@@ -279,15 +332,8 @@ func (s *Service) loadStoryCards(
 					Meaning:       definition.Meaning,
 					Examples:      examples,
 					Contexts:      contexts,
-					WordDetail: WordDetail{
-						Origin:        definition.Origin,
-						Pronunciation: definition.Pronunciation,
-						PartOfSpeech:  definition.PartOfSpeech,
-						Synonyms:      definition.Synonyms,
-						Antonyms:      definition.Antonyms,
-						Memo:          definition.Memo,
-					},
-					Images: definition.Images,
+					WordDetail:    buildWordDetail(&definition, originMap),
+					Images:        definition.Images,
 				})
 			}
 		}
@@ -301,6 +347,7 @@ func (s *Service) loadFlashcardCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]Card, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
@@ -337,15 +384,8 @@ func (s *Service) loadFlashcardCards(
 				OriginalEntry: originalEntry,
 				Meaning:       card.Meaning,
 				Examples:      examples,
-				WordDetail: WordDetail{
-					Origin:        card.Origin,
-					Pronunciation: card.Pronunciation,
-					PartOfSpeech:  card.PartOfSpeech,
-					Synonyms:      card.Synonyms,
-					Antonyms:      card.Antonyms,
-					Memo:          card.Memo,
-				},
-				Images: card.Images,
+				WordDetail:    buildWordDetail(&card, originMap),
+				Images:        card.Images,
 			})
 		}
 	}
@@ -574,6 +614,7 @@ type ReverseCard struct {
 	Meaning      string
 	Contexts     []ReverseContext
 	Expression   string // original expression to guess
+	AltForm      string // alternate inflected form (Note.Definition when set), used for masking
 	WordDetail   WordDetail
 	Images       []string
 }
@@ -598,6 +639,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
+	originMap := buildOriginMap(reader)
 
 	var cards []ReverseCard
 
@@ -606,11 +648,17 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		_, isFlashcard := flashcardIndexes[notebookID]
 
 		if !isStory && !isFlashcard {
+			// Try definitions-only book as fallback
+			defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap)
+			if len(defCards) > 0 {
+				cards = append(cards, defCards...)
+				continue
+			}
 			return nil, &NotFoundError{NotebookID: notebookID}
 		}
 
 		if isStory {
-			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext)
+			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -618,7 +666,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 
 		if isFlashcard {
-			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext)
+			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load flashcard reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -630,7 +678,38 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 	rand.Shuffle(len(cards), func(i, j int) {
 		cards[i], cards[j] = cards[j], cards[i]
 	})
+	applyForwardMask(cards)
 	return cards, nil
+}
+
+// applyForwardMask updates each card's MaskedContext to also hide the
+// expressions of all cards that come AFTER it in the session order. This
+// prevents shared example sentences from leaking the answers of upcoming
+// cards. Words from cards that have already been asked remain visible.
+//
+// The current card's expression is masked with "______" (the standard quiz
+// blank), while future cards' expressions use "[...]" so users can
+// distinguish the blank they need to fill from words hidden for spoiler
+// protection.
+func applyForwardMask(cards []ReverseCard) {
+	for i := range cards {
+		for j := range cards[i].Contexts {
+			ctx := cards[i].Contexts[j].Context
+			// Mask the current card's expression with standard blank.
+			ctx = maskOccurrences(ctx, cards[i].Expression)
+			if cards[i].AltForm != "" {
+				ctx = maskOccurrences(ctx, cards[i].AltForm)
+			}
+			// Mask future cards' expressions with a distinct marker.
+			for k := i + 1; k < len(cards); k++ {
+				ctx = maskOccurrencesAs(ctx, cards[k].Expression, "[...]")
+				if cards[k].AltForm != "" {
+					ctx = maskOccurrencesAs(ctx, cards[k].AltForm, "[...]")
+				}
+			}
+			cards[i].Contexts[j].MaskedContext = ctx
+		}
+	}
 }
 
 func deduplicateReverseCards(cards []ReverseCard) []ReverseCard {
@@ -655,6 +734,7 @@ func (s *Service) loadStoryReverseCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]ReverseCard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
@@ -670,8 +750,10 @@ func (s *Service) loadStoryReverseCards(
 				}
 
 				expression := definition.Expression
+				altForm := ""
 				if definition.Definition != "" {
 					expression = definition.Definition
+					altForm = definition.Expression
 				}
 
 				// Skip words marked as skipped
@@ -699,15 +781,9 @@ func (s *Service) loadStoryReverseCards(
 					Meaning:      definition.Meaning,
 					Contexts:     contexts,
 					Expression:   expression,
-					WordDetail: WordDetail{
-						Origin:        definition.Origin,
-						Pronunciation: definition.Pronunciation,
-						PartOfSpeech:  definition.PartOfSpeech,
-						Synonyms:      definition.Synonyms,
-						Antonyms:      definition.Antonyms,
-						Memo:          definition.Memo,
-					},
-					Images: definition.Images,
+					AltForm:      altForm,
+					WordDetail:   buildWordDetail(&definition, originMap),
+					Images:       definition.Images,
 				})
 			}
 		}
@@ -721,6 +797,7 @@ func (s *Service) loadFlashcardReverseCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
+	originMap map[string]notebook.EtymologyOrigin,
 ) ([]ReverseCard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
@@ -735,8 +812,10 @@ func (s *Service) loadFlashcardReverseCards(
 			}
 
 			expression := card.Expression
+			altForm := ""
 			if card.Definition != "" {
 				expression = card.Definition
+				altForm = card.Expression
 			}
 
 			// Skip words marked as skipped
@@ -773,15 +852,9 @@ func (s *Service) loadFlashcardReverseCards(
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
 				Expression:   expression,
-				WordDetail: WordDetail{
-					Origin:        card.Origin,
-					Pronunciation: card.Pronunciation,
-					PartOfSpeech:  card.PartOfSpeech,
-					Synonyms:      card.Synonyms,
-					Antonyms:      card.Antonyms,
-					Memo:          card.Memo,
-				},
-				Images: card.Images,
+				AltForm:      altForm,
+				WordDetail:   buildWordDetail(&card, originMap),
+				Images:       card.Images,
 			})
 		}
 	}
@@ -790,13 +863,70 @@ func (s *Service) loadFlashcardReverseCards(
 }
 
 func maskWord(context, expression, definition string) string {
-	re := regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(expression) + `\b`)
-	context = re.ReplaceAllString(context, "______")
+	context = maskOccurrences(context, expression)
 	if definition != "" {
-		re = regexp.MustCompile(`(?i)\b` + regexp.QuoteMeta(definition) + `\b`)
-		context = re.ReplaceAllString(context, "______")
+		context = maskOccurrences(context, definition)
 	}
 	return context
+}
+
+// maskOccurrences replaces every case-insensitive occurrence of target in
+// context with "______". It uses \b for word-character boundaries (so partial
+// matches like "questioning" don't match "question") and falls back to a
+// non-word/start-of-string boundary on either side when target itself starts
+// or ends with a non-word character (e.g. "#1 fan").
+func maskOccurrences(context, target string) string {
+	return maskOccurrencesAs(context, target, "______")
+}
+
+func maskOccurrencesAs(context, target, replacement string) string {
+	if target == "" {
+		return context
+	}
+	runes := []rune(target)
+	left := `\b`
+	if !isWordChar(runes[0]) {
+		left = `(?:^|[^\w])`
+	}
+	right := `\b`
+	if !isWordChar(runes[len(runes)-1]) {
+		right = `(?:[^\w]|$)`
+	}
+	re := regexp.MustCompile(`(?i)` + left + regexp.QuoteMeta(target) + right)
+	targetLower := strings.ToLower(target)
+	return re.ReplaceAllStringFunc(context, func(match string) string {
+		idx := strings.Index(strings.ToLower(match), targetLower)
+		if idx < 0 {
+			return replacement
+		}
+		return match[:idx] + replacement + match[idx+len(target):]
+	})
+}
+
+func isWordChar(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'
+}
+
+// containsExpressionWord reports whether the text contains the expression or
+// a close English inflection of it, case-insensitively. It is used to
+// safety-net the grading model: self-definition reasons must never fire when
+// the expression word (or its stem) is absent from the user's answer.
+//
+// For single-word expressions of length >= 5 it drops the last character to
+// form a stem, so "happy" (stem "happ") matches both "happy" and "happiness".
+// Multi-word expressions and short words are matched literally.
+func containsExpressionWord(text, expression string) bool {
+	text = strings.ToLower(text)
+	expr := strings.ToLower(strings.TrimSpace(expression))
+	if expr == "" {
+		return false
+	}
+	stem := expr
+	if !strings.Contains(expr, " ") && len([]rune(expr)) >= 5 {
+		r := []rune(expr)
+		stem = string(r[:len(r)-1])
+	}
+	return strings.Contains(text, stem)
 }
 
 func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note) []ReverseContext {
@@ -841,7 +971,10 @@ func needsReverseReview(
 					continue
 				}
 
-				if !expr.HasAnyCorrectAnswer() {
+				// Words must be answered in freeform first AND have at
+				// least one correct answer before becoming eligible for
+				// reverse quiz.
+				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
 					continue
 				}
 
@@ -870,7 +1003,10 @@ func needsReverseFlashcardReview(
 				continue
 			}
 
-			if !expr.HasAnyCorrectAnswer() {
+			// Words must be answered in freeform first AND have at
+			// least one correct answer before becoming eligible for
+			// reverse quiz.
+			if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
 				continue
 			}
 
@@ -961,11 +1097,12 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
+	originMap := buildOriginMap(reader)
 
 	var cards []FreeformCard
 
 	for notebookID := range storyIndexes {
-		words, err := s.loadStoryWords(reader, notebookID)
+		words, err := s.loadStoryWords(reader, notebookID, originMap)
 		if err != nil {
 			continue
 		}
@@ -973,17 +1110,29 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	}
 
 	for notebookID := range flashcardIndexes {
-		words, err := s.loadFlashcardWords(reader, notebookID)
+		words, err := s.loadFlashcardWords(reader, notebookID, originMap)
 		if err != nil {
 			continue
 		}
 		cards = append(cards, words...)
 	}
 
+	// Also load from definitions-only books
+	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		if _, isStory := storyIndexes[nbID]; isStory {
+			continue
+		}
+		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
+			continue
+		}
+		defWords := loadDefinitionWords(reader, nbID, originMap)
+		cards = append(cards, defWords...)
+	}
+
 	return cards, nil
 }
 
-func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]FreeformCard, error) {
+func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
 		return nil, err
@@ -1018,15 +1167,8 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 					OriginalExpression: definition.Expression,
 					Meaning:            definition.Meaning,
 					Contexts:           contexts,
-					WordDetail: WordDetail{
-						Origin:        definition.Origin,
-						Pronunciation: definition.Pronunciation,
-						PartOfSpeech:  definition.PartOfSpeech,
-						Synonyms:      definition.Synonyms,
-						Antonyms:      definition.Antonyms,
-						Memo:          definition.Memo,
-					},
-					Images: definition.Images,
+					WordDetail:         buildWordDetail(&definition, originMap),
+					Images:             definition.Images,
 				})
 			}
 		}
@@ -1035,7 +1177,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string) ([]
 	return cards, nil
 }
 
-func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string) ([]FreeformCard, error) {
+func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		return nil, err
@@ -1074,15 +1216,8 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string)
 				Expression:   expression,
 				Meaning:      card.Meaning,
 				Contexts:     contexts,
-				WordDetail: WordDetail{
-					Origin:        card.Origin,
-					Pronunciation: card.Pronunciation,
-					PartOfSpeech:  card.PartOfSpeech,
-					Synonyms:      card.Synonyms,
-					Antonyms:      card.Antonyms,
-					Memo:          card.Memo,
-				},
-				Images: card.Images,
+				WordDetail:   buildWordDetail(&card, originMap),
+				Images:       card.Images,
 			})
 		}
 	}
@@ -1125,6 +1260,20 @@ func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string,
 	result := results.Answers[0]
 	isCorrect, reason, quality := extractAnswerResult(result)
 
+	// Safety net: the grading model occasionally flags an answer as
+	// "self-definition" even though the user's meaning does not contain
+	// the expression word at all. Self-definition by definition requires
+	// the user to reuse the expression word itself, so if the expression
+	// word is absent from the meaning, override the model's verdict.
+	if !isCorrect && strings.Contains(strings.ToLower(reason), "self-definition") &&
+		!containsExpressionWord(meaning, word) {
+		isCorrect = true
+		reason = "matches the expected meaning (self-definition reason was overridden: your answer does not contain the expression word)"
+		if quality < 3 {
+			quality = 3
+		}
+	}
+
 	var context string
 	var notebookName string
 	if len(matchingCards) > 0 {
@@ -1134,10 +1283,19 @@ func (s *Service) GradeFreeformAnswer(ctx context.Context, word, meaning string,
 		notebookName = matchingCards[0].NotebookName
 	}
 
+	// Prefer the notebook's reference meaning over OpenAI's canonical
+	// meaning. The notebook is what the user studied, and showing the
+	// model's context-derived meaning led to cases where "Expected
+	// meaning" and "Reason" described different interpretations.
+	expectedMeaning := matchingCards[0].Meaning
+	if expectedMeaning == "" {
+		expectedMeaning = result.Meaning
+	}
+
 	return FreeformGradeResult{
 		Correct:      isCorrect,
 		Word:         result.Expression,
-		Meaning:      result.Meaning,
+		Meaning:      expectedMeaning,
 		Reason:       reason,
 		Context:      context,
 		NotebookName: notebookName,
@@ -1312,4 +1470,202 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 // isExpressionSkippedInHistory checks if a note is marked as skipped in the learning history.
 func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note) bool {
 	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition)
+}
+
+// countDefinitionNotes counts notes in definitions-only books that need review.
+func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories []notebook.LearningHistory, isReverse bool) int {
+	count := 0
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for i := range notes {
+				note := &notes[i]
+				if note.Meaning == "" {
+					continue
+				}
+				if isReverse {
+					if needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note) {
+						count++
+					}
+				} else {
+					if needsDefinitionReview(histories, storyTitle, sceneTitle, note) {
+						count++
+					}
+				}
+			}
+		}
+	}
+	return count
+}
+
+// loadDefinitionCards loads standard quiz cards from definitions-only books.
+func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin) []Card {
+	defs, ok := reader.GetDefinitionsNotes(bookID)
+	if !ok {
+		return nil
+	}
+
+	var cards []Card
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for _, note := range notes {
+				if note.Meaning == "" {
+					continue
+				}
+				if !needsDefinitionReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
+					continue
+				}
+				entry := note.Definition
+				originalEntry := ""
+				if entry == "" {
+					entry = note.Expression
+				} else {
+					originalEntry = note.Expression
+				}
+				cards = append(cards, Card{
+					NotebookName:  bookID,
+					StoryTitle:    storyTitle,
+					SceneTitle:    sceneTitle,
+					Entry:         entry,
+					OriginalEntry: originalEntry,
+					Meaning:       note.Meaning,
+					WordDetail:    buildWordDetail(&note, originMap),
+				})
+			}
+		}
+	}
+	return cards
+}
+
+// loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
+func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin) []ReverseCard {
+	defs, ok := reader.GetDefinitionsNotes(bookID)
+	if !ok {
+		return nil
+	}
+
+	var cards []ReverseCard
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for _, note := range notes {
+				if note.Meaning == "" {
+					continue
+				}
+				if !needsDefinitionReverseReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
+					continue
+				}
+				expression := note.Expression
+				altForm := ""
+				if note.Definition != "" {
+					expression = note.Definition
+					altForm = note.Expression
+				}
+				cards = append(cards, ReverseCard{
+					NotebookName: bookID,
+					StoryTitle:   storyTitle,
+					SceneTitle:   sceneTitle,
+					Meaning:      note.Meaning,
+					Expression:   expression,
+					AltForm:      altForm,
+					WordDetail:   buildWordDetail(&note, originMap),
+				})
+			}
+		}
+	}
+	return cards
+}
+
+// loadDefinitionWords loads freeform cards from definitions-only books.
+func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[string]notebook.EtymologyOrigin) []FreeformCard {
+	defs, ok := reader.GetDefinitionsNotes(bookID)
+	if !ok {
+		return nil
+	}
+
+	var cards []FreeformCard
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for _, note := range notes {
+				if note.Meaning == "" {
+					continue
+				}
+				expression := note.Expression
+				if note.Definition != "" {
+					expression = note.Definition
+				}
+				cards = append(cards, FreeformCard{
+					NotebookName:       bookID,
+					StoryTitle:         storyTitle,
+					SceneTitle:         sceneTitle,
+					Expression:         expression,
+					OriginalExpression: note.Expression,
+					Meaning:            note.Meaning,
+					WordDetail:         buildWordDetail(&note, originMap),
+				})
+			}
+		}
+	}
+	return cards
+}
+
+// needsDefinitionReview checks if a definition note needs forward quiz review.
+func needsDefinitionReview(
+	histories []notebook.LearningHistory,
+	storyTitle, sceneTitle string,
+	note *notebook.Note,
+) bool {
+	for _, h := range histories {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if expr.Expression != note.Expression && expr.Expression != note.Definition {
+					continue
+				}
+				// Words must be answered in freeform first.
+				if !expr.HasFreeformAnswer() {
+					return false
+				}
+				return expr.NeedsForwardReview()
+			}
+		}
+	}
+	return false
+}
+
+// needsDefinitionReverseReview checks if a definition note needs reverse quiz review.
+func needsDefinitionReverseReview(
+	histories []notebook.LearningHistory,
+	storyTitle, sceneTitle string,
+	note *notebook.Note,
+) bool {
+	for _, h := range histories {
+		if h.Metadata.Title != storyTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sceneTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if expr.Expression != note.Expression && expr.Expression != note.Definition {
+					continue
+				}
+				// Words must be answered in freeform first AND have at
+				// least one correct answer before becoming eligible for
+				// reverse quiz.
+				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
+					continue
+				}
+				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
+					return false
+				}
+				return true
+			}
+		}
+	}
+	return false
 }

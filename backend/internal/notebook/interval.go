@@ -130,6 +130,15 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 			lastInterval = log.OverrideInterval
 		} else {
 			nextInterval := CalculateNextInterval(lastInterval, ef, quality, correctStreak)
+			// Early review guard: if a correct answer came before the
+			// previous interval elapsed, don't advance the interval.
+			// Reviewing early doesn't prove long-term retention.
+			if quality >= 3 && lastInterval > 0 && i > 0 {
+				elapsed := int(log.LearnedAt.Sub(newLogs[i-1].LearnedAt.Time).Hours() / 24)
+				if elapsed < lastInterval && nextInterval > lastInterval {
+					nextInterval = lastInterval
+				}
+			}
 			log.IntervalDays = nextInterval
 			lastInterval = nextInterval
 		}
@@ -182,18 +191,6 @@ func (c *FixedLevelCalculator) levelFromInterval(lastInterval int) int {
 	return level
 }
 
-// snapToNextLevel returns the smallest fixed interval >= the given interval.
-func (c *FixedLevelCalculator) snapToNextLevel(interval int) int {
-	for _, iv := range c.intervals() {
-		if iv >= interval {
-			return iv
-		}
-	}
-	// If interval exceeds all levels, return max
-	intervals := c.intervals()
-	return intervals[len(intervals)-1]
-}
-
 // DeriveEF returns 0 for fixed level calculator since it does not use EF.
 func (c *FixedLevelCalculator) DeriveEF(_ []LearningRecord) float64 {
 	return 0
@@ -225,8 +222,9 @@ func (c *FixedLevelCalculator) CalculateInterval(logs []LearningRecord, currentQ
 	return intervals[level], 0
 }
 
-// RecalculateAll snaps each log's interval to the nearest fixed level.
-// Each log's interval is set to the smallest fixed level >= its original interval.
+// RecalculateAll replays logs oldest-to-newest using fixed interval levels,
+// applying the early-review guard: if a correct answer came before the
+// previous interval elapsed, the interval does not advance.
 func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, []LearningRecord) {
 	if len(logs) == 0 {
 		return 0, logs
@@ -235,6 +233,12 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 	newLogs := make([]LearningRecord, len(logs))
 	copy(newLogs, logs)
 
+	// Sort ascending (oldest first) for replay
+	sort.Slice(newLogs, func(i, j int) bool {
+		return newLogs[i].LearnedAt.Before(newLogs[j].LearnedAt.Time)
+	})
+
+	lastInterval := 0
 	for i := range newLogs {
 		log := &newLogs[i]
 		q := log.Quality
@@ -247,12 +251,35 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 			log.Quality = q
 		}
 
+		var nextInterval int
 		if log.OverrideInterval > 0 {
-			log.IntervalDays = log.OverrideInterval
+			nextInterval = log.OverrideInterval
 		} else {
-			log.IntervalDays = c.snapToNextLevel(log.IntervalDays)
+			// Build a fake "previous logs" slice with just the last interval
+			// so CalculateInterval can derive the current level.
+			prevLogs := []LearningRecord{}
+			if lastInterval > 0 {
+				prevLogs = []LearningRecord{{IntervalDays: lastInterval}}
+			}
+			nextInterval, _ = c.CalculateInterval(prevLogs, q, 0)
 		}
+
+		// Early review guard
+		if q >= 3 && lastInterval > 0 && i > 0 {
+			elapsed := int(log.LearnedAt.Sub(newLogs[i-1].LearnedAt.Time).Hours() / 24)
+			if elapsed < lastInterval && nextInterval > lastInterval {
+				nextInterval = lastInterval
+			}
+		}
+
+		log.IntervalDays = nextInterval
+		lastInterval = nextInterval
 	}
+
+	// Re-sort newest first
+	sort.Slice(newLogs, func(i, j int) bool {
+		return newLogs[i].LearnedAt.After(newLogs[j].LearnedAt.Time)
+	})
 
 	return 0, newLogs
 }

@@ -66,6 +66,41 @@ func (h LearningHistory) GetLogs(
 	return nil
 }
 
+// GetReverseLogs returns the reverse-quiz learning logs for the matching
+// expression. Used to hydrate Note.ReverseLogs for PDF/notebook export so the
+// filter can consider both forward and reverse tracks.
+func (h LearningHistory) GetReverseLogs(
+	notebookTitle, sceneTitle string, definition Note,
+) []LearningRecord {
+	if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(notebookTitle) {
+		return nil
+	}
+
+	if h.Metadata.Type == "flashcard" {
+		for _, expression := range h.Expressions {
+			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+				continue
+			}
+			return expression.ReverseLogs
+		}
+		return nil
+	}
+
+	normalizedSceneTitle := normalizeQuotes(sceneTitle)
+	for _, scene := range h.Scenes {
+		if normalizeQuotes(scene.Metadata.Title) != normalizedSceneTitle {
+			continue
+		}
+		for _, expression := range scene.Expressions {
+			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+				continue
+			}
+			return expression.ReverseLogs
+		}
+	}
+	return nil
+}
+
 type LearningScene struct {
 	Metadata    LearningSceneMetadata `yaml:"metadata"`
 	Expressions []LearningHistoryExpression
@@ -115,18 +150,73 @@ func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 	return lastLog.Status
 }
 
-// GetLogsForQuizType returns learning logs for the specified quiz type
+// GetLogsForQuizType returns learning logs for the specified quiz type.
+// For etymology freeform, returns breakdown logs (the primary track).
 func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []LearningRecord {
 	switch quizType {
 	case QuizTypeReverse:
 		return exp.ReverseLogs
-	case QuizTypeEtymologyBreakdown:
+	case QuizTypeEtymologyStandard, QuizTypeEtymologyFreeform:
 		return exp.EtymologyBreakdownLogs
-	case QuizTypeEtymologyAssembly:
+	case QuizTypeEtymologyReverse:
 		return exp.EtymologyAssemblyLogs
 	default:
 		return exp.LearnedLogs
 	}
+}
+
+// SetLogsForQuizType sets learning logs for the specified quiz type.
+// For etymology freeform, sets BOTH breakdown and assembly logs.
+func (exp *LearningHistoryExpression) SetLogsForQuizType(quizType QuizType, logs []LearningRecord) {
+	switch quizType {
+	case QuizTypeReverse:
+		exp.ReverseLogs = logs
+	case QuizTypeEtymologyStandard:
+		exp.EtymologyBreakdownLogs = logs
+	case QuizTypeEtymologyReverse:
+		exp.EtymologyAssemblyLogs = logs
+	case QuizTypeEtymologyFreeform:
+		exp.EtymologyBreakdownLogs = logs
+		exp.EtymologyAssemblyLogs = logs
+	default:
+		exp.LearnedLogs = logs
+	}
+}
+
+// NeedsForwardReview returns true if the expression needs forward quiz review
+// based on spaced repetition algorithm
+func (exp LearningHistoryExpression) NeedsForwardReview() bool {
+	if len(exp.LearnedLogs) == 0 {
+		return true
+	}
+
+	lastLog := exp.LearnedLogs[0]
+
+	// Always include misunderstood expressions for review
+	if lastLog.Status == LearnedStatusMisunderstood {
+		return true
+	}
+
+	// Use stored interval if available
+	threshold := lastLog.IntervalDays
+	if threshold == 0 {
+		// Fallback: calculate based on correct streak
+		correctCount := 0
+		for _, log := range exp.LearnedLogs {
+			if log.Status != LearnedStatusMisunderstood && log.Status != LearnedStatusLearning {
+				correctCount++
+			}
+		}
+		threshold = GetThresholdDaysFromCount(correctCount)
+	}
+
+	// Calculate elapsed days since last review
+	now := time.Now()
+	elapsed := now.Sub(lastLog.LearnedAt.Time)
+	elapsedDays := int(elapsed.Hours() / 24)
+
+	// Need review if elapsed days >= threshold
+	return elapsedDays >= threshold
 }
 
 // GetEasinessFactorForQuizType returns the easiness factor for the specified quiz type
@@ -137,12 +227,12 @@ func (exp LearningHistoryExpression) GetEasinessFactorForQuizType(quizType QuizT
 			return DefaultEasinessFactor
 		}
 		return exp.ReverseEasinessFactor
-	case QuizTypeEtymologyBreakdown:
+	case QuizTypeEtymologyStandard:
 		if exp.EtymologyBreakdownEasinessFactor == 0 {
 			return DefaultEasinessFactor
 		}
 		return exp.EtymologyBreakdownEasinessFactor
-	case QuizTypeEtymologyAssembly:
+	case QuizTypeEtymologyReverse:
 		if exp.EtymologyAssemblyEasinessFactor == 0 {
 			return DefaultEasinessFactor
 		}
@@ -168,7 +258,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 		if isKnownWord {
 			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
@@ -196,43 +286,37 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	var logs []LearningRecord
-
-	switch quizType {
-	case QuizTypeEtymologyBreakdown:
-		logs = exp.EtymologyBreakdownLogs
-	case QuizTypeEtymologyAssembly:
-		logs = exp.EtymologyAssemblyLogs
-	default:
-		return
-	}
-
 	status := LearnedStatusMisunderstood
 	if isCorrect {
 		if isKnownWord {
 			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
-	currentEF := calculator.DeriveEF(logs)
-	nextInterval, _ := calculator.CalculateInterval(logs, quality, currentEF)
-
-	newRecord := LearningRecord{
-		Status:         status,
-		LearnedAt:      NewDate(),
-		Quality:        quality,
-		ResponseTimeMs: responseTimeMs,
-		QuizType:       string(quizType),
-		IntervalDays:   nextInterval,
+	addRecord := func(logs []LearningRecord) []LearningRecord {
+		currentEF := calculator.DeriveEF(logs)
+		nextInterval, _ := calculator.CalculateInterval(logs, quality, currentEF)
+		newRecord := LearningRecord{
+			Status:         status,
+			LearnedAt:      NewDate(),
+			Quality:        quality,
+			ResponseTimeMs: responseTimeMs,
+			QuizType:       string(quizType),
+			IntervalDays:   nextInterval,
+		}
+		return append([]LearningRecord{newRecord}, logs...)
 	}
 
 	switch quizType {
-	case QuizTypeEtymologyBreakdown:
-		exp.EtymologyBreakdownLogs = append([]LearningRecord{newRecord}, exp.EtymologyBreakdownLogs...)
-	case QuizTypeEtymologyAssembly:
-		exp.EtymologyAssemblyLogs = append([]LearningRecord{newRecord}, exp.EtymologyAssemblyLogs...)
+	case QuizTypeEtymologyStandard:
+		exp.EtymologyBreakdownLogs = addRecord(exp.EtymologyBreakdownLogs)
+	case QuizTypeEtymologyReverse:
+		exp.EtymologyAssemblyLogs = addRecord(exp.EtymologyAssemblyLogs)
+	case QuizTypeEtymologyFreeform:
+		exp.EtymologyBreakdownLogs = addRecord(exp.EtymologyBreakdownLogs)
+		exp.EtymologyAssemblyLogs = addRecord(exp.EtymologyAssemblyLogs)
 	}
 }
 
@@ -271,7 +355,48 @@ func (exp LearningHistoryExpression) NeedsEtymologyReview(quizType QuizType) boo
 func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
 	for _, log := range exp.LearnedLogs {
 		if log.Status == LearnedStatusUnderstood ||
-			log.Status == learnedStatusCanBeUsed ||
+			log.Status == LearnedStatusCanBeUsed ||
+			log.Status == learnedStatusIntuitivelyUsed {
+			return true
+		}
+	}
+	return false
+}
+
+// HasFreeformAnswer returns true if the expression has at least one freeform quiz
+// answer recorded in LearnedLogs. Vocabulary words must be answered in freeform mode
+// first before becoming eligible for standard or reverse quizzes.
+func (exp LearningHistoryExpression) HasFreeformAnswer() bool {
+	for _, log := range exp.LearnedLogs {
+		if log.QuizType == string(QuizTypeFreeform) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasEtymologyFreeformAnswer returns true if the expression has at least one
+// etymology freeform answer recorded in EtymologyBreakdownLogs. Origins must be
+// answered in etymology freeform mode first before becoming eligible for etymology
+// standard or reverse quizzes.
+func (exp LearningHistoryExpression) HasEtymologyFreeformAnswer() bool {
+	for _, log := range exp.EtymologyBreakdownLogs {
+		if log.QuizType == string(QuizTypeEtymologyFreeform) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasCorrectEtymologyAnswer returns true if the expression has at least one
+// correct answer recorded in EtymologyBreakdownLogs. Origins must have been
+// answered correctly at least once (in any etymology mode) before becoming
+// eligible for etymology standard or reverse quizzes — otherwise the user
+// would be drilled on origins they have never actually understood.
+func (exp LearningHistoryExpression) HasCorrectEtymologyAnswer() bool {
+	for _, log := range exp.EtymologyBreakdownLogs {
+		if log.Status == LearnedStatusUnderstood ||
+			log.Status == LearnedStatusCanBeUsed ||
 			log.Status == learnedStatusIntuitivelyUsed {
 			return true
 		}
@@ -329,7 +454,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 		if isKnownWord {
 			status = LearnedStatusUnderstood
 		} else {
-			status = learnedStatusCanBeUsed
+			status = LearnedStatusCanBeUsed
 		}
 	}
 
@@ -400,7 +525,7 @@ func (exp *LearningHistoryExpression) Validate(location string) []ValidationErro
 		LearnedStatusLearning:        true,
 		LearnedStatusMisunderstood:   true,
 		LearnedStatusUnderstood:      true,
-		learnedStatusCanBeUsed:       true,
+		LearnedStatusCanBeUsed:       true,
 		learnedStatusIntuitivelyUsed: true,
 	}
 

@@ -51,6 +51,7 @@ notebooks:
           learned_logs:
             - status: "misunderstood"
               learned_at: "2025-01-14"
+              quiz_type: "freeform"
 `), 0644))
 }
 
@@ -81,6 +82,7 @@ notebooks:
       learned_logs:
         - status: "misunderstood"
           learned_at: "2025-01-14"
+          quiz_type: "freeform"
 `), 0644))
 }
 
@@ -187,10 +189,12 @@ notebooks:
             - status: "understood"
               learned_at: "2025-01-14"
               interval_days: 1
+              quiz_type: "freeform"
         - expression: "break the ice"
           learned_logs:
             - status: "misunderstood"
               learned_at: "2025-01-14"
+              quiz_type: "freeform"
 `), 0644))
 
 	// Flashcard with one word that has a correct answer
@@ -219,10 +223,12 @@ notebooks:
         - status: "understood"
           learned_at: "2025-01-14"
           interval_days: 1
+          quiz_type: "freeform"
     - expression: "ephemeral"
       learned_logs:
         - status: "misunderstood"
           learned_at: "2025-01-14"
+          quiz_type: "freeform"
 `), 0644))
 
 	svc := NewService(config.NotebooksConfig{
@@ -351,6 +357,20 @@ notebooks:
         - expression: "run"
           definition: "ran"
           meaning: "to move swiftly on foot"
+`), 0644))
+	// Word must have a freeform answer to be eligible for standard quiz.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-story.yml"), []byte(`- metadata:
+    notebook_id: test-story
+    title: "Chapter One"
+  scenes:
+    - metadata:
+        title: "Opening"
+      expressions:
+        - expression: "run"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
 `), 0644))
 
 	svc := NewService(config.NotebooksConfig{
@@ -894,6 +914,181 @@ func TestDeduplicateCards(t *testing.T) {
 			if tt.validate != nil {
 				tt.validate(t, result)
 			}
+		})
+	}
+}
+
+func TestApplyForwardMask(t *testing.T) {
+	// Two reverse-quiz cards whose contexts contain BOTH expressions. The
+	// first card (index 0) shows its context to the user; that context must
+	// hide the second card's expression too. The second card sees its own
+	// context with only its own expression masked (since the first was
+	// already revealed by then).
+	cards := []ReverseCard{
+		{
+			Expression: "alpha",
+			Contexts: []ReverseContext{
+				{Context: "alpha and beta are friends.", MaskedContext: "alpha and beta are friends."},
+			},
+		},
+		{
+			Expression: "beta",
+			Contexts: []ReverseContext{
+				{Context: "alpha and beta are friends.", MaskedContext: "alpha and beta are friends."},
+			},
+		},
+	}
+
+	applyForwardMask(cards)
+
+	assert.Equal(t, "______ and [...] are friends.", cards[0].Contexts[0].MaskedContext, "first card masks itself with ______ and future card with [...]")
+	assert.Equal(t, "alpha and ______ are friends.", cards[1].Contexts[0].MaskedContext, "second card masks only itself; the previously-asked first card is visible")
+}
+
+func TestApplyForwardMask_AltForm(t *testing.T) {
+	// When a card has an inflected form (AltForm), both the primary expression
+	// and the inflected form must be masked in future cards' contexts.
+	cards := []ReverseCard{
+		{
+			Expression: "running",
+			AltForm:    "run",
+			Contexts:   []ReverseContext{{Context: "She is running fast.", MaskedContext: "She is running fast."}},
+		},
+		{
+			Expression: "fast",
+			Contexts:   []ReverseContext{{Context: "She likes to run fast.", MaskedContext: "She likes to run fast."}},
+		},
+	}
+
+	applyForwardMask(cards)
+
+	assert.Equal(t, "She is ______ [...].", cards[0].Contexts[0].MaskedContext, "first card masks itself with ______ and future card 'fast' with [...]")
+	// Second card only masks itself; the past card's forms ('run', 'running') are now revealed.
+	assert.Equal(t, "She likes to run ______.", cards[1].Contexts[0].MaskedContext, "second card masks only itself; the past card's forms are revealed")
+}
+
+func TestContainsExpressionWord(t *testing.T) {
+	tests := []struct {
+		name       string
+		text       string
+		expression string
+		want       bool
+	}{
+		{
+			name:       "exact match",
+			text:       "happy",
+			expression: "happy",
+			want:       true,
+		},
+		{
+			name:       "trivial inflection",
+			text:       "happiness and joy",
+			expression: "happy",
+			want:       true,
+		},
+		{
+			name:       "does not match words that merely appear in the expected meaning",
+			text:       "feeling of great joy",
+			expression: "happy",
+			want:       false,
+		},
+		{
+			name:       "does not match partial substring",
+			text:       "of large size",
+			expression: "huge",
+			want:       false,
+		},
+		{
+			name:       "case insensitive",
+			text:       "Happy feelings",
+			expression: "happy",
+			want:       true,
+		},
+		{
+			name:       "multi-word expression",
+			text:       "she decided to break the ice at the party",
+			expression: "break the ice",
+			want:       true,
+		},
+		{
+			name:       "expression starting with non-word character",
+			text:       "she is the #1 fan of that band",
+			expression: "#1 fan",
+			want:       true,
+		},
+		{
+			name:       "empty expression",
+			text:       "anything",
+			expression: "",
+			want:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := containsExpressionWord(tt.text, tt.expression)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestMaskWord(t *testing.T) {
+	tests := []struct {
+		name       string
+		context    string
+		expression string
+		definition string
+		want       string
+	}{
+		{
+			name:       "simple word with surrounding spaces",
+			context:    "the question is hard",
+			expression: "question",
+			want:       "the ______ is hard",
+		},
+		{
+			name:       "case insensitive match",
+			context:    "Question time",
+			expression: "question",
+			want:       "______ time",
+		},
+		{
+			name:       "does not mask partial word",
+			context:    "the questioning continues",
+			expression: "question",
+			want:       "the questioning continues",
+		},
+		{
+			name:       "expression starting with non-word character",
+			context:    "She is the #1 fan of that band.",
+			expression: "#1 fan",
+			want:       "She is the ______ of that band.",
+		},
+		{
+			name:       "multiple consecutive occurrences",
+			context:    "fast and fast and fast",
+			expression: "fast",
+			want:       "______ and ______ and ______",
+		},
+		{
+			name:       "expression at end of context",
+			context:    "an idiom for break the ice",
+			expression: "break the ice",
+			want:       "an idiom for ______",
+		},
+		{
+			name:       "definition also masked",
+			context:    "She used the term break the ice during the meeting",
+			expression: "break ice",
+			definition: "break the ice",
+			want:       "She used the term ______ during the meeting",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := maskWord(tt.context, tt.expression, tt.definition)
+			assert.Equal(t, tt.want, got)
 		})
 	}
 }

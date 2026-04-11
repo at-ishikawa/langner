@@ -72,3 +72,6 @@ outputs:
 
   # Directory for flashcard notebook output files
   flashcard_directory: examples/outputs
+
+  # Directory for etymology notebook output files
+  etymology_directory: examples/outputs

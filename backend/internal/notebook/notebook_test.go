@@ -296,7 +296,7 @@ func TestNote_getLearnScore(t *testing.T) {
 				Definition:   "greeting",
 				notebookDate: now.Add(-10 * 24 * time.Hour),
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-5 * 24 * time.Hour))},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(now.Add(-5 * 24 * time.Hour))},
 				},
 			},
 			// score=1000, days≈5, notebookDays≈10 → ~985
@@ -395,7 +395,7 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-8 * 24 * time.Hour))},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-8 * 24 * time.Hour))},
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-12 * 24 * time.Hour))},
 				},
 			},
@@ -407,7 +407,7 @@ func TestNote_needsToLearn(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-5 * 24 * time.Hour))},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-5 * 24 * time.Hour))},
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-10 * 24 * time.Hour))},
 				},
 			},
@@ -420,7 +420,7 @@ func TestNote_needsToLearn(t *testing.T) {
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
 					{Status: learnedStatusIntuitivelyUsed, LearnedAt: NewDate(time.Now().Add(-15 * 24 * time.Hour))},
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-20 * 24 * time.Hour))},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-20 * 24 * time.Hour))},
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-25 * 24 * time.Hour))},
 				},
 			},
@@ -495,7 +495,7 @@ func TestNote_getNextLearningThresholdDays(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate()},                                   // counted (1)
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate()},                                   // counted (1)
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Now().Add(-time.Hour))},        // counted (2)
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(time.Now().Add(-2 * time.Hour))}, // not counted
 				},
@@ -568,7 +568,7 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(baseTime)},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(baseTime)},
 				},
 			},
 			expected: true,
@@ -675,7 +675,7 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(baseTime)},
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(baseTime)},
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-24 * time.Hour))},
 				},
 			},

@@ -114,6 +114,7 @@ notebooks:
 			},
 			wantContains: []string{
 				"# Test Etymology",
+				"### graph (to write)",
 				"**graph** [Greek]: to write",
 				"**logos** [Greek]: word or study",
 				"**graphologist**",
@@ -125,6 +126,196 @@ notebooks:
 				"[noun]",
 				"beautiful handwriting",
 				"Note: Often used for decorative writing",
+			},
+			wantNotContain: []string{
+				"### Words",
+			},
+		},
+		{
+			name:        "session title with multiple sections",
+			etymologyID: "multi-section",
+			setupFiles: func(t *testing.T, tmpDir string) {
+				etymDir := filepath.Join(tmpDir, "etymology", "multi-section")
+				require.NoError(t, os.MkdirAll(etymDir, 0755))
+
+				indexYAML := `id: multi-section
+kind: Etymology
+name: Word Roots
+notebooks:
+  - ./session1.yml
+`
+				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
+
+				sessionYAML := `origins:
+  - origin: graph
+    language: Greek
+    meaning: to write
+  - origin: duc
+    language: Latin
+    meaning: to lead
+`
+				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(sessionYAML), 0644))
+
+				defDir := filepath.Join(tmpDir, "definitions", "books", "multi-section-vocab")
+				require.NoError(t, os.MkdirAll(defDir, 0755))
+
+				defIndex := `id: multi-section-vocab
+notebooks:
+  - ./session1.yml
+`
+				require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(defIndex), 0644))
+
+				defYAML := `- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "graph (to write)"
+      expressions:
+        - expression: autograph
+          meaning: "self-writing; a signature"
+          origin_parts:
+            - origin: graph
+    - metadata:
+        title: "duc (to lead)"
+      expressions:
+        - expression: conduct
+          meaning: "to lead together"
+          origin_parts:
+            - origin: duc
+`
+				require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(defYAML), 0644))
+			},
+			wantContains: []string{
+				"# Word Roots",
+				"## Session 1",
+				"### graph (to write)",
+				"**autograph**",
+				"self-writing; a signature",
+				"### duc (to lead)",
+				"**conduct**",
+				"to lead together",
+			},
+			wantNotContain: []string{
+				"### Words",
+			},
+		},
+		{
+			name:        "merges entries with same session title into one chapter",
+			etymologyID: "merge-test",
+			setupFiles: func(t *testing.T, tmpDir string) {
+				etymDir := filepath.Join(tmpDir, "etymology", "merge-test")
+				require.NoError(t, os.MkdirAll(etymDir, 0755))
+
+				indexYAML := `id: merge-test
+kind: Etymology
+name: Merge Test
+notebooks:
+  - ./session1.yml
+`
+				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
+
+				sessionYAML := `origins:
+  - origin: ego
+    language: Latin
+    meaning: I, self
+  - origin: alter
+    language: Latin
+    meaning: other
+`
+				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(sessionYAML), 0644))
+
+				defDir := filepath.Join(tmpDir, "definitions", "books", "merge-test-vocab")
+				require.NoError(t, os.MkdirAll(defDir, 0755))
+
+				defIndex := `id: merge-test-vocab
+notebooks:
+  - ./session1.yml
+`
+				require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(defIndex), 0644))
+
+				// Two entries with the same title "Session 1", each with a different section
+				defYAML := `- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "ego (I, self)"
+      expressions:
+        - expression: egoist
+          meaning: "one whose primary concern is self-interest"
+          origin_parts:
+            - origin: ego
+- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "alter (other)"
+      expressions:
+        - expression: altruist
+          meaning: "one who puts others first"
+          origin_parts:
+            - origin: alter
+`
+				require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(defYAML), 0644))
+			},
+			wantContains: []string{
+				"## Session 1",
+				"### ego (I, self)",
+				"**egoist**",
+				"### alter (other)",
+				"**altruist**",
+			},
+			wantNotContain: []string{
+				"### Words",
+			},
+		},
+		{
+			name:        "falls back to Words heading when scenes have no titles",
+			etymologyID: "no-scene-title",
+			setupFiles: func(t *testing.T, tmpDir string) {
+				etymDir := filepath.Join(tmpDir, "etymology", "no-scene-title")
+				require.NoError(t, os.MkdirAll(etymDir, 0755))
+
+				indexYAML := `id: no-scene-title
+kind: Etymology
+name: Basic Roots
+notebooks:
+  - ./session1.yml
+`
+				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
+
+				sessionYAML := `origins:
+  - origin: spect
+    language: Latin
+    meaning: to look
+`
+				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(sessionYAML), 0644))
+
+				defDir := filepath.Join(tmpDir, "definitions", "books", "no-scene-title-vocab")
+				require.NoError(t, os.MkdirAll(defDir, 0755))
+
+				defIndex := `id: no-scene-title-vocab
+notebooks:
+  - ./session1.yml
+`
+				require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(defIndex), 0644))
+
+				defYAML := `- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+      expressions:
+        - expression: spectator
+          meaning: "one who looks"
+          origin_parts:
+            - origin: spect
+`
+				require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(defYAML), 0644))
+			},
+			wantContains: []string{
+				"## Session 1",
+				"### Words",
+				"**spectator**",
 			},
 		},
 	}
@@ -141,7 +332,7 @@ notebooks:
 			reader, err := NewReader(nil, nil, nil, definitionsDirs, etymologyDirs, nil)
 			require.NoError(t, err)
 
-			writer := NewEtymologyNotebookWriter(reader, "", definitionsDirs)
+			writer := NewEtymologyNotebookWriter(reader, "", definitionsDirs, nil)
 			err = writer.OutputEtymologyNotebook(tt.etymologyID, outputDir, false)
 
 			if tt.wantErr != "" {

@@ -391,13 +391,18 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	if err != nil { return fmt.Errorf("load learning histories: %w", err) }
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[log.NotebookName], r.calculator)
 	quizType := notebook.QuizType(log.QuizType)
+	// Freeform requires active recall of both the word and its meaning, so a
+	// correct answer means the user can actually use the word, not just
+	// recognise it. Pass isKnownWord=false to get "usable" status. Standard
+	// and reverse quizzes pass isKnownWord=true for "understood".
+	isKnownWord := quizType != notebook.QuizTypeFreeform
 	if quizType == notebook.QuizTypeReverse {
 		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeReverse)
 	} else {
-		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), quizType)
+		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), quizType)
 		// Freeform quiz tests word recall (similar to reverse), so also update reverse logs
 		if quizType == notebook.QuizTypeFreeform {
-			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeFreeform)
+			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeFreeform)
 		}
 	}
 	notePath := filepath.Join(dir, log.NotebookName+".yml")

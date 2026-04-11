@@ -1,0 +1,34 @@
+- metadata:
+    notebook_id: frankenstein
+    title: "Letter I"
+  scenes:
+    - metadata:
+        title: ""
+      expressions:
+        - expression: rejoice
+          learned_logs:
+            - status: usable
+              learned_at: "2025-12-10T00:00:00Z"
+              quality: 4
+              quiz_type: freeform
+              interval_days: 30
+        - expression: commencement
+          learned_logs:
+            - status: misunderstood
+              learned_at: "2025-12-13T00:00:00Z"
+              quality: 1
+              quiz_type: freeform
+              interval_days: 1
+        - expression: forebodings
+          learned_logs:
+            - status: understood
+              learned_at: "2025-12-11T00:00:00Z"
+              quality: 4
+              quiz_type: freeform
+              interval_days: 7
+          reverse_logs:
+            - status: misunderstood
+              learned_at: "2025-12-14T00:00:00Z"
+              quality: 1
+              quiz_type: reverse
+              interval_days: 1

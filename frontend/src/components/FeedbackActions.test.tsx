@@ -89,4 +89,99 @@ describe("FeedbackActions", () => {
     fireEvent.click(screen.getByText("Exclude from Quizzes"));
     expect(onSkip).toHaveBeenCalledTimes(1);
   });
+
+  // Banner tests
+  describe("correct/incorrect banner", () => {
+    it("shows Correct banner when isCorrect=true", () => {
+      renderComponent({ isCorrect: true });
+      expect(screen.getByText(/Correct/)).toBeInTheDocument();
+    });
+
+    it("shows Incorrect banner when isCorrect=false", () => {
+      renderComponent({ isCorrect: false });
+      expect(screen.getByText(/Incorrect/)).toBeInTheDocument();
+    });
+
+    it("does not show (overridden) label when isOverridden=false", () => {
+      renderComponent({ isOverridden: false });
+      expect(screen.queryByText("(overridden)")).not.toBeInTheDocument();
+    });
+
+    it("shows (overridden) label when isOverridden=true", () => {
+      renderComponent({ isOverridden: true });
+      expect(screen.getByText("(overridden)")).toBeInTheDocument();
+    });
+  });
+
+  // Undo tests
+  describe("onUndo", () => {
+    it("does not show Undo link when isOverridden=false", () => {
+      renderComponent({ isOverridden: false, onUndo: vi.fn() });
+      expect(screen.queryByText("Undo")).not.toBeInTheDocument();
+    });
+
+    it("does not show Undo link when onUndo is not provided", () => {
+      renderComponent({ isOverridden: true });
+      expect(screen.queryByText("Undo")).not.toBeInTheDocument();
+    });
+
+    it("shows Undo link when isOverridden=true and onUndo provided", () => {
+      renderComponent({ isOverridden: true, onUndo: vi.fn() });
+      expect(screen.getByText("Undo")).toBeInTheDocument();
+    });
+
+    it("calls onUndo when Undo link clicked", () => {
+      const onUndo = vi.fn();
+      renderComponent({ isOverridden: true, onUndo });
+      fireEvent.click(screen.getByText("Undo"));
+      expect(onUndo).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // Children prop tests
+  describe("children", () => {
+    it("renders children between banner and buttons", () => {
+      render(
+        <ChakraProvider value={defaultSystem}>
+          <FeedbackActions
+            isCorrect={true}
+            noteId={BigInt(1)}
+            isOverridden={false}
+            isSkipped={false}
+            nextLabel="Next"
+            onNext={vi.fn()}
+          >
+            <div data-testid="child-content">Page-specific content</div>
+          </FeedbackActions>
+        </ChakraProvider>
+      );
+      expect(screen.getByTestId("child-content")).toBeInTheDocument();
+      expect(screen.getByText("Page-specific content")).toBeInTheDocument();
+    });
+
+    it("does not render children slot when no children provided", () => {
+      const { container } = renderComponent();
+      expect(container.querySelector("[data-testid='child-content']")).not.toBeInTheDocument();
+    });
+  });
+
+  // onSeeResults tests
+  describe("onSeeResults", () => {
+    it("renders See Results button when onSeeResults is provided", () => {
+      renderComponent({ onSeeResults: vi.fn(), nextLabel: "Next" });
+      expect(screen.getByText("See Results")).toBeInTheDocument();
+    });
+
+    it("does not render See Results button when onSeeResults is not provided", () => {
+      renderComponent({ nextLabel: "Next" });
+      expect(screen.queryByText("See Results")).not.toBeInTheDocument();
+    });
+
+    it("calls onSeeResults when See Results button clicked", () => {
+      const onSeeResults = vi.fn();
+      renderComponent({ onSeeResults, nextLabel: "Next" });
+      fireEvent.click(screen.getByText("See Results"));
+      expect(onSeeResults).toHaveBeenCalledTimes(1);
+    });
+  });
 });

@@ -81,9 +81,12 @@ describe("QuizHubPage", () => {
     });
     fireEvent.click(screen.getByText("Etymology"));
 
-    expect(screen.getByText("Breakdown")).toBeInTheDocument();
-    expect(screen.getByText("See a word, identify its origins and meanings")).toBeInTheDocument();
-    expect(screen.getByText("Assembly")).toBeInTheDocument();
+    // Etymology tab shows Standard, Reverse, Freeform modes
+    const standardTexts = screen.getAllByText("Standard");
+    expect(standardTexts.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("See an origin, type its meaning")).toBeInTheDocument();
+    const reverseTexts = screen.getAllByText("Reverse");
+    expect(reverseTexts.length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("Freeform")).toBeInTheDocument();
   });
 

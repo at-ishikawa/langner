@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   Heading,
-  Input,
   Progress,
   Spinner,
   Text,
@@ -15,6 +14,7 @@ import {
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { AnswerInput } from "@/components/AnswerInput";
 
 type QuizPhase = "answering" | "feedback";
 
@@ -26,6 +26,7 @@ interface FeedbackData {
   partOfSpeech?: string;
   learnedAt?: string;
   images?: string[];
+  originParts?: { origin: string; type: string; language: string; meaning: string }[];
 }
 
 export default function QuizCardPage() {
@@ -109,6 +110,7 @@ export default function QuizCardPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
+        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -154,6 +156,7 @@ export default function QuizCardPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
+        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -222,36 +225,16 @@ export default function QuizCardPage() {
             </VStack>
           )}
 
-          <Box>
-            <Text fontWeight="medium" mb={1}>
-              Meaning
-            </Text>
-            <Input
-              ref={inputRef}
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Type your answer"
-              size="lg"
-            />
-          </Box>
-
-          <Button
-            colorPalette="blue"
-            onClick={handleSubmit}
-            disabled={!answer.trim()}
-            size="lg"
-          >
-            Submit
-          </Button>
-
-          <Button
-            variant="outline"
-            onClick={handleSkip}
-            size="lg"
-          >
-            Don&apos;t Know
-          </Button>
+          <AnswerInput
+            ref={inputRef}
+            label="Meaning"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={handleSubmit}
+            onSkip={handleSkip}
+            placeholder="Type your answer"
+          />
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
@@ -274,102 +257,6 @@ export default function QuizCardPage() {
             </Box>
           ) : feedback ? (
             <>
-              {/* 1. Correct/Incorrect indicator with override/undo labels */}
-              <Box
-                p={3}
-                borderRadius="md"
-                bg={displayCorrect ? "green.100" : "red.100"}
-                color={displayCorrect ? "green.800" : "red.800"}
-                _dark={{
-                  bg: displayCorrect ? "green.900" : "red.900",
-                  color: displayCorrect ? "green.200" : "red.200",
-                }}
-                display="flex"
-                justifyContent="space-between"
-                alignItems="center"
-              >
-                <Text fontWeight="bold">
-                  {displayCorrect ? "\u2713 Correct" : "\u2717 Incorrect"}
-                  {overridden && (
-                    <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
-                  )}
-                </Text>
-                {overridden && (
-                  <Text
-                    as="span"
-                    fontSize="sm"
-                    cursor="pointer"
-                    textDecoration="underline"
-                    onClick={async () => {
-                      try {
-                        const res = await quizClient.undoOverrideAnswer({
-                          noteId: card.noteId,
-                          quizType: ProtoQuizType.STANDARD,
-                          learnedAt: feedback.learnedAt!,
-                          originalQuality: overrideOriginals?.quality ?? 0,
-                          originalStatus: overrideOriginals?.status ?? "",
-                          originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                        });
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(res.correct);
-                      } catch {
-                        setOverridden(false);
-                        setOverrideOriginals(null);
-                        setDisplayCorrect(feedback.correct);
-                      }
-                    }}
-                  >
-                    Undo
-                  </Text>
-                )}
-              </Box>
-
-              {/* 2. Your answer */}
-              {submittedAnswer ? (
-                <Text textDecoration={displayCorrect ? "none" : "line-through"}>
-                  Your answer: {submittedAnswer}
-                </Text>
-              ) : (
-                <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                  Skipped
-                </Text>
-              )}
-
-              <Box>
-                <Text fontWeight="bold">Meaning</Text>
-                <Text>{feedback.meaning}</Text>
-              </Box>
-
-              {feedback.reason && (
-                <Box>
-                  <Text fontWeight="bold">Reason</Text>
-                  <Text>{feedback.reason}</Text>
-                </Box>
-              )}
-
-              {card.examples.length > 0 && (
-                <Box>
-                  <Text fontWeight="bold">Examples</Text>
-                  <VStack align="stretch" gap={1} mt={1}>
-                    {card.examples.map((ex, i) => (
-                      <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
-                        {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
-                      </Text>
-                    ))}
-                  </VStack>
-                </Box>
-              )}
-
-              {feedback.images && feedback.images.length > 0 && (
-                <Box display="flex" gap={2} flexWrap="wrap">
-                  {feedback.images.map((src, i) => (
-                    <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-                  ))}
-                </Box>
-              )}
-
-              {/* 4-7. Next review date, Next button, Override, Skip */}
               <FeedbackActions
                 isCorrect={displayCorrect}
                 noteId={card.noteId}
@@ -399,6 +286,25 @@ export default function QuizCardPage() {
                     });
                   } catch { /* silently fail */ }
                 }}
+                onUndo={async () => {
+                  try {
+                    const res = await quizClient.undoOverrideAnswer({
+                      noteId: card.noteId,
+                      quizType: ProtoQuizType.STANDARD,
+                      learnedAt: feedback.learnedAt!,
+                      originalQuality: overrideOriginals?.quality ?? 0,
+                      originalStatus: overrideOriginals?.status ?? "",
+                      originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
+                    });
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(res.correct);
+                  } catch {
+                    setOverridden(false);
+                    setOverrideOriginals(null);
+                    setDisplayCorrect(feedback.correct);
+                  }
+                }}
                 onSkip={async () => {
                   try {
                     await quizClient.skipWord({ noteId: card.noteId });
@@ -406,17 +312,72 @@ export default function QuizCardPage() {
                     storeSkipResult(currentIndex, "standard");
                   } catch { /* silently fail */ }
                 }}
-              />
+                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
+              >
+                {/* Your answer */}
+                {submittedAnswer ? (
+                  <Text textDecoration={displayCorrect ? "none" : "line-through"}>
+                    Your answer: {submittedAnswer}
+                  </Text>
+                ) : (
+                  <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                    Skipped
+                  </Text>
+                )}
 
-              {currentIndex + 1 < total && (
-                <Button
-                  colorPalette="green"
-                  variant="outline"
-                  onClick={() => router.push("/quiz/complete")}
-                >
-                  See Results
-                </Button>
-              )}
+                <Box>
+                  <Text fontWeight="bold">Meaning</Text>
+                  <Text>{feedback.meaning}</Text>
+                </Box>
+
+                {feedback.reason && (
+                  <Box>
+                    <Text fontWeight="bold">Reason</Text>
+                    <Text>{feedback.reason}</Text>
+                  </Box>
+                )}
+
+                {card.examples.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold">Examples</Text>
+                    <VStack align="stretch" gap={1} mt={1}>
+                      {card.examples.map((ex, i) => (
+                        <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
+                          {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
+                        </Text>
+                      ))}
+                    </VStack>
+                  </Box>
+                )}
+
+                {feedback.images && feedback.images.length > 0 && (
+                  <Box display="flex" gap={2} flexWrap="wrap">
+                    {feedback.images.map((src, i) => (
+                      <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
+                    ))}
+                  </Box>
+                )}
+
+                {feedback.originParts && feedback.originParts.length > 0 && (
+                  <Box>
+                    <Text fontWeight="bold" fontSize="sm">Etymology</Text>
+                    <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
+                      {feedback.originParts.map((p, i) => (
+                        <Box key={i} display="flex" alignItems="center" gap={1}>
+                          {i > 0 && <Text color="fg.muted">+</Text>}
+                          <Text color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium" fontSize="sm">{p.origin}</Text>
+                          <Text fontSize="sm" color="fg.muted">({p.meaning})</Text>
+                          {p.language && (
+                            <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
+                              <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
+                            </Box>
+                          )}
+                        </Box>
+                      ))}
+                    </Box>
+                  </Box>
+                )}
+              </FeedbackActions>
             </>
           ) : error ? (
             <>

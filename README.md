@@ -2,203 +2,136 @@
 
 [![CI Status](https://github.com/at-ishikawa/langner/actions/workflows/pr.yml/badge.svg)](https://github.com/at-ishikawa/langner/actions/workflows/pr.yml)
 
-A CLI tool to help you learn English by creating interactive vocabulary notebooks from your favorite content (videos, books, articles, etc.).
+A vocabulary learning app that helps you learn English words and phrases from stories you enjoy.
 
-## What is Langner?
+![Home](docs/static/screenshots/home.jpg)
 
-Langner helps you learn English vocabulary in context by:
+## Why Langner?
 
-- Creating study notebooks from your favorite content
-- Generating formatted study materials (Markdown and PDF)
-- Testing your knowledge with interactive quizzes
-- Tracking your learning progress over time
+Most vocabulary apps give you random word lists with no context. Langner takes a different approach:
 
-## Quick Start
+1. **Learn words from stories you care about** - Create notebooks from books, TV shows, or articles you're actually reading. Words stick better when you learn them in context rather than from isolated flashcards.
+2. **Don't waste time on words you already know** - A spaced repetition system tracks what you know and what you don't. Words you've mastered stop showing up, so you spend time only on what needs practice.
+3. **Export PDFs to study anywhere** - Generate printable study materials from your notebooks so you can review on any device, even offline.
 
-### 1. Installation
+## Getting Started
 
-Install using Go:
-```bash
-go install github.com/at-ishikawa/langner/cmd/langner@latest
-```
+### Prerequisites
 
-Make sure `$GOPATH/bin` is in your `PATH` to run the `langner` command.
-
-### 2. Set Up Your Configuration
-
-Copy the example configuration:
-```bash
-cp config.example.yml config.yml
-```
-
-Edit `config.yml` to customize your directories:
-- `notebooks.stories_directory`: Where you store your story notebooks
-- `notebooks.learning_notes_directory`: Where learning progress is tracked
-- `outputs.story_directory`: Where generated study materials are saved
-
-### 3. Create Your First Story Notebook
-
-Create a YAML file in your stories directory (e.g., `stories/daily-conversation/meeting.yml`):
-
-```yaml
-- event: 'Meeting a friend at a coffee shop'
-  date: 2025-11-08T00:00:00Z
-  scenes:
-    - scene: At the coffee shop
-      conversations:
-        - speaker: Alice
-          quote: I'm {{ excited }} about the new project
-        - speaker: Bob
-          quote: Me too! We should {{ discuss }} the details
-      definitions:
-        - expression: excited
-          meaning: Feeling enthusiastic and eager
-        - expression: discuss
-          meaning: To talk about something with someone
-```
-
-Mark words you want to learn with `{{ }}` in the quotes.
-
-### 4. Set Up Environment Variables (Optional for Advanced Features)
-
-Different commands require different environment variables:
-
-**For Quiz Commands** (`langner quiz notebook`, `langner quiz freeform`):
-```bash
-export OPENAI_API_KEY="your-openai-api-key"
-export OPENAI_MODEL="gpt-4o-mini"  # Optional, defaults to gpt-4o-mini
-```
-
-**For Dictionary Lookup** (`langner dictionary lookup`):
-```bash
-export RAPID_API_HOST="wordsapiv1.p.rapidapi.com"
-export RAPID_API_KEY="your-rapidapi-key"
-```
-Get your RapidAPI key at: https://rapidapi.com/dpventures/api/wordsapi
-
-**Note:** The `notebooks stories` command uses cached dictionary data, so it doesn't require API keys if you already have cached definitions.
-
-## Main Features
-
-### Generate Study Materials
-
-Create formatted study materials from your notebooks:
-
-```bash
-# Generate markdown output
-langner notebooks stories <name>
-
-# Generate both markdown and PDF
-langner notebooks stories <name> --pdf
-```
-
-This creates a study guide with:
-- Original conversations
-- Word definitions and pronunciations
-- Example sentences
-- Synonyms
-
-### Take Vocabulary Quizzes
-
-Test your knowledge with interactive quizzes using spaced repetition:
-
-```bash
-# Quiz from a specific notebook (shows word, you provide meaning)
-langner quiz notebook
-
-# Freeform quiz (recall both word and meaning)
-langner quiz freeform
-```
-
-**Spaced Repetition System:**
-Langner uses a modified SM-2 algorithm for spaced repetition. Words are reviewed at increasing intervals based on how well you know them. Words you answer correctly appear less frequently, while words you struggle with appear more often.
-
-### Validate Your Notebooks
-
-Check your notebooks for errors and inconsistencies:
-
-```bash
-# Check for errors
-langner validate
-
-# Automatically fix errors
-langner validate --fix
-```
-
-## Workflow Example
-
-1. Watch your favorite English show or read an article
-2. Create a story notebook with interesting vocabulary
-3. Mark words you want to learn with `{{ }}`
-4. Generate study materials: `langner notebooks stories <name> --pdf`
-5. Review the PDF with definitions and examples
-6. Test yourself: `langner quiz notebook`
-7. Track your progress in learning notes
-
-## Configuration Options
-
-Your `config.yml` file controls:
-
-- **notebooks**: Directory paths for stories and learning notes
-- **dictionaries**: Cache directory for dictionary lookups
-- **templates**: Directory for custom markdown templates
-- **outputs**: Where to save generated study materials
-
-## Command Reference
-
-| Command | Description | Required Environment Variables |
-|---------|-------------|-------------------------------|
-| `langner notebooks stories <name>` | Generate study materials from a notebook | None (uses cached dictionary data) |
-| `langner quiz notebook <name>` | Take a vocabulary quiz from a specific notebook | `OPENAI_API_KEY` |
-| `langner quiz freeform` | Freeform recall quiz | `OPENAI_API_KEY` |
-| `langner dictionary lookup <word>` | Look up word definition | `RAPID_API_HOST`, `RAPID_API_KEY` |
-| `langner validate` | Check notebooks for errors | None |
-| `langner validate --fix` | Auto-fix validation errors | None |
-
-## Local Development
-
-You can run the interactive quiz application (backend and frontend) locally for development.
-
-### 1. Prerequisites
 - [Docker](https://docs.docker.com/get-docker/)
 - [Go](https://golang.org/doc/install) (1.25+)
 - [Node.js](https://nodejs.org/) and [pnpm](https://pnpm.io/installation)
 
-### 2. Initial Setup
-Run the setup command to start the database, install dependencies, and run migrations:
+### Setup
+
 ```bash
 cp config.example.yml config.yml
 make setup
 ```
 
-### 3. Running the Application
-Start both the backend and frontend concurrently:
+This starts the database, installs dependencies, and runs migrations.
+
+### Running
+
 ```bash
 export OPENAI_API_KEY="your-api-key-here"
 make dev
 ```
-- **Backend**: http://localhost:8080
+
 - **Frontend**: http://localhost:3000
+- **Backend**: http://localhost:8080
 
-## Tips for Success
+## Adding a Book
 
-1. **Create notebooks regularly**: The more you practice, the better you learn
-2. **Use real content**: Learn from content you enjoy (TV shows, books, podcasts)
-3. **Mark words in context**: Understanding how words are used helps retention
-4. **Review with quizzes**: Regular testing reinforces memory
-5. **Track progress**: Use learning notes to see how far you've come
+Langner uses books from [Standard Ebooks](https://standardebooks.org/). Add a book with the CLI:
 
-## Getting Help
-
-For detailed help on any command:
 ```bash
-langner [command] --help
+langner ebook clone https://standardebooks.org/ebooks/mary-shelley/frankenstein
 ```
 
-Enable debug mode for troubleshooting:
+This clones the ebook so you can read it in the web UI. You can also list and remove books:
+
 ```bash
-langner --debug [command]
+langner ebook list
+langner ebook remove <id>
 ```
+
+## Building Your Notebook
+
+There are two ways to build vocabulary notebooks:
+
+**From books** - As you read a book in the web UI, select any word to look it up. Save the definition and it's added to a notebook for that book automatically.
+
+**From YAML files** - Create your own notebooks as YAML files for vocabulary from any source (TV shows, articles, podcasts, etc.). Place them in the directories configured in `config.yml`. See the `examples/` directory for the supported formats:
+
+- `examples/stories/` - Story notebooks with conversations and scenes
+- `examples/flashcards/` - Simple vocabulary card lists
+
+Saved words from both sources appear in the Learn section and are available for quizzes.
+
+## Features
+
+### Books
+
+Read books directly in the app. Select any word or phrase in the text to look it up in the dictionary, then save definitions to your notebook for later study.
+
+- Browse your book library
+- Read chapters with an interactive reader
+- Tap any word to see its definition, pronunciation, examples, synonyms, and antonyms
+- Save words to your notebook with one click
+
+![Book Reader](docs/static/screenshots/book-reader.jpg)
+
+### Learn
+
+Browse your vocabulary and etymology notebooks to review what you've been studying.
+
+**Vocabulary** - View all saved words organized by the stories and scenes where you found them. Each word shows its definition, pronunciation, examples, learning status, and next review date.
+
+**Etymology** - Explore word origins (roots, prefixes, suffixes). Browse by origin or by meaning to see how words are related.
+
+![Learn](docs/static/screenshots/learn.jpg)
+
+![Notebook Words](docs/static/screenshots/notebook-words.jpg)
+
+### Quiz
+
+Test yourself with several quiz modes, all powered by spaced repetition:
+
+**Vocabulary Quizzes**
+- **Standard** - See a word, type its meaning
+- **Reverse** - See a meaning and context, type the word
+- **Freeform** - Recall any word and its meaning from memory
+
+**Etymology Quizzes**
+- **Breakdown** - See a word, identify its origins and their meanings
+- **Assembly** - See the origins, type the complete word
+- **Freeform** - Recall a word and break down its etymology
+
+After each answer, you get feedback with the correct answer, examples, and pronunciation. You can override results if you think you were marked incorrectly, or skip words you want to exclude from future quizzes.
+
+At the end of a session, a results page shows your score and lets you review incorrect answers.
+
+![Quiz](docs/static/screenshots/quiz.jpg)
+
+![Quiz Setup](docs/static/screenshots/quiz-setup.jpg)
+
+### Export PDF
+
+From any notebook page, export a formatted PDF with all your words, definitions, examples, and pronunciations. Useful for offline review or printing.
+
+## Configuration
+
+Edit `config.yml` to set your directories for notebooks, dictionaries, templates, and outputs. See `config.example.yml` for all available options.
+
+### Environment Variables
+
+| Variable | Required For | Description |
+|----------|-------------|-------------|
+| `OPENAI_API_KEY` | Quizzes | OpenAI API key for quiz answer evaluation |
+| `OPENAI_MODEL` | Quizzes (optional) | Model to use, defaults to `gpt-4o-mini` |
+| `RAPID_API_HOST` | Dictionary lookup | Set to `wordsapiv1.p.rapidapi.com` |
+| `RAPID_API_KEY` | Dictionary lookup | Get at [RapidAPI](https://rapidapi.com/dpventures/api/wordsapi) |
 
 ## License
 

@@ -149,7 +149,11 @@ func newNotebookCommand() *cobra.Command {
 				return fmt.Errorf("notebook.NewReader() > %w", err)
 			}
 
-			writer := notebook.NewEtymologyNotebookWriter(reader, cfg.Templates.EtymologyNotebookTemplate, cfg.Notebooks.DefinitionsDirectories)
+			learningHistories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
+			if err != nil {
+				return fmt.Errorf("notebook.NewLearningHistories() > %w", err)
+			}
+			writer := notebook.NewEtymologyNotebookWriter(reader, cfg.Templates.EtymologyNotebookTemplate, cfg.Notebooks.DefinitionsDirectories, learningHistories)
 			if err := writer.OutputEtymologyNotebook(etymologyID, cfg.Outputs.EtymologyDirectory, etymologyGeneratePDF); err != nil {
 				return fmt.Errorf("writer.OutputEtymologyNotebook > %w", err)
 			}

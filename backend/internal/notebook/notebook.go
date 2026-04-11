@@ -33,7 +33,7 @@ const (
 	LearnedStatusLearning        LearnedStatus = ""
 	LearnedStatusMisunderstood   LearnedStatus = "misunderstood"
 	LearnedStatusUnderstood      LearnedStatus = "understood"
-	learnedStatusCanBeUsed       LearnedStatus = "usable"
+	LearnedStatusCanBeUsed       LearnedStatus = "usable"
 	learnedStatusIntuitivelyUsed LearnedStatus = "intuitive"
 )
 
@@ -80,6 +80,9 @@ type Note struct {
 
 	// Deprecated: This was moved to LearningHistory
 	LearnedLogs []LearningRecord `yaml:"learned_logs,omitempty"`
+	// ReverseLogs is hydrated by FilterStoryNotebooks from the learning
+	// history's ReverseLogs track. Not serialised to YAML.
+	ReverseLogs []LearningRecord `yaml:"-"`
 	NotUsed     bool             `yaml:"not_used,omitempty"`
 
 	// only for template rendering
@@ -141,7 +144,7 @@ func (note Note) getLearnScore() int {
 			score -= 5
 		case LearnedStatusUnderstood:
 			score += 10
-		case learnedStatusCanBeUsed:
+		case LearnedStatusCanBeUsed:
 			score += 1_000
 		case learnedStatusIntuitivelyUsed:
 			score += 100_000
@@ -237,23 +240,37 @@ func (note *Note) needsToLearn() bool {
 	return now.After(lastLearnedResult.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
 }
 
-// needsToLearnInNotebook returns true if the note should be shown in notebook quiz.
-// Notebook quiz shows words that have no correct answers (never practiced) or
-// have a misunderstood latest answer.
+// needsToLearnInNotebook returns true if the note should be shown in notebook
+// output / PDF. A word is included if ANY quiz track needs attention:
+//   - Forward track: no correct answers yet, or latest is misunderstood
+//   - Reverse track: latest is misunderstood (when ReverseLogs are populated)
 func (note *Note) needsToLearnInNotebook() bool {
-	// Show if no correct answers (never practiced successfully)
+	// Forward track check
+	forwardNeedsLearn := false
 	if !note.hasAnyCorrectAnswer() {
+		forwardNeedsLearn = true
+	} else if len(note.LearnedLogs) > 0 {
+		sort.Slice(note.LearnedLogs, func(i, j int) bool {
+			return note.LearnedLogs[i].LearnedAt.After(note.LearnedLogs[j].LearnedAt.Time)
+		})
+		forwardNeedsLearn = note.LearnedLogs[0].Status == LearnedStatusMisunderstood
+	}
+
+	if forwardNeedsLearn {
 		return true
 	}
 
-	// Show if latest answer is misunderstood
-	if len(note.LearnedLogs) == 0 {
-		return true
+	// Reverse track check (only when logs are populated by the caller)
+	if len(note.ReverseLogs) > 0 {
+		sort.Slice(note.ReverseLogs, func(i, j int) bool {
+			return note.ReverseLogs[i].LearnedAt.After(note.ReverseLogs[j].LearnedAt.Time)
+		})
+		if note.ReverseLogs[0].Status == LearnedStatusMisunderstood {
+			return true
+		}
 	}
-	sort.Slice(note.LearnedLogs, func(i, j int) bool {
-		return note.LearnedLogs[i].LearnedAt.After(note.LearnedLogs[j].LearnedAt.Time)
-	})
-	return note.LearnedLogs[0].Status == LearnedStatusMisunderstood
+
+	return false
 }
 
 func (note Note) hasAnyCorrectAnswer() bool {
@@ -263,12 +280,24 @@ func (note Note) hasAnyCorrectAnswer() bool {
 
 	for _, log := range note.LearnedLogs {
 		if log.Status == LearnedStatusUnderstood ||
-			log.Status == learnedStatusCanBeUsed ||
+			log.Status == LearnedStatusCanBeUsed ||
 			log.Status == learnedStatusIntuitivelyUsed {
 			return true
 		}
 	}
 
+	return false
+}
+
+// hasFreeformAnswer returns true if any LearnedLog entry was recorded by the
+// freeform quiz. Vocabulary words must be answered in freeform mode first before
+// becoming eligible for standard or reverse quizzes.
+func (note Note) hasFreeformAnswer() bool {
+	for _, log := range note.LearnedLogs {
+		if log.QuizType == string(QuizTypeFreeform) {
+			return true
+		}
+	}
 	return false
 }
 

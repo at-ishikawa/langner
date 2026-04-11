@@ -1,0 +1,5 @@
+id: common-roots
+kind: Etymology
+name: "Common Latin and Greek Roots"
+notebooks:
+  - ./origins.yml

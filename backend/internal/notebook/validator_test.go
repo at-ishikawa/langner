@@ -1378,7 +1378,7 @@ func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 									{
 										Expression: "ovulate",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
 										},
 									},
 								},
@@ -1423,7 +1423,7 @@ func TestValidator_DuplicateExpressionsAcrossScenes(t *testing.T) {
 									{
 										Expression: "ovulate",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC))},
 										},
 									},
 								},
@@ -2047,7 +2047,7 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 									{
 										Expression: "break the ice",
 										ReverseLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
 										},
 									},
 								},
@@ -2087,7 +2087,7 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 									{
 										Expression: "lose one's temper",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
 										},
 									},
 								},
@@ -2130,10 +2130,10 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 									{
 										Expression: "hit the road",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
 										},
 										ReverseLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
 										},
 									},
 								},
@@ -2187,7 +2187,7 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 									{
 										Expression: "break the ice",
 										ReverseLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
 										},
 									},
 								},
@@ -2237,7 +2237,7 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 									{
 										Expression: "lose one's temper",
 										LearnedLogs: []LearningRecord{
-											{Status: learnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
+											{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)), Quality: 5},
 										},
 									},
 								},

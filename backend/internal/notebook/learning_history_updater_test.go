@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNormalizeTitle(t *testing.T) {
+func TestNormalizeQuotes(t *testing.T) {
 	tests := []struct {
 		name  string
 		input string
@@ -20,19 +20,14 @@ func TestNormalizeTitle(t *testing.T) {
 			want:  "Scene Title",
 		},
 		{
-			name:  "leading and trailing whitespace",
-			input: "  Scene Title  ",
-			want:  "Scene Title",
+			name:  "smart single quotes to ASCII",
+			input: "it\u2019s time",
+			want:  "it's time",
 		},
 		{
-			name:  "multiple internal spaces",
-			input: "Scene   Title",
-			want:  "Scene Title",
-		},
-		{
-			name:  "newlines and tabs",
-			input: "Scene\n\tTitle",
-			want:  "Scene Title",
+			name:  "smart double quotes to ASCII",
+			input: "\u201CHello\u201D",
+			want:  "\"Hello\"",
 		},
 		{
 			name:  "empty string",
@@ -43,7 +38,7 @@ func TestNormalizeTitle(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := normalizeTitle(tt.input)
+			got := normalizeQuotes(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
 	}
@@ -495,7 +490,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusCanBeUsed,
+			wantStatus:      LearnedStatusCanBeUsed,
 		},
 		{
 			name: "Create new story in existing history",
@@ -575,7 +570,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 										{
-											Status:    learnedStatusCanBeUsed,
+											Status:    LearnedStatusCanBeUsed,
 											LearnedAt: Date{Time: time.Date(2025, 1, 2, 0, 0, 0, 0, time.UTC)},
 										},
 									},
@@ -626,7 +621,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 									Expression: "word2",
 									LearnedLogs: []LearningRecord{
 										{
-											Status:    learnedStatusCanBeUsed,
+											Status:    LearnedStatusCanBeUsed,
 											LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)},
 										},
 									},
@@ -683,7 +678,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       true,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusCanBeUsed,
+			wantStatus:      LearnedStatusCanBeUsed,
 			wantLogs:        1,
 		},
 		{
@@ -796,7 +791,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 			quizType:        QuizTypeFreeform,
 			wantFound:       false,
 			wantExpressions: 1,
-			wantStatus:      learnedStatusCanBeUsed,
+			wantStatus:      LearnedStatusCanBeUsed,
 			wantScenesLen:   2,
 		},
 		{

@@ -305,12 +305,17 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 						scene.Title,
 						definition,
 					)
-					if len(logs) == 0 {
-						continue
+					if len(logs) > 0 {
+						definition.LearnedLogs = logs
 					}
-
-					// todo: Fix this!! temporary mitigation
-					definition.LearnedLogs = logs
+					reverseLogs := h.GetReverseLogs(
+						notebook.Event,
+						scene.Title,
+						definition,
+					)
+					if len(reverseLogs) > 0 {
+						definition.ReverseLogs = reverseLogs
+					}
 				}
 
 				if strings.TrimSpace(definition.Expression) == "" {
@@ -319,6 +324,12 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 
 				// Skip words that are marked as skipped in learning history
 				if isExpressionSkipped(learningHistory, notebook.Event, scene.Title, definition) {
+					continue
+				}
+
+				// Words must be answered in freeform mode first before they
+				// become eligible for standard or reverse quizzes.
+				if !definition.hasFreeformAnswer() {
 					continue
 				}
 
