@@ -1,0 +1,36 @@
+- metadata:
+    title: "Letter I"
+  scenes:
+    - metadata:
+        index: 0
+      expressions:
+        - expression: rejoice
+          meaning: to feel or show great joy or delight
+          part_of_speech: verb
+          pronunciation: "/rɪˈdʒɔɪs/"
+          examples:
+            - "The crowd rejoiced when the team scored the winning goal."
+        - expression: commencement
+          meaning: the beginning or start of something
+          part_of_speech: noun
+          pronunciation: "/kəˈmɛnsmənt/"
+          origin_parts:
+            - origin: com
+              language: Latin
+            - origin: ment
+              language: Latin
+        - expression: foreboding
+          definition: forebodings
+          meaning: a feeling that something bad will happen; fearful apprehension
+          part_of_speech: noun
+          pronunciation: "/fɔːrˈboʊdɪŋ/"
+    - metadata:
+        index: 1
+      expressions:
+        - expression: braces
+          definition: brace
+          meaning: to make stronger or firmer; to invigorate
+          part_of_speech: verb
+          pronunciation: "/breɪs/"
+          examples:
+            - "She braced herself for the cold wind."

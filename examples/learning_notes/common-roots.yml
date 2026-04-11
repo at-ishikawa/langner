@@ -1,0 +1,25 @@
+- metadata:
+    notebook_id: common-roots
+    title: "Common Latin and Greek Roots"
+  expressions:
+    - expression: bene
+      etymology_breakdown_logs:
+        - status: usable
+          learned_at: "2025-12-10T00:00:00Z"
+          quality: 4
+          quiz_type: etymology_freeform
+          interval_days: 30
+    - expression: mal
+      etymology_breakdown_logs:
+        - status: misunderstood
+          learned_at: "2025-12-13T00:00:00Z"
+          quality: 1
+          quiz_type: etymology_freeform
+          interval_days: 1
+    - expression: dict
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-12-12T00:00:00Z"
+          quality: 4
+          quiz_type: etymology_freeform
+          interval_days: 7
