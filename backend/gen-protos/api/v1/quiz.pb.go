@@ -220,8 +220,11 @@ type NotebookSummary struct {
 	Kind                 string                 `protobuf:"bytes,4,opt,name=kind,proto3" json:"kind,omitempty"`
 	ReverseReviewCount   int32                  `protobuf:"varint,5,opt,name=reverse_review_count,json=reverseReviewCount,proto3" json:"reverse_review_count,omitempty"`
 	EtymologyReviewCount int32                  `protobuf:"varint,6,opt,name=etymology_review_count,json=etymologyReviewCount,proto3" json:"etymology_review_count,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// has_content is true when any scene in the notebook has statements or
+	// conversations — i.e., there is prose/dialogue to read, not just flashcards.
+	HasContent    bool `protobuf:"varint,7,opt,name=has_content,json=hasContent,proto3" json:"has_content,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NotebookSummary) Reset() {
@@ -294,6 +297,13 @@ func (x *NotebookSummary) GetEtymologyReviewCount() int32 {
 		return x.EtymologyReviewCount
 	}
 	return 0
+}
+
+func (x *NotebookSummary) GetHasContent() bool {
+	if x != nil {
+		return x.HasContent
+	}
+	return false
 }
 
 type StartQuizRequest struct {
@@ -2736,7 +2746,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11api/v1/quiz.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"\x17\n" +
 	"\x15GetQuizOptionsRequest\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
-	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xe5\x01\n" +
+	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\x86\x02\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
@@ -2744,7 +2754,9 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\freview_count\x18\x03 \x01(\x05R\vreviewCount\x12\x12\n" +
 	"\x04kind\x18\x04 \x01(\tR\x04kind\x120\n" +
 	"\x14reverse_review_count\x18\x05 \x01(\x05R\x12reverseReviewCount\x124\n" +
-	"\x16etymology_review_count\x18\x06 \x01(\x05R\x14etymologyReviewCount\"l\n" +
+	"\x16etymology_review_count\x18\x06 \x01(\x05R\x14etymologyReviewCount\x12\x1f\n" +
+	"\vhas_content\x18\a \x01(\bR\n" +
+	"hasContent\"l\n" +
 	"\x10StartQuizRequest\x12+\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tB\b\xbaH\x05\x92\x01\x02\b\x01R\vnotebookIds\x12+\n" +
 	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"F\n" +

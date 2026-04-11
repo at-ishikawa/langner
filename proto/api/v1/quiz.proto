@@ -54,6 +54,9 @@ message NotebookSummary {
   string kind = 4;
   int32 reverse_review_count = 5;
   int32 etymology_review_count = 6;
+  // has_content is true when any scene in the notebook has statements or
+  // conversations — i.e., there is prose/dialogue to read, not just flashcards.
+  bool has_content = 7;
 }
 
 message StartQuizRequest {

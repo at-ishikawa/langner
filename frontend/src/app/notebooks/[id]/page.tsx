@@ -80,10 +80,14 @@ function isFlatStory(story: StoryEntry): boolean {
   return story.scenes.length === 1 && !story.scenes[0].title;
 }
 
-// Check if notebook is a book (has scenes with statements)
-function isBookNotebook(data: GetNotebookDetailResponse): boolean {
+// hasReadableContent returns true when any scene carries prose or dialogue —
+// i.e., the content reader at /learn/[id] has something to render.
+function hasReadableContent(data: GetNotebookDetailResponse): boolean {
   return data.stories.some((story) =>
-    story.scenes.some((scene) => scene.statements.length > 0),
+    story.scenes.some(
+      (scene) =>
+        scene.statements.length > 0 || scene.conversations.length > 0,
+    ),
   );
 }
 
@@ -315,10 +319,10 @@ export default function NotebookDetailPage() {
             </Text>
           </Box>
           <Box display="flex" gap={2}>
-            {isBookNotebook(data) && (
-              <Link href={`/books/${id}`}>
+            {hasReadableContent(data) && (
+              <Link href={`/learn/${id}`}>
                 <Button size="sm" variant="outline">
-                  Read Book
+                  Read
                 </Button>
               </Link>
             )}

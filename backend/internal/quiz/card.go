@@ -54,6 +54,9 @@ type NotebookSummary struct {
 	EtymologyReviewCount  int
 	LatestStoryDate       time.Time
 	Kind                  string
+	// HasContent is true when any scene in the notebook has statements or
+	// conversations — i.e., there is prose/dialogue to read, not just flashcards.
+	HasContent bool
 }
 
 // GradeResult holds the outcome of grading a user's answer.

@@ -149,7 +149,11 @@ export default function LearnHubPage() {
               {vocabularyNotebooks.map((notebook) => (
                 <Link
                   key={notebook.notebookId}
-                  href={`/notebooks/${notebook.notebookId}`}
+                  href={
+                    notebook.hasContent
+                      ? `/learn/${notebook.notebookId}`
+                      : `/notebooks/${notebook.notebookId}`
+                  }
                 >
                   <Box
                     p={4}

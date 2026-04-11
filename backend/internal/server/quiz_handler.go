@@ -70,6 +70,7 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 			NotebookId: s.NotebookID, Name: s.Name, ReviewCount: int32(s.ReviewCount),
 			Kind: s.Kind, ReverseReviewCount: int32(s.ReverseReviewCount),
 			EtymologyReviewCount: int32(s.EtymologyReviewCount),
+			HasContent:           s.HasContent,
 		})
 	}
 	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{Notebooks: protoSummaries}), nil
