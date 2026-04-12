@@ -2,7 +2,7 @@
 <html>
 <head><title>Learn English with Stories - YouTube</title></head>
 <body>
-<!-- Minimal fixture mimicking the YouTube DOM elements the scraper reads. -->
+<!-- Fixture mimicking YouTube's real DOM layout (2025-2026). -->
 
 <!-- Video title -->
 <ytd-watch-metadata>
@@ -18,32 +18,51 @@
   </div>
 </ytd-video-owner-renderer>
 
-<!-- Transcript panel segments -->
-<ytd-transcript-renderer>
-  <ytd-transcript-segment-list-renderer>
+<!-- Transcript panel — lives inside an engagement panel. The key
+     container is #segments-container with ytd-transcript-segment-renderer
+     children. Each renderer has .segment-timestamp and .segment-text. -->
+<ytd-engagement-panel-section-list-renderer target-id="engagement-panel-searchable-transcript" visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED">
+  <div id="content">
+    <ytd-transcript-renderer>
+      <div id="body">
+        <ytd-transcript-search-panel-renderer></ytd-transcript-search-panel-renderer>
+        <ytd-transcript-segment-list-renderer>
+          <div id="segments-container">
 
-    <ytd-transcript-segment-renderer>
-      <div class="segment-timestamp">0:00</div>
-      <yt-formatted-string class="segment-text">Hello everyone and welcome.</yt-formatted-string>
-    </ytd-transcript-segment-renderer>
+            <ytd-transcript-segment-renderer>
+              <div class="segment-start-offset" style="width: 75px;">
+                <div class="segment-timestamp">0:00</div>
+              </div>
+              <yt-formatted-string class="segment-text">Hello everyone and welcome.</yt-formatted-string>
+            </ytd-transcript-segment-renderer>
 
-    <ytd-transcript-segment-renderer>
-      <div class="segment-timestamp">0:05</div>
-      <yt-formatted-string class="segment-text">Today we are going to talk about stories.</yt-formatted-string>
-    </ytd-transcript-segment-renderer>
+            <ytd-transcript-segment-renderer>
+              <div class="segment-start-offset" style="width: 75px;">
+                <div class="segment-timestamp">0:05</div>
+              </div>
+              <yt-formatted-string class="segment-text">Today we are going to talk about stories.</yt-formatted-string>
+            </ytd-transcript-segment-renderer>
 
-    <ytd-transcript-segment-renderer>
-      <div class="segment-timestamp">2:00</div>
-      <yt-formatted-string class="segment-text">Now let us look at part two.</yt-formatted-string>
-    </ytd-transcript-segment-renderer>
+            <ytd-transcript-segment-renderer>
+              <div class="segment-start-offset" style="width: 75px;">
+                <div class="segment-timestamp">2:00</div>
+              </div>
+              <yt-formatted-string class="segment-text">Now let us look at part two.</yt-formatted-string>
+            </ytd-transcript-segment-renderer>
 
-    <ytd-transcript-segment-renderer>
-      <div class="segment-timestamp">2:05</div>
-      <yt-formatted-string class="segment-text">This section covers new vocabulary.</yt-formatted-string>
-    </ytd-transcript-segment-renderer>
+            <ytd-transcript-segment-renderer>
+              <div class="segment-start-offset" style="width: 75px;">
+                <div class="segment-timestamp">2:05</div>
+              </div>
+              <yt-formatted-string class="segment-text">This section covers new vocabulary.</yt-formatted-string>
+            </ytd-transcript-segment-renderer>
 
-  </ytd-transcript-segment-list-renderer>
-</ytd-transcript-renderer>
+          </div>
+        </ytd-transcript-segment-list-renderer>
+      </div>
+    </ytd-transcript-renderer>
+  </div>
+</ytd-engagement-panel-section-list-renderer>
 
 <!-- Chapter markers -->
 <ytd-macro-markers-list-renderer>

@@ -169,7 +169,8 @@ async function scrapeActiveTab(): Promise<ScrapedVideo> {
 
 // This function is serialized and injected into the YouTube tab via
 // chrome.scripting.executeScript. It cannot reference closures — all
-// logic must be self-contained.
+// logic must be self-contained. It mirrors the multi-strategy approach
+// in src/youtube/scraper.ts.
 function scrapeInPage(): ScrapedVideo {
   function parseTs(ts: string): number {
     const parts = ts.split(":").map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
@@ -177,6 +178,31 @@ function scrapeInPage(): ScrapedVideo {
     if (parts.length === 1) return parts[0]! * 1000;
     if (parts.length === 2) return (parts[0]! * 60 + parts[1]!) * 1000;
     return (parts[0]! * 3600 + parts[1]! * 60 + parts[2]!) * 1000;
+  }
+
+  function findTimestamp(seg: Element): string {
+    for (const sel of [".segment-timestamp", "[class*='timestamp']", "div.segment-start-offset"]) {
+      const el = seg.querySelector(sel);
+      if (el?.textContent?.trim()) return el.textContent.trim();
+    }
+    return "";
+  }
+
+  function findText(seg: Element): string {
+    for (const sel of [".segment-text", "yt-formatted-string.segment-text", ".yt-core-attributed-string", "yt-formatted-string:not([class*='timestamp'])"]) {
+      const el = seg.querySelector(sel);
+      if (el?.textContent?.trim()) return el.textContent.trim();
+    }
+    return "";
+  }
+
+  function extractFromRenderers(segments: NodeListOf<Element>): Array<{ offsetMs: number; text: string }> {
+    const result: Array<{ offsetMs: number; text: string }> = [];
+    for (const seg of segments) {
+      const text = findText(seg);
+      if (text) result.push({ offsetMs: parseTs(findTimestamp(seg)), text });
+    }
+    return result;
   }
 
   const titleEl = document.querySelector("ytd-watch-metadata #title h1");
@@ -189,11 +215,35 @@ function scrapeInPage(): ScrapedVideo {
   let videoId = "";
   try { videoId = new URL(url).searchParams.get("v") ?? ""; } catch { /* noop */ }
 
-  const cues: Array<{ offsetMs: number; text: string }> = [];
-  for (const seg of document.querySelectorAll("ytd-transcript-segment-renderer")) {
-    const ts = seg.querySelector(".segment-timestamp")?.textContent?.trim() ?? "";
-    const txt = seg.querySelector(".segment-text")?.textContent?.trim() ?? "";
-    if (txt) cues.push({ offsetMs: parseTs(ts), text: txt });
+  // Multi-strategy cue extraction (same logic as src/youtube/scraper.ts)
+  let cues: Array<{ offsetMs: number; text: string }> = [];
+  const container = document.querySelector("#segments-container");
+  if (container) {
+    // Strategy 1a: ytd-transcript-segment-renderer inside #segments-container
+    let segments = container.querySelectorAll("ytd-transcript-segment-renderer");
+    if (segments.length > 0) cues = extractFromRenderers(segments);
+    // Strategy 1b: transcript-segment-view-model (newer March 2026 variant)
+    if (cues.length === 0) {
+      segments = container.querySelectorAll("transcript-segment-view-model");
+      if (segments.length > 0) cues = extractFromRenderers(segments);
+    }
+    // Strategy 1c: flat yt-formatted-string elements (timestamp/text alternating)
+    if (cues.length === 0) {
+      const tsPattern = /^\d{1,2}:\d{2}(:\d{2})?$/;
+      let pendingTs = "";
+      for (const el of container.querySelectorAll("yt-formatted-string")) {
+        const t = el.textContent?.trim() ?? "";
+        if (!t) continue;
+        if (tsPattern.test(t)) { pendingTs = t; }
+        else if (pendingTs) { cues.push({ offsetMs: parseTs(pendingTs), text: t }); pendingTs = ""; }
+        else { cues.push({ offsetMs: 0, text: t }); }
+      }
+    }
+  }
+  // Strategy 2: global ytd-transcript-segment-renderer
+  if (cues.length === 0) {
+    const segments = document.querySelectorAll("ytd-transcript-segment-renderer");
+    if (segments.length > 0) cues = extractFromRenderers(segments);
   }
 
   const chapters: Array<{ startMs: number; title: string }> = [];

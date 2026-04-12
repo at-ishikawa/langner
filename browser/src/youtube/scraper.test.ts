@@ -101,6 +101,29 @@ describe("scrapeYouTubePage", () => {
     });
   });
 
+  describe("newer transcript-segment-view-model layout", () => {
+    const doc = loadFixture("youtube-view-model-segments.html");
+    const result = scrapeYouTubePage(
+      doc,
+      "https://www.youtube.com/watch?v=newlayout",
+    );
+
+    it("extracts title and channel", () => {
+      expect(result.title).toBe("Newer YouTube Layout");
+      expect(result.channel).toBe("Test Channel");
+    });
+
+    it("extracts cues from transcript-segment-view-model elements", () => {
+      expect(result.cues).toHaveLength(3);
+      expect(result.cues[0]!.text).toBe("Welcome to the video.");
+      expect(result.cues[0]!.offsetMs).toBe(0);
+      expect(result.cues[1]!.text).toBe("Let us get started.");
+      expect(result.cues[1]!.offsetMs).toBe(4_000);
+      expect(result.cues[2]!.text).toBe("Here is the main topic.");
+      expect(result.cues[2]!.offsetMs).toBe(8_000);
+    });
+  });
+
   describe("title fallback", () => {
     it("falls back to page title when metadata element is missing", () => {
       const dom = new JSDOM(

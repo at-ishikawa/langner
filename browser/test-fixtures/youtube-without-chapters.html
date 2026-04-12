@@ -15,26 +15,40 @@
   </div>
 </ytd-video-owner-renderer>
 
-<ytd-transcript-renderer>
-  <ytd-transcript-segment-list-renderer>
+<ytd-engagement-panel-section-list-renderer target-id="engagement-panel-searchable-transcript" visibility="ENGAGEMENT_PANEL_VISIBILITY_EXPANDED">
+  <div id="content">
+    <ytd-transcript-renderer>
+      <div id="body">
+        <ytd-transcript-segment-list-renderer>
+          <div id="segments-container">
 
-    <ytd-transcript-segment-renderer>
-      <div class="segment-timestamp">0:00</div>
-      <yt-formatted-string class="segment-text">Welcome to my kitchen.</yt-formatted-string>
-    </ytd-transcript-segment-renderer>
+            <ytd-transcript-segment-renderer>
+              <div class="segment-start-offset">
+                <div class="segment-timestamp">0:00</div>
+              </div>
+              <yt-formatted-string class="segment-text">Welcome to my kitchen.</yt-formatted-string>
+            </ytd-transcript-segment-renderer>
 
-    <ytd-transcript-segment-renderer>
-      <div class="segment-timestamp">0:03</div>
-      <yt-formatted-string class="segment-text">Today I will show you a recipe.</yt-formatted-string>
-    </ytd-transcript-segment-renderer>
+            <ytd-transcript-segment-renderer>
+              <div class="segment-start-offset">
+                <div class="segment-timestamp">0:03</div>
+              </div>
+              <yt-formatted-string class="segment-text">Today I will show you a recipe.</yt-formatted-string>
+            </ytd-transcript-segment-renderer>
 
-    <ytd-transcript-segment-renderer>
-      <div class="segment-timestamp">0:06</div>
-      <yt-formatted-string class="segment-text">First we need some flour.</yt-formatted-string>
-    </ytd-transcript-segment-renderer>
+            <ytd-transcript-segment-renderer>
+              <div class="segment-start-offset">
+                <div class="segment-timestamp">0:06</div>
+              </div>
+              <yt-formatted-string class="segment-text">First we need some flour.</yt-formatted-string>
+            </ytd-transcript-segment-renderer>
 
-  </ytd-transcript-segment-list-renderer>
-</ytd-transcript-renderer>
+          </div>
+        </ytd-transcript-segment-list-renderer>
+      </div>
+    </ytd-transcript-renderer>
+  </div>
+</ytd-engagement-panel-section-list-renderer>
 
 <!-- No chapter markers -->
 
