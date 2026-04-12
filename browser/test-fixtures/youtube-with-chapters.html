@@ -1,0 +1,64 @@
+<!doctype html>
+<html>
+<head><title>Learn English with Stories - YouTube</title></head>
+<body>
+<!-- Minimal fixture mimicking the YouTube DOM elements the scraper reads. -->
+
+<!-- Video title -->
+<ytd-watch-metadata>
+  <div id="title">
+    <h1><yt-formatted-string>Learn English with Stories</yt-formatted-string></h1>
+  </div>
+</ytd-watch-metadata>
+
+<!-- Channel name -->
+<ytd-video-owner-renderer>
+  <div id="channel-name">
+    <a href="/c/EnglishLessons">English Lessons</a>
+  </div>
+</ytd-video-owner-renderer>
+
+<!-- Transcript panel segments -->
+<ytd-transcript-renderer>
+  <ytd-transcript-segment-list-renderer>
+
+    <ytd-transcript-segment-renderer>
+      <div class="segment-timestamp">0:00</div>
+      <yt-formatted-string class="segment-text">Hello everyone and welcome.</yt-formatted-string>
+    </ytd-transcript-segment-renderer>
+
+    <ytd-transcript-segment-renderer>
+      <div class="segment-timestamp">0:05</div>
+      <yt-formatted-string class="segment-text">Today we are going to talk about stories.</yt-formatted-string>
+    </ytd-transcript-segment-renderer>
+
+    <ytd-transcript-segment-renderer>
+      <div class="segment-timestamp">2:00</div>
+      <yt-formatted-string class="segment-text">Now let us look at part two.</yt-formatted-string>
+    </ytd-transcript-segment-renderer>
+
+    <ytd-transcript-segment-renderer>
+      <div class="segment-timestamp">2:05</div>
+      <yt-formatted-string class="segment-text">This section covers new vocabulary.</yt-formatted-string>
+    </ytd-transcript-segment-renderer>
+
+  </ytd-transcript-segment-list-renderer>
+</ytd-transcript-renderer>
+
+<!-- Chapter markers -->
+<ytd-macro-markers-list-renderer>
+
+  <ytd-macro-markers-list-item-renderer>
+    <h4 id="details"><a id="endpoint"><span id="title">Introduction</span></a></h4>
+    <div id="time">0:00</div>
+  </ytd-macro-markers-list-item-renderer>
+
+  <ytd-macro-markers-list-item-renderer>
+    <h4 id="details"><a id="endpoint"><span id="title">Vocabulary</span></a></h4>
+    <div id="time">2:00</div>
+  </ytd-macro-markers-list-item-renderer>
+
+</ytd-macro-markers-list-renderer>
+
+</body>
+</html>

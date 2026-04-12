@@ -15,3 +15,10 @@ frontend/node_modules/
 frontend/.next/
 frontend/next-env.d.ts
 langner-server
+
+# Browser extension
+browser/node_modules/
+browser/.output/
+browser/.wxt/
+browser/test-results/
+browser/playwright-report/
