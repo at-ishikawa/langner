@@ -324,7 +324,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc)
+			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc, false)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.wantErrMsg != "" {
@@ -343,4 +343,30 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFilterFlashcardNotebooks_IncludeUnstudied(t *testing.T) {
+	now := time.Now()
+
+	notebooks := []FlashcardNotebook{
+		{
+			Title: "Unit 1",
+			Date:  now,
+			Cards: []Note{
+				{Expression: "hello", Meaning: "a greeting"},
+				{Expression: "goodbye", Meaning: "a farewell"},
+			},
+		},
+	}
+
+	// With includeUnstudied=true, new cards with no learning history appear.
+	result, err := FilterFlashcardNotebooks(notebooks, nil, nil, false, true)
+	require.NoError(t, err)
+	require.Len(t, result, 1)
+	assert.Len(t, result[0].Cards, 2)
+
+	// With includeUnstudied=false, new cards are excluded (freeform-first gate).
+	result, err = FilterFlashcardNotebooks(notebooks, nil, nil, false, false)
+	require.NoError(t, err)
+	assert.Len(t, result, 0)
 }

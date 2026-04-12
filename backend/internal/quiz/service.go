@@ -76,7 +76,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 
 		filtered, err := notebook.FilterStoryNotebooks(
 			stories, learningHistories[id], s.dictionaryMap,
-			false, false, true, false,
+			false, false, true, false, false,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter story notebook %q: %w", id, err)
@@ -109,7 +109,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		}
 
 		filtered, err := notebook.FilterFlashcardNotebooks(
-			notebooks, learningHistories[id], s.dictionaryMap, false,
+			notebooks, learningHistories[id], s.dictionaryMap, false, false,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
@@ -304,7 +304,7 @@ func (s *Service) loadStoryCards(
 
 	filtered, err := notebook.FilterStoryNotebooks(
 		stories, learningHistories[notebookID], s.dictionaryMap,
-		false, includeUnstudied, true, false,
+		false, includeUnstudied, true, false, false,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter story notebook %q: %w", notebookID, err)
@@ -356,7 +356,7 @@ func (s *Service) loadFlashcardCards(
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], s.dictionaryMap, includeUnstudied,
+		notebooks, learningHistories[notebookID], s.dictionaryMap, includeUnstudied, false,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
