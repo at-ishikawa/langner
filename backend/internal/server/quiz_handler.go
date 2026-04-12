@@ -282,7 +282,7 @@ func (h *QuizHandler) ResumeWord(ctx context.Context, req *connect.Request[apiv1
 
 func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyQuizRequest]) (*connect.Response[apiv1.StartEtymologyQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetIncludeUnstudied())
+	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetIncludeUnstudied(), false)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	localStore := make(map[int64]quiz.EtymologyOriginCard); var nextID int64 = 1
 	var protoCards []*apiv1.EtymologyQuizCard
@@ -326,7 +326,7 @@ func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *con
 
 func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest]) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), true)
+	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), true, true)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	nextReviewDates, err := h.svc.GetEtymologyOriginNextReviewDates(cards)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err)) }

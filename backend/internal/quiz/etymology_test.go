@@ -89,6 +89,7 @@ func TestService_LoadEtymologyOriginCards(t *testing.T) {
 	cards, err := svc.LoadEtymologyOriginCards(
 		[]string{"latin-roots"},
 		true,
+		true,
 	)
 	require.NoError(t, err)
 
@@ -181,11 +182,16 @@ notebooks:
 		config.QuizConfig{},
 	)
 
-	// Even with includeUnstudied=true, only root-b should be eligible.
-	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true)
+	// When skipEligibility is false, only root-b should be eligible (standard/reverse gate).
+	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, false)
 	require.NoError(t, err)
 	require.Len(t, cards, 1, "only origins that were freeformed AND answered correctly should be eligible")
 	assert.Equal(t, "root-b", cards[0].Origin)
+
+	// When skipEligibility is true (freeform mode), ALL origins are returned.
+	freeformCards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, true)
+	require.NoError(t, err)
+	require.Len(t, freeformCards, 4, "freeform quiz should see all origins regardless of eligibility")
 }
 
 func TestService_LoadEtymologyOriginCards_Deduplicates(t *testing.T) {
@@ -246,7 +252,7 @@ notebooks:
 		config.QuizConfig{},
 	)
 
-	cards, err := svc.LoadEtymologyOriginCards([]string{"roots-1", "roots-2"}, true)
+	cards, err := svc.LoadEtymologyOriginCards([]string{"roots-1", "roots-2"}, true, true)
 	require.NoError(t, err)
 	assert.Len(t, cards, 1, "duplicate origins should be deduplicated")
 }
