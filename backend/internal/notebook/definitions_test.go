@@ -140,11 +140,13 @@ func TestNewDefinitionsMap(t *testing.T) {
     notebook: chapter-1.yml
   scenes:
     - metadata:
+        index: 0
         title: First Scene
       expressions:
         - expression: first
           meaning: first word
     - metadata:
+        index: 1
         title: Second Scene
       expressions:
         - expression: second
@@ -248,6 +250,40 @@ func TestNewDefinitionsMap(t *testing.T) {
 						"__index_0": []Note{
 							{Expression: "colossal", DictionaryNumber: 1},
 							{Expression: "test", Meaning: "a test meaning", DictionaryNumber: 2},
+						},
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "declared index differs from array position",
+			setup: func(t *testing.T) string {
+				dir := t.TempDir()
+				// The definitions file has only one scene, but it declares
+				// index: 1 (the second scene in the story). The array
+				// position is 0, so the current code stores it at
+				// __index_0 instead of __index_1.
+				content := `- metadata:
+    title: Episode 1
+  scenes:
+    - metadata:
+        index: 1
+        title: At the office
+      expressions:
+        - expression: break the ice
+          meaning: initiate conversation in a social setting
+`
+				err := os.WriteFile(filepath.Join(dir, "show.yml"), []byte(content), 0644)
+				require.NoError(t, err)
+				return dir
+			},
+			directories: nil,
+			want: DefinitionsMap{
+				"show": {
+					"Episode 1": {
+						"__index_1": []Note{
+							{Expression: "break the ice", Meaning: "initiate conversation in a social setting"},
 						},
 					},
 				},
@@ -451,6 +487,53 @@ func TestMergeDefinitionsIntoNotebooks(t *testing.T) {
 							Definitions: []Note{
 								{Expression: "test", Meaning: "a test word"},
 							},
+						},
+					},
+				},
+			},
+		},
+		{
+			name:   "definitions at declared index merge into correct scene",
+			bookID: "show",
+			notebooks: []StoryNotebook{
+				{
+					Event: "Episode 1",
+					Scenes: []StoryScene{
+						{
+							Title:         "Opening",
+							Conversations: []Conversation{{Speaker: "Alice", Quote: "Good morning everyone."}},
+						},
+						{
+							Title:         "At the office",
+							Conversations: []Conversation{{Speaker: "Bob", Quote: "Let me break the ice here."}},
+						},
+					},
+				},
+			},
+			notebookPaths: []string{"season1.yml"},
+			definitionsMap: DefinitionsMap{
+				"show": {
+					"Episode 1": {
+						// Definitions belong to scene index 1 ("At the office"),
+						// NOT scene index 0 ("Opening").
+						"__index_1": []Note{
+							{Expression: "break the ice", Meaning: "initiate conversation in a social setting"},
+						},
+					},
+				},
+			},
+			want: []StoryNotebook{
+				{
+					Event: "Episode 1",
+					Scenes: []StoryScene{
+						{
+							Title:         "Opening",
+							Conversations: []Conversation{{Speaker: "Alice", Quote: "Good morning everyone."}},
+						},
+						{
+							Title:         "At the office",
+							Conversations: []Conversation{{Speaker: "Bob", Quote: "Let me break the ice here."}},
+							Definitions:   []Note{{Expression: "break the ice", Meaning: "initiate conversation in a social setting"}},
 						},
 					},
 				},

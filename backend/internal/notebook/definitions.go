@@ -89,10 +89,8 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) erro
 			result[bookID][key] = make(map[string][]Note)
 		}
 
-		for i, scene := range def.Scenes {
-			// Use array position as key to avoid duplication when multiple
-			// scenes share the same title (e.g., "In Monica's apartment")
-			sceneKey := fmt.Sprintf("__index_%d", i)
+		for _, scene := range def.Scenes {
+			sceneKey := fmt.Sprintf("__index_%d", scene.Metadata.GetIndex())
 			result[bookID][key][sceneKey] = append(
 				result[bookID][key][sceneKey],
 				scene.Expressions...,
