@@ -85,16 +85,11 @@ func (notebook *FlashcardNotebook) Validate(location string) []ValidationError {
 // FilterFlashcardNotebooks filters flashcard notebooks based on learning history
 // and spaced repetition algorithm, similar to FilterStoryNotebooks.
 // It returns only the cards that need to be learned based on the learning history.
-// When includeUnstudied is true the freeform-first gate is skipped so that
-// brand-new cards (no learning history) appear in the output — this is the
-// right behaviour for notebook/PDF generation, where the user wants to see
-// everything they need to study. Quiz summary counting should pass false.
 func FilterFlashcardNotebooks(
 	flashcardNotebooks []FlashcardNotebook,
 	learningHistory []LearningHistory,
 	dictionaryMap map[string]rapidapi.Response,
 	sortDesc bool,
-	includeUnstudied bool,
 ) ([]FlashcardNotebook, error) {
 	result := make([]FlashcardNotebook, 0)
 
@@ -131,13 +126,6 @@ func FilterFlashcardNotebooks(
 
 			// Skip words that are marked as skipped in learning history
 			if isExpressionSkipped(learningHistory, notebook.Title, "", card) {
-				continue
-			}
-
-			// Words must be answered in freeform mode first before they
-			// become eligible for standard or reverse quizzes. Skipped
-			// when generating notebook/PDF output so new cards appear.
-			if !includeUnstudied && !card.hasFreeformAnswer() {
 				continue
 			}
 

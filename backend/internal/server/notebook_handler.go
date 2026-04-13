@@ -342,7 +342,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 	}
 
 	preserveOrder := reader.IsBook(notebookID)
-	filtered, err := notebook.FilterStoryNotebooks(storyNotebooks, learningHistory, h.dictionaryMap, false, true, false, preserveOrder, true)
+	filtered, err := notebook.FilterStoryNotebooks(storyNotebooks, learningHistory, h.dictionaryMap, false, true, false, preserveOrder)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("filter story notebooks: %w", err))
 	}

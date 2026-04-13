@@ -288,7 +288,7 @@ const (
 	ConversionStylePlain
 )
 
-func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool, preserveOrder bool, includeUnstudied bool) ([]StoryNotebook, error) {
+func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool, preserveOrder bool) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
 	for _, notebook := range storyNotebooks {
 		if len(notebook.Scenes) == 0 {
@@ -324,13 +324,6 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 
 				// Skip words that are marked as skipped in learning history
 				if isExpressionSkipped(learningHistory, notebook.Event, scene.Title, definition) {
-					continue
-				}
-
-				// Words must be answered in freeform mode first before they
-				// become eligible for standard or reverse quizzes. Skipped
-				// when generating notebook/PDF output so new words appear.
-				if !includeUnstudied && !definition.hasFreeformAnswer() {
 					continue
 				}
 
@@ -417,7 +410,7 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 
 	// For books, preserve index order instead of sorting by date
 	preserveOrder := writer.reader.IsBook(storyID)
-	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false, preserveOrder, true)
+	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false, preserveOrder)
 	if err != nil {
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}

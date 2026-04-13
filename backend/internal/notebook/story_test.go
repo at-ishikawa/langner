@@ -827,7 +827,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			expectedWords:           []string{"test"},
 		},
 		{
-			name: "Both modes - no learning history excluded (must answer in freeform first, useSpacedRepetition=false)",
+			name: "Both modes - no learning history included (new words need learning, useSpacedRepetition=false)",
 			storyNotebooks: []StoryNotebook{
 				{
 					Event: "Story 1",
@@ -849,11 +849,11 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			sortDesc:                false,
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     false,
-			expectedWordCount:       0,
-			expectedWords:           nil,
+			expectedWordCount:       1,
+			expectedWords:           []string{"test"},
 		},
 		{
-			name: "Both modes - no learning history excluded (must answer in freeform first, useSpacedRepetition=true)",
+			name: "Both modes - no learning history included (new words need learning, useSpacedRepetition=true)",
 			storyNotebooks: []StoryNotebook{
 				{
 					Event: "Story 1",
@@ -875,8 +875,8 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			sortDesc:                false,
 			includeNoCorrectAnswers: true,
 			useSpacedRepetition:     true,
-			expectedWordCount:       0,
-			expectedWords:           nil,
+			expectedWordCount:       1,
+			expectedWords:           []string{"test"},
 		},
 		{
 			name: "duplicate expression entries - first empty, second usable - word NOT included",
@@ -945,7 +945,6 @@ func TestFilterStoryNotebooks(t *testing.T) {
 				tt.includeNoCorrectAnswers,
 				tt.useSpacedRepetition,
 				tt.preserveOrder,
-				false,
 			)
 			if tt.wantErr {
 				assert.Error(t, err)
