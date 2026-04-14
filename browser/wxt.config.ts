@@ -5,14 +5,18 @@ export default defineConfig({
   srcDir: ".",
   outDir: ".output",
   manifest: {
-    name: "Langner YouTube Notebook Capture (PoC)",
+    name: "Langner Video Notebook Capture (PoC)",
     description:
-      "Capture the transcript of a YouTube video you are watching and save it as a Langner story notebook.",
-    version: "0.0.1",
+      "Capture subtitles from streaming videos and save them as Langner story notebooks.",
+    version: "0.0.2",
     permissions: ["activeTab", "scripting", "downloads"],
-    host_permissions: ["*://www.youtube.com/*", "*://m.youtube.com/*"],
+    host_permissions: [
+      "*://www.youtube.com/*",
+      "*://m.youtube.com/*",
+      "*://*.netflix.com/*",
+    ],
     action: {
-      default_title: "Capture this YouTube video",
+      default_title: "Capture subtitles as notebook",
     },
   },
 });

@@ -1,7 +1,7 @@
-import { scrapeYouTubePage } from "../../src/youtube/scraper.js";
+import { parseSubtitle } from "../../src/subtitle/parsers.js";
 import { buildStoryNotebook } from "../../src/notebook/builder.js";
 import { serializeStoryNotebooks } from "../../src/notebook/yaml.js";
-import type { ScrapedVideo, StoryNotebook } from "../../src/types.js";
+import type { ScrapedVideo, StoryNotebook, TranscriptCue } from "../../src/types.js";
 
 // DOM references
 const app = document.getElementById("app")!;
@@ -20,9 +20,10 @@ function createInitialView(): HTMLElement {
   div.innerHTML = `
     <h1><span class="logo">L</span> Langner Capture</h1>
     <p style="color: var(--muted); margin-bottom: 12px; font-size: 13px;">
-      Capture this YouTube video's transcript as a Langner story notebook.
+      Capture subtitles from the current video as a Langner story notebook.
+      Make sure captions are enabled on the video.
     </p>
-    <button id="capture-btn" class="primary">Capture Transcript</button>
+    <button id="capture-btn" class="primary">Capture Subtitles</button>
     <div id="message"></div>
   `;
 
@@ -40,15 +41,19 @@ async function handleCapture() {
   msgDiv.innerHTML = "";
 
   try {
-    const video = await scrapeActiveTab();
+    const video = await getVideoData();
     if (video.cues.length === 0) {
       msgDiv.innerHTML = `<div class="error">
-        No transcript found on this page. Make sure you are on a YouTube video
-        and that the transcript panel is open (click the "..." menu below the video,
-        then "Show transcript").
+        No subtitles captured. Make sure:<br>
+        1. You are on a video page (YouTube, Netflix, etc.)<br>
+        2. Captions/subtitles are turned on<br>
+        3. The video has played at least a few seconds with captions visible<br>
+        <br>
+        The extension captures subtitle data as it loads. Try refreshing the page,
+        enabling captions, and then clicking Capture again.
       </div>`;
       btn.disabled = false;
-      btn.textContent = "Capture Transcript";
+      btn.textContent = "Capture Subtitles";
       return;
     }
 
@@ -59,7 +64,7 @@ async function handleCapture() {
     const message = err instanceof Error ? err.message : String(err);
     msgDiv.innerHTML = `<div class="error">${escapeHtml(message)}</div>`;
     btn.disabled = false;
-    btn.textContent = "Capture Transcript";
+    btn.textContent = "Capture Subtitles";
   }
 }
 
@@ -70,13 +75,12 @@ function showPreview(video: ScrapedVideo, notebook: StoryNotebook) {
   app.innerHTML = `
     <h1><span class="logo">L</span> Captured</h1>
     <div class="preview-header">
-      <div class="title">${escapeHtml(video.title)}</div>
-      <div class="meta">${escapeHtml(video.channel)}</div>
+      <div class="title">${escapeHtml(video.title || "Untitled Video")}</div>
+      <div class="meta">${escapeHtml(video.channel || "Unknown channel")}</div>
     </div>
     <div class="stats">
       <span><strong>${totalScenes}</strong> scene${totalScenes !== 1 ? "s" : ""}</span>
       <span><strong>${totalCues}</strong> caption${totalCues !== 1 ? "s" : ""}</span>
-      ${video.chapters.length > 0 ? `<span><strong>${video.chapters.length}</strong> chapter${video.chapters.length !== 1 ? "s" : ""}</span>` : ""}
     </div>
     <div class="scenes-list" id="scenes-list"></div>
     <div class="button-row">
@@ -108,7 +112,6 @@ function handleDownload() {
   const url = URL.createObjectURL(blob);
   const filename = sanitizeFilename(currentNotebook.event) + ".yml";
 
-  // Use chrome.downloads if available (extension context), fallback for tests
   if (typeof chrome !== "undefined" && chrome.downloads) {
     chrome.downloads.download({ url, filename, saveAs: true });
   } else {
@@ -136,124 +139,66 @@ async function handleCopy() {
   }
 }
 
-async function scrapeActiveTab(): Promise<ScrapedVideo> {
-  // In a real extension, use chrome.scripting.executeScript to run the
-  // scraper in the active tab. For the PoC we check if the API exists.
-  if (typeof chrome !== "undefined" && chrome.tabs && chrome.scripting) {
-    const [tab] = await chrome.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-    if (!tab?.id || !tab.url) {
-      throw new Error("No active tab found.");
-    }
-    if (!tab.url.includes("youtube.com/watch")) {
-      throw new Error("The active tab is not a YouTube video page.");
-    }
-
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: scrapeInPage,
-    });
-
-    if (!results || results.length === 0 || !results[0]?.result) {
-      throw new Error("Failed to run capture script in the page.");
-    }
-    return results[0].result as ScrapedVideo;
+// Gets video data by messaging the content script for intercepted subtitles
+// and page metadata.
+async function getVideoData(): Promise<ScrapedVideo> {
+  if (typeof chrome === "undefined" || !chrome.tabs) {
+    // Fallback for testing outside extension context
+    return {
+      videoId: "",
+      title: document.title,
+      channel: "",
+      url: window.location.href,
+      cues: [],
+      chapters: [],
+    };
   }
 
-  // Fallback: if running outside extension context (e.g. testing in a
-  // regular browser tab), try to scrape the current page directly.
-  return scrapeYouTubePage(document, window.location.href);
-}
-
-// This function is serialized and injected into the YouTube tab via
-// chrome.scripting.executeScript. It cannot reference closures — all
-// logic must be self-contained. It mirrors the multi-strategy approach
-// in src/youtube/scraper.ts.
-function scrapeInPage(): ScrapedVideo {
-  function parseTs(ts: string): number {
-    const parts = ts.split(":").map((p) => parseInt(p, 10)).filter((n) => !isNaN(n));
-    if (parts.length === 0) return 0;
-    if (parts.length === 1) return parts[0]! * 1000;
-    if (parts.length === 2) return (parts[0]! * 60 + parts[1]!) * 1000;
-    return (parts[0]! * 3600 + parts[1]! * 60 + parts[2]!) * 1000;
+  const [tab] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  if (!tab?.id) {
+    throw new Error("No active tab found.");
   }
 
-  function findTimestamp(seg: Element): string {
-    for (const sel of [".segment-timestamp", "[class*='timestamp']", "div.segment-start-offset"]) {
-      const el = seg.querySelector(sel);
-      if (el?.textContent?.trim()) return el.textContent.trim();
-    }
-    return "";
-  }
+  // Get captured subtitles from the content script
+  const subtitleResponse = await chrome.tabs.sendMessage(tab.id, {
+    type: "GET_CAPTURED_SUBTITLES",
+  });
 
-  function findText(seg: Element): string {
-    for (const sel of [".segment-text", "yt-formatted-string.segment-text", ".yt-core-attributed-string", "yt-formatted-string:not([class*='timestamp'])"]) {
-      const el = seg.querySelector(sel);
-      if (el?.textContent?.trim()) return el.textContent.trim();
-    }
-    return "";
-  }
+  // Get page metadata from the content script
+  const metaResponse = await chrome.tabs.sendMessage(tab.id, {
+    type: "GET_PAGE_METADATA",
+  });
 
-  function extractFromRenderers(segments: NodeListOf<Element>): Array<{ offsetMs: number; text: string }> {
-    const result: Array<{ offsetMs: number; text: string }> = [];
-    for (const seg of segments) {
-      const text = findText(seg);
-      if (text) result.push({ offsetMs: parseTs(findTimestamp(seg)), text });
-    }
-    return result;
-  }
-
-  const titleEl = document.querySelector("ytd-watch-metadata #title h1");
-  const title = titleEl?.textContent?.trim() ??
-    (document.querySelector("title")?.textContent?.trim() ?? "").replace(/\s*-\s*YouTube\s*$/i, "");
-
-  const channel = document.querySelector("ytd-video-owner-renderer #channel-name a")?.textContent?.trim() ?? "";
-  const url = window.location.href;
-
-  let videoId = "";
-  try { videoId = new URL(url).searchParams.get("v") ?? ""; } catch { /* noop */ }
-
-  // Multi-strategy cue extraction (same logic as src/youtube/scraper.ts)
-  let cues: Array<{ offsetMs: number; text: string }> = [];
-  const container = document.querySelector("#segments-container");
-  if (container) {
-    // Strategy 1a: ytd-transcript-segment-renderer inside #segments-container
-    let segments = container.querySelectorAll("ytd-transcript-segment-renderer");
-    if (segments.length > 0) cues = extractFromRenderers(segments);
-    // Strategy 1b: transcript-segment-view-model (newer March 2026 variant)
-    if (cues.length === 0) {
-      segments = container.querySelectorAll("transcript-segment-view-model");
-      if (segments.length > 0) cues = extractFromRenderers(segments);
-    }
-    // Strategy 1c: flat yt-formatted-string elements (timestamp/text alternating)
-    if (cues.length === 0) {
-      const tsPattern = /^\d{1,2}:\d{2}(:\d{2})?$/;
-      let pendingTs = "";
-      for (const el of container.querySelectorAll("yt-formatted-string")) {
-        const t = el.textContent?.trim() ?? "";
-        if (!t) continue;
-        if (tsPattern.test(t)) { pendingTs = t; }
-        else if (pendingTs) { cues.push({ offsetMs: parseTs(pendingTs), text: t }); pendingTs = ""; }
-        else { cues.push({ offsetMs: 0, text: t }); }
+  // Parse all captured subtitle responses into cues
+  const allCues: TranscriptCue[] = [];
+  if (subtitleResponse?.subtitles) {
+    for (const sub of subtitleResponse.subtitles) {
+      const cues = parseSubtitle(sub.content, sub.url);
+      if (cues.length > allCues.length) {
+        // Use the subtitle response that yielded the most cues
+        // (there may be multiple languages; pick the longest)
+        allCues.length = 0;
+        allCues.push(...cues);
       }
     }
   }
-  // Strategy 2: global ytd-transcript-segment-renderer
-  if (cues.length === 0) {
-    const segments = document.querySelectorAll("ytd-transcript-segment-renderer");
-    if (segments.length > 0) cues = extractFromRenderers(segments);
-  }
 
-  const chapters: Array<{ startMs: number; title: string }> = [];
-  for (const item of document.querySelectorAll("ytd-macro-markers-list-item-renderer")) {
-    const t = item.querySelector('[id="title"]')?.textContent?.trim() ?? "";
-    const tm = item.querySelector('[id="time"]')?.textContent?.trim() ?? "";
-    if (t || tm) chapters.push({ startMs: parseTs(tm), title: t });
-  }
+  let videoId = "";
+  try {
+    videoId = new URL(metaResponse?.url ?? "").searchParams.get("v") ?? "";
+  } catch { /* noop */ }
 
-  return { videoId, title, channel, url, cues, chapters };
+  return {
+    videoId,
+    title: metaResponse?.title ?? "",
+    channel: metaResponse?.channel ?? "",
+    url: metaResponse?.url ?? tab.url ?? "",
+    cues: allCues,
+    chapters: [],
+  };
 }
 
 function escapeHtml(str: string): string {
