@@ -363,14 +363,12 @@ func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
 	return false
 }
 
-// HasFreeformAnswer returns true if the expression has at least one answer
-// demonstrating active recall (status "usable"). The freeform quiz assigns
-// "usable" on correct answers (isKnownWord=false), so this is a reliable
-// proxy for having done freeform — and it works for older logs that predate
-// the quiz_type field.
+// HasFreeformAnswer returns true if the expression has at least one freeform quiz
+// answer recorded in LearnedLogs. Vocabulary words must be answered in freeform mode
+// first before becoming eligible for standard or reverse quizzes.
 func (exp LearningHistoryExpression) HasFreeformAnswer() bool {
 	for _, log := range exp.LearnedLogs {
-		if log.Status == LearnedStatusCanBeUsed {
+		if log.QuizType == string(QuizTypeFreeform) {
 			return true
 		}
 	}

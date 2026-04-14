@@ -2262,3 +2262,126 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 		assert.Len(t, fixed[0].contents[0].Scenes[1].Expressions, 0)
 	})
 }
+
+func TestValidator_backfillQuizType(t *testing.T) {
+	now := NewDate(time.Now())
+	v := &Validator{}
+
+	tests := []struct {
+		name  string
+		input []learningHistoryFile
+		// want is a map from expression name to expected QuizType for the
+		// first log of that expression, across all histories and scenes.
+		want map[string]string
+		// wantWarnings lists expected warning substrings.
+		wantWarnings []string
+	}{
+		{
+			name: "usable log without quiz_type gets freeform",
+			input: []learningHistoryFile{{
+				path: "test.yml",
+				contents: []LearningHistory{{
+					Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+					Scenes: []LearningScene{{
+						Metadata: LearningSceneMetadata{Title: "Scene 1"},
+						Expressions: []LearningHistoryExpression{{
+							Expression:  "break the ice",
+							LearnedLogs: []LearningRecord{{Status: LearnedStatusCanBeUsed, LearnedAt: now}},
+						}},
+					}},
+				}},
+			}},
+			want:         map[string]string{"break the ice": string(QuizTypeFreeform)},
+			wantWarnings: []string{"Backfilled quiz_type=freeform"},
+		},
+		{
+			name: "usable log with existing quiz_type is unchanged",
+			input: []learningHistoryFile{{
+				path: "test.yml",
+				contents: []LearningHistory{{
+					Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+					Scenes: []LearningScene{{
+						Metadata: LearningSceneMetadata{Title: "Scene 1"},
+						Expressions: []LearningHistoryExpression{{
+							Expression:  "break the ice",
+							LearnedLogs: []LearningRecord{{Status: LearnedStatusCanBeUsed, LearnedAt: now, QuizType: "notebook"}},
+						}},
+					}},
+				}},
+			}},
+			want: map[string]string{"break the ice": "notebook"},
+		},
+		{
+			name: "non-usable log without quiz_type stays empty",
+			input: []learningHistoryFile{{
+				path: "test.yml",
+				contents: []LearningHistory{{
+					Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+					Scenes: []LearningScene{{
+						Metadata: LearningSceneMetadata{Title: "Scene 1"},
+						Expressions: []LearningHistoryExpression{{
+							Expression:  "break the ice",
+							LearnedLogs: []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: now}},
+						}},
+					}},
+				}},
+			}},
+			want: map[string]string{"break the ice": ""},
+		},
+		{
+			name: "flashcard style (top-level expressions) is handled",
+			input: []learningHistoryFile{{
+				path: "test.yml",
+				contents: []LearningHistory{{
+					Metadata: LearningHistoryMetadata{Title: "Unit 1", Type: "flashcard"},
+					Expressions: []LearningHistoryExpression{{
+						Expression:  "lose one's temper",
+						LearnedLogs: []LearningRecord{{Status: LearnedStatusCanBeUsed, LearnedAt: now}},
+					}},
+				}},
+			}},
+			want:         map[string]string{"lose one's temper": string(QuizTypeFreeform)},
+			wantWarnings: []string{"Backfilled quiz_type=freeform"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := &ValidationResult{}
+			fixed := v.backfillQuizType(tt.input, result)
+
+			got := make(map[string]string)
+			for _, f := range fixed {
+				for _, h := range f.contents {
+					for _, e := range h.Expressions {
+						if len(e.LearnedLogs) > 0 {
+							got[e.Expression] = e.LearnedLogs[0].QuizType
+						}
+					}
+					for _, s := range h.Scenes {
+						for _, e := range s.Expressions {
+							if len(e.LearnedLogs) > 0 {
+								got[e.Expression] = e.LearnedLogs[0].QuizType
+							}
+						}
+					}
+				}
+			}
+			assert.Equal(t, tt.want, got)
+
+			for _, want := range tt.wantWarnings {
+				found := false
+				for _, w := range result.Warnings {
+					if strings.Contains(w.Message, want) {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "expected warning containing %q", want)
+			}
+			if len(tt.wantWarnings) == 0 {
+				assert.Empty(t, result.Warnings)
+			}
+		})
+	}
+}
