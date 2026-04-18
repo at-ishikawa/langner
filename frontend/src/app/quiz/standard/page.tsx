@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -19,6 +19,23 @@ import { WordDetailView } from "@/components/WordDetailView";
 import type { WordDetail } from "@/store/quizStore";
 
 type QuizPhase = "answering" | "feedback";
+
+function highlightExpression(
+  text: string,
+  expression: string,
+): React.ReactNode[] {
+  const escaped = expression.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <Text as="span" key={i} fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
+        {part}
+      </Text>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    ),
+  );
+}
 
 interface FeedbackData {
   correct: boolean;
@@ -221,7 +238,10 @@ export default function QuizCardPage() {
             <VStack align="stretch" gap={2}>
               {card.examples.map((ex, i) => (
                 <Text key={i} fontSize="md" color="fg.muted">
-                  {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
+                  {ex.speaker && <>{ex.speaker}: &ldquo;</>}
+                  {!ex.speaker && <>&ldquo;</>}
+                  {highlightExpression(ex.text, card.entry)}
+                  &rdquo;
                 </Text>
               ))}
             </VStack>
@@ -345,7 +365,10 @@ export default function QuizCardPage() {
                     <VStack align="stretch" gap={1} mt={1}>
                       {card.examples.map((ex, i) => (
                         <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
-                          {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
+                          {ex.speaker && <>{ex.speaker}: &ldquo;</>}
+                          {!ex.speaker && <>&ldquo;</>}
+                          {highlightExpression(ex.text, card.entry)}
+                          &rdquo;
                         </Text>
                       ))}
                     </VStack>
