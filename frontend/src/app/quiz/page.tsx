@@ -133,7 +133,7 @@ export default function QuizHubPage() {
           });
           setFlashcards(
             (res.flashcards ?? []).map((f) => ({
-              noteId: f.noteId, entry: f.entry, examples: f.examples,
+              noteId: f.noteId, entry: f.entry, originalEntry: f.originalEntry, examples: f.examples,
             })),
           );
           router.push("/quiz/standard");

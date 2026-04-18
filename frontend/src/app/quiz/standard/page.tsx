@@ -240,7 +240,7 @@ export default function QuizCardPage() {
                 <Text key={i} fontSize="md" color="fg.muted">
                   {ex.speaker && <>{ex.speaker}: &ldquo;</>}
                   {!ex.speaker && <>&ldquo;</>}
-                  {highlightExpression(ex.text, card.entry)}
+                  {highlightExpression(ex.text, card.originalEntry || card.entry)}
                   &rdquo;
                 </Text>
               ))}
@@ -367,7 +367,7 @@ export default function QuizCardPage() {
                         <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
                           {ex.speaker && <>{ex.speaker}: &ldquo;</>}
                           {!ex.speaker && <>&ldquo;</>}
-                          {highlightExpression(ex.text, card.entry)}
+                          {highlightExpression(ex.text, card.originalEntry || card.entry)}
                           &rdquo;
                         </Text>
                       ))}

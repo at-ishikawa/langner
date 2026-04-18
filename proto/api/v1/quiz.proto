@@ -74,6 +74,10 @@ message Flashcard {
   int64 note_id = 1;
   string entry = 2;
   repeated Example examples = 3;
+  // original_entry is the expression as it appears in the conversation text
+  // (e.g., "racked up"), while entry is the canonical/dictionary form
+  // (e.g., "rack up"). Used for highlighting the expression in context.
+  string original_entry = 4;
 }
 
 message Example {

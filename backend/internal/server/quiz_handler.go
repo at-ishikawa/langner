@@ -91,7 +91,7 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		noteID := nextID; nextID++; localStore[noteID] = card
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples { examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker}) }
-		flashcards = append(flashcards, &apiv1.Flashcard{NoteId: noteID, Entry: card.Entry, Examples: examples})
+		flashcards = append(flashcards, &apiv1.Flashcard{NoteId: noteID, Entry: card.Entry, Examples: examples, OriginalEntry: card.OriginalEntry})
 	}
 	h.mu.Lock(); h.noteStore = localStore; h.nextID = nextID; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartQuizResponse{Flashcards: flashcards}), nil
