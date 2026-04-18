@@ -28,18 +28,9 @@ describe("HomePage", () => {
     expect(screen.getByText("Langner")).toBeInTheDocument();
   });
 
-  it("shows Books feature link", () => {
-    renderPage();
-    expect(screen.getByText("Books")).toBeInTheDocument();
-    expect(screen.getByText("Read books and look up words")).toBeInTheDocument();
-    const link = screen.getByText("Books").closest("a");
-    expect(link).toHaveAttribute("href", "/books");
-  });
-
   it("shows Learn feature link", () => {
     renderPage();
     expect(screen.getByText("Learn")).toBeInTheDocument();
-    expect(screen.getByText("Browse vocabulary notebooks and etymology origins")).toBeInTheDocument();
     const link = screen.getByText("Learn").closest("a");
     expect(link).toHaveAttribute("href", "/learn");
   });
@@ -52,18 +43,17 @@ describe("HomePage", () => {
     expect(link).toHaveAttribute("href", "/quiz");
   });
 
-  it("renders exactly 3 feature cards", () => {
+  it("renders exactly 2 feature cards", () => {
     renderPage();
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(2);
   });
 
   it("renders in dark mode without errors", () => {
     renderPageDark();
     expect(screen.getByText("Langner")).toBeInTheDocument();
-    expect(screen.getByText("Books")).toBeInTheDocument();
     expect(screen.getByText("Learn")).toBeInTheDocument();
     expect(screen.getByText("Quiz")).toBeInTheDocument();
-    expect(screen.getAllByRole("link")).toHaveLength(3);
+    expect(screen.getAllByRole("link")).toHaveLength(2);
   });
 });

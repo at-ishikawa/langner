@@ -186,7 +186,7 @@ notebooks:
       expressions:
         - expression: "lose one's temper"
           learned_logs:
-            - status: "understood"
+            - status: "usable"
               learned_at: "2025-01-14"
               interval_days: 1
               quiz_type: "freeform"
@@ -220,7 +220,7 @@ notebooks:
   expressions:
     - expression: "serendipity"
       learned_logs:
-        - status: "understood"
+        - status: "usable"
           learned_at: "2025-01-14"
           interval_days: 1
           quiz_type: "freeform"

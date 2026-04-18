@@ -13,8 +13,9 @@ import {
   VStack,
 } from "@chakra-ui/react";
 import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
-import { useQuizStore } from "@/store/quizStore";
+import { useQuizStore, type WordDetail } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { WordDetailView } from "@/components/WordDetailView";
 
 export default function FreeformQuizPage() {
   const router = useRouter();
@@ -43,7 +44,7 @@ export default function FreeformQuizPage() {
     learnedAt?: string;
     noteId?: bigint;
     images?: string[];
-    originParts?: { origin: string; type: string; language: string; meaning: string }[];
+    wordDetail?: WordDetail;
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [overridden, setOverridden] = useState(false);
@@ -103,7 +104,7 @@ export default function FreeformQuizPage() {
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
         images: (res.images ?? []).length > 0 ? res.images : undefined,
-        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
+        wordDetail: res.wordDetail,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -286,25 +287,7 @@ export default function FreeformQuizPage() {
               </Box>
             )}
 
-            {feedback.originParts && feedback.originParts.length > 0 && (
-              <Box>
-                <Text fontWeight="bold" fontSize="sm">Etymology</Text>
-                <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
-                  {feedback.originParts.map((p, i) => (
-                    <Box key={i} display="flex" alignItems="center" gap={1}>
-                      {i > 0 && <Text color="fg.muted">+</Text>}
-                      <Text color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium" fontSize="sm">{p.origin}</Text>
-                      <Text fontSize="sm" color="fg.muted">({p.meaning})</Text>
-                      {p.language && (
-                        <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
-                          <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
-                        </Box>
-                      )}
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            )}
+            <WordDetailView wordDetail={feedback.wordDetail} />
           </FeedbackActions>
 
           <Button

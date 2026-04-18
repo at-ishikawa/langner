@@ -22,9 +22,13 @@ type EtymologyOriginCard struct {
 }
 
 // LoadEtymologyOriginCards loads individual origin cards from selected etymology notebooks.
+// When skipEligibility is true the hard gate (freeform-first + has-correct-answer)
+// is skipped — the freeform quiz needs this because it IS the entry point where
+// origins are encountered for the first time.
 func (s *Service) LoadEtymologyOriginCards(
 	etymologyNotebookIDs []string,
 	includeUnstudied bool,
+	skipEligibility bool,
 ) ([]EtymologyOriginCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
@@ -59,11 +63,12 @@ func (s *Service) LoadEtymologyOriginCards(
 			}
 			seen[key] = true
 
-			// Hard eligibility gate: always enforced, even when the
-			// user has "include unstudied" ticked. Origins must have at
-			// least one etymology_freeform entry AND at least one
-			// correct etymology answer before they become eligible.
-			if !isOriginEligible(learningHistories[etymID], nbTitle, o.Origin) {
+			// Hard eligibility gate for standard/reverse quizzes:
+			// origins must have at least one etymology_freeform entry
+			// AND at least one correct etymology answer. Skipped for
+			// freeform mode, which is the entry point where new origins
+			// are first encountered.
+			if !skipEligibility && !isOriginEligible(learningHistories[etymID], nbTitle, o.Origin) {
 				continue
 			}
 			// Soft SR check: skipped when includeUnstudied is true so

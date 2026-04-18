@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -15,8 +15,27 @@ import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
 import { FeedbackActions } from "@/components/FeedbackActions";
 import { AnswerInput } from "@/components/AnswerInput";
+import { WordDetailView } from "@/components/WordDetailView";
+import type { WordDetail } from "@/store/quizStore";
 
 type QuizPhase = "answering" | "feedback";
+
+function highlightExpression(
+  text: string,
+  expression: string,
+): React.ReactNode[] {
+  const escaped = expression.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
+  return parts.map((part, i) =>
+    i % 2 === 1 ? (
+      <Text as="span" key={i} fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
+        {part}
+      </Text>
+    ) : (
+      <React.Fragment key={i}>{part}</React.Fragment>
+    ),
+  );
+}
 
 interface FeedbackData {
   correct: boolean;
@@ -26,7 +45,7 @@ interface FeedbackData {
   partOfSpeech?: string;
   learnedAt?: string;
   images?: string[];
-  originParts?: { origin: string; type: string; language: string; meaning: string }[];
+  wordDetail?: WordDetail;
 }
 
 export default function QuizCardPage() {
@@ -110,7 +129,7 @@ export default function QuizCardPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
-        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
+        wordDetail: res.wordDetail,
       });
       setDisplayCorrect(res.correct);
       storeSubmitResult({
@@ -156,7 +175,7 @@ export default function QuizCardPage() {
         partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
-        originParts: res.wordDetail?.originParts?.length ? res.wordDetail.originParts : undefined,
+        wordDetail: res.wordDetail,
       });
       setDisplayCorrect(false);
       storeSubmitResult({
@@ -219,7 +238,10 @@ export default function QuizCardPage() {
             <VStack align="stretch" gap={2}>
               {card.examples.map((ex, i) => (
                 <Text key={i} fontSize="md" color="fg.muted">
-                  {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
+                  {ex.speaker && <>{ex.speaker}: &ldquo;</>}
+                  {!ex.speaker && <>&ldquo;</>}
+                  {highlightExpression(ex.text, card.originalEntry || card.entry)}
+                  &rdquo;
                 </Text>
               ))}
             </VStack>
@@ -343,7 +365,10 @@ export default function QuizCardPage() {
                     <VStack align="stretch" gap={1} mt={1}>
                       {card.examples.map((ex, i) => (
                         <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
-                          {ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`}
+                          {ex.speaker && <>{ex.speaker}: &ldquo;</>}
+                          {!ex.speaker && <>&ldquo;</>}
+                          {highlightExpression(ex.text, card.originalEntry || card.entry)}
+                          &rdquo;
                         </Text>
                       ))}
                     </VStack>
@@ -358,25 +383,7 @@ export default function QuizCardPage() {
                   </Box>
                 )}
 
-                {feedback.originParts && feedback.originParts.length > 0 && (
-                  <Box>
-                    <Text fontWeight="bold" fontSize="sm">Etymology</Text>
-                    <Box display="flex" gap={2} alignItems="center" flexWrap="wrap">
-                      {feedback.originParts.map((p, i) => (
-                        <Box key={i} display="flex" alignItems="center" gap={1}>
-                          {i > 0 && <Text color="fg.muted">+</Text>}
-                          <Text color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium" fontSize="sm">{p.origin}</Text>
-                          <Text fontSize="sm" color="fg.muted">({p.meaning})</Text>
-                          {p.language && (
-                            <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
-                              <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
-                            </Box>
-                          )}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                )}
+                <WordDetailView wordDetail={feedback.wordDetail} />
               </FeedbackActions>
             </>
           ) : error ? (

@@ -696,7 +696,7 @@ func TestNewReverseQuizCLI_MultiLineSceneTitle(t *testing.T) {
 						{
 							Expression: "excited",
 							LearnedLogs: []notebook.LearningRecord{
-								{Status: "understood", QuizType: string(notebook.QuizTypeFreeform)},
+								{Status: notebook.LearnedStatusCanBeUsed, QuizType: string(notebook.QuizTypeFreeform)},
 							},
 							ReverseLogs: []notebook.LearningRecord{
 								{
@@ -911,7 +911,7 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 						{
 							Expression: "excited",
 							LearnedLogs: []notebook.LearningRecord{
-								{Status: "understood", QuizType: string(notebook.QuizTypeFreeform)},
+								{Status: notebook.LearnedStatusCanBeUsed, QuizType: string(notebook.QuizTypeFreeform)},
 							},
 						},
 					},
@@ -1134,7 +1134,7 @@ func TestNewReverseQuizCLI_AllNotebooks(t *testing.T) {
 					Expressions: []notebook.LearningHistoryExpression{
 						{
 							Expression:  "eager",
-							LearnedLogs: []notebook.LearningRecord{{Status: "understood", LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}},
+							LearnedLogs: []notebook.LearningRecord{{Status: notebook.LearnedStatusCanBeUsed, LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}},
 						},
 					},
 				},
@@ -1162,7 +1162,7 @@ func TestNewReverseQuizCLI_AllNotebooks(t *testing.T) {
 			Expressions: []notebook.LearningHistoryExpression{
 				{
 					Expression:  "break the ice",
-					LearnedLogs: []notebook.LearningRecord{{Status: "understood", LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}},
+					LearnedLogs: []notebook.LearningRecord{{Status: notebook.LearnedStatusCanBeUsed, LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}},
 				},
 			},
 		},
@@ -1212,7 +1212,7 @@ func TestNewReverseQuizCLI_FlashcardNotebook(t *testing.T) {
 			Expressions: []notebook.LearningHistoryExpression{
 				{
 					Expression:  "break the ice",
-					LearnedLogs: []notebook.LearningRecord{{Status: "understood", LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}},
+					LearnedLogs: []notebook.LearningRecord{{Status: notebook.LearnedStatusCanBeUsed, LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}},
 				},
 			},
 		},
@@ -1332,8 +1332,8 @@ func TestNewReverseQuizCLI_ListMissingContext(t *testing.T) {
 		{
 			Metadata: notebook.LearningHistoryMetadata{NotebookID: "test-fc", Title: "Unit 1", Type: "flashcard"},
 			Expressions: []notebook.LearningHistoryExpression{
-				{Expression: "abstruse", LearnedLogs: []notebook.LearningRecord{{Status: "understood", LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}}},
-				{Expression: "break the ice", LearnedLogs: []notebook.LearningRecord{{Status: "understood", LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}}},
+				{Expression: "abstruse", LearnedLogs: []notebook.LearningRecord{{Status: notebook.LearnedStatusCanBeUsed, LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}}},
+				{Expression: "break the ice", LearnedLogs: []notebook.LearningRecord{{Status: notebook.LearnedStatusCanBeUsed, LearnedAt: notebook.NewDate(time.Now().Add(-30 * 24 * time.Hour)), QuizType: string(notebook.QuizTypeFreeform)}}},
 			},
 		},
 	}))

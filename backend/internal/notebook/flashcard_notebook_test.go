@@ -140,7 +140,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 			wantLen: 0,
 		},
 		{
-			name: "cards with no logs are not yet eligible (must answer in freeform first)",
+			name: "cards with no logs are included (new words need to be learned)",
 			notebooks: []FlashcardNotebook{
 				{
 					Title: "Unit 1",
@@ -151,7 +151,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 				},
 			},
 			history: nil,
-			wantLen: 0,
+			wantLen: 1,
 		},
 		{
 			name: "empty expression returns error",
@@ -344,3 +344,4 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 		})
 	}
 }
+

@@ -20,6 +20,7 @@ interface Example {
 export interface Flashcard {
   noteId: bigint;
   entry: string;
+  originalEntry: string;
   examples: Example[];
 }
 

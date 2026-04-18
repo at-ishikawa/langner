@@ -289,18 +289,6 @@ func (note Note) hasAnyCorrectAnswer() bool {
 	return false
 }
 
-// hasFreeformAnswer returns true if any LearnedLog entry was recorded by the
-// freeform quiz. Vocabulary words must be answered in freeform mode first before
-// becoming eligible for standard or reverse quizzes.
-func (note Note) hasFreeformAnswer() bool {
-	for _, log := range note.LearnedLogs {
-		if log.QuizType == string(QuizTypeFreeform) {
-			return true
-		}
-	}
-	return false
-}
-
 // GetThresholdDaysFromCount returns the number of days until next review
 // based on the number of correct answers. This implements the spaced repetition
 // algorithm used across all quiz types.

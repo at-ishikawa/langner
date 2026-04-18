@@ -929,6 +929,292 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 	}
 }
 
+// TestQuizHandler_SubmitAnswer_WordDetail exercises the full RPC pipeline
+// (YAML fixture → StartQuiz → SubmitAnswer) and verifies that WordDetail
+// fields (origin, origin_parts, synonyms, antonyms, memo, pronunciation,
+// part_of_speech) are correctly populated in the response across all
+// notebook types and data patterns.
+func TestQuizHandler_SubmitAnswer_WordDetail(t *testing.T) {
+	type wantWordDetail struct {
+		origin        string
+		pronunciation string
+		partOfSpeech  string
+		synonyms      []string
+		antonyms      []string
+		memo          string
+		originParts   []*apiv1.WordOriginPart
+		nilDetail     bool // expect response.WordDetail to be nil (when all fields empty)
+	}
+
+	tests := []struct {
+		name             string
+		notebookType     string // "story" or "flashcard"
+		expression       string
+		// notebookYAML is the content of the story/flashcard notebook file.
+		notebookYAML string
+		want         wantWordDetail
+	}{
+		{
+			name:         "story word with origin prose only (e.g. idiom)",
+			notebookType: "story",
+			expression:   "break the ice",
+			notebookYAML: `- event: "Ep 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "S1"
+      conversations:
+        - speaker: "Alice"
+          quote: "Let me break the ice."
+      definitions:
+        - expression: "break the ice"
+          meaning: "initiate conversation"
+          origin: "Refers to ships breaking winter ice to sail."
+`,
+			want: wantWordDetail{
+				origin: "Refers to ships breaking winter ice to sail.",
+			},
+		},
+		{
+			name:         "story word with pronunciation and part_of_speech",
+			notebookType: "story",
+			expression:   "rejoice",
+			notebookYAML: `- event: "Ep 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "S1"
+      conversations:
+        - speaker: "Alice"
+          quote: "I rejoice at the news."
+      definitions:
+        - expression: "rejoice"
+          meaning: "to feel joy"
+          part_of_speech: "verb"
+          pronunciation: "/rɪˈdʒɔɪs/"
+`,
+			want: wantWordDetail{
+				pronunciation: "/rɪˈdʒɔɪs/",
+				partOfSpeech:  "verb",
+			},
+		},
+		{
+			name:         "story word with synonyms and antonyms",
+			notebookType: "story",
+			expression:   "happy",
+			notebookYAML: `- event: "Ep 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "S1"
+      conversations:
+        - speaker: "Alice"
+          quote: "She feels happy."
+      definitions:
+        - expression: "happy"
+          meaning: "feeling joy"
+          synonyms: [joyful, pleased]
+          antonyms: [sad, unhappy]
+`,
+			want: wantWordDetail{
+				synonyms: []string{"joyful", "pleased"},
+				antonyms: []string{"sad", "unhappy"},
+			},
+		},
+		{
+			name:         "story word with memo",
+			notebookType: "story",
+			expression:   "turf war",
+			notebookYAML: `- event: "Ep 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "S1"
+      conversations:
+        - speaker: "Alice"
+          quote: "This is a turf war."
+      definitions:
+        - expression: "turf war"
+          meaning: "a struggle for control"
+          memo: "Also used for street gang territory disputes."
+`,
+			want: wantWordDetail{
+				memo: "Also used for street gang territory disputes.",
+			},
+		},
+		{
+			name:         "story word with all fields populated",
+			notebookType: "story",
+			expression:   "commence",
+			notebookYAML: `- event: "Ep 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "S1"
+      conversations:
+        - speaker: "Alice"
+          quote: "Let us commence the meeting."
+      definitions:
+        - expression: "commence"
+          meaning: "to begin"
+          part_of_speech: "verb"
+          pronunciation: "/kəˈmɛns/"
+          origin: "From Latin cominitiare."
+          synonyms: [begin, start]
+          antonyms: [end, finish]
+          memo: "Formal register."
+`,
+			want: wantWordDetail{
+				origin:        "From Latin cominitiare.",
+				pronunciation: "/kəˈmɛns/",
+				partOfSpeech:  "verb",
+				synonyms:      []string{"begin", "start"},
+				antonyms:      []string{"end", "finish"},
+				memo:          "Formal register.",
+			},
+		},
+		{
+			name:         "story word with no WordDetail fields produces nil detail",
+			notebookType: "story",
+			expression:   "simple",
+			notebookYAML: `- event: "Ep 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "S1"
+      conversations:
+        - speaker: "Alice"
+          quote: "A simple case."
+      definitions:
+        - expression: "simple"
+          meaning: "not complicated"
+`,
+			want: wantWordDetail{nilDetail: true},
+		},
+		{
+			name:         "flashcard with origin and synonyms",
+			notebookType: "flashcard",
+			expression:   "serendipity",
+			notebookYAML: `- title: "Basic"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "serendipity"
+      meaning: "a fortunate discovery"
+      origin: "Coined by Horace Walpole in 1754."
+      synonyms: [chance, fortune]
+`,
+			want: wantWordDetail{
+				origin:   "Coined by Horace Walpole in 1754.",
+				synonyms: []string{"chance", "fortune"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockClient := mock_inference.NewMockClient(ctrl)
+
+			storiesDir := t.TempDir()
+			flashcardsDir := t.TempDir()
+			learningDir := t.TempDir()
+
+			const notebookID = "wd-test"
+			const eventTitle = "Ep 1"
+			const sceneTitle = "S1"
+			const flashcardTitle = "Basic"
+
+			switch tt.notebookType {
+			case "story":
+				nbDir := filepath.Join(storiesDir, notebookID)
+				require.NoError(t, os.MkdirAll(nbDir, 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(
+					"id: "+notebookID+"\nname: Test\nnotebooks:\n  - ./episodes.yml\n",
+				), 0644))
+				require.NoError(t, os.WriteFile(filepath.Join(nbDir, "episodes.yml"), []byte(tt.notebookYAML), 0644))
+				// Learning history: freeform-first with a correct answer so the
+				// word is eligible for standard quiz.
+				require.NoError(t, os.WriteFile(filepath.Join(learningDir, notebookID+".yml"), []byte(
+					"- metadata:\n    notebook_id: "+notebookID+"\n    title: \""+eventTitle+"\"\n  scenes:\n    - metadata:\n        title: \""+sceneTitle+"\"\n      expressions:\n        - expression: \""+tt.expression+"\"\n          learned_logs:\n            - status: \"usable\"\n              learned_at: \"2025-01-14\"\n              quiz_type: \"freeform\"\n",
+				), 0644))
+
+			case "flashcard":
+				nbDir := filepath.Join(flashcardsDir, notebookID)
+				require.NoError(t, os.MkdirAll(nbDir, 0755))
+				require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(
+					"id: "+notebookID+"\nname: Test\nnotebooks:\n  - ./cards.yml\n",
+				), 0644))
+				require.NoError(t, os.WriteFile(filepath.Join(nbDir, "cards.yml"), []byte(tt.notebookYAML), 0644))
+				require.NoError(t, os.WriteFile(filepath.Join(learningDir, notebookID+".yml"), []byte(
+					"- metadata:\n    notebook_id: "+notebookID+"\n    title: \""+flashcardTitle+"\"\n    type: \"flashcard\"\n  expressions:\n    - expression: \""+tt.expression+"\"\n      learned_logs:\n        - status: \"usable\"\n          learned_at: \"2025-01-14\"\n          quiz_type: \"freeform\"\n",
+				), 0644))
+			}
+
+			svc := quiz.NewService(config.NotebooksConfig{
+				StoriesDirectories:     []string{storiesDir},
+				FlashcardsDirectories:  []string{flashcardsDir},
+				LearningNotesDirectory: learningDir,
+			}, mockClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+			handler := NewQuizHandler(svc)
+
+			// Start the quiz to populate the note store
+			startResp, err := handler.StartQuiz(context.Background(), connect.NewRequest(&apiv1.StartQuizRequest{
+				NotebookIds:       []string{notebookID},
+				IncludeUnstudied:  true,
+			}))
+			require.NoError(t, err)
+			require.NotEmpty(t, startResp.Msg.GetFlashcards(), "quiz should have at least one card")
+
+			// Find the card matching the expression
+			var noteID int64
+			for _, fc := range startResp.Msg.GetFlashcards() {
+				if fc.GetEntry() == tt.expression {
+					noteID = fc.GetNoteId()
+					break
+				}
+			}
+			require.NotZero(t, noteID, "expression %q should be in the quiz", tt.expression)
+
+			// Mock inference
+			mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+				inference.AnswerMeaningsResponse{
+					Answers: []inference.AnswerMeaning{{
+						Expression: tt.expression,
+						AnswersForContext: []inference.AnswersForContext{{
+							Correct: true, Reason: "match", Quality: 4,
+						}},
+					}},
+				}, nil,
+			)
+
+			// Submit the answer
+			resp, err := handler.SubmitAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitAnswerRequest{
+				NoteId:         noteID,
+				Answer:         "any answer",
+				ResponseTimeMs: 1000,
+			}))
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+
+			wd := resp.Msg.GetWordDetail()
+			if tt.want.nilDetail {
+				assert.Nil(t, wd, "expected WordDetail to be nil when all fields empty")
+				return
+			}
+			require.NotNil(t, wd, "expected WordDetail to be populated")
+
+			assert.Equal(t, tt.want.origin, wd.GetOrigin(), "origin")
+			assert.Equal(t, tt.want.pronunciation, wd.GetPronunciation(), "pronunciation")
+			assert.Equal(t, tt.want.partOfSpeech, wd.GetPartOfSpeech(), "part_of_speech")
+			assert.Equal(t, tt.want.memo, wd.GetMemo(), "memo")
+			if len(tt.want.synonyms) == 0 {
+				assert.Empty(t, wd.GetSynonyms(), "synonyms")
+			} else {
+				assert.Equal(t, tt.want.synonyms, wd.GetSynonyms(), "synonyms")
+			}
+			if len(tt.want.antonyms) == 0 {
+				assert.Empty(t, wd.GetAntonyms(), "antonyms")
+			} else {
+				assert.Equal(t, tt.want.antonyms, wd.GetAntonyms(), "antonyms")
+			}
+		})
+	}
+}
+
 func TestValidateRequest(t *testing.T) {
 	tests := []struct {
 		name          string

@@ -98,6 +98,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			EtymologyReviewCount:  etymCount,
 			LatestStoryDate:       latestDate,
 			Kind:                  kindFromIndex(index),
+			HasContent:            storyHasContent(stories),
 		})
 	}
 
@@ -355,7 +356,7 @@ func (s *Service) loadFlashcardCards(
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], s.dictionaryMap, includeUnstudied,
+		notebooks, learningHistories[notebookID], s.dictionaryMap, false,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
@@ -439,6 +440,20 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
 	return nil
+}
+
+// storyHasContent reports whether any scene carries prose or dialogue worth
+// rendering in the content reader. Flashcards and definitions-only books
+// return false because they have neither statements nor conversations.
+func storyHasContent(stories []notebook.StoryNotebook) bool {
+	for _, story := range stories {
+		for _, scene := range story.Scenes {
+			if len(scene.Statements) > 0 || len(scene.Conversations) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func countStoryDefinitions(stories []notebook.StoryNotebook) int {

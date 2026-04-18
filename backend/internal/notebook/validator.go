@@ -156,6 +156,9 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// Fix cross-notebook consistency issues
 	fixedLearning = v.fixConsistency(fixedLearning, storyNotebooks, result)
 
+	// Backfill quiz_type for learning logs that predate the field
+	fixedLearning = v.backfillQuizType(fixedLearning, result)
+
 	// Create missing learning note entries
 	fixedLearning = v.createMissingLearningNotes(fixedLearning, storyNotebooks, result)
 
@@ -836,6 +839,41 @@ func (v *Validator) fixConsistency(
 		}
 	}
 
+	return learningFiles
+}
+
+// backfillQuizType sets quiz_type to "freeform" on any learning log that has
+// status "usable" but no quiz_type. Older learning logs predate the quiz_type
+// field; the freeform quiz is the only path that produces "usable" status on
+// a correct answer (isKnownWord=false), so this backfill is safe.
+func (v *Validator) backfillQuizType(learningFiles []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	for fileIdx := range learningFiles {
+		file := &learningFiles[fileIdx]
+		for histIdx := range file.contents {
+			history := &file.contents[histIdx]
+			fillFreeformLogs := func(logs []LearningRecord, expr string) {
+				for i := range logs {
+					if logs[i].Status == LearnedStatusCanBeUsed && logs[i].QuizType == "" {
+						logs[i].QuizType = string(QuizTypeFreeform)
+						result.AddWarning(ValidationError{
+							File:    file.path,
+							Message: fmt.Sprintf("Backfilled quiz_type=freeform on usable log for %q", expr),
+						})
+					}
+				}
+			}
+			// Flashcard-style: top-level expressions
+			for eIdx := range history.Expressions {
+				fillFreeformLogs(history.Expressions[eIdx].LearnedLogs, history.Expressions[eIdx].Expression)
+			}
+			// Story-style: nested under scenes
+			for sIdx := range history.Scenes {
+				for eIdx := range history.Scenes[sIdx].Expressions {
+					fillFreeformLogs(history.Scenes[sIdx].Expressions[eIdx].LearnedLogs, history.Scenes[sIdx].Expressions[eIdx].Expression)
+				}
+			}
+		}
+	}
 	return learningFiles
 }
 

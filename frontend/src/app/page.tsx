@@ -5,15 +5,9 @@ import { Box, Heading, Text } from "@chakra-ui/react";
 
 const features = [
   {
-    href: "/books",
-    title: "Books",
-    description: "Read books and look up words",
-    icon: "B",
-  },
-  {
     href: "/learn",
     title: "Learn",
-    description: "Browse vocabulary notebooks and etymology origins",
+    description: "Read notebooks and browse vocabulary and etymology",
     icon: "L",
   },
   {
