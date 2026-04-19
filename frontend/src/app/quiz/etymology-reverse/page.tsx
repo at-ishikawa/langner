@@ -9,6 +9,7 @@ import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { etymologyResultToItem } from "@/lib/quizResultItems";
 import { useQuizResultActions } from "@/lib/useQuizResultActions";
+import { responseTimeSince } from "@/lib/responseTime";
 
 type QuizPhase = "answering" | "grading" | "batch-feedback";
 
@@ -34,7 +35,7 @@ export default function EtymologyReversePage() {
   const [error, setError] = useState<string | null>(null);
   const [pendingRetry, setPendingRetry] = useState<BufferedAnswer[] | null>(null);
   const bufferRef = useRef<BufferedAnswer[]>([]);
-  const startTimeRef = useRef(Date.now());
+  const startTimeRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { handleOverride, handleUndo, handleSkip: handleItemSkip, handleResume } =
@@ -119,24 +120,24 @@ export default function EtymologyReversePage() {
 
   const handleSubmit = () => {
     if (!answer.trim() || phase !== "answering") return;
-    const responseTimeMs = Date.now() - startTimeRef.current;
+    const responseTime = responseTimeSince(startTimeRef.current);
     const userAnswer = answer.trim();
     recordAndAdvance({
       card,
       answer: userAnswer,
       displayAnswer: userAnswer,
-      responseTimeMs: BigInt(responseTimeMs),
+      responseTimeMs: responseTime,
     });
   };
 
   const handleSkip = () => {
     if (phase !== "answering") return;
-    const responseTimeMs = Date.now() - startTimeRef.current;
+    const responseTime = responseTimeSince(startTimeRef.current);
     recordAndAdvance({
       card,
       answer: "I don't know",
       displayAnswer: "(skipped)",
-      responseTimeMs: BigInt(responseTimeMs),
+      responseTimeMs: responseTime,
     });
   };
 

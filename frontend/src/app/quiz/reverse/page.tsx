@@ -17,6 +17,7 @@ import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
 import { reverseResultToItem } from "@/lib/quizResultItems";
 import { useQuizResultActions } from "@/lib/useQuizResultActions";
+import { responseTimeSince } from "@/lib/responseTime";
 
 type QuizPhase = "answering" | "grading" | "synonym-retry" | "retry-grading" | "batch-feedback";
 
@@ -51,7 +52,7 @@ export default function ReverseQuizPage() {
   const initialResponsesRef = useRef<SubmitReverseAnswerResponse[]>([]);
   const retrySlotsRef = useRef<RetrySlot[]>([]);
   const retryAnswersRef = useRef<Record<number, BufferedAnswer>>({});
-  const startTimeRef = useRef(Date.now());
+  const startTimeRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const { handleOverride, handleUndo, handleSkip: handleItemSkip, handleResume } =
@@ -209,30 +210,27 @@ export default function ReverseQuizPage() {
 
   const handleSubmit = () => {
     if (phase !== "answering" || !answer.trim()) return;
-    const responseTimeMs = Date.now() - startTimeRef.current;
     const userAnswer = answer.trim();
     recordAndAdvance({
       card,
       answer: userAnswer,
       displayAnswer: userAnswer,
-      responseTimeMs: BigInt(responseTimeMs),
+      responseTimeMs: responseTimeSince(startTimeRef.current),
     });
   };
 
   const handleSkip = () => {
     if (phase !== "answering") return;
-    const responseTimeMs = Date.now() - startTimeRef.current;
     recordAndAdvance({
       card,
       answer: "I don't know",
       displayAnswer: "(skipped)",
-      responseTimeMs: BigInt(responseTimeMs),
+      responseTimeMs: responseTimeSince(startTimeRef.current),
     });
   };
 
   const handleRetrySubmit = () => {
     if (phase !== "synonym-retry" || !answer.trim()) return;
-    const responseTimeMs = Date.now() - startTimeRef.current;
     const userAnswer = answer.trim();
     const slot = retrySlotsRef.current[retryQueueIdx];
     const originalBuffered = bufferRef.current[slot.index];
@@ -240,7 +238,7 @@ export default function ReverseQuizPage() {
       card: originalBuffered.card,
       answer: userAnswer,
       displayAnswer: userAnswer,
-      responseTimeMs: BigInt(responseTimeMs),
+      responseTimeMs: responseTimeSince(startTimeRef.current),
     };
     if (retryQueueIdx + 1 >= retrySlotsRef.current.length) {
       void flushRetryBatch();
