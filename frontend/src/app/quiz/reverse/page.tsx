@@ -229,22 +229,41 @@ export default function ReverseQuizPage() {
     });
   };
 
-  const handleRetrySubmit = () => {
-    if (phase !== "synonym-retry" || !answer.trim()) return;
-    const userAnswer = answer.trim();
+  const recordRetryAndAdvance = (entry: BufferedAnswer) => {
     const slot = retrySlotsRef.current[retryQueueIdx];
-    const originalBuffered = bufferRef.current[slot.index];
-    retryAnswersRef.current[slot.index] = {
-      card: originalBuffered.card,
-      answer: userAnswer,
-      displayAnswer: userAnswer,
-      responseTimeMs: responseTimeSince(startTimeRef.current),
-    };
+    retryAnswersRef.current[slot.index] = entry;
     if (retryQueueIdx + 1 >= retrySlotsRef.current.length) {
       void flushRetryBatch();
     } else {
       setRetryQueueIdx(retryQueueIdx + 1);
     }
+  };
+
+  const handleRetrySubmit = () => {
+    if (phase !== "synonym-retry" || !answer.trim()) return;
+    const userAnswer = answer.trim();
+    const slot = retrySlotsRef.current[retryQueueIdx];
+    const originalBuffered = bufferRef.current[slot.index];
+    recordRetryAndAdvance({
+      card: originalBuffered.card,
+      answer: userAnswer,
+      displayAnswer: userAnswer,
+      responseTimeMs: responseTimeSince(startTimeRef.current),
+    });
+  };
+
+  const handleRetrySkip = () => {
+    if (phase !== "synonym-retry") return;
+    const slot = retrySlotsRef.current[retryQueueIdx];
+    const originalBuffered = bufferRef.current[slot.index];
+    // Sending "I don't know" makes the backend classify it as wrong on retry,
+    // so mergeRetry replaces the initial synonym response with an incorrect one.
+    recordRetryAndAdvance({
+      card: originalBuffered.card,
+      answer: "I don't know",
+      displayAnswer: "(skipped)",
+      responseTimeMs: responseTimeSince(startTimeRef.current),
+    });
   };
 
   const handleContinue = () => {
@@ -340,6 +359,7 @@ export default function ReverseQuizPage() {
             onChange={setAnswer}
             onKeyDown={handleKeyDown}
             onSubmit={handleRetrySubmit}
+            onSkip={handleRetrySkip}
             placeholder="Try again..."
           />
           {error && (
