@@ -33,7 +33,7 @@ export function BatchFeedback({
   return (
     <Box>
       <Heading size="lg" mb={3}>
-        {isFinal ? "Session Complete" : "Batch Feedback"}
+        Feedback
       </Heading>
       <Box mb={4}>
         <Text fontWeight="bold">Batch: {items.length} words</Text>

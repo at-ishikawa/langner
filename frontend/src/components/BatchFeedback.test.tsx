@@ -50,14 +50,9 @@ function renderComponent(props: Partial<Parameters<typeof BatchFeedback>[0]> = {
 }
 
 describe("BatchFeedback", () => {
-  it("shows batch heading when not final", () => {
+  it("shows Feedback heading", () => {
     renderComponent({ isFinal: false });
-    expect(screen.getByText("Batch Feedback")).toBeInTheDocument();
-  });
-
-  it("shows Session Complete heading when final", () => {
-    renderComponent({ isFinal: true });
-    expect(screen.getByText("Session Complete")).toBeInTheDocument();
+    expect(screen.getByText("Feedback")).toBeInTheDocument();
   });
 
   it("shows correct and incorrect counts", () => {
