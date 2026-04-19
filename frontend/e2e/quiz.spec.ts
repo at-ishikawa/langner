@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 
 const GET_QUIZ_OPTIONS_URL = /GetQuizOptions/;
 const START_QUIZ_URL = /StartQuiz/;
-const SUBMIT_ANSWER_URL = /SubmitAnswer/;
+const BATCH_SUBMIT_ANSWERS_URL = /BatchSubmitAnswers/;
 const START_REVERSE_QUIZ_URL = /StartReverseQuiz/;
 const START_FREEFORM_QUIZ_URL = /StartFreeformQuiz/;
 const SUBMIT_FREEFORM_ANSWER_URL = /SubmitFreeformAnswer/;
@@ -91,7 +91,7 @@ test("shows notebooks and starts quiz", async ({ page }) => {
 });
 
 test("completes full quiz flow", async ({ page }) => {
-  let submitAnswerCallCount = 0;
+  let batchCallCount = 0;
 
   await page.route(GET_QUIZ_OPTIONS_URL, async (route) => {
     await route.fulfill({
@@ -109,25 +109,29 @@ test("completes full quiz flow", async ({ page }) => {
     });
   });
 
-  await page.route(SUBMIT_ANSWER_URL, async (route) => {
-    submitAnswerCallCount++;
-    const isFirstCard = submitAnswerCallCount === 1;
+  // Batch RPC: with feedbackInterval=1, each answer submits a single-item batch.
+  // First batch returns correct; second returns incorrect.
+  await page.route(BATCH_SUBMIT_ANSWERS_URL, async (route) => {
+    batchCallCount++;
+    const isFirstBatch = batchCallCount === 1;
     await route.fulfill({
       status: 200,
       headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
-      body: JSON.stringify(
-        isFirstCard
-          ? {
-            correct: true,
-            meaning: "to initiate social interaction",
-            reason: "The answer captures the core meaning",
-          }
-          : {
-            correct: false,
-            meaning: "to initiate social interaction",
-            reason: "The answer does not match",
-          }
-      ),
+      body: JSON.stringify({
+        responses: [
+          isFirstBatch
+            ? {
+                correct: true,
+                meaning: "to initiate social interaction",
+                reason: "The answer captures the core meaning",
+              }
+            : {
+                correct: false,
+                meaning: "to initiate social interaction",
+                reason: "The answer does not match",
+              },
+        ],
+      }),
     });
   });
 
@@ -157,7 +161,7 @@ test("completes full quiz flow", async ({ page }) => {
 
   // Batch feedback appears after first answer (interval=1)
   await expect(page.getByText(/Correct: 1/)).toBeVisible();
-  expect(submitAnswerCallCount).toBe(1);
+  expect(batchCallCount).toBe(1);
 
   await page.getByRole("button", { name: "Continue" }).click();
 
@@ -167,7 +171,7 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByRole("button", { name: "Submit" }).click();
 
   await expect(page.getByText(/Incorrect: 1/)).toBeVisible();
-  expect(submitAnswerCallCount).toBe(2);
+  expect(batchCallCount).toBe(2);
 
   await page.getByRole("button", { name: "See Results" }).click();
 
@@ -337,16 +341,20 @@ test("override answer in standard quiz feedback", async ({ page }) => {
     });
   });
 
-  await page.route(SUBMIT_ANSWER_URL, async (route) => {
+  await page.route(BATCH_SUBMIT_ANSWERS_URL, async (route) => {
     await route.fulfill({
       status: 200,
       headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
       body: JSON.stringify({
-        correct: true,
-        meaning: "to initiate social interaction",
-        reason: "The answer captures the core meaning",
-        nextReviewDate: "2027-06-15",
-        learnedAt: "2026-03-16T00:00:00Z",
+        responses: [
+          {
+            correct: true,
+            meaning: "to initiate social interaction",
+            reason: "The answer captures the core meaning",
+            nextReviewDate: "2027-06-15",
+            learnedAt: "2026-03-16T00:00:00Z",
+          },
+        ],
       }),
     });
   });
@@ -422,16 +430,20 @@ test("skip word in standard quiz feedback", async ({ page }) => {
     });
   });
 
-  await page.route(SUBMIT_ANSWER_URL, async (route) => {
+  await page.route(BATCH_SUBMIT_ANSWERS_URL, async (route) => {
     await route.fulfill({
       status: 200,
       headers: { "Content-Type": CONNECT_JSON_CONTENT_TYPE },
       body: JSON.stringify({
-        correct: true,
-        meaning: "to initiate social interaction",
-        reason: "The answer captures the core meaning",
-        nextReviewDate: "2027-06-15",
-        learnedAt: "2026-03-16T00:00:00Z",
+        responses: [
+          {
+            correct: true,
+            meaning: "to initiate social interaction",
+            reason: "The answer captures the core meaning",
+            nextReviewDate: "2027-06-15",
+            learnedAt: "2026-03-16T00:00:00Z",
+          },
+        ],
       }),
     });
   });

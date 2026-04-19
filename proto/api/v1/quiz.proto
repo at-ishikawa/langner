@@ -26,8 +26,10 @@ service QuizService {
   rpc GetQuizOptions(GetQuizOptionsRequest) returns (GetQuizOptionsResponse);
   rpc StartQuiz(StartQuizRequest) returns (StartQuizResponse);
   rpc SubmitAnswer(SubmitAnswerRequest) returns (SubmitAnswerResponse);
+  rpc BatchSubmitAnswers(BatchSubmitAnswersRequest) returns (BatchSubmitAnswersResponse);
   rpc StartReverseQuiz(StartReverseQuizRequest) returns (StartReverseQuizResponse);
   rpc SubmitReverseAnswer(SubmitReverseAnswerRequest) returns (SubmitReverseAnswerResponse);
+  rpc BatchSubmitReverseAnswers(BatchSubmitReverseAnswersRequest) returns (BatchSubmitReverseAnswersResponse);
   rpc StartFreeformQuiz(StartFreeformQuizRequest) returns (StartFreeformQuizResponse);
   rpc SubmitFreeformAnswer(SubmitFreeformAnswerRequest) returns (SubmitFreeformAnswerResponse);
   rpc OverrideAnswer(OverrideAnswerRequest) returns (OverrideAnswerResponse);
@@ -36,7 +38,9 @@ service QuizService {
   rpc ResumeWord(ResumeWordRequest) returns (ResumeWordResponse);
   rpc StartEtymologyQuiz(StartEtymologyQuizRequest) returns (StartEtymologyQuizResponse);
   rpc SubmitEtymologyStandardAnswer(SubmitEtymologyStandardAnswerRequest) returns (SubmitEtymologyStandardAnswerResponse);
+  rpc BatchSubmitEtymologyStandardAnswers(BatchSubmitEtymologyStandardAnswersRequest) returns (BatchSubmitEtymologyStandardAnswersResponse);
   rpc SubmitEtymologyReverseAnswer(SubmitEtymologyReverseAnswerRequest) returns (SubmitEtymologyReverseAnswerResponse);
+  rpc BatchSubmitEtymologyReverseAnswers(BatchSubmitEtymologyReverseAnswersRequest) returns (BatchSubmitEtymologyReverseAnswersResponse);
   rpc StartEtymologyFreeformQuiz(StartEtymologyFreeformQuizRequest) returns (StartEtymologyFreeformQuizResponse);
   rpc SubmitEtymologyFreeformAnswer(SubmitEtymologyFreeformAnswerRequest) returns (SubmitEtymologyFreeformAnswerResponse);
 }
@@ -125,6 +129,16 @@ message SubmitAnswerResponse {
   repeated string images = 7;
 }
 
+message BatchSubmitAnswersRequest {
+  repeated SubmitAnswerRequest answers = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+}
+
+message BatchSubmitAnswersResponse {
+  repeated SubmitAnswerResponse responses = 1;
+}
+
 message StartReverseQuizRequest {
   repeated string notebook_ids = 1 [
     (buf.validate.field).repeated.min_items = 1
@@ -174,6 +188,16 @@ message SubmitReverseAnswerResponse {
   string next_review_date = 8;
   string learned_at = 9;
   repeated string images = 10;
+}
+
+message BatchSubmitReverseAnswersRequest {
+  repeated SubmitReverseAnswerRequest answers = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+}
+
+message BatchSubmitReverseAnswersResponse {
+  repeated SubmitReverseAnswerResponse responses = 1;
 }
 
 message StartFreeformQuizRequest {}
@@ -311,6 +335,16 @@ message SubmitEtymologyStandardAnswerResponse {
   int64 note_id = 6;
 }
 
+message BatchSubmitEtymologyStandardAnswersRequest {
+  repeated SubmitEtymologyStandardAnswerRequest answers = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+}
+
+message BatchSubmitEtymologyStandardAnswersResponse {
+  repeated SubmitEtymologyStandardAnswerResponse responses = 1;
+}
+
 message SubmitEtymologyReverseAnswerRequest {
   int64 card_id = 1 [(buf.validate.field).int64.gt = 0];
   string answer = 2 [(buf.validate.field).string = {min_len: 1, pattern: "\\S"}];
@@ -326,6 +360,16 @@ message SubmitEtymologyReverseAnswerResponse {
   string next_review_date = 6;
   string learned_at = 7;
   int64 note_id = 8;
+}
+
+message BatchSubmitEtymologyReverseAnswersRequest {
+  repeated SubmitEtymologyReverseAnswerRequest answers = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+}
+
+message BatchSubmitEtymologyReverseAnswersResponse {
+  repeated SubmitEtymologyReverseAnswerResponse responses = 1;
 }
 
 message StartEtymologyFreeformQuizRequest {
