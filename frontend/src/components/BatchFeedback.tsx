@@ -45,7 +45,7 @@ export function BatchFeedback({
         </Text>
       </Box>
 
-      <Box pb={!isFinal ? 28 : 20}>
+      <Box pb={20}>
         <QuizResultsGroupedList
           items={items}
           isEtymology={isEtymology}
@@ -66,12 +66,14 @@ export function BatchFeedback({
         mx={-4}
         px={4}
         py={3}
+        display="flex"
+        gap={2}
       >
-        <Button w="full" colorPalette="blue" onClick={isFinal ? onSeeResults : onContinue}>
+        <Button flex="1" colorPalette="blue" onClick={isFinal ? onSeeResults : onContinue}>
           {isFinal ? "See Results" : "Continue"}
         </Button>
         {!isFinal && (
-          <Button w="full" mt={2} variant="outline" colorPalette="green" onClick={onSeeResults}>
+          <Button flex="1" variant="outline" colorPalette="green" onClick={onSeeResults}>
             See Results
           </Button>
         )}
