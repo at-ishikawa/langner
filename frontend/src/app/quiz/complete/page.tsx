@@ -68,18 +68,32 @@ export default function SessionCompletePage() {
         </Text>
       </VStack>
 
-      <QuizResultsGroupedList
-        items={allResults}
-        isEtymology={isEtymologyQuiz}
-        onOverride={handleOverride}
-        onUndo={handleUndo}
-        onSkip={handleSkip}
-        onResume={handleResume}
-      />
+      <Box pb={20}>
+        <QuizResultsGroupedList
+          items={allResults}
+          isEtymology={isEtymologyQuiz}
+          onOverride={handleOverride}
+          onUndo={handleUndo}
+          onSkip={handleSkip}
+          onResume={handleResume}
+        />
+      </Box>
 
-      <Button w="full" colorPalette="blue" onClick={handleBackToStart}>
-        Back to Start
-      </Button>
+      <Box
+        position="sticky"
+        bottom={0}
+        bg="white"
+        _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+        borderTopWidth="1px"
+        borderTopColor="gray.200"
+        mx={-4}
+        px={4}
+        py={3}
+      >
+        <Button w="full" colorPalette="blue" onClick={handleBackToStart}>
+          Back to Start
+        </Button>
+      </Box>
     </Box>
   );
 }

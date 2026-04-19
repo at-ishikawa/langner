@@ -45,23 +45,37 @@ export function BatchFeedback({
         </Text>
       </Box>
 
-      <QuizResultsGroupedList
-        items={items}
-        isEtymology={isEtymology}
-        onOverride={onOverride}
-        onUndo={onUndo}
-        onSkip={onSkip}
-        onResume={onResume}
-      />
+      <Box pb={!isFinal ? 28 : 20}>
+        <QuizResultsGroupedList
+          items={items}
+          isEtymology={isEtymology}
+          onOverride={onOverride}
+          onUndo={onUndo}
+          onSkip={onSkip}
+          onResume={onResume}
+        />
+      </Box>
 
-      <Button w="full" colorPalette="blue" onClick={isFinal ? onSeeResults : onContinue}>
-        {isFinal ? "See Results" : "Continue"}
-      </Button>
-      {!isFinal && (
-        <Button w="full" mt={2} variant="outline" colorPalette="green" onClick={onSeeResults}>
-          See Results
+      <Box
+        position="sticky"
+        bottom={0}
+        bg="white"
+        _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+        borderTopWidth="1px"
+        borderTopColor="gray.200"
+        mx={-4}
+        px={4}
+        py={3}
+      >
+        <Button w="full" colorPalette="blue" onClick={isFinal ? onSeeResults : onContinue}>
+          {isFinal ? "See Results" : "Continue"}
         </Button>
-      )}
+        {!isFinal && (
+          <Button w="full" mt={2} variant="outline" colorPalette="green" onClick={onSeeResults}>
+            See Results
+          </Button>
+        )}
+      </Box>
     </Box>
   );
 }
