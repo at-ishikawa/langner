@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -11,14 +11,14 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
+import { quizClient } from "@/lib/client";
 import { useQuizStore } from "@/store/quizStore";
-import { FeedbackActions } from "@/components/FeedbackActions";
 import { AnswerInput } from "@/components/AnswerInput";
-import { WordDetailView } from "@/components/WordDetailView";
-import type { WordDetail } from "@/store/quizStore";
+import { BatchFeedback } from "@/components/BatchFeedback";
+import { standardResultToItem } from "@/lib/quizResultItems";
+import { useQuizResultActions } from "@/lib/useQuizResultActions";
 
-type QuizPhase = "answering" | "feedback";
+type QuizPhase = "answering" | "batch-feedback";
 
 function highlightExpression(
   text: string,
@@ -37,43 +37,25 @@ function highlightExpression(
   );
 }
 
-interface FeedbackData {
-  correct: boolean;
-  meaning: string;
-  reason: string;
-  pronunciation?: string;
-  partOfSpeech?: string;
-  learnedAt?: string;
-  images?: string[];
-  wordDetail?: WordDetail;
-}
-
 export default function QuizCardPage() {
   const router = useRouter();
   const flashcards = useQuizStore((s) => s.flashcards);
   const quizType = useQuizStore((s) => s.quizType);
   const currentIndex = useQuizStore((s) => s.currentIndex);
+  const results = useQuizStore((s) => s.results);
+  const feedbackInterval = useQuizStore((s) => s.feedbackInterval);
   const storeSubmitResult = useQuizStore((s) => s.submitResult);
-  const storeSkipResult = useQuizStore((s) => s.skipResult);
-  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
   const [answer, setAnswer] = useState("");
-  const [submittedAnswer, setSubmittedAnswer] = useState("");
-  const [feedback, setFeedback] = useState<FeedbackData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [overridden, setOverridden] = useState(false);
-  const [skipped, setSkipped] = useState(false);
-  const [displayCorrect, setDisplayCorrect] = useState(false);
-  const [overrideOriginals, setOverrideOriginals] = useState<{
-    quality: number;
-    status: string;
-    intervalDays: number;
-  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { handleOverride, handleUndo, handleSkip: handleItemSkip, handleResume } =
+    useQuizResultActions(quizType);
 
   useEffect(() => {
     if (flashcards.length === 0 || quizType !== "standard") {
@@ -85,33 +67,44 @@ export default function QuizCardPage() {
     startTimeRef.current = Date.now();
     setPhase("answering");
     setAnswer("");
-    setSubmittedAnswer("");
-    setFeedback(null);
-    setOverridden(false);
-    setSkipped(false);
-    setDisplayCorrect(false);
-    setOverrideOriginals(null);
+    setError(null);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [currentIndex]);
+
+  const total = flashcards.length;
+  const progress = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
+
+  const batchStart = useMemo(
+    () => Math.floor(currentIndex / feedbackInterval) * feedbackInterval,
+    [currentIndex, feedbackInterval],
+  );
+
+  const batchItems = useMemo(
+    () => results.slice(batchStart).map((r, i) => standardResultToItem(r, batchStart + i)),
+    [results, batchStart],
+  );
 
   if (flashcards.length === 0) {
     return null;
   }
 
   const card = flashcards[currentIndex];
-  const total = flashcards.length;
-  const progress = ((currentIndex + 1) / total) * 100;
+  const isFinalCard = currentIndex + 1 >= total;
+
+  const afterSubmit = () => {
+    const isBatchBoundary = (currentIndex + 1) % feedbackInterval === 0;
+    if (isFinalCard || isBatchBoundary) {
+      setPhase("batch-feedback");
+    } else {
+      nextCard();
+    }
+  };
 
   const handleSubmit = async () => {
-    if (!answer.trim()) return;
-
+    if (loading || !answer.trim()) return;
     const responseTimeMs = Date.now() - startTimeRef.current;
     const userAnswer = answer.trim();
-    setSubmittedAnswer(userAnswer);
-    setAnswer("");
-    setPhase("feedback");
     setLoading(true);
-    setFeedback(null);
     setError(null);
 
     try {
@@ -121,17 +114,6 @@ export default function QuizCardPage() {
         responseTimeMs: BigInt(responseTimeMs),
       });
 
-      setFeedback({
-        correct: res.correct,
-        meaning: res.meaning,
-        reason: res.reason,
-        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
-        wordDetail: res.wordDetail,
-      });
-      setDisplayCorrect(res.correct);
       storeSubmitResult({
         noteId: card.noteId,
         entry: card.entry,
@@ -144,6 +126,8 @@ export default function QuizCardPage() {
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
+      setAnswer("");
+      afterSubmit();
     } catch {
       setError("Failed to submit answer");
     } finally {
@@ -152,12 +136,9 @@ export default function QuizCardPage() {
   };
 
   const handleSkip = async () => {
+    if (loading) return;
     const responseTimeMs = Date.now() - startTimeRef.current;
-    setSubmittedAnswer("");
-    setAnswer("");
-    setPhase("feedback");
     setLoading(true);
-    setFeedback(null);
     setError(null);
 
     try {
@@ -167,17 +148,6 @@ export default function QuizCardPage() {
         responseTimeMs: BigInt(responseTimeMs),
       });
 
-      setFeedback({
-        correct: false,
-        meaning: res.meaning,
-        reason: res.reason,
-        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
-        wordDetail: res.wordDetail,
-      });
-      setDisplayCorrect(false);
       storeSubmitResult({
         noteId: card.noteId,
         entry: card.entry,
@@ -190,6 +160,8 @@ export default function QuizCardPage() {
         learnedAt: res.learnedAt || undefined,
         images: res.images.length > 0 ? res.images : undefined,
       });
+      setAnswer("");
+      afterSubmit();
     } catch {
       setError("Failed to submit answer");
     } finally {
@@ -197,21 +169,19 @@ export default function QuizCardPage() {
     }
   };
 
-  const handleNext = () => {
-    if (currentIndex + 1 >= total) {
+  const handleContinue = () => {
+    if (isFinalCard) {
       router.push("/quiz/complete");
     } else {
       nextCard();
     }
   };
 
+  const handleSeeResults = () => router.push("/quiz/complete");
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      if (phase === "answering") {
-        handleSubmit();
-      } else if (phase === "feedback" && !loading) {
-        handleNext();
-      }
+    if (e.key === "Enter" && phase === "answering" && !loading) {
+      handleSubmit();
     }
   };
 
@@ -257,161 +227,43 @@ export default function QuizCardPage() {
             onSkip={handleSkip}
             placeholder="Type your answer"
           />
-        </VStack>
-      ) : (
-        <VStack align="stretch" gap={4}>
-          <Heading size="xl" textAlign="center">
-            {card.entry}
-          </Heading>
-          {feedback && (feedback.pronunciation || feedback.partOfSpeech) && (
-            <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center">
-              {[
-                feedback.pronunciation && `/${feedback.pronunciation}/`,
-                feedback.partOfSpeech,
-              ].filter(Boolean).join(" · ")}
-            </Text>
+
+          {loading && (
+            <Box textAlign="center" py={2}>
+              <Spinner size="sm" mr={2} />
+              <Text as="span">Submitting...</Text>
+            </Box>
           )}
 
-          {loading ? (
-            <Box textAlign="center" py={8}>
-              <Spinner size="lg" mb={4} />
-              <Text>Checking your answer...</Text>
-            </Box>
-          ) : feedback ? (
-            <>
-              <FeedbackActions
-                isCorrect={displayCorrect}
-                noteId={card.noteId}
-                isOverridden={overridden}
-                isSkipped={skipped}
-                nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
-                onNext={handleNext}
-                onOverride={async () => {
-                  try {
-                    const res = await quizClient.overrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.STANDARD,
-                      learnedAt: feedback.learnedAt!,
-                      markCorrect: !displayCorrect,
-                    });
-                    setOverridden(true);
-                    setDisplayCorrect(!displayCorrect);
-                    setOverrideOriginals({
-                      quality: res.originalQuality,
-                      status: res.originalStatus,
-                      intervalDays: res.originalIntervalDays,
-                    });
-                    storeOverrideResult(currentIndex, "standard", res.nextReviewDate || "", {
-                      quality: res.originalQuality,
-                      status: res.originalStatus,
-                      intervalDays: res.originalIntervalDays,
-                    });
-                  } catch { /* silently fail */ }
-                }}
-                onUndo={async () => {
-                  try {
-                    const res = await quizClient.undoOverrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.STANDARD,
-                      learnedAt: feedback.learnedAt!,
-                      originalQuality: overrideOriginals?.quality ?? 0,
-                      originalStatus: overrideOriginals?.status ?? "",
-                      originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                    });
-                    setOverridden(false);
-                    setOverrideOriginals(null);
-                    setDisplayCorrect(res.correct);
-                  } catch {
-                    setOverridden(false);
-                    setOverrideOriginals(null);
-                    setDisplayCorrect(feedback.correct);
-                  }
-                }}
-                onSkip={async () => {
-                  try {
-                    await quizClient.skipWord({ noteId: card.noteId });
-                    setSkipped(true);
-                    storeSkipResult(currentIndex, "standard");
-                  } catch { /* silently fail */ }
-                }}
-                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
-              >
-                {/* Your answer */}
-                {submittedAnswer ? (
-                  <Text textDecoration={displayCorrect ? "none" : "line-through"}>
-                    Your answer: {submittedAnswer}
-                  </Text>
-                ) : (
-                  <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                    Skipped
-                  </Text>
-                )}
-
-                <Box>
-                  <Text fontWeight="bold">Meaning</Text>
-                  <Text>{feedback.meaning}</Text>
-                </Box>
-
-                {feedback.reason && (
-                  <Box>
-                    <Text fontWeight="bold">Reason</Text>
-                    <Text>{feedback.reason}</Text>
-                  </Box>
-                )}
-
-                {card.examples.length > 0 && (
-                  <Box>
-                    <Text fontWeight="bold">Examples</Text>
-                    <VStack align="stretch" gap={1} mt={1}>
-                      {card.examples.map((ex, i) => (
-                        <Text key={i} fontSize="sm" color="fg.muted" fontStyle="italic">
-                          {ex.speaker && <>{ex.speaker}: &ldquo;</>}
-                          {!ex.speaker && <>&ldquo;</>}
-                          {highlightExpression(ex.text, card.originalEntry || card.entry)}
-                          &rdquo;
-                        </Text>
-                      ))}
-                    </VStack>
-                  </Box>
-                )}
-
-                {feedback.images && feedback.images.length > 0 && (
-                  <Box display="flex" gap={2} flexWrap="wrap">
-                    {feedback.images.map((src, i) => (
-                      <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-                    ))}
-                  </Box>
-                )}
-
-                <WordDetailView wordDetail={feedback.wordDetail} />
-              </FeedbackActions>
-            </>
-          ) : error ? (
-            <>
+          {error && (
+            <VStack align="stretch" gap={2}>
               <Text color="red.500">{error}</Text>
               <Button
                 w="full"
                 colorPalette="blue"
                 variant="outline"
                 onClick={() => {
-                  setPhase("answering");
                   setError(null);
-                  setAnswer(submittedAnswer);
                   setTimeout(() => inputRef.current?.focus(), 50);
                 }}
               >
                 Retry
               </Button>
-              <Button
-                w="full"
-                colorPalette="blue"
-                onClick={handleNext}
-              >
-                {currentIndex + 1 >= total ? "See Results" : "Skip"}
-              </Button>
-            </>
-          ) : null}
+            </VStack>
+          )}
         </VStack>
+      ) : (
+        <BatchFeedback
+          items={batchItems}
+          isEtymology={false}
+          isFinal={isFinalCard}
+          onContinue={handleContinue}
+          onSeeResults={handleSeeResults}
+          onOverride={handleOverride}
+          onUndo={handleUndo}
+          onSkip={handleItemSkip}
+          onResume={handleResume}
+        />
       )}
     </Box>
   );

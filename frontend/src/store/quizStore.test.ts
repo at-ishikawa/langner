@@ -57,6 +57,18 @@ describe("useQuizStore", () => {
     expect(state.flashcards).toEqual([]);
     expect(state.currentIndex).toBe(0);
     expect(state.results).toEqual([]);
+    expect(state.feedbackInterval).toBe(10);
+  });
+
+  it("setFeedbackInterval updates feedbackInterval", () => {
+    useQuizStore.getState().setFeedbackInterval(5);
+    expect(useQuizStore.getState().feedbackInterval).toBe(5);
+  });
+
+  it("reset restores feedbackInterval to default", () => {
+    useQuizStore.getState().setFeedbackInterval(3);
+    useQuizStore.getState().reset();
+    expect(useQuizStore.getState().feedbackInterval).toBe(10);
   });
 
   it("setFlashcards updates flashcards", () => {

@@ -8,6 +8,7 @@ import {
   Button,
   Checkbox,
   Heading,
+  Input,
   Spinner,
   Switch,
   Text,
@@ -59,6 +60,11 @@ export default function QuizHubPage() {
   const setEtymologyOriginCards = useQuizStore((s) => s.setEtymologyOriginCards);
   const setEtymologyFreeformOrigins = useQuizStore((s) => s.setEtymologyFreeformOrigins);
   const setEtymologyFreeformNextReviewDates = useQuizStore((s) => s.setEtymologyFreeformNextReviewDates);
+  const feedbackInterval = useQuizStore((s) => s.feedbackInterval);
+  const setFeedbackInterval = useQuizStore((s) => s.setFeedbackInterval);
+  const [feedbackIntervalText, setFeedbackIntervalText] = useState(
+    feedbackInterval.toString(),
+  );
 
   useEffect(() => {
     quizClient
@@ -121,7 +127,20 @@ export default function QuizHubPage() {
     selectedMode !== null &&
     !(tab === "vocabulary" && selectedVocabMode === "freeform");
 
+  const isFreeformMode =
+    (tab === "vocabulary" && selectedVocabMode === "freeform") ||
+    (tab === "etymology" && selectedEtyMode === "freeform");
+  const showFeedbackInterval = selectedMode !== null && !isFreeformMode;
+
   const handleStart = async () => {
+    const parsed = parseInt(feedbackIntervalText, 10);
+    if (!isFreeformMode && (!Number.isFinite(parsed) || parsed < 1)) {
+      setError("Feedback interval must be a positive number");
+      return;
+    }
+    if (!isFreeformMode) {
+      setFeedbackInterval(parsed);
+    }
     setStarting(true);
     try {
       if (tab === "vocabulary") {
@@ -364,6 +383,24 @@ export default function QuizHubPage() {
             {notebooks.reduce((sum, n) => sum + n.reviewCount, 0)} words
             available across all notebooks
           </Text>
+        )}
+
+        {showFeedbackInterval && (
+          <Box mt={2}>
+            <Text fontWeight="medium" fontSize="sm" mb={1}>
+              Questions per feedback screen
+            </Text>
+            <Input
+              type="number"
+              min={1}
+              value={feedbackIntervalText}
+              onChange={(e) => setFeedbackIntervalText(e.target.value)}
+              placeholder="10"
+            />
+            <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+              See feedback for multiple answers at once. Default: 10.
+            </Text>
+          </Box>
         )}
 
         {/* Start button -- only show when a mode is selected */}

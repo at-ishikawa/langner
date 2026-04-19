@@ -142,6 +142,10 @@ test("completes full quiz flow", async ({ page }) => {
 
   await expect(page.getByText("English Phrases")).toBeVisible();
   await page.getByRole("checkbox", { name: /English Phrases/ }).click({ force: true });
+
+  // Set feedback interval to 1 so feedback shows after each answer
+  await page.getByRole("spinbutton").fill("1");
+
   await page.getByRole("button", { name: "Start" }).click();
 
   await page.waitForURL("/quiz/standard");
@@ -151,17 +155,18 @@ test("completes full quiz flow", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("start a conversation");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/^[✓✗] (?:Correct|Incorrect)/)).toBeVisible();
+  // Batch feedback appears after first answer (interval=1)
+  await expect(page.getByText(/Correct: 1/)).toBeVisible();
   expect(submitAnswerCallCount).toBe(1);
 
-  await page.getByRole("button", { name: "Next", exact: true }).click();
+  await page.getByRole("button", { name: "Continue" }).click();
 
   await expect(page.getByRole("heading", { name: "lose one's temper" })).toBeVisible();
 
   await page.getByPlaceholder("Type your answer").fill("get angry");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/^[✓✗] (?:Correct|Incorrect)/)).toBeVisible();
+  await expect(page.getByText(/Incorrect: 1/)).toBeVisible();
   expect(submitAnswerCallCount).toBe(2);
 
   await page.getByRole("button", { name: "See Results" }).click();
@@ -384,23 +389,20 @@ test("override answer in standard quiz feedback", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("start a conversation");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/Correct/)).toBeVisible();
+  // Final card in batch — batch feedback shows "Correct: 1"
+  await expect(page.getByText(/Correct: 1/)).toBeVisible();
 
-  // Click "Mark as Incorrect" to override
+  // Click "Mark as Incorrect" on the result card
   await page.getByRole("button", { name: "Mark as Incorrect" }).click();
 
-  // Verify "(overridden)" label appears
-  await expect(page.getByText("(overridden)")).toBeVisible();
-
-  // Verify "Undo" link appears
-  await expect(page.getByText("Undo")).toBeVisible();
+  // Verify "(overridden)" or "Marked as" label appears
+  await expect(page.getByText(/overridden/)).toBeVisible();
 
   // Click "Undo" to restore original state
   await page.getByText("Undo").click();
 
-  // Verify original state restored: should show Correct again without (overridden)
-  await expect(page.getByText("(overridden)")).not.toBeVisible();
-  await expect(page.getByText(/Correct/)).toBeVisible();
+  // Verify override is cleared
+  await expect(page.getByText(/overridden/)).not.toBeVisible();
 });
 
 test("skip word in standard quiz feedback", async ({ page }) => {
@@ -455,16 +457,17 @@ test("skip word in standard quiz feedback", async ({ page }) => {
   await page.getByPlaceholder("Type your answer").fill("start a conversation");
   await page.getByRole("button", { name: "Submit" }).click();
 
-  await expect(page.getByText(/Correct/)).toBeVisible();
+  // Batch feedback shows correct count
+  await expect(page.getByText(/Correct: 1/)).toBeVisible();
 
-  // Click "Skip" button — immediately skips (no confirmation)
+  // Click "Exclude from Quizzes" on the result card
   await page.getByRole("button", { name: "Exclude from Quizzes" }).click();
 
-  // Verify "Skipped" label appears
-  await expect(page.getByText("Excluded from quizzes")).toBeVisible();
+  // Verify the card is moved to the Excluded section
+  await expect(page.getByText(/Excluded from Quizzes \(1\)/)).toBeVisible();
 
-  // Verify "Skip" button is gone
-  await expect(page.getByRole("button", { name: "Exclude from Quizzes" })).not.toBeVisible();
+  // Verify Resume button appears on the excluded card
+  await expect(page.getByRole("button", { name: "Resume" })).toBeVisible();
 });
 
 // Review date display and change functionality was removed from the per-question feedback screen
