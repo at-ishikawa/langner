@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -76,10 +76,30 @@ export default function QuizHubPage() {
 
   const selectedMode = tab === "vocabulary" ? selectedVocabMode : selectedEtyMode;
 
-  // Notebook lists
-  const vocabNotebooks = notebooks.filter((n) => n.kind !== "Etymology");
-  const etymologySourceNotebooks = notebooks.filter((n) => n.kind === "Etymology");
-  const displayedNotebooks = tab === "vocabulary" ? vocabNotebooks : etymologySourceNotebooks;
+  // Notebook lists. Hide notebooks with zero review count for the selected
+  // mode; when includeUnstudied is on, we can't know the unstudied count so
+  // fall back to showing all of them.
+  const displayedNotebooks = useMemo(() => {
+    const base = notebooks.filter((n) =>
+      tab === "vocabulary" ? n.kind !== "Etymology" : n.kind === "Etymology",
+    );
+    if (includeUnstudied) return base;
+    return base.filter((n) => {
+      if (tab === "etymology") return n.etymologyReviewCount > 0;
+      if (selectedVocabMode === "reverse") return n.reverseReviewCount > 0;
+      return n.reviewCount > 0;
+    });
+  }, [notebooks, tab, includeUnstudied, selectedVocabMode]);
+
+  // Drop selections that are hidden by the current filter so the user doesn't
+  // accidentally start a quiz referencing notebooks they can no longer see.
+  useEffect(() => {
+    const displayedIds = new Set(displayedNotebooks.map((n) => n.notebookId));
+    setSelectedIds((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => displayedIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [displayedNotebooks]);
 
   const allSelected =
     displayedNotebooks.length > 0 &&
@@ -304,7 +324,52 @@ export default function QuizHubPage() {
           );
         })}
 
-        {/* Notebook selection (inline below selected mode) */}
+        {/* Quiz options (shown above the notebook picker so filters apply) */}
+        {selectedMode !== null && (
+          <VStack align="stretch" gap={3} mt={1}>
+            {showNotebookSelection && (
+              <Switch.Root
+                checked={includeUnstudied}
+                onCheckedChange={(e) => setIncludeUnstudied(e.checked)}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control />
+                <Switch.Label>Include unstudied words</Switch.Label>
+              </Switch.Root>
+            )}
+
+            {tab === "vocabulary" && selectedVocabMode === "reverse" && (
+              <Switch.Root
+                checked={listMissingContext}
+                onCheckedChange={(e) => setListMissingContext(e.checked)}
+              >
+                <Switch.HiddenInput />
+                <Switch.Control />
+                <Switch.Label>List words missing context</Switch.Label>
+              </Switch.Root>
+            )}
+
+            {showFeedbackInterval && (
+              <Box>
+                <Text fontWeight="medium" fontSize="sm" mb={1}>
+                  Questions per feedback screen
+                </Text>
+                <Input
+                  type="number"
+                  min={1}
+                  value={feedbackIntervalText}
+                  onChange={(e) => setFeedbackIntervalText(e.target.value)}
+                  placeholder="10"
+                />
+                <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+                  See feedback for multiple answers at once. Default: 10.
+                </Text>
+              </Box>
+            )}
+          </VStack>
+        )}
+
+        {/* Notebook selection (filtered by selected options) */}
         {showNotebookSelection && (
           <Box mt={1}>
             <Text fontWeight="medium" fontSize="sm" mb={1}>
@@ -316,64 +381,50 @@ export default function QuizHubPage() {
               </Text>
             )}
 
-            <VStack align="stretch" gap={3}>
-              <Checkbox.Root checked={allSelected} onCheckedChange={toggleAll}>
-                <Checkbox.HiddenInput />
-                <Checkbox.Control />
-                <Checkbox.Label fontWeight="bold">All notebooks</Checkbox.Label>
-              </Checkbox.Root>
-
-              {displayedNotebooks.map((notebook) => (
-                <Checkbox.Root
-                  key={notebook.notebookId}
-                  checked={selectedIds.has(notebook.notebookId)}
-                  onCheckedChange={() => toggleNotebook(notebook.notebookId)}
-                >
+            {displayedNotebooks.length === 0 ? (
+              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={2}>
+                No notebooks have words due for this mode. Turn on{" "}
+                <Text as="span" fontWeight="medium">Include unstudied words</Text>{" "}
+                to see more.
+              </Text>
+            ) : (
+              <VStack align="stretch" gap={3}>
+                <Checkbox.Root checked={allSelected} onCheckedChange={toggleAll}>
                   <Checkbox.HiddenInput />
                   <Checkbox.Control />
-                  <Checkbox.Label flex="1">
-                    <Box display="flex" justifyContent="space-between" w="full">
-                      <Text>{notebook.name}</Text>
-                      <Text color="gray.500" fontSize="sm">
-                        {tab === "etymology"
-                          ? `${notebook.etymologyReviewCount} words`
-                          : selectedVocabMode === "reverse"
-                            ? notebook.reverseReviewCount
-                            : notebook.reviewCount}
-                      </Text>
-                    </Box>
-                  </Checkbox.Label>
+                  <Checkbox.Label fontWeight="bold">All notebooks</Checkbox.Label>
                 </Checkbox.Root>
-              ))}
-            </VStack>
 
-            <Box mt={4}>
-              <Switch.Root
-                checked={includeUnstudied}
-                onCheckedChange={(e) => setIncludeUnstudied(e.checked)}
-              >
-                <Switch.HiddenInput />
-                <Switch.Control />
-                <Switch.Label>Include unstudied words</Switch.Label>
-              </Switch.Root>
-            </Box>
-
-            {tab === "vocabulary" && selectedVocabMode === "reverse" && (
-              <Box mt={2}>
-                <Switch.Root
-                  checked={listMissingContext}
-                  onCheckedChange={(e) => setListMissingContext(e.checked)}
-                >
-                  <Switch.HiddenInput />
-                  <Switch.Control />
-                  <Switch.Label>List words missing context</Switch.Label>
-                </Switch.Root>
-              </Box>
+                {displayedNotebooks.map((notebook) => (
+                  <Checkbox.Root
+                    key={notebook.notebookId}
+                    checked={selectedIds.has(notebook.notebookId)}
+                    onCheckedChange={() => toggleNotebook(notebook.notebookId)}
+                  >
+                    <Checkbox.HiddenInput />
+                    <Checkbox.Control />
+                    <Checkbox.Label flex="1">
+                      <Box display="flex" justifyContent="space-between" w="full">
+                        <Text>{notebook.name}</Text>
+                        <Text color="gray.500" fontSize="sm">
+                          {tab === "etymology"
+                            ? `${notebook.etymologyReviewCount} words`
+                            : selectedVocabMode === "reverse"
+                              ? notebook.reverseReviewCount
+                              : notebook.reviewCount}
+                        </Text>
+                      </Box>
+                    </Checkbox.Label>
+                  </Checkbox.Root>
+                ))}
+              </VStack>
             )}
 
-            <Text mt={4} fontWeight="bold" textAlign="center">
-              {totalDue} words due for review
-            </Text>
+            {displayedNotebooks.length > 0 && (
+              <Text mt={4} fontWeight="bold" textAlign="center">
+                {totalDue} words due for review
+              </Text>
+            )}
           </Box>
         )}
 
@@ -383,24 +434,6 @@ export default function QuizHubPage() {
             {notebooks.reduce((sum, n) => sum + n.reviewCount, 0)} words
             available across all notebooks
           </Text>
-        )}
-
-        {showFeedbackInterval && (
-          <Box mt={2}>
-            <Text fontWeight="medium" fontSize="sm" mb={1}>
-              Questions per feedback screen
-            </Text>
-            <Input
-              type="number"
-              min={1}
-              value={feedbackIntervalText}
-              onChange={(e) => setFeedbackIntervalText(e.target.value)}
-              placeholder="10"
-            />
-            <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
-              See feedback for multiple answers at once. Default: 10.
-            </Text>
-          </Box>
         )}
 
         {/* Start button -- only show when a mode is selected */}
