@@ -35,6 +35,7 @@ export function standardResultToItem(r: QuizResult, index: number): ResultItem {
     pronunciation: r.wordDetail?.pronunciation,
     partOfSpeech: r.wordDetail?.partOfSpeech,
     originBreakdown: buildOriginBreakdown(r.wordDetail),
+    wordDetail: r.wordDetail,
   };
 }
 
@@ -57,6 +58,7 @@ export function reverseResultToItem(r: ReverseQuizResult, index: number): Result
     pronunciation: r.wordDetail?.pronunciation,
     partOfSpeech: r.wordDetail?.partOfSpeech,
     originBreakdown: buildOriginBreakdown(r.wordDetail),
+    wordDetail: r.wordDetail,
   };
 }
 
@@ -78,6 +80,7 @@ export function freeformResultToItem(r: FreeformResult, index: number): ResultIt
     pronunciation: r.wordDetail?.pronunciation,
     partOfSpeech: r.wordDetail?.partOfSpeech,
     originBreakdown: buildOriginBreakdown(r.wordDetail),
+    wordDetail: r.wordDetail,
   };
 }
 

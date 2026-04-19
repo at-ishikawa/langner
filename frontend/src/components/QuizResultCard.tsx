@@ -1,6 +1,8 @@
 "use client";
 
 import { Box, Button, Text } from "@chakra-ui/react";
+import type { WordDetail } from "@/store/quizStore";
+import { WordDetailView } from "./WordDetailView";
 
 export interface OriginPartDisplay {
   origin: string;
@@ -27,6 +29,10 @@ export interface ResultItem {
   reason?: string;
   pronunciation?: string;
   partOfSpeech?: string;
+  /** Full word detail (origin prose, synonyms, antonyms, memo). Origin parts
+   * are rendered via originBreakdown — the wordDetail passed to
+   * WordDetailView has its originParts stripped to avoid duplication. */
+  wordDetail?: WordDetail;
 }
 
 function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
@@ -308,6 +314,15 @@ export function QuizResultCard({
               );
             })}
           </Box>
+        </Box>
+      )}
+
+      {/* Extra word details (origin prose, synonyms, antonyms, memo). Origin
+          parts are stripped so WordDetailView doesn't render the etymology
+          section a second time. */}
+      {item.wordDetail && (
+        <Box mb={3}>
+          <WordDetailView wordDetail={{ ...item.wordDetail, originParts: undefined }} />
         </Box>
       )}
 
