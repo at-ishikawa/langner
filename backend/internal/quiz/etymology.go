@@ -272,6 +272,7 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 			Name:                 index.Name,
 			EtymologyReviewCount: dueCount,
 			Kind:                 "Etymology",
+			LatestDate:           index.LatestDate,
 		})
 	}
 

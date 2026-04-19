@@ -52,7 +52,7 @@ type NotebookSummary struct {
 	ReviewCount           int
 	ReverseReviewCount    int
 	EtymologyReviewCount  int
-	LatestStoryDate       time.Time
+	LatestDate            time.Time
 	Kind                  string
 	// HasContent is true when any scene in the notebook has statements or
 	// conversations — i.e., there is prose/dialogue to read, not just flashcards.

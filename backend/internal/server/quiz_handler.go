@@ -60,7 +60,7 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load notebook summaries: %w", err))
 	}
 	sort.Slice(summaries, func(i, j int) bool {
-		di, dj := summaries[i].LatestStoryDate, summaries[j].LatestStoryDate
+		di, dj := summaries[i].LatestDate, summaries[j].LatestDate
 		if !di.Equal(dj) { return di.After(dj) }
 		return summaries[i].NotebookID < summaries[j].NotebookID
 	})

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 )
@@ -15,6 +16,7 @@ type Reader struct {
 	etymologyIndexes  map[string]EtymologyIndex
 	dictionaryMap     map[string]rapidapi.Response
 	definitionsMap    DefinitionsMap
+	definitionsDates  map[string]time.Time
 }
 
 // walkIndexFiles walks a directory and loads index.yml files into the provided map
@@ -104,7 +106,7 @@ func NewReader(
 		}
 	}
 
-	definitionsMap, err := NewDefinitionsMap(definitionsDirectories)
+	definitionsMap, definitionsDates, err := NewDefinitionsMap(definitionsDirectories)
 	if err != nil {
 		return nil, fmt.Errorf("NewDefinitionsMap: %w", err)
 	}
@@ -120,6 +122,7 @@ func NewReader(
 		etymologyIndexes: etymologyIndexes,
 		dictionaryMap:    dictionaryMap,
 		definitionsMap:   definitionsMap,
+		definitionsDates: definitionsDates,
 	}, nil
 }
 

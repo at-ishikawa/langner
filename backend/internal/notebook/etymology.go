@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // EtymologyOrigin represents a single etymology origin (root, prefix, or suffix).
@@ -23,8 +24,9 @@ type EtymologyIndex struct {
 	NotebookPaths []string `yaml:"notebooks"`
 
 	// internal fields
-	Path    string            `yaml:"-"`
-	Origins []EtymologyOrigin `yaml:"-"`
+	Path       string            `yaml:"-"`
+	Origins    []EtymologyOrigin `yaml:"-"`
+	LatestDate time.Time         `yaml:"-"` // max session-file `date`, used to sort notebooks
 }
 
 // EtymologyDefinitionEntry is a definition with origin_parts in an etymology session file.
@@ -49,10 +51,13 @@ func (e EtymologyDefinitionEntry) GetExpression() string {
 // etymologySessionFile supports both flat list and wrapped formats:
 //
 //	Flat:    [{ origin: tele, ... }, ...]
-//	Wrapped: { origins: [...], definitions: [...] }
+//	Wrapped: { origins: [...], definitions: [...], date: 2025-01-15 }
 type etymologySessionFile struct {
 	Origins     []EtymologyOrigin           `yaml:"origins"`
 	Definitions []EtymologyDefinitionEntry  `yaml:"definitions"`
+	// Date is optional. Used to sort etymology notebooks on the quiz start
+	// page. The latest date across all session files wins.
+	Date time.Time `yaml:"date,omitempty"`
 }
 
 // ReadEtymologyNotebook reads the origins from an etymology notebook.
@@ -200,6 +205,19 @@ func walkEtymologyIndexFiles(rootDir string, indexMap map[string]EtymologyIndex)
 		}
 
 		index.Path = dir
+
+		// Read the `date` field (wrapped format only) from each session file and
+		// keep the latest. Errors are ignored — flat format has no date.
+		for _, nbPath := range index.NotebookPaths {
+			wrapped, err := readYamlFile[etymologySessionFile](filepath.Join(dir, nbPath))
+			if err != nil {
+				continue
+			}
+			if wrapped.Date.After(index.LatestDate) {
+				index.LatestDate = wrapped.Date
+			}
+		}
+
 		indexMap[index.ID] = index
 		return nil
 	})
