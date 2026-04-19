@@ -406,8 +406,8 @@ test("override answer in standard quiz feedback", async ({ page }) => {
   // Verify "(overridden)" or "Marked as" label appears
   await expect(page.getByText(/overridden/)).toBeVisible();
 
-  // Click "Undo" to restore original state
-  await page.getByText("Undo").click();
+  // Click "Undo override" to restore original state
+  await page.getByText("Undo override").click();
 
   // Verify override is cleared
   await expect(page.getByText(/overridden/)).not.toBeVisible();
@@ -472,8 +472,8 @@ test("skip word in standard quiz feedback", async ({ page }) => {
   // Batch feedback shows correct count
   await expect(page.getByText(/Correct: 1/)).toBeVisible();
 
-  // Click "Exclude from Quizzes" on the result card
-  await page.getByRole("button", { name: "Exclude from Quizzes" }).click();
+  // Click "Exclude" on the result card
+  await page.getByRole("button", { name: "Exclude" }).click();
 
   // Verify the card is moved to the Excluded section
   await expect(page.getByText(/Excluded from Quizzes \(1\)/)).toBeVisible();

@@ -199,7 +199,7 @@ describe("SessionCompletePage", () => {
       renderPage();
 
       // Get the Skip buttons - should have 2 (one per card)
-      const skipButtons = screen.getAllByText("Exclude from Quizzes");
+      const skipButtons = screen.getAllByRole("button", { name: "Exclude" });
       fireEvent.click(skipButtons[0]);
 
       await waitFor(() => {
@@ -230,11 +230,11 @@ describe("SessionCompletePage", () => {
       fireEvent.click(screen.getByText("Mark as Correct"));
 
       await waitFor(() => {
-        expect(screen.getByText("Undo")).toBeInTheDocument();
+        expect(screen.getByText("Undo override")).toBeInTheDocument();
       });
 
       // Undo the override
-      fireEvent.click(screen.getByText("Undo"));
+      fireEvent.click(screen.getByText("Undo override"));
 
       await waitFor(() => {
         expect(client.quizClient.undoOverrideAnswer).toHaveBeenCalledWith(
@@ -256,7 +256,7 @@ describe("SessionCompletePage", () => {
       renderPage();
 
       // Skip the incorrect card first
-      const skipButtons = screen.getAllByText("Exclude from Quizzes");
+      const skipButtons = screen.getAllByRole("button", { name: "Exclude" });
       fireEvent.click(skipButtons[0]);
 
       await waitFor(() => {
