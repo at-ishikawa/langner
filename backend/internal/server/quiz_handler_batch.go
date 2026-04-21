@@ -65,8 +65,12 @@ func (h *QuizHandler) BatchSubmitAnswers(
 }
 
 // BatchSubmitReverseAnswers grades a batch of reverse quiz answers.
-// Synonym classifications are returned as-is; the frontend decides whether
-// to prompt the user for a retry.
+//
+// Synonym classifications are returned as-is so the frontend can ask the user
+// to retry. On a retry batch the frontend sets AcceptSynonymAsCorrect=true,
+// in which case a remaining synonym is persisted as a correct result with
+// reduced quality — this gives the user SRS progress and enables the
+// override button on the feedback card.
 func (h *QuizHandler) BatchSubmitReverseAnswers(
 	ctx context.Context,
 	req *connect.Request[apiv1.BatchSubmitReverseAnswersRequest],
@@ -97,7 +101,14 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 
 	responses := make([]*apiv1.SubmitReverseAnswerResponse, len(answers))
 	for i := range answers {
-		if grades[i].Classification != string(inference.ClassificationSynonym) {
+		isSynonym := grades[i].Classification == string(inference.ClassificationSynonym)
+		if isSynonym && answers[i].GetAcceptSynonymAsCorrect() {
+			// Accepted-on-retry synonym: save as correct with reduced quality.
+			grades[i].Correct = true
+			grades[i].Quality = synonymAcceptedQuality
+		}
+		shouldSave := !isSynonym || answers[i].GetAcceptSynonymAsCorrect()
+		if shouldSave {
 			if err := h.svc.SaveReverseResult(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 			}
@@ -123,6 +134,12 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 
 	return connect.NewResponse(&apiv1.BatchSubmitReverseAnswersResponse{Responses: responses}), nil
 }
+
+// synonymAcceptedQuality is the SRS quality used when an answer is a synonym
+// of the expected word and the user has accepted it on retry. Lower than a
+// regular correct answer (3-5) so repeated synonym-only answers don't advance
+// the word as fast as exact-match answers.
+const synonymAcceptedQuality = 2
 
 // BatchSubmitEtymologyStandardAnswers grades a batch of etymology standard answers.
 func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(

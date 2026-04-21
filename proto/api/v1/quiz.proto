@@ -175,6 +175,10 @@ message SubmitReverseAnswerRequest {
     }
   ];
   int64 response_time_ms = 3;
+  // When true, a "synonym" classification is persisted as a correct learning
+  // log entry (with reduced quality). The frontend sets this on retry batches
+  // where the user has already had a chance to provide the exact word.
+  bool accept_synonym_as_correct = 4;
 }
 
 message SubmitReverseAnswerResponse {

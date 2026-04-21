@@ -1162,8 +1162,12 @@ type SubmitReverseAnswerRequest struct {
 	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
 	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
 	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// When true, a "synonym" classification is persisted as a correct learning
+	// log entry (with reduced quality). The frontend sets this on retry batches
+	// where the user has already had a chance to provide the exact word.
+	AcceptSynonymAsCorrect bool `protobuf:"varint,4,opt,name=accept_synonym_as_correct,json=acceptSynonymAsCorrect,proto3" json:"accept_synonym_as_correct,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *SubmitReverseAnswerRequest) Reset() {
@@ -1215,6 +1219,13 @@ func (x *SubmitReverseAnswerRequest) GetResponseTimeMs() int64 {
 		return x.ResponseTimeMs
 	}
 	return 0
+}
+
+func (x *SubmitReverseAnswerRequest) GetAcceptSynonymAsCorrect() bool {
+	if x != nil {
+		return x.AcceptSynonymAsCorrect
+	}
+	return false
 }
 
 type SubmitReverseAnswerResponse struct {
@@ -3185,11 +3196,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"sceneTitle\"R\n" +
 	"\x0fContextSentence\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12%\n" +
-	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\x8d\x01\n" +
+	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xc8\x01\n" +
 	"\x1aSubmitReverseAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xe3\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x129\n" +
+	"\x19accept_synonym_as_correct\x18\x04 \x01(\bR\x16acceptSynonymAsCorrect\"\xe3\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +

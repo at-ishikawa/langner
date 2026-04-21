@@ -130,11 +130,16 @@ export default function ReverseQuizPage() {
       const retryRes = retryResponses[j];
       const init = initialResponsesRef.current[slot.index];
       if (retryRes.classification === "synonym") {
-        // Accept synonym on retry as correct (matches existing behavior)
+        // Accepted-on-retry synonym. The backend saves this case when
+        // acceptSynonymAsCorrect is true, so carry the retry's learnedAt /
+        // nextReviewDate through — without them the override button on the
+        // feedback card is hidden.
         initialResponsesRef.current[slot.index] = {
           ...init,
           correct: true,
           reason: retryRes.reason + " (accepted on retry)",
+          learnedAt: retryRes.learnedAt,
+          nextReviewDate: retryRes.nextReviewDate,
         };
       } else {
         initialResponsesRef.current[slot.index] = retryRes;
@@ -148,7 +153,10 @@ export default function ReverseQuizPage() {
     try {
       const ordered = retrySlotsRef.current.map((slot) => retryAnswersRef.current[slot.index]);
       const res = await quizClient.batchSubmitReverseAnswers({
-        answers: ordered.map(buildRequest),
+        answers: ordered.map((b) => ({
+          ...buildRequest(b),
+          acceptSynonymAsCorrect: true,
+        })),
       });
       mergeRetry(res.responses);
       persistResults();

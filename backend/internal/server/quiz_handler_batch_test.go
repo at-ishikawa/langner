@@ -132,3 +132,87 @@ func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 		})
 	}
 }
+
+// TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence documents the
+// current behavior around synonym classifications in the reverse quiz and
+// then, in the `accept_synonym_as_correct=true` case, pins the fixed
+// behavior where a retry-accepted synonym is saved as a correct result.
+func TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence(t *testing.T) {
+	tests := []struct {
+		name                   string
+		acceptSynonymAsCorrect bool
+		wantCorrect            bool
+		wantLearnedAtPopulated bool
+		wantClassification     string
+	}{
+		{
+			// Initial submission of a synonym — client will ask the user to
+			// retry, so we purposefully skip saving. The response therefore
+			// has an empty LearnedAt and the override button stays hidden.
+			name:                   "synonym on initial submission is not persisted",
+			acceptSynonymAsCorrect: false,
+			wantCorrect:            false,
+			wantLearnedAtPopulated: false,
+			wantClassification:     "synonym",
+		},
+		{
+			// Retry-accepted synonym: the frontend flags the retry batch so the
+			// backend saves it as a correct result. LearnedAt is populated,
+			// enabling the override button and advancing SRS.
+			name:                   "synonym on retry is persisted as correct",
+			acceptSynonymAsCorrect: true,
+			wantCorrect:            true,
+			wantLearnedAtPopulated: true,
+			wantClassification:     "synonym",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockClient := mock_inference.NewMockClient(ctrl)
+			handler := newTestHandler(t, mockClient)
+
+			handler.reverseStore[1] = quiz.ReverseCard{
+				NotebookName: "notebook",
+				Expression:   "lose one's temper",
+				Meaning:      "to become angry",
+			}
+
+			mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(
+				inference.ValidateWordFormResponse{
+					Classification: inference.ClassificationSynonym,
+					Reason:         "valid synonym",
+					Quality:        2,
+				}, nil,
+			)
+
+			resp, err := handler.BatchSubmitReverseAnswers(
+				context.Background(),
+				connect.NewRequest(&apiv1.BatchSubmitReverseAnswersRequest{
+					Answers: []*apiv1.SubmitReverseAnswerRequest{{
+						NoteId:                 1,
+						Answer:                 "get mad",
+						ResponseTimeMs:         1000,
+						AcceptSynonymAsCorrect: tt.acceptSynonymAsCorrect,
+					}},
+				}),
+			)
+
+			require.NoError(t, err)
+			require.NotNil(t, resp)
+			require.Len(t, resp.Msg.GetResponses(), 1)
+			got := resp.Msg.GetResponses()[0]
+
+			assert.Equal(t, tt.wantCorrect, got.GetCorrect())
+			assert.Equal(t, tt.wantClassification, got.GetClassification())
+			if tt.wantLearnedAtPopulated {
+				assert.NotEmpty(t, got.GetLearnedAt(),
+					"expected a saved learning log so the frontend can show the override button")
+			} else {
+				assert.Empty(t, got.GetLearnedAt(),
+					"expected no save for an unaccepted synonym submission")
+			}
+		})
+	}
+}
