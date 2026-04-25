@@ -46,21 +46,27 @@ export const AnswerInput = forwardRef<HTMLInputElement, Props>(
           />
         </Box>
 
-        <Button
-          colorPalette="blue"
-          onClick={onSubmit}
-          disabled={!value.trim()}
-          size="lg"
+        <Box
+          display="flex"
+          gap={2}
           {...(stickySubmit ? { position: "sticky", bottom: 4 } : {})}
         >
-          {submitLabel}
-        </Button>
-
-        {onSkip && (
-          <Button variant="outline" onClick={onSkip} size="lg">
-            Don&apos;t Know
+          <Button
+            flex="1"
+            colorPalette="blue"
+            onClick={onSubmit}
+            disabled={!value.trim()}
+            size="lg"
+          >
+            {submitLabel}
           </Button>
-        )}
+
+          {onSkip && (
+            <Button flex="1" variant="outline" onClick={onSkip} size="lg">
+              Don&apos;t Know
+            </Button>
+          )}
+        </Box>
       </>
     );
   },

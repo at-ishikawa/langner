@@ -96,7 +96,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			ReviewCount:           countStoryDefinitions(filtered),
 			ReverseReviewCount:    reverseCount,
 			EtymologyReviewCount:  etymCount,
-			LatestStoryDate:       latestDate,
+			LatestDate:            latestDate,
 			Kind:                  kindFromIndex(index),
 			HasContent:            storyHasContent(stories),
 		})
@@ -117,12 +117,19 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 
 		reverseCount := countReverseFlashcardCards(notebooks, learningHistories[id])
 		etymCount := countFlashcardEtymologyCards(notebooks)
+		var latestDate time.Time
+		for _, n := range notebooks {
+			if n.Date.After(latestDate) {
+				latestDate = n.Date
+			}
+		}
 		summaries = append(summaries, NotebookSummary{
 			NotebookID:            id,
 			Name:                  index.Name,
 			ReviewCount:           countFlashcardCards(filtered),
 			ReverseReviewCount:    reverseCount,
 			EtymologyReviewCount:  etymCount,
+			LatestDate:            latestDate,
 		})
 	}
 
@@ -151,6 +158,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			ReviewCount:        reviewCount,
 			ReverseReviewCount: reverseCount,
 			Kind:               "Books",
+			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
 		})
 	}
 

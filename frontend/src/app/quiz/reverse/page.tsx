@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   Box,
@@ -11,25 +11,26 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
-import { useQuizStore, type WordDetail } from "@/store/quizStore";
-import { FeedbackActions } from "@/components/FeedbackActions";
+import { quizClient, type SubmitReverseAnswerResponse } from "@/lib/client";
+import { useQuizStore, type ReverseFlashcard } from "@/store/quizStore";
 import { AnswerInput } from "@/components/AnswerInput";
-import { WordDetailView } from "@/components/WordDetailView";
+import { BatchFeedback } from "@/components/BatchFeedback";
+import { reverseResultToItem } from "@/lib/quizResultItems";
+import { useQuizResultActions } from "@/lib/useQuizResultActions";
+import { responseTimeSince } from "@/lib/responseTime";
 
-type QuizPhase = "answering" | "synonym-retry" | "feedback";
+type QuizPhase = "answering" | "grading" | "synonym-retry" | "retry-grading" | "batch-feedback";
 
-interface FeedbackData {
-  correct: boolean;
-  expression: string;
-  meaning: string;
-  reason: string;
-  contexts: string[];
-  pronunciation?: string;
-  partOfSpeech?: string;
-  learnedAt?: string;
-  images?: string[];
-  wordDetail?: WordDetail;
+interface BufferedAnswer {
+  card: ReverseFlashcard;
+  answer: string;
+  displayAnswer: string;
+  responseTimeMs: bigint;
+}
+
+interface RetrySlot {
+  index: number; // index into buffer
+  originalAnswer: string;
 }
 
 export default function ReverseQuizPage() {
@@ -37,28 +38,25 @@ export default function ReverseQuizPage() {
   const reverseFlashcards = useQuizStore((s) => s.reverseFlashcards);
   const quizType = useQuizStore((s) => s.quizType);
   const currentIndex = useQuizStore((s) => s.currentIndex);
+  const reverseResults = useQuizStore((s) => s.reverseResults);
+  const feedbackInterval = useQuizStore((s) => s.feedbackInterval);
   const storeSubmitResult = useQuizStore((s) => s.submitReverseResult);
-  const storeSkipResult = useQuizStore((s) => s.skipResult);
-  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
   const nextCard = useQuizStore((s) => s.nextCard);
 
   const [phase, setPhase] = useState<QuizPhase>("answering");
   const [answer, setAnswer] = useState("");
-  const [submittedAnswer, setSubmittedAnswer] = useState("");
-  const [synonymAnswer, setSynonymAnswer] = useState("");
-  const [feedback, setFeedback] = useState<FeedbackData | null>(null);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [overridden, setOverridden] = useState(false);
-  const [skipped, setSkipped] = useState(false);
-  const [displayCorrect, setDisplayCorrect] = useState(false);
-  const [overrideOriginals, setOverrideOriginals] = useState<{
-    quality: number;
-    status: string;
-    intervalDays: number;
-  } | null>(null);
-  const startTimeRef = useRef(Date.now());
+  const [retryQueueIdx, setRetryQueueIdx] = useState(0);
+
+  const bufferRef = useRef<BufferedAnswer[]>([]);
+  const initialResponsesRef = useRef<SubmitReverseAnswerResponse[]>([]);
+  const retrySlotsRef = useRef<RetrySlot[]>([]);
+  const retryAnswersRef = useRef<Record<number, BufferedAnswer>>({});
+  const startTimeRef = useRef<number>(0);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const { handleOverride, handleUndo, handleSkip: handleItemSkip, handleResume } =
+    useQuizResultActions(quizType);
 
   useEffect(() => {
     if (reverseFlashcards.length === 0 || quizType !== "reverse") {
@@ -68,158 +66,235 @@ export default function ReverseQuizPage() {
 
   useEffect(() => {
     startTimeRef.current = Date.now();
-    setPhase("answering");
     setAnswer("");
-    setSubmittedAnswer("");
-    setSynonymAnswer("");
-    setFeedback(null);
-    setOverridden(false);
-    setSkipped(false);
-    setDisplayCorrect(false);
-    setOverrideOriginals(null);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, [currentIndex]);
+    setError(null);
+    if (phase === "answering" || phase === "synonym-retry") {
+      setTimeout(() => inputRef.current?.focus(), 100);
+    }
+  }, [currentIndex, phase, retryQueueIdx]);
 
-  if (reverseFlashcards.length === 0) {
-    return null;
-  }
+  const total = reverseFlashcards.length;
+  const progress = total > 0 ? ((currentIndex + 1) / total) * 100 : 0;
+
+  const batchStart = useMemo(
+    () => Math.floor(currentIndex / feedbackInterval) * feedbackInterval,
+    [currentIndex, feedbackInterval],
+  );
+
+  const batchItems = useMemo(
+    () => reverseResults.slice(batchStart).map((r, i) => reverseResultToItem(r, batchStart + i)),
+    [reverseResults, batchStart],
+  );
+
+  if (reverseFlashcards.length === 0) return null;
 
   const card = reverseFlashcards[currentIndex];
-  const total = reverseFlashcards.length;
-  const progress = ((currentIndex + 1) / total) * 100;
+  const isFinalCard = currentIndex + 1 >= total;
 
-  const handleSubmit = async (isRetry = false) => {
-    if (!answer.trim()) return;
+  const buildRequest = (b: BufferedAnswer) => ({
+    noteId: b.card.noteId,
+    answer: b.answer,
+    responseTimeMs: b.responseTimeMs,
+  });
 
-    const responseTimeMs = Date.now() - startTimeRef.current;
-    const userAnswer = answer.trim();
-    setSubmittedAnswer(userAnswer);
-    setAnswer("");
-    setPhase("feedback");
-    setLoading(true);
-    setFeedback(null);
-    setError(null);
-
-    try {
-      const res = await quizClient.submitReverseAnswer({
-        noteId: card.noteId,
-        answer: userAnswer,
-        responseTimeMs: BigInt(responseTimeMs),
-      });
-
-      // Synonym on first attempt: show hint and let user retry
-      if (res.classification === "synonym" && !isRetry) {
-        setSynonymAnswer(userAnswer);
-        setPhase("synonym-retry");
-        setLoading(false);
-        setTimeout(() => inputRef.current?.focus(), 100);
-        return;
+  const persistResults = () => {
+    const buffer = bufferRef.current;
+    const initial = initialResponsesRef.current;
+    buffer.forEach((b, i) => {
+      const init = initial[i];
+      const retry = retryAnswersRef.current[i];
+      let finalCorrect = init.correct;
+      let finalReason = init.reason;
+      let finalAnswer = b.displayAnswer;
+      const isRetrySynonym = retry !== undefined;
+      if (isRetrySynonym) {
+        finalAnswer = `${b.displayAnswer} -> ${retry.displayAnswer}`;
       }
-
-      // On retry with synonym, accept as correct with lower quality
-      const correct = isRetry && res.classification === "synonym" ? true : res.correct;
-
-      setFeedback({
-        correct,
-        expression: res.expression,
-        meaning: res.meaning,
-        reason: res.reason,
-        contexts: res.contexts ?? [],
-        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
-        wordDetail: res.wordDetail,
-      });
-      setDisplayCorrect(correct);
       storeSubmitResult({
-        noteId: card.noteId,
-        answer: isRetry ? `${synonymAnswer} -> ${userAnswer}` : userAnswer,
-        correct,
-        expression: res.expression,
-        meaning: res.meaning,
-        reason: isRetry && res.classification === "synonym"
-          ? res.reason + " (accepted on retry)"
-          : res.reason,
-        contexts: res.contexts ?? [],
-        wordDetail: res.wordDetail,
-        learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
+        noteId: b.card.noteId,
+        answer: finalAnswer,
+        correct: finalCorrect,
+        expression: init.expression,
+        meaning: init.meaning,
+        reason: finalReason,
+        contexts: init.contexts ?? [],
+        wordDetail: init.wordDetail,
+        learnedAt: init.learnedAt || undefined,
+        images: init.images.length > 0 ? init.images : undefined,
       });
-    } catch {
-      setError("Failed to submit answer");
-    } finally {
-      setLoading(false);
-    }
+    });
   };
 
-  const handleSkip = async () => {
-    const responseTimeMs = Date.now() - startTimeRef.current;
-    setSubmittedAnswer("");
-    setAnswer("");
-    setPhase("feedback");
-    setLoading(true);
-    setFeedback(null);
+  const mergeRetry = (retryResponses: SubmitReverseAnswerResponse[]) => {
+    retrySlotsRef.current.forEach((slot, j) => {
+      const retryRes = retryResponses[j];
+      const init = initialResponsesRef.current[slot.index];
+      if (retryRes.classification === "synonym") {
+        // Accepted-on-retry synonym. The backend saves this case when
+        // acceptSynonymAsCorrect is true, so carry the retry's learnedAt /
+        // nextReviewDate through — without them the override button on the
+        // feedback card is hidden.
+        initialResponsesRef.current[slot.index] = {
+          ...init,
+          correct: true,
+          reason: retryRes.reason + " (accepted on retry)",
+          learnedAt: retryRes.learnedAt,
+          nextReviewDate: retryRes.nextReviewDate,
+        };
+      } else {
+        initialResponsesRef.current[slot.index] = retryRes;
+      }
+    });
+  };
+
+  const flushRetryBatch = async () => {
+    setPhase("retry-grading");
     setError(null);
-
     try {
-      const res = await quizClient.submitReverseAnswer({
-        noteId: card.noteId,
-        answer: "I don't know",
-        responseTimeMs: BigInt(responseTimeMs),
+      const ordered = retrySlotsRef.current.map((slot) => retryAnswersRef.current[slot.index]);
+      const res = await quizClient.batchSubmitReverseAnswers({
+        answers: ordered.map((b) => ({
+          ...buildRequest(b),
+          acceptSynonymAsCorrect: true,
+        })),
       });
-
-      setFeedback({
-        correct: false,
-        expression: res.expression,
-        meaning: res.meaning,
-        reason: res.reason,
-        contexts: res.contexts ?? [],
-        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
-        wordDetail: res.wordDetail,
-      });
-      setDisplayCorrect(false);
-      storeSubmitResult({
-        noteId: card.noteId,
-        answer: "(skipped)",
-        correct: false,
-        expression: res.expression,
-        meaning: res.meaning,
-        reason: res.reason,
-        contexts: res.contexts ?? [],
-        wordDetail: res.wordDetail,
-        learnedAt: res.learnedAt || undefined,
-        images: res.images.length > 0 ? res.images : undefined,
-      });
+      mergeRetry(res.responses);
+      persistResults();
+      bufferRef.current = [];
+      initialResponsesRef.current = [];
+      retrySlotsRef.current = [];
+      retryAnswersRef.current = {};
+      setPhase("batch-feedback");
     } catch {
-      setError("Failed to submit answer");
-    } finally {
-      setLoading(false);
+      setError("Failed to submit retry answers");
+      setPhase("synonym-retry");
     }
   };
 
-  const handleNext = () => {
-    if (currentIndex + 1 >= total) {
-      router.push("/quiz/complete");
+  const startSynonymRetryFlow = (responses: SubmitReverseAnswerResponse[]) => {
+    initialResponsesRef.current = responses;
+    const synonymSlots: RetrySlot[] = [];
+    responses.forEach((r, i) => {
+      if (r.classification === "synonym") {
+        synonymSlots.push({ index: i, originalAnswer: bufferRef.current[i].displayAnswer });
+      }
+    });
+    if (synonymSlots.length === 0) {
+      persistResults();
+      bufferRef.current = [];
+      initialResponsesRef.current = [];
+      setPhase("batch-feedback");
+      return;
+    }
+    retrySlotsRef.current = synonymSlots;
+    retryAnswersRef.current = {};
+    setRetryQueueIdx(0);
+    setPhase("synonym-retry");
+  };
+
+  const flushBatch = async (toFlush: BufferedAnswer[]) => {
+    setPhase("grading");
+    setError(null);
+    try {
+      const res = await quizClient.batchSubmitReverseAnswers({
+        answers: toFlush.map(buildRequest),
+      });
+      startSynonymRetryFlow(res.responses);
+    } catch {
+      setError("Failed to submit answers");
+      setPhase("answering");
+    }
+  };
+
+  const recordAndAdvance = (entry: BufferedAnswer) => {
+    bufferRef.current = [...bufferRef.current, entry];
+    const isBatchBoundary = (currentIndex + 1) % feedbackInterval === 0;
+    if (isFinalCard || isBatchBoundary) {
+      void flushBatch(bufferRef.current);
     } else {
       nextCard();
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      if (phase === "answering") {
-        handleSubmit();
-      } else if (phase === "synonym-retry") {
-        handleSubmit(true);
-      } else if (phase === "feedback" && !loading) {
-        handleNext();
-      }
+  const handleSubmit = () => {
+    if (phase !== "answering" || !answer.trim()) return;
+    const userAnswer = answer.trim();
+    recordAndAdvance({
+      card,
+      answer: userAnswer,
+      displayAnswer: userAnswer,
+      responseTimeMs: responseTimeSince(startTimeRef.current),
+    });
+  };
+
+  const handleSkip = () => {
+    if (phase !== "answering") return;
+    recordAndAdvance({
+      card,
+      answer: "I don't know",
+      displayAnswer: "(skipped)",
+      responseTimeMs: responseTimeSince(startTimeRef.current),
+    });
+  };
+
+  const recordRetryAndAdvance = (entry: BufferedAnswer) => {
+    const slot = retrySlotsRef.current[retryQueueIdx];
+    retryAnswersRef.current[slot.index] = entry;
+    if (retryQueueIdx + 1 >= retrySlotsRef.current.length) {
+      void flushRetryBatch();
+    } else {
+      setRetryQueueIdx(retryQueueIdx + 1);
     }
   };
+
+  const handleRetrySubmit = () => {
+    if (phase !== "synonym-retry" || !answer.trim()) return;
+    const userAnswer = answer.trim();
+    const slot = retrySlotsRef.current[retryQueueIdx];
+    const originalBuffered = bufferRef.current[slot.index];
+    recordRetryAndAdvance({
+      card: originalBuffered.card,
+      answer: userAnswer,
+      displayAnswer: userAnswer,
+      responseTimeMs: responseTimeSince(startTimeRef.current),
+    });
+  };
+
+  const handleRetrySkip = () => {
+    if (phase !== "synonym-retry") return;
+    const slot = retrySlotsRef.current[retryQueueIdx];
+    const originalBuffered = bufferRef.current[slot.index];
+    // Sending "I don't know" makes the backend classify it as wrong on retry,
+    // so mergeRetry replaces the initial synonym response with an incorrect one.
+    recordRetryAndAdvance({
+      card: originalBuffered.card,
+      answer: "I don't know",
+      displayAnswer: "(skipped)",
+      responseTimeMs: responseTimeSince(startTimeRef.current),
+    });
+  };
+
+  const handleContinue = () => {
+    if (isFinalCard) router.push("/quiz/complete");
+    else {
+      setPhase("answering");
+      nextCard();
+    }
+  };
+
+  const handleSeeResults = () => router.push("/quiz/complete");
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "Enter") return;
+    if (phase === "answering") handleSubmit();
+    else if (phase === "synonym-retry") handleRetrySubmit();
+  };
+
+  const currentRetrySlot =
+    phase === "synonym-retry" && retryQueueIdx < retrySlotsRef.current.length
+      ? retrySlotsRef.current[retryQueueIdx]
+      : null;
+  const retryCard = currentRetrySlot ? bufferRef.current[currentRetrySlot.index]?.card : null;
 
   return (
     <Box p={4} maxW="md" mx="auto">
@@ -234,10 +309,30 @@ export default function ReverseQuizPage() {
         </Progress.Root>
       </Box>
 
-      {phase === "synonym-retry" ? (
+      {phase === "batch-feedback" ? (
+        <BatchFeedback
+          items={batchItems}
+          isEtymology={false}
+          isFinal={isFinalCard}
+          onContinue={handleContinue}
+          onSeeResults={handleSeeResults}
+          onOverride={handleOverride}
+          onUndo={handleUndo}
+          onSkip={handleItemSkip}
+          onResume={handleResume}
+        />
+      ) : phase === "grading" || phase === "retry-grading" ? (
+        <Box textAlign="center" py={8}>
+          <Spinner size="lg" mb={4} />
+          <Text>{phase === "grading" ? "Checking your answers..." : "Checking retries..."}</Text>
+        </Box>
+      ) : phase === "synonym-retry" && retryCard && currentRetrySlot ? (
         <VStack align="stretch" gap={4}>
+          <Text fontSize="sm" color="fg.muted">
+            Retry {retryQueueIdx + 1} / {retrySlotsRef.current.length}
+          </Text>
           <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
-            {card.meaning}
+            {retryCard.meaning}
           </Heading>
 
           <Box
@@ -251,20 +346,14 @@ export default function ReverseQuizPage() {
               That&apos;s a valid synonym! But we&apos;re looking for a specific word.
             </Text>
             <Text fontSize="sm" mt={1}>
-              Your word &quot;{synonymAnswer}&quot; means the same thing. Try the exact word.
+              Your word &quot;{currentRetrySlot.originalAnswer}&quot; means the same thing. Try the exact word.
             </Text>
           </Box>
 
-          {card.contexts.length > 0 && (
+          {retryCard.contexts.length > 0 && (
             <VStack align="stretch" gap={2}>
-              {card.contexts.map((ctx, i) => (
-                <Text
-                  key={i}
-                  fontSize="md"
-                  color="gray.600"
-                  _dark={{ color: "gray.400" }}
-                  fontStyle="italic"
-                >
+              {retryCard.contexts.map((ctx, i) => (
+                <Text key={i} fontSize="md" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
                   {ctx.maskedContext}
                 </Text>
               ))}
@@ -277,43 +366,18 @@ export default function ReverseQuizPage() {
             value={answer}
             onChange={setAnswer}
             onKeyDown={handleKeyDown}
-            onSubmit={() => handleSubmit(true)}
-            onSkip={handleSkip}
+            onSubmit={handleRetrySubmit}
+            onSkip={handleRetrySkip}
             placeholder="Try again..."
           />
-        </VStack>
-      ) : phase === "answering" ? (
-        <VStack align="stretch" gap={4}>
-          <Heading size="xl" textAlign="center" color="blue.700" _dark={{ color: "blue.300" }}>
-            {card.meaning}
-          </Heading>
-
-          {card.contexts.length > 0 && (
+          {error && (
             <VStack align="stretch" gap={2}>
-              {card.contexts.map((ctx, i) => (
-                <Text
-                  key={i}
-                  fontSize="md"
-                  color="gray.600"
-                  _dark={{ color: "gray.400" }}
-                  fontStyle="italic"
-                >
-                  {ctx.maskedContext}
-                </Text>
-              ))}
+              <Text color="red.500">{error}</Text>
+              <Button w="full" colorPalette="blue" variant="outline" onClick={flushRetryBatch}>
+                Retry grading
+              </Button>
             </VStack>
           )}
-
-          <AnswerInput
-            ref={inputRef}
-            label="Word"
-            value={answer}
-            onChange={setAnswer}
-            onKeyDown={handleKeyDown}
-            onSubmit={() => handleSubmit()}
-            onSkip={handleSkip}
-            placeholder="Type the word"
-          />
         </VStack>
       ) : (
         <VStack align="stretch" gap={4}>
@@ -321,154 +385,35 @@ export default function ReverseQuizPage() {
             {card.meaning}
           </Heading>
 
-          {loading ? (
-            <Box textAlign="center" py={8}>
-              <Spinner size="lg" mb={4} />
-              <Text>Checking your answer...</Text>
-            </Box>
-          ) : feedback ? (
-            <>
-              <FeedbackActions
-                isCorrect={displayCorrect}
-                noteId={card.noteId}
-                isOverridden={overridden}
-                isSkipped={skipped}
-                nextLabel={currentIndex + 1 >= total ? "See Results" : "Next"}
-                onNext={handleNext}
-                onOverride={async () => {
-                  try {
-                    const res = await quizClient.overrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.REVERSE,
-                      learnedAt: feedback.learnedAt!,
-                      markCorrect: !displayCorrect,
-                    });
-                    setOverridden(true);
-                    setDisplayCorrect(!displayCorrect);
-                    setOverrideOriginals({
-                      quality: res.originalQuality,
-                      status: res.originalStatus,
-                      intervalDays: res.originalIntervalDays,
-                    });
-                    storeOverrideResult(currentIndex, "reverse", res.nextReviewDate || "", {
-                      quality: res.originalQuality,
-                      status: res.originalStatus,
-                      intervalDays: res.originalIntervalDays,
-                    });
-                  } catch { /* silently fail */ }
-                }}
-                onUndo={async () => {
-                  try {
-                    const res = await quizClient.undoOverrideAnswer({
-                      noteId: card.noteId,
-                      quizType: ProtoQuizType.REVERSE,
-                      learnedAt: feedback.learnedAt!,
-                      originalQuality: overrideOriginals?.quality ?? 0,
-                      originalStatus: overrideOriginals?.status ?? "",
-                      originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                    });
-                    setOverridden(false);
-                    setOverrideOriginals(null);
-                    setDisplayCorrect(res.correct);
-                  } catch {
-                    setOverridden(false);
-                    setOverrideOriginals(null);
-                    setDisplayCorrect(feedback.correct);
-                  }
-                }}
-                onSkip={async () => {
-                  try {
-                    await quizClient.skipWord({ noteId: card.noteId });
-                    setSkipped(true);
-                    storeSkipResult(currentIndex, "reverse");
-                  } catch { /* silently fail */ }
-                }}
-                onSeeResults={currentIndex + 1 < total ? () => router.push("/quiz/complete") : undefined}
-              >
-                {/* Your answer */}
-                {submittedAnswer ? (
-                  <Text textDecoration={displayCorrect ? "none" : "line-through"}>
-                    Your answer: {submittedAnswer}
-                  </Text>
-                ) : (
-                  <Text color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                    Skipped
-                  </Text>
-                )}
+          {card.contexts.length > 0 && (
+            <VStack align="stretch" gap={2}>
+              {card.contexts.map((ctx, i) => (
+                <Text key={i} fontSize="md" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
+                  {ctx.maskedContext}
+                </Text>
+              ))}
+            </VStack>
+          )}
 
-                {/* Word, pronunciation, part of speech, reason, examples */}
-                <Box>
-                  <Text fontWeight="bold">Word</Text>
-                  <Text fontStyle="italic">
-                    {feedback.expression}
-                    {(feedback.pronunciation || feedback.partOfSpeech) && (
-                      <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="normal">
-                        {" "}
-                        {[
-                          feedback.pronunciation && `/${feedback.pronunciation}/`,
-                          feedback.partOfSpeech,
-                        ].filter(Boolean).join(" · ")}
-                      </Text>
-                    )}
-                  </Text>
-                </Box>
+          <AnswerInput
+            ref={inputRef}
+            label="Word"
+            value={answer}
+            onChange={setAnswer}
+            onKeyDown={handleKeyDown}
+            onSubmit={handleSubmit}
+            onSkip={handleSkip}
+            placeholder="Type the word"
+          />
 
-                {feedback.reason && (
-                  <Box>
-                    <Text fontWeight="bold">Reason</Text>
-                    <Text>{feedback.reason}</Text>
-                  </Box>
-                )}
-
-                {feedback.contexts.length > 0 && (
-                  <Box>
-                    <Text fontWeight="bold">Context</Text>
-                    <VStack align="stretch" gap={1} mt={1}>
-                      {feedback.contexts.map((ctx, i) => (
-                        <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} fontStyle="italic">
-                          {i + 1}. {ctx}
-                        </Text>
-                      ))}
-                    </VStack>
-                  </Box>
-                )}
-
-                {feedback.images && feedback.images.length > 0 && (
-                  <Box display="flex" gap={2} flexWrap="wrap">
-                    {feedback.images.map((src, i) => (
-                      <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-                    ))}
-                  </Box>
-                )}
-
-                <WordDetailView wordDetail={feedback.wordDetail} />
-              </FeedbackActions>
-            </>
-          ) : error ? (
-            <>
+          {error && (
+            <VStack align="stretch" gap={2}>
               <Text color="red.500">{error}</Text>
-              <Button
-                w="full"
-                colorPalette="blue"
-                variant="outline"
-                onClick={() => {
-                  setPhase("answering");
-                  setError(null);
-                  setAnswer(submittedAnswer);
-                  setTimeout(() => inputRef.current?.focus(), 50);
-                }}
-              >
-                Retry
+              <Button w="full" colorPalette="blue" variant="outline" onClick={() => void flushBatch(bufferRef.current)}>
+                Retry grading
               </Button>
-              <Button
-                w="full"
-                colorPalette="blue"
-                onClick={handleNext}
-              >
-                {currentIndex + 1 >= total ? "See Results" : "Skip"}
-              </Button>
-            </>
-          ) : null}
+            </VStack>
+          )}
         </VStack>
       )}
     </Box>

@@ -132,6 +132,8 @@ interface QuizState {
   freeformNextReviewDates: Record<string, string>;
   etymologyFreeformOrigins: string[];
   etymologyFreeformNextReviewDates: Record<string, string>;
+  feedbackInterval: number;
+  setFeedbackInterval: (n: number) => void;
   setQuizType: (type: QuizType) => void;
   setFlashcards: (flashcards: Flashcard[]) => void;
   setReverseFlashcards: (flashcards: ReverseFlashcard[]) => void;
@@ -170,6 +172,7 @@ const initialState = {
   freeformNextReviewDates: {} as Record<string, string>,
   etymologyFreeformOrigins: [] as string[],
   etymologyFreeformNextReviewDates: {} as Record<string, string>,
+  feedbackInterval: 10,
 };
 
 function updateArrayItem<T>(arr: T[], index: number, patch: Partial<T>): T[] {
@@ -182,6 +185,7 @@ function isEtymologyType(qt: QuizType): boolean {
 
 export const useQuizStore = create<QuizState>((set) => ({
   ...initialState,
+  setFeedbackInterval: (feedbackInterval) => set({ feedbackInterval }),
   setQuizType: (quizType) => set({ quizType }),
   setFlashcards: (flashcards) => set({ flashcards }),
   setReverseFlashcards: (reverseFlashcards) => set({ reverseFlashcards }),

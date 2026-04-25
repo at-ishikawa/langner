@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -20,8 +21,9 @@ type Definitions struct {
 // DefinitionsMetadata contains metadata about which notebook the definitions apply to
 // Either Notebook (filename) or Title (event name) can be used to identify the notebook
 type DefinitionsMetadata struct {
-	Notebook string `yaml:"notebook,omitempty"` // e.g., "005-letter-1.yml"
-	Title    string `yaml:"title,omitempty"`    // e.g., "Letter I" (matches notebook.Event)
+	Notebook string    `yaml:"notebook,omitempty"` // e.g., "005-letter-1.yml"
+	Title    string    `yaml:"title,omitempty"`    // e.g., "Letter I" (matches notebook.Event)
+	Date     time.Time `yaml:"date,omitempty"`     // optional; used to sort notebooks on the quiz start page
 }
 
 // DefinitionsScene represents definitions for a specific scene
@@ -65,8 +67,10 @@ type definitionsIndex struct {
 	Notebooks []string `yaml:"notebooks"`
 }
 
-// loadDefinitionsFile loads a single definitions YAML file into the result map.
-func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) error {
+// loadDefinitionsFile loads a single definitions YAML file into the result map
+// and updates the dates map with the latest `date` across all definitions in
+// the file for the given bookID.
+func loadDefinitionsFile(path string, bookID string, result DefinitionsMap, dates map[string]time.Time) error {
 	definitions, err := readYamlFile[[]Definitions](path)
 	if err != nil {
 		return fmt.Errorf("readYamlFile(%s): %w", path, err)
@@ -77,6 +81,10 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) erro
 	}
 
 	for _, def := range definitions {
+		if def.Metadata.Date.After(dates[bookID]) {
+			dates[bookID] = def.Metadata.Date
+		}
+
 		key := def.Metadata.Notebook
 		if key == "" {
 			key = def.Metadata.Title
@@ -101,9 +109,12 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap) erro
 	return nil
 }
 
-// NewDefinitionsMap loads definitions from the given directories
-func NewDefinitionsMap(directories []string) (DefinitionsMap, error) {
+// NewDefinitionsMap loads definitions from the given directories. Returns the
+// definitions map and a per-book `latest date` map (populated from each
+// definition file's metadata.date — the max wins per book).
+func NewDefinitionsMap(directories []string) (DefinitionsMap, map[string]time.Time, error) {
 	result := make(DefinitionsMap)
+	dates := make(map[string]time.Time)
 
 	for _, dir := range directories {
 		if dir == "" {
@@ -136,7 +147,7 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, error) {
 
 			for _, nbPath := range idx.Notebooks {
 				nbFullPath := filepath.Join(indexDir, nbPath)
-				if err := loadDefinitionsFile(nbFullPath, idx.ID, result); err != nil {
+				if err := loadDefinitionsFile(nbFullPath, idx.ID, result, dates); err != nil {
 					return err
 				}
 			}
@@ -144,7 +155,7 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, error) {
 			return nil
 		})
 		if err != nil {
-			return nil, fmt.Errorf("walk definitions directory %s (index pass): %w", dir, err)
+			return nil, nil, fmt.Errorf("walk definitions directory %s (index pass): %w", dir, err)
 		}
 
 		// Second pass: load standalone .yml files (not in indexed directories)
@@ -166,15 +177,15 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, error) {
 
 			// Book ID from filename
 			bookID := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-			return loadDefinitionsFile(path, bookID, result)
+			return loadDefinitionsFile(path, bookID, result, dates)
 		})
 
 		if err != nil {
-			return nil, fmt.Errorf("walk definitions directory %s: %w", dir, err)
+			return nil, nil, fmt.Errorf("walk definitions directory %s: %w", dir, err)
 		}
 	}
 
-	return result, nil
+	return result, dates, nil
 }
 
 // MergeDefinitionsIntoNotebooks merges definitions from the definitions map into story notebooks
@@ -246,6 +257,12 @@ func (r Reader) GetDefinitionsBookIDs() []string {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// GetDefinitionsLatestDate returns the latest `date` across all definition
+// files for the given book ID, or the zero time if no dates are set.
+func (r Reader) GetDefinitionsLatestDate(bookID string) time.Time {
+	return r.definitionsDates[bookID]
 }
 
 // addExpressionMarker adds {{ }} markers around an expression in text (case-insensitive)
