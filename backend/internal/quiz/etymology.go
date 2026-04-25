@@ -21,6 +21,16 @@ type EtymologyOriginCard struct {
 	Meaning       string
 }
 
+// originDedupKey returns the canonical key used to deduplicate etymology
+// origins across the standard, reverse, and freeform quizzes. The key is the
+// trimmed, lowercased origin only — language is intentionally excluded so a
+// notebook with the same origin recorded with inconsistent language metadata
+// (e.g. "Greek" vs "" vs "greek ") collapses to a single card, matching how
+// the freeform quiz already groups them.
+func originDedupKey(origin string) string {
+	return strings.ToLower(strings.TrimSpace(origin))
+}
+
 // LoadEtymologyOriginCards loads individual origin cards from selected etymology notebooks.
 // When skipEligibility is true the hard gate (freeform-first + has-correct-answer)
 // is skipped — the freeform quiz needs this because it IS the entry point where
@@ -42,7 +52,7 @@ func (s *Service) LoadEtymologyOriginCards(
 
 	etymIndexes := reader.GetEtymologyIndexes()
 
-	seen := make(map[string]bool) // key: lowercase origin|language
+	seen := make(map[string]bool)
 	var cards []EtymologyOriginCard
 
 	for _, etymID := range etymologyNotebookIDs {
@@ -57,7 +67,7 @@ func (s *Service) LoadEtymologyOriginCards(
 		}
 
 		for _, o := range origins {
-			key := strings.ToLower(o.Origin + "|" + o.Language)
+			key := originDedupKey(o.Origin)
 			if seen[key] {
 				continue
 			}
@@ -258,7 +268,13 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 		}
 
 		dueCount := 0
+		seen := make(map[string]bool)
 		for _, o := range origins {
+			key := originDedupKey(o.Origin)
+			if seen[key] {
+				continue
+			}
+			seen[key] = true
 			if !isOriginEligible(learningHistories[id], index.Name, o.Origin) {
 				continue
 			}
