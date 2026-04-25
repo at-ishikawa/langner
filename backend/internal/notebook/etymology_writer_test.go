@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -356,6 +357,98 @@ notebooks:
 			}
 		})
 	}
+}
+
+// TestEtymologyNotebookWriter_HidesSectionsWhoseOriginsAreMastered pins the
+// expected behavior for the markdown export: when every origin referenced by
+// every word in a section has been mastered (latest log is non-misunderstood
+// and the next review date is still in the future), the entire section — its
+// header AND its words — is omitted from the output. Sections with at least
+// one origin that still needs study are kept in full so the user can review
+// them in context.
+func TestEtymologyNotebookWriter_HidesSectionsWhoseOriginsAreMastered(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	etymDir := filepath.Join(tmpDir, "etymology", "test-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: test-roots
+kind: Etymology
+name: Test Roots
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(`origins:
+  - origin: mastered-root
+    language: Latin
+    meaning: well-known
+  - origin: open-root
+    language: Latin
+    meaning: needs work
+`), 0o644))
+
+	defDir := filepath.Join(tmpDir, "definitions", "books", "test-roots-vocab")
+	require.NoError(t, os.MkdirAll(defDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(`id: test-roots-vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "mastered-root (well-known)"
+      expressions:
+        - expression: mastered-word
+          meaning: "uses only the mastered root"
+          origin_parts:
+            - origin: mastered-root
+    - metadata:
+        title: "open-root (needs work)"
+      expressions:
+        - expression: open-word
+          meaning: "uses the root that still needs study"
+          origin_parts:
+            - origin: open-root
+`), 0o644))
+
+	// Learning history: mastered-root has a recent correct answer with a long
+	// interval (next review far in the future). open-root has no etymology
+	// history at all.
+	learningHistories := map[string][]LearningHistory{
+		"test-roots": {{
+			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Test Roots", Type: "etymology"},
+			Expressions: []LearningHistoryExpression{{
+				Expression: "mastered-root",
+				EtymologyBreakdownLogs: []LearningRecord{{
+					Status:       LearnedStatusUnderstood,
+					LearnedAt:    Date{Time: time.Now()},
+					Quality:      5,
+					QuizType:     string(QuizTypeEtymologyStandard),
+					IntervalDays: 365,
+				}},
+			}},
+		}},
+	}
+
+	outputDir := filepath.Join(tmpDir, "output")
+	reader, err := NewReader(nil, nil, nil,
+		[]string{filepath.Join(tmpDir, "definitions")},
+		[]string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.NoError(t, err)
+
+	writer := NewEtymologyNotebookWriter(reader, "",
+		[]string{filepath.Join(tmpDir, "definitions")}, learningHistories)
+	require.NoError(t, writer.OutputEtymologyNotebook("test-roots", outputDir, false))
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "test-roots.md"))
+	require.NoError(t, err)
+	out := string(content)
+
+	assert.NotContains(t, out, "mastered-root", "mastered origin must not appear anywhere in the export — not as an origin entry, not as a section header, not as a word's origin reference")
+	assert.NotContains(t, out, "mastered-word", "a word whose origin parts are all mastered must be omitted")
+
+	assert.Contains(t, out, "### open-root (needs work)", "sections with at least one origin still needing study must remain")
+	assert.Contains(t, out, "**open-word**", "words with at least one origin still needing study must remain")
 }
 
 func TestEtymologyNotebookWriter_buildOriginMap(t *testing.T) {

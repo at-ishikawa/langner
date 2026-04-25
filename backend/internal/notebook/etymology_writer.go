@@ -122,17 +122,28 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 			})
 		}
 
-		// Read definitions for this session directly from the definitions file
+		// Read definitions for this session directly from the definitions file.
+		// A word is hidden when every origin it references has been mastered
+		// (not in the current "needs study" set built above) — once nothing in
+		// a section is left to learn, the section header drops out too.
 		sessionFilename := filepath.Base(nbPath)
-		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap)
+		needsStudy := func(origin string) bool {
+			return writer.originNeedsStudy(etymIndex.ID, etymIndex.Name, origin)
+		}
+		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy)
 
 		if len(defChapters) > 0 {
+			filteredChapters := make([]assets.EtymologyChapter, 0, len(defChapters))
 			for i := range defChapters {
 				// Only include origins that are referenced by words in this chapter
 				defChapters[i].Origins = filterOriginsForChapter(templateOrigins, defChapters[i])
+				if chapterIsEmpty(defChapters[i]) {
+					continue
+				}
+				filteredChapters = append(filteredChapters, defChapters[i])
 			}
-			chapters = append(chapters, defChapters...)
-		} else {
+			chapters = append(chapters, filteredChapters...)
+		} else if len(templateOrigins) > 0 {
 			// No definitions found; create a single chapter with just origins
 			title := strings.TrimSuffix(sessionFilename, filepath.Ext(sessionFilename))
 			chapters = append(chapters, assets.EtymologyChapter{
@@ -143,6 +154,21 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 	}
 
 	return chapters, nil
+}
+
+// chapterIsEmpty reports whether a chapter contributes nothing to the export.
+// A chapter is empty when there are no origins to learn at the top of the
+// chapter and no surviving words in either the top-level or section bodies.
+func chapterIsEmpty(c assets.EtymologyChapter) bool {
+	if len(c.Origins) > 0 || len(c.Words) > 0 {
+		return false
+	}
+	for _, s := range c.Sections {
+		if len(s.Words) > 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // readSessionOrigins reads the origins from an etymology session file.
@@ -296,9 +322,15 @@ func filterOriginsForChapter(allOrigins []assets.EtymologyOriginEntry, chapter a
 	return filtered
 }
 
-// readDefinitionsFileChapters reads definitions from a file matching the session filename
-// in the definitions directory, and groups them into chapters by metadata.title.
-func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string) []assets.EtymologyChapter {
+// readDefinitionsFileChapters reads definitions from a file matching the
+// session filename in the definitions directory, and groups them into chapters
+// by metadata.title.
+//
+// needsStudy is consulted per word: a word is dropped from the export when
+// every origin it references reports false (i.e. fully mastered). Sections
+// with no surviving words are dropped along with their header so the user
+// doesn't see "## verto (to turn)" headings for origins they've finished.
+func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string, needsStudy func(origin string) bool) []assets.EtymologyChapter {
 	if defDir == "" {
 		return nil
 	}
@@ -326,6 +358,9 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 		for _, scene := range def.Scenes {
 			var sceneWords []assets.EtymologyWordEntry
 			for _, note := range scene.Expressions {
+				if !wordNeedsStudy(note.OriginParts, needsStudy) {
+					continue
+				}
 				word := assets.EtymologyWordEntry{
 					Expression:    note.Expression,
 					Definition:    note.Definition,
@@ -344,6 +379,9 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 				}
 
 				sceneWords = append(sceneWords, word)
+			}
+			if len(sceneWords) == 0 {
+				continue
 			}
 			allWords = append(allWords, sceneWords...)
 			if scene.Metadata.Title != "" {
@@ -373,4 +411,20 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 	}
 
 	return chapters
+}
+
+// wordNeedsStudy returns true when at least one of the word's origin parts
+// still needs review. A word with no origin_parts is always kept (we have no
+// signal to filter it on). When needsStudy is nil all words are kept (used by
+// callers that don't have learning history available).
+func wordNeedsStudy(originParts []OriginPartRef, needsStudy func(origin string) bool) bool {
+	if needsStudy == nil || len(originParts) == 0 {
+		return true
+	}
+	for _, op := range originParts {
+		if needsStudy(op.Origin) {
+			return true
+		}
+	}
+	return false
 }
