@@ -1442,19 +1442,8 @@ func freeformNextReviewDate(histories []notebook.LearningHistory, card FreeformC
 	return ""
 }
 
-// computeNextReviewDate returns the next review date for an expression,
-// or "" when the expression is due now (so callers — freeform's "not due
-// until …" badge and the Submit-button gate — treat it as immediately
-// answerable). A latest log of "misunderstood" always returns "" even
-// when the SR calculator wrote a positive interval: the user just got
-// the word wrong and must be able to retry without waiting, mirroring
-// how NeedsForwardReview / NeedsReverseReview / NeedsEtymologyReview
-// already special-case misunderstood for the other quiz modes.
 func computeNextReviewDate(logs []notebook.LearningRecord) string {
 	if len(logs) == 0 || logs[0].IntervalDays == 0 {
-		return ""
-	}
-	if logs[0].Status == notebook.LearnedStatusMisunderstood {
 		return ""
 	}
 	nextDate := logs[0].LearnedAt.AddDate(0, 0, logs[0].IntervalDays)
