@@ -473,6 +473,17 @@ func (v *Validator) validateDictionaryReferences(files []storyNotebookFile, resu
 }
 
 func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	for fileIdx := range files {
+		// First, merge duplicate top-level histories whose Metadata.Title
+		// matches after quote normalization. Without this, two episode entries
+		// for the same lesson — one written with a smart apostrophe, one with
+		// an ASCII apostrophe — survive as separate histories. The same
+		// expression then appears in both, the older entry's stale shorter
+		// interval keeps the word due, and the user is asked it every day.
+		files[fileIdx].contents = v.mergeDuplicateHistories(
+			files[fileIdx].contents, files[fileIdx].path, result,
+		)
+	}
 	for _, file := range files {
 		for histIdx := range file.contents {
 			// Merge duplicate scenes whose titles differ only by quote style
@@ -676,6 +687,58 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 	}
 
 	return files
+}
+
+// mergeDuplicateHistories merges top-level LearningHistory entries whose
+// Metadata.Title matches after normalizing quote characters and trimming
+// whitespace. Scenes from later histories are appended to the first one;
+// the per-history scene/expression dedup that runs after this call collapses
+// the resulting overlap.
+//
+// The encounter-order of titles is preserved so existing files don't see a
+// gratuitous reordering on --fix.
+func (v *Validator) mergeDuplicateHistories(
+	histories []LearningHistory, filePath string, result *ValidationResult,
+) []LearningHistory {
+	groups := make(map[string][]int)
+	var order []string
+	for i, h := range histories {
+		key := normalizeQuotes(strings.TrimSpace(h.Metadata.Title))
+		if _, seen := groups[key]; !seen {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], i)
+	}
+
+	needsMerge := false
+	for _, indices := range groups {
+		if len(indices) > 1 {
+			needsMerge = true
+			break
+		}
+	}
+	if !needsMerge {
+		return histories
+	}
+
+	var merged []LearningHistory
+	for _, key := range order {
+		indices := groups[key]
+		base := histories[indices[0]]
+		if len(indices) == 1 {
+			merged = append(merged, base)
+			continue
+		}
+		for _, hi := range indices[1:] {
+			base.Scenes = append(base.Scenes, histories[hi].Scenes...)
+		}
+		result.AddWarning(ValidationError{
+			File:    filePath,
+			Message: fmt.Sprintf("Merged %d duplicate history entry(ies) with title %q", len(indices)-1, base.Metadata.Title),
+		})
+		merged = append(merged, base)
+	}
+	return merged
 }
 
 // mergeDuplicateScenes merges scenes whose titles match after normalizing

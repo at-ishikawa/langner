@@ -2,9 +2,11 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -177,6 +179,180 @@ notebooks:
 	teleNew, graphNew := countNewBreakdownLogs(t, filepath.Join(learningDir, "greek-roots.yml"))
 	assert.Equal(t, 1, teleNew, "exactly one new etymology_breakdown_logs entry should be saved for 'tele'")
 	assert.Equal(t, 1, graphNew, "exactly one new etymology_breakdown_logs entry should be saved for 'graph'")
+}
+
+// TestVocabularyFreeformQuiz_LoadsWordsFromDefinitionsOnlyBook reproduces a
+// user-reported bug: an expression registered in a definitions-only book
+// (notebooks/definitions/books/<id>/session*.yml indexed by index.yml) was
+// not selectable in the vocabulary freeform quiz, even though it had a
+// `meaning` field set. The expected behavior is that StartFreeformQuiz
+// surfaces every expression with a meaning from every kind of notebook the
+// reader knows about — story, flashcard, AND definitions-only book — so the
+// frontend's expression list shows it. This test pins that contract end-to-
+// end through the real RPC handler with a generic seeded book.
+func TestVocabularyFreeformQuiz_LoadsWordsFromDefinitionsOnlyBook(t *testing.T) {
+	tmpDir := t.TempDir()
+	booksDir := filepath.Join(tmpDir, "definitions", "books")
+	bookDir := filepath.Join(booksDir, "test-vocab")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: test-vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// One expression has a meaning AND origin_parts (mirrors the real-world
+	// shape that triggered the report); a sibling expression in the same
+	// scene has only origin_parts (no meaning). We assert only the one with a
+	// meaning surfaces — the meaning-less one is intentionally excluded
+	// because freeform grading needs a reference meaning to compare against.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: Lesson One
+  scenes:
+    - metadata:
+        index: 0
+        scene: null
+        title: stargazers
+      expressions:
+        - expression: stargazer-with-meaning
+          meaning: a person who studies the stars
+          origin_parts:
+            - origin: star
+              language: English
+            - origin: gaze
+        - expression: stargazer-without-meaning
+          origin_parts:
+            - origin: star
+              language: English
+`), 0o644))
+
+	ctrl := gomock.NewController(t)
+	openai := mock_inference.NewMockClient(ctrl)
+	openai.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
+			return inference.AnswerMeaningsResponse{
+				Answers: []inference.AnswerMeaning{{
+					Expression: "stargazer-with-meaning",
+					Meaning:    "a person who studies the stars",
+					AnswersForContext: []inference.AnswersForContext{{
+						Correct: true, Reason: "matches", Quality: 4,
+					}},
+				}},
+			}, nil
+		}).AnyTimes()
+
+	learningDir := t.TempDir()
+	svc := quiz.NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{filepath.Join(tmpDir, "definitions")},
+		LearningNotesDirectory: learningDir,
+	}, openai, make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	handler := NewQuizHandler(svc)
+
+	startResp, err := handler.StartFreeformQuiz(context.Background(),
+		connect.NewRequest(&apiv1.StartFreeformQuizRequest{}))
+	require.NoError(t, err)
+
+	expressions := startResp.Msg.GetExpressions()
+	assert.Contains(t, expressions, "stargazer-with-meaning",
+		"a definitions-book expression with a meaning must be selectable in freeform")
+	assert.NotContains(t, expressions, "stargazer-without-meaning",
+		"expressions without a meaning have no reference for grading and must be excluded")
+
+	submitResp, err := handler.SubmitFreeformAnswer(context.Background(),
+		connect.NewRequest(&apiv1.SubmitFreeformAnswerRequest{
+			Word:           "stargazer-with-meaning",
+			Meaning:        "a person who studies the stars",
+			ResponseTimeMs: 2000,
+		}))
+	require.NoError(t, err)
+	assert.True(t, submitResp.Msg.GetCorrect(),
+		"submitting the expected meaning must grade as correct, not get rejected with 'not found in any notebook'")
+	assert.NotContains(t, submitResp.Msg.GetReason(), "not found",
+		"the answer must not be rejected as 'not found in any notebook'")
+}
+
+// TestVocabularyFreeformQuiz_MisunderstoodWordIsImmediatelyRetryable
+// reproduces a user report: a vocabulary word in a definitions-only book
+// could not be re-attempted in freeform after a single wrong answer. The
+// SR calculator wrote interval_days=1 for the wrong answer (status:
+// misunderstood, quality: 1) — a sensible "show again tomorrow" interval
+// for the spaced-repetition schedule — but freeform's UI keys off
+// nextReviewDate to disable the Submit button, so the user was locked
+// out of the word for a full day with no way to retry.
+//
+// Other quiz modes special-case misunderstood (NeedsForwardReview,
+// NeedsReverseReview, NeedsEtymologyReview all return true on
+// misunderstood regardless of stored interval). Freeform's
+// NextReviewDates path was missing that override.
+//
+// Expected: GetFreeformNextReviewDates does NOT include a future date
+// for an expression whose latest log is "misunderstood", regardless of
+// the stored interval_days. The frontend then treats the word as due
+// and the Submit button stays enabled.
+func TestVocabularyFreeformQuiz_MisunderstoodWordIsImmediatelyRetryable(t *testing.T) {
+	tmpDir := t.TempDir()
+	booksDir := filepath.Join(tmpDir, "definitions", "books")
+	bookDir := filepath.Join(booksDir, "test-vocab")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	learningDir := filepath.Join(tmpDir, "learning_notes")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: test-vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: Lesson One
+  scenes:
+    - metadata:
+        index: 0
+        scene: null
+        title: stargazers
+      expressions:
+        - expression: stargazer
+          meaning: a person who studies the stars
+`), 0o644))
+
+	// Seed a freeform "wrong answer" entry — the stored interval is 1 day
+	// (today → tomorrow) but status is misunderstood, so the word is *not*
+	// truly mastered for tomorrow; the user just got it wrong and should
+	// be able to retry now.
+	today := time.Now().Format("2006-01-02T15:04:05-07:00")
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-vocab.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: test-vocab
+    title: Lesson One
+  scenes:
+    - metadata:
+        title: __index_0
+      expressions:
+        - expression: stargazer
+          learned_logs:
+            - status: misunderstood
+              learned_at: %q
+              quality: 1
+              quiz_type: freeform
+              interval_days: 1
+`, today)), 0o644))
+
+	svc := quiz.NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{filepath.Join(tmpDir, "definitions")},
+		LearningNotesDirectory: learningDir,
+	}, nil, make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	handler := NewQuizHandler(svc)
+
+	resp, err := handler.StartFreeformQuiz(context.Background(),
+		connect.NewRequest(&apiv1.StartFreeformQuizRequest{}))
+	require.NoError(t, err)
+
+	expressions := resp.Msg.GetExpressions()
+	assert.Contains(t, expressions, "stargazer")
+
+	nextDates := resp.Msg.GetExpressionNextReviewDate()
+	_, hasFutureDate := nextDates["stargazer"]
+	assert.False(t, hasFutureDate,
+		"a misunderstood word must NOT carry a future next-review date — the user just got it wrong and should be able to retry immediately, not be locked out of the freeform Submit button until tomorrow; got %v",
+		nextDates["stargazer"])
 }
 
 // countNewBreakdownLogs reads a learning-history YAML and returns the number
