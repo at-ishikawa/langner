@@ -256,3 +256,72 @@ notebooks:
 	require.NoError(t, err)
 	assert.Len(t, cards, 1, "duplicate origins should be deduplicated")
 }
+
+// TestService_LoadEtymologyOriginCards_DedupesAcrossLanguageMetadata pins the
+// fix for a bug where the same origin recorded with inconsistent language
+// metadata (e.g. case differences, whitespace, or empty language) bypassed the
+// dedup, causing the same word to appear multiple times in the standard quiz
+// and learning history records to be appended multiple times per session.
+func TestService_LoadEtymologyOriginCards_DedupesAcrossLanguageMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "messy-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: messy-roots
+kind: Etymology
+name: Messy Roots
+notebooks:
+  - ./origins.yml
+`), 0644))
+	// Three "spect" entries with inconsistent language fields and one with a
+	// trailing space in the origin. All four refer to the same origin.
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`- origin: "spect"
+  type: root
+  language: Latin
+  meaning: to look or see
+- origin: "spect"
+  type: root
+  language: latin
+  meaning: to look or see
+- origin: "spect"
+  type: root
+  language: ""
+  meaning: to look or see
+- origin: "spect "
+  type: root
+  language: Latin
+  meaning: to look or see
+`), 0644))
+
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "messy-roots.yml"), []byte(`- metadata:
+    notebook_id: messy-roots
+    title: Messy Roots
+  expressions:
+    - expression: spect
+      etymology_breakdown_logs:
+        - status: understood
+          learned_at: "2025-01-01"
+          quiz_type: etymology_freeform
+`), 0644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{},
+	)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{"messy-roots"}, true, false)
+	require.NoError(t, err)
+	require.Len(t, cards, 1, "the same origin must collapse to one card regardless of language/whitespace differences")
+	assert.Equal(t, "spect", cards[0].Origin)
+
+	summaries, err := svc.LoadEtymologyNotebookSummaries()
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, 1, summaries[0].EtymologyReviewCount,
+		"the due count shown on the start page must equal the number of cards in the quiz")
+}

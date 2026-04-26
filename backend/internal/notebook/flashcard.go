@@ -16,6 +16,7 @@ type Reader struct {
 	etymologyIndexes  map[string]EtymologyIndex
 	dictionaryMap     map[string]rapidapi.Response
 	definitionsMap    DefinitionsMap
+	definitionsRaw    map[string][]Definitions
 	definitionsDates  map[string]time.Time
 }
 
@@ -106,7 +107,7 @@ func NewReader(
 		}
 	}
 
-	definitionsMap, definitionsDates, err := NewDefinitionsMap(definitionsDirectories)
+	definitionsMap, definitionsRaw, definitionsDates, err := NewDefinitionsMap(definitionsDirectories)
 	if err != nil {
 		return nil, fmt.Errorf("NewDefinitionsMap: %w", err)
 	}
@@ -122,8 +123,18 @@ func NewReader(
 		etymologyIndexes: etymologyIndexes,
 		dictionaryMap:    dictionaryMap,
 		definitionsMap:   definitionsMap,
+		definitionsRaw:   definitionsRaw,
 		definitionsDates: definitionsDates,
 	}, nil
+}
+
+// GetDefinitionsBook returns the raw Definitions slice for a book ID.
+// Unlike GetDefinitionsNotes (which exposes index-keyed scenes), this
+// preserves the original session/scene titles so callers like the
+// notebook-detail RPC can render meaningful headers.
+func (r Reader) GetDefinitionsBook(bookID string) ([]Definitions, bool) {
+	defs, ok := r.definitionsRaw[bookID]
+	return defs, ok && len(defs) > 0
 }
 
 func (f Reader) ReadAllStoryNotebooks() (map[string]Index, error) {

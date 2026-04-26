@@ -188,6 +188,8 @@ func (h *NotebookHandler) GetNotebookDetail(
 }
 
 // getFlashcardNotebookDetail handles GetNotebookDetail for flashcard notebooks.
+// If no flashcard notebook matches, it falls through to definitions-only books
+// (e.g. vocabulary books under definitions/books/<id>/) before returning 404.
 func (h *NotebookHandler) getFlashcardNotebookDetail(
 	notebookID string,
 	reader *notebook.Reader,
@@ -196,7 +198,7 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 	flashcardNotebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
+			return h.getDefinitionsBookDetail(notebookID, reader, learningHistory)
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read flashcard notebooks: %w", err))
 	}
@@ -252,6 +254,86 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 	return connect.NewResponse(&apiv1.GetNotebookDetailResponse{
 		NotebookId:     notebookID,
 		Name:           indexName,
+		Stories:        stories,
+		TotalWordCount: totalWordCount,
+	}), nil
+}
+
+// getDefinitionsBookDetail handles GetNotebookDetail for definitions-only
+// vocabulary books (e.g. Word Power Made Easy) that aren't loaded as story
+// or flashcard notebooks. The book's source YAML preserves session titles
+// and per-scene titles, so each Definitions entry surfaces as a StoryEntry
+// (one per session/title) with nested scenes carrying the original scene
+// titles (e.g. "tele (far)") and their expressions.
+func (h *NotebookHandler) getDefinitionsBookDetail(
+	notebookID string,
+	reader *notebook.Reader,
+	learningHistory []notebook.LearningHistory,
+) (*connect.Response[apiv1.GetNotebookDetailResponse], error) {
+	bookDefs, ok := reader.GetDefinitionsBook(notebookID)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
+	}
+
+	var totalWordCount int32
+	var stories []*apiv1.StoryEntry
+	for _, def := range bookDefs {
+		event := def.Metadata.Title
+		if event == "" {
+			event = def.Metadata.Notebook
+		}
+		if event == "" {
+			continue
+		}
+
+		var scenes []*apiv1.StoryScene
+		for _, scene := range def.Scenes {
+			var definitions []*apiv1.NotebookWord
+			for i := range scene.Expressions {
+				note := scene.Expressions[i]
+				_ = note.SetDetails(h.dictionaryMap, "")
+				info := h.findLearningInfoFull(learningHistory, event, scene.Metadata.Title, note)
+
+				var logs []notebook.LearningRecord
+				for _, hist := range learningHistory {
+					if l := hist.GetLogs(event, scene.Metadata.Title, note); len(l) > 0 {
+						logs = l
+					}
+				}
+
+				definitions = append(definitions, &apiv1.NotebookWord{
+					Expression:     note.Expression,
+					Definition:     note.Definition,
+					Meaning:        note.Meaning,
+					PartOfSpeech:   note.PartOfSpeech,
+					Pronunciation:  note.Pronunciation,
+					Examples:       note.Examples,
+					Synonyms:       note.Synonyms,
+					Antonyms:       note.Antonyms,
+					LearningStatus: string(info.status),
+					LearnedLogs:    convertLogsToProto(logs),
+					NextReviewDate: info.nextReviewDate,
+					Origin:         note.Origin,
+					IsSkipped:      info.isSkipped,
+				})
+				totalWordCount++
+			}
+			scenes = append(scenes, &apiv1.StoryScene{
+				Title:       scene.Metadata.Title,
+				Definitions: definitions,
+			})
+		}
+
+		stories = append(stories, &apiv1.StoryEntry{
+			Event:  event,
+			Date:   def.Metadata.Date.Format("2006-01-02"),
+			Scenes: scenes,
+		})
+	}
+
+	return connect.NewResponse(&apiv1.GetNotebookDetailResponse{
+		NotebookId:     notebookID,
+		Name:           notebookID,
 		Stories:        stories,
 		TotalWordCount: totalWordCount,
 	}), nil
