@@ -214,7 +214,7 @@ func (v *Validator) loadStoryNotebooks() ([]storyNotebookFile, error) {
 // loadDefinitionsExpressions returns a set of all expressions found in definitions directories.
 func (v *Validator) loadDefinitionsExpressions() map[string]bool {
 	result := make(map[string]bool)
-	defsMap, _, err := NewDefinitionsMap(v.definitionsDirs)
+	defsMap, _, _, err := NewDefinitionsMap(v.definitionsDirs)
 	if err != nil {
 		return result
 	}
@@ -1341,7 +1341,7 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 // validateSeparateDefinitionsInConversations checks that definitions from separate
 // definitions files appear in the matching story notebook conversations/statements.
 func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []storyNotebookFile, result *ValidationResult) {
-	defsMap, _, err := NewDefinitionsMap(v.definitionsDirs)
+	defsMap, _, _, err := NewDefinitionsMap(v.definitionsDirs)
 	if err != nil {
 		return
 	}
