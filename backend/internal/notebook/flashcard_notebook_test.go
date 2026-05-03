@@ -324,7 +324,7 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc)
+			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc, QuizTypeNotebook)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.wantErrMsg != "" {
