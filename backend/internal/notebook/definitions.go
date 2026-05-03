@@ -69,8 +69,10 @@ type definitionsIndex struct {
 
 // loadDefinitionsFile loads a single definitions YAML file into the result map
 // and updates the dates map with the latest `date` across all definitions in
-// the file for the given bookID.
-func loadDefinitionsFile(path string, bookID string, result DefinitionsMap, dates map[string]time.Time) error {
+// the file for the given bookID. raw, when non-nil, accumulates the parsed
+// Definitions slice per book so callers that need the original scene titles
+// (lost in the index-keyed result map) can recover them.
+func loadDefinitionsFile(path string, bookID string, result DefinitionsMap, raw map[string][]Definitions, dates map[string]time.Time) error {
 	definitions, err := readYamlFile[[]Definitions](path)
 	if err != nil {
 		return fmt.Errorf("readYamlFile(%s): %w", path, err)
@@ -78,6 +80,9 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap, date
 
 	if result[bookID] == nil {
 		result[bookID] = make(map[string]map[string][]Note)
+	}
+	if raw != nil {
+		raw[bookID] = append(raw[bookID], definitions...)
 	}
 
 	for _, def := range definitions {
@@ -110,10 +115,13 @@ func loadDefinitionsFile(path string, bookID string, result DefinitionsMap, date
 }
 
 // NewDefinitionsMap loads definitions from the given directories. Returns the
-// definitions map and a per-book `latest date` map (populated from each
-// definition file's metadata.date — the max wins per book).
-func NewDefinitionsMap(directories []string) (DefinitionsMap, map[string]time.Time, error) {
+// index-keyed result map (used by quiz code), a raw per-book Definitions
+// slice (preserves scene titles for the notebook-detail view), and a per-book
+// `latest date` map (populated from each definition file's metadata.date —
+// the max wins per book).
+func NewDefinitionsMap(directories []string) (DefinitionsMap, map[string][]Definitions, map[string]time.Time, error) {
 	result := make(DefinitionsMap)
+	raw := make(map[string][]Definitions)
 	dates := make(map[string]time.Time)
 
 	for _, dir := range directories {
@@ -147,7 +155,7 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, map[string]time.Ti
 
 			for _, nbPath := range idx.Notebooks {
 				nbFullPath := filepath.Join(indexDir, nbPath)
-				if err := loadDefinitionsFile(nbFullPath, idx.ID, result, dates); err != nil {
+				if err := loadDefinitionsFile(nbFullPath, idx.ID, result, raw, dates); err != nil {
 					return err
 				}
 			}
@@ -155,7 +163,7 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, map[string]time.Ti
 			return nil
 		})
 		if err != nil {
-			return nil, nil, fmt.Errorf("walk definitions directory %s (index pass): %w", dir, err)
+			return nil, nil, nil, fmt.Errorf("walk definitions directory %s (index pass): %w", dir, err)
 		}
 
 		// Second pass: load standalone .yml files (not in indexed directories)
@@ -177,15 +185,15 @@ func NewDefinitionsMap(directories []string) (DefinitionsMap, map[string]time.Ti
 
 			// Book ID from filename
 			bookID := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-			return loadDefinitionsFile(path, bookID, result, dates)
+			return loadDefinitionsFile(path, bookID, result, raw, dates)
 		})
 
 		if err != nil {
-			return nil, nil, fmt.Errorf("walk definitions directory %s: %w", dir, err)
+			return nil, nil, nil, fmt.Errorf("walk definitions directory %s: %w", dir, err)
 		}
 	}
 
-	return result, dates, nil
+	return result, raw, dates, nil
 }
 
 // MergeDefinitionsIntoNotebooks merges definitions from the definitions map into story notebooks

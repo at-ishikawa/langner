@@ -3,11 +3,16 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"strings"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
+	migrate "github.com/golang-migrate/migrate/v4"
+	migratemysql "github.com/golang-migrate/migrate/v4/database/mysql"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/at-ishikawa/langner/internal/config"
@@ -64,6 +69,33 @@ func RunInTx(ctx context.Context, db *sqlx.DB, fn func(ctx context.Context, tx *
 	}
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit transaction: %w", err)
+	}
+	return nil
+}
+
+// Migrate runs all pending up migrations against db, sourced from the given
+// embedded filesystem. dir is the path within migrationsFS that contains the
+// *.up.sql / *.down.sql files (e.g. "migrations" when the embed pattern is
+// "migrations/*.sql"). Returns nil when the schema is already at the latest
+// version. Idempotent.
+func Migrate(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
+	src, err := iofs.New(migrationsFS, dir)
+	if err != nil {
+		return fmt.Errorf("init migration source: %w", err)
+	}
+
+	driver, err := migratemysql.WithInstance(db.DB, &migratemysql.Config{})
+	if err != nil {
+		return fmt.Errorf("init migration driver: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", src, "mysql", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+
+	if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
+		return fmt.Errorf("apply migrations: %w", err)
 	}
 	return nil
 }

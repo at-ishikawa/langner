@@ -146,7 +146,8 @@ func (h *NotebookHandler) GetNotebookDetail(
 					LearnedLogs:    convertLogsToProto(logs),
 					NextReviewDate: info.nextReviewDate,
 					Origin:         def.Origin,
-					IsSkipped:      info.isSkipped,
+					IsSkipped:        info.isSkipped,
+					SkippedQuizTypes: info.skippedTypes,
 				})
 				totalWordCount++
 			}
@@ -188,6 +189,8 @@ func (h *NotebookHandler) GetNotebookDetail(
 }
 
 // getFlashcardNotebookDetail handles GetNotebookDetail for flashcard notebooks.
+// If no flashcard notebook matches, it falls through to definitions-only books
+// (e.g. vocabulary books under definitions/books/<id>/) before returning 404.
 func (h *NotebookHandler) getFlashcardNotebookDetail(
 	notebookID string,
 	reader *notebook.Reader,
@@ -196,7 +199,7 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 	flashcardNotebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
+			return h.getDefinitionsBookDetail(notebookID, reader, learningHistory)
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read flashcard notebooks: %w", err))
 	}
@@ -257,11 +260,97 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 	}), nil
 }
 
+// getDefinitionsBookDetail handles GetNotebookDetail for definitions-only
+// vocabulary books (e.g. Word Power Made Easy) that aren't loaded as story
+// or flashcard notebooks. The book's source YAML preserves session titles
+// and per-scene titles, so each Definitions entry surfaces as a StoryEntry
+// (one per session/title) with nested scenes carrying the original scene
+// titles (e.g. "tele (far)") and their expressions.
+func (h *NotebookHandler) getDefinitionsBookDetail(
+	notebookID string,
+	reader *notebook.Reader,
+	learningHistory []notebook.LearningHistory,
+) (*connect.Response[apiv1.GetNotebookDetailResponse], error) {
+	bookDefs, ok := reader.GetDefinitionsBook(notebookID)
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
+	}
+
+	var totalWordCount int32
+	var stories []*apiv1.StoryEntry
+	for _, def := range bookDefs {
+		event := def.Metadata.Title
+		if event == "" {
+			event = def.Metadata.Notebook
+		}
+		if event == "" {
+			continue
+		}
+
+		var scenes []*apiv1.StoryScene
+		for _, scene := range def.Scenes {
+			var definitions []*apiv1.NotebookWord
+			for i := range scene.Expressions {
+				note := scene.Expressions[i]
+				_ = note.SetDetails(h.dictionaryMap, "")
+				info := h.findLearningInfoFull(learningHistory, event, scene.Metadata.Title, note)
+
+				var logs []notebook.LearningRecord
+				for _, hist := range learningHistory {
+					if l := hist.GetLogs(event, scene.Metadata.Title, note); len(l) > 0 {
+						logs = l
+					}
+				}
+
+				definitions = append(definitions, &apiv1.NotebookWord{
+					Expression:     note.Expression,
+					Definition:     note.Definition,
+					Meaning:        note.Meaning,
+					PartOfSpeech:   note.PartOfSpeech,
+					Pronunciation:  note.Pronunciation,
+					Examples:       note.Examples,
+					Synonyms:       note.Synonyms,
+					Antonyms:       note.Antonyms,
+					LearningStatus: string(info.status),
+					LearnedLogs:    convertLogsToProto(logs),
+					NextReviewDate: info.nextReviewDate,
+					Origin:         note.Origin,
+					IsSkipped:        info.isSkipped,
+					SkippedQuizTypes: info.skippedTypes,
+				})
+				totalWordCount++
+			}
+			scenes = append(scenes, &apiv1.StoryScene{
+				Title:       scene.Metadata.Title,
+				Definitions: definitions,
+			})
+		}
+
+		stories = append(stories, &apiv1.StoryEntry{
+			Event:  event,
+			Date:   def.Metadata.Date.Format("2006-01-02"),
+			Scenes: scenes,
+		})
+	}
+
+	return connect.NewResponse(&apiv1.GetNotebookDetailResponse{
+		NotebookId:     notebookID,
+		Name:           notebookID,
+		Stories:        stories,
+		TotalWordCount: totalWordCount,
+	}), nil
+}
+
 // learningInfo holds learning status details for a definition.
 type learningInfo struct {
 	status         notebook.LearnedStatus
 	nextReviewDate string
-	isSkipped      bool
+	// isSkipped is true when the expression is excluded from at least one
+	// quiz type. Used for the simple "is anything skipped" badge.
+	isSkipped bool
+	// skippedTypes lists the quiz type strings the expression is excluded
+	// from, for per-type badge rendering on the notebook detail page.
+	skippedTypes []string
 }
 
 // findLearningInfoFull returns full learning info including skip status.
@@ -283,7 +372,8 @@ func (h *NotebookHandler) findLearningInfoFull(
 		return learningInfo{
 			status:         expr.GetLatestStatus(),
 			nextReviewDate: nextReview,
-			isSkipped:      expr.SkippedAt != "",
+			isSkipped:      expr.SkippedAt.IsSkippedAny(),
+			skippedTypes:   expr.SkippedAt.SkippedTypes(),
 		}
 	}
 
@@ -342,7 +432,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 	}
 
 	preserveOrder := reader.IsBook(notebookID)
-	filtered, err := notebook.FilterStoryNotebooks(storyNotebooks, learningHistory, h.dictionaryMap, false, true, false, preserveOrder)
+	filtered, err := notebook.FilterStoryNotebooks(storyNotebooks, learningHistory, h.dictionaryMap, false, true, false, preserveOrder, notebook.QuizTypeNotebook)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("filter story notebooks: %w", err))
 	}
@@ -482,25 +572,43 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read etymology notebook: %w", err))
 	}
 
-	// Build origin map for counting words per origin
-	originWordCounts := make(map[string]int)
-
-	// Find all definitions across all notebooks that have matching origin_parts
-	var definitions []*apiv1.EtymologyDefinition
-	originSet := make(map[string]bool)
-	for _, o := range origins {
-		originSet[strings.ToLower(o.Origin)] = true
+	// originKey returns the (origin, sessionTitle) tuple used for strict
+	// per-sense binding. Two senses of the same origin (e.g. "ana" in Session
+	// 13 vs Session 16) have different keys and accumulate separate word
+	// counts.
+	originKey := func(origin, sessionTitle string) string {
+		return strings.ToLower(strings.TrimSpace(origin)) + "\x00" + sessionTitle
 	}
 
-	// addDefinition deduplicates and appends a definition
+	originWordCounts := make(map[string]int)
+	originSet := make(map[string]bool)
+	for _, o := range origins {
+		originSet[originKey(o.Origin, o.SessionTitle)] = true
+	}
+
+	// addDefinition deduplicates and appends a definition. sessionTitle is
+	// the definition's parent metadata.title; under strict mode an empty
+	// sessionTitle means the definition cannot bind to any origin's sense
+	// and is silently skipped.
+	var definitions []*apiv1.EtymologyDefinition
 	seen := make(map[string]bool)
-	addDefinition := func(expr, meaning, partOfSpeech, note string, examples, contexts []string, originParts []notebook.OriginPartRef, nbName string) {
-		key := strings.ToLower(expr) + "|" + nbName
+	addDefinition := func(expr, meaning, partOfSpeech, note string, examples, contexts []string, originParts []notebook.OriginPartRef, nbName, sessionTitle string) {
+		key := strings.ToLower(expr) + "|" + nbName + "|" + sessionTitle
 		if seen[key] {
 			return
 		}
 		seen[key] = true
-		if !hasMatchingOriginParts(originParts, originSet) {
+		if sessionTitle == "" {
+			return
+		}
+		matched := false
+		for _, ref := range originParts {
+			if originSet[originKey(ref.Origin, sessionTitle)] {
+				matched = true
+				break
+			}
+		}
+		if !matched {
 			return
 		}
 		var parts []*apiv1.EtymologyOriginPart
@@ -509,7 +617,9 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 				Origin:   ref.Origin,
 				Language: ref.Language,
 			})
-			originWordCounts[strings.ToLower(ref.Origin)]++
+			if originSet[originKey(ref.Origin, sessionTitle)] {
+				originWordCounts[originKey(ref.Origin, sessionTitle)]++
+			}
 		}
 		definitions = append(definitions, &apiv1.EtymologyDefinition{
 			Expression:   expr,
@@ -523,7 +633,9 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		})
 	}
 
-	// Search story notebooks
+	// Story and flashcard definitions don't carry session metadata, so they
+	// can't bind to a specific sense under strict mode. They're scanned for
+	// future when stories/flashcards adopt session titles.
 	for nbID := range reader.GetStoryIndexes() {
 		stories, err := reader.ReadStoryNotebooks(nbID)
 		if err != nil {
@@ -540,21 +652,21 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					for _, conv := range scene.Conversations {
 						contexts = append(contexts, conv.Speaker+": "+conv.Quote)
 					}
-					addDefinition(def.Expression, def.Meaning, def.PartOfSpeech, def.Memo, def.Examples, contexts, def.OriginParts, nbID)
+					addDefinition(def.Expression, def.Meaning, def.PartOfSpeech, def.Memo, def.Examples, contexts, def.OriginParts, nbID, "")
 				}
 			}
 		}
 	}
 
-	// Search definitions from session files (definitions: [...] format)
+	// Etymology session-embedded definitions carry their parent session's
+	// title via SessionTitle (set in Phase 1's reader).
 	for _, def := range reader.ReadAllEtymologyDefinitions() {
 		if len(def.OriginParts) == 0 {
 			continue
 		}
-		addDefinition(def.GetExpression(), def.Meaning, def.PartOfSpeech, def.Note, nil, nil, def.OriginParts, def.NotebookName)
+		addDefinition(def.GetExpression(), def.Meaning, def.PartOfSpeech, def.Note, nil, nil, def.OriginParts, def.NotebookName, def.SessionTitle)
 	}
 
-	// Search flashcard notebooks
 	for nbID := range reader.GetFlashcardIndexes() {
 		notebooks, err := reader.ReadFlashcardNotebooks(nbID)
 		if err != nil {
@@ -565,12 +677,14 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 				if len(card.OriginParts) == 0 {
 					continue
 				}
-				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples, nil, card.OriginParts, nbID)
+				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples, nil, card.OriginParts, nbID, "")
 			}
 		}
 	}
 
-	// Search definitions-only books
+	// Standalone definitions books: the outer map key is the parent
+	// metadata.title — the binding key for matching origin senses to
+	// the definition's source session.
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
@@ -584,19 +698,19 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		if !ok {
 			continue
 		}
-		for _, sceneDefs := range defs {
+		for sessionTitle, sceneDefs := range defs {
 			for _, notes := range sceneDefs {
 				for _, note := range notes {
 					if len(note.OriginParts) == 0 {
 						continue
 					}
-					addDefinition(note.Expression, note.Meaning, note.PartOfSpeech, note.Memo, note.Examples, nil, note.OriginParts, nbID)
+					addDefinition(note.Expression, note.Meaning, note.PartOfSpeech, note.Memo, note.Examples, nil, note.OriginParts, nbID, sessionTitle)
 				}
 			}
 		}
 	}
 
-	// Build proto origins with word counts
+	// Build proto origins with per-sense word counts
 	var protoOrigins []*apiv1.EtymologyOriginPart
 	for _, o := range origins {
 		protoOrigins = append(protoOrigins, &apiv1.EtymologyOriginPart{
@@ -604,7 +718,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 			Type:      o.Type,
 			Language:  o.Language,
 			Meaning:   o.Meaning,
-			WordCount: int32(originWordCounts[strings.ToLower(o.Origin)]),
+			WordCount: int32(originWordCounts[originKey(o.Origin, o.SessionTitle)]),
 		})
 	}
 
@@ -634,15 +748,6 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		OriginCount:     int32(len(origins)),
 		DefinitionCount: int32(len(definitions)),
 	}), nil
-}
-
-func hasMatchingOriginParts(refs []notebook.OriginPartRef, originSet map[string]bool) bool {
-	for _, ref := range refs {
-		if originSet[strings.ToLower(ref.Origin)] {
-			return true
-		}
-	}
-	return false
 }
 
 // RegisterDefinition adds a definition via the repository.

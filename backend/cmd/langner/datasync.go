@@ -18,11 +18,13 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/schemas"
 )
 
 func newMigrateImportDBCommand() *cobra.Command {
 	var dryRun bool
 	var updateExisting bool
+	var skipMigrate bool
 
 	cmd := &cobra.Command{
 		Use:   "import-db",
@@ -35,6 +37,17 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return err
 			}
 			defer func() { _ = db.Close() }()
+
+			// Auto-apply schema migrations before import. The embedded
+			// migration files always match the binary version, so we can
+			// safely run them every time. --skip-migrate is the escape
+			// hatch for the rare case where a downgraded binary needs to
+			// import against a newer schema without rolling back.
+			if !skipMigrate {
+				if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+					return fmt.Errorf("apply schema migrations: %w", err)
+				}
+			}
 
 			importer := newImporterFromConfig(cfg, db, os.Stdout)
 			opts := datasync.ImportOptions{
@@ -51,10 +64,14 @@ func newMigrateImportDBCommand() *cobra.Command {
 			if opts.DryRun {
 				fmt.Println("  (dry-run mode — no changes made)")
 			}
-			fmt.Printf("  Notes:              %d new, %d skipped, %d updated\n", result.Notes.NotesNew, result.Notes.NotesSkipped, result.Notes.NotesUpdated)
-			fmt.Printf("  Notebook notes:     %d new, %d skipped\n", result.Notes.NotebookNew, result.Notes.NotebookSkipped)
-			fmt.Printf("  Learning logs:      %d new, %d skipped\n", result.Learning.LearningNew, result.Learning.LearningSkipped)
+			fmt.Printf("  Notes:              %d new, %d skipped, %d updated, %d deleted\n", result.Notes.NotesNew, result.Notes.NotesSkipped, result.Notes.NotesUpdated, result.Notes.NotesDeleted)
+			fmt.Printf("  Notebook notes:     %d new, %d skipped, %d deleted\n", result.Notes.NotebookNew, result.Notes.NotebookSkipped, result.Notes.NotebookNotesDeleted)
+			fmt.Printf("  Learning logs:      %d new, %d skipped, %d deleted\n", result.Learning.LearningNew, result.Learning.LearningSkipped, result.Learning.LearningDeleted)
 			fmt.Printf("  Dictionary entries: %d new, %d skipped, %d updated\n", result.Dictionary.DictionaryNew, result.Dictionary.DictionarySkipped, result.Dictionary.DictionaryUpdated)
+			if result.Etymology != nil {
+				fmt.Printf("  Etymology origins:  %d new, %d skipped\n", result.Etymology.OriginsNew, result.Etymology.OriginsSkipped)
+				fmt.Printf("  Note origin parts:  %d new, %d skipped\n", result.Etymology.PartsNew, result.Etymology.PartsSkipped)
+			}
 
 			return nil
 		},
@@ -62,6 +79,7 @@ func newMigrateImportDBCommand() *cobra.Command {
 
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Preview changes without modifying the database")
 	cmd.Flags().BoolVar(&updateExisting, "update-existing", false, "Update existing records with new data")
+	cmd.Flags().BoolVar(&skipMigrate, "skip-migrate", false, "Skip applying schema migrations before import")
 	return cmd
 }
 
@@ -223,7 +241,13 @@ func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *d
 	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, nil)
 	jsonDictRepo := rapidapi.NewJSONDictionaryRepository(cfg.Dictionaries.RapidAPI.CacheDirectory)
 
-	return datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, writer)
+	imp := datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, writer)
+	return imp.WithEtymology(
+		notebook.NewDBEtymologyOriginRepository(db),
+		notebook.NewDBNoteOriginPartRepository(db),
+		notebook.NewYAMLEtymologyOriginSource(reader),
+		notebook.NewYAMLEtymologyDefinitionSource(reader),
+	)
 }
 
 func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, writer io.Writer) *datasync.Exporter {

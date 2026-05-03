@@ -300,7 +300,7 @@ func TestNewDefinitionsMap(t *testing.T) {
 				dirs = []string{dir}
 			}
 
-			got, _, err := NewDefinitionsMap(dirs)
+			got, _, _, err := NewDefinitionsMap(dirs)
 			if tt.wantErr {
 				require.Error(t, err)
 				return

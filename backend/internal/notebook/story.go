@@ -288,7 +288,13 @@ const (
 	ConversionStylePlain
 )
 
-func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool, preserveOrder bool) ([]StoryNotebook, error) {
+// FilterStoryNotebooks filters a slice of story notebooks for output.
+//
+// quizType selects which slot of the per-type SkippedAt map gates the skip
+// filter. PDF/markdown export and the standard quiz both pass
+// QuizTypeNotebook; reverse and freeform paths have their own loaders that
+// don't go through this function.
+func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []LearningHistory, dictionaryMap map[string]rapidapi.Response, sortDesc bool, includeNoCorrectAnswers bool, useSpacedRepetition bool, preserveOrder bool, quizType QuizType) ([]StoryNotebook, error) {
 	result := make([]StoryNotebook, 0)
 	for _, notebook := range storyNotebooks {
 		if len(notebook.Scenes) == 0 {
@@ -322,8 +328,8 @@ func FilterStoryNotebooks(storyNotebooks []StoryNotebook, learningHistory []Lear
 					return nil, fmt.Errorf("empty definition.Expression: %v in story %s", definition, notebook.Event)
 				}
 
-				// Skip words that are marked as skipped in learning history
-				if isExpressionSkipped(learningHistory, notebook.Event, scene.Title, definition) {
+				// Skip words that are marked as skipped from this quiz type
+				if isExpressionSkipped(learningHistory, notebook.Event, scene.Title, definition, quizType) {
 					continue
 				}
 
@@ -410,7 +416,7 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 
 	// For books, preserve index order instead of sorting by date
 	preserveOrder := writer.reader.IsBook(storyID)
-	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false, preserveOrder)
+	notebooks, err = FilterStoryNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, false, preserveOrder, QuizTypeNotebook)
 	if err != nil {
 		return fmt.Errorf("filterStoryNotebooks() > %w", err)
 	}
@@ -611,7 +617,8 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 	}
 }
 
-// isExpressionSkipped checks if a definition is marked as skipped in learning history.
-func isExpressionSkipped(learningHistory []LearningHistory, event, sceneTitle string, def Note) bool {
-	return IsExpressionSkipped(learningHistory, event, sceneTitle, def.Expression, def.Definition)
+// isExpressionSkipped checks if a definition is excluded from the given quiz
+// type in the learning history.
+func isExpressionSkipped(learningHistory []LearningHistory, event, sceneTitle string, def Note, quizType QuizType) bool {
+	return IsExpressionSkipped(learningHistory, event, sceneTitle, def.Expression, def.Definition, quizType)
 }

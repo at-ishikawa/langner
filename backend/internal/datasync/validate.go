@@ -82,10 +82,17 @@ func buildLearningStats(learningByNotebook map[string][]notebook.LearningHistory
 	for nbID, expressions := range learningByNotebook {
 		exprStats := make(map[string]*LearningExpressionStats)
 		for _, expr := range expressions {
-			es := exprStats[expr.Expression]
+			// Lowercase the expression key so source and exported buckets
+			// fold case variants together — the importer's noteLookup is
+			// already case-insensitive, so the round-trip comparison must
+			// match. Without this, the same word recorded as "All..." in
+			// vocab YAML and "all..." in learning history shows up as two
+			// distinct buckets each missing on the other side.
+			key := strings.ToLower(strings.TrimSpace(expr.Expression))
+			es := exprStats[key]
 			if es == nil {
 				es = &LearningExpressionStats{}
-				exprStats[expr.Expression] = es
+				exprStats[key] = es
 			}
 			es.LearnedLogCount += len(expr.LearnedLogs)
 			es.ReverseLogCount += len(expr.ReverseLogs)

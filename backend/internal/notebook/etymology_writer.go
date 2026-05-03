@@ -107,12 +107,20 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		// Build origin map for resolving origin_parts meanings
 		originMap := buildOriginMap(sessionOrigins)
 
+		// All origins in this session share the file's metadata.title (set by
+		// readSessionOrigins). Use it as the per-session disambiguator when
+		// looking up SR history.
+		sessionTitle := ""
+		if len(sessionOrigins) > 0 {
+			sessionTitle = sessionOrigins[0].SessionTitle
+		}
+
 		// Convert origins to template format, filtering by learning status.
 		// Only include origins whose latest etymology log is misunderstood or
 		// that have no correct answer yet (i.e., still need study).
 		var templateOrigins []assets.EtymologyOriginEntry
 		for _, o := range sessionOrigins {
-			if !writer.originNeedsStudy(etymIndex.ID, etymIndex.Name, o.Origin) {
+			if !writer.originNeedsStudy(etymIndex.ID, etymIndex.Name, o.SessionTitle, o.Origin) {
 				continue
 			}
 			templateOrigins = append(templateOrigins, assets.EtymologyOriginEntry{
@@ -122,17 +130,28 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 			})
 		}
 
-		// Read definitions for this session directly from the definitions file
+		// Read definitions for this session directly from the definitions file.
+		// A word is hidden when every origin it references has been mastered
+		// (not in the current "needs study" set built above) — once nothing in
+		// a section is left to learn, the section header drops out too.
 		sessionFilename := filepath.Base(nbPath)
-		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap)
+		needsStudy := func(origin string) bool {
+			return writer.originNeedsStudy(etymIndex.ID, etymIndex.Name, sessionTitle, origin)
+		}
+		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy)
 
 		if len(defChapters) > 0 {
+			filteredChapters := make([]assets.EtymologyChapter, 0, len(defChapters))
 			for i := range defChapters {
 				// Only include origins that are referenced by words in this chapter
 				defChapters[i].Origins = filterOriginsForChapter(templateOrigins, defChapters[i])
+				if chapterIsEmpty(defChapters[i]) {
+					continue
+				}
+				filteredChapters = append(filteredChapters, defChapters[i])
 			}
-			chapters = append(chapters, defChapters...)
-		} else {
+			chapters = append(chapters, filteredChapters...)
+		} else if len(templateOrigins) > 0 {
 			// No definitions found; create a single chapter with just origins
 			title := strings.TrimSuffix(sessionFilename, filepath.Ext(sessionFilename))
 			chapters = append(chapters, assets.EtymologyChapter{
@@ -145,20 +164,39 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 	return chapters, nil
 }
 
-// readSessionOrigins reads the origins from an etymology session file.
-func readSessionOrigins(path string) ([]EtymologyOrigin, error) {
-	// Try flat list first
-	origins, flatErr := readYamlFile[[]EtymologyOrigin](path)
-	if flatErr == nil {
-		return origins, nil
+// chapterIsEmpty reports whether a chapter contributes nothing to the export.
+// A chapter is empty when there are no origins to learn at the top of the
+// chapter and no surviving words in either the top-level or section bodies.
+func chapterIsEmpty(c assets.EtymologyChapter) bool {
+	if len(c.Origins) > 0 || len(c.Words) > 0 {
+		return false
 	}
+	for _, s := range c.Sections {
+		if len(s.Words) > 0 {
+			return false
+		}
+	}
+	return true
+}
 
-	// Try wrapped format
-	wrapped, wrappedErr := readYamlFile[etymologySessionFile](path)
-	if wrappedErr != nil {
-		return nil, fmt.Errorf("readYamlFile(%s) > %w", path, flatErr)
+// readSessionOrigins reads the origins from an etymology session file.
+// The file must use the wrapped format with a non-empty metadata.title; the
+// returned origins are tagged with that title via SessionTitle.
+func readSessionOrigins(path string) ([]EtymologyOrigin, error) {
+	wrapped, err := readYamlFile[etymologySessionFile](path)
+	if err != nil {
+		return nil, fmt.Errorf("read etymology session %s: %w", path, err)
 	}
-	return wrapped.Origins, nil
+	title := strings.TrimSpace(wrapped.Metadata.Title)
+	if title == "" {
+		return nil, fmt.Errorf("etymology session %s missing required metadata.title", path)
+	}
+	origins := make([]EtymologyOrigin, len(wrapped.Origins))
+	for i, o := range wrapped.Origins {
+		o.SessionTitle = title
+		origins[i] = o
+	}
+	return origins, nil
 }
 
 // buildOriginMap creates a map from origin name to its meaning for quick lookup.
@@ -197,8 +235,9 @@ func (writer EtymologyNotebookWriter) findDefinitionsDir(etymIndex EtymologyInde
 
 			idxDir := filepath.Dir(path)
 
-			// Check by ID convention
-			if idx.ID == etymIndex.ID+"-vocab" || idx.ID == etymIndex.ID {
+			// The etymology and definitions notebooks share an ID after the
+			// Phase 2 consolidation, so an exact match is the canonical pairing.
+			if idx.ID == etymIndex.ID {
 				found = idxDir
 				return filepath.SkipAll
 			}
@@ -225,12 +264,19 @@ func (writer EtymologyNotebookWriter) findDefinitionsDir(etymIndex EtymologyInde
 // originNeedsStudy returns true if the origin should be included in the PDF
 // based on learning history. An origin needs study if:
 //   - it has no etymology learning history at all (never encountered), OR
-//   - its latest EtymologyBreakdownLogs entry is misunderstood, OR
-//   - it has freeform entries but no correct answers yet
+//   - the most recent answer (across BOTH breakdown and assembly tracks) is
+//     misunderstood, OR
+//   - the most recent answer's review interval has elapsed
 //
-// Origins that have been successfully mastered (latest status is understood/usable)
-// and are not yet due for review are excluded.
-func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, nbTitle, origin string) bool {
+// Both directions count because answering an origin in reverse counts as
+// recent practice — without this combined check the PDF re-listed origins
+// the user had just answered correctly in the reverse quiz earlier the same
+// day.
+//
+// sessionTitle is the etymology session's metadata.title — origins are looked
+// up under the matching scene so multi-sense origins (same string, different
+// senses) are tracked independently.
+func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, nbTitle, sessionTitle, origin string) bool {
 	histories := writer.learningHistories[etymID]
 	if len(histories) == 0 {
 		return true // no history → include
@@ -240,35 +286,54 @@ func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, nbTitle, origin s
 		if h.Metadata.Title != nbTitle {
 			continue
 		}
-		for _, expr := range h.Expressions {
-			if !strings.EqualFold(expr.Expression, origin) {
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sessionTitle {
 				continue
 			}
-			// Found learning record for this origin.
-			logs := expr.EtymologyBreakdownLogs
-			if len(logs) == 0 {
-				return true // no etymology logs → include
-			}
-			// Check latest status — if misunderstood, definitely needs study.
-			latest := logs[0]
-			for _, l := range logs[1:] {
-				if l.LearnedAt.After(latest.LearnedAt.Time) {
-					latest = l
+			for _, expr := range scene.Expressions {
+				if !strings.EqualFold(expr.Expression, origin) {
+					continue
 				}
+				// Pick the most recent log across both etymology
+				// directions. Whichever was answered last governs the
+				// "is this still being studied today" decision.
+				latest, found := latestEtymologyLog(expr.EtymologyBreakdownLogs, expr.EtymologyAssemblyLogs)
+				if !found {
+					return true // no etymology logs → include
+				}
+				if latest.Status == LearnedStatusMisunderstood {
+					return true
+				}
+				// Check SR: if the review interval has elapsed, needs study.
+				if latest.IntervalDays > 0 {
+					elapsed := int(time.Since(latest.LearnedAt.Time).Hours() / 24)
+					return elapsed >= latest.IntervalDays
+				}
+				// Has correct answer and no interval → recently reviewed, skip.
+				return false
 			}
-			if latest.Status == LearnedStatusMisunderstood {
-				return true
-			}
-			// Check SR: if the review interval has elapsed, needs study.
-			if latest.IntervalDays > 0 {
-				elapsed := int(time.Since(latest.LearnedAt.Time).Hours() / 24)
-				return elapsed >= latest.IntervalDays
-			}
-			// Has correct answer and no interval → recently reviewed, skip.
-			return false
 		}
 	}
 	return true // not found in history → include
+}
+
+// latestEtymologyLog returns the single most-recent log across both etymology
+// tracks (breakdown for standard/freeform, assembly for reverse). The bool
+// is false when neither slice has any entries.
+func latestEtymologyLog(breakdown, assembly []LearningRecord) (LearningRecord, bool) {
+	var latest LearningRecord
+	found := false
+	consider := func(logs []LearningRecord) {
+		for _, l := range logs {
+			if !found || l.LearnedAt.After(latest.LearnedAt.Time) {
+				latest = l
+				found = true
+			}
+		}
+	}
+	consider(breakdown)
+	consider(assembly)
+	return latest, found
 }
 
 // filterOriginsForChapter returns only the origins that are referenced by any word's origin parts,
@@ -296,9 +361,15 @@ func filterOriginsForChapter(allOrigins []assets.EtymologyOriginEntry, chapter a
 	return filtered
 }
 
-// readDefinitionsFileChapters reads definitions from a file matching the session filename
-// in the definitions directory, and groups them into chapters by metadata.title.
-func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string) []assets.EtymologyChapter {
+// readDefinitionsFileChapters reads definitions from a file matching the
+// session filename in the definitions directory, and groups them into chapters
+// by metadata.title.
+//
+// needsStudy is consulted per word: a word is dropped from the export when
+// every origin it references reports false (i.e. fully mastered). Sections
+// with no surviving words are dropped along with their header so the user
+// doesn't see "## verto (to turn)" headings for origins they've finished.
+func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string, needsStudy func(origin string) bool) []assets.EtymologyChapter {
 	if defDir == "" {
 		return nil
 	}
@@ -326,6 +397,9 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 		for _, scene := range def.Scenes {
 			var sceneWords []assets.EtymologyWordEntry
 			for _, note := range scene.Expressions {
+				if !wordNeedsStudy(note.OriginParts, needsStudy) {
+					continue
+				}
 				word := assets.EtymologyWordEntry{
 					Expression:    note.Expression,
 					Definition:    note.Definition,
@@ -344,6 +418,9 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 				}
 
 				sceneWords = append(sceneWords, word)
+			}
+			if len(sceneWords) == 0 {
+				continue
 			}
 			allWords = append(allWords, sceneWords...)
 			if scene.Metadata.Title != "" {
@@ -373,4 +450,20 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 	}
 
 	return chapters
+}
+
+// wordNeedsStudy returns true when at least one of the word's origin parts
+// still needs review. A word with no origin_parts is always kept (we have no
+// signal to filter it on). When needsStudy is nil all words are kept (used by
+// callers that don't have learning history available).
+func wordNeedsStudy(originParts []OriginPartRef, needsStudy func(origin string) bool) bool {
+	if needsStudy == nil || len(originParts) == 0 {
+		return true
+	}
+	for _, op := range originParts {
+		if needsStudy(op.Origin) {
+			return true
+		}
+	}
+	return false
 }

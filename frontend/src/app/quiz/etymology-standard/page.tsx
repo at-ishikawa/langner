@@ -160,7 +160,7 @@ export default function EtymologyStandardPage() {
   };
 
   return (
-    <Box p={4} maxW="sm" mx="auto" onKeyDown={handleKeyDown}>
+    <Box p={4} maxW="sm" mx="auto">
       <Box mb={4}>
         <Text fontSize="sm" mb={1}>{currentIndex + 1} / {total}</Text>
         <Progress.Root value={progress} size="sm"><Progress.Track><Progress.Range /></Progress.Track></Progress.Root>
@@ -190,6 +190,11 @@ export default function EtymologyStandardPage() {
               {card.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{card.type}</Text></Box>}
               {card.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{card.language}</Text></Box>}
             </Box>
+            {card.exampleWords && card.exampleWords.length > 0 && (
+              <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} mt={3}>
+                e.g. {card.exampleWords.join(", ")}
+              </Text>
+            )}
           </Box>
           <AnswerInput
             ref={inputRef}

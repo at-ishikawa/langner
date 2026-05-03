@@ -40,3 +40,15 @@ func (m *MultiNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteReco
 	if err := m.secondary.BatchUpdate(ctx, notes, newNotebookNotes); err != nil { slog.Warn("secondary note batch update failed", "error", err) }
 	return nil
 }
+
+func (m *MultiNoteRepository) BatchDeleteNotes(ctx context.Context, ids []int64) error {
+	if err := m.primary.BatchDeleteNotes(ctx, ids); err != nil { return err }
+	if err := m.secondary.BatchDeleteNotes(ctx, ids); err != nil { slog.Warn("secondary note batch delete failed", "error", err) }
+	return nil
+}
+
+func (m *MultiNoteRepository) BatchDeleteNotebookNotes(ctx context.Context, ids []int64) error {
+	if err := m.primary.BatchDeleteNotebookNotes(ctx, ids); err != nil { return err }
+	if err := m.secondary.BatchDeleteNotebookNotes(ctx, ids); err != nil { slog.Warn("secondary notebook_note batch delete failed", "error", err) }
+	return nil
+}

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 type LearningHistory struct {
@@ -138,7 +140,122 @@ type LearningHistoryExpression struct {
 	EtymologyAssemblyLogs           []LearningRecord `yaml:"etymology_assembly_logs,omitempty"`
 	EtymologyAssemblyEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
-	SkippedAt string `yaml:"skipped_at,omitempty"` // RFC3339 date when skipped
+	// SkippedAt records, per quiz type, when the user excluded this expression
+	// from that quiz mode. A word skipped only from `reverse` will still appear
+	// in `notebook` (standard) and `freeform`. Legacy plain-string YAML values
+	// (a single timestamp meaning "skipped from everywhere") are upgraded to a
+	// fully-populated map at unmarshal time.
+	SkippedAt SkippedAtMap `yaml:"skipped_at,omitempty"`
+}
+
+// SkippedAtMap maps a quiz type string (e.g. "reverse", "etymology_freeform")
+// to an RFC3339 timestamp marking when that quiz mode's exclusion was set.
+type SkippedAtMap map[string]string
+
+// allQuizTypeKeys returns every quiz type string the system can record a
+// skip against. Kept private to this file because the canonical list lives
+// in quiz_type.go; this helper is only used by the legacy-format upgrade.
+func allQuizTypeKeys() []string {
+	return []string{
+		string(QuizTypeNotebook),
+		string(QuizTypeReverse),
+		string(QuizTypeFreeform),
+		string(QuizTypeEtymologyStandard),
+		string(QuizTypeEtymologyReverse),
+		string(QuizTypeEtymologyFreeform),
+	}
+}
+
+// UnmarshalYAML accepts both the new map shape and the pre-migration plain
+// string. A bare string upgrades to a map with the timestamp written under
+// every quiz type key, matching the old "skipped from everywhere" semantics.
+func (m *SkippedAtMap) UnmarshalYAML(value *yaml.Node) error {
+	if value == nil {
+		return nil
+	}
+	switch value.Kind {
+	case yaml.ScalarNode:
+		if value.Value == "" {
+			*m = nil
+			return nil
+		}
+		out := make(SkippedAtMap, len(allQuizTypeKeys()))
+		for _, k := range allQuizTypeKeys() {
+			out[k] = value.Value
+		}
+		*m = out
+		return nil
+	case yaml.MappingNode:
+		out := make(SkippedAtMap, len(value.Content)/2)
+		for i := 0; i+1 < len(value.Content); i += 2 {
+			k := value.Content[i].Value
+			v := value.Content[i+1].Value
+			if k != "" && v != "" {
+				out[k] = v
+			}
+		}
+		if len(out) == 0 {
+			*m = nil
+			return nil
+		}
+		*m = out
+		return nil
+	default:
+		return fmt.Errorf("skipped_at must be a string or mapping, got kind %d", value.Kind)
+	}
+}
+
+// IsSkipped reports whether the expression is excluded from the given quiz type.
+func (m SkippedAtMap) IsSkipped(quizType QuizType) bool {
+	if m == nil {
+		return false
+	}
+	return m[string(quizType)] != ""
+}
+
+// IsSkippedAny reports whether the expression is excluded from at least one quiz type.
+// Used for UI badges that summarise per-type skips.
+func (m SkippedAtMap) IsSkippedAny() bool {
+	for _, v := range m {
+		if v != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// SkippedTypes returns the quiz types this expression is excluded from, in
+// the canonical order from allQuizTypeKeys.
+func (m SkippedAtMap) SkippedTypes() []string {
+	if len(m) == 0 {
+		return nil
+	}
+	var out []string
+	for _, k := range allQuizTypeKeys() {
+		if m[k] != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// Set records a skip for the given quiz type at the given timestamp.
+// Returns the (possibly newly allocated) map so callers writing into a
+// nil-valued field get the result back.
+func (m SkippedAtMap) Set(quizType QuizType, at string) SkippedAtMap {
+	if m == nil {
+		m = make(SkippedAtMap)
+	}
+	m[string(quizType)] = at
+	return m
+}
+
+// Clear removes the skip for the given quiz type (no-op if not set).
+func (m SkippedAtMap) Clear(quizType QuizType) {
+	if m == nil {
+		return
+	}
+	delete(m, string(quizType))
 }
 
 func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
@@ -474,8 +591,10 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 	exp.LearnedLogs = append([]LearningRecord{newRecord}, exp.LearnedLogs...)
 }
 
-// IsExpressionSkipped checks if a note is marked as skipped in the learning history.
-func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition string) bool {
+// IsExpressionSkipped checks whether a note is excluded from the given quiz
+// type. Per-type skips replaced the old "skipped from everything" string —
+// each call site supplies the quiz mode it's filtering for.
+func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition string, quizType QuizType) bool {
 	for _, hist := range histories {
 		if hist.Metadata.Title != event {
 			continue
@@ -483,7 +602,7 @@ func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, 
 		if hist.Metadata.Type == "flashcard" {
 			for _, expr := range hist.Expressions {
 				if expr.Expression == expression || expr.Expression == definition {
-					return expr.SkippedAt != ""
+					return expr.SkippedAt.IsSkipped(quizType)
 				}
 			}
 			continue
@@ -494,7 +613,7 @@ func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, 
 			}
 			for _, expr := range scene.Expressions {
 				if expr.Expression == expression || expr.Expression == definition {
-					return expr.SkippedAt != ""
+					return expr.SkippedAt.IsSkipped(quizType)
 				}
 			}
 		}
@@ -625,6 +744,13 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 		if sceneErrors := scene.Validate(sceneLocation); len(sceneErrors) > 0 {
 			errors = append(errors, sceneErrors...)
 		}
+	}
+
+	// Etymology histories use scene titles to disambiguate multi-sense origins
+	// (e.g. "ana" = "up" in one session, "negative" in another). The same
+	// expression appearing in two scenes is intentional, not a duplicate.
+	if h.Metadata.Type == "etymology" {
+		return errors
 	}
 
 	// Check for duplicate expressions across different scenes in the same episode

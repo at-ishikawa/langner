@@ -1058,7 +1058,7 @@ func TestValidator_Fix(t *testing.T) {
 			require.NoError(t, WriteYamlFile(storyPath, tt.storyNotebook))
 
 			// Create validator
-			validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir, nil)
+			validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, []string{}, dictionaryDir, nil)
 
 			// Run Fix
 			result, err := validator.Fix()
@@ -1091,6 +1091,90 @@ func TestValidator_Fix(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidator_Fix_MergesHistoriesWithQuoteOnlyTitleDifference pins the
+// expected behavior for a real bug: a learning_notes/<id>.yml file
+// containing two top-level LearningHistory entries whose Metadata.Title
+// values differ ONLY in apostrophe encoding (one uses U+2019 RIGHT SINGLE
+// QUOTATION MARK, the other an ASCII apostrophe, which YAML serialises as
+// 'It''s'). The reader treats them as two episodes, so a vocabulary word
+// recorded in both keeps reappearing in daily quizzes — the SR algorithm
+// finds the stale shorter-interval entry and marks the word due even
+// after the user has answered it correctly weeks apart in the merged
+// entry.
+//
+// Validator.Fix() previously dedup'd scenes WITHIN one history (via
+// mergeDuplicateScenes) and expressions WITHIN one history (via
+// fixLearningNotesStructure) but never merged two histories whose titles
+// matched after normalizeQuotes. This test asserts the merged result has
+// one history, one scene, one expression, and the union of all logs.
+func TestValidator_Fix_MergesHistoriesWithQuoteOnlyTitleDifference(t *testing.T) {
+	tmpDir := t.TempDir()
+	learningNotesDir := filepath.Join(tmpDir, "learning_notes")
+	storiesDir := filepath.Join(tmpDir, "stories")
+	dictionaryDir := filepath.Join(tmpDir, "dictionaries")
+	require.NoError(t, os.MkdirAll(learningNotesDir, 0o755))
+	require.NoError(t, os.MkdirAll(storiesDir, 0o755))
+	require.NoError(t, os.MkdirAll(dictionaryDir, 0o755))
+
+	// learning_notes/test-show.yml has two histories whose titles compare
+	// equal after normalizeQuotes — the first uses a smart apostrophe, the
+	// second uses YAML's escaped ASCII apostrophe ('').
+	require.NoError(t, os.WriteFile(filepath.Join(learningNotesDir, "test-show.yml"), []byte(
+		"- metadata:\n"+
+			"    id: test-show\n"+
+			"    title: 'EPISODE ONE: HE’S BACK'\n"+
+			"  scenes:\n"+
+			"    - metadata:\n"+
+			"        title: opening scene\n"+
+			"      expressions:\n"+
+			"        - expression: shared word\n"+
+			"          learned_logs:\n"+
+			"            - status: understood\n"+
+			"              learned_at: \"2026-04-24T05:00:00-07:00\"\n"+
+			"              quality: 4\n"+
+			"              quiz_type: notebook\n"+
+			"              interval_days: 30\n"+
+			"- metadata:\n"+
+			"    id: test-show\n"+
+			"    title: 'EPISODE ONE: HE''S BACK'\n"+
+			"  scenes:\n"+
+			"    - metadata:\n"+
+			"        title: opening scene\n"+
+			"      expressions:\n"+
+			"        - expression: shared word\n"+
+			"          learned_logs:\n"+
+			"            - status: understood\n"+
+			"              learned_at: \"2026-04-04T05:00:00-07:00\"\n"+
+			"              quality: 4\n"+
+			"              quiz_type: notebook\n"+
+			"              interval_days: 7\n",
+	), 0o644))
+
+	// Story notebook so the validator's "missing learning note" pass
+	// doesn't add anything new — we only want to exercise the dedup path.
+	require.NoError(t, os.WriteFile(filepath.Join(storiesDir, "test-show.yml"), []byte(
+		"- event: 'EPISODE ONE: HE’S BACK'\n"+
+			"  scenes:\n"+
+			"    - scene: opening scene\n"+
+			"      definitions:\n"+
+			"        - expression: shared word\n",
+	), 0o644))
+
+	validator := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, []string{}, dictionaryDir, nil)
+	_, err := validator.Fix()
+	require.NoError(t, err)
+
+	merged, err := readYamlFile[[]LearningHistory](filepath.Join(learningNotesDir, "test-show.yml"))
+	require.NoError(t, err)
+
+	require.Len(t, merged, 1, "two histories with quote-only title difference must collapse to one")
+	require.Len(t, merged[0].Scenes, 1, "the single surviving history must have one scene")
+	require.Len(t, merged[0].Scenes[0].Expressions, 1, "the shared expression must appear exactly once")
+
+	logs := merged[0].Scenes[0].Expressions[0].LearnedLogs
+	assert.Len(t, logs, 2, "logs from both histories must be combined onto the surviving expression")
 }
 
 func TestExtractSeriesName(t *testing.T) {
@@ -1345,7 +1429,7 @@ func TestValidator_Validate(t *testing.T) {
 	}
 	require.NoError(t, WriteYamlFile(filepath.Join(flashcardsDir, "idioms.yml"), flashcardContent))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{flashcardsDir}, []string{}, dictionaryDir, nil)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{flashcardsDir}, []string{}, []string{}, dictionaryDir, nil)
 
 	result, err := v.Validate()
 	require.NoError(t, err)
@@ -1898,7 +1982,7 @@ func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {
 	// Create dictionary file for "eager" only
 	require.NoError(t, os.WriteFile(filepath.Join(dictionaryDir, "eager.json"), []byte(`{}`), 0644))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir, nil)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, []string{}, dictionaryDir, nil)
 	result, err := v.Fix()
 	require.NoError(t, err)
 
@@ -1958,7 +2042,7 @@ func TestValidator_Fix_WithMismatchedScenes(t *testing.T) {
 		},
 	}))
 
-	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, dictionaryDir, nil)
+	v := NewValidator(learningNotesDir, []string{storiesDir}, []string{}, []string{}, []string{}, dictionaryDir, nil)
 	result, err := v.Fix()
 	require.NoError(t, err)
 
