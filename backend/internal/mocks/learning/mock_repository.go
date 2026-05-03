@@ -55,6 +55,20 @@ func (mr *MockLearningRepositoryMockRecorder) BatchCreate(ctx, logs any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchCreate", reflect.TypeOf((*MockLearningRepository)(nil).BatchCreate), ctx, logs)
 }
 
+// BatchDelete mocks base method.
+func (m *MockLearningRepository) BatchDelete(ctx context.Context, ids []int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchDelete", ctx, ids)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchDelete indicates an expected call of BatchDelete.
+func (mr *MockLearningRepositoryMockRecorder) BatchDelete(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchDelete", reflect.TypeOf((*MockLearningRepository)(nil).BatchDelete), ctx, ids)
+}
+
 // Create mocks base method.
 func (m *MockLearningRepository) Create(ctx context.Context, log *learning.LearningLog) error {
 	m.ctrl.T.Helper()
