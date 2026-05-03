@@ -176,7 +176,7 @@ func TestExamples_FilterStoryNotebooks_IncludesReverseMisunderstood(t *testing.T
 	require.NoError(t, err)
 
 	lh := histories["frankenstein"]
-	filtered, err := notebook.FilterStoryNotebooks(notebooks, lh, nil, false, true, false, true)
+	filtered, err := notebook.FilterStoryNotebooks(notebooks, lh, nil, false, true, false, true, notebook.QuizTypeNotebook)
 	require.NoError(t, err)
 
 	// Find forebodings in filtered result
@@ -203,6 +203,7 @@ func TestExamples_Validate(t *testing.T) {
 		[]string{filepath.Join(examples, "stories")},
 		[]string{filepath.Join(examples, "flashcards")},
 		[]string{filepath.Join(examples, "definitions")},
+		[]string{filepath.Join(examples, "etymology")},
 		filepath.Join(examples, "dictionaries", "rapidapi"),
 		calculator,
 	)

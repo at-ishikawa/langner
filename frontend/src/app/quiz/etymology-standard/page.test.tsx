@@ -54,9 +54,9 @@ beforeEach(() => {
   // unique origins; this test verifies the *frontend* doesn't re-introduce
   // duplicates from the same single user action.
   useQuizStore.getState().setEtymologyOriginCards([
-    { cardId: BigInt(1), origin: "tele", type: "root", language: "Greek", meaning: "far", notebookName: "greek-roots" },
-    { cardId: BigInt(2), origin: "graph", type: "root", language: "Greek", meaning: "to write", notebookName: "greek-roots" },
-    { cardId: BigInt(3), origin: "phone", type: "root", language: "Greek", meaning: "sound", notebookName: "greek-roots" },
+    { cardId: BigInt(1), origin: "tele", type: "root", language: "Greek", meaning: "far", notebookName: "greek-roots", sessionTitle: "Session 1", exampleWords: [] },
+    { cardId: BigInt(2), origin: "graph", type: "root", language: "Greek", meaning: "to write", notebookName: "greek-roots", sessionTitle: "Session 1", exampleWords: [] },
+    { cardId: BigInt(3), origin: "phone", type: "root", language: "Greek", meaning: "sound", notebookName: "greek-roots", sessionTitle: "Session 1", exampleWords: [] },
   ]);
   useQuizStore.getState().setFeedbackInterval(3);
 });

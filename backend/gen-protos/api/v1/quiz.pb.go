@@ -2182,13 +2182,23 @@ func (*ResumeWordResponse) Descriptor() ([]byte, []int) {
 
 // Etymology Quiz Messages
 type EtymologyQuizCard struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	CardId        int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	Origin        string                 `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
-	Type          string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Language      string                 `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
-	Meaning       string                 `protobuf:"bytes,5,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	NotebookName  string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	CardId       int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	Origin       string                 `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
+	Type         string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
+	Language     string                 `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	Meaning      string                 `protobuf:"bytes,5,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	NotebookName string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	// session_title is the metadata.title of the etymology session that defined
+	// this origin sense. The same origin string in different sessions becomes
+	// separate cards (e.g. "ana" = "up" in Session 13, "ana" = "negative" in
+	// Session 16) so this field disambiguates them.
+	SessionTitle string `protobuf:"bytes,7,opt,name=session_title,json=sessionTitle,proto3" json:"session_title,omitempty"`
+	// example_words are expressions from the consolidated definitions notebook
+	// that reference this exact (origin, session_title) pair. Standard quiz
+	// shows these alongside the origin so the user can recognise which sense
+	// is being asked about.
+	ExampleWords  []string `protobuf:"bytes,8,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2263,6 +2273,20 @@ func (x *EtymologyQuizCard) GetNotebookName() string {
 		return x.NotebookName
 	}
 	return ""
+}
+
+func (x *EtymologyQuizCard) GetSessionTitle() string {
+	if x != nil {
+		return x.SessionTitle
+	}
+	return ""
+}
+
+func (x *EtymologyQuizCard) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
+	}
+	return nil
 }
 
 type StartEtymologyQuizRequest struct {
@@ -3005,6 +3029,74 @@ func (x *SubmitEtymologyFreeformAnswerRequest) GetResponseTimeMs() int64 {
 	return 0
 }
 
+type EtymologyOriginSense struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Meaning       string                 `protobuf:"bytes,1,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Type          string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"`
+	Language      string                 `protobuf:"bytes,3,opt,name=language,proto3" json:"language,omitempty"`
+	SessionTitle  string                 `protobuf:"bytes,4,opt,name=session_title,json=sessionTitle,proto3" json:"session_title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EtymologyOriginSense) Reset() {
+	*x = EtymologyOriginSense{}
+	mi := &file_api_v1_quiz_proto_msgTypes[47]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EtymologyOriginSense) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EtymologyOriginSense) ProtoMessage() {}
+
+func (x *EtymologyOriginSense) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[47]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EtymologyOriginSense.ProtoReflect.Descriptor instead.
+func (*EtymologyOriginSense) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{47}
+}
+
+func (x *EtymologyOriginSense) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *EtymologyOriginSense) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *EtymologyOriginSense) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
+}
+
+func (x *EtymologyOriginSense) GetSessionTitle() string {
+	if x != nil {
+		return x.SessionTitle
+	}
+	return ""
+}
+
 type SubmitEtymologyFreeformAnswerResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Correct        bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
@@ -3016,13 +3108,17 @@ type SubmitEtymologyFreeformAnswerResponse struct {
 	NextReviewDate string                 `protobuf:"bytes,7,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,8,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	NoteId         int64                  `protobuf:"varint,9,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// all_senses lists every recorded sense of the typed origin. The freeform
+	// grader accepts any sense's meaning as correct; this field surfaces the
+	// alternatives so the user is reminded that multi-sense origins exist.
+	AllSenses     []*EtymologyOriginSense `protobuf:"bytes,10,rep,name=all_senses,json=allSenses,proto3" json:"all_senses,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitEtymologyFreeformAnswerResponse) Reset() {
 	*x = SubmitEtymologyFreeformAnswerResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[47]
+	mi := &file_api_v1_quiz_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3034,7 +3130,7 @@ func (x *SubmitEtymologyFreeformAnswerResponse) String() string {
 func (*SubmitEtymologyFreeformAnswerResponse) ProtoMessage() {}
 
 func (x *SubmitEtymologyFreeformAnswerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[47]
+	mi := &file_api_v1_quiz_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3047,7 +3143,7 @@ func (x *SubmitEtymologyFreeformAnswerResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use SubmitEtymologyFreeformAnswerResponse.ProtoReflect.Descriptor instead.
 func (*SubmitEtymologyFreeformAnswerResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{47}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *SubmitEtymologyFreeformAnswerResponse) GetCorrect() bool {
@@ -3111,6 +3207,13 @@ func (x *SubmitEtymologyFreeformAnswerResponse) GetNoteId() int64 {
 		return x.NoteId
 	}
 	return 0
+}
+
+func (x *SubmitEtymologyFreeformAnswerResponse) GetAllSenses() []*EtymologyOriginSense {
+	if x != nil {
+		return x.AllSenses
+	}
+	return nil
 }
 
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
@@ -3286,14 +3389,16 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11ResumeWordRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
 	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\"\x14\n" +
-	"\x12ResumeWordResponse\"\xb3\x01\n" +
+	"\x12ResumeWordResponse\"\xfd\x01\n" +
 	"\x11EtymologyQuizCard\x12\x17\n" +
 	"\acard_id\x18\x01 \x01(\x03R\x06cardId\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x12\n" +
 	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x18\n" +
 	"\ameaning\x18\x05 \x01(\tR\ameaning\x12#\n" +
-	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\"\xad\x01\n" +
+	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\x12#\n" +
+	"\rsession_title\x18\a \x01(\tR\fsessionTitle\x12#\n" +
+	"\rexample_words\x18\b \x03(\tR\fexampleWords\"\xad\x01\n" +
 	"\x19StartEtymologyQuizRequest\x124\n" +
 	"\x16etymology_notebook_ids\x18\x01 \x03(\tR\x14etymologyNotebookIds\x12-\n" +
 	"\x04mode\x18\x03 \x01(\x0e2\x19.api.v1.EtymologyQuizModeR\x04mode\x12+\n" +
@@ -3345,7 +3450,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"$SubmitEtymologyFreeformAnswerRequest\x12#\n" +
 	"\x06origin\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06origin\x12%\n" +
 	"\ameaning\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\ameaning\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xb9\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x85\x01\n" +
+	"\x14EtymologyOriginSense\x12\x18\n" +
+	"\ameaning\x18\x01 \x01(\tR\ameaning\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
+	"\blanguage\x18\x03 \x01(\tR\blanguage\x12#\n" +
+	"\rsession_title\x18\x04 \x01(\tR\fsessionTitle\"\xf6\x02\n" +
 	"%SubmitEtymologyFreeformAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12'\n" +
@@ -3356,7 +3466,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10next_review_date\x18\a \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
 	"learned_at\x18\b \x01(\tR\tlearnedAt\x12\x17\n" +
-	"\anote_id\x18\t \x01(\x03R\x06noteId*\xd1\x01\n" +
+	"\anote_id\x18\t \x01(\x03R\x06noteId\x12;\n" +
+	"\n" +
+	"all_senses\x18\n" +
+	" \x03(\v2\x1c.api.v1.EtymologyOriginSenseR\tallSenses*\xd1\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +
@@ -3405,7 +3518,7 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 50)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 51)
 var file_api_v1_quiz_proto_goTypes = []any{
 	(QuizType)(0),                                       // 0: api.v1.QuizType
 	(EtymologyQuizMode)(0),                              // 1: api.v1.EtymologyQuizMode
@@ -3456,9 +3569,10 @@ var file_api_v1_quiz_proto_goTypes = []any{
 	(*StartEtymologyFreeformQuizRequest)(nil),           // 46: api.v1.StartEtymologyFreeformQuizRequest
 	(*StartEtymologyFreeformQuizResponse)(nil),          // 47: api.v1.StartEtymologyFreeformQuizResponse
 	(*SubmitEtymologyFreeformAnswerRequest)(nil),        // 48: api.v1.SubmitEtymologyFreeformAnswerRequest
-	(*SubmitEtymologyFreeformAnswerResponse)(nil),       // 49: api.v1.SubmitEtymologyFreeformAnswerResponse
-	nil, // 50: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
-	nil, // 51: api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
+	(*EtymologyOriginSense)(nil),                        // 49: api.v1.EtymologyOriginSense
+	(*SubmitEtymologyFreeformAnswerResponse)(nil),       // 50: api.v1.SubmitEtymologyFreeformAnswerResponse
+	nil, // 51: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	nil, // 52: api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
 	4,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
@@ -3473,7 +3587,7 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	9,  // 9: api.v1.SubmitReverseAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	19, // 10: api.v1.BatchSubmitReverseAnswersRequest.answers:type_name -> api.v1.SubmitReverseAnswerRequest
 	20, // 11: api.v1.BatchSubmitReverseAnswersResponse.responses:type_name -> api.v1.SubmitReverseAnswerResponse
-	50, // 12: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	51, // 12: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 	9,  // 13: api.v1.SubmitFreeformAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	0,  // 14: api.v1.OverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
 	0,  // 15: api.v1.UndoOverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
@@ -3485,52 +3599,53 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	39, // 21: api.v1.BatchSubmitEtymologyStandardAnswersResponse.responses:type_name -> api.v1.SubmitEtymologyStandardAnswerResponse
 	42, // 22: api.v1.BatchSubmitEtymologyReverseAnswersRequest.answers:type_name -> api.v1.SubmitEtymologyReverseAnswerRequest
 	43, // 23: api.v1.BatchSubmitEtymologyReverseAnswersResponse.responses:type_name -> api.v1.SubmitEtymologyReverseAnswerResponse
-	51, // 24: api.v1.StartEtymologyFreeformQuizResponse.next_review_dates:type_name -> api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
-	2,  // 25: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	5,  // 26: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	11, // 27: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	13, // 28: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
-	15, // 29: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	19, // 30: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	21, // 31: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
-	23, // 32: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	25, // 33: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	27, // 34: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	29, // 35: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	31, // 36: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	33, // 37: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	36, // 38: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
-	38, // 39: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
-	40, // 40: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
-	42, // 41: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
-	44, // 42: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
-	46, // 43: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
-	48, // 44: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
-	3,  // 45: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	6,  // 46: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	12, // 47: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	14, // 48: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
-	16, // 49: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	20, // 50: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	22, // 51: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
-	24, // 52: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	26, // 53: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	28, // 54: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
-	30, // 55: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
-	32, // 56: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
-	34, // 57: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
-	37, // 58: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
-	39, // 59: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
-	41, // 60: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
-	43, // 61: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
-	45, // 62: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
-	47, // 63: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
-	49, // 64: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
-	45, // [45:65] is the sub-list for method output_type
-	25, // [25:45] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	52, // 24: api.v1.StartEtymologyFreeformQuizResponse.next_review_dates:type_name -> api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
+	49, // 25: api.v1.SubmitEtymologyFreeformAnswerResponse.all_senses:type_name -> api.v1.EtymologyOriginSense
+	2,  // 26: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	5,  // 27: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	11, // 28: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	13, // 29: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
+	15, // 30: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	19, // 31: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	21, // 32: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
+	23, // 33: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	25, // 34: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	27, // 35: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	29, // 36: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	31, // 37: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	33, // 38: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	36, // 39: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
+	38, // 40: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
+	40, // 41: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
+	42, // 42: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
+	44, // 43: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
+	46, // 44: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
+	48, // 45: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
+	3,  // 46: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	6,  // 47: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	12, // 48: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	14, // 49: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
+	16, // 50: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	20, // 51: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	22, // 52: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
+	24, // 53: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	26, // 54: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	28, // 55: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	30, // 56: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	32, // 57: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	34, // 58: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	37, // 59: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
+	39, // 60: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
+	41, // 61: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
+	43, // 62: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
+	45, // 63: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
+	47, // 64: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
+	50, // 65: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
+	46, // [46:66] is the sub-list for method output_type
+	26, // [26:46] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -3545,7 +3660,7 @@ func file_api_v1_quiz_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   50,
+			NumMessages:   51,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

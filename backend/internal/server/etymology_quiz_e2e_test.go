@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -41,28 +42,33 @@ func newEtymologyTestHandler(t *testing.T, openai inference.Client, etymologyDir
 // Symptom (from a real session): "I only answered 2 origins, but the feedback
 // screen showed 7 entries (4 of one origin + 3 of another), and the progress
 // bar advanced by 3 instead of 2." The hypothesis was that when the etymology
-// notebook lists the same origin multiple times across session files, those
+// notebook lists the same origin multiple times within a session file, those
 // duplicates leaked through StartEtymologyQuiz into the cards array and then
 // into the per-card save loop in BatchSubmitEtymologyStandardAnswers,
 // producing one save (and one feedback entry) per duplicate.
 //
-// This test seeds a notebook that has the same two origins repeated 4 and 3
-// times respectively (mimicking the user's "4 derma, 3 ophthalmos" symptom
-// with generic Greek-root data) and asserts:
+// This test seeds a notebook session that has the same two origins repeated
+// 4 and 3 times respectively (mimicking the user's "4 derma, 3 ophthalmos"
+// symptom with generic Greek-root data) and asserts:
 //
 //  1. StartEtymologyQuiz returns exactly 2 cards (not 7).
 //  2. Submitting answers for the 2 returned cards produces exactly 2
 //     responses and writes exactly 1 etymology_breakdown_logs entry per
 //     origin to the learning history file (not 4 + 3 = 7).
+//
+// Cross-session "duplicates" (same origin string across two sessions) are
+// intentionally NOT collapsed — those are multi-sense origins. The within-
+// session dedup that this test pins down still applies under the new keying.
 func TestEtymologyStandardQuiz_DuplicatesInSeedYieldOneCardAndOneSavePerOrigin(t *testing.T) {
 	tmpDir := t.TempDir()
 	etymologyDir := filepath.Join(tmpDir, "etymology")
 	learningDir := filepath.Join(tmpDir, "learning")
 	require.NoError(t, os.MkdirAll(learningDir, 0o755))
 
-	// Create an etymology notebook whose session files repeat the same two
+	// Create an etymology notebook whose session file repeats the same two
 	// origins 4 and 3 times respectively. This mirrors how a user's data
-	// drifts when they record the same root in multiple daily session files.
+	// drifts when they accidentally record the same root multiple times in
+	// the same session file.
 	nbDir := filepath.Join(etymologyDir, "greek-roots")
 	require.NoError(t, os.MkdirAll(nbDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(`id: greek-roots
@@ -70,10 +76,11 @@ kind: Etymology
 name: Greek Roots
 notebooks:
   - ./session1.yml
-  - ./session2.yml
 `), 0o644))
-	// 4× tele + 1× graph in session1, 2× graph in session2 → 4 tele + 3 graph total.
-	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session1.yml"), []byte(`origins:
+	// 4× tele + 3× graph all in one session → still 2 unique origins.
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
   - origin: tele
     type: root
     language: Greek
@@ -94,8 +101,6 @@ notebooks:
     type: root
     language: Greek
     meaning: to write
-`), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session2.yml"), []byte(`origins:
   - origin: graph
     type: root
     language: Greek
@@ -111,22 +116,24 @@ notebooks:
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "greek-roots.yml"), []byte(`- metadata:
     id: greek-roots
     title: Greek Roots
-    type: etymology
-  expressions:
-    - expression: tele
-      learned_logs: []
-      etymology_breakdown_logs:
-        - status: understood
-          learned_at: "2025-01-01"
-          quiz_type: etymology_freeform
-          interval_days: 7
-    - expression: graph
-      learned_logs: []
-      etymology_breakdown_logs:
-        - status: understood
-          learned_at: "2025-01-01"
-          quiz_type: etymology_freeform
-          interval_days: 7
+  scenes:
+    - metadata:
+        title: "Session 1"
+      expressions:
+        - expression: tele
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01"
+              quiz_type: etymology_freeform
+              interval_days: 7
+        - expression: graph
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01"
+              quiz_type: etymology_freeform
+              interval_days: 7
 `), 0o644))
 
 	ctrl := gomock.NewController(t)
@@ -179,27 +186,128 @@ notebooks:
 	assert.Equal(t, 1, graphNew, "exactly one new etymology_breakdown_logs entry should be saved for 'graph'")
 }
 
+// TestEtymologyReverseQuiz_DoesNotRepeatJustAnsweredOrigin reproduces, end
+// to end via the real RPC, the case where an origin's standard-direction SR
+// interval is overdue but its reverse-direction interval is not. The bug:
+// StartEtymologyQuiz used etymology_breakdown_logs for the SR-due check
+// regardless of mode, so reverse mode kept returning origins the user had
+// just answered correctly in reverse the same day.
+//
+// Setup: one origin "spectro", same session.
+//   - etymology_breakdown_logs[0]: 10 days ago, interval=7  → standard track is overdue
+//   - etymology_assembly_logs[0]:  today,       interval=30 → reverse track is fresh
+//
+// Expectation:
+//   - StartEtymologyQuiz(STANDARD) returns 1 card (standard is overdue).
+//   - StartEtymologyQuiz(REVERSE)  returns 0 cards (reverse just answered).
+func TestEtymologyReverseQuiz_DoesNotRepeatJustAnsweredOrigin(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymologyDir := filepath.Join(tmpDir, "etymology")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+
+	nbDir := filepath.Join(etymologyDir, "test-roots")
+	require.NoError(t, os.MkdirAll(nbDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(`id: test-roots
+kind: Etymology
+name: Test Roots
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: spectro
+    type: root
+    language: Latin
+    meaning: to look closely
+`), 0o644))
+
+	now := time.Now().UTC()
+	tenDaysAgo := now.AddDate(0, 0, -10).Format(time.RFC3339)
+	today := now.Format(time.RFC3339)
+	historyYAML := `- metadata:
+    id: test-roots
+    title: Test Roots
+    type: etymology
+  scenes:
+    - metadata:
+        title: "Session 1"
+      expressions:
+        - expression: spectro
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: usable
+              learned_at: "` + tenDaysAgo + `"
+              quality: 4
+              quiz_type: etymology_breakdown
+              interval_days: 7
+            - status: understood
+              learned_at: "` + tenDaysAgo + `"
+              quality: 4
+              quiz_type: etymology_freeform
+              interval_days: 7
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "` + today + `"
+              quality: 5
+              quiz_type: etymology_assembly
+              interval_days: 30
+`
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-roots.yml"), []byte(historyYAML), 0o644))
+
+	ctrl := gomock.NewController(t)
+	openai := mock_inference.NewMockClient(ctrl)
+	handler := newEtymologyTestHandler(t, openai, etymologyDir, learningDir)
+	ctx := context.Background()
+
+	standardResp, err := handler.StartEtymologyQuiz(ctx, connect.NewRequest(&apiv1.StartEtymologyQuizRequest{
+		EtymologyNotebookIds: []string{"test-roots"},
+		Mode:                 apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_STANDARD,
+	}))
+	require.NoError(t, err)
+	assert.Len(t, standardResp.Msg.GetCards(), 1,
+		"standard track is overdue (10 days ago, interval=7) — quiz must surface the card")
+
+	reverseResp, err := handler.StartEtymologyQuiz(ctx, connect.NewRequest(&apiv1.StartEtymologyQuizRequest{
+		EtymologyNotebookIds: []string{"test-roots"},
+		Mode:                 apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE,
+	}))
+	require.NoError(t, err)
+	assert.Empty(t, reverseResp.Msg.GetCards(),
+		"reverse track was answered today with interval=30 — quiz must NOT surface the card again")
+}
+
 // countNewBreakdownLogs reads a learning-history YAML and returns the number
 // of breakdown log entries with quiz_type=etymology_breakdown (i.e. saves
-// from a standard quiz, not the seed freeform entries).
+// from a standard quiz, not the seed freeform entries). The new etymology
+// learning-history shape is nested: scenes[].expressions[], so we walk both.
 func countNewBreakdownLogs(t *testing.T, path string) (tele, graph int) {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var histories []notebook.LearningHistory
 	require.NoError(t, yaml.Unmarshal(data, &histories))
+	count := func(e notebook.LearningHistoryExpression) {
+		for _, log := range e.EtymologyBreakdownLogs {
+			if log.QuizType != string(notebook.QuizTypeEtymologyStandard) {
+				continue
+			}
+			switch e.Expression {
+			case "tele":
+				tele++
+			case "graph":
+				graph++
+			}
+		}
+	}
 	for _, h := range histories {
 		for _, e := range h.Expressions {
-			for _, log := range e.EtymologyBreakdownLogs {
-				if log.QuizType != string(notebook.QuizTypeEtymologyStandard) {
-					continue
-				}
-				switch e.Expression {
-				case "tele":
-					tele++
-				case "graph":
-					graph++
-				}
+			count(e)
+		}
+		for _, scene := range h.Scenes {
+			for _, e := range scene.Expressions {
+				count(e)
 			}
 		}
 	}

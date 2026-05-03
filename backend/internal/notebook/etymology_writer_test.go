@@ -40,7 +40,9 @@ notebooks:
 `
 				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
 
-				sessionYAML := `origins:
+				sessionYAML := `metadata:
+  title: "Session 1"
+origins:
   - origin: spect
     language: Latin
     meaning: to look
@@ -72,7 +74,9 @@ notebooks:
 `
 				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
 
-				sessionYAML := `origins:
+				sessionYAML := `metadata:
+  title: "Session 1"
+origins:
   - origin: graph
     language: Greek
     meaning: to write
@@ -147,7 +151,9 @@ notebooks:
 `
 				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
 
-				sessionYAML := `origins:
+				sessionYAML := `metadata:
+  title: "Session 1"
+origins:
   - origin: graph
     language: Greek
     meaning: to write
@@ -215,7 +221,9 @@ notebooks:
 `
 				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
 
-				sessionYAML := `origins:
+				sessionYAML := `metadata:
+  title: "Session 1"
+origins:
   - origin: ego
     language: Latin
     meaning: I, self
@@ -284,7 +292,9 @@ notebooks:
 `
 				require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
 
-				sessionYAML := `origins:
+				sessionYAML := `metadata:
+  title: "Session 1"
+origins:
   - origin: spect
     language: Latin
     meaning: to look
@@ -377,7 +387,9 @@ name: Test Roots
 notebooks:
   - ./session1.yml
 `), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(`origins:
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
   - origin: mastered-root
     language: Latin
     meaning: well-known
@@ -413,18 +425,22 @@ notebooks:
 
 	// Learning history: mastered-root has a recent correct answer with a long
 	// interval (next review far in the future). open-root has no etymology
-	// history at all.
+	// history at all. The history is keyed by the session's metadata.title
+	// so the writer's per-session lookup can find it.
 	learningHistories := map[string][]LearningHistory{
 		"test-roots": {{
-			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Test Roots", Type: "etymology"},
-			Expressions: []LearningHistoryExpression{{
-				Expression: "mastered-root",
-				EtymologyBreakdownLogs: []LearningRecord{{
-					Status:       LearnedStatusUnderstood,
-					LearnedAt:    Date{Time: time.Now()},
-					Quality:      5,
-					QuizType:     string(QuizTypeEtymologyStandard),
-					IntervalDays: 365,
+			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Test Roots"},
+			Scenes: []LearningScene{{
+				Metadata: LearningSceneMetadata{Title: "Session 1"},
+				Expressions: []LearningHistoryExpression{{
+					Expression: "mastered-root",
+					EtymologyBreakdownLogs: []LearningRecord{{
+						Status:       LearnedStatusUnderstood,
+						LearnedAt:    Date{Time: time.Now()},
+						Quality:      5,
+						QuizType:     string(QuizTypeEtymologyStandard),
+						IntervalDays: 365,
+					}},
 				}},
 			}},
 		}},

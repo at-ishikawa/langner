@@ -386,7 +386,9 @@ name: Common Roots
 notebooks:
   - ./session1.yml
 `), 0644))
-				require.NoError(t, os.WriteFile(filepath.Join(dir, "session1.yml"), []byte(`origins:
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
   - origin: spect
     type: root
     language: Latin
