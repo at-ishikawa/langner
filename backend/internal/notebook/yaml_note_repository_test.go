@@ -332,6 +332,69 @@ notebooks:
 	assert.True(t, foundTelescope, "FindAll should include definitions-book entries (telescope)")
 }
 
+// FindAll must dedup NotebookNotes for an expression that's reachable
+// through more than one walk. Books with an accompanying definitions
+// YAML (e.g. epistolary novels under both books/ and
+// definitions/.../bookID/) trigger MergeDefinitionsIntoNotebooks in
+// ReadStoryNotebooks, which appends each definitions-YAML expression
+// onto the matching story-book scene. The story-book walk then visits
+// the same expression twice and addNote was emitting two NotebookNotes
+// with identical (notebook_type=book, notebook_id, group, subgroup)
+// tuples. classifyRecord's new-note branch in datasync passes those
+// straight to BatchCreate, tripping the notebook_notes unique key on
+// (note_id, notebook_type, notebook_id, group) and aborting import-db.
+func TestYAMLNoteRepository_FindAll_BookAndDefinitionsBookSameID(t *testing.T) {
+	tmpDir := t.TempDir()
+	booksDir := filepath.Join(tmpDir, "books", "shared-id")
+	require.NoError(t, os.MkdirAll(booksDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(booksDir, "index.yml"), []byte(`id: shared-id
+notebooks:
+  - ./chapter01.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(booksDir, "chapter01.yml"), []byte(`- event: "Chapter One"
+  date: 2025-01-01T00:00:00Z
+  scenes:
+    - scene: "Opening"
+      statements:
+        - "It was a dark and stormy night."
+      definitions:
+        - expression: "stormy"
+          meaning: "characterised by strong winds and rain"
+`), 0644))
+
+	defsDir := filepath.Join(tmpDir, "definitions", "books", "shared-id")
+	require.NoError(t, os.MkdirAll(defsDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(defsDir, "index.yml"), []byte(`id: shared-id
+notebooks:
+  - ./chapter01.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsDir, "chapter01.yml"), []byte(`- metadata:
+    title: "Chapter One"
+  scenes:
+    - metadata:
+        index: 0
+        title: "Opening"
+      expressions:
+        - expression: "stormy"
+          meaning: "characterised by strong winds and rain"
+`), 0644))
+
+	reader, err := NewReader(
+		nil, nil,
+		[]string{filepath.Join(tmpDir, "books")},
+		[]string{filepath.Join(tmpDir, "definitions")},
+		nil, nil,
+	)
+	require.NoError(t, err)
+	repo := NewYAMLNoteRepository(reader)
+	got, err := repo.FindAll(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 1, "the same note must not appear twice")
+	require.Len(t, got[0].NotebookNotes, 1,
+		"a notebook ID present in both books/ and definitions/books/ must produce exactly one notebook_notes row")
+	assert.Equal(t, "shared-id", got[0].NotebookNotes[0].NotebookID)
+}
+
 // FindAll must not panic when the repository was constructed via the
 // writer-only constructors (NewYAMLNoteRepositoryWithDefsDir or
 // NewYAMLNoteRepositoryWriter), which leave the reader nil. The server
