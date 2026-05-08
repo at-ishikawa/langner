@@ -85,11 +85,16 @@ func (notebook *FlashcardNotebook) Validate(location string) []ValidationError {
 // FilterFlashcardNotebooks filters flashcard notebooks based on learning history
 // and spaced repetition algorithm, similar to FilterStoryNotebooks.
 // It returns only the cards that need to be learned based on the learning history.
+//
+// quizType selects which slot of the per-type SkippedAt map gates the skip
+// filter. PDF/markdown export passes QuizTypeNotebook; quiz card loaders
+// pass the mode they're loading for.
 func FilterFlashcardNotebooks(
 	flashcardNotebooks []FlashcardNotebook,
 	learningHistory []LearningHistory,
 	dictionaryMap map[string]rapidapi.Response,
 	sortDesc bool,
+	quizType QuizType,
 ) ([]FlashcardNotebook, error) {
 	result := make([]FlashcardNotebook, 0)
 
@@ -124,8 +129,8 @@ func FilterFlashcardNotebooks(
 				return nil, fmt.Errorf("empty card.Expression: %v in flashcard notebook %s", card, notebook.Title)
 			}
 
-			// Skip words that are marked as skipped in learning history
-			if isExpressionSkipped(learningHistory, notebook.Title, "", card) {
+			// Skip words that are marked as skipped from this quiz type
+			if isExpressionSkipped(learningHistory, notebook.Title, "", card, quizType) {
 				continue
 			}
 

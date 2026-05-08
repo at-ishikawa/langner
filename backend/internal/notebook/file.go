@@ -25,16 +25,42 @@ func readYamlFile[T any](path string) (T, error) {
 	return result, nil
 }
 
+// WriteYamlFile atomically replaces the file at path with the YAML encoding
+// of data. The encoded bytes are written to a sibling temp file and then
+// renamed over the destination. This prevents two racing writers (or a
+// crashed writer) from leaving a half-written, garbage-interleaved file —
+// either the rename completes and readers see the new content, or it
+// doesn't and they see the previous content. A previous version used
+// os.Create + streaming yaml.Encoder, which truncated the file in place
+// and corrupted it under concurrent writes.
 func WriteYamlFile[T any](path string, data T) error {
-	file, err := os.Create(path)
+	encoded, err := yaml.Marshal(data)
 	if err != nil {
-		return fmt.Errorf("os.Create(%s)> %w", path, err)
+		return fmt.Errorf("yaml.Marshal(%s)> %w", path, err)
 	}
-	defer func() {
-		_ = file.Close()
-	}()
 
-	return yaml.NewEncoder(file).Encode(data)
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return fmt.Errorf("os.CreateTemp(%s)> %w", dir, err)
+	}
+	tmpPath := tmp.Name()
+	cleanup := func() { _ = os.Remove(tmpPath) }
+
+	if _, err := tmp.Write(encoded); err != nil {
+		_ = tmp.Close()
+		cleanup()
+		return fmt.Errorf("write(%s)> %w", tmpPath, err)
+	}
+	if err := tmp.Close(); err != nil {
+		cleanup()
+		return fmt.Errorf("close(%s)> %w", tmpPath, err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		cleanup()
+		return fmt.Errorf("rename(%s -> %s)> %w", tmpPath, path, err)
+	}
+	return nil
 }
 
 // yamlFile represents a YAML file with its path and contents

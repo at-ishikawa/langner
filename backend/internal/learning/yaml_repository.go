@@ -417,3 +417,9 @@ func (r *YAMLLearningRepository) FindAll(_ context.Context) ([]LearningLog, erro
 func (r *YAMLLearningRepository) BatchCreate(_ context.Context, _ []*LearningLog) error {
 	return fmt.Errorf("BatchCreate is not supported for YAML learning repository")
 }
+
+// BatchDelete is a no-op on the YAML side. The reconcile pass only ever
+// targets the DB; YAML is the source of truth.
+func (r *YAMLLearningRepository) BatchDelete(_ context.Context, _ []int64) error {
+	return fmt.Errorf("BatchDelete is not supported for YAML learning repository")
+}

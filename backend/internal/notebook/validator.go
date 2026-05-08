@@ -61,12 +61,13 @@ type Validator struct {
 	storyNotebooksDirs []string
 	flashcardsDirs     []string
 	definitionsDirs    []string
+	etymologyDirs      []string
 	dictionaryDir      string
 	calculator         IntervalCalculator
 }
 
 // NewValidator creates a new validator
-func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, definitionsDirs []string, dictionaryDir string, calculator IntervalCalculator) *Validator {
+func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcardsDirs []string, definitionsDirs []string, etymologyDirs []string, dictionaryDir string, calculator IntervalCalculator) *Validator {
 	if calculator == nil {
 		calculator = &SM2Calculator{}
 	}
@@ -75,6 +76,7 @@ func NewValidator(learningNotesDir string, storyNotebooksDirs []string, flashcar
 		storyNotebooksDirs: storyNotebooksDirs,
 		flashcardsDirs:     flashcardsDirs,
 		definitionsDirs:    definitionsDirs,
+		etymologyDirs:      etymologyDirs,
 		dictionaryDir:      dictionaryDir,
 		calculator:         calculator,
 	}
@@ -144,8 +146,13 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 		return nil, fmt.Errorf("loadStoryNotebooks() > %w", err)
 	}
 
+	// Promote legacy interval_days: 3650 skips into the per-type
+	// SkippedAt map. Must run before fixConsistency, which would otherwise
+	// recompute interval_days and silently overwrite the skip.
+	fixedLearning := v.migrateLegacySkipIntervals(learningHistories, result)
+
 	// Fix mismatched scenes by moving expressions to correct scenes (do this first)
-	fixedLearning := v.fixMismatchedScenes(learningHistories, storyNotebooks, result)
+	fixedLearning = v.fixMismatchedScenes(fixedLearning, storyNotebooks, result)
 
 	// Fix expression names to match story definitions (do this before merging duplicates)
 	fixedLearning = v.fixExpressionNames(fixedLearning, storyNotebooks, result)
@@ -214,7 +221,7 @@ func (v *Validator) loadStoryNotebooks() ([]storyNotebookFile, error) {
 // loadDefinitionsExpressions returns a set of all expressions found in definitions directories.
 func (v *Validator) loadDefinitionsExpressions() map[string]bool {
 	result := make(map[string]bool)
-	defsMap, _, err := NewDefinitionsMap(v.definitionsDirs)
+	defsMap, _, _, err := NewDefinitionsMap(v.definitionsDirs)
 	if err != nil {
 		return result
 	}
@@ -229,6 +236,41 @@ func (v *Validator) loadDefinitionsExpressions() map[string]bool {
 					if note.Definition != "" {
 						result[strings.TrimSpace(note.Definition)] = true
 					}
+				}
+			}
+		}
+	}
+	// Etymology origins are valid expression sources for learning history
+	// (the etymology learning history tracks origins, not vocabulary words).
+	for k := range v.loadEtymologyOriginExpressions() {
+		result[k] = true
+	}
+	return result
+}
+
+// loadEtymologyOriginExpressions returns a set of all etymology origins
+// across configured etymology directories. Used by the consistency check so
+// origins recorded in learning history (under per-session scenes) aren't
+// flagged as orphaned.
+func (v *Validator) loadEtymologyOriginExpressions() map[string]bool {
+	result := make(map[string]bool)
+	indexMap := make(map[string]EtymologyIndex)
+	for _, dir := range v.etymologyDirs {
+		if dir == "" {
+			continue
+		}
+		_ = walkEtymologyIndexFiles(dir, indexMap)
+	}
+	for _, idx := range indexMap {
+		for _, nbPath := range idx.NotebookPaths {
+			wrapped, err := readYamlFile[etymologySessionFile](filepath.Join(idx.Path, nbPath))
+			if err != nil {
+				continue
+			}
+			for _, o := range wrapped.Origins {
+				origin := strings.TrimSpace(o.Origin)
+				if origin != "" {
+					result[origin] = true
 				}
 			}
 		}
@@ -473,6 +515,17 @@ func (v *Validator) validateDictionaryReferences(files []storyNotebookFile, resu
 }
 
 func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	for fileIdx := range files {
+		// First, merge duplicate top-level histories whose Metadata.Title
+		// matches after quote normalization. Without this, two episode entries
+		// for the same lesson — one written with a smart apostrophe, one with
+		// an ASCII apostrophe — survive as separate histories. The same
+		// expression then appears in both, the older entry's stale shorter
+		// interval keeps the word due, and the user is asked it every day.
+		files[fileIdx].contents = v.mergeDuplicateHistories(
+			files[fileIdx].contents, files[fileIdx].path, result,
+		)
+	}
 	for _, file := range files {
 		for histIdx := range file.contents {
 			// Merge duplicate scenes whose titles differ only by quote style
@@ -529,6 +582,15 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						return expr.LearnedLogs[i].LearnedAt.After(expr.LearnedLogs[j].LearnedAt.Time)
 					})
 				}
+			}
+
+			// Etymology histories use scenes to disambiguate multi-sense
+			// origins (e.g. "ana" = "up" in Session 13, "negative" in
+			// Session 16). The same expression in two scenes is intentional,
+			// so the cross-scene merge below would corrupt the data — skip
+			// it entirely for etymology.
+			if file.contents[histIdx].Metadata.Type == "etymology" {
+				continue
 			}
 
 			// Then, merge duplicate expressions across different scenes in the same episode
@@ -676,6 +738,58 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 	}
 
 	return files
+}
+
+// mergeDuplicateHistories merges top-level LearningHistory entries whose
+// Metadata.Title matches after normalizing quote characters and trimming
+// whitespace. Scenes from later histories are appended to the first one;
+// the per-history scene/expression dedup that runs after this call collapses
+// the resulting overlap.
+//
+// The encounter-order of titles is preserved so existing files don't see a
+// gratuitous reordering on --fix.
+func (v *Validator) mergeDuplicateHistories(
+	histories []LearningHistory, filePath string, result *ValidationResult,
+) []LearningHistory {
+	groups := make(map[string][]int)
+	var order []string
+	for i, h := range histories {
+		key := normalizeQuotes(strings.TrimSpace(h.Metadata.Title))
+		if _, seen := groups[key]; !seen {
+			order = append(order, key)
+		}
+		groups[key] = append(groups[key], i)
+	}
+
+	needsMerge := false
+	for _, indices := range groups {
+		if len(indices) > 1 {
+			needsMerge = true
+			break
+		}
+	}
+	if !needsMerge {
+		return histories
+	}
+
+	var merged []LearningHistory
+	for _, key := range order {
+		indices := groups[key]
+		base := histories[indices[0]]
+		if len(indices) == 1 {
+			merged = append(merged, base)
+			continue
+		}
+		for _, hi := range indices[1:] {
+			base.Scenes = append(base.Scenes, histories[hi].Scenes...)
+		}
+		result.AddWarning(ValidationError{
+			File:    filePath,
+			Message: fmt.Sprintf("Merged %d duplicate history entry(ies) with title %q", len(indices)-1, base.Metadata.Title),
+		})
+		merged = append(merged, base)
+	}
+	return merged
 }
 
 // mergeDuplicateScenes merges scenes whose titles match after normalizing
@@ -1341,7 +1455,7 @@ func (v *Validator) validateDefinitionsInConversations(files []storyNotebookFile
 // validateSeparateDefinitionsInConversations checks that definitions from separate
 // definitions files appear in the matching story notebook conversations/statements.
 func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []storyNotebookFile, result *ValidationResult) {
-	defsMap, _, err := NewDefinitionsMap(v.definitionsDirs)
+	defsMap, _, _, err := NewDefinitionsMap(v.definitionsDirs)
 	if err != nil {
 		return
 	}
@@ -1421,6 +1535,67 @@ func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []stor
 			}
 		}
 	}
+}
+
+// migrateLegacySkipIntervals promotes the pre-Phase-2 skip representation
+// (a single log with interval_days >= 3650 and no override_interval) into
+// the per-quiz-type SkippedAtMap. The log's interval_days is then reset to
+// zero so the SR-recalculate pass downstream computes the natural value.
+//
+// This runs unconditionally on every Fix() because it's a no-op once data
+// is migrated. The threshold of 3650 is the magic value SkipWord used
+// before the per-type rewrite — natural SM-2 intervals stay below ~1100
+// days for typical study histories, so 3650 unambiguously means "skip".
+func (v *Validator) migrateLegacySkipIntervals(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	const legacySkipThreshold = 3650
+
+	promote := func(expr *LearningHistoryExpression, logs []LearningRecord, fileLabel, exprLabel string) []LearningRecord {
+		if len(logs) == 0 {
+			return logs
+		}
+		latest := &logs[0]
+		if latest.IntervalDays < legacySkipThreshold || latest.OverrideInterval != 0 {
+			return logs
+		}
+		quizType := QuizType(latest.QuizType)
+		if quizType == "" {
+			// Without a quiz_type we can't pick a slot; leave the
+			// record alone and let backfillQuizType run first.
+			return logs
+		}
+		at := latest.LearnedAt.Format("2006-01-02T15:04:05Z07:00")
+		expr.SkippedAt = expr.SkippedAt.Set(quizType, at)
+		latest.IntervalDays = 0
+		result.AddWarning(ValidationError{
+			File:    fileLabel,
+			Message: fmt.Sprintf("Migrated legacy skip (interval_days=3650) for %q to skipped_at[%s]", exprLabel, quizType),
+		})
+		return logs
+	}
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		for histIdx := range file.contents {
+			history := &file.contents[histIdx]
+
+			migrate := func(expr *LearningHistoryExpression) {
+				expr.LearnedLogs = promote(expr, expr.LearnedLogs, file.path, expr.Expression)
+				expr.ReverseLogs = promote(expr, expr.ReverseLogs, file.path, expr.Expression)
+				expr.EtymologyBreakdownLogs = promote(expr, expr.EtymologyBreakdownLogs, file.path, expr.Expression)
+				expr.EtymologyAssemblyLogs = promote(expr, expr.EtymologyAssemblyLogs, file.path, expr.Expression)
+			}
+
+			for ei := range history.Expressions {
+				migrate(&history.Expressions[ei])
+			}
+			for si := range history.Scenes {
+				for ei := range history.Scenes[si].Expressions {
+					migrate(&history.Scenes[si].Expressions[ei])
+				}
+			}
+		}
+	}
+	return files
 }
 
 // recalculateLearningLogs replays the configured algorithm to recompute interval_days.

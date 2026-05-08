@@ -24,6 +24,7 @@ export default function EtymologyFreeformQuizPage() {
     correct: boolean; reason: string; correctMeaning: string;
     type: string; language: string; notebookName?: string;
     learnedAt?: string; noteId?: bigint;
+    allSenses: { meaning: string; type: string; language: string; sessionTitle: string }[];
   } | null>(null);
   const [overridden, setOverridden] = useState(false);
   const [skipped, setSkipped] = useState(false);
@@ -69,6 +70,9 @@ export default function EtymologyFreeformQuizPage() {
         notebookName: res.notebookName || undefined,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId ? BigInt(res.noteId) : undefined,
+        allSenses: (res.allSenses ?? []).map((s) => ({
+          meaning: s.meaning, type: s.type, language: s.language, sessionTitle: s.sessionTitle,
+        })),
       };
       setFeedback(fb);
       setDisplayCorrect(fb.correct);
@@ -127,6 +131,21 @@ export default function EtymologyFreeformQuizPage() {
                 {feedback.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{feedback.language}</Text></Box>}
               </Box>
             </Box>
+            {feedback.allSenses.length > 1 && (
+              <Box p={3} borderWidth="1px" borderRadius="lg" bg="yellow.50" _dark={{ bg: "yellow.900", borderColor: "yellow.700" }}>
+                <Text fontSize="sm" fontWeight="bold" mb={2}>Other senses of {origin}</Text>
+                <VStack align="stretch" gap={1}>
+                  {feedback.allSenses
+                    .filter((s) => s.meaning !== feedback.correctMeaning)
+                    .map((s, i) => (
+                      <Text key={i} fontSize="sm">
+                        <Text as="span" fontWeight="medium">{s.meaning}</Text>
+                        {s.sessionTitle && <Text as="span" color="gray.500" _dark={{ color: "gray.400" }}> — {s.sessionTitle}</Text>}
+                      </Text>
+                    ))}
+                </VStack>
+              </Box>
+            )}
             {feedback.reason && <Box><Text fontWeight="bold">Reason</Text><Text>{feedback.reason}</Text></Box>}
             {feedback.notebookName && <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>Found in: {feedback.notebookName}</Text>}
           </FeedbackActions>

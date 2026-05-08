@@ -455,3 +455,5 @@ func (r *YAMLNoteRepository) Delete(_ context.Context, notebookID string, expres
 
 func (r *YAMLNoteRepository) BatchCreate(_ context.Context, _ []*NoteRecord) error { return fmt.Errorf("not supported") }
 func (r *YAMLNoteRepository) BatchUpdate(_ context.Context, _ []*NoteRecord, _ []NotebookNote) error { return fmt.Errorf("not supported") }
+func (r *YAMLNoteRepository) BatchDeleteNotes(_ context.Context, _ []int64) error { return fmt.Errorf("not supported") }
+func (r *YAMLNoteRepository) BatchDeleteNotebookNotes(_ context.Context, _ []int64) error { return fmt.Errorf("not supported") }

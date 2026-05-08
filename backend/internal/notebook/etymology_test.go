@@ -24,19 +24,22 @@ notebooks:
 `
 	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
 
-	// Write origins.yml
-	originsYAML := `- origin: "spect"
-  type: root
-  language: Latin
-  meaning: to look or see
-- origin: "pre"
-  type: prefix
-  language: Latin
-  meaning: before
-- origin: "graph"
-  type: root
-  language: Greek
-  meaning: to write
+	// Write origins.yml — wrapped format with required metadata.title
+	originsYAML := `metadata:
+  title: "Lesson 1"
+origins:
+  - origin: "spect"
+    type: root
+    language: Latin
+    meaning: to look or see
+  - origin: "pre"
+    type: prefix
+    language: Latin
+    meaning: before
+  - origin: "graph"
+    type: root
+    language: Greek
+    meaning: to write
 `
 	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(originsYAML), 0644))
 
@@ -65,12 +68,38 @@ notebooks:
 	assert.Equal(t, "root", origins[0].Type)
 	assert.Equal(t, "Latin", origins[0].Language)
 	assert.Equal(t, "to look or see", origins[0].Meaning)
+	assert.Equal(t, "Lesson 1", origins[0].SessionTitle)
 
 	assert.Equal(t, "pre", origins[1].Origin)
 	assert.Equal(t, "prefix", origins[1].Type)
 
 	assert.Equal(t, "graph", origins[2].Origin)
 	assert.Equal(t, "Greek", origins[2].Language)
+}
+
+func TestReader_ReadEtymologyNotebook_MissingTitle(t *testing.T) {
+	// Reader must reject session files without metadata.title.
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "no-title")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+
+	indexYAML := `id: no-title
+kind: Etymology
+name: Missing Title
+notebooks:
+  - ./session.yml
+`
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
+
+	sessionYAML := `origins:
+  - origin: anchor
+    meaning: hold fast
+`
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session.yml"), []byte(sessionYAML), 0644))
+
+	_, err := NewReader(nil, nil, nil, nil, []string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "missing required metadata.title")
 }
 
 func TestReader_ReadEtymologyNotebook_WrappedFormat(t *testing.T) {
@@ -86,8 +115,10 @@ notebooks:
 `
 	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(indexYAML), 0644))
 
-	// Wrapped format: origins under "origins:" key
-	sessionYAML := `origins:
+	// Wrapped format with required metadata.title
+	sessionYAML := `metadata:
+  title: "Wrapped Session"
+origins:
   - origin: duc
     type: root
     language: Latin
@@ -107,7 +138,9 @@ notebooks:
 	assert.Len(t, origins, 2)
 	assert.Equal(t, "duc", origins[0].Origin)
 	assert.Equal(t, "to lead", origins[0].Meaning)
+	assert.Equal(t, "Wrapped Session", origins[0].SessionTitle)
 	assert.Equal(t, "vert", origins[1].Origin)
+	assert.Equal(t, "Wrapped Session", origins[1].SessionTitle)
 }
 
 func TestReader_ReadEtymologyNotebook_NotFound(t *testing.T) {
@@ -187,7 +220,7 @@ notebooks:
   - ./origins.yml
 `
 	require.NoError(t, os.WriteFile(filepath.Join(mixedDir, "etymology-nb", "index.yml"), []byte(etymIndex), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(mixedDir, "etymology-nb", "origins.yml"), []byte("[]"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(mixedDir, "etymology-nb", "origins.yml"), []byte("metadata:\n  title: Empty\norigins: []\n"), 0644))
 
 	// Story index
 	storyIndex := `id: story-test

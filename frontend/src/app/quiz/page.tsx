@@ -76,20 +76,24 @@ export default function QuizHubPage() {
 
   const selectedMode = tab === "vocabulary" ? selectedVocabMode : selectedEtyMode;
 
+  const isFreeformMode =
+    (tab === "vocabulary" && selectedVocabMode === "freeform") ||
+    (tab === "etymology" && selectedEtyMode === "freeform");
+
   // Notebook lists. Hide notebooks with zero review count for the selected
-  // mode; when includeUnstudied is on, we can't know the unstudied count so
-  // fall back to showing all of them.
+  // mode; when includeUnstudied is on (or in freeform, which always covers
+  // unstudied words) we can't know the unstudied count so show all of them.
   const displayedNotebooks = useMemo(() => {
     const base = notebooks.filter((n) =>
       tab === "vocabulary" ? n.kind !== "Etymology" : n.kind === "Etymology",
     );
-    if (includeUnstudied) return base;
+    if (includeUnstudied || isFreeformMode) return base;
     return base.filter((n) => {
       if (tab === "etymology") return n.etymologyReviewCount > 0;
       if (selectedVocabMode === "reverse") return n.reverseReviewCount > 0;
       return n.reviewCount > 0;
     });
-  }, [notebooks, tab, includeUnstudied, selectedVocabMode]);
+  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode]);
 
   // Drop selections that are hidden by the current filter so the user doesn't
   // accidentally start a quiz referencing notebooks they can no longer see.
@@ -147,9 +151,6 @@ export default function QuizHubPage() {
     selectedMode !== null &&
     !(tab === "vocabulary" && selectedVocabMode === "freeform");
 
-  const isFreeformMode =
-    (tab === "vocabulary" && selectedVocabMode === "freeform") ||
-    (tab === "etymology" && selectedEtyMode === "freeform");
   const showFeedbackInterval = selectedMode !== null && !isFreeformMode;
 
   const handleStart = async () => {
@@ -223,7 +224,8 @@ export default function QuizHubPage() {
             (res.cards ?? []).map((c) => ({
               cardId: c.cardId, origin: c.origin, type: c.type,
               language: c.language, meaning: c.meaning,
-              notebookName: c.notebookName,
+              notebookName: c.notebookName, sessionTitle: c.sessionTitle,
+              exampleWords: c.exampleWords ?? [],
             })),
           );
           router.push(selectedEtyMode === "standard" ? "/quiz/etymology-standard" : "/quiz/etymology-reverse");
@@ -327,7 +329,7 @@ export default function QuizHubPage() {
         {/* Quiz options (shown above the notebook picker so filters apply) */}
         {selectedMode !== null && (
           <VStack align="stretch" gap={3} mt={1}>
-            {showNotebookSelection && (
+            {showNotebookSelection && !isFreeformMode && (
               <Switch.Root
                 checked={includeUnstudied}
                 onCheckedChange={(e) => setIncludeUnstudied(e.checked)}
@@ -383,9 +385,15 @@ export default function QuizHubPage() {
 
             {displayedNotebooks.length === 0 ? (
               <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={2}>
-                No notebooks have words due for this mode. Turn on{" "}
-                <Text as="span" fontWeight="medium">Include unstudied words</Text>{" "}
-                to see more.
+                {isFreeformMode ? (
+                  "No notebooks available for this mode."
+                ) : (
+                  <>
+                    No notebooks have words due for this mode. Turn on{" "}
+                    <Text as="span" fontWeight="medium">Include unstudied words</Text>{" "}
+                    to see more.
+                  </>
+                )}
               </Text>
             ) : (
               <VStack align="stretch" gap={3}>

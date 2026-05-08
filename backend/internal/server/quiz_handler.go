@@ -282,13 +282,25 @@ func (h *QuizHandler) ResumeWord(ctx context.Context, req *connect.Request[apiv1
 
 func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyQuizRequest]) (*connect.Response[apiv1.StartEtymologyQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetIncludeUnstudied(), false)
+	loadQuizType := notebook.QuizTypeEtymologyStandard
+	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
+		loadQuizType = notebook.QuizTypeEtymologyReverse
+	}
+	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetIncludeUnstudied(), false, loadQuizType)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
+	examples, err := h.svc.LoadEtymologyExampleWords(cards)
+	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err)) }
 	localStore := make(map[int64]quiz.EtymologyOriginCard); var nextID int64 = 1
 	var protoCards []*apiv1.EtymologyQuizCard
 	for _, card := range cards {
 		cardID := nextID; nextID++; localStore[cardID] = card
-		protoCards = append(protoCards, &apiv1.EtymologyQuizCard{CardId: cardID, Origin: card.Origin, Type: card.Type, Language: card.Language, Meaning: card.Meaning, NotebookName: card.NotebookName})
+		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle
+		protoCards = append(protoCards, &apiv1.EtymologyQuizCard{
+			CardId: cardID, Origin: card.Origin, Type: card.Type,
+			Language: card.Language, Meaning: card.Meaning,
+			NotebookName: card.NotebookName, SessionTitle: card.SessionTitle,
+			ExampleWords: examples[exampleKey],
+		})
 	}
 	h.mu.Lock(); h.etymologyOriginStore = localStore; h.etymologyQuizMode = req.Msg.GetMode(); h.nextID = nextID; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartEtymologyQuizResponse{Cards: protoCards}), nil
@@ -326,7 +338,7 @@ func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *con
 
 func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest]) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), true, true)
+	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), true, true, notebook.QuizTypeEtymologyFreeform)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	nextReviewDates, err := h.svc.GetEtymologyOriginNextReviewDates(cards)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err)) }
@@ -343,20 +355,62 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *co
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
 	h.mu.Lock(); cards := h.etymologyOriginCards; h.mu.Unlock()
 	origin := req.Msg.GetOrigin(); meaning := req.Msg.GetMeaning()
-	var matchedCard *quiz.EtymologyOriginCard
-	for _, card := range cards { if strings.EqualFold(card.Origin, origin) { c := card; matchedCard = &c; break } }
-	if matchedCard == nil { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("origin %q not found", origin)) }
-	grade, err := h.svc.GradeEtymologyStandardAnswer(ctx, *matchedCard, meaning, req.Msg.GetResponseTimeMs())
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology freeform: %w", err)) }
-	if err := h.svc.SaveEtymologyOriginResult(*matchedCard, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyFreeform, false); err != nil {
+	senses := h.svc.LoadEtymologyOriginSenses(cards, origin)
+	if len(senses) == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("origin %q not found", origin))
+	}
+
+	// Grade against every sense; the user's answer is correct if it matches
+	// any sense. The FIRST matching sense wins for SR-history updates.
+	// Non-matching senses aren't penalised — the user might know "ana = up"
+	// without knowing "ana = negative", and freeform shouldn't dock them.
+	var matchedSense *quiz.EtymologyOriginCard
+	var bestGrade quiz.GradeResult
+	bestGrade.Reason = "no sense matched"
+	for i, sense := range senses {
+		s := sense
+		grade, err := h.svc.GradeEtymologyStandardAnswer(ctx, s, meaning, req.Msg.GetResponseTimeMs())
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology freeform: %w", err))
+		}
+		if grade.Correct && matchedSense == nil {
+			matchedSense = &s
+			bestGrade = grade
+		}
+		if i == 0 && matchedSense == nil {
+			bestGrade = grade
+		}
+	}
+
+	// If no sense matched, fall back to the first sense for SR-history
+	// (the user got it wrong; record misunderstood under the canonical sense).
+	resultSense := matchedSense
+	if resultSense == nil {
+		s := senses[0]
+		resultSense = &s
+	}
+
+	if err := h.svc.SaveEtymologyOriginResult(*resultSense, bestGrade.Quality, bestGrade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyFreeform, false); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology freeform result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(matchedCard.NotebookName, matchedCard.Origin, notebook.QuizTypeEtymologyFreeform)
-	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = *matchedCard; h.mu.Unlock()
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(resultSense.NotebookName, resultSense.Origin, notebook.QuizTypeEtymologyFreeform)
+	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = *resultSense; h.mu.Unlock()
+
+	allSenses := make([]*apiv1.EtymologyOriginSense, 0, len(senses))
+	for _, sense := range senses {
+		allSenses = append(allSenses, &apiv1.EtymologyOriginSense{
+			Meaning:      sense.Meaning,
+			Type:         sense.Type,
+			Language:     sense.Language,
+			SessionTitle: sense.SessionTitle,
+		})
+	}
+
 	return connect.NewResponse(&apiv1.SubmitEtymologyFreeformAnswerResponse{
-		Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: matchedCard.Meaning,
-		Type: matchedCard.Type, Language: matchedCard.Language, NotebookName: matchedCard.NotebookName,
+		Correct: bestGrade.Correct, Reason: bestGrade.Reason, CorrectMeaning: resultSense.Meaning,
+		Type: resultSense.Type, Language: resultSense.Language, NotebookName: resultSense.NotebookName,
 		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID,
+		AllSenses: allSenses,
 	}), nil
 }
 

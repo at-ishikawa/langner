@@ -47,6 +47,51 @@ const filterOptions: { value: StatusFilter; label: string }[] = [
   { value: "skipped", label: "Skipped" },
 ];
 
+// SKIPPED_TYPE_LABELS maps protobuf quiz-type strings to short user-facing
+// labels for the skip badges shown next to each word. The keys must match
+// the values written by the backend's SkippedAtMap (notebook/quiz_type.go).
+const SKIPPED_TYPE_LABELS: Record<string, string> = {
+  notebook: "Standard",
+  reverse: "Reverse",
+  freeform: "Freeform",
+  etymology_breakdown: "Etym. Std",
+  etymology_assembly: "Etym. Rev",
+  etymology_freeform: "Etym. FF",
+};
+
+function SkippedTypeBadges({ types }: { types: string[] }) {
+  // Fallback to a generic "Skipped" badge if the backend didn't supply
+  // per-type info (older clients) or if every entry is unrecognised.
+  const labels = (types ?? [])
+    .map((t) => SKIPPED_TYPE_LABELS[t])
+    .filter((l): l is string => Boolean(l));
+  if (labels.length === 0) {
+    return (
+      <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
+        <Text fontSize="xs" color="fg.muted" fontStyle="italic">Skipped</Text>
+      </Box>
+    );
+  }
+  return (
+    <Box display="flex" flexDirection="column" gap={1} alignItems="flex-end">
+      {labels.map((label) => (
+        <Box
+          key={label}
+          bg="gray.100"
+          _dark={{ bg: "gray.700" }}
+          px={2}
+          py={0.5}
+          borderRadius="sm"
+        >
+          <Text fontSize="xs" color="fg.muted" fontStyle="italic">
+            Skipped: {label}
+          </Text>
+        </Box>
+      ))}
+    </Box>
+  );
+}
+
 function renderQuote(quote: string) {
   const parts = quote.split(/\{\{\s*([^}]+?)\s*\}\}/);
   return parts.map((part, i) =>
@@ -547,9 +592,7 @@ function WordCard({
             {word.expression}
           </Text>
           {word.isSkipped ? (
-            <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="sm">
-              <Text fontSize="xs" color="fg.muted" fontStyle="italic">Skipped</Text>
-            </Box>
+            <SkippedTypeBadges types={word.skippedQuizTypes} />
           ) : (
             <LearningStatusBadge status={word.learningStatus} />
           )}

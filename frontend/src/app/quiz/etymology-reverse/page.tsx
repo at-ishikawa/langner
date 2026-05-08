@@ -160,7 +160,7 @@ export default function EtymologyReversePage() {
   };
 
   return (
-    <Box p={4} maxW="sm" mx="auto" onKeyDown={handleKeyDown}>
+    <Box p={4} maxW="sm" mx="auto">
       <Box mb={4}>
         <Text fontSize="sm" mb={1}>{currentIndex + 1} / {total}</Text>
         <Progress.Root value={progress} size="sm"><Progress.Track><Progress.Range /></Progress.Track></Progress.Root>

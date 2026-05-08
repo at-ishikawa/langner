@@ -34,6 +34,7 @@ func newValidateCommand() *cobra.Command {
 				cfg.Notebooks.StoriesDirectories,
 				cfg.Notebooks.FlashcardsDirectories,
 				cfg.Notebooks.DefinitionsDirectories,
+				cfg.Notebooks.EtymologyDirectories,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
 				calculator,
 			)

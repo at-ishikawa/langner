@@ -32,6 +32,8 @@ const mockEtymologyCards: EtymologyOriginCard[] = [
     language: "Greek",
     meaning: "life",
     notebookName: "Science Roots",
+    sessionTitle: "Lesson 1",
+    exampleWords: ["biology", "biopsy"],
   },
 ];
 

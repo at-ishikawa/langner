@@ -55,6 +55,34 @@ func (mr *MockNoteRepositoryMockRecorder) BatchCreate(ctx, notes any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchCreate", reflect.TypeOf((*MockNoteRepository)(nil).BatchCreate), ctx, notes)
 }
 
+// BatchDeleteNotebookNotes mocks base method.
+func (m *MockNoteRepository) BatchDeleteNotebookNotes(ctx context.Context, ids []int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchDeleteNotebookNotes", ctx, ids)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchDeleteNotebookNotes indicates an expected call of BatchDeleteNotebookNotes.
+func (mr *MockNoteRepositoryMockRecorder) BatchDeleteNotebookNotes(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchDeleteNotebookNotes", reflect.TypeOf((*MockNoteRepository)(nil).BatchDeleteNotebookNotes), ctx, ids)
+}
+
+// BatchDeleteNotes mocks base method.
+func (m *MockNoteRepository) BatchDeleteNotes(ctx context.Context, ids []int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "BatchDeleteNotes", ctx, ids)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// BatchDeleteNotes indicates an expected call of BatchDeleteNotes.
+func (mr *MockNoteRepositoryMockRecorder) BatchDeleteNotes(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "BatchDeleteNotes", reflect.TypeOf((*MockNoteRepository)(nil).BatchDeleteNotes), ctx, ids)
+}
+
 // BatchUpdate mocks base method.
 func (m *MockNoteRepository) BatchUpdate(ctx context.Context, notes []*notebook.NoteRecord, newNotebookNotes []notebook.NotebookNote) error {
 	m.ctrl.T.Helper()

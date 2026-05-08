@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -14,6 +15,10 @@ type EtymologyOrigin struct {
 	Type     string `yaml:"type"`     // prefix, suffix, root
 	Language string `yaml:"language"` // Latin, Greek, etc.
 	Meaning  string `yaml:"meaning"`
+
+	// SessionTitle is the parent session's metadata.title. Set at read time
+	// from etymologySessionFile.Metadata.Title; not serialised.
+	SessionTitle string `yaml:"-"`
 }
 
 // EtymologyIndex represents an index file for etymology directories.
@@ -38,6 +43,7 @@ type EtymologyDefinitionEntry struct {
 	Note         string          `yaml:"note"`
 	OriginParts  []OriginPartRef `yaml:"origin_parts"`
 	NotebookName string          `yaml:"-"` // set at read time
+	SessionTitle string          `yaml:"-"` // set at read time from session metadata.title
 }
 
 // GetExpression returns the expression, falling back to the definition field.
@@ -48,19 +54,42 @@ func (e EtymologyDefinitionEntry) GetExpression() string {
 	return e.Definition
 }
 
-// etymologySessionFile supports both flat list and wrapped formats:
+// EtymologySessionMetadata contains required metadata for an etymology session
+// YAML file. Title is used as the disambiguator for multi-sense origins (the
+// same origin string can appear in multiple sessions with different meanings)
+// and is the binding key for definitions referencing those origins.
+type EtymologySessionMetadata struct {
+	Title string `yaml:"title"`
+}
+
+// etymologySessionFile is the wrapped format for etymology session YAML files.
+// Required structure:
 //
-//	Flat:    [{ origin: tele, ... }, ...]
-//	Wrapped: { origins: [...], definitions: [...], date: 2025-01-15 }
+//	metadata:
+//	  title: "Session 13"
+//	date: 2025-01-15  # optional
+//	origins:
+//	  - origin: ...
+//	  - ...
+//	definitions:        # optional
+//	  - ...
+//
+// metadata.title is required — readers reject files missing it.
 type etymologySessionFile struct {
-	Origins     []EtymologyOrigin           `yaml:"origins"`
-	Definitions []EtymologyDefinitionEntry  `yaml:"definitions"`
+	Metadata    EtymologySessionMetadata   `yaml:"metadata"`
+	Origins     []EtymologyOrigin          `yaml:"origins"`
+	Definitions []EtymologyDefinitionEntry `yaml:"definitions"`
 	// Date is optional. Used to sort etymology notebooks on the quiz start
 	// page. The latest date across all session files wins.
 	Date time.Time `yaml:"date,omitempty"`
 }
 
 // ReadEtymologyNotebook reads the origins from an etymology notebook.
+//
+// Each session file is required to use the wrapped format with metadata.title.
+// Origins are tagged with their session's title via SessionTitle, which is the
+// disambiguator used by quizzes and the etymology page when the same origin
+// string appears in multiple sessions with different meanings.
 func (r *Reader) ReadEtymologyNotebook(etymologyID string) ([]EtymologyOrigin, error) {
 	index, ok := r.etymologyIndexes[etymologyID]
 	if !ok {
@@ -74,18 +103,18 @@ func (r *Reader) ReadEtymologyNotebook(etymologyID string) ([]EtymologyOrigin, e
 	var allOrigins []EtymologyOrigin
 	for _, notebookPath := range index.NotebookPaths {
 		path := filepath.Join(index.Path, notebookPath)
-		// Try flat list first (e.g., [{ origin: tele, ... }])
-		origins, flatErr := readYamlFile[[]EtymologyOrigin](path)
-		if flatErr == nil {
-			allOrigins = append(allOrigins, origins...)
-			continue
+		wrapped, err := readYamlFile[etymologySessionFile](path)
+		if err != nil {
+			return nil, fmt.Errorf("read etymology session %s: %w", path, err)
 		}
-		// Try wrapped format (e.g., origins: [{ origin: tele, ... }])
-		wrapped, wrappedErr := readYamlFile[etymologySessionFile](path)
-		if wrappedErr != nil {
-			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, flatErr)
+		title := strings.TrimSpace(wrapped.Metadata.Title)
+		if title == "" {
+			return nil, fmt.Errorf("etymology session %s missing required metadata.title", path)
 		}
-		allOrigins = append(allOrigins, wrapped.Origins...)
+		for _, o := range wrapped.Origins {
+			o.SessionTitle = title
+			allOrigins = append(allOrigins, o)
+		}
 	}
 
 	index.Origins = allOrigins
@@ -95,6 +124,10 @@ func (r *Reader) ReadEtymologyNotebook(etymologyID string) ([]EtymologyOrigin, e
 
 // ReadAllEtymologyDefinitions reads definitions with origin_parts from ALL
 // notebook session files: etymology notebooks, story notebooks, and flashcard notebooks.
+//
+// SessionTitle on each returned entry is set from the session file's
+// metadata.title — the binding key used by Phase 5 to disambiguate which sense
+// of an origin a definition refers to.
 func (r *Reader) ReadAllEtymologyDefinitions() []EtymologyDefinitionEntry {
 	var allDefs []EtymologyDefinitionEntry
 	seen := make(map[string]bool) // track scanned paths to avoid duplicates
@@ -110,9 +143,11 @@ func (r *Reader) ReadAllEtymologyDefinitions() []EtymologyDefinitionEntry {
 			if err != nil {
 				continue
 			}
+			sessionTitle := strings.TrimSpace(wrapped.Metadata.Title)
 			for _, def := range wrapped.Definitions {
 				if len(def.OriginParts) > 0 {
 					def.NotebookName = notebookName
+					def.SessionTitle = sessionTitle
 					allDefs = append(allDefs, def)
 				}
 			}
@@ -206,12 +241,18 @@ func walkEtymologyIndexFiles(rootDir string, indexMap map[string]EtymologyIndex)
 
 		index.Path = dir
 
-		// Read the `date` field (wrapped format only) from each session file and
-		// keep the latest. Errors are ignored — flat format has no date.
+		// Read the `date` field from each session file and keep the latest.
+		// Each session file must have metadata.title — fail fast otherwise so
+		// the operator notices missing metadata at startup rather than at quiz
+		// time when origins disappear from the deduplicated set.
 		for _, nbPath := range index.NotebookPaths {
-			wrapped, err := readYamlFile[etymologySessionFile](filepath.Join(dir, nbPath))
+			sessionPath := filepath.Join(dir, nbPath)
+			wrapped, err := readYamlFile[etymologySessionFile](sessionPath)
 			if err != nil {
-				continue
+				return fmt.Errorf("read etymology session %s: %w", sessionPath, err)
+			}
+			if strings.TrimSpace(wrapped.Metadata.Title) == "" {
+				return fmt.Errorf("etymology session %s missing required metadata.title", sessionPath)
 			}
 			if wrapped.Date.After(index.LatestDate) {
 				index.LatestDate = wrapped.Date

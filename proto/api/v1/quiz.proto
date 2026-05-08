@@ -312,6 +312,16 @@ message EtymologyQuizCard {
   string language = 4;
   string meaning = 5;
   string notebook_name = 6;
+  // session_title is the metadata.title of the etymology session that defined
+  // this origin sense. The same origin string in different sessions becomes
+  // separate cards (e.g. "ana" = "up" in Session 13, "ana" = "negative" in
+  // Session 16) so this field disambiguates them.
+  string session_title = 7;
+  // example_words are expressions from the consolidated definitions notebook
+  // that reference this exact (origin, session_title) pair. Standard quiz
+  // shows these alongside the origin so the user can recognise which sense
+  // is being asked about.
+  repeated string example_words = 8;
 }
 
 message StartEtymologyQuizRequest {
@@ -391,6 +401,13 @@ message SubmitEtymologyFreeformAnswerRequest {
   int64 response_time_ms = 3;
 }
 
+message EtymologyOriginSense {
+  string meaning = 1;
+  string type = 2;
+  string language = 3;
+  string session_title = 4;
+}
+
 message SubmitEtymologyFreeformAnswerResponse {
   bool correct = 1;
   string reason = 2;
@@ -401,4 +418,8 @@ message SubmitEtymologyFreeformAnswerResponse {
   string next_review_date = 7;
   string learned_at = 8;
   int64 note_id = 9;
+  // all_senses lists every recorded sense of the typed origin. The freeform
+  // grader accepts any sense's meaning as correct; this field surfaces the
+  // alternatives so the user is reminded that multi-sense origins exist.
+  repeated EtymologyOriginSense all_senses = 10;
 }

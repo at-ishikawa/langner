@@ -76,7 +76,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 
 		filtered, err := notebook.FilterStoryNotebooks(
 			stories, learningHistories[id], s.dictionaryMap,
-			false, false, true, false,
+			false, false, true, false, notebook.QuizTypeNotebook,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter story notebook %q: %w", id, err)
@@ -109,7 +109,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		}
 
 		filtered, err := notebook.FilterFlashcardNotebooks(
-			notebooks, learningHistories[id], s.dictionaryMap, false,
+			notebooks, learningHistories[id], s.dictionaryMap, false, notebook.QuizTypeNotebook,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
@@ -312,7 +312,7 @@ func (s *Service) loadStoryCards(
 
 	filtered, err := notebook.FilterStoryNotebooks(
 		stories, learningHistories[notebookID], s.dictionaryMap,
-		false, includeUnstudied, true, false,
+		false, includeUnstudied, true, false, notebook.QuizTypeNotebook,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter story notebook %q: %w", notebookID, err)
@@ -364,7 +364,7 @@ func (s *Service) loadFlashcardCards(
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], s.dictionaryMap, false,
+		notebooks, learningHistories[notebookID], s.dictionaryMap, false, notebook.QuizTypeNotebook,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
@@ -779,8 +779,8 @@ func (s *Service) loadStoryReverseCards(
 					altForm = definition.Expression
 				}
 
-				// Skip words marked as skipped
-				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition) {
+				// Skip words marked as skipped from reverse mode
+				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeReverse) {
 					continue
 				}
 
@@ -841,8 +841,8 @@ func (s *Service) loadFlashcardReverseCards(
 				altForm = card.Expression
 			}
 
-			// Skip words marked as skipped
-			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card) {
+			// Skip words marked as skipped from reverse mode
+			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeReverse) {
 				continue
 			}
 
@@ -1170,8 +1170,8 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
-				// Skip words marked as skipped
-				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition) {
+				// Skip words marked as skipped from freeform mode
+				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeFreeform) {
 					continue
 				}
 
@@ -1214,8 +1214,8 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 	var cards []FreeformCard
 	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
-			// Skip words marked as skipped
-			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card) {
+			// Skip words marked as skipped from freeform mode
+			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeFreeform) {
 				continue
 			}
 
@@ -1490,9 +1490,10 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 	return learnedAt, nextReviewDate
 }
 
-// isExpressionSkippedInHistory checks if a note is marked as skipped in the learning history.
-func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note) bool {
-	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition)
+// isExpressionSkippedInHistory checks whether a note is excluded from the
+// given quiz type. Per-type skipping replaced the global skip flag.
+func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note, quizType notebook.QuizType) bool {
+	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition, quizType)
 }
 
 // countDefinitionNotes counts notes in definitions-only books that need review.

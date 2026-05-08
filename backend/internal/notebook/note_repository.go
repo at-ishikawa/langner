@@ -17,6 +17,12 @@ type NoteRepository interface {
 	BatchUpdate(ctx context.Context, notes []*NoteRecord, newNotebookNotes []NotebookNote) error
 	Create(ctx context.Context, note *NoteRecord) error
 	Delete(ctx context.Context, notebookID string, expression string) error
+	// BatchDeleteNotes removes notes whose IDs are in the slice along with
+	// every dependent row (notebook_notes, learning_logs, note_origin_parts).
+	// Used by the importer's reconcile pass.
+	BatchDeleteNotes(ctx context.Context, ids []int64) error
+	// BatchDeleteNotebookNotes removes specific notebook_notes rows.
+	BatchDeleteNotebookNotes(ctx context.Context, ids []int64) error
 }
 
 // DBNoteRepository implements NoteRepository using MySQL.
@@ -294,4 +300,73 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 	}
 
 	return nil
+}
+
+// BatchDeleteNotes removes the given notes along with every dependent row
+// in note_origin_parts, learning_logs, note_images, note_references, and
+// notebook_notes. Used by the importer's reconcile pass to drop DB-only
+// notes that no longer have a counterpart in the YAML source of truth.
+func (r *DBNoteRepository) BatchDeleteNotes(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	const chunkSize = 5000
+	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		for i := 0; i < len(ids); i += chunkSize {
+			end := i + chunkSize
+			if end > len(ids) {
+				end = len(ids)
+			}
+			chunk := ids[i:end]
+			tables := []string{
+				"note_origin_parts",
+				"learning_logs",
+				"note_images",
+				"note_references",
+				"notebook_notes",
+				"notes",
+			}
+			for _, t := range tables {
+				column := "note_id"
+				if t == "notes" {
+					column = "id"
+				}
+				query, args, err := sqlx.In("DELETE FROM "+t+" WHERE "+column+" IN (?)", chunk)
+				if err != nil {
+					return fmt.Errorf("build delete query for %s: %w", t, err)
+				}
+				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+					return fmt.Errorf("delete from %s: %w", t, err)
+				}
+			}
+		}
+		return nil
+	})
+}
+
+// BatchDeleteNotebookNotes removes the specified notebook_notes rows.
+// Used by the reconcile pass when a note still exists in YAML but its
+// presence in a particular notebook does not.
+func (r *DBNoteRepository) BatchDeleteNotebookNotes(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	const chunkSize = 5000
+	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		for i := 0; i < len(ids); i += chunkSize {
+			end := i + chunkSize
+			if end > len(ids) {
+				end = len(ids)
+			}
+			chunk := ids[i:end]
+			query, args, err := sqlx.In("DELETE FROM notebook_notes WHERE id IN (?)", chunk)
+			if err != nil {
+				return fmt.Errorf("build delete query: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				return fmt.Errorf("delete notebook_notes: %w", err)
+			}
+		}
+		return nil
+	})
 }

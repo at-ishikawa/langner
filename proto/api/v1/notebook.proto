@@ -67,7 +67,14 @@ message NotebookWord {
   reserved 11;
   string next_review_date = 12;
   string origin = 13;
+  // is_skipped is true when the expression is excluded from at least one
+  // quiz mode. Kept for the existing single-badge UI; per-type badges
+  // should consume skipped_quiz_types directly.
   bool is_skipped = 14;
+  // skipped_quiz_types lists the quiz type strings (e.g. "notebook",
+  // "reverse", "etymology_breakdown") this expression is excluded from.
+  // Empty when not skipped from anywhere.
+  repeated string skipped_quiz_types = 15;
 }
 
 message LearningLogEntry {

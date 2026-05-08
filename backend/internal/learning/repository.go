@@ -15,6 +15,9 @@ type LearningRepository interface {
 	FindAll(ctx context.Context) ([]LearningLog, error)
 	BatchCreate(ctx context.Context, logs []*LearningLog) error
 	Create(ctx context.Context, log *LearningLog) error
+	// BatchDelete removes rows whose IDs appear in ids. Used by the
+	// reconcile pass to drop DB-only logs that no longer exist in YAML.
+	BatchDelete(ctx context.Context, ids []int64) error
 }
 
 // DBLearningRepository implements LearningRepository using MySQL.
@@ -112,6 +115,33 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return fmt.Errorf("insert learning logs: %w", err)
+			}
+		}
+		return nil
+	})
+}
+
+// BatchDelete removes the rows whose IDs are in the slice. Used by the
+// importer's reconcile pass to drop DB-only logs whose YAML counterpart
+// has disappeared.
+func (r *DBLearningRepository) BatchDelete(ctx context.Context, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	const chunkSize = 5000
+	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
+		for i := 0; i < len(ids); i += chunkSize {
+			end := i + chunkSize
+			if end > len(ids) {
+				end = len(ids)
+			}
+			chunk := ids[i:end]
+			query, args, err := sqlx.In("DELETE FROM learning_logs WHERE id IN (?)", chunk)
+			if err != nil {
+				return fmt.Errorf("build delete query: %w", err)
+			}
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				return fmt.Errorf("delete learning logs: %w", err)
 			}
 		}
 		return nil

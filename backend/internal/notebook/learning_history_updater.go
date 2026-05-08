@@ -408,17 +408,22 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(
 	return false, "", false
 }
 
-// SetSkippedAt sets the skipped_at field on an expression.
-func (u *LearningHistoryUpdater) SetSkippedAt(expression string, skippedAt string) bool {
+// SetSkippedAt records a skip for the given quiz type at the given timestamp.
+// Returns false if the expression isn't found in any history.
+func (u *LearningHistoryUpdater) SetSkippedAt(expression string, quizType QuizType, skippedAt string) bool {
 	expr := u.FindExpressionByName(expression)
 	if expr == nil {
 		return false
 	}
-	expr.SkippedAt = skippedAt
+	expr.SkippedAt = expr.SkippedAt.Set(quizType, skippedAt)
 	return true
 }
 
 // UpdateOrCreateExpressionWithQualityForEtymology updates or creates an expression with SM-2 quality assessment for etymology quiz.
+//
+// Etymology learning history is stored under per-session scenes (sceneTitle =
+// the session's metadata.title) so multi-sense origins are tracked separately.
+// Callers must always pass a non-empty sceneTitle.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
@@ -426,24 +431,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 	responseTimeMs int64,
 	quizType QuizType,
 ) bool {
-	isFlat := sceneTitle == ""
-
 	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
 		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
-			continue
-		}
-
-		if isFlat || h.Metadata.Type == "etymology" {
-			for ei, exp := range h.Expressions {
-				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
-					continue
-				}
-				exp.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
-				u.history[hi].Expressions[ei] = exp
-				return true
-			}
 			continue
 		}
 
@@ -475,11 +466,12 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	flatType := ""
-	if sceneTitle == "" {
-		flatType = "etymology"
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, "")
+	// Mark as etymology so the validator skips the per-scene duplicate check
+	// (multi-sense origins legitimately appear in multiple session scenes).
+	if u.history[storyIndex].Metadata.Type == "" {
+		u.history[storyIndex].Metadata.Type = "etymology"
 	}
-	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
@@ -492,14 +484,6 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 		return
 	}
 
-	if flatType != "" || u.history[storyIndex].Metadata.Type == "etymology" {
-		u.history[storyIndex].Expressions = append(
-			u.history[storyIndex].Expressions,
-			newExpression,
-		)
-		return
-	}
-
 	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
 	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
 		u.history[storyIndex].Scenes[sceneIndex].Expressions,
@@ -507,12 +491,13 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	)
 }
 
-// ClearSkippedAt clears the skipped_at field on an expression.
-func (u *LearningHistoryUpdater) ClearSkippedAt(expression string) bool {
+// ClearSkippedAt removes the skip for the given quiz type. The expression
+// remains skipped for any other quiz types still set in its SkippedAt map.
+func (u *LearningHistoryUpdater) ClearSkippedAt(expression string, quizType QuizType) bool {
 	expr := u.FindExpressionByName(expression)
 	if expr == nil {
 		return false
 	}
-	expr.SkippedAt = ""
+	expr.SkippedAt.Clear(quizType)
 	return true
 }

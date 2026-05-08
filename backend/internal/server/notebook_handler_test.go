@@ -226,6 +226,76 @@ func TestNotebookHandler_GetNotebookDetail_WithLearningHistory(t *testing.T) {
 	assert.Equal(t, int32(7), logs[0].GetIntervalDays())
 }
 
+// TestNotebookHandler_GetNotebookDetail_DefinitionsBook reproduces the
+// "notebook X not found" error the user hit when opening a definitions-only
+// vocabulary book (notebooks under definitions/books/<id>/, with an
+// index.yml + session*.yml files) from the learn page. GetNotebookDetail
+// previously fell back from story-notebook lookup to flashcard-notebook
+// lookup and 404'd if neither matched, never consulting the
+// definitions-book reader. The expected behavior is that a definitions
+// book loads with its session titles surfaced as "stories" and the
+// expressions inside each scene surfaced as definitions, so the frontend
+// /learn/[id] and /notebooks/[id] pages can render it.
+func TestNotebookHandler_GetNotebookDetail_DefinitionsBook(t *testing.T) {
+	tmpDir := t.TempDir()
+	booksDir := filepath.Join(tmpDir, "definitions", "books")
+	bookDir := filepath.Join(booksDir, "sample-vocab")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: sample-vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: Session 1
+  scenes:
+    - metadata:
+        index: 0
+        scene: null
+        title: tele (far)
+      expressions:
+        - expression: telegraph
+          meaning: a system for sending messages over distance
+          origin_parts:
+            - origin: tele
+              language: Greek
+            - origin: graph
+              language: Greek
+`), 0o644))
+
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{
+			DefinitionsDirectories: []string{filepath.Join(tmpDir, "definitions")},
+			LearningNotesDirectory: t.TempDir(),
+		},
+		config.TemplatesConfig{},
+		make(map[string]rapidapi.Response),
+		nil, nil, nil,
+	)
+
+	resp, err := handler.GetNotebookDetail(
+		context.Background(),
+		connect.NewRequest(&apiv1.GetNotebookDetailRequest{NotebookId: "sample-vocab"}),
+	)
+	require.NoError(t, err, "definitions-book lookup must succeed")
+	require.NotNil(t, resp)
+
+	assert.Equal(t, "sample-vocab", resp.Msg.GetNotebookId())
+	assert.Equal(t, int32(1), resp.Msg.GetTotalWordCount())
+
+	stories := resp.Msg.GetStories()
+	require.Len(t, stories, 1, "one story per definitions session/title")
+	assert.Equal(t, "Session 1", stories[0].GetEvent())
+
+	scenes := stories[0].GetScenes()
+	require.Len(t, scenes, 1, "one scene per definitions sub-section")
+	assert.Equal(t, "tele (far)", scenes[0].GetTitle())
+
+	defs := scenes[0].GetDefinitions()
+	require.Len(t, defs, 1)
+	assert.Equal(t, "telegraph", defs[0].GetExpression())
+}
+
 func TestNotebookHandler_ExportNotebookPDF(t *testing.T) {
 	tests := []struct {
 		name     string

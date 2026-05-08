@@ -945,6 +945,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 				tt.includeNoCorrectAnswers,
 				tt.useSpacedRepetition,
 				tt.preserveOrder,
+				QuizTypeNotebook,
 			)
 			if tt.wantErr {
 				assert.Error(t, err)

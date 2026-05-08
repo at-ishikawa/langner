@@ -40,6 +40,8 @@ export interface EtymologyOriginCard {
   language: string;
   meaning: string;
   notebookName: string;
+  sessionTitle: string;
+  exampleWords: string[];
 }
 
 export interface OriginalValues {

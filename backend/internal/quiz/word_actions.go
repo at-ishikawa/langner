@@ -48,80 +48,32 @@ func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 	}
 }
 
-// SkipWord sets a skip interval on a word so it won't appear in quizzes until the given date.
-// If skipUntil is empty, the word is skipped for a very long interval (10 years).
-// quizType determines which log set to update (forward or reverse).
+// SkipWord excludes a word from the given quiz type. The skip is recorded
+// as a per-(expression, quiz_type) timestamp on SkippedAt; quiz card loaders
+// filter against that field. The skipUntil parameter is accepted for RPC
+// compatibility but is not currently honored — exclusion is permanent until
+// ResumeWord clears the slot.
+//
+// If the expression has no learning history yet, SkipWord seeds an entry so
+// the skip has somewhere to live, then writes the skip onto it.
 func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.QuizType) error {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	var intervalDays int
-	if skipUntil != "" {
-		parsed, err := time.Parse("2006-01-02", skipUntil)
-		if err != nil {
-			return fmt.Errorf("invalid skip_until date %q: %w", skipUntil, err)
-		}
-		intervalDays = int(time.Until(parsed).Hours()/24) + 1
-		if intervalDays < 1 {
-			intervalDays = 1
-		}
-	} else {
-		intervalDays = 3650 // ~10 years
-	}
-
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
 
-	switch quizType {
-	case notebook.QuizTypeReverse:
-		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
-			updater.UpdateOrCreateExpressionWithQualityForReverse(
-				info.NotebookName,
-				info.StoryTitle,
-				info.SceneTitle,
-				info.Expression,
-				info.Expression,
-				true,
-				true,
-				5,
-				0,
-				notebook.QuizTypeReverse,
-			)
-			s.setSkipInterval(updater, info, intervalDays, quizType)
-		}
-	case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse, notebook.QuizTypeEtymologyFreeform:
-		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
-			updater.UpdateOrCreateExpressionWithQualityForEtymology(
-				info.NotebookName,
-				info.StoryTitle,
-				info.SceneTitle,
-				info.Expression,
-				info.Expression,
-				true,
-				true,
-				5,
-				0,
-				quizType,
-			)
-			s.setSkipInterval(updater, info, intervalDays, quizType)
-		}
-	default:
-		if !s.setSkipInterval(updater, info, intervalDays, quizType) {
-			updater.UpdateOrCreateExpressionWithQuality(
-				info.NotebookName,
-				info.StoryTitle,
-				info.SceneTitle,
-				info.Expression,
-				info.Expression,
-				true,
-				true,
-				5,
-				0,
-				quizType,
-			)
-			s.setSkipInterval(updater, info, intervalDays, quizType)
-		}
+	if !findExpressionForSkip(updater, info) {
+		// Seed an expression entry so SetSkippedAt has something to mark.
+		// The seeded record uses quality 5 ("usable") to avoid polluting
+		// the SR schedule — the skip itself is what excludes it from quizzes.
+		seedSkippedExpression(updater, info, quizType)
+	}
+
+	skippedAt := time.Now().Format(time.RFC3339)
+	if !updater.SetSkippedAt(info.Expression, quizType, skippedAt) {
+		return fmt.Errorf("failed to record skip for expression %q in notebook %q", info.Expression, info.NotebookName)
 	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
@@ -131,51 +83,58 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 	return nil
 }
 
-// setSkipInterval finds the expression in the learning history and overrides
-// the interval of the most recent log entry. Returns false if not found.
-func (s *Service) setSkipInterval(updater *notebook.LearningHistoryUpdater, info CardInfo, intervalDays int, quizType notebook.QuizType) bool {
+// findExpressionForSkip returns true if the expression already exists in any
+// scene of the learning history for the given notebook + story title. The
+// quiz_type isn't part of the lookup because the SkippedAt map lives on the
+// expression record itself.
+func findExpressionForSkip(updater *notebook.LearningHistoryUpdater, info CardInfo) bool {
 	for _, h := range updater.GetHistory() {
 		if h.Metadata.Title != info.StoryTitle {
 			continue
 		}
-
-		if len(h.Expressions) > 0 {
-			for _, expr := range h.Expressions {
-				if !strings.EqualFold(expr.Expression, info.Expression) {
-					continue
-				}
-				logs := expr.GetLogsForQuizType(quizType)
-				if len(logs) > 0 {
-					logs[0].IntervalDays = intervalDays
-					return true
-				}
-				return false
+		for _, expr := range h.Expressions {
+			if strings.EqualFold(expr.Expression, info.Expression) {
+				return true
 			}
-			continue
 		}
-
 		for _, scene := range h.Scenes {
-			if scene.Metadata.Title != info.SceneTitle {
-				continue
-			}
 			for _, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, info.Expression) {
-					continue
-				}
-				logs := expr.GetLogsForQuizType(quizType)
-				if len(logs) > 0 {
-					logs[0].IntervalDays = intervalDays
+				if strings.EqualFold(expr.Expression, info.Expression) {
 					return true
 				}
-				return false
 			}
 		}
 	}
 	return false
 }
 
-// ResumeWord resets the skip interval on a word so it appears in quizzes again.
-// This sets the interval to 0, making the word immediately due for review.
+// seedSkippedExpression creates a learning history entry so SetSkippedAt
+// has somewhere to attach the skip. Uses quality 5 ("usable") with
+// responseTimeMs=0 so the SR schedule treats this as a no-op review.
+func seedSkippedExpression(updater *notebook.LearningHistoryUpdater, info CardInfo, quizType notebook.QuizType) {
+	switch quizType {
+	case notebook.QuizTypeReverse:
+		updater.UpdateOrCreateExpressionWithQualityForReverse(
+			info.NotebookName, info.StoryTitle, info.SceneTitle,
+			info.Expression, info.Expression, true, true, 5, 0, quizType,
+		)
+	case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse, notebook.QuizTypeEtymologyFreeform:
+		updater.UpdateOrCreateExpressionWithQualityForEtymology(
+			info.NotebookName, info.StoryTitle, info.SceneTitle,
+			info.Expression, info.Expression, true, true, 5, 0, quizType,
+		)
+	default:
+		updater.UpdateOrCreateExpressionWithQuality(
+			info.NotebookName, info.StoryTitle, info.SceneTitle,
+			info.Expression, info.Expression, true, true, 5, 0, quizType,
+		)
+	}
+}
+
+// ResumeWord clears the skip for the given quiz type so the word reappears
+// in that quiz mode. Other quiz types' skips are left intact, so a word
+// excluded from both `reverse` and `etymology_freeform` only resumes the
+// type the caller specifies.
 func (s *Service) ResumeWord(info CardInfo, quizType notebook.QuizType) error {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
@@ -183,7 +142,7 @@ func (s *Service) ResumeWord(info CardInfo, quizType notebook.QuizType) error {
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
-	s.setSkipInterval(updater, info, 0, quizType)
+	updater.ClearSkippedAt(info.Expression, quizType)
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {

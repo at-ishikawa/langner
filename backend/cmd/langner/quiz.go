@@ -20,6 +20,7 @@ func newQuizCommand() *cobra.Command {
 
 	quizCommand.AddCommand(newQuizNotebookCommand())
 	quizCommand.AddCommand(newQuizFreeformCommand())
+	quizCommand.AddCommand(newQuizEtymologyStatusCommand())
 
 	return quizCommand
 }

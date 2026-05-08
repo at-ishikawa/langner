@@ -1,8 +1,10 @@
 package notebook
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -152,7 +154,7 @@ func TestWriteYamlFile(t *testing.T) {
 			filePath:         "/nonexistent/directory/file.yml",
 			useTempDir:       false,
 			expectError:      true,
-			wantErrorContain: "os.Create",
+			wantErrorContain: "os.CreateTemp",
 		},
 	}
 
@@ -195,4 +197,42 @@ func TestWriteYamlFile(t *testing.T) {
 			assert.Equal(t, tt.data, result)
 		})
 	}
+}
+
+// TestWriteYamlFile_ConcurrentWritesNeverCorrupt pins the fix for a bug where
+// two concurrent writes to the same learning_notes file produced a half-
+// written, garbage-interleaved YAML file (the symptom was a "did not find
+// expected key" decode error on the next save). With the atomic
+// write-temp-then-rename strategy, every concurrent caller's write either
+// fully wins or is fully replaced — the file is always parseable as one of
+// the inputs that was written.
+func TestWriteYamlFile_ConcurrentWritesNeverCorrupt(t *testing.T) {
+	type Entry struct {
+		ID    int    `yaml:"id"`
+		Value string `yaml:"value"`
+	}
+
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "test.yml")
+
+	const writers = 50
+	const valueLen = 4096
+	var wg sync.WaitGroup
+	for i := 0; i < writers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			data := Entry{
+				ID:    id,
+				Value: fmt.Sprintf("%0*d", valueLen, id),
+			}
+			require.NoError(t, WriteYamlFile(path, data))
+		}(i)
+	}
+	wg.Wait()
+
+	result, err := readYamlFile[Entry](path)
+	require.NoError(t, err, "file must be parseable after concurrent writes")
+	assert.Less(t, result.ID, writers, "final content must be one of the writers' values")
+	assert.Len(t, result.Value, valueLen, "final value must be a complete write, not truncated/interleaved")
 }

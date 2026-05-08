@@ -29,3 +29,9 @@ func (m *MultiLearningRepository) BatchCreate(ctx context.Context, logs []*Learn
 	if err := m.secondary.BatchCreate(ctx, logs); err != nil { slog.Warn("secondary learning batch write failed", "error", err) }
 	return nil
 }
+
+func (m *MultiLearningRepository) BatchDelete(ctx context.Context, ids []int64) error {
+	if err := m.primary.BatchDelete(ctx, ids); err != nil { return err }
+	if err := m.secondary.BatchDelete(ctx, ids); err != nil { slog.Warn("secondary learning batch delete failed", "error", err) }
+	return nil
+}
