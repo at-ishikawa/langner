@@ -7,6 +7,7 @@ import Link from "next/link";
 import {
   Box,
   Button,
+  Checkbox,
   Heading,
   Spinner,
   Text,
@@ -15,6 +16,7 @@ import {
 import {
   notebookClient,
   quizClient,
+  QuizType,
   type GetNotebookDetailResponse,
   type NotebookWord,
   type StoryEntry,
@@ -548,9 +550,15 @@ function SceneRow({
   );
 }
 
-// TODO: Add a "Resume" button for skipped words. The ResumeWord RPC requires a
-// note_id, but the NotebookWord proto does not expose note_id. A proto change is
-// needed to add note_id to NotebookWord before this feature can be implemented.
+// VOCAB_SKIP_TYPES is the set of vocabulary quiz-type strings (matching the
+// backend's SkippedAtMap keys) that the per-type skip checkboxes manage.
+// Etymology types are intentionally excluded — vocab notebook words aren't
+// shown in etymology quizzes, so toggling them here would be meaningless.
+const VOCAB_SKIP_TYPES: { key: string; label: string; quizType: QuizType }[] = [
+  { key: "notebook", label: "Standard", quizType: QuizType.STANDARD },
+  { key: "reverse", label: "Reverse", quizType: QuizType.REVERSE },
+  { key: "freeform", label: "Freeform", quizType: QuizType.FREEFORM },
+];
 
 function WordCard({
   word,
@@ -560,6 +568,9 @@ function WordCard({
   originPartsMap: OriginPartsMap;
 }) {
   const [open, setOpen] = useState(false);
+  const [skippedTypes, setSkippedTypes] = useState<Set<string>>(
+    () => new Set(word.skippedQuizTypes),
+  );
 
   const lastLog =
     word.learnedLogs.length > 0
@@ -567,6 +578,68 @@ function WordCard({
       : null;
 
   const etymologyData = originPartsMap.get(word.expression);
+  const hasNoteId = word.noteId !== BigInt(0);
+  const isSkippedAnywhere = skippedTypes.size > 0;
+
+  async function toggleType(quizType: QuizType, key: string, nextChecked: boolean) {
+    if (!hasNoteId) return;
+    setSkippedTypes((prev) => {
+      const next = new Set(prev);
+      if (nextChecked) next.add(key);
+      else next.delete(key);
+      return next;
+    });
+    try {
+      if (nextChecked) {
+        await quizClient.skipWord({ noteId: word.noteId, quizType, skipUntil: "" });
+      } else {
+        await quizClient.resumeWord({ noteId: word.noteId, quizType });
+      }
+    } catch {
+      setSkippedTypes((prev) => {
+        const next = new Set(prev);
+        if (nextChecked) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    }
+  }
+
+  async function toggleAll(nextChecked: boolean) {
+    if (!hasNoteId) return;
+    const targets = nextChecked
+      ? VOCAB_SKIP_TYPES.filter((t) => !skippedTypes.has(t.key))
+      : VOCAB_SKIP_TYPES.filter((t) => skippedTypes.has(t.key));
+    if (targets.length === 0) return;
+    setSkippedTypes((prev) => {
+      const next = new Set(prev);
+      for (const t of targets) {
+        if (nextChecked) next.add(t.key);
+        else next.delete(t.key);
+      }
+      return next;
+    });
+    try {
+      await Promise.all(
+        targets.map((t) =>
+          nextChecked
+            ? quizClient.skipWord({ noteId: word.noteId, quizType: t.quizType, skipUntil: "" })
+            : quizClient.resumeWord({ noteId: word.noteId, quizType: t.quizType }),
+        ),
+      );
+    } catch {
+      setSkippedTypes((prev) => {
+        const next = new Set(prev);
+        for (const t of targets) {
+          if (nextChecked) next.delete(t.key);
+          else next.add(t.key);
+        }
+        return next;
+      });
+    }
+  }
+
+  const allVocabChecked = VOCAB_SKIP_TYPES.every((t) => skippedTypes.has(t.key));
 
   return (
     <Box
@@ -574,7 +647,7 @@ function WordCard({
       borderRadius="md"
       overflow="hidden"
       fontSize="sm"
-      opacity={word.isSkipped ? 0.6 : 1}
+      opacity={isSkippedAnywhere ? 0.6 : 1}
     >
       <Box
         p={3}
@@ -591,8 +664,8 @@ function WordCard({
           <Text fontWeight="semibold" flex="1">
             {word.expression}
           </Text>
-          {word.isSkipped ? (
-            <SkippedTypeBadges types={word.skippedQuizTypes} />
+          {isSkippedAnywhere ? (
+            <SkippedTypeBadges types={Array.from(skippedTypes)} />
           ) : (
             <LearningStatusBadge status={word.learningStatus} />
           )}
@@ -663,6 +736,34 @@ function WordCard({
       {open && (
         <Box p={3} pt={0} borderTopWidth="1px" bg="bg.subtle">
           <VStack align="stretch" gap={2} fontSize="sm" pt={3}>
+            {hasNoteId && (
+              <Box onClick={(e) => e.stopPropagation()}>
+                <Text fontWeight="bold" mb={1}>
+                  Skip from quiz:
+                </Text>
+                <Box display="flex" gap={4} flexWrap="wrap">
+                  <Checkbox.Root
+                    checked={allVocabChecked}
+                    onCheckedChange={(d) => toggleAll(d.checked === true)}
+                  >
+                    <Checkbox.HiddenInput />
+                    <Checkbox.Control />
+                    <Checkbox.Label>All</Checkbox.Label>
+                  </Checkbox.Root>
+                  {VOCAB_SKIP_TYPES.map((t) => (
+                    <Checkbox.Root
+                      key={t.key}
+                      checked={skippedTypes.has(t.key)}
+                      onCheckedChange={(d) => toggleType(t.quizType, t.key, d.checked === true)}
+                    >
+                      <Checkbox.HiddenInput />
+                      <Checkbox.Control />
+                      <Checkbox.Label>{t.label}</Checkbox.Label>
+                    </Checkbox.Root>
+                  ))}
+                </Box>
+              </Box>
+            )}
             {word.partOfSpeech && (
               <Text>
                 <Text as="span" fontWeight="bold">

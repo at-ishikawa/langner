@@ -103,10 +103,12 @@ func (h *NotebookHandler) GetNotebookDetail(
 		return nil, err
 	}
 
+	noteIDByExpr := h.loadNoteIDsForNotebook(ctx, notebookID)
+
 	storyNotebooks, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			return h.getFlashcardNotebookDetail(notebookID, reader, learningHistory)
+			return h.getFlashcardNotebookDetail(notebookID, reader, learningHistory, noteIDByExpr)
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read story notebooks: %w", err))
 	}
@@ -132,6 +134,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 
 				_ = def.SetDetails(h.dictionaryMap, "")
 				info := h.findLearningInfoFull(learningHistory, nb.Event, scene.Title, def)
+				info.noteID = noteIDForDef(noteIDByExpr, def)
 
 				definitions = append(definitions, &apiv1.NotebookWord{
 					Expression:     def.Expression,
@@ -148,6 +151,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 					Origin:         def.Origin,
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
+					NoteId:           info.noteID,
 				})
 				totalWordCount++
 			}
@@ -195,11 +199,12 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 	notebookID string,
 	reader *notebook.Reader,
 	learningHistory []notebook.LearningHistory,
+	noteIDByExpr map[string]int64,
 ) (*connect.Response[apiv1.GetNotebookDetailResponse], error) {
 	flashcardNotebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") {
-			return h.getDefinitionsBookDetail(notebookID, reader, learningHistory)
+			return h.getDefinitionsBookDetail(notebookID, reader, learningHistory, noteIDByExpr)
 		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read flashcard notebooks: %w", err))
 	}
@@ -223,21 +228,24 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 
 			_ = card.SetDetails(h.dictionaryMap, "")
 			info := h.findLearningInfoFull(learningHistory, nb.Title, "", card)
+			info.noteID = noteIDForDef(noteIDByExpr, card)
 
 			definitions = append(definitions, &apiv1.NotebookWord{
-				Expression:     card.Expression,
-				Definition:     card.Definition,
-				Meaning:        card.Meaning,
-				PartOfSpeech:   card.PartOfSpeech,
-				Pronunciation:  card.Pronunciation,
-				Examples:       card.Examples,
-				Synonyms:       card.Synonyms,
-				Antonyms:       card.Antonyms,
-				LearningStatus: string(info.status),
-				LearnedLogs:    convertLogsToProto(logs),
-				NextReviewDate: info.nextReviewDate,
-				Origin:         card.Origin,
-				IsSkipped:      info.isSkipped,
+				Expression:       card.Expression,
+				Definition:       card.Definition,
+				Meaning:          card.Meaning,
+				PartOfSpeech:     card.PartOfSpeech,
+				Pronunciation:    card.Pronunciation,
+				Examples:         card.Examples,
+				Synonyms:         card.Synonyms,
+				Antonyms:         card.Antonyms,
+				LearningStatus:   string(info.status),
+				LearnedLogs:      convertLogsToProto(logs),
+				NextReviewDate:   info.nextReviewDate,
+				Origin:           card.Origin,
+				IsSkipped:        info.isSkipped,
+				SkippedQuizTypes: info.skippedTypes,
+				NoteId:           info.noteID,
 			})
 			totalWordCount++
 		}
@@ -270,6 +278,7 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 	notebookID string,
 	reader *notebook.Reader,
 	learningHistory []notebook.LearningHistory,
+	noteIDByExpr map[string]int64,
 ) (*connect.Response[apiv1.GetNotebookDetailResponse], error) {
 	bookDefs, ok := reader.GetDefinitionsBook(notebookID)
 	if !ok {
@@ -294,6 +303,7 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 				note := scene.Expressions[i]
 				_ = note.SetDetails(h.dictionaryMap, "")
 				info := h.findLearningInfoFull(learningHistory, event, scene.Metadata.Title, note)
+				info.noteID = noteIDForDef(noteIDByExpr, note)
 
 				var logs []notebook.LearningRecord
 				for _, hist := range learningHistory {
@@ -317,6 +327,7 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 					Origin:         note.Origin,
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
+					NoteId:           info.noteID,
 				})
 				totalWordCount++
 			}
@@ -351,6 +362,57 @@ type learningInfo struct {
 	// skippedTypes lists the quiz type strings the expression is excluded
 	// from, for per-type badge rendering on the notebook detail page.
 	skippedTypes []string
+	// noteID is the DB primary key of this expression's note row, used by
+	// the notebook detail page to call SkipWord/ResumeWord. Zero when the
+	// DB hasn't been populated.
+	noteID int64
+}
+
+// loadNoteIDsForNotebook returns a map of lowercase expression -> note ID
+// for every note linked to notebookID via notebook_notes. Returns an empty
+// map if the DB is not configured or the lookup fails — the caller then
+// emits zero note IDs and the frontend hides the skip controls.
+func (h *NotebookHandler) loadNoteIDsForNotebook(ctx context.Context, notebookID string) map[string]int64 {
+	out := make(map[string]int64)
+	if h.noteRepository == nil {
+		return out
+	}
+	notes, err := h.noteRepository.FindAll(ctx)
+	if err != nil {
+		return out
+	}
+	for _, n := range notes {
+		linked := false
+		for _, nn := range n.NotebookNotes {
+			if nn.NotebookID == notebookID {
+				linked = true
+				break
+			}
+		}
+		if !linked {
+			continue
+		}
+		if k := strings.ToLower(strings.TrimSpace(n.Usage)); k != "" {
+			out[k] = n.ID
+		}
+		if k := strings.ToLower(strings.TrimSpace(n.Entry)); k != "" {
+			out[k] = n.ID
+		}
+	}
+	return out
+}
+
+// noteIDForDef looks up the DB note ID for a definition. Tries Expression
+// first, then Definition (some entries are keyed by definition text). Zero
+// when not found.
+func noteIDForDef(byExpr map[string]int64, def notebook.Note) int64 {
+	if id, ok := byExpr[strings.ToLower(strings.TrimSpace(def.Expression))]; ok {
+		return id
+	}
+	if id, ok := byExpr[strings.ToLower(strings.TrimSpace(def.Definition))]; ok {
+		return id
+	}
+	return 0
 }
 
 // findLearningInfoFull returns full learning info including skip status.

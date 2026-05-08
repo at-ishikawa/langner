@@ -75,6 +75,10 @@ message NotebookWord {
   // "reverse", "etymology_breakdown") this expression is excluded from.
   // Empty when not skipped from anywhere.
   repeated string skipped_quiz_types = 15;
+  // note_id is the DB primary key of this expression's note row. Used by
+  // the notebook detail page to call SkipWord/ResumeWord directly. Zero
+  // when the DB hasn't been populated (no langner migrate import-db run).
+  int64 note_id = 16;
 }
 
 message LearningLogEntry {
