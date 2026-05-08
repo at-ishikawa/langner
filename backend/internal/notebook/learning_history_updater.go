@@ -419,6 +419,40 @@ func (u *LearningHistoryUpdater) SetSkippedAt(expression string, quizType QuizTy
 	return true
 }
 
+// EnsureExpressionStubForSkip creates a learned-log-free stub for the
+// expression at (notebookID, storyTitle, sceneTitle) when no entry exists
+// yet. The stub holds only the expression name; SetSkippedAt then writes
+// the skip timestamp onto it. This is the path the notebook detail page's
+// per-type skip checkboxes take when the user clicks Skip on a word that
+// hasn't been studied yet — without it, the only way to record a skip
+// was UpdateOrCreateExpressionWithQuality, which fabricated a fake
+// "quality 5" learned_log entry that pretended the user had answered
+// the word correctly.
+//
+// If the expression already exists anywhere in the history, this is a
+// no-op and SetSkippedAt updates the existing record in place.
+//
+// sceneTitle "" stores the stub at the top-level Expressions list
+// (flashcard-style); a non-empty value nests it under that scene.
+func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
+	notebookID, storyTitle, sceneTitle, expression string,
+) {
+	if u.FindExpressionByName(expression) != nil {
+		return
+	}
+	stub := LearningHistoryExpression{Expression: expression}
+	if sceneTitle == "" {
+		idx := u.findOrCreateStory(notebookID, storyTitle, "flashcard")
+		u.history[idx].Expressions = append(u.history[idx].Expressions, stub)
+		return
+	}
+	storyIdx := u.findOrCreateStory(notebookID, storyTitle, "")
+	sceneIdx := u.findOrCreateScene(storyIdx, sceneTitle)
+	u.history[storyIdx].Scenes[sceneIdx].Expressions = append(
+		u.history[storyIdx].Scenes[sceneIdx].Expressions, stub,
+	)
+}
+
 // UpdateOrCreateExpressionWithQualityForEtymology updates or creates an expression with SM-2 quality assessment for etymology quiz.
 //
 // Etymology learning history is stored under per-session scenes (sceneTitle =

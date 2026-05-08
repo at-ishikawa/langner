@@ -283,6 +283,72 @@ func TestYAMLNoteRepository_FindAll(t *testing.T) {
 	}
 }
 
+// FindAll must walk definitions books too — without this, import-db
+// wouldn't materialise notes for vocabulary books like Word Power Made
+// Easy, and the notebook-detail per-word skip controls (which key off
+// note IDs) would never appear for those books.
+func TestYAMLNoteRepository_FindAll_DefinitionsBook(t *testing.T) {
+	defsDir := t.TempDir()
+	bookDir := filepath.Join(defsDir, "vocab-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: vocab-book
+notebooks:
+  - ./roots.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "roots.yml"), []byte(`- metadata:
+    title: "Roots Chapter 1"
+    date: 2025-01-01T00:00:00Z
+  scenes:
+    - metadata:
+        index: 0
+        title: "tele (far)"
+      expressions:
+        - expression: "telegraph"
+          meaning: "long-distance message device"
+        - expression: "telescope"
+          meaning: "instrument for viewing distant objects"
+`), 0644))
+
+	reader, err := NewReader(nil, nil, nil, []string{defsDir}, nil, nil)
+	require.NoError(t, err)
+	repo := NewYAMLNoteRepository(reader)
+	got, err := repo.FindAll(context.Background())
+	require.NoError(t, err)
+
+	var foundTelegraph, foundTelescope bool
+	for _, n := range got {
+		if n.Usage == "telegraph" {
+			foundTelegraph = true
+			require.Len(t, n.NotebookNotes, 1)
+			assert.Equal(t, "vocab-book", n.NotebookNotes[0].NotebookID)
+			assert.Equal(t, "Roots Chapter 1", n.NotebookNotes[0].Group)
+			assert.Equal(t, "tele (far)", n.NotebookNotes[0].Subgroup)
+		}
+		if n.Usage == "telescope" {
+			foundTelescope = true
+		}
+	}
+	assert.True(t, foundTelegraph, "FindAll should include definitions-book entries (telegraph)")
+	assert.True(t, foundTelescope, "FindAll should include definitions-book entries (telescope)")
+}
+
+// FindAll must not panic when the repository was constructed via the
+// writer-only constructors (NewYAMLNoteRepositoryWithDefsDir or
+// NewYAMLNoteRepositoryWriter), which leave the reader nil. The server
+// wires its noteRepo this way, so FindAll calls from request handlers
+// would otherwise nil-deref on the YAML side.
+func TestYAMLNoteRepository_FindAll_NilReaderReturnsEmpty(t *testing.T) {
+	repo := NewYAMLNoteRepositoryWithDefsDir("")
+	got, err := repo.FindAll(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	repoWriter := NewYAMLNoteRepositoryWriter("")
+	got, err = repoWriter.FindAll(context.Background())
+	require.NoError(t, err)
+	assert.Empty(t, got)
+}
+
 func TestConvertRecordToNote(t *testing.T) {
 	tests := []struct {
 		name string

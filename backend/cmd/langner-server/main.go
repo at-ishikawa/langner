@@ -124,6 +124,7 @@ func run(ctx context.Context) error {
 	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
 
 	handler := server.NewQuizHandler(svc)
+	handler.SetNoteRepository(noteRepo)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
 

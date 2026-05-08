@@ -28,6 +28,13 @@ func NewLearningHistories(directory string) (map[string][]LearningHistory, error
 	})
 }
 
+// ReadLearningHistoryFile loads a single notebook's learning history YAML.
+// Use this on the hot path of Skip/Resume RPCs to avoid the cost of
+// NewLearningHistories, which walks and parses every file in the directory.
+func ReadLearningHistoryFile(path string) ([]LearningHistory, error) {
+	return readYamlFile[[]LearningHistory](path)
+}
+
 func (h LearningHistory) GetLogs(
 	notebookTitle, sceneTitle string, definition Note,
 ) []LearningRecord {

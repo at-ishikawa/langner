@@ -26,8 +26,12 @@ func (m *MultiNoteRepository) Delete(ctx context.Context, notebookID string, exp
 	return nil
 }
 
-func (m *MultiNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) { return m.primary.FindAll(ctx) }
-func (m *MultiNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) { return m.primary.FindByID(ctx, id) }
+// FindAll reads from secondary (DB) because notebook_handler relies on the
+// returned NoteRecord.ID and NotebookNotes — IDs only exist on the DB side.
+// Primary (YAML) is configured via NewYAMLNoteRepositoryWithDefsDir on the
+// server, which has no reader and would panic.
+func (m *MultiNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) { return m.secondary.FindAll(ctx) }
+func (m *MultiNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) { return m.secondary.FindByID(ctx, id) }
 
 func (m *MultiNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord) error {
 	if err := m.primary.BatchCreate(ctx, notes); err != nil { return err }

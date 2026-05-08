@@ -50,6 +50,12 @@ func (r *YAMLNoteRepository) FindByID(_ context.Context, _ int64) (*NoteRecord, 
 // FindAll reads all story and flashcard notebooks, converts each YAML Note
 // to a NoteRecord, and deduplicates by (Usage, Entry) key.
 func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
+	if r.reader == nil {
+		// Constructed via NewYAMLNoteRepositoryWithDefsDir / Writer — no
+		// reader configured. Treat as an empty, read-only repository
+		// instead of panicking.
+		return nil, nil
+	}
 	storyIndexes, err := r.reader.ReadAllStoryNotebooks()
 	if err != nil {
 		return nil, fmt.Errorf("read all story notebooks: %w", err)
@@ -117,6 +123,31 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		for _, fn := range flashcardIndex.Notebooks {
 			for _, card := range fn.Cards {
 				addNote(card, "flashcard", flashcardID, fn.Title, "")
+			}
+		}
+	}
+
+	// Walk definitions books — these are reference vocabularies (e.g.
+	// Word Power Made Easy) loaded via DefinitionsDirectories. Without
+	// this pass, import-db wouldn't materialise their notes in the DB,
+	// and the notebook detail page couldn't surface per-word skip
+	// controls for them. The bookID matches the request's notebook_id.
+	bookIDs := r.reader.GetDefinitionsBookIDs()
+	sort.Strings(bookIDs)
+	for _, bookID := range bookIDs {
+		books, ok := r.reader.GetDefinitionsBook(bookID)
+		if !ok {
+			continue
+		}
+		for _, book := range books {
+			group := book.Metadata.Title
+			if group == "" {
+				group = book.Metadata.Notebook
+			}
+			for _, scene := range book.Scenes {
+				for _, expr := range scene.Expressions {
+					addNote(expr, "book", bookID, group, scene.Metadata.Title)
+				}
 			}
 		}
 	}

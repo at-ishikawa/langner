@@ -1422,6 +1422,54 @@ func TestQuizHandler_SkipWord_NotFound(t *testing.T) {
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
+// SkipWord must succeed when called from outside an active quiz session
+// (e.g. the notebook detail page's per-type skip checkboxes), as long as
+// the note repository is wired. Without SetNoteRepository wiring in
+// main.go, resolveCardInfo falls through to "no database configured"
+// even though the DB is available — exactly the bug that 18:24 produced.
+func TestQuizHandler_SkipWord_FromNotebookDetailPage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
+
+	const noteID int64 = 3450014
+
+	// First call without noteRepository wired — emulates the bug.
+	_, err := handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId:   noteID,
+			QuizType: apiv1.QuizType_QUIZ_TYPE_STANDARD,
+		}),
+	)
+	require.Error(t, err)
+	connectErr, ok := err.(*connect.Error)
+	require.True(t, ok)
+	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
+	assert.Contains(t, err.Error(), "no database configured")
+
+	// Now wire the repository (what main.go must do) and retry.
+	mockRepo := mock_notebook.NewMockNoteRepository(ctrl)
+	handler.SetNoteRepository(mockRepo)
+	mockRepo.EXPECT().FindByID(gomock.Any(), noteID).Return(&notebook.NoteRecord{
+		ID:    noteID,
+		Usage: "egoist",
+		Entry: "egoist",
+		NotebookNotes: []notebook.NotebookNote{
+			{NotebookID: "word-power-made-easy", Group: "Roots", Subgroup: "ego (self)"},
+		},
+	}, nil)
+
+	_, err = handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId:   noteID,
+			QuizType: apiv1.QuizType_QUIZ_TYPE_STANDARD,
+		}),
+	)
+	require.NoError(t, err)
+}
+
 func TestQuizHandler_ResumeWord_FromSession(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
