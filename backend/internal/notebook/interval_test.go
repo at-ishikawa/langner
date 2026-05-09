@@ -1,6 +1,7 @@
 package notebook
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -109,6 +110,88 @@ func TestSM2Calculator_RecalculateAll_EarlyReviewGuard(t *testing.T) {
 	assert.Equal(t, interval_4_1, result[1].IntervalDays, "4/4 early review: should keep same interval as 4/1")
 	// 4/8: only 4 days since 4/4 → still early → should NOT advance
 	assert.Equal(t, interval_4_1, result[0].IntervalDays, "4/8 early review: should keep same interval")
+}
+
+// TestRecalculateAll_AdvancesAfterMisunderstood encodes the spec the user
+// articulated: when the previous log is misunderstood (interval=1) and the
+// next log is correct on any later calendar day, the recalculated interval
+// for the correct log must advance past the misunderstood's interval —
+// matching what the live quiz produces at submit time. validate --fix
+// re-runs RecalculateAll, and any drift between the two paths leaves the
+// stored interval inconsistent with what the user actually earned.
+//
+// The original bug — duration.Hours()/24 truncation — silently violated
+// this spec when the second review's wall-clock time was earlier than the
+// first's, even on different calendar days. The test deliberately varies
+// both calendar-day gap (1, 3, 7) and times-of-day so the spec is enforced
+// regardless of when on the clock the user reviews. Midnight-only fixtures
+// hid the original bug; this matrix forbids that.
+func TestRecalculateAll_AdvancesAfterMisunderstood(t *testing.T) {
+	day1 := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
+	hourPairs := [][2]int{
+		{0, 0},   // identical clock — pure calendar boundary
+		{6, 9},   // forward-of-day clock advance
+		{18, 9},  // clock wraps backward across midnight (the truncation case)
+		{23, 0},  // 1-hour real gap, full calendar day
+	}
+	dayGaps := []int{1, 3, 7} // next-day, mid-week, end-of-week
+
+	calculators := map[string]IntervalCalculator{
+		"sm2":         &SM2Calculator{},
+		"fixed_level": &FixedLevelCalculator{},
+	}
+
+	for name, calc := range calculators {
+		for _, gap := range dayGaps {
+			for _, hp := range hourPairs {
+				t.Run(fmt.Sprintf("%s/gap=%dd/clock=%02d->%02d", name, gap, hp[0], hp[1]), func(t *testing.T) {
+					prev := day1.Add(time.Duration(hp[0]) * time.Hour)
+					next := day1.AddDate(0, 0, gap).Add(time.Duration(hp[1]) * time.Hour)
+					logs := []LearningRecord{
+						{Quality: 4, LearnedAt: Date{Time: next}, Status: LearnedStatusUnderstood},
+						{Quality: 1, LearnedAt: Date{Time: prev}, Status: LearnedStatusMisunderstood, IntervalDays: 1},
+					}
+					_, result := calc.RecalculateAll(logs)
+					require.Len(t, result, 2)
+					assert.Greater(t, result[0].IntervalDays, 1,
+						"misunderstood on %s, correct on %s — validate --fix must advance the interval (live quiz does)",
+						prev.Format(time.RFC3339), next.Format(time.RFC3339),
+					)
+				})
+			}
+		}
+	}
+}
+
+// TestRecalculateAll_DoesNotAdvanceSameDayCorrect locks in the negative half
+// of the spec: a correct answer the same calendar day as a misunderstood
+// must NOT advance the interval, regardless of how many hours later it
+// happened. Reviewing twice in one day doesn't prove next-day retention,
+// so the early-review guard must keep the interval at 1.
+func TestRecalculateAll_DoesNotAdvanceSameDayCorrect(t *testing.T) {
+	day := time.Date(2026, 5, 9, 0, 0, 0, 0, time.UTC)
+	hourPairs := [][2]int{{0, 23}, {6, 18}, {9, 17}}
+
+	calculators := map[string]IntervalCalculator{
+		"sm2":         &SM2Calculator{},
+		"fixed_level": &FixedLevelCalculator{},
+	}
+
+	for name, calc := range calculators {
+		for _, hp := range hourPairs {
+			t.Run(fmt.Sprintf("%s/clock=%02d->%02d", name, hp[0], hp[1]), func(t *testing.T) {
+				logs := []LearningRecord{
+					{Quality: 4, LearnedAt: Date{Time: day.Add(time.Duration(hp[1]) * time.Hour)}, Status: LearnedStatusUnderstood},
+					{Quality: 1, LearnedAt: Date{Time: day.Add(time.Duration(hp[0]) * time.Hour)}, Status: LearnedStatusMisunderstood, IntervalDays: 1},
+				}
+				_, result := calc.RecalculateAll(logs)
+				require.Len(t, result, 2)
+				assert.Equal(t, 1, result[0].IntervalDays,
+					"same-day correct must NOT advance — early-review guard keeps interval at the misunderstood's value",
+				)
+			})
+		}
+	}
 }
 
 func TestSM2Calculator_DeriveEF(t *testing.T) {

@@ -935,9 +935,13 @@ func (v *Validator) fixConsistency(
 
 					// Only keep expressions that either:
 					// 1. Have any logs (learned, reverse, or etymology), OR
-					// 2. Exist in the story (even with empty logs)
+					// 2. Exist in the story (even with empty logs), OR
+					// 3. Are skipped from at least one quiz mode — the
+					//    notebook detail page seeds skip-only stubs that
+					//    would otherwise be dropped on the next --fix.
 					hasLogs := len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || len(expr.EtymologyBreakdownLogs) > 0 || len(expr.EtymologyAssemblyLogs) > 0
-					if hasLogs || existsInStory {
+					hasSkip := expr.SkippedAt.IsSkippedAny()
+					if hasLogs || existsInStory || hasSkip {
 						validExpressions = append(validExpressions, expr)
 					} else {
 						// Remove orphaned expressions with no logs

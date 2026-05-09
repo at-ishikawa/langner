@@ -2,7 +2,27 @@ package notebook
 
 import (
 	"sort"
+	"time"
 )
+
+// calendarDaysBetween returns the number of calendar-day boundaries crossed
+// between two timestamps, evaluated in each timestamp's own location. The
+// early-review guard uses this instead of duration-based math because review
+// scheduling is a calendar concept: a review at 9am the day after a 6pm
+// review is "1 day later" even though only 15 hours have elapsed. Truncating
+// duration.Hours()/24 would round that to 0 and clamp the interval.
+//
+// Negative results are clamped to 0 — callers only care whether `to` is at
+// least one day after `from`.
+func calendarDaysBetween(from, to time.Time) int {
+	startDay := time.Date(from.Year(), from.Month(), from.Day(), 0, 0, 0, 0, from.Location())
+	endDay := time.Date(to.Year(), to.Month(), to.Day(), 0, 0, 0, 0, to.Location())
+	days := int(endDay.Sub(startDay).Hours() / 24)
+	if days < 0 {
+		return 0
+	}
+	return days
+}
 
 // DefaultFixedIntervals is the default progression of review intervals in days.
 var DefaultFixedIntervals = []int{1, 7, 30, 90, 365, 1095, 1825}
@@ -134,7 +154,7 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 			// previous interval elapsed, don't advance the interval.
 			// Reviewing early doesn't prove long-term retention.
 			if quality >= 3 && lastInterval > 0 && i > 0 {
-				elapsed := int(log.LearnedAt.Sub(newLogs[i-1].LearnedAt.Time).Hours() / 24)
+				elapsed := calendarDaysBetween(newLogs[i-1].LearnedAt.Time, log.LearnedAt.Time)
 				if elapsed < lastInterval && nextInterval > lastInterval {
 					nextInterval = lastInterval
 				}
@@ -266,7 +286,7 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 
 		// Early review guard
 		if q >= 3 && lastInterval > 0 && i > 0 {
-			elapsed := int(log.LearnedAt.Sub(newLogs[i-1].LearnedAt.Time).Hours() / 24)
+			elapsed := calendarDaysBetween(newLogs[i-1].LearnedAt.Time, log.LearnedAt.Time)
 			if elapsed < lastInterval && nextInterval > lastInterval {
 				nextInterval = lastInterval
 			}

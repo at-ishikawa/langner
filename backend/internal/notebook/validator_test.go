@@ -3,12 +3,14 @@ package notebook
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestValidationError_Error(t *testing.T) {
@@ -1909,6 +1911,57 @@ func TestValidator_FixConsistency(t *testing.T) {
 		assert.Contains(t, result.Warnings[0].Message, "Removed orphaned expression")
 	})
 
+	t.Run("keeps expressions whose only data is skipped_at", func(t *testing.T) {
+		// Reproduces a real bug: a word skipped from the notebook detail
+		// page (no logs yet) was dropped by fixConsistency because the
+		// keep-condition only checked logs and story membership. The
+		// SkippedAt map was lost on the next `langner validate --fix`.
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{Title: "Scene A", Definitions: []Note{{Expression: "eager"}}},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									// orphaned (not in story scene), no logs,
+									// but skipped from a quiz mode — must
+									// survive the fix pass.
+									{
+										Expression: "introvert",
+										SkippedAt:  SkippedAtMap{"freeform": "2026-05-09T09:32:08-07:00"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixConsistency(learningFiles, storyFiles, result)
+
+		require.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1, "skipped-only expression must not be dropped")
+		assert.Equal(t, "introvert", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+		assert.True(t, fixed[0].contents[0].Scenes[0].Expressions[0].SkippedAt.IsSkippedAny())
+	})
+
 	t.Run("keeps orphaned expressions with learned_logs", func(t *testing.T) {
 		storyFiles := []storyNotebookFile{
 			{
@@ -1949,6 +2002,163 @@ func TestValidator_FixConsistency(t *testing.T) {
 		assert.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 2)
 		assert.Len(t, result.Warnings, 0)
 	})
+}
+
+// TestValidator_Fix_PreservesEveryPersistableField is a reflection-based
+// regression guard against the class of bug where a new field is added to
+// LearningHistoryExpression but the validator's fix pass forgets to honour
+// it — silently dropping data on the next `langner validate --fix`. The
+// concrete instance was SkippedAt: per-type skips were saved by SkipWord,
+// then fixConsistency dropped the expression because it had no logs and
+// wasn't in the story notebook.
+//
+// For every exported field on LearningHistoryExpression that participates
+// in YAML round-tripping, this test:
+//  1. builds a minimal expression with only Expression + that one field
+//     populated to a non-zero value,
+//  2. writes it to a learning_notes file with NO matching story file
+//     (so the expression is "orphaned" — the case fixConsistency drops),
+//  3. runs Validator.Fix(),
+//  4. reloads the YAML from disk,
+//  5. asserts the expression survived AND the field is still non-zero.
+//
+// Adding a new persisted field to LearningHistoryExpression will make this
+// test fail until the fix pipeline is updated to recognize the field — or
+// the field is explicitly added to the skip list below with a comment
+// explaining why losing it during --fix is intentional.
+func TestValidator_Fix_PreservesEveryPersistableField(t *testing.T) {
+	// Fields the fix pass is allowed to mutate or drop. Each entry must
+	// document why; an empty list keeps the guard tight.
+	skip := map[string]string{
+		"Expression":     "the identifier itself, always set",
+		"EasinessFactor": `yaml:"-" — derived on the fly`,
+		"ReverseEasinessFactor":            `yaml:"-" — derived`,
+		"EtymologyBreakdownEasinessFactor": `yaml:"-" — derived`,
+		"EtymologyAssemblyEasinessFactor":  `yaml:"-" — derived`,
+	}
+
+	rt := reflect.TypeOf(LearningHistoryExpression{})
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		if reason, ok := skip[field.Name]; ok {
+			t.Logf("skipping %s: %s", field.Name, reason)
+			continue
+		}
+		// Skip yaml:"-" fields — they don't round-trip by design.
+		if tag := field.Tag.Get("yaml"); tag == "-" {
+			continue
+		}
+
+		t.Run(field.Name, func(t *testing.T) {
+			value, ok := nonZeroValueFor(field.Type)
+			if !ok {
+				t.Fatalf("test cannot generate a non-zero value for field %s of type %s — extend nonZeroValueFor", field.Name, field.Type)
+			}
+
+			expr := LearningHistoryExpression{Expression: "needle"}
+			reflect.ValueOf(&expr).Elem().FieldByName(field.Name).Set(value)
+
+			learningDir := t.TempDir()
+			storyDir := t.TempDir() // intentionally empty: forces the orphaned-expression code path
+
+			// Write the history file with our single-field expression, nested
+			// under a scene so it goes through fixConsistency (the path that
+			// dropped SkippedAt-only entries).
+			history := []LearningHistory{{
+				Metadata: LearningHistoryMetadata{NotebookID: "fixture", Title: "Episode"},
+				Scenes: []LearningScene{{
+					Metadata:    LearningSceneMetadata{Title: "Scene"},
+					Expressions: []LearningHistoryExpression{expr},
+				}},
+			}}
+			path := filepath.Join(learningDir, "fixture.yml")
+			require.NoError(t, WriteYamlFile(path, history))
+
+			v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "", nil)
+			_, err := v.Fix()
+			require.NoError(t, err)
+
+			raw, err := os.ReadFile(path)
+			require.NoError(t, err, "validate --fix must not delete the YAML file")
+
+			var got []LearningHistory
+			require.NoError(t, yaml.Unmarshal(raw, &got))
+			require.NotEmpty(t, got, "validate --fix dropped the entire history")
+			require.NotEmpty(t, got[0].Scenes, "validate --fix dropped the scene")
+			require.NotEmpty(t, got[0].Scenes[0].Expressions,
+				"validate --fix dropped the expression — field %s is not recognised as 'meaningful data' by fixConsistency",
+				field.Name,
+			)
+			roundTripped := got[0].Scenes[0].Expressions[0]
+			fieldValue := reflect.ValueOf(roundTripped).FieldByName(field.Name)
+			assert.False(t, fieldValue.IsZero(),
+				"field %s is zero after validate --fix; fix pipeline must preserve it",
+				field.Name,
+			)
+		})
+	}
+}
+
+// nonZeroValueFor returns a non-zero reflect.Value for a representative set
+// of types LearningHistoryExpression uses. Returning ok=false makes the
+// caller fail loudly when a new field type appears, so the test author has
+// to extend this helper rather than silently skip the new field.
+func nonZeroValueFor(t reflect.Type) (reflect.Value, bool) {
+	switch t.Kind() {
+	case reflect.String:
+		return reflect.ValueOf("test").Convert(t), true
+	case reflect.Int, reflect.Int32, reflect.Int64:
+		return reflect.ValueOf(int64(1)).Convert(t), true
+	case reflect.Float32, reflect.Float64:
+		return reflect.ValueOf(1.0).Convert(t), true
+	case reflect.Bool:
+		return reflect.ValueOf(true), true
+	case reflect.Slice:
+		// LearningRecord is a complex struct; provide a fully-populated
+		// element directly so a slice of one round-trips through YAML.
+		if t.Elem() == reflect.TypeOf(LearningRecord{}) {
+			elem := reflect.ValueOf(LearningRecord{
+				Status:       LearnedStatusUnderstood,
+				LearnedAt:    Date{Time: time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)},
+				Quality:      4,
+				QuizType:     "freeform",
+				IntervalDays: 7,
+			})
+			s := reflect.MakeSlice(t, 1, 1)
+			s.Index(0).Set(elem)
+			return s, true
+		}
+		elem, ok := nonZeroValueFor(t.Elem())
+		if !ok {
+			return reflect.Value{}, false
+		}
+		s := reflect.MakeSlice(t, 1, 1)
+		s.Index(0).Set(elem)
+		return s, true
+	case reflect.Map:
+		// SkippedAtMap is map[string]string under the hood.
+		m := reflect.MakeMapWithSize(t, 1)
+		key, ok1 := nonZeroValueFor(t.Key())
+		val, ok2 := nonZeroValueFor(t.Elem())
+		if !ok1 || !ok2 {
+			return reflect.Value{}, false
+		}
+		// Use a real quiz-type string so legacy-format unmarshaling is
+		// not surprised.
+		if t.Key().Kind() == reflect.String && t.Elem().Kind() == reflect.String {
+			key = reflect.ValueOf("freeform").Convert(t.Key())
+			val = reflect.ValueOf("2026-05-09T09:32:08-07:00").Convert(t.Elem())
+		}
+		m.SetMapIndex(key, val)
+		return m, true
+	case reflect.Struct:
+		// Date is a thin time wrapper; populate it with a non-zero time.
+		if t == reflect.TypeOf(Date{}) {
+			return reflect.ValueOf(Date{Time: time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)}), true
+		}
+		return reflect.Value{}, false
+	}
+	return reflect.Value{}, false
 }
 
 func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {
