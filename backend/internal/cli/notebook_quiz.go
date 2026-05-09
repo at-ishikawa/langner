@@ -60,7 +60,7 @@ func NewNotebookQuizCLI(
 		}
 
 		if len(notebookIDs) > 0 {
-			cards, err = svc.LoadCards(notebookIDs, includeNoCorrectAnswers)
+			cards, err = svc.LoadCards(notebookIDs, includeNoCorrectAnswers, nil)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load quiz cards: %w", err)
 			}
@@ -72,7 +72,7 @@ func NewNotebookQuizCLI(
 			return nil, fmt.Errorf("no learning note for %s hasn't been supported yet", notebookName)
 		}
 
-		cards, err = svc.LoadCards([]string{notebookName}, includeNoCorrectAnswers)
+		cards, err = svc.LoadCards([]string{notebookName}, includeNoCorrectAnswers, nil)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load quiz cards: %w", err)
 		}
@@ -109,7 +109,7 @@ func NewFlashcardQuizCLI(
 	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
 	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
-	cards, err := svc.LoadCards([]string{notebookName}, false)
+	cards, err := svc.LoadCards([]string{notebookName}, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load quiz cards: %w", err)
 	}

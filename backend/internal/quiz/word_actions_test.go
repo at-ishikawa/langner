@@ -44,9 +44,11 @@ func TestService_SkipWord_DoesNotForgeLearningLog(t *testing.T) {
 		Expression:   "ambivert",
 	}
 
-	require.NoError(t, svc.SkipWord(info, "", notebook.QuizTypeNotebook))
-	require.NoError(t, svc.SkipWord(info, "", notebook.QuizTypeReverse))
-	require.NoError(t, svc.SkipWord(info, "", notebook.QuizTypeFreeform))
+	require.NoError(t, svc.SkipWord(info, "", []notebook.QuizType{
+		notebook.QuizTypeNotebook,
+		notebook.QuizTypeReverse,
+		notebook.QuizTypeFreeform,
+	}))
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "word-power-made-easy.yml"))
 	require.NoError(t, err)
@@ -105,7 +107,7 @@ func TestService_SkipWord_PreservesExistingLogs(t *testing.T) {
 		SceneTitle:   "verto (to turn)",
 		Expression:   "ambivert",
 	}
-	require.NoError(t, svc.SkipWord(info, "", notebook.QuizTypeReverse))
+	require.NoError(t, svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeReverse}))
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "word-power-made-easy.yml"))
 	require.NoError(t, err)

@@ -57,6 +57,20 @@ type NotebookSummary struct {
 	// HasContent is true when any scene in the notebook has statements or
 	// conversations — i.e., there is prose/dialogue to read, not just flashcards.
 	HasContent bool
+	// Sections lists the per-section summaries (story events for vocabulary,
+	// session titles for etymology) in document order. Empty for flashcards
+	// and definitions-only books that have no section hierarchy.
+	Sections []NotebookSectionSummary
+}
+
+// NotebookSectionSummary describes a single section within a notebook with
+// per-mode review counts so the start screen can show counts both per
+// section and per-notebook.
+type NotebookSectionSummary struct {
+	Title                string
+	ReviewCount          int
+	ReverseReviewCount   int
+	EtymologyReviewCount int
 }
 
 // GradeResult holds the outcome of grading a user's answer.

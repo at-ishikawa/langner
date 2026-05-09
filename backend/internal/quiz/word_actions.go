@@ -65,15 +65,23 @@ func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 	}
 }
 
-// SkipWord excludes a word from the given quiz type. The skip is recorded
-// as a per-(expression, quiz_type) timestamp on SkippedAt; quiz card loaders
-// filter against that field. The skipUntil parameter is accepted for RPC
-// compatibility but is not currently honored — exclusion is permanent until
-// ResumeWord clears the slot.
+// SkipWord excludes a word from each of the given quiz types in a single
+// read-modify-write of the notebook's learning history YAML. Batching avoids
+// the race that bit the per-type API: when the UI's "All" toggle issued one
+// RPC per type concurrently, every handler read the same pre-update file
+// and the last writer overwrote the others, dropping skips.
+//
+// The skip is recorded as a per-(expression, quiz_type) timestamp on
+// SkippedAt; quiz card loaders filter against that field. The skipUntil
+// parameter is accepted for RPC compatibility but is not honored —
+// exclusion is permanent until ResumeWord clears the slot.
 //
 // If the expression has no learning history yet, SkipWord seeds an entry so
-// the skip has somewhere to live, then writes the skip onto it.
-func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.QuizType) error {
+// the skip has somewhere to live, then writes the skips onto it.
+func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook.QuizType) error {
+	if len(quizTypes) == 0 {
+		return fmt.Errorf("at least one quiz type is required to skip a word")
+	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
 		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
@@ -87,8 +95,10 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 	updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, info.Expression)
 
 	skippedAt := time.Now().Format(time.RFC3339)
-	if !updater.SetSkippedAt(info.Expression, quizType, skippedAt) {
-		return fmt.Errorf("failed to record skip for expression %q in notebook %q", info.Expression, info.NotebookName)
+	for _, qt := range quizTypes {
+		if !updater.SetSkippedAt(info.Expression, qt, skippedAt) {
+			return fmt.Errorf("failed to record skip for expression %q (%s) in notebook %q", info.Expression, qt, info.NotebookName)
+		}
 	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
@@ -98,18 +108,24 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 	return nil
 }
 
-// ResumeWord clears the skip for the given quiz type so the word reappears
-// in that quiz mode. Other quiz types' skips are left intact, so a word
-// excluded from both `reverse` and `etymology_freeform` only resumes the
-// type the caller specifies.
-func (s *Service) ResumeWord(info CardInfo, quizType notebook.QuizType) error {
+// ResumeWord clears skips for each of the given quiz types so the word
+// reappears in those modes. Other quiz types' skips are left intact, so a
+// word excluded from multiple modes only resumes the ones the caller lists.
+// Batched into a single read-modify-write for the same race-free reason as
+// SkipWord.
+func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error {
+	if len(quizTypes) == 0 {
+		return fmt.Errorf("at least one quiz type is required to resume a word")
+	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
 		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
-	updater.ClearSkippedAt(info.Expression, quizType)
+	for _, qt := range quizTypes {
+		updater.ClearSkippedAt(info.Expression, qt)
+	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {

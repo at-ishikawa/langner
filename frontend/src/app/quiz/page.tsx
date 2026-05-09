@@ -45,6 +45,11 @@ export default function QuizHubPage() {
 
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // sectionSelections holds per-notebook section title sets when the user
+  // narrows a notebook to specific chapters/sessions. Absence means "all
+  // sections" (the default when a notebook is checked).
+  const [sectionSelections, setSectionSelections] = useState<Map<string, Set<string>>>(new Map());
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [includeUnstudied, setIncludeUnstudied] = useState(false);
   const [listMissingContext, setListMissingContext] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -103,6 +108,13 @@ export default function QuizHubPage() {
       const next = new Set(Array.from(prev).filter((id) => displayedIds.has(id)));
       return next.size === prev.size ? prev : next;
     });
+    setSectionSelections((prev) => {
+      const next = new Map<string, Set<string>>();
+      for (const [id, sections] of prev.entries()) {
+        if (displayedIds.has(id)) next.set(id, sections);
+      }
+      return next.size === prev.size ? prev : next;
+    });
   }, [displayedNotebooks]);
 
   const allSelected =
@@ -116,24 +128,122 @@ export default function QuizHubPage() {
       else next.add(id);
       return next;
     });
+    // Clearing a notebook also clears any per-section narrowing it had —
+    // re-checking later starts fresh with "all sections".
+    setSectionSelections((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
   };
 
   const toggleAll = () => {
-    if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(displayedNotebooks.map((n) => n.notebookId)));
+    if (allSelected) {
+      setSelectedIds(new Set());
+      setSectionSelections(new Map());
+    } else {
+      setSelectedIds(new Set(displayedNotebooks.map((n) => n.notebookId)));
+      // "All notebooks" implies "all sections" — drop any narrowing.
+      setSectionSelections(new Map());
+    }
   };
 
+  const toggleSection = (notebook: NotebookSummary, sectionTitle: string) => {
+    const id = notebook.notebookId;
+    const allTitles = (notebook.sections ?? []).map((s) => s.title);
+    const notebookSelected = selectedIds.has(id);
+    const existing = sectionSelections.get(id);
+
+    // Resolve the *currently displayed* set of checked sections so the
+    // toggle matches what the user sees:
+    //   - notebook unchecked → no sections shown checked → start empty.
+    //   - notebook checked, no explicit narrowing → all sections shown
+    //     checked → start with the full set.
+    //   - notebook checked, explicit narrowing → start with that set.
+    let current: Set<string>;
+    if (!notebookSelected) {
+      current = new Set();
+    } else if (existing) {
+      current = new Set(existing);
+    } else {
+      current = new Set(allTitles);
+    }
+    if (current.has(sectionTitle)) current.delete(sectionTitle);
+    else current.add(sectionTitle);
+
+    setSectionSelections((prev) => {
+      const next = new Map(prev);
+      if (current.size === 0) {
+        next.delete(id);
+      } else if (current.size === allTitles.length) {
+        // Everything checked → drop the explicit set so we always send
+        // "all sections" (resilient to future section additions).
+        next.delete(id);
+      } else {
+        next.set(id, current);
+      }
+      return next;
+    });
+
+    setSelectedIds((prev) => {
+      const isNowSelected = current.size > 0;
+      if (isNowSelected === prev.has(id)) return prev;
+      const next = new Set(prev);
+      if (isNowSelected) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const isSectionChecked = (notebookId: string, sectionTitle: string): boolean => {
+    if (!selectedIds.has(notebookId)) return false;
+    const sel = sectionSelections.get(notebookId);
+    if (!sel) return true; // notebook checked + no narrowing = all sections in
+    return sel.has(sectionTitle);
+  };
+
+  const toggleExpanded = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  // pickModeCount maps a section/notebook count source to the active mode.
+  const pickModeCount = (counts: {
+    reviewCount: number;
+    reverseReviewCount: number;
+    etymologyReviewCount: number;
+  }): number => {
+    if (tab === "etymology") return counts.etymologyReviewCount;
+    if (selectedVocabMode === "reverse") return counts.reverseReviewCount;
+    return counts.reviewCount;
+  };
+
+  // totalDue sums only the words actually due across the active selection,
+  // honouring per-section narrowing. When a notebook has no per-section
+  // narrowing we fall back to its notebook-level count.
   const totalDue = displayedNotebooks
     .filter((n) => selectedIds.has(n.notebookId))
     .reduce((sum, n) => {
-      if (tab === "etymology") return sum + n.etymologyReviewCount;
-      if (selectedVocabMode === "reverse") return sum + n.reverseReviewCount;
-      return sum + n.reviewCount;
+      const sel = sectionSelections.get(n.notebookId);
+      if (!sel || (n.sections ?? []).length === 0) {
+        return sum + pickModeCount(n);
+      }
+      const sectionSum = (n.sections ?? [])
+        .filter((s) => sel.has(s.title))
+        .reduce((acc, s) => acc + pickModeCount(s), 0);
+      return sum + sectionSum;
     }, 0);
 
   const handleTabChange = (newTab: Tab) => {
     setTab(newTab);
     setSelectedIds(new Set());
+    setSectionSelections(new Map());
+    setExpandedIds(new Set());
   };
 
   const handleModeSelect = (mode: string) => {
@@ -145,6 +255,18 @@ export default function QuizHubPage() {
       setSelectedEtyMode(selectedEtyMode === m ? null : m);
     }
     setSelectedIds(new Set());
+    setSectionSelections(new Map());
+    setExpandedIds(new Set());
+  };
+
+  // buildNotebookSections turns the local selection state into the
+  // NotebookSection list the backend expects. A notebook with no per-section
+  // narrowing is sent with an empty section_titles list ("all sections").
+  const buildNotebookSections = (): { notebookId: string; sectionTitles: string[] }[] => {
+    return Array.from(selectedIds).map((id) => {
+      const sel = sectionSelections.get(id);
+      return { notebookId: id, sectionTitles: sel ? Array.from(sel) : [] };
+    });
   };
 
   const showNotebookSelection =
@@ -164,11 +286,12 @@ export default function QuizHubPage() {
     }
     setStarting(true);
     try {
+      const notebookSections = buildNotebookSections();
       if (tab === "vocabulary") {
         if (selectedVocabMode === "standard") {
           setQuizType("standard");
           const res = await quizClient.startQuiz({
-            notebookIds: Array.from(selectedIds),
+            notebookSections,
             includeUnstudied,
           });
           setFlashcards(
@@ -180,7 +303,7 @@ export default function QuizHubPage() {
         } else if (selectedVocabMode === "reverse") {
           setQuizType("reverse");
           const res = await quizClient.startReverseQuiz({
-            notebookIds: Array.from(selectedIds),
+            notebookSections,
             listMissingContext,
           });
           setReverseFlashcards(
@@ -199,12 +322,13 @@ export default function QuizHubPage() {
           router.push("/quiz/freeform");
         }
       } else {
-        const etymologyIds = Array.from(selectedIds);
-
         if (selectedEtyMode === "freeform") {
           setQuizType("etymology-freeform" as QuizType);
+          // Etymology freeform doesn't yet support per-session narrowing;
+          // the canonical "all sessions of selected notebooks" form keeps
+          // the existing API shape.
           const res = await quizClient.startEtymologyFreeformQuiz({
-            etymologyNotebookIds: etymologyIds,
+            etymologyNotebookIds: Array.from(selectedIds),
           });
           setEtymologyFreeformOrigins(res.origins ?? []);
           setEtymologyFreeformNextReviewDates(res.nextReviewDates ?? {});
@@ -216,7 +340,7 @@ export default function QuizHubPage() {
             ? "etymology-standard" as QuizType : "etymology-reverse" as QuizType;
           setQuizType(storeType);
           const res = await quizClient.startEtymologyQuiz({
-            etymologyNotebookIds: etymologyIds,
+            notebookSections,
             mode: quizMode,
             includeUnstudied,
           });
@@ -403,28 +527,79 @@ export default function QuizHubPage() {
                   <Checkbox.Label fontWeight="bold">All notebooks</Checkbox.Label>
                 </Checkbox.Root>
 
-                {displayedNotebooks.map((notebook) => (
-                  <Checkbox.Root
-                    key={notebook.notebookId}
-                    checked={selectedIds.has(notebook.notebookId)}
-                    onCheckedChange={() => toggleNotebook(notebook.notebookId)}
-                  >
-                    <Checkbox.HiddenInput />
-                    <Checkbox.Control />
-                    <Checkbox.Label flex="1">
-                      <Box display="flex" justifyContent="space-between" w="full">
-                        <Text>{notebook.name}</Text>
-                        <Text color="gray.500" fontSize="sm">
-                          {tab === "etymology"
-                            ? `${notebook.etymologyReviewCount} words`
-                            : selectedVocabMode === "reverse"
-                              ? notebook.reverseReviewCount
-                              : notebook.reviewCount}
-                        </Text>
+                {displayedNotebooks.map((notebook) => {
+                  const sections = notebook.sections ?? [];
+                  const expanded = expandedIds.has(notebook.notebookId);
+                  const sel = sectionSelections.get(notebook.notebookId);
+                  const partial =
+                    selectedIds.has(notebook.notebookId) && sel !== undefined && sel.size < sections.length;
+                  return (
+                    <Box key={notebook.notebookId}>
+                      <Box display="flex" alignItems="center" gap={2}>
+                        <Checkbox.Root
+                          checked={selectedIds.has(notebook.notebookId)}
+                          onCheckedChange={() => toggleNotebook(notebook.notebookId)}
+                          flex="1"
+                        >
+                          <Checkbox.HiddenInput />
+                          <Checkbox.Control />
+                          <Checkbox.Label flex="1">
+                            <Box display="flex" justifyContent="space-between" w="full">
+                              <Text>
+                                {notebook.name}
+                                {partial && (
+                                  <Text as="span" color="gray.500" fontSize="xs" ml={1}>
+                                    ({sel!.size}/{sections.length})
+                                  </Text>
+                                )}
+                              </Text>
+                              <Text color="gray.500" fontSize="sm">
+                                {pickModeCount(notebook)}
+                              </Text>
+                            </Box>
+                          </Checkbox.Label>
+                        </Checkbox.Root>
+                        {sections.length > 0 && (
+                          <Box
+                            as="button"
+                            onClick={() => toggleExpanded(notebook.notebookId)}
+                            fontSize="xs"
+                            color="blue.600"
+                            _dark={{ color: "blue.300" }}
+                            cursor="pointer"
+                            px={2}
+                            aria-label={expanded ? "Hide sections" : "Show sections"}
+                          >
+                            {expanded ? "▲" : "▼"}
+                          </Box>
+                        )}
                       </Box>
-                    </Checkbox.Label>
-                  </Checkbox.Root>
-                ))}
+                      {expanded && sections.length > 0 && (
+                        <VStack align="stretch" gap={1} pl={6} mt={1} mb={1}>
+                          {sections.map((section) => (
+                            <Checkbox.Root
+                              key={section.title}
+                              checked={isSectionChecked(notebook.notebookId, section.title)}
+                              onCheckedChange={() => toggleSection(notebook, section.title)}
+                              size="sm"
+                            >
+                              <Checkbox.HiddenInput />
+                              <Checkbox.Control />
+                              <Checkbox.Label fontSize="sm" color="gray.700" _dark={{ color: "gray.300" }} flex="1">
+                                <Box display="flex" justifyContent="space-between" w="full">
+                                  <Text as="span" truncate>{section.title}</Text>
+                                  <Text as="span" color="gray.500" fontSize="xs" ml={2}>
+                                    {pickModeCount(section)}
+                                  </Text>
+                                </Box>
+                              </Checkbox.Label>
+                            </Checkbox.Root>
+                          ))}
+                        </VStack>
+                      )}
+                    </Box>
+                  );
+                })}
               </VStack>
             )}
 

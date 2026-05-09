@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/quiz.proto.
  */
 export const file_api_v1_quiz: GenFile = /*@__PURE__*/
-  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnkiqwEKD05vdGVib29rU3VtbWFyeRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHJldmlld19jb3VudBgDIAEoBRIMCgRraW5kGAQgASgJEhwKFHJldmVyc2VfcmV2aWV3X2NvdW50GAUgASgFEh4KFmV0eW1vbG9neV9yZXZpZXdfY291bnQYBiABKAUSEwoLaGFzX2NvbnRlbnQYByABKAgiTQoQU3RhcnRRdWl6UmVxdWVzdBIeCgxub3RlYm9va19pZHMYASADKAlCCLpIBZIBAggBEhkKEWluY2x1ZGVfdW5zdHVkaWVkGAIgASgIIjoKEVN0YXJ0UXVpelJlc3BvbnNlEiUKCmZsYXNoY2FyZHMYASADKAsyES5hcGkudjEuRmxhc2hjYXJkImYKCUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg0KBWVudHJ5GAIgASgJEiEKCGV4YW1wbGVzGAMgAygLMg8uYXBpLnYxLkV4YW1wbGUSFgoOb3JpZ2luYWxfZW50cnkYBCABKAkiKAoHRXhhbXBsZRIMCgR0ZXh0GAEgASgJEg8KB3NwZWFrZXIYAiABKAkiqwEKCldvcmREZXRhaWwSDgoGb3JpZ2luGAEgASgJEhUKDXByb251bmNpYXRpb24YAiABKAkSFgoOcGFydF9vZl9zcGVlY2gYAyABKAkSEAoIc3lub255bXMYBCADKAkSEAoIYW50b255bXMYBSADKAkSDAoEbWVtbxgGIAEoCRIsCgxvcmlnaW5fcGFydHMYByADKAsyFi5hcGkudjEuV29yZE9yaWdpblBhcnQiUQoOV29yZE9yaWdpblBhcnQSDgoGb3JpZ2luGAEgASgJEgwKBHR5cGUYAiABKAkSEAoIbGFuZ3VhZ2UYAyABKAkSDwoHbWVhbmluZxgEIAEoCSJmChNTdWJtaXRBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASGwoGYW5zd2VyGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIq8BChRTdWJtaXRBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEg8KB21lYW5pbmcYAiABKAkSDgoGcmVhc29uGAMgASgJEicKC3dvcmRfZGV0YWlsGAQgASgLMhIuYXBpLnYxLldvcmREZXRhaWwSGAoQbmV4dF9yZXZpZXdfZGF0ZRgFIAEoCRISCgpsZWFybmVkX2F0GAYgASgJEg4KBmltYWdlcxgHIAMoCSJTChlCYXRjaFN1Ym1pdEFuc3dlcnNSZXF1ZXN0EjYKB2Fuc3dlcnMYASADKAsyGy5hcGkudjEuU3VibWl0QW5zd2VyUmVxdWVzdEIIukgFkgECCAEiTQoaQmF0Y2hTdWJtaXRBbnN3ZXJzUmVzcG9uc2USLwoJcmVzcG9uc2VzGAEgAygLMhwuYXBpLnYxLlN1Ym1pdEFuc3dlclJlc3BvbnNlIlcKF1N0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0Eh4KDG5vdGVib29rX2lkcxgBIAMoCUIIukgFkgECCAESHAoUbGlzdF9taXNzaW5nX2NvbnRleHQYAiABKAgiSAoYU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEiwKCmZsYXNoY2FyZHMYASADKAsyGC5hcGkudjEuUmV2ZXJzZUZsYXNoY2FyZCKgAQoQUmV2ZXJzZUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg8KB21lYW5pbmcYAiABKAkSKQoIY29udGV4dHMYAyADKAsyFy5hcGkudjEuQ29udGV4dFNlbnRlbmNlEhUKDW5vdGVib29rX25hbWUYBCABKAkSEwoLc3RvcnlfdGl0bGUYBSABKAkSEwoLc2NlbmVfdGl0bGUYBiABKAkiOgoPQ29udGV4dFNlbnRlbmNlEg8KB2NvbnRleHQYASABKAkSFgoObWFza2VkX2NvbnRleHQYAiABKAkikAEKGlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASGwoGYW5zd2VyGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDEiEKGWFjY2VwdF9zeW5vbnltX2FzX2NvcnJlY3QYBCABKAgi9AEKG1N1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhIKCmV4cHJlc3Npb24YAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSEAoIY29udGV4dHMYBSADKAkSJwoLd29yZF9kZXRhaWwYBiABKAsyEi5hcGkudjEuV29yZERldGFpbBIWCg5jbGFzc2lmaWNhdGlvbhgHIAEoCRIYChBuZXh0X3Jldmlld19kYXRlGAggASgJEhIKCmxlYXJuZWRfYXQYCSABKAkSDgoGaW1hZ2VzGAogAygJImEKIEJhdGNoU3VibWl0UmV2ZXJzZUFuc3dlcnNSZXF1ZXN0Ej0KB2Fuc3dlcnMYASADKAsyIi5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3RCCLpIBZIBAggBIlsKIUJhdGNoU3VibWl0UmV2ZXJzZUFuc3dlcnNSZXNwb25zZRI2CglyZXNwb25zZXMYASADKAsyIy5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlc3BvbnNlIhoKGFN0YXJ0RnJlZWZvcm1RdWl6UmVxdWVzdCLrAQoZU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRISCgp3b3JkX2NvdW50GAEgASgFEhMKC2V4cHJlc3Npb25zGAIgAygJEmQKG2V4cHJlc3Npb25fbmV4dF9yZXZpZXdfZGF0ZRgDIAMoCzI/LmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlc3BvbnNlLkV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5Gj8KHUV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEicAobU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0EhkKBHdvcmQYASABKAlCC7pICHIGEAEyAlxTEhwKB21lYW5pbmcYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMi/gEKHFN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIMCgR3b3JkGAIgASgJEg8KB21lYW5pbmcYAyABKAkSDgoGcmVhc29uGAQgASgJEg8KB2NvbnRleHQYBSABKAkSFQoNbm90ZWJvb2tfbmFtZRgGIAEoCRInCgt3b3JkX2RldGFpbBgHIAEoCzISLmFwaS52MS5Xb3JkRGV0YWlsEhgKEG5leHRfcmV2aWV3X2RhdGUYCCABKAkSEgoKbGVhcm5lZF9hdBgJIAEoCRIPCgdub3RlX2lkGAogASgDEg4KBmltYWdlcxgLIAMoCSLTAQoVT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGQoMbWFya19jb3JyZWN0GAQgASgISACIAQESHQoQbmV4dF9yZXZpZXdfZGF0ZRgFIAEoCUgBiAEBQg8KDV9tYXJrX2NvcnJlY3RCEwoRX25leHRfcmV2aWV3X2RhdGUiiwEKFk92ZXJyaWRlQW5zd2VyUmVzcG9uc2USGAoQbmV4dF9yZXZpZXdfZGF0ZRgBIAEoCRIYChBvcmlnaW5hbF9xdWFsaXR5GAIgASgFEhcKD29yaWdpbmFsX3N0YXR1cxgDIAEoCRIeChZvcmlnaW5hbF9pbnRlcnZhbF9kYXlzGAQgASgFSgQIBRAGItABChlVbmRvT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGAoQb3JpZ2luYWxfcXVhbGl0eRgEIAEoBRIXCg9vcmlnaW5hbF9zdGF0dXMYBSABKAkSHgoWb3JpZ2luYWxfaW50ZXJ2YWxfZGF5cxgGIAEoBUoECAcQCCJHChpVbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhgKEG5leHRfcmV2aWV3X2RhdGUYAiABKAkiZAoPU2tpcFdvcmRSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhIKCnNraXBfdW50aWwYAyABKAkiEgoQU2tpcFdvcmRSZXNwb25zZSJSChFSZXN1bWVXb3JkUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAEiMKCXF1aXpfdHlwZRgCIAEoDjIQLmFwaS52MS5RdWl6VHlwZSIUChJSZXN1bWVXb3JkUmVzcG9uc2UiqgEKEUV0eW1vbG9neVF1aXpDYXJkEg8KB2NhcmRfaWQYASABKAMSDgoGb3JpZ2luGAIgASgJEgwKBHR5cGUYAyABKAkSEAoIbGFuZ3VhZ2UYBCABKAkSDwoHbWVhbmluZxgFIAEoCRIVCg1ub3RlYm9va19uYW1lGAYgASgJEhUKDXNlc3Npb25fdGl0bGUYByABKAkSFQoNZXhhbXBsZV93b3JkcxgIIAMoCSJ/ChlTdGFydEV0eW1vbG9neVF1aXpSZXF1ZXN0Eh4KFmV0eW1vbG9neV9ub3RlYm9va19pZHMYASADKAkSJwoEbW9kZRgDIAEoDjIZLmFwaS52MS5FdHltb2xvZ3lRdWl6TW9kZRIZChFpbmNsdWRlX3Vuc3R1ZGllZBgEIAEoCCJGChpTdGFydEV0eW1vbG9neVF1aXpSZXNwb25zZRIoCgVjYXJkcxgBIAMoCzIZLmFwaS52MS5FdHltb2xvZ3lRdWl6Q2FyZCJ3CiRTdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlclJlcXVlc3QSGAoHY2FyZF9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMioAEKJVN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIOCgZyZWFzb24YAiABKAkSFwoPY29ycmVjdF9tZWFuaW5nGAMgASgJEhgKEG5leHRfcmV2aWV3X2RhdGUYBCABKAkSEgoKbGVhcm5lZF9hdBgFIAEoCRIPCgdub3RlX2lkGAYgASgDInUKKkJhdGNoU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJzUmVxdWVzdBJHCgdhbnN3ZXJzGAEgAygLMiwuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2VyUmVxdWVzdEIIukgFkgECCAEibworQmF0Y2hTdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlcnNSZXNwb25zZRJACglyZXNwb25zZXMYASADKAsyLS5hcGkudjEuU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJSZXNwb25zZSJ2CiNTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyUmVxdWVzdBIYCgdjYXJkX2lkGAEgASgDQge6SAQiAiAAEhsKBmFuc3dlchgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyK+AQokU3VibWl0RXR5bW9sb2d5UmV2ZXJzZUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDgoGcmVhc29uGAIgASgJEhYKDmNvcnJlY3Rfb3JpZ2luGAMgASgJEgwKBHR5cGUYBCABKAkSEAoIbGFuZ3VhZ2UYBSABKAkSGAoQbmV4dF9yZXZpZXdfZGF0ZRgGIAEoCRISCgpsZWFybmVkX2F0GAcgASgJEg8KB25vdGVfaWQYCCABKAMicwopQmF0Y2hTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2Vyc1JlcXVlc3QSRgoHYW5zd2VycxgBIAMoCzIrLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyUmVxdWVzdEIIukgFkgECCAEibQoqQmF0Y2hTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2Vyc1Jlc3BvbnNlEj8KCXJlc3BvbnNlcxgBIAMoCzIsLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyUmVzcG9uc2UiQwohU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXpSZXF1ZXN0Eh4KFmV0eW1vbG9neV9ub3RlYm9va19pZHMYASADKAkiyQEKIlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVzcG9uc2USDwoHb3JpZ2lucxgBIAMoCRJaChFuZXh0X3Jldmlld19kYXRlcxgCIAMoCzI/LmFwaS52MS5TdGFydEV0eW1vbG9neUZyZWVmb3JtUXVpelJlc3BvbnNlLk5leHRSZXZpZXdEYXRlc0VudHJ5GjYKFE5leHRSZXZpZXdEYXRlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiewokU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0EhsKBm9yaWdpbhgBIAEoCUILukgIcgYQATICXFMSHAoHbWVhbmluZxgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyJeChRFdHltb2xvZ3lPcmlnaW5TZW5zZRIPCgdtZWFuaW5nGAEgASgJEgwKBHR5cGUYAiABKAkSEAoIbGFuZ3VhZ2UYAyABKAkSFQoNc2Vzc2lvbl90aXRsZRgEIAEoCSKJAgolU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEg4KBnJlYXNvbhgCIAEoCRIXCg9jb3JyZWN0X21lYW5pbmcYAyABKAkSDAoEdHlwZRgEIAEoCRIQCghsYW5ndWFnZRgFIAEoCRIVCg1ub3RlYm9va19uYW1lGAYgASgJEhgKEG5leHRfcmV2aWV3X2RhdGUYByABKAkSEgoKbGVhcm5lZF9hdBgIIAEoCRIPCgdub3RlX2lkGAkgASgDEjAKCmFsbF9zZW5zZXMYCiADKAsyHC5hcGkudjEuRXR5bW9sb2d5T3JpZ2luU2Vuc2Uq0QEKCFF1aXpUeXBlEhkKFVFVSVpfVFlQRV9VTlNQRUNJRklFRBAAEhYKElFVSVpfVFlQRV9TVEFOREFSRBABEhUKEVFVSVpfVFlQRV9SRVZFUlNFEAISFgoSUVVJWl9UWVBFX0ZSRUVGT1JNEAMSIAocUVVJWl9UWVBFX0VUWU1PTE9HWV9TVEFOREFSRBAEEh8KG1FVSVpfVFlQRV9FVFlNT0xPR1lfUkVWRVJTRRAFEiAKHFFVSVpfVFlQRV9FVFlNT0xPR1lfRlJFRUZPUk0QBip7ChFFdHltb2xvZ3lRdWl6TW9kZRIjCh9FVFlNT0xPR1lfUVVJWl9NT0RFX1VOU1BFQ0lGSUVEEAASIAocRVRZTU9MT0dZX1FVSVpfTU9ERV9TVEFOREFSRBABEh8KG0VUWU1PTE9HWV9RVUlaX01PREVfUkVWRVJTRRACMsgPCgtRdWl6U2VydmljZRJPCg5HZXRRdWl6T3B0aW9ucxIdLmFwaS52MS5HZXRRdWl6T3B0aW9uc1JlcXVlc3QaHi5hcGkudjEuR2V0UXVpek9wdGlvbnNSZXNwb25zZRJACglTdGFydFF1aXoSGC5hcGkudjEuU3RhcnRRdWl6UmVxdWVzdBoZLmFwaS52MS5TdGFydFF1aXpSZXNwb25zZRJJCgxTdWJtaXRBbnN3ZXISGy5hcGkudjEuU3VibWl0QW5zd2VyUmVxdWVzdBocLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXNwb25zZRJbChJCYXRjaFN1Ym1pdEFuc3dlcnMSIS5hcGkudjEuQmF0Y2hTdWJtaXRBbnN3ZXJzUmVxdWVzdBoiLmFwaS52MS5CYXRjaFN1Ym1pdEFuc3dlcnNSZXNwb25zZRJVChBTdGFydFJldmVyc2VRdWl6Eh8uYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0GiAuYXBpLnYxLlN0YXJ0UmV2ZXJzZVF1aXpSZXNwb25zZRJeChNTdWJtaXRSZXZlcnNlQW5zd2VyEiIuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0GiMuYXBpLnYxLlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRJwChlCYXRjaFN1Ym1pdFJldmVyc2VBbnN3ZXJzEiguYXBpLnYxLkJhdGNoU3VibWl0UmV2ZXJzZUFuc3dlcnNSZXF1ZXN0GikuYXBpLnYxLkJhdGNoU3VibWl0UmV2ZXJzZUFuc3dlcnNSZXNwb25zZRJYChFTdGFydEZyZWVmb3JtUXVpehIgLmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlcXVlc3QaIS5hcGkudjEuU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRJhChRTdWJtaXRGcmVlZm9ybUFuc3dlchIjLmFwaS52MS5TdWJtaXRGcmVlZm9ybUFuc3dlclJlcXVlc3QaJC5hcGkudjEuU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXNwb25zZRJPCg5PdmVycmlkZUFuc3dlchIdLmFwaS52MS5PdmVycmlkZUFuc3dlclJlcXVlc3QaHi5hcGkudjEuT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRJbChJVbmRvT3ZlcnJpZGVBbnN3ZXISIS5hcGkudjEuVW5kb092ZXJyaWRlQW5zd2VyUmVxdWVzdBoiLmFwaS52MS5VbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRI9CghTa2lwV29yZBIXLmFwaS52MS5Ta2lwV29yZFJlcXVlc3QaGC5hcGkudjEuU2tpcFdvcmRSZXNwb25zZRJDCgpSZXN1bWVXb3JkEhkuYXBpLnYxLlJlc3VtZVdvcmRSZXF1ZXN0GhouYXBpLnYxLlJlc3VtZVdvcmRSZXNwb25zZRJbChJTdGFydEV0eW1vbG9neVF1aXoSIS5hcGkudjEuU3RhcnRFdHltb2xvZ3lRdWl6UmVxdWVzdBoiLmFwaS52MS5TdGFydEV0eW1vbG9neVF1aXpSZXNwb25zZRJ8Ch1TdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlchIsLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlclJlcXVlc3QaLS5hcGkudjEuU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJSZXNwb25zZRKOAQojQmF0Y2hTdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlcnMSMi5hcGkudjEuQmF0Y2hTdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlcnNSZXF1ZXN0GjMuYXBpLnYxLkJhdGNoU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJzUmVzcG9uc2USeQocU3VibWl0RXR5bW9sb2d5UmV2ZXJzZUFuc3dlchIrLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyUmVxdWVzdBosLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyUmVzcG9uc2USiwEKIkJhdGNoU3VibWl0RXR5bW9sb2d5UmV2ZXJzZUFuc3dlcnMSMS5hcGkudjEuQmF0Y2hTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2Vyc1JlcXVlc3QaMi5hcGkudjEuQmF0Y2hTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2Vyc1Jlc3BvbnNlEnMKGlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6EikuYXBpLnYxLlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVxdWVzdBoqLmFwaS52MS5TdGFydEV0eW1vbG9neUZyZWVmb3JtUXVpelJlc3BvbnNlEnwKHVN1Ym1pdEV0eW1vbG9neUZyZWVmb3JtQW5zd2VyEiwuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neUZyZWVmb3JtQW5zd2VyUmVxdWVzdBotLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lGcmVlZm9ybUFuc3dlclJlc3BvbnNlQjhaNmdpdGh1Yi5jb20vYXQtaXNoaWthd2EvbGFuZ25lci9nZW4tcHJvdG9zL2FwaS92MTthcGl2MWIGcHJvdG8z", [file_buf_validate_validate]);
+  fileDesc("ChFhcGkvdjEvcXVpei5wcm90bxIGYXBpLnYxIhcKFUdldFF1aXpPcHRpb25zUmVxdWVzdCJEChZHZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEioKCW5vdGVib29rcxgBIAMoCzIXLmFwaS52MS5Ob3RlYm9va1N1bW1hcnki3QEKD05vdGVib29rU3VtbWFyeRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEhQKDHJldmlld19jb3VudBgDIAEoBRIMCgRraW5kGAQgASgJEhwKFHJldmVyc2VfcmV2aWV3X2NvdW50GAUgASgFEh4KFmV0eW1vbG9neV9yZXZpZXdfY291bnQYBiABKAUSEwoLaGFzX2NvbnRlbnQYByABKAgSMAoIc2VjdGlvbnMYCCADKAsyHi5hcGkudjEuTm90ZWJvb2tTZWN0aW9uU3VtbWFyeSJ7ChZOb3RlYm9va1NlY3Rpb25TdW1tYXJ5Eg0KBXRpdGxlGAEgASgJEhQKDHJldmlld19jb3VudBgCIAEoBRIcChRyZXZlcnNlX3Jldmlld19jb3VudBgDIAEoBRIeChZldHltb2xvZ3lfcmV2aWV3X2NvdW50GAQgASgFIkcKD05vdGVib29rU2VjdGlvbhIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQARIWCg5zZWN0aW9uX3RpdGxlcxgCIAMoCSJ3ChBTdGFydFF1aXpSZXF1ZXN0EhQKDG5vdGVib29rX2lkcxgBIAMoCRIZChFpbmNsdWRlX3Vuc3R1ZGllZBgCIAEoCBIyChFub3RlYm9va19zZWN0aW9ucxgDIAMoCzIXLmFwaS52MS5Ob3RlYm9va1NlY3Rpb24iOgoRU3RhcnRRdWl6UmVzcG9uc2USJQoKZmxhc2hjYXJkcxgBIAMoCzIRLmFwaS52MS5GbGFzaGNhcmQiZgoJRmxhc2hjYXJkEg8KB25vdGVfaWQYASABKAMSDQoFZW50cnkYAiABKAkSIQoIZXhhbXBsZXMYAyADKAsyDy5hcGkudjEuRXhhbXBsZRIWCg5vcmlnaW5hbF9lbnRyeRgEIAEoCSIoCgdFeGFtcGxlEgwKBHRleHQYASABKAkSDwoHc3BlYWtlchgCIAEoCSKrAQoKV29yZERldGFpbBIOCgZvcmlnaW4YASABKAkSFQoNcHJvbnVuY2lhdGlvbhgCIAEoCRIWCg5wYXJ0X29mX3NwZWVjaBgDIAEoCRIQCghzeW5vbnltcxgEIAMoCRIQCghhbnRvbnltcxgFIAMoCRIMCgRtZW1vGAYgASgJEiwKDG9yaWdpbl9wYXJ0cxgHIAMoCzIWLmFwaS52MS5Xb3JkT3JpZ2luUGFydCJRCg5Xb3JkT3JpZ2luUGFydBIOCgZvcmlnaW4YASABKAkSDAoEdHlwZRgCIAEoCRIQCghsYW5ndWFnZRgDIAEoCRIPCgdtZWFuaW5nGAQgASgJImYKE1N1Ym1pdEFuc3dlclJlcXVlc3QSGAoHbm90ZV9pZBgBIAEoA0IHukgEIgIgABIbCgZhbnN3ZXIYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMirwEKFFN1Ym1pdEFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDwoHbWVhbmluZxgCIAEoCRIOCgZyZWFzb24YAyABKAkSJwoLd29yZF9kZXRhaWwYBCABKAsyEi5hcGkudjEuV29yZERldGFpbBIYChBuZXh0X3Jldmlld19kYXRlGAUgASgJEhIKCmxlYXJuZWRfYXQYBiABKAkSDgoGaW1hZ2VzGAcgAygJIlMKGUJhdGNoU3VibWl0QW5zd2Vyc1JlcXVlc3QSNgoHYW5zd2VycxgBIAMoCzIbLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXF1ZXN0Qgi6SAWSAQIIASJNChpCYXRjaFN1Ym1pdEFuc3dlcnNSZXNwb25zZRIvCglyZXNwb25zZXMYASADKAsyHC5hcGkudjEuU3VibWl0QW5zd2VyUmVzcG9uc2UigQEKF1N0YXJ0UmV2ZXJzZVF1aXpSZXF1ZXN0EhQKDG5vdGVib29rX2lkcxgBIAMoCRIcChRsaXN0X21pc3NpbmdfY29udGV4dBgCIAEoCBIyChFub3RlYm9va19zZWN0aW9ucxgDIAMoCzIXLmFwaS52MS5Ob3RlYm9va1NlY3Rpb24iSAoYU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEiwKCmZsYXNoY2FyZHMYASADKAsyGC5hcGkudjEuUmV2ZXJzZUZsYXNoY2FyZCKgAQoQUmV2ZXJzZUZsYXNoY2FyZBIPCgdub3RlX2lkGAEgASgDEg8KB21lYW5pbmcYAiABKAkSKQoIY29udGV4dHMYAyADKAsyFy5hcGkudjEuQ29udGV4dFNlbnRlbmNlEhUKDW5vdGVib29rX25hbWUYBCABKAkSEwoLc3RvcnlfdGl0bGUYBSABKAkSEwoLc2NlbmVfdGl0bGUYBiABKAkiOgoPQ29udGV4dFNlbnRlbmNlEg8KB2NvbnRleHQYASABKAkSFgoObWFza2VkX2NvbnRleHQYAiABKAkikAEKGlN1Ym1pdFJldmVyc2VBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASGwoGYW5zd2VyGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDEiEKGWFjY2VwdF9zeW5vbnltX2FzX2NvcnJlY3QYBCABKAgi9AEKG1N1Ym1pdFJldmVyc2VBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhIKCmV4cHJlc3Npb24YAiABKAkSDwoHbWVhbmluZxgDIAEoCRIOCgZyZWFzb24YBCABKAkSEAoIY29udGV4dHMYBSADKAkSJwoLd29yZF9kZXRhaWwYBiABKAsyEi5hcGkudjEuV29yZERldGFpbBIWCg5jbGFzc2lmaWNhdGlvbhgHIAEoCRIYChBuZXh0X3Jldmlld19kYXRlGAggASgJEhIKCmxlYXJuZWRfYXQYCSABKAkSDgoGaW1hZ2VzGAogAygJImEKIEJhdGNoU3VibWl0UmV2ZXJzZUFuc3dlcnNSZXF1ZXN0Ej0KB2Fuc3dlcnMYASADKAsyIi5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3RCCLpIBZIBAggBIlsKIUJhdGNoU3VibWl0UmV2ZXJzZUFuc3dlcnNSZXNwb25zZRI2CglyZXNwb25zZXMYASADKAsyIy5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlc3BvbnNlIhoKGFN0YXJ0RnJlZWZvcm1RdWl6UmVxdWVzdCLrAQoZU3RhcnRGcmVlZm9ybVF1aXpSZXNwb25zZRISCgp3b3JkX2NvdW50GAEgASgFEhMKC2V4cHJlc3Npb25zGAIgAygJEmQKG2V4cHJlc3Npb25fbmV4dF9yZXZpZXdfZGF0ZRgDIAMoCzI/LmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlc3BvbnNlLkV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5Gj8KHUV4cHJlc3Npb25OZXh0UmV2aWV3RGF0ZUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEicAobU3VibWl0RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0EhkKBHdvcmQYASABKAlCC7pICHIGEAEyAlxTEhwKB21lYW5pbmcYAiABKAlCC7pICHIGEAEyAlxTEhgKEHJlc3BvbnNlX3RpbWVfbXMYAyABKAMi/gEKHFN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIMCgR3b3JkGAIgASgJEg8KB21lYW5pbmcYAyABKAkSDgoGcmVhc29uGAQgASgJEg8KB2NvbnRleHQYBSABKAkSFQoNbm90ZWJvb2tfbmFtZRgGIAEoCRInCgt3b3JkX2RldGFpbBgHIAEoCzISLmFwaS52MS5Xb3JkRGV0YWlsEhgKEG5leHRfcmV2aWV3X2RhdGUYCCABKAkSEgoKbGVhcm5lZF9hdBgJIAEoCRIPCgdub3RlX2lkGAogASgDEg4KBmltYWdlcxgLIAMoCSLTAQoVT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGQoMbWFya19jb3JyZWN0GAQgASgISACIAQESHQoQbmV4dF9yZXZpZXdfZGF0ZRgFIAEoCUgBiAEBQg8KDV9tYXJrX2NvcnJlY3RCEwoRX25leHRfcmV2aWV3X2RhdGUiiwEKFk92ZXJyaWRlQW5zd2VyUmVzcG9uc2USGAoQbmV4dF9yZXZpZXdfZGF0ZRgBIAEoCRIYChBvcmlnaW5hbF9xdWFsaXR5GAIgASgFEhcKD29yaWdpbmFsX3N0YXR1cxgDIAEoCRIeChZvcmlnaW5hbF9pbnRlcnZhbF9kYXlzGAQgASgFSgQIBRAGItABChlVbmRvT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASIwoJcXVpel90eXBlGAIgASgOMhAuYXBpLnYxLlF1aXpUeXBlEhsKCmxlYXJuZWRfYXQYAyABKAlCB7pIBHICEAoSGAoQb3JpZ2luYWxfcXVhbGl0eRgEIAEoBRIXCg9vcmlnaW5hbF9zdGF0dXMYBSABKAkSHgoWb3JpZ2luYWxfaW50ZXJ2YWxfZGF5cxgGIAEoBUoECAcQCCJHChpVbmRvT3ZlcnJpZGVBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEhgKEG5leHRfcmV2aWV3X2RhdGUYAiABKAkigAEKD1NraXBXb3JkUmVxdWVzdBIYCgdub3RlX2lkGAEgASgDQge6SAQiAiAAEi4KCnF1aXpfdHlwZXMYBCADKA4yEC5hcGkudjEuUXVpelR5cGVCCLpIBZIBAggBEhIKCnNraXBfdW50aWwYAyABKAlKBAgCEANSCXF1aXpfdHlwZSISChBTa2lwV29yZFJlc3BvbnNlIm4KEVJlc3VtZVdvcmRSZXF1ZXN0EhgKB25vdGVfaWQYASABKANCB7pIBCICIAASLgoKcXVpel90eXBlcxgDIAMoDjIQLmFwaS52MS5RdWl6VHlwZUIIukgFkgECCAFKBAgCEANSCXF1aXpfdHlwZSIUChJSZXN1bWVXb3JkUmVzcG9uc2UiqgEKEUV0eW1vbG9neVF1aXpDYXJkEg8KB2NhcmRfaWQYASABKAMSDgoGb3JpZ2luGAIgASgJEgwKBHR5cGUYAyABKAkSEAoIbGFuZ3VhZ2UYBCABKAkSDwoHbWVhbmluZxgFIAEoCRIVCg1ub3RlYm9va19uYW1lGAYgASgJEhUKDXNlc3Npb25fdGl0bGUYByABKAkSFQoNZXhhbXBsZV93b3JkcxgIIAMoCSKzAQoZU3RhcnRFdHltb2xvZ3lRdWl6UmVxdWVzdBIeChZldHltb2xvZ3lfbm90ZWJvb2tfaWRzGAEgAygJEicKBG1vZGUYAyABKA4yGS5hcGkudjEuRXR5bW9sb2d5UXVpek1vZGUSGQoRaW5jbHVkZV91bnN0dWRpZWQYBCABKAgSMgoRbm90ZWJvb2tfc2VjdGlvbnMYBSADKAsyFy5hcGkudjEuTm90ZWJvb2tTZWN0aW9uIkYKGlN0YXJ0RXR5bW9sb2d5UXVpelJlc3BvbnNlEigKBWNhcmRzGAEgAygLMhkuYXBpLnYxLkV0eW1vbG9neVF1aXpDYXJkIncKJFN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2VyUmVxdWVzdBIYCgdjYXJkX2lkGAEgASgDQge6SAQiAiAAEhsKBmFuc3dlchgCIAEoCUILukgIcgYQATICXFMSGAoQcmVzcG9uc2VfdGltZV9tcxgDIAEoAyKgAQolU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJSZXNwb25zZRIPCgdjb3JyZWN0GAEgASgIEg4KBnJlYXNvbhgCIAEoCRIXCg9jb3JyZWN0X21lYW5pbmcYAyABKAkSGAoQbmV4dF9yZXZpZXdfZGF0ZRgEIAEoCRISCgpsZWFybmVkX2F0GAUgASgJEg8KB25vdGVfaWQYBiABKAMidQoqQmF0Y2hTdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlcnNSZXF1ZXN0EkcKB2Fuc3dlcnMYASADKAsyLC5hcGkudjEuU3VibWl0RXR5bW9sb2d5U3RhbmRhcmRBbnN3ZXJSZXF1ZXN0Qgi6SAWSAQIIASJvCitCYXRjaFN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2Vyc1Jlc3BvbnNlEkAKCXJlc3BvbnNlcxgBIAMoCzItLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlclJlc3BvbnNlInYKI1N1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJSZXF1ZXN0EhgKB2NhcmRfaWQYASABKANCB7pIBCICIAASGwoGYW5zd2VyGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIr4BCiRTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyUmVzcG9uc2USDwoHY29ycmVjdBgBIAEoCBIOCgZyZWFzb24YAiABKAkSFgoOY29ycmVjdF9vcmlnaW4YAyABKAkSDAoEdHlwZRgEIAEoCRIQCghsYW5ndWFnZRgFIAEoCRIYChBuZXh0X3Jldmlld19kYXRlGAYgASgJEhIKCmxlYXJuZWRfYXQYByABKAkSDwoHbm90ZV9pZBgIIAEoAyJzCilCYXRjaFN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJzUmVxdWVzdBJGCgdhbnN3ZXJzGAEgAygLMisuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJSZXF1ZXN0Qgi6SAWSAQIIASJtCipCYXRjaFN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJzUmVzcG9uc2USPwoJcmVzcG9uc2VzGAEgAygLMiwuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJSZXNwb25zZSJDCiFTdGFydEV0eW1vbG9neUZyZWVmb3JtUXVpelJlcXVlc3QSHgoWZXR5bW9sb2d5X25vdGVib29rX2lkcxgBIAMoCSLJAQoiU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXpSZXNwb25zZRIPCgdvcmlnaW5zGAEgAygJEloKEW5leHRfcmV2aWV3X2RhdGVzGAIgAygLMj8uYXBpLnYxLlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVzcG9uc2UuTmV4dFJldmlld0RhdGVzRW50cnkaNgoUTmV4dFJldmlld0RhdGVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJ7CiRTdWJtaXRFdHltb2xvZ3lGcmVlZm9ybUFuc3dlclJlcXVlc3QSGwoGb3JpZ2luGAEgASgJQgu6SAhyBhABMgJcUxIcCgdtZWFuaW5nGAIgASgJQgu6SAhyBhABMgJcUxIYChByZXNwb25zZV90aW1lX21zGAMgASgDIl4KFEV0eW1vbG9neU9yaWdpblNlbnNlEg8KB21lYW5pbmcYASABKAkSDAoEdHlwZRgCIAEoCRIQCghsYW5ndWFnZRgDIAEoCRIVCg1zZXNzaW9uX3RpdGxlGAQgASgJIokCCiVTdWJtaXRFdHltb2xvZ3lGcmVlZm9ybUFuc3dlclJlc3BvbnNlEg8KB2NvcnJlY3QYASABKAgSDgoGcmVhc29uGAIgASgJEhcKD2NvcnJlY3RfbWVhbmluZxgDIAEoCRIMCgR0eXBlGAQgASgJEhAKCGxhbmd1YWdlGAUgASgJEhUKDW5vdGVib29rX25hbWUYBiABKAkSGAoQbmV4dF9yZXZpZXdfZGF0ZRgHIAEoCRISCgpsZWFybmVkX2F0GAggASgJEg8KB25vdGVfaWQYCSABKAMSMAoKYWxsX3NlbnNlcxgKIAMoCzIcLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5TZW5zZSrRAQoIUXVpelR5cGUSGQoVUVVJWl9UWVBFX1VOU1BFQ0lGSUVEEAASFgoSUVVJWl9UWVBFX1NUQU5EQVJEEAESFQoRUVVJWl9UWVBFX1JFVkVSU0UQAhIWChJRVUlaX1RZUEVfRlJFRUZPUk0QAxIgChxRVUlaX1RZUEVfRVRZTU9MT0dZX1NUQU5EQVJEEAQSHwobUVVJWl9UWVBFX0VUWU1PTE9HWV9SRVZFUlNFEAUSIAocUVVJWl9UWVBFX0VUWU1PTE9HWV9GUkVFRk9STRAGKnsKEUV0eW1vbG9neVF1aXpNb2RlEiMKH0VUWU1PTE9HWV9RVUlaX01PREVfVU5TUEVDSUZJRUQQABIgChxFVFlNT0xPR1lfUVVJWl9NT0RFX1NUQU5EQVJEEAESHwobRVRZTU9MT0dZX1FVSVpfTU9ERV9SRVZFUlNFEAIyyA8KC1F1aXpTZXJ2aWNlEk8KDkdldFF1aXpPcHRpb25zEh0uYXBpLnYxLkdldFF1aXpPcHRpb25zUmVxdWVzdBoeLmFwaS52MS5HZXRRdWl6T3B0aW9uc1Jlc3BvbnNlEkAKCVN0YXJ0UXVpehIYLmFwaS52MS5TdGFydFF1aXpSZXF1ZXN0GhkuYXBpLnYxLlN0YXJ0UXVpelJlc3BvbnNlEkkKDFN1Ym1pdEFuc3dlchIbLmFwaS52MS5TdWJtaXRBbnN3ZXJSZXF1ZXN0GhwuYXBpLnYxLlN1Ym1pdEFuc3dlclJlc3BvbnNlElsKEkJhdGNoU3VibWl0QW5zd2VycxIhLmFwaS52MS5CYXRjaFN1Ym1pdEFuc3dlcnNSZXF1ZXN0GiIuYXBpLnYxLkJhdGNoU3VibWl0QW5zd2Vyc1Jlc3BvbnNlElUKEFN0YXJ0UmV2ZXJzZVF1aXoSHy5hcGkudjEuU3RhcnRSZXZlcnNlUXVpelJlcXVlc3QaIC5hcGkudjEuU3RhcnRSZXZlcnNlUXVpelJlc3BvbnNlEl4KE1N1Ym1pdFJldmVyc2VBbnN3ZXISIi5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlcXVlc3QaIy5hcGkudjEuU3VibWl0UmV2ZXJzZUFuc3dlclJlc3BvbnNlEnAKGUJhdGNoU3VibWl0UmV2ZXJzZUFuc3dlcnMSKC5hcGkudjEuQmF0Y2hTdWJtaXRSZXZlcnNlQW5zd2Vyc1JlcXVlc3QaKS5hcGkudjEuQmF0Y2hTdWJtaXRSZXZlcnNlQW5zd2Vyc1Jlc3BvbnNlElgKEVN0YXJ0RnJlZWZvcm1RdWl6EiAuYXBpLnYxLlN0YXJ0RnJlZWZvcm1RdWl6UmVxdWVzdBohLmFwaS52MS5TdGFydEZyZWVmb3JtUXVpelJlc3BvbnNlEmEKFFN1Ym1pdEZyZWVmb3JtQW5zd2VyEiMuYXBpLnYxLlN1Ym1pdEZyZWVmb3JtQW5zd2VyUmVxdWVzdBokLmFwaS52MS5TdWJtaXRGcmVlZm9ybUFuc3dlclJlc3BvbnNlEk8KDk92ZXJyaWRlQW5zd2VyEh0uYXBpLnYxLk92ZXJyaWRlQW5zd2VyUmVxdWVzdBoeLmFwaS52MS5PdmVycmlkZUFuc3dlclJlc3BvbnNlElsKElVuZG9PdmVycmlkZUFuc3dlchIhLmFwaS52MS5VbmRvT3ZlcnJpZGVBbnN3ZXJSZXF1ZXN0GiIuYXBpLnYxLlVuZG9PdmVycmlkZUFuc3dlclJlc3BvbnNlEj0KCFNraXBXb3JkEhcuYXBpLnYxLlNraXBXb3JkUmVxdWVzdBoYLmFwaS52MS5Ta2lwV29yZFJlc3BvbnNlEkMKClJlc3VtZVdvcmQSGS5hcGkudjEuUmVzdW1lV29yZFJlcXVlc3QaGi5hcGkudjEuUmVzdW1lV29yZFJlc3BvbnNlElsKElN0YXJ0RXR5bW9sb2d5UXVpehIhLmFwaS52MS5TdGFydEV0eW1vbG9neVF1aXpSZXF1ZXN0GiIuYXBpLnYxLlN0YXJ0RXR5bW9sb2d5UXVpelJlc3BvbnNlEnwKHVN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2VyEiwuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2VyUmVxdWVzdBotLmFwaS52MS5TdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlclJlc3BvbnNlEo4BCiNCYXRjaFN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2VycxIyLmFwaS52MS5CYXRjaFN1Ym1pdEV0eW1vbG9neVN0YW5kYXJkQW5zd2Vyc1JlcXVlc3QaMy5hcGkudjEuQmF0Y2hTdWJtaXRFdHltb2xvZ3lTdGFuZGFyZEFuc3dlcnNSZXNwb25zZRJ5ChxTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VyEisuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJSZXF1ZXN0GiwuYXBpLnYxLlN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJSZXNwb25zZRKLAQoiQmF0Y2hTdWJtaXRFdHltb2xvZ3lSZXZlcnNlQW5zd2VycxIxLmFwaS52MS5CYXRjaFN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJzUmVxdWVzdBoyLmFwaS52MS5CYXRjaFN1Ym1pdEV0eW1vbG9neVJldmVyc2VBbnN3ZXJzUmVzcG9uc2UScwoaU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXoSKS5hcGkudjEuU3RhcnRFdHltb2xvZ3lGcmVlZm9ybVF1aXpSZXF1ZXN0GiouYXBpLnYxLlN0YXJ0RXR5bW9sb2d5RnJlZWZvcm1RdWl6UmVzcG9uc2USfAodU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXISLC5hcGkudjEuU3VibWl0RXR5bW9sb2d5RnJlZWZvcm1BbnN3ZXJSZXF1ZXN0Gi0uYXBpLnYxLlN1Ym1pdEV0eW1vbG9neUZyZWVmb3JtQW5zd2VyUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetQuizOptionsRequest
@@ -84,6 +84,16 @@ export type NotebookSummary = Message<"api.v1.NotebookSummary"> & {
    * @generated from field: bool has_content = 7;
    */
   hasContent: boolean;
+
+  /**
+   * sections lists the sections within this notebook in document order.
+   * Sections are story events (chapters/episodes) for vocabulary notebooks
+   * and session titles for etymology notebooks. Empty for flashcard or
+   * definitions-only notebooks that have no section hierarchy.
+   *
+   * @generated from field: repeated api.v1.NotebookSectionSummary sections = 8;
+   */
+  sections: NotebookSectionSummary[];
 };
 
 /**
@@ -92,6 +102,67 @@ export type NotebookSummary = Message<"api.v1.NotebookSummary"> & {
  */
 export const NotebookSummarySchema: GenMessage<NotebookSummary> = /*@__PURE__*/
   messageDesc(file_api_v1_quiz, 2);
+
+/**
+ * NotebookSectionSummary holds the display title and per-mode review counts
+ * for a single section within a notebook.
+ *
+ * @generated from message api.v1.NotebookSectionSummary
+ */
+export type NotebookSectionSummary = Message<"api.v1.NotebookSectionSummary"> & {
+  /**
+   * @generated from field: string title = 1;
+   */
+  title: string;
+
+  /**
+   * @generated from field: int32 review_count = 2;
+   */
+  reviewCount: number;
+
+  /**
+   * @generated from field: int32 reverse_review_count = 3;
+   */
+  reverseReviewCount: number;
+
+  /**
+   * @generated from field: int32 etymology_review_count = 4;
+   */
+  etymologyReviewCount: number;
+};
+
+/**
+ * Describes the message api.v1.NotebookSectionSummary.
+ * Use `create(NotebookSectionSummarySchema)` to create a new message.
+ */
+export const NotebookSectionSummarySchema: GenMessage<NotebookSectionSummary> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 3);
+
+/**
+ * NotebookSection narrows a quiz request to specific sections within a single
+ * notebook. When section_titles is empty, every section of the notebook is
+ * included (equivalent to passing the notebook_id alone).
+ *
+ * @generated from message api.v1.NotebookSection
+ */
+export type NotebookSection = Message<"api.v1.NotebookSection"> & {
+  /**
+   * @generated from field: string notebook_id = 1;
+   */
+  notebookId: string;
+
+  /**
+   * @generated from field: repeated string section_titles = 2;
+   */
+  sectionTitles: string[];
+};
+
+/**
+ * Describes the message api.v1.NotebookSection.
+ * Use `create(NotebookSectionSchema)` to create a new message.
+ */
+export const NotebookSectionSchema: GenMessage<NotebookSection> = /*@__PURE__*/
+  messageDesc(file_api_v1_quiz, 4);
 
 /**
  * @generated from message api.v1.StartQuizRequest
@@ -106,6 +177,14 @@ export type StartQuizRequest = Message<"api.v1.StartQuizRequest"> & {
    * @generated from field: bool include_unstudied = 2;
    */
   includeUnstudied: boolean;
+
+  /**
+   * notebook_sections, when non-empty, replaces notebook_ids and allows the
+   * caller to narrow the quiz to specific sections within each notebook.
+   *
+   * @generated from field: repeated api.v1.NotebookSection notebook_sections = 3;
+   */
+  notebookSections: NotebookSection[];
 };
 
 /**
@@ -113,7 +192,7 @@ export type StartQuizRequest = Message<"api.v1.StartQuizRequest"> & {
  * Use `create(StartQuizRequestSchema)` to create a new message.
  */
 export const StartQuizRequestSchema: GenMessage<StartQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 3);
+  messageDesc(file_api_v1_quiz, 5);
 
 /**
  * @generated from message api.v1.StartQuizResponse
@@ -130,7 +209,7 @@ export type StartQuizResponse = Message<"api.v1.StartQuizResponse"> & {
  * Use `create(StartQuizResponseSchema)` to create a new message.
  */
 export const StartQuizResponseSchema: GenMessage<StartQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 4);
+  messageDesc(file_api_v1_quiz, 6);
 
 /**
  * @generated from message api.v1.Flashcard
@@ -166,7 +245,7 @@ export type Flashcard = Message<"api.v1.Flashcard"> & {
  * Use `create(FlashcardSchema)` to create a new message.
  */
 export const FlashcardSchema: GenMessage<Flashcard> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 5);
+  messageDesc(file_api_v1_quiz, 7);
 
 /**
  * @generated from message api.v1.Example
@@ -188,7 +267,7 @@ export type Example = Message<"api.v1.Example"> & {
  * Use `create(ExampleSchema)` to create a new message.
  */
 export const ExampleSchema: GenMessage<Example> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 6);
+  messageDesc(file_api_v1_quiz, 8);
 
 /**
  * @generated from message api.v1.WordDetail
@@ -235,7 +314,7 @@ export type WordDetail = Message<"api.v1.WordDetail"> & {
  * Use `create(WordDetailSchema)` to create a new message.
  */
 export const WordDetailSchema: GenMessage<WordDetail> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 7);
+  messageDesc(file_api_v1_quiz, 9);
 
 /**
  * @generated from message api.v1.WordOriginPart
@@ -267,7 +346,7 @@ export type WordOriginPart = Message<"api.v1.WordOriginPart"> & {
  * Use `create(WordOriginPartSchema)` to create a new message.
  */
 export const WordOriginPartSchema: GenMessage<WordOriginPart> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 8);
+  messageDesc(file_api_v1_quiz, 10);
 
 /**
  * @generated from message api.v1.SubmitAnswerRequest
@@ -294,7 +373,7 @@ export type SubmitAnswerRequest = Message<"api.v1.SubmitAnswerRequest"> & {
  * Use `create(SubmitAnswerRequestSchema)` to create a new message.
  */
 export const SubmitAnswerRequestSchema: GenMessage<SubmitAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 9);
+  messageDesc(file_api_v1_quiz, 11);
 
 /**
  * @generated from message api.v1.SubmitAnswerResponse
@@ -341,7 +420,7 @@ export type SubmitAnswerResponse = Message<"api.v1.SubmitAnswerResponse"> & {
  * Use `create(SubmitAnswerResponseSchema)` to create a new message.
  */
 export const SubmitAnswerResponseSchema: GenMessage<SubmitAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 10);
+  messageDesc(file_api_v1_quiz, 12);
 
 /**
  * @generated from message api.v1.BatchSubmitAnswersRequest
@@ -358,7 +437,7 @@ export type BatchSubmitAnswersRequest = Message<"api.v1.BatchSubmitAnswersReques
  * Use `create(BatchSubmitAnswersRequestSchema)` to create a new message.
  */
 export const BatchSubmitAnswersRequestSchema: GenMessage<BatchSubmitAnswersRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 11);
+  messageDesc(file_api_v1_quiz, 13);
 
 /**
  * @generated from message api.v1.BatchSubmitAnswersResponse
@@ -375,7 +454,7 @@ export type BatchSubmitAnswersResponse = Message<"api.v1.BatchSubmitAnswersRespo
  * Use `create(BatchSubmitAnswersResponseSchema)` to create a new message.
  */
 export const BatchSubmitAnswersResponseSchema: GenMessage<BatchSubmitAnswersResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 12);
+  messageDesc(file_api_v1_quiz, 14);
 
 /**
  * @generated from message api.v1.StartReverseQuizRequest
@@ -390,6 +469,14 @@ export type StartReverseQuizRequest = Message<"api.v1.StartReverseQuizRequest"> 
    * @generated from field: bool list_missing_context = 2;
    */
   listMissingContext: boolean;
+
+  /**
+   * notebook_sections, when non-empty, replaces notebook_ids and allows the
+   * caller to narrow the quiz to specific sections within each notebook.
+   *
+   * @generated from field: repeated api.v1.NotebookSection notebook_sections = 3;
+   */
+  notebookSections: NotebookSection[];
 };
 
 /**
@@ -397,7 +484,7 @@ export type StartReverseQuizRequest = Message<"api.v1.StartReverseQuizRequest"> 
  * Use `create(StartReverseQuizRequestSchema)` to create a new message.
  */
 export const StartReverseQuizRequestSchema: GenMessage<StartReverseQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 13);
+  messageDesc(file_api_v1_quiz, 15);
 
 /**
  * @generated from message api.v1.StartReverseQuizResponse
@@ -414,7 +501,7 @@ export type StartReverseQuizResponse = Message<"api.v1.StartReverseQuizResponse"
  * Use `create(StartReverseQuizResponseSchema)` to create a new message.
  */
 export const StartReverseQuizResponseSchema: GenMessage<StartReverseQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 14);
+  messageDesc(file_api_v1_quiz, 16);
 
 /**
  * @generated from message api.v1.ReverseFlashcard
@@ -456,7 +543,7 @@ export type ReverseFlashcard = Message<"api.v1.ReverseFlashcard"> & {
  * Use `create(ReverseFlashcardSchema)` to create a new message.
  */
 export const ReverseFlashcardSchema: GenMessage<ReverseFlashcard> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 15);
+  messageDesc(file_api_v1_quiz, 17);
 
 /**
  * @generated from message api.v1.ContextSentence
@@ -478,7 +565,7 @@ export type ContextSentence = Message<"api.v1.ContextSentence"> & {
  * Use `create(ContextSentenceSchema)` to create a new message.
  */
 export const ContextSentenceSchema: GenMessage<ContextSentence> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 16);
+  messageDesc(file_api_v1_quiz, 18);
 
 /**
  * @generated from message api.v1.SubmitReverseAnswerRequest
@@ -514,7 +601,7 @@ export type SubmitReverseAnswerRequest = Message<"api.v1.SubmitReverseAnswerRequ
  * Use `create(SubmitReverseAnswerRequestSchema)` to create a new message.
  */
 export const SubmitReverseAnswerRequestSchema: GenMessage<SubmitReverseAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 17);
+  messageDesc(file_api_v1_quiz, 19);
 
 /**
  * @generated from message api.v1.SubmitReverseAnswerResponse
@@ -576,7 +663,7 @@ export type SubmitReverseAnswerResponse = Message<"api.v1.SubmitReverseAnswerRes
  * Use `create(SubmitReverseAnswerResponseSchema)` to create a new message.
  */
 export const SubmitReverseAnswerResponseSchema: GenMessage<SubmitReverseAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 18);
+  messageDesc(file_api_v1_quiz, 20);
 
 /**
  * @generated from message api.v1.BatchSubmitReverseAnswersRequest
@@ -593,7 +680,7 @@ export type BatchSubmitReverseAnswersRequest = Message<"api.v1.BatchSubmitRevers
  * Use `create(BatchSubmitReverseAnswersRequestSchema)` to create a new message.
  */
 export const BatchSubmitReverseAnswersRequestSchema: GenMessage<BatchSubmitReverseAnswersRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 19);
+  messageDesc(file_api_v1_quiz, 21);
 
 /**
  * @generated from message api.v1.BatchSubmitReverseAnswersResponse
@@ -610,7 +697,7 @@ export type BatchSubmitReverseAnswersResponse = Message<"api.v1.BatchSubmitRever
  * Use `create(BatchSubmitReverseAnswersResponseSchema)` to create a new message.
  */
 export const BatchSubmitReverseAnswersResponseSchema: GenMessage<BatchSubmitReverseAnswersResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 20);
+  messageDesc(file_api_v1_quiz, 22);
 
 /**
  * @generated from message api.v1.StartFreeformQuizRequest
@@ -623,7 +710,7 @@ export type StartFreeformQuizRequest = Message<"api.v1.StartFreeformQuizRequest"
  * Use `create(StartFreeformQuizRequestSchema)` to create a new message.
  */
 export const StartFreeformQuizRequestSchema: GenMessage<StartFreeformQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 21);
+  messageDesc(file_api_v1_quiz, 23);
 
 /**
  * @generated from message api.v1.StartFreeformQuizResponse
@@ -650,7 +737,7 @@ export type StartFreeformQuizResponse = Message<"api.v1.StartFreeformQuizRespons
  * Use `create(StartFreeformQuizResponseSchema)` to create a new message.
  */
 export const StartFreeformQuizResponseSchema: GenMessage<StartFreeformQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 22);
+  messageDesc(file_api_v1_quiz, 24);
 
 /**
  * @generated from message api.v1.SubmitFreeformAnswerRequest
@@ -677,7 +764,7 @@ export type SubmitFreeformAnswerRequest = Message<"api.v1.SubmitFreeformAnswerRe
  * Use `create(SubmitFreeformAnswerRequestSchema)` to create a new message.
  */
 export const SubmitFreeformAnswerRequestSchema: GenMessage<SubmitFreeformAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 23);
+  messageDesc(file_api_v1_quiz, 25);
 
 /**
  * @generated from message api.v1.SubmitFreeformAnswerResponse
@@ -744,7 +831,7 @@ export type SubmitFreeformAnswerResponse = Message<"api.v1.SubmitFreeformAnswerR
  * Use `create(SubmitFreeformAnswerResponseSchema)` to create a new message.
  */
 export const SubmitFreeformAnswerResponseSchema: GenMessage<SubmitFreeformAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 24);
+  messageDesc(file_api_v1_quiz, 26);
 
 /**
  * Override Answer
@@ -783,7 +870,7 @@ export type OverrideAnswerRequest = Message<"api.v1.OverrideAnswerRequest"> & {
  * Use `create(OverrideAnswerRequestSchema)` to create a new message.
  */
 export const OverrideAnswerRequestSchema: GenMessage<OverrideAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 25);
+  messageDesc(file_api_v1_quiz, 27);
 
 /**
  * @generated from message api.v1.OverrideAnswerResponse
@@ -815,7 +902,7 @@ export type OverrideAnswerResponse = Message<"api.v1.OverrideAnswerResponse"> & 
  * Use `create(OverrideAnswerResponseSchema)` to create a new message.
  */
 export const OverrideAnswerResponseSchema: GenMessage<OverrideAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 26);
+  messageDesc(file_api_v1_quiz, 28);
 
 /**
  * Undo Override Answer
@@ -859,7 +946,7 @@ export type UndoOverrideAnswerRequest = Message<"api.v1.UndoOverrideAnswerReques
  * Use `create(UndoOverrideAnswerRequestSchema)` to create a new message.
  */
 export const UndoOverrideAnswerRequestSchema: GenMessage<UndoOverrideAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 27);
+  messageDesc(file_api_v1_quiz, 29);
 
 /**
  * @generated from message api.v1.UndoOverrideAnswerResponse
@@ -881,7 +968,7 @@ export type UndoOverrideAnswerResponse = Message<"api.v1.UndoOverrideAnswerRespo
  * Use `create(UndoOverrideAnswerResponseSchema)` to create a new message.
  */
 export const UndoOverrideAnswerResponseSchema: GenMessage<UndoOverrideAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 28);
+  messageDesc(file_api_v1_quiz, 30);
 
 /**
  * Skip Word
@@ -895,9 +982,13 @@ export type SkipWordRequest = Message<"api.v1.SkipWordRequest"> & {
   noteId: bigint;
 
   /**
-   * @generated from field: api.v1.QuizType quiz_type = 2;
+   * quiz_types lists every quiz mode the word should be excluded from. The
+   * server applies the whole set in one read-modify-write so multi-type
+   * skips ("All" toggle) cannot race with each other.
+   *
+   * @generated from field: repeated api.v1.QuizType quiz_types = 4;
    */
-  quizType: QuizType;
+  quizTypes: QuizType[];
 
   /**
    * @generated from field: string skip_until = 3;
@@ -910,7 +1001,7 @@ export type SkipWordRequest = Message<"api.v1.SkipWordRequest"> & {
  * Use `create(SkipWordRequestSchema)` to create a new message.
  */
 export const SkipWordRequestSchema: GenMessage<SkipWordRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 29);
+  messageDesc(file_api_v1_quiz, 31);
 
 /**
  * @generated from message api.v1.SkipWordResponse
@@ -923,7 +1014,7 @@ export type SkipWordResponse = Message<"api.v1.SkipWordResponse"> & {
  * Use `create(SkipWordResponseSchema)` to create a new message.
  */
 export const SkipWordResponseSchema: GenMessage<SkipWordResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 30);
+  messageDesc(file_api_v1_quiz, 32);
 
 /**
  * Resume Skipped Word
@@ -937,9 +1028,12 @@ export type ResumeWordRequest = Message<"api.v1.ResumeWordRequest"> & {
   noteId: bigint;
 
   /**
-   * @generated from field: api.v1.QuizType quiz_type = 2;
+   * quiz_types lists every quiz mode whose skip should be cleared. Same
+   * rationale as SkipWordRequest.quiz_types.
+   *
+   * @generated from field: repeated api.v1.QuizType quiz_types = 3;
    */
-  quizType: QuizType;
+  quizTypes: QuizType[];
 };
 
 /**
@@ -947,7 +1041,7 @@ export type ResumeWordRequest = Message<"api.v1.ResumeWordRequest"> & {
  * Use `create(ResumeWordRequestSchema)` to create a new message.
  */
 export const ResumeWordRequestSchema: GenMessage<ResumeWordRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 31);
+  messageDesc(file_api_v1_quiz, 33);
 
 /**
  * @generated from message api.v1.ResumeWordResponse
@@ -960,7 +1054,7 @@ export type ResumeWordResponse = Message<"api.v1.ResumeWordResponse"> & {
  * Use `create(ResumeWordResponseSchema)` to create a new message.
  */
 export const ResumeWordResponseSchema: GenMessage<ResumeWordResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 32);
+  messageDesc(file_api_v1_quiz, 34);
 
 /**
  * Etymology Quiz Messages
@@ -1024,7 +1118,7 @@ export type EtymologyQuizCard = Message<"api.v1.EtymologyQuizCard"> & {
  * Use `create(EtymologyQuizCardSchema)` to create a new message.
  */
 export const EtymologyQuizCardSchema: GenMessage<EtymologyQuizCard> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 33);
+  messageDesc(file_api_v1_quiz, 35);
 
 /**
  * @generated from message api.v1.StartEtymologyQuizRequest
@@ -1044,6 +1138,14 @@ export type StartEtymologyQuizRequest = Message<"api.v1.StartEtymologyQuizReques
    * @generated from field: bool include_unstudied = 4;
    */
   includeUnstudied: boolean;
+
+  /**
+   * notebook_sections, when non-empty, replaces etymology_notebook_ids and
+   * narrows the quiz to specific sessions within each etymology notebook.
+   *
+   * @generated from field: repeated api.v1.NotebookSection notebook_sections = 5;
+   */
+  notebookSections: NotebookSection[];
 };
 
 /**
@@ -1051,7 +1153,7 @@ export type StartEtymologyQuizRequest = Message<"api.v1.StartEtymologyQuizReques
  * Use `create(StartEtymologyQuizRequestSchema)` to create a new message.
  */
 export const StartEtymologyQuizRequestSchema: GenMessage<StartEtymologyQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 34);
+  messageDesc(file_api_v1_quiz, 36);
 
 /**
  * @generated from message api.v1.StartEtymologyQuizResponse
@@ -1068,7 +1170,7 @@ export type StartEtymologyQuizResponse = Message<"api.v1.StartEtymologyQuizRespo
  * Use `create(StartEtymologyQuizResponseSchema)` to create a new message.
  */
 export const StartEtymologyQuizResponseSchema: GenMessage<StartEtymologyQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 35);
+  messageDesc(file_api_v1_quiz, 37);
 
 /**
  * @generated from message api.v1.SubmitEtymologyStandardAnswerRequest
@@ -1095,7 +1197,7 @@ export type SubmitEtymologyStandardAnswerRequest = Message<"api.v1.SubmitEtymolo
  * Use `create(SubmitEtymologyStandardAnswerRequestSchema)` to create a new message.
  */
 export const SubmitEtymologyStandardAnswerRequestSchema: GenMessage<SubmitEtymologyStandardAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 36);
+  messageDesc(file_api_v1_quiz, 38);
 
 /**
  * @generated from message api.v1.SubmitEtymologyStandardAnswerResponse
@@ -1137,7 +1239,7 @@ export type SubmitEtymologyStandardAnswerResponse = Message<"api.v1.SubmitEtymol
  * Use `create(SubmitEtymologyStandardAnswerResponseSchema)` to create a new message.
  */
 export const SubmitEtymologyStandardAnswerResponseSchema: GenMessage<SubmitEtymologyStandardAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 37);
+  messageDesc(file_api_v1_quiz, 39);
 
 /**
  * @generated from message api.v1.BatchSubmitEtymologyStandardAnswersRequest
@@ -1154,7 +1256,7 @@ export type BatchSubmitEtymologyStandardAnswersRequest = Message<"api.v1.BatchSu
  * Use `create(BatchSubmitEtymologyStandardAnswersRequestSchema)` to create a new message.
  */
 export const BatchSubmitEtymologyStandardAnswersRequestSchema: GenMessage<BatchSubmitEtymologyStandardAnswersRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 38);
+  messageDesc(file_api_v1_quiz, 40);
 
 /**
  * @generated from message api.v1.BatchSubmitEtymologyStandardAnswersResponse
@@ -1171,7 +1273,7 @@ export type BatchSubmitEtymologyStandardAnswersResponse = Message<"api.v1.BatchS
  * Use `create(BatchSubmitEtymologyStandardAnswersResponseSchema)` to create a new message.
  */
 export const BatchSubmitEtymologyStandardAnswersResponseSchema: GenMessage<BatchSubmitEtymologyStandardAnswersResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 39);
+  messageDesc(file_api_v1_quiz, 41);
 
 /**
  * @generated from message api.v1.SubmitEtymologyReverseAnswerRequest
@@ -1198,7 +1300,7 @@ export type SubmitEtymologyReverseAnswerRequest = Message<"api.v1.SubmitEtymolog
  * Use `create(SubmitEtymologyReverseAnswerRequestSchema)` to create a new message.
  */
 export const SubmitEtymologyReverseAnswerRequestSchema: GenMessage<SubmitEtymologyReverseAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 40);
+  messageDesc(file_api_v1_quiz, 42);
 
 /**
  * @generated from message api.v1.SubmitEtymologyReverseAnswerResponse
@@ -1250,7 +1352,7 @@ export type SubmitEtymologyReverseAnswerResponse = Message<"api.v1.SubmitEtymolo
  * Use `create(SubmitEtymologyReverseAnswerResponseSchema)` to create a new message.
  */
 export const SubmitEtymologyReverseAnswerResponseSchema: GenMessage<SubmitEtymologyReverseAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 41);
+  messageDesc(file_api_v1_quiz, 43);
 
 /**
  * @generated from message api.v1.BatchSubmitEtymologyReverseAnswersRequest
@@ -1267,7 +1369,7 @@ export type BatchSubmitEtymologyReverseAnswersRequest = Message<"api.v1.BatchSub
  * Use `create(BatchSubmitEtymologyReverseAnswersRequestSchema)` to create a new message.
  */
 export const BatchSubmitEtymologyReverseAnswersRequestSchema: GenMessage<BatchSubmitEtymologyReverseAnswersRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 42);
+  messageDesc(file_api_v1_quiz, 44);
 
 /**
  * @generated from message api.v1.BatchSubmitEtymologyReverseAnswersResponse
@@ -1284,7 +1386,7 @@ export type BatchSubmitEtymologyReverseAnswersResponse = Message<"api.v1.BatchSu
  * Use `create(BatchSubmitEtymologyReverseAnswersResponseSchema)` to create a new message.
  */
 export const BatchSubmitEtymologyReverseAnswersResponseSchema: GenMessage<BatchSubmitEtymologyReverseAnswersResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 43);
+  messageDesc(file_api_v1_quiz, 45);
 
 /**
  * @generated from message api.v1.StartEtymologyFreeformQuizRequest
@@ -1301,7 +1403,7 @@ export type StartEtymologyFreeformQuizRequest = Message<"api.v1.StartEtymologyFr
  * Use `create(StartEtymologyFreeformQuizRequestSchema)` to create a new message.
  */
 export const StartEtymologyFreeformQuizRequestSchema: GenMessage<StartEtymologyFreeformQuizRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 44);
+  messageDesc(file_api_v1_quiz, 46);
 
 /**
  * @generated from message api.v1.StartEtymologyFreeformQuizResponse
@@ -1323,7 +1425,7 @@ export type StartEtymologyFreeformQuizResponse = Message<"api.v1.StartEtymologyF
  * Use `create(StartEtymologyFreeformQuizResponseSchema)` to create a new message.
  */
 export const StartEtymologyFreeformQuizResponseSchema: GenMessage<StartEtymologyFreeformQuizResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 45);
+  messageDesc(file_api_v1_quiz, 47);
 
 /**
  * @generated from message api.v1.SubmitEtymologyFreeformAnswerRequest
@@ -1350,7 +1452,7 @@ export type SubmitEtymologyFreeformAnswerRequest = Message<"api.v1.SubmitEtymolo
  * Use `create(SubmitEtymologyFreeformAnswerRequestSchema)` to create a new message.
  */
 export const SubmitEtymologyFreeformAnswerRequestSchema: GenMessage<SubmitEtymologyFreeformAnswerRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 46);
+  messageDesc(file_api_v1_quiz, 48);
 
 /**
  * @generated from message api.v1.EtymologyOriginSense
@@ -1382,7 +1484,7 @@ export type EtymologyOriginSense = Message<"api.v1.EtymologyOriginSense"> & {
  * Use `create(EtymologyOriginSenseSchema)` to create a new message.
  */
 export const EtymologyOriginSenseSchema: GenMessage<EtymologyOriginSense> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 47);
+  messageDesc(file_api_v1_quiz, 49);
 
 /**
  * @generated from message api.v1.SubmitEtymologyFreeformAnswerResponse
@@ -1448,7 +1550,7 @@ export type SubmitEtymologyFreeformAnswerResponse = Message<"api.v1.SubmitEtymol
  * Use `create(SubmitEtymologyFreeformAnswerResponseSchema)` to create a new message.
  */
 export const SubmitEtymologyFreeformAnswerResponseSchema: GenMessage<SubmitEtymologyFreeformAnswerResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_quiz, 48);
+  messageDesc(file_api_v1_quiz, 50);
 
 /**
  * @generated from enum api.v1.QuizType

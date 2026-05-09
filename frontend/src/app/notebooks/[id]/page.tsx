@@ -591,9 +591,9 @@ function WordCard({
     });
     try {
       if (nextChecked) {
-        await quizClient.skipWord({ noteId: word.noteId, quizType, skipUntil: "" });
+        await quizClient.skipWord({ noteId: word.noteId, quizTypes: [quizType], skipUntil: "" });
       } else {
-        await quizClient.resumeWord({ noteId: word.noteId, quizType });
+        await quizClient.resumeWord({ noteId: word.noteId, quizTypes: [quizType] });
       }
     } catch {
       setSkippedTypes((prev) => {
@@ -620,13 +620,15 @@ function WordCard({
       return next;
     });
     try {
-      await Promise.all(
-        targets.map((t) =>
-          nextChecked
-            ? quizClient.skipWord({ noteId: word.noteId, quizType: t.quizType, skipUntil: "" })
-            : quizClient.resumeWord({ noteId: word.noteId, quizType: t.quizType }),
-        ),
-      );
+      // One batched RPC instead of fanning out per-type calls — the previous
+      // Promise.all raced inside the backend's read-modify-write of the
+      // notebook YAML, dropping all but one of the skips.
+      const quizTypes = targets.map((t) => t.quizType);
+      if (nextChecked) {
+        await quizClient.skipWord({ noteId: word.noteId, quizTypes, skipUntil: "" });
+      } else {
+        await quizClient.resumeWord({ noteId: word.noteId, quizTypes });
+      }
     } catch {
       setSkippedTypes((prev) => {
         const next = new Set(prev);

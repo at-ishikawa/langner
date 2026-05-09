@@ -13,6 +13,7 @@ export const notebookClient = createClient(NotebookService, transport);
 
 export type {
   NotebookSummary,
+  NotebookSectionSummary,
   StartQuizRequest,
   StartQuizResponse,
   GetQuizOptionsResponse,

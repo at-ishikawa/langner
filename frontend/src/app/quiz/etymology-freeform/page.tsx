@@ -126,7 +126,7 @@ export default function EtymologyFreeformQuizPage() {
                 storeUndoOverrideResult(etymologyOriginResults.length - 1, "etymology-freeform", res.correct, res.nextReviewDate || "");
               } catch { setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(feedback.correct); storeUndoOverrideResult(etymologyOriginResults.length - 1, "etymology-freeform", feedback.correct, ""); }
             } : undefined}
-            onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId! }); setSkipped(true); storeSkipResult(etymologyOriginResults.length - 1, "etymology-freeform"); } catch {} } : undefined}
+            onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId!, quizTypes: [ProtoQuizType.ETYMOLOGY_FREEFORM] }); setSkipped(true); storeSkipResult(etymologyOriginResults.length - 1, "etymology-freeform"); } catch {} } : undefined}
             onSeeResults={etymologyOriginResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
           >
             <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>

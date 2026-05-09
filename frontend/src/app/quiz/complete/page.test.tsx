@@ -203,7 +203,10 @@ describe("SessionCompletePage", () => {
       fireEvent.click(skipButtons[0]);
 
       await waitFor(() => {
-        expect(client.quizClient.skipWord).toHaveBeenCalledWith({ noteId: 2n });
+        expect(client.quizClient.skipWord).toHaveBeenCalledWith({
+          noteId: 2n,
+          quizTypes: [client.QuizType.STANDARD],
+        });
       });
 
       // Skipped card shows "Skipped" badge
@@ -267,7 +270,10 @@ describe("SessionCompletePage", () => {
       fireEvent.click(screen.getByText("Resume"));
 
       await waitFor(() => {
-        expect(client.quizClient.resumeWord).toHaveBeenCalledWith({ noteId: 2n });
+        expect(client.quizClient.resumeWord).toHaveBeenCalledWith({
+          noteId: 2n,
+          quizTypes: [client.QuizType.STANDARD],
+        });
       });
 
       // Verify the store was updated (isSkipped cleared)

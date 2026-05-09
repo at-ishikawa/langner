@@ -236,7 +236,10 @@ export default function FreeformQuizPage() {
             onSkip={async () => {
               if (!feedback.noteId) return;
               try {
-                await quizClient.skipWord({ noteId: feedback.noteId });
+                await quizClient.skipWord({
+                  noteId: feedback.noteId,
+                  quizTypes: [ProtoQuizType.FREEFORM],
+                });
                 setSkipped(true);
                 storeSkipResult(freeformResults.length - 1, "freeform");
               } catch { /* silently fail */ }

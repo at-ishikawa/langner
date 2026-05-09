@@ -66,11 +66,21 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 	})
 	protoSummaries := make([]*apiv1.NotebookSummary, 0, len(summaries))
 	for _, s := range summaries {
+		var sections []*apiv1.NotebookSectionSummary
+		for _, sec := range s.Sections {
+			sections = append(sections, &apiv1.NotebookSectionSummary{
+				Title:                sec.Title,
+				ReviewCount:          int32(sec.ReviewCount),
+				ReverseReviewCount:   int32(sec.ReverseReviewCount),
+				EtymologyReviewCount: int32(sec.EtymologyReviewCount),
+			})
+		}
 		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{
 			NotebookId: s.NotebookID, Name: s.Name, ReviewCount: int32(s.ReviewCount),
 			Kind: s.Kind, ReverseReviewCount: int32(s.ReverseReviewCount),
 			EtymologyReviewCount: int32(s.EtymologyReviewCount),
 			HasContent:           s.HasContent,
+			Sections:             sections,
 		})
 	}
 	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{Notebooks: protoSummaries}), nil
@@ -78,7 +88,9 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 
 func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.StartQuizRequest]) (*connect.Response[apiv1.StartQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	cards, err := h.svc.LoadCards(req.Msg.GetNotebookIds(), req.Msg.GetIncludeUnstudied())
+	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetNotebookIds(), req.Msg.GetNotebookSections())
+	if err != nil { return nil, err }
+	cards, err := h.svc.LoadCards(notebookIDs, req.Msg.GetIncludeUnstudied(), sectionTitles)
 	if err != nil {
 		var notFoundErr *quiz.NotFoundError
 		if errors.As(err, &notFoundErr) { return nil, connect.NewError(connect.CodeNotFound, err) }
@@ -124,6 +136,38 @@ func toProtoWordDetail(wd quiz.WordDetail) *apiv1.WordDetail {
 	return &apiv1.WordDetail{Origin: wd.Origin, Pronunciation: wd.Pronunciation, PartOfSpeech: wd.PartOfSpeech, Synonyms: wd.Synonyms, Antonyms: wd.Antonyms, Memo: wd.Memo, OriginParts: parts}
 }
 
+// resolveNotebookSections normalises a quiz request's notebook selection.
+// When notebookSections is non-empty it takes precedence and produces both
+// the flat list of notebook IDs and a per-notebook section filter map.
+// Otherwise it falls back to the legacy notebookIDs list with no section
+// filtering (an empty filter means "all sections").
+//
+// Empty results return an InvalidArgument error so callers can surface a
+// consistent "select at least one notebook" message regardless of which
+// field the client populated.
+func resolveNotebookSections(notebookIDs []string, notebookSections []*apiv1.NotebookSection) ([]string, map[string][]string, error) {
+	if len(notebookSections) > 0 {
+		ids := make([]string, 0, len(notebookSections))
+		filter := make(map[string][]string, len(notebookSections))
+		for _, sec := range notebookSections {
+			id := sec.GetNotebookId()
+			if id == "" { continue }
+			ids = append(ids, id)
+			if titles := sec.GetSectionTitles(); len(titles) > 0 {
+				filter[id] = titles
+			}
+		}
+		if len(ids) == 0 {
+			return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("notebook_sections must include at least one notebook_id"))
+		}
+		return ids, filter, nil
+	}
+	if len(notebookIDs) == 0 {
+		return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("notebook_ids must include at least one item"))
+	}
+	return notebookIDs, nil, nil
+}
+
 func validateRequest(msg proto.Message) *connect.Error {
 	if err := protovalidate.Validate(msg); err != nil {
 		connectErr := connect.NewError(connect.CodeInvalidArgument, err)
@@ -142,7 +186,9 @@ func validateRequest(msg proto.Message) *connect.Error {
 
 func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request[apiv1.StartReverseQuizRequest]) (*connect.Response[apiv1.StartReverseQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	cards, err := h.svc.LoadReverseCards(req.Msg.GetNotebookIds(), req.Msg.GetListMissingContext())
+	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetNotebookIds(), req.Msg.GetNotebookSections())
+	if err != nil { return nil, err }
+	cards, err := h.svc.LoadReverseCards(notebookIDs, req.Msg.GetListMissingContext(), sectionTitles)
 	if err != nil {
 		var notFoundErr *quiz.NotFoundError
 		if errors.As(err, &notFoundErr) { return nil, connect.NewError(connect.CodeNotFound, err) }
@@ -262,8 +308,8 @@ func (h *QuizHandler) SkipWord(ctx context.Context, req *connect.Request[apiv1.S
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
 	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
 	if err != nil { return nil, err }
-	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
-	if err := h.svc.SkipWord(*info, req.Msg.GetSkipUntil(), quizType); err != nil {
+	quizTypes := protoQuizTypesToNotebook(req.Msg.GetQuizTypes())
+	if err := h.svc.SkipWord(*info, req.Msg.GetSkipUntil(), quizTypes); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("skip word: %w", err))
 	}
 	return connect.NewResponse(&apiv1.SkipWordResponse{}), nil
@@ -273,11 +319,22 @@ func (h *QuizHandler) ResumeWord(ctx context.Context, req *connect.Request[apiv1
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
 	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
 	if err != nil { return nil, err }
-	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
-	if err := h.svc.ResumeWord(*info, quizType); err != nil {
+	quizTypes := protoQuizTypesToNotebook(req.Msg.GetQuizTypes())
+	if err := h.svc.ResumeWord(*info, quizTypes); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume word: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ResumeWordResponse{}), nil
+}
+
+// protoQuizTypesToNotebook converts a repeated proto QuizType list to the
+// internal notebook.QuizType slice. Used by SkipWord/ResumeWord which
+// accept multiple types per request.
+func protoQuizTypesToNotebook(qts []apiv1.QuizType) []notebook.QuizType {
+	out := make([]notebook.QuizType, 0, len(qts))
+	for _, qt := range qts {
+		out = append(out, protoQuizTypeToNotebook(qt))
+	}
+	return out
 }
 
 func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyQuizRequest]) (*connect.Response[apiv1.StartEtymologyQuizResponse], error) {
@@ -286,7 +343,9 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
 		loadQuizType = notebook.QuizTypeEtymologyReverse
 	}
-	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetIncludeUnstudied(), false, loadQuizType)
+	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetNotebookSections())
+	if err != nil { return nil, err }
+	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, req.Msg.GetIncludeUnstudied(), false, loadQuizType, sectionTitles)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	examples, err := h.svc.LoadEtymologyExampleWords(cards)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err)) }
@@ -338,7 +397,9 @@ func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *con
 
 func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest]) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	cards, err := h.svc.LoadEtymologyOriginCards(req.Msg.GetEtymologyNotebookIds(), true, true, notebook.QuizTypeEtymologyFreeform)
+	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), nil)
+	if err != nil { return nil, err }
+	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, true, true, notebook.QuizTypeEtymologyFreeform, sectionTitles)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	nextReviewDates, err := h.svc.GetEtymologyOriginNextReviewDates(cards)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err)) }

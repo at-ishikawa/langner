@@ -45,11 +45,15 @@ func originDedupKey(origin string) string {
 // When skipEligibility is true the hard gate (freeform-first + has-correct-answer)
 // is skipped — the freeform quiz needs this because it IS the entry point where
 // origins are encountered for the first time.
+//
+// sessionTitlesByID narrows the result to specific etymology sessions per
+// notebook. A nil/empty list for a notebook means "all sessions".
 func (s *Service) LoadEtymologyOriginCards(
 	etymologyNotebookIDs []string,
 	includeUnstudied bool,
 	skipEligibility bool,
 	quizType notebook.QuizType,
+	sessionTitlesByID map[string][]string,
 ) ([]EtymologyOriginCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
@@ -84,8 +88,12 @@ func (s *Service) LoadEtymologyOriginCards(
 		if idx, ok := etymIndexes[etymID]; ok {
 			nbTitle = idx.Name
 		}
+		sessionFilter := sessionTitlesByID[etymID]
 
 		for _, o := range origins {
+			if !inSectionFilter(sessionFilter, o.SessionTitle) {
+				continue
+			}
 			// Per-session dedup: an origin appearing twice within the
 			// same session (e.g. with inconsistent language metadata)
 			// collapses to one card, but the same origin in another
@@ -446,7 +454,19 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 
 		dueCount := 0
 		seen := make(map[string]bool)
+		seenSession := make(map[string]struct{})
+		// sectionDue tallies due origins per session in the order sessions
+		// first appear in the file so the start page lists them in document
+		// order rather than map-iteration order.
+		var sessionOrder []string
+		sectionDue := make(map[string]int)
 		for _, o := range origins {
+			if o.SessionTitle != "" {
+				if _, ok := seenSession[o.SessionTitle]; !ok {
+					seenSession[o.SessionTitle] = struct{}{}
+					sessionOrder = append(sessionOrder, o.SessionTitle)
+				}
+			}
 			// Per-(session, origin) dedup so multi-sense origins each
 			// contribute their own due-count slot. See
 			// LoadEtymologyOriginCards for the keying rationale.
@@ -466,7 +486,16 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 			}
 			if needsOriginReview(learningHistories[id], index.Name, o.SessionTitle, o.Origin, notebook.QuizTypeEtymologyStandard) {
 				dueCount++
+				sectionDue[o.SessionTitle]++
 			}
+		}
+
+		var sections []NotebookSectionSummary
+		for _, title := range sessionOrder {
+			sections = append(sections, NotebookSectionSummary{
+				Title:                title,
+				EtymologyReviewCount: sectionDue[title],
+			})
 		}
 
 		summaries = append(summaries, NotebookSummary{
@@ -475,6 +504,7 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 			EtymologyReviewCount: dueCount,
 			Kind:                 "Etymology",
 			LatestDate:           index.LatestDate,
+			Sections:             sections,
 		})
 	}
 

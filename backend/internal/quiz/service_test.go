@@ -280,7 +280,7 @@ func TestService_LoadCards_StoryNotebook(t *testing.T) {
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"test-story"}, true)
+	cards, err := svc.LoadCards([]string{"test-story"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "preposterous", cards[0].Entry)
@@ -302,7 +302,7 @@ func TestService_LoadCards_FlashcardNotebook(t *testing.T) {
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"test-vocab"}, true)
+	cards, err := svc.LoadCards([]string{"test-vocab"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "serendipity", cards[0].Entry)
@@ -318,7 +318,7 @@ func TestService_LoadCards_MultipleNotebooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc, _ := newTestServiceWithFixtures(t, mock_inference.NewMockClient(ctrl))
 
-	cards, err := svc.LoadCards([]string{"test-story", "test-vocab"}, true)
+	cards, err := svc.LoadCards([]string{"test-story", "test-vocab"}, true, nil)
 	require.NoError(t, err)
 	assert.Len(t, cards, 2)
 }
@@ -327,7 +327,7 @@ func TestService_LoadCards_NotFoundError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := newTestService(t, mock_inference.NewMockClient(ctrl))
 
-	_, err := svc.LoadCards([]string{"non-existent"}, true)
+	_, err := svc.LoadCards([]string{"non-existent"}, true, nil)
 	require.Error(t, err)
 	var notFoundErr *NotFoundError
 	require.ErrorAs(t, err, &notFoundErr)
@@ -378,10 +378,259 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"test-story"}, true)
+	cards, err := svc.LoadCards([]string{"test-story"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "ran", cards[0].Entry)
+}
+
+func TestService_LoadNotebookSummaries_SectionCounts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	storiesDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(storiesDir, "two-eps")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(`id: two-eps
+name: Two Episodes
+notebooks:
+  - ./episodes.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "episodes.yml"), []byte(`- event: "Episode 1"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "Scene A"
+      conversations:
+        - speaker: "Alice"
+          quote: "Time to break the ice."
+      definitions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+- event: "Episode 2"
+  date: 2025-01-16T00:00:00Z
+  scenes:
+    - scene: "Scene B"
+      conversations:
+        - speaker: "Bob"
+          quote: "Don't lose your temper now."
+        - speaker: "Bob"
+          quote: "It's a piece of cake."
+      definitions:
+        - expression: "lose temper"
+          meaning: "to become angry"
+        - expression: "piece of cake"
+          meaning: "something easy"
+`), 0644))
+	// Both expressions in episode 2 are eligible (have correct freeform
+	// answers); episode 1's expression is not yet learned.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "two-eps.yml"), []byte(`- metadata:
+    notebook_id: two-eps
+    title: "Episode 1"
+  scenes:
+    - metadata:
+        title: "Scene A"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+- metadata:
+    notebook_id: two-eps
+    title: "Episode 2"
+  scenes:
+    - metadata:
+        title: "Scene B"
+      expressions:
+        - expression: "lose temper"
+          learned_logs:
+            - status: "understood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+        - expression: "piece of cake"
+          learned_logs:
+            - status: "understood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	summaries, err := svc.LoadNotebookSummaries()
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	require.Len(t, summaries[0].Sections, 2)
+
+	// Sections must be in document order.
+	assert.Equal(t, "Episode 1", summaries[0].Sections[0].Title)
+	assert.Equal(t, "Episode 2", summaries[0].Sections[1].Title)
+
+	// Episode 1 has no eligible (freeform-correct) words yet.
+	assert.Equal(t, 0, summaries[0].Sections[0].ReviewCount, "ep1 word still misunderstood")
+	// Episode 2 has two eligible words.
+	assert.Equal(t, 2, summaries[0].Sections[1].ReviewCount, "ep2 has two eligible words")
+
+	// Reverse counts likewise reflect per-section eligibility.
+	assert.Equal(t, 0, summaries[0].Sections[0].ReverseReviewCount)
+	assert.Equal(t, 2, summaries[0].Sections[1].ReverseReviewCount)
+
+	// Per-section counts add up to the notebook-level total.
+	totalReview := summaries[0].Sections[0].ReviewCount + summaries[0].Sections[1].ReviewCount
+	assert.Equal(t, summaries[0].ReviewCount, totalReview)
+}
+
+func TestService_LoadCards_SectionFilter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	storiesDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(storiesDir, "two-chapters")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(`id: two-chapters
+name: Two Chapters
+notebooks:
+  - ./episodes.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "episodes.yml"), []byte(`- event: "Chapter One"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "Opening"
+      conversations:
+        - speaker: "Alice"
+          quote: "We need to break the ice."
+      definitions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+- event: "Chapter Two"
+  date: 2025-01-16T00:00:00Z
+  scenes:
+    - scene: "Closing"
+      conversations:
+        - speaker: "Bob"
+          quote: "Don't lose your temper."
+      definitions:
+        - expression: "lose temper"
+          meaning: "to become angry"
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "two-chapters.yml"), []byte(`- metadata:
+    notebook_id: two-chapters
+    title: "Chapter One"
+  scenes:
+    - metadata:
+        title: "Opening"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+- metadata:
+    notebook_id: two-chapters
+    title: "Chapter Two"
+  scenes:
+    - metadata:
+        title: "Closing"
+      expressions:
+        - expression: "lose temper"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	all, err := svc.LoadCards([]string{"two-chapters"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, all, 2, "no filter returns both chapters")
+
+	filtered, err := svc.LoadCards([]string{"two-chapters"}, true, map[string][]string{
+		"two-chapters": {"Chapter Two"},
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "Chapter Two", filtered[0].StoryTitle)
+	assert.Equal(t, "lose temper", filtered[0].Entry)
+}
+
+func TestService_LoadReverseCards_SectionFilter(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	storiesDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(storiesDir, "rev-chapters")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(`id: rev-chapters
+name: Reverse Chapters
+notebooks:
+  - ./episodes.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "episodes.yml"), []byte(`- event: "Chapter A"
+  date: 2025-01-15T00:00:00Z
+  scenes:
+    - scene: "S1"
+      conversations:
+        - speaker: "X"
+          quote: "Time to break the ice."
+      definitions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+- event: "Chapter B"
+  date: 2025-01-16T00:00:00Z
+  scenes:
+    - scene: "S2"
+      conversations:
+        - speaker: "Y"
+          quote: "Try not to lose your temper."
+      definitions:
+        - expression: "lose temper"
+          meaning: "to become angry"
+`), 0644))
+	// Both expressions need a correct freeform log to be reverse-eligible.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "rev-chapters.yml"), []byte(`- metadata:
+    notebook_id: rev-chapters
+    title: "Chapter A"
+  scenes:
+    - metadata:
+        title: "S1"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "understood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+- metadata:
+    notebook_id: rev-chapters
+    title: "Chapter B"
+  scenes:
+    - metadata:
+        title: "S2"
+      expressions:
+        - expression: "lose temper"
+          learned_logs:
+            - status: "understood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	filtered, err := svc.LoadReverseCards([]string{"rev-chapters"}, false, map[string][]string{
+		"rev-chapters": {"Chapter A"},
+	})
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "Chapter A", filtered[0].StoryTitle)
+	assert.Equal(t, "break the ice", filtered[0].Expression)
 }
 
 // ---------- GradeNotebookAnswer ----------

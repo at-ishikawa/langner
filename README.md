@@ -108,7 +108,7 @@ Test yourself with several quiz modes, all powered by spaced repetition:
 - **Assembly** - See the origins, type the complete word
 - **Freeform** - Recall a word and break down its etymology
 
-Choose how many answers to review at once on the start screen (default 10). After every batch, a feedback screen shows your answers with the correct meanings, examples, and pronunciation — you can mark answers correct or incorrect, exclude words from future quizzes, or undo overrides, then continue to the next batch or jump to the final results. Freeform quizzes still show feedback after each answer.
+Choose how many answers to review at once on the start screen (default 10). You can also narrow a quiz to specific chapters or episodes within a notebook by expanding the notebook on the start screen and ticking only the sections you want — useful when you want to drill the most recent episode you read. After every batch, a feedback screen shows your answers with the correct meanings, examples, and pronunciation — you can mark answers correct or incorrect, exclude words from future quizzes, or undo overrides, then continue to the next batch or jump to the final results. Freeform quizzes still show feedback after each answer.
 
 At the end of a session, a results page shows your score and lets you review incorrect answers.
 

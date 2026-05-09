@@ -101,6 +101,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			LatestDate:            latestDate,
 			Kind:                  kindFromIndex(index),
 			HasContent:            storyHasContent(stories),
+			Sections:              storySectionSummaries(stories, filtered, learningHistories[id]),
 		})
 	}
 
@@ -132,6 +133,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			ReverseReviewCount:    reverseCount,
 			EtymologyReviewCount:  etymCount,
 			LatestDate:            latestDate,
+			Sections:              flashcardSectionSummaries(notebooks, filtered, learningHistories[id]),
 		})
 	}
 
@@ -227,7 +229,12 @@ func buildWordDetail(note *notebook.Note, originMap map[string]notebook.Etymolog
 
 // LoadCards returns filtered quiz cards for the given notebooks.
 // Returns *NotFoundError if any notebook ID does not exist.
-func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card, error) {
+//
+// When sectionTitlesByID has an entry for a notebook, only cards from
+// sections (story events for stories, sub-notebook titles for flashcards)
+// matching the listed titles are returned. A nil or empty list for a
+// notebook means "all sections".
+func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]Card, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
@@ -247,10 +254,11 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 	for _, notebookID := range notebookIDs {
 		_, isStory := storyIndexes[notebookID]
 		_, isFlashcard := flashcardIndexes[notebookID]
+		sectionFilter := sectionTitlesByID[notebookID]
 
 		if !isStory && !isFlashcard {
 			// Try definitions-only book as fallback
-			defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap)
+			defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap, sectionFilter)
 			if len(defCards) > 0 {
 				cards = append(cards, defCards...)
 				continue
@@ -259,7 +267,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		}
 
 		if isStory {
-			storyCards, err := s.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied, originMap)
+			storyCards, err := s.loadStoryCards(reader, notebookID, learningHistories, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story cards for notebook %q: %w", notebookID, err)
 			}
@@ -267,7 +275,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		}
 
 		if isFlashcard {
-			flashCards, err := s.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied, originMap)
+			flashCards, err := s.loadFlashcardCards(reader, notebookID, learningHistories, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load flashcard cards for notebook %q: %w", notebookID, err)
 			}
@@ -282,6 +290,20 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 		})
 	}
 	return cards, nil
+}
+
+// inSectionFilter reports whether title is allowed by filter. An empty
+// filter means "no filter" (all sections allowed).
+func inSectionFilter(filter []string, title string) bool {
+	if len(filter) == 0 {
+		return true
+	}
+	for _, t := range filter {
+		if t == title {
+			return true
+		}
+	}
+	return false
 }
 
 func deduplicateCards(cards []Card) []Card {
@@ -308,6 +330,7 @@ func (s *Service) loadStoryCards(
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
 	originMap map[string]notebook.EtymologyOrigin,
+	sectionFilter []string,
 ) ([]Card, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
@@ -324,6 +347,9 @@ func (s *Service) loadStoryCards(
 
 	var cards []Card
 	for _, story := range filtered {
+		if !inSectionFilter(sectionFilter, story.Event) {
+			continue
+		}
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
 				entry := definition.Definition
@@ -361,6 +387,7 @@ func (s *Service) loadFlashcardCards(
 	learningHistories map[string][]notebook.LearningHistory,
 	includeUnstudied bool,
 	originMap map[string]notebook.EtymologyOrigin,
+	sectionFilter []string,
 ) ([]Card, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
@@ -376,6 +403,9 @@ func (s *Service) loadFlashcardCards(
 
 	var cards []Card
 	for _, nb := range filtered {
+		if !inSectionFilter(sectionFilter, nb.Title) {
+			continue
+		}
 		for _, card := range nb.Cards {
 			entry := card.Definition
 			originalEntry := ""
@@ -457,6 +487,75 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 // storyHasContent reports whether any scene carries prose or dialogue worth
 // rendering in the content reader. Flashcards and definitions-only books
 // return false because they have neither statements nor conversations.
+// storySectionSummaries returns per-story counts in document order. The
+// notebook-level filtered slice is regrouped by story event so we don't
+// re-run FilterStoryNotebooks once per story; reverse and etymology counts
+// are computed directly off the raw stories slice (those filters live in
+// dedicated counters and don't share FilterStoryNotebooks' due-check).
+func storySectionSummaries(
+	stories []notebook.StoryNotebook,
+	filtered []notebook.StoryNotebook,
+	histories []notebook.LearningHistory,
+) []NotebookSectionSummary {
+	filteredByEvent := make(map[string][]notebook.StoryNotebook, len(filtered))
+	for _, story := range filtered {
+		filteredByEvent[story.Event] = append(filteredByEvent[story.Event], story)
+	}
+
+	seen := make(map[string]struct{}, len(stories))
+	var sections []NotebookSectionSummary
+	for _, story := range stories {
+		if story.Event == "" {
+			continue
+		}
+		if _, ok := seen[story.Event]; ok {
+			continue
+		}
+		seen[story.Event] = struct{}{}
+		one := []notebook.StoryNotebook{story}
+		sections = append(sections, NotebookSectionSummary{
+			Title:                story.Event,
+			ReviewCount:          countStoryDefinitions(filteredByEvent[story.Event]),
+			ReverseReviewCount:   countReverseStoryDefinitions(one, histories),
+			EtymologyReviewCount: countStoryEtymologyDefinitions(one),
+		})
+	}
+	return sections
+}
+
+// flashcardSectionSummaries returns per-flashcard-file counts. Each
+// FlashcardNotebook's Title is the section, mirroring storySectionSummaries.
+func flashcardSectionSummaries(
+	notebooks []notebook.FlashcardNotebook,
+	filtered []notebook.FlashcardNotebook,
+	histories []notebook.LearningHistory,
+) []NotebookSectionSummary {
+	filteredByTitle := make(map[string][]notebook.FlashcardNotebook, len(filtered))
+	for _, nb := range filtered {
+		filteredByTitle[nb.Title] = append(filteredByTitle[nb.Title], nb)
+	}
+
+	seen := make(map[string]struct{}, len(notebooks))
+	var sections []NotebookSectionSummary
+	for _, nb := range notebooks {
+		if nb.Title == "" {
+			continue
+		}
+		if _, ok := seen[nb.Title]; ok {
+			continue
+		}
+		seen[nb.Title] = struct{}{}
+		one := []notebook.FlashcardNotebook{nb}
+		sections = append(sections, NotebookSectionSummary{
+			Title:                nb.Title,
+			ReviewCount:          countFlashcardCards(filteredByTitle[nb.Title]),
+			ReverseReviewCount:   countReverseFlashcardCards(one, histories),
+			EtymologyReviewCount: countFlashcardEtymologyCards(one),
+		})
+	}
+	return sections
+}
+
 func storyHasContent(stories []notebook.StoryNotebook) bool {
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
@@ -653,7 +752,10 @@ type ReverseContext struct {
 }
 
 // LoadReverseCards loads reverse quiz cards for the given notebooks.
-func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool) ([]ReverseCard, error) {
+//
+// sectionTitlesByID narrows results to the listed sections per notebook (see
+// LoadCards). A nil/empty list for a notebook means "all sections".
+func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
@@ -673,10 +775,11 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 	for _, notebookID := range notebookIDs {
 		_, isStory := storyIndexes[notebookID]
 		_, isFlashcard := flashcardIndexes[notebookID]
+		sectionFilter := sectionTitlesByID[notebookID]
 
 		if !isStory && !isFlashcard {
 			// Try definitions-only book as fallback
-			defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap)
+			defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap, sectionFilter)
 			if len(defCards) > 0 {
 				cards = append(cards, defCards...)
 				continue
@@ -685,7 +788,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 
 		if isStory {
-			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap)
+			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -693,7 +796,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 
 		if isFlashcard {
-			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap)
+			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load flashcard reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -764,6 +867,7 @@ func (s *Service) loadStoryReverseCards(
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
 	originMap map[string]notebook.EtymologyOrigin,
+	sectionFilter []string,
 ) ([]ReverseCard, error) {
 	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
@@ -772,6 +876,9 @@ func (s *Service) loadStoryReverseCards(
 
 	var cards []ReverseCard
 	for _, story := range stories {
+		if !inSectionFilter(sectionFilter, story.Event) {
+			continue
+		}
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
 				if !isEligibleForReverseQuiz(&definition) {
@@ -827,6 +934,7 @@ func (s *Service) loadFlashcardReverseCards(
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
 	originMap map[string]notebook.EtymologyOrigin,
+	sectionFilter []string,
 ) ([]ReverseCard, error) {
 	notebooks, err := reader.ReadFlashcardNotebooks(notebookID)
 	if err != nil {
@@ -835,6 +943,9 @@ func (s *Service) loadFlashcardReverseCards(
 
 	var cards []ReverseCard
 	for _, nb := range notebooks {
+		if !inSectionFilter(sectionFilter, nb.Title) {
+			continue
+		}
 		for _, card := range nb.Cards {
 			if !isEligibleForReverseQuiz(&card) {
 				continue
@@ -1536,7 +1647,7 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 }
 
 // loadDefinitionCards loads standard quiz cards from definitions-only books.
-func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin) []Card {
+func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string) []Card {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
@@ -1544,6 +1655,9 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 
 	var cards []Card
 	for storyTitle, sceneDefs := range defs {
+		if !inSectionFilter(sectionFilter, storyTitle) {
+			continue
+		}
 		for sceneTitle, notes := range sceneDefs {
 			for _, note := range notes {
 				if note.Meaning == "" {
@@ -1575,7 +1689,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 }
 
 // loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
-func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin) []ReverseCard {
+func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string) []ReverseCard {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
@@ -1583,6 +1697,9 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 
 	var cards []ReverseCard
 	for storyTitle, sceneDefs := range defs {
+		if !inSectionFilter(sectionFilter, storyTitle) {
+			continue
+		}
 		for sceneTitle, notes := range sceneDefs {
 			for _, note := range notes {
 				if note.Meaning == "" {
