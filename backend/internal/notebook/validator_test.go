@@ -2161,6 +2161,103 @@ func nonZeroValueFor(t reflect.Type) (reflect.Value, bool) {
 	return reflect.Value{}, false
 }
 
+// TestValidator_Fix_MigratesEtymologyShape verifies that legacy etymology
+// blocks (top-level title = notebook display name, type=etymology, with
+// sessions stored as scenes) get rewritten into the canonical per-session
+// shape with origins under a scene whose title comes from the matching
+// definitions notebook.
+func TestValidator_Fix_MigratesEtymologyShape(t *testing.T) {
+	root := t.TempDir()
+	learningDir := filepath.Join(root, "learning")
+	storyDir := filepath.Join(root, "stories")
+	defsDir := filepath.Join(root, "definitions")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.MkdirAll(defsDir, 0755))
+
+	defsBookDir := filepath.Join(defsDir, "wpme")
+	require.NoError(t, os.MkdirAll(defsBookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBookDir, "index.yml"), []byte(`id: wpme
+notebooks:
+  - ./session2.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBookDir, "session2.yml"), []byte(`- metadata:
+    title: "Session 2"
+  scenes:
+    - metadata:
+        index: 0
+        title: "ana (up, back)"
+      expressions:
+        - expression: anabolic
+          meaning: "promoting cellular growth"
+          origin_parts:
+            - origin: ana
+              language: Greek
+`), 0644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "wpme.yml"), []byte(`- metadata:
+    id: wpme
+    title: "Word Power Made Easy"
+    type: etymology
+  scenes:
+    - metadata:
+        title: "Session 2"
+      expressions:
+        - expression: ana
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+        - expression: untracked-origin
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+`), 0644))
+
+	v := NewValidator(learningDir, []string{storyDir}, nil, []string{defsDir}, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "wpme.yml"))
+	require.NoError(t, err)
+	var got []LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+
+	for _, h := range got {
+		assert.NotEqualf(t, "etymology", h.Metadata.Type,
+			"legacy etymology block (title=%q) was not migrated", h.Metadata.Title)
+		assert.NotEqualf(t, "Word Power Made Easy", h.Metadata.Title,
+			"notebook-name top-level block must be replaced by per-session blocks")
+	}
+	require.Len(t, got, 1)
+	require.Equal(t, "Session 2", got[0].Metadata.Title)
+
+	scenesByTitle := make(map[string]LearningScene, len(got[0].Scenes))
+	for _, scene := range got[0].Scenes {
+		scenesByTitle[scene.Metadata.Title] = scene
+	}
+	matched, ok := scenesByTitle["ana (up, back)"]
+	require.Truef(t, ok, "expected scene 'ana (up, back)' from definitions lookup; got: %v", keysOf(scenesByTitle))
+	require.Len(t, matched.Expressions, 1)
+	assert.Equal(t, "ana", matched.Expressions[0].Expression)
+
+	fallback, ok := scenesByTitle["Session 2"]
+	require.True(t, ok, "expected synthetic 'Session 2' scene for unmatched origins")
+	require.Len(t, fallback.Expressions, 1)
+	assert.Equal(t, "untracked-origin", fallback.Expressions[0].Expression)
+}
+
+func keysOf[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
 // TestValidator_Fix_PreservesSkippedOnlyOnDisk walks Validator.Fix end-to-end
 // against a real YAML file containing an expression whose only data is
 // SkippedAt. The previous fixConsistency keep-condition only checked logs

@@ -492,7 +492,14 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 	return false
 }
 
-// createNewExpressionWithQualityForEtymology creates a new expression entry with quality data for etymology quiz
+// createNewExpressionWithQualityForEtymology creates a new expression entry
+// with quality data for etymology quizzes. Now writes the canonical
+// per-session shape that standard/reverse/freeform also use: top-level
+// title = session, scenes hold expressions. metadata.type stays empty —
+// the etymology block looks identical to a vocab block, just with
+// etymology_breakdown_logs / etymology_assembly_logs populated instead
+// of learned_logs. Multi-sense origins remain disambiguated because
+// each session is its own top-level block.
 func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression string,
 	isCorrect, isKnownWord bool,
@@ -501,11 +508,6 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	quizType QuizType,
 ) {
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, "")
-	// Mark as etymology so the validator skips the per-scene duplicate check
-	// (multi-sense origins legitimately appear in multiple session scenes).
-	if u.history[storyIndex].Metadata.Type == "" {
-		u.history[storyIndex].Metadata.Type = "etymology"
-	}
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
