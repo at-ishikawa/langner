@@ -525,59 +525,6 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	)
 }
 
-// UpdateOrCreateEtymologyOrigin writes (or updates) an etymology origin at
-// the canonical per-session shape: one top-level history block per session
-// with origins stored flat in the top-level Expressions list. This replaces
-// the legacy shape (one notebook-named block with sessions as scenes), which
-// fragmented data when standard/reverse/freeform writers — which key by
-// session — touched the same notebook.
-//
-// If the session block doesn't exist yet it's created. If the origin
-// already exists at the session's top level its etymology log is appended
-// in place. The legacy shape is migrated by Validator.migrateEtymologyShape;
-// live writes always use this path going forward.
-func (u *LearningHistoryUpdater) UpdateOrCreateEtymologyOrigin(
-	notebookID, sessionTitle, origin string,
-	isCorrect, isKnownWord bool,
-	quality int,
-	responseTimeMs int64,
-	quizType QuizType,
-) bool {
-	normalizedSession := normalizeQuotes(sessionTitle)
-
-	for hi, h := range u.history {
-		if normalizeQuotes(h.Metadata.Title) != normalizedSession {
-			continue
-		}
-		for ei, exp := range h.Expressions {
-			if exp.Expression != origin {
-				continue
-			}
-			exp.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
-			u.history[hi].Expressions[ei] = exp
-			return true
-		}
-		// Block exists for this session but origin not found — append to
-		// the top-level Expressions list of this block.
-		newExpr := LearningHistoryExpression{Expression: origin}
-		newExpr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
-		u.history[hi].Expressions = append(u.history[hi].Expressions, newExpr)
-		return false
-	}
-
-	// No block for this session yet — create one.
-	newExpr := LearningHistoryExpression{Expression: origin}
-	newExpr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
-	u.history = append(u.history, LearningHistory{
-		Metadata: LearningHistoryMetadata{
-			NotebookID: notebookID,
-			Title:      sessionTitle,
-		},
-		Expressions: []LearningHistoryExpression{newExpr},
-	})
-	return false
-}
-
 // ClearSkippedAt removes the skip for the given quiz type. The expression
 // remains skipped for any other quiz types still set in its SkippedAt map.
 func (u *LearningHistoryUpdater) ClearSkippedAt(expression string, quizType QuizType) bool {

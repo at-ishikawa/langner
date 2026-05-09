@@ -239,15 +239,15 @@ func (s *Service) SaveEtymologyOriginResult(
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName], s.calculator)
-	// Etymology learning history shares one top-level block per session
-	// (canonical Shape B) with standard/reverse/freeform writes. Origins
-	// live flat in the block's top-level Expressions list — no scene level —
-	// because the source etymology YAML has no scene concept. Multi-sense
-	// origins remain disambiguated per-session because each session is its
-	// own top-level block.
-	updater.UpdateOrCreateEtymologyOrigin(
+	// SessionTitle becomes the scene title — per-sense SR history is keyed by
+	// (notebook, session_title, origin) so two different senses of the same
+	// origin (ana = "up" in Session 13, "negative" in Session 16) get
+	// independent learning curves.
+	updater.UpdateOrCreateExpressionWithQualityForEtymology(
 		card.NotebookName,
+		card.NotebookTitle,
 		card.SessionTitle,
+		card.Origin,
 		card.Origin,
 		correct,
 		isKnownWord,
@@ -511,67 +511,36 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 	return summaries, nil
 }
 
-// findOriginExpression returns the LearningHistoryExpression for an origin,
-// looking first at the canonical per-session shape (one top-level block
-// per session, origins flat in Expressions) and falling back to the legacy
-// shape (notebook-name top-level block, origins under per-session scenes)
-// for unmigrated data. Validator.migrateEtymologyShape rewrites legacy
-// data to the canonical shape; the fallback exists so users who haven't
-// run validate --fix yet don't lose etymology progress.
-//
-// notebookTitle is used only for the legacy-shape lookup. Eligibility is
-// per-(session_title, origin) so multi-sense origins (ana = "up" in
-// Session 13, "negative" in Session 16) keep independent learning curves.
-func findOriginExpression(
-	histories []notebook.LearningHistory,
-	notebookTitle, sessionTitle, origin string,
-) *notebook.LearningHistoryExpression {
-	// Canonical: per-session top-level block, origins flat in Expressions.
-	for hi := range histories {
-		if histories[hi].Metadata.Title != sessionTitle {
-			continue
-		}
-		for ei := range histories[hi].Expressions {
-			expr := &histories[hi].Expressions[ei]
-			if strings.EqualFold(expr.Expression, origin) {
-				return expr
-			}
-		}
-	}
-	// Legacy fallback: notebook-named top-level block, sessions as scenes.
-	for hi := range histories {
-		if histories[hi].Metadata.Title != notebookTitle {
-			continue
-		}
-		for si := range histories[hi].Scenes {
-			if histories[hi].Scenes[si].Metadata.Title != sessionTitle {
-				continue
-			}
-			for ei := range histories[hi].Scenes[si].Expressions {
-				expr := &histories[hi].Scenes[si].Expressions[ei]
-				if strings.EqualFold(expr.Expression, origin) {
-					return expr
-				}
-			}
-		}
-	}
-	return nil
-}
-
 // isOriginEligible is the hard gate that must always pass for an origin to
 // appear in etymology standard or reverse quizzes. The user must have (1)
 // attempted the origin in etymology freeform mode at least once, and (2)
 // answered at least one etymology question about it correctly. Both checks
 // are enforced even when "include unstudied" is selected.
+//
+// Eligibility is per-(session_title, origin): two senses of the same origin
+// are evaluated independently, so progress on Session 13's "ana" doesn't
+// count toward Session 16's "ana".
 func isOriginEligible(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
 ) bool {
-	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
-	if expr == nil {
-		return false
+	for _, h := range histories {
+		if h.Metadata.Title != notebookTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sessionTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if !strings.EqualFold(expr.Expression, origin) {
+					continue
+				}
+				return expr.HasEtymologyFreeformAnswer() && expr.HasCorrectEtymologyAnswer()
+			}
+		}
 	}
-	return expr.HasEtymologyFreeformAnswer() && expr.HasCorrectEtymologyAnswer()
+	return false
 }
 
 // isOriginSkipped returns true when the origin's per-(notebook, session)
@@ -582,11 +551,23 @@ func isOriginSkipped(
 	notebookTitle, sessionTitle, origin string,
 	quizType notebook.QuizType,
 ) bool {
-	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
-	if expr == nil {
-		return false
+	for _, h := range histories {
+		if h.Metadata.Title != notebookTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sessionTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if !strings.EqualFold(expr.Expression, origin) {
+					continue
+				}
+				return expr.SkippedAt.IsSkipped(quizType)
+			}
+		}
 	}
-	return expr.SkippedAt.IsSkipped(quizType)
+	return false
 }
 
 // needsOriginReview checks whether an origin is DUE for review under the
@@ -598,9 +579,21 @@ func needsOriginReview(
 	notebookTitle, sessionTitle, origin string,
 	quizType notebook.QuizType,
 ) bool {
-	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
-	if expr == nil {
-		return false
+	for _, h := range histories {
+		if h.Metadata.Title != notebookTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			if scene.Metadata.Title != sessionTitle {
+				continue
+			}
+			for _, expr := range scene.Expressions {
+				if !strings.EqualFold(expr.Expression, origin) {
+					continue
+				}
+				return expr.NeedsEtymologyReview(quizType)
+			}
+		}
 	}
-	return expr.NeedsEtymologyReview(quizType)
+	return false
 }
