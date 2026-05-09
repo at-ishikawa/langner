@@ -2161,6 +2161,109 @@ func nonZeroValueFor(t reflect.Type) (reflect.Value, bool) {
 	return reflect.Value{}, false
 }
 
+// TestValidator_Fix_MigratesEtymologyShape verifies that legacy etymology
+// blocks (top-level title = notebook display name, type=etymology, with
+// sessions stored as scenes) get rewritten into the canonical per-session
+// shape: one top-level block per session, origins flat in the top-level
+// Expressions list. When a session's per-session block already exists
+// (e.g. from standard-quiz writes), the legacy block's origins merge into
+// it instead of creating a duplicate.
+func TestValidator_Fix_MigratesEtymologyShape(t *testing.T) {
+	learningDir := t.TempDir()
+	storyDir := t.TempDir() // empty: orphan-detection isn't relevant here
+
+	// Existing data captures the divergence: one Shape A etymology block
+	// (Session 2 + Session 3 origins), and one Shape B standard-quiz block
+	// already present for Session 2 (so the migration must merge, not
+	// duplicate). Session 4 has no Shape B counterpart and must produce a
+	// brand-new top-level block.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "wpme.yml"), []byte(`- metadata:
+    id: wpme
+    title: Word Power Made Easy
+    type: etymology
+  scenes:
+    - metadata:
+        title: Session 2
+      expressions:
+        - expression: "ana"
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+        - expression: "logos"
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+    - metadata:
+        title: Session 4
+      expressions:
+        - expression: "metron"
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-02"
+              quality: 4
+              quiz_type: etymology_freeform
+- metadata:
+    id: wpme
+    title: Session 2
+  scenes:
+    - metadata:
+        title: psyche + logos
+      expressions:
+        - expression: "psychology"
+          learned_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: notebook
+              interval_days: 7
+`), 0644))
+
+	v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "wpme.yml"))
+	require.NoError(t, err)
+	var got []LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+
+	titles := make(map[string]*LearningHistory, len(got))
+	for i := range got {
+		titles[got[i].Metadata.Title] = &got[i]
+	}
+
+	// No legacy etymology-shape block survives.
+	for _, h := range got {
+		assert.NotEqualf(t, "etymology", h.Metadata.Type,
+			"legacy etymology block (title=%q) was not migrated", h.Metadata.Title)
+		assert.NotEqualf(t, "Word Power Made Easy", h.Metadata.Title,
+			"notebook-name top-level block must be replaced by per-session blocks")
+	}
+
+	// Session 2: the existing Shape B block must absorb both etymology
+	// origins from the legacy block while keeping its psychology vocab entry.
+	session2, ok := titles["Session 2"]
+	require.True(t, ok, "Session 2 block must exist after migration")
+	exprNames := make(map[string]bool, len(session2.Expressions))
+	for _, expr := range session2.Expressions {
+		exprNames[expr.Expression] = true
+	}
+	assert.True(t, exprNames["ana"], "ana must land at Session 2 top-level Expressions")
+	assert.True(t, exprNames["logos"], "logos must land at Session 2 top-level Expressions")
+	require.Len(t, session2.Scenes, 1, "the original Shape B scene must be preserved")
+	assert.Equal(t, "psyche + logos", session2.Scenes[0].Metadata.Title)
+
+	// Session 4: brand-new per-session block created from the legacy data.
+	session4, ok := titles["Session 4"]
+	require.True(t, ok, "Session 4 must produce a new per-session block")
+	require.Len(t, session4.Expressions, 1)
+	assert.Equal(t, "metron", session4.Expressions[0].Expression)
+}
+
 // TestValidator_Fix_PreservesSkippedOnlyOnDisk walks Validator.Fix end-to-end
 // against a real YAML file containing an expression whose only data is
 // SkippedAt. The previous fixConsistency keep-condition only checked logs

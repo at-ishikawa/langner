@@ -151,6 +151,13 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// recompute interval_days and silently overwrite the skip.
 	fixedLearning := v.migrateLegacySkipIntervals(learningHistories, result)
 
+	// Migrate legacy etymology shape (notebook-name top-level + sessions
+	// as scenes) to the canonical per-session shape that standard/reverse/
+	// freeform writers also use. Must run before fixConsistency: that
+	// pass treats Shape A scenes as orphaned because the source story
+	// notebook doesn't have those scene titles.
+	fixedLearning = v.migrateEtymologyShape(fixedLearning, result)
+
 	// Fix mismatched scenes by moving expressions to correct scenes (do this first)
 	fixedLearning = v.fixMismatchedScenes(fixedLearning, storyNotebooks, result)
 
@@ -1539,6 +1546,112 @@ func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []stor
 			}
 		}
 	}
+}
+
+// migrateEtymologyShape converts legacy etymology learning history blocks
+// (top-level metadata.title = notebook display name, type=etymology, with
+// sessions stored as scenes) into the canonical per-session shape that
+// standard/reverse/freeform writers also use:
+//
+//	BEFORE                                    AFTER
+//	- metadata:                               - metadata:
+//	    title: "Word Power Made Easy"             title: "Session 2"
+//	    type: etymology                         expressions:
+//	  scenes:                                     - expression: "ana"
+//	    - metadata:                                 etymology_breakdown_logs: [...]
+//	        title: "Session 2"                - metadata:
+//	      expressions:                            title: "Session 3"
+//	        - expression: "ana"                 expressions:
+//	          etymology_breakdown_logs: [...]     - expression: "logos"
+//	    - metadata:                                 etymology_breakdown_logs: [...]
+//	        title: "Session 3"
+//	      expressions:
+//	        - expression: "logos"
+//	          etymology_breakdown_logs: [...]
+//
+// Origins land at the top-level Expressions list because the source
+// etymology YAML has no scene concept — origins live flat under each
+// session file.
+//
+// When a session's per-session top-level block already exists (e.g.
+// because standard quiz writes also touched the same notebook), the
+// legacy block's origins are merged into that existing block instead of
+// creating a duplicate. Same-name expressions across the two sources
+// merge their logs and SkippedAt slots; in practice this only fires when
+// an expression appears as both a word definition AND an etymology origin.
+//
+// Runs once per Fix(); idempotent on already-migrated data.
+func (v *Validator) migrateEtymologyShape(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		var legacy []LearningHistory
+		var keep []LearningHistory
+		for _, h := range file.contents {
+			if h.Metadata.Type == "etymology" && len(h.Scenes) > 0 {
+				legacy = append(legacy, h)
+			} else {
+				keep = append(keep, h)
+			}
+		}
+		if len(legacy) == 0 {
+			continue
+		}
+
+		for _, src := range legacy {
+			for _, scene := range src.Scenes {
+				sessionTitle := scene.Metadata.Title
+				targetIdx := -1
+				for i := range keep {
+					if normalizeQuotes(keep[i].Metadata.Title) == normalizeQuotes(sessionTitle) {
+						targetIdx = i
+						break
+					}
+				}
+				if targetIdx < 0 {
+					keep = append(keep, LearningHistory{
+						Metadata: LearningHistoryMetadata{
+							NotebookID: src.Metadata.NotebookID,
+							Title:      sessionTitle,
+						},
+					})
+					targetIdx = len(keep) - 1
+				}
+
+				for _, expr := range scene.Expressions {
+					mergeIdx := -1
+					for ei := range keep[targetIdx].Expressions {
+						if keep[targetIdx].Expressions[ei].Expression == expr.Expression {
+							mergeIdx = ei
+							break
+						}
+					}
+					if mergeIdx < 0 {
+						keep[targetIdx].Expressions = append(keep[targetIdx].Expressions, expr)
+						continue
+					}
+					existing := &keep[targetIdx].Expressions[mergeIdx]
+					existing.LearnedLogs = append(existing.LearnedLogs, expr.LearnedLogs...)
+					existing.ReverseLogs = append(existing.ReverseLogs, expr.ReverseLogs...)
+					existing.EtymologyBreakdownLogs = append(existing.EtymologyBreakdownLogs, expr.EtymologyBreakdownLogs...)
+					existing.EtymologyAssemblyLogs = append(existing.EtymologyAssemblyLogs, expr.EtymologyAssemblyLogs...)
+					for k, v := range expr.SkippedAt {
+						if existing.SkippedAt == nil {
+							existing.SkippedAt = make(SkippedAtMap)
+						}
+						if _, dup := existing.SkippedAt[k]; !dup {
+							existing.SkippedAt[k] = v
+						}
+					}
+				}
+			}
+			result.AddWarning(ValidationError{
+				File:    file.path,
+				Message: fmt.Sprintf("Migrated etymology shape for notebook %q (legacy title=%q): %d session(s) folded into per-session top-level blocks", src.Metadata.NotebookID, src.Metadata.Title, len(src.Scenes)),
+			})
+		}
+		file.contents = keep
+	}
+	return files
 }
 
 // migrateLegacySkipIntervals promotes the pre-Phase-2 skip representation
