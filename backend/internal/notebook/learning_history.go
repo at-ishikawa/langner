@@ -132,6 +132,15 @@ type LearningRecord struct {
 
 type LearningHistoryExpression struct {
 	Expression     string           `yaml:"expression"`
+	// Type distinguishes vocabulary entries from etymology-origin entries
+	// when their `expression` strings collide. "" or "vocabulary" means a
+	// regular vocab entry; "origin" means an etymology origin. Without
+	// this field, an entry with the same name in both senses (e.g. "ego"
+	// the English word AND the Latin root) would dedup into one record
+	// and the YAML would be ambiguous about which is being tracked.
+	// Backward-compatible: legacy entries without Type are treated as
+	// vocabulary by all readers.
+	Type           string           `yaml:"type,omitempty"`
 	LearnedLogs    []LearningRecord `yaml:"learned_logs"`
 	EasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
@@ -153,6 +162,44 @@ type LearningHistoryExpression struct {
 	// (a single timestamp meaning "skipped from everywhere") are upgraded to a
 	// fully-populated map at unmarshal time.
 	SkippedAt SkippedAtMap `yaml:"skipped_at,omitempty"`
+}
+
+// LearningExpressionType is the discriminator for LearningHistoryExpression.Type.
+// "" / "vocabulary" — a vocab word entry (default and legacy).
+// "origin" — an etymology origin (root, prefix, suffix).
+const (
+	LearningExpressionTypeVocabulary = "vocabulary"
+	LearningExpressionTypeOrigin     = "origin"
+)
+
+// ExpressionTypeForQuizType returns the LearningHistoryExpression.Type value
+// the quiz mode operates on. Etymology quiz modes target origin entries;
+// every other mode (standard, reverse, freeform) targets vocabulary
+// entries. Used by skip/resume and reader lookups so an "ego"-the-vocab
+// entry and an "ego"-the-origin entry can coexist in the same scene
+// without each kind clobbering the other's logs and skip state.
+func ExpressionTypeForQuizType(quizType QuizType) string {
+	switch quizType {
+	case QuizTypeEtymologyStandard, QuizTypeEtymologyReverse, QuizTypeEtymologyFreeform:
+		return LearningExpressionTypeOrigin
+	default:
+		return LearningExpressionTypeVocabulary
+	}
+}
+
+// MatchesExpressionType reports whether expr's Type field matches target.
+// "vocabulary" matches both empty and "vocabulary" (legacy back-compat);
+// "origin" matches only entries explicitly marked "origin".
+func MatchesExpressionType(expr *LearningHistoryExpression, target string) bool {
+	if expr == nil {
+		return false
+	}
+	switch target {
+	case LearningExpressionTypeOrigin:
+		return expr.Type == LearningExpressionTypeOrigin
+	default:
+		return expr.Type == "" || expr.Type == LearningExpressionTypeVocabulary
+	}
 }
 
 // SkippedAtMap maps a quiz type string (e.g. "reverse", "etymology_freeform")

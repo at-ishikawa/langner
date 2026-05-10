@@ -544,17 +544,27 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 			for sceneIdx := range file.contents[histIdx].Scenes {
 				scene := &file.contents[histIdx].Scenes[sceneIdx]
 
-				// First, merge duplicate expressions in the same scene
-				expressionMap := make(map[string]int) // map expression to index in mergedExpressions
+				// First, merge duplicate expressions in the same scene.
+				// Dedup key is (name, type) so a vocab "ego" and an
+				// origin "ego" can coexist without merging.
+				type exprKey struct{ name, typ string }
+				normaliseType := func(t string) string {
+					if t == LearningExpressionTypeVocabulary {
+						return ""
+					}
+					return t
+				}
+				expressionMap := make(map[exprKey]int)
 				var mergedExpressions []LearningHistoryExpression
 
 				for _, expr := range scene.Expressions {
-					exprKey := strings.TrimSpace(expr.Expression)
-					if exprKey == "" {
+					name := strings.TrimSpace(expr.Expression)
+					if name == "" {
 						continue
 					}
+					key := exprKey{name: name, typ: normaliseType(expr.Type)}
 
-					if existingIdx, found := expressionMap[exprKey]; found {
+					if existingIdx, found := expressionMap[key]; found {
 						// Merge learning logs into the existing expression
 						if len(expr.LearnedLogs) > 0 {
 							mergedExpressions[existingIdx].LearnedLogs = append(mergedExpressions[existingIdx].LearnedLogs, expr.LearnedLogs...)
@@ -566,10 +576,10 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						}
 						result.AddWarning(ValidationError{
 							File:    file.path,
-							Message: fmt.Sprintf("Merged duplicate expression %q in scene %s::%s", exprKey, file.contents[histIdx].Metadata.Title, scene.Metadata.Title),
+							Message: fmt.Sprintf("Merged duplicate expression %q (type=%q) in scene %s::%s", name, key.typ, file.contents[histIdx].Metadata.Title, scene.Metadata.Title),
 						})
 					} else {
-						expressionMap[exprKey] = len(mergedExpressions)
+						expressionMap[key] = len(mergedExpressions)
 						mergedExpressions = append(mergedExpressions, expr)
 					}
 				}
@@ -600,64 +610,63 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 				continue
 			}
 
-			// Then, merge duplicate expressions across different scenes in the same episode
-			episodeExpressions := make(map[string]int) // expression -> scene index
+			// Then, merge duplicate expressions across different scenes in
+			// the same episode. Key by (name, type) so a vocab "ego" in
+			// one scene and an origin "ego" in another stay separate.
+			type crossKey struct{ name, typ string }
+			normaliseType := func(t string) string {
+				if t == LearningExpressionTypeVocabulary {
+					return ""
+				}
+				return t
+			}
+			episodeExpressions := make(map[crossKey]int) // -> scene index
 			for sceneIdx := range file.contents[histIdx].Scenes {
 				scene := &file.contents[histIdx].Scenes[sceneIdx]
 
-				// Track expressions and find duplicates
-				expressionsToRemove := make(map[int]bool) // indices to remove
+				expressionsToRemove := make(map[int]bool)
 				for exprIdx := range scene.Expressions {
 					expr := &scene.Expressions[exprIdx]
-					exprKey := strings.TrimSpace(expr.Expression)
-					if exprKey == "" {
+					name := strings.TrimSpace(expr.Expression)
+					if name == "" {
 						continue
 					}
+					ck := crossKey{name: name, typ: normaliseType(expr.Type)}
 
-					if firstSceneIdx, found := episodeExpressions[exprKey]; found {
-						// This expression already exists in another scene - merge into the first occurrence
+					if firstSceneIdx, found := episodeExpressions[ck]; found {
 						firstScene := &file.contents[histIdx].Scenes[firstSceneIdx]
-
-						// Find the first occurrence expression in the first scene
 						for firstExprIdx := range firstScene.Expressions {
-							if strings.TrimSpace(firstScene.Expressions[firstExprIdx].Expression) == exprKey {
-								// Merge learning logs
-								if len(expr.LearnedLogs) > 0 {
-									firstScene.Expressions[firstExprIdx].LearnedLogs = append(
-										firstScene.Expressions[firstExprIdx].LearnedLogs,
-										expr.LearnedLogs...,
-									)
-									_, firstScene.Expressions[firstExprIdx].LearnedLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs, v.calculator)
-								}
-								if len(expr.ReverseLogs) > 0 {
-									firstScene.Expressions[firstExprIdx].ReverseLogs = append(
-										firstScene.Expressions[firstExprIdx].ReverseLogs,
-										expr.ReverseLogs...,
-									)
-									_, firstScene.Expressions[firstExprIdx].ReverseLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs, v.calculator)
-								}
-
-								// Mark this duplicate for removal
-								expressionsToRemove[exprIdx] = true
-
-								result.AddWarning(ValidationError{
-									File:    file.path,
-									Message: fmt.Sprintf("Merged duplicate expression %q from scene %s into scene %s in episode %s",
-										exprKey,
-										scene.Metadata.Title,
-										firstScene.Metadata.Title,
-										file.contents[histIdx].Metadata.Title),
-								})
-								break
+							firstExpr := &firstScene.Expressions[firstExprIdx]
+							if strings.TrimSpace(firstExpr.Expression) != name {
+								continue
 							}
+							if normaliseType(firstExpr.Type) != ck.typ {
+								continue
+							}
+							if len(expr.LearnedLogs) > 0 {
+								firstExpr.LearnedLogs = append(firstExpr.LearnedLogs, expr.LearnedLogs...)
+								_, firstExpr.LearnedLogs, _ = recalculateLearningLogs(firstExpr.LearnedLogs, v.calculator)
+							}
+							if len(expr.ReverseLogs) > 0 {
+								firstExpr.ReverseLogs = append(firstExpr.ReverseLogs, expr.ReverseLogs...)
+								_, firstExpr.ReverseLogs, _ = recalculateLearningLogs(firstExpr.ReverseLogs, v.calculator)
+							}
+							expressionsToRemove[exprIdx] = true
+							result.AddWarning(ValidationError{
+								File:    file.path,
+								Message: fmt.Sprintf("Merged duplicate expression %q (type=%q) from scene %s into scene %s in episode %s",
+									name, ck.typ,
+									scene.Metadata.Title,
+									firstScene.Metadata.Title,
+									file.contents[histIdx].Metadata.Title),
+							})
+							break
 						}
 					} else {
-						// First occurrence of this expression in the episode
-						episodeExpressions[exprKey] = sceneIdx
+						episodeExpressions[ck] = sceneIdx
 					}
 				}
 
-				// Remove duplicates from this scene
 				if len(expressionsToRemove) > 0 {
 					filteredExpressions := make([]LearningHistoryExpression, 0)
 					for exprIdx, expr := range scene.Expressions {
@@ -1619,6 +1628,11 @@ func (v *Validator) migrateEtymologyShape(files []learningHistoryFile, result *V
 				}
 
 				for _, expr := range legacyScene.Expressions {
+					// All entries pulled from a type=etymology block are
+					// origins by definition; tag them so they don't merge
+					// with vocab entries sharing the same name in the
+					// destination scene.
+					expr.Type = LearningExpressionTypeOrigin
 					sceneTitle := pickBestSceneForOrigin(candidates, expr.Expression, notebookID, sessionTitle)
 					if sceneTitle == "" {
 						sceneTitle = sessionTitle
@@ -1636,9 +1650,16 @@ func (v *Validator) migrateEtymologyShape(files []learningHistoryFile, result *V
 						})
 						sceneIdx = len(keep[targetIdx].Scenes) - 1
 					}
+					// Merge target: only an entry of the same type counts
+					// as a duplicate. A type=origin and a type=vocabulary
+					// entry with the same name coexist as separate records.
 					mergeIdx := -1
 					for ei := range keep[targetIdx].Scenes[sceneIdx].Expressions {
-						if keep[targetIdx].Scenes[sceneIdx].Expressions[ei].Expression == expr.Expression {
+						existing := &keep[targetIdx].Scenes[sceneIdx].Expressions[ei]
+						if existing.Expression != expr.Expression {
+							continue
+						}
+						if existing.Type == LearningExpressionTypeOrigin {
 							mergeIdx = ei
 							break
 						}

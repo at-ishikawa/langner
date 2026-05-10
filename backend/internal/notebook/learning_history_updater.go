@@ -453,11 +453,11 @@ func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
 	)
 }
 
-// UpdateOrCreateExpressionWithQualityForEtymology updates or creates an expression with SM-2 quality assessment for etymology quiz.
-//
-// Etymology learning history is stored under per-session scenes (sceneTitle =
-// the session's metadata.title) so multi-sense origins are tracked separately.
-// Callers must always pass a non-empty sceneTitle.
+// UpdateOrCreateExpressionWithQualityForEtymology updates or creates an
+// origin entry. Lookup matches on (name, Type=origin) so a vocab entry
+// sharing the name doesn't get its etymology logs polluted. Legacy
+// type-empty entries with etymology logs are upgraded in place to
+// Type=origin so re-runs converge on the typed shape.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
@@ -481,6 +481,20 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
+				// Skip vocab entries — only update origin entries (or
+				// legacy type-empty entries that already carry etymology
+				// logs, which we can safely upgrade).
+				if exp.Type != LearningExpressionTypeOrigin {
+					if exp.Type != "" {
+						continue
+					}
+					if len(exp.EtymologyBreakdownLogs) == 0 && len(exp.EtymologyAssemblyLogs) == 0 {
+						continue
+					}
+				}
+				if exp.Type == "" {
+					exp.Type = LearningExpressionTypeOrigin
+				}
 				exp.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
@@ -493,13 +507,9 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 }
 
 // createNewExpressionWithQualityForEtymology creates a new expression entry
-// with quality data for etymology quizzes. Now writes the canonical
-// per-session shape that standard/reverse/freeform also use: top-level
-// title = session, scenes hold expressions. metadata.type stays empty —
-// the etymology block looks identical to a vocab block, just with
-// etymology_breakdown_logs / etymology_assembly_logs populated instead
-// of learned_logs. Multi-sense origins remain disambiguated because
-// each session is its own top-level block.
+// with quality data for etymology quizzes. The entry is tagged
+// Type=origin so it never collides with a vocab entry sharing the same
+// name in the same scene (e.g., "ego" the word vs the Latin root).
 func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression string,
 	isCorrect, isKnownWord bool,
@@ -511,6 +521,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
+		Type:        LearningExpressionTypeOrigin,
 		LearnedLogs: []LearningRecord{},
 	}
 	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)

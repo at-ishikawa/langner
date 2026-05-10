@@ -2035,6 +2035,11 @@ func TestValidator_Fix_PreservesEveryPersistableField(t *testing.T) {
 		"ReverseEasinessFactor":            `yaml:"-" — derived`,
 		"EtymologyBreakdownEasinessFactor": `yaml:"-" — derived`,
 		"EtymologyAssemblyEasinessFactor":  `yaml:"-" — derived`,
+		// Type is a discriminator (vocabulary vs origin), not data. An
+		// entry whose only data is Type is empty by intent and is
+		// correctly dropped by fixConsistency. Round-tripping with
+		// other data populated is exercised by the migration tests.
+		"Type": "discriminator field, not 'data' that keeps an entry alive",
 	}
 
 	rt := reflect.TypeOf(LearningHistoryExpression{})
@@ -2159,6 +2164,67 @@ func nonZeroValueFor(t reflect.Type) (reflect.Value, bool) {
 		return reflect.Value{}, false
 	}
 	return reflect.Value{}, false
+}
+
+// TestValidator_Fix_TypeFieldRoundTrips proves that the new Type
+// discriminator on LearningHistoryExpression is preserved through a
+// full Validator.Fix run when the entry has actual data — origin and
+// vocabulary entries with the same name in the same scene must
+// coexist as separate records and each must keep its Type.
+func TestValidator_Fix_TypeFieldRoundTrips(t *testing.T) {
+	learningDir := t.TempDir()
+	storyDir := t.TempDir() // empty: orphan-detection isn't relevant here
+
+	// Same-name collision: vocab "ego" + origin "ego" in the same scene.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "wpme.yml"), []byte(`- metadata:
+    id: wpme
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "ego (self)"
+      expressions:
+        - expression: ego
+          type: vocabulary
+          learned_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: notebook
+        - expression: ego
+          type: origin
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+`), 0644))
+
+	v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "wpme.yml"))
+	require.NoError(t, err)
+	var got []LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Scenes, 1)
+	exprs := got[0].Scenes[0].Expressions
+	require.Lenf(t, exprs, 2, "vocab and origin entries with the same name must NOT merge — found: %+v", exprs)
+
+	byType := make(map[string]LearningHistoryExpression, 2)
+	for _, e := range exprs {
+		byType[e.Type] = e
+	}
+	vocab, ok := byType[LearningExpressionTypeVocabulary]
+	require.True(t, ok, "vocabulary entry missing")
+	assert.NotEmpty(t, vocab.LearnedLogs, "vocab entry must keep its learned_logs")
+	assert.Empty(t, vocab.EtymologyBreakdownLogs, "vocab entry must not absorb etymology logs")
+
+	origin, ok := byType[LearningExpressionTypeOrigin]
+	require.True(t, ok, "origin entry missing")
+	assert.NotEmpty(t, origin.EtymologyBreakdownLogs, "origin entry must keep its etymology_breakdown_logs")
+	assert.Empty(t, origin.LearnedLogs, "origin entry must not absorb vocab logs")
 }
 
 // TestValidator_Fix_MigratesEtymologyShape verifies that legacy etymology

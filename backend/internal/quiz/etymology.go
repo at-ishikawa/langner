@@ -525,13 +525,11 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 }
 
 // findOriginExpression returns the LearningHistoryExpression for an origin.
-// It looks first at the canonical Shape B layout (top-level title =
-// sessionTitle, origin under any scene of that block) and falls back to
-// the legacy Shape A layout (top-level title = notebookTitle, sessions
-// stored as scenes). Validator.migrateEtymologyShape rewrites Shape A to
-// Shape B during `validate --fix`; the fallback path keeps unmigrated
-// data readable so users running the new binary before --fix don't lose
-// etymology progress.
+// Prefers entries explicitly typed as origin so a vocab entry sharing the
+// name (e.g. "ego" the word vs the Latin root) isn't returned by mistake.
+// Falls back to legacy type-empty entries that carry etymology logs (the
+// pre-Type representation). Looks at canonical Shape B first, then legacy
+// Shape A for unmigrated learning-history files.
 //
 // Eligibility is per-(session_title, origin) so multi-sense origins
 // (ana = "up" in Session 13, "negative" in Session 16) keep independent
@@ -540,23 +538,50 @@ func findOriginExpression(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
 ) *notebook.LearningHistoryExpression {
+	isOriginCandidate := func(expr *notebook.LearningHistoryExpression) bool {
+		if expr.Type == notebook.LearningExpressionTypeOrigin {
+			return true
+		}
+		if expr.Type == "" && (len(expr.EtymologyBreakdownLogs) > 0 || len(expr.EtymologyAssemblyLogs) > 0) {
+			return true
+		}
+		return false
+	}
+	scan := func(h *notebook.LearningHistory) *notebook.LearningHistoryExpression {
+		var typedHit, legacyHit *notebook.LearningHistoryExpression
+		check := func(expr *notebook.LearningHistoryExpression) {
+			if !strings.EqualFold(expr.Expression, origin) {
+				return
+			}
+			if expr.Type == notebook.LearningExpressionTypeOrigin && typedHit == nil {
+				typedHit = expr
+				return
+			}
+			if isOriginCandidate(expr) && legacyHit == nil {
+				legacyHit = expr
+			}
+		}
+		for ei := range h.Expressions {
+			check(&h.Expressions[ei])
+		}
+		for si := range h.Scenes {
+			for ei := range h.Scenes[si].Expressions {
+				check(&h.Scenes[si].Expressions[ei])
+			}
+		}
+		if typedHit != nil {
+			return typedHit
+		}
+		return legacyHit
+	}
+
 	// Canonical Shape B: top-level title is the session.
 	for hi := range histories {
 		if histories[hi].Metadata.Title != sessionTitle {
 			continue
 		}
-		for ei := range histories[hi].Expressions {
-			if strings.EqualFold(histories[hi].Expressions[ei].Expression, origin) {
-				return &histories[hi].Expressions[ei]
-			}
-		}
-		for si := range histories[hi].Scenes {
-			for ei := range histories[hi].Scenes[si].Expressions {
-				expr := &histories[hi].Scenes[si].Expressions[ei]
-				if strings.EqualFold(expr.Expression, origin) {
-					return expr
-				}
-			}
+		if hit := scan(&histories[hi]); hit != nil {
+			return hit
 		}
 	}
 	// Legacy Shape A fallback: notebook-named top-level block, sessions
@@ -571,7 +596,7 @@ func findOriginExpression(
 			}
 			for ei := range histories[hi].Scenes[si].Expressions {
 				expr := &histories[hi].Scenes[si].Expressions[ei]
-				if strings.EqualFold(expr.Expression, origin) {
+				if strings.EqualFold(expr.Expression, origin) && isOriginCandidate(expr) {
 					return expr
 				}
 			}
