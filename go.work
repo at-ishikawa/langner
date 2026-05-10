@@ -1,0 +1,8 @@
+go 1.25.0
+
+use (
+	./go/backend
+	./go/check-case-coverage
+	./go/gen-test-suites
+	./go/testrunner
+)

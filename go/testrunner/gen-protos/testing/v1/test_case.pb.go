@@ -1475,7 +1475,7 @@ const file_testing_v1_test_case_proto_rawDesc = "" +
 	"\trow_match\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\browMatch\"T\n" +
 	"\tRowAbsent\x12\x14\n" +
 	"\x05table\x18\x01 \x01(\tR\x05table\x121\n" +
-	"\trow_match\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\browMatchB@Z>github.com/at-ishikawa/langner/gen-protos/testing/v1;testingv1b\x06proto3"
+	"\trow_match\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\browMatchBKZIgithub.com/at-ishikawa/langner/testrunner/gen-protos/testing/v1;testingv1b\x06proto3"
 
 var (
 	file_testing_v1_test_case_proto_rawDescOnce sync.Once

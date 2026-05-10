@@ -1,1 +1,3 @@
-name: "smoke"
+cases {
+  name: "smoke"
+}

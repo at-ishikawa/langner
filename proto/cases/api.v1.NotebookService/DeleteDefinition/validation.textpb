@@ -1,0 +1,19 @@
+cases {
+  name: "rejects_missing_notebook_id"
+  request {
+    expression: "lose one's temper"
+  }
+  expected {
+    status: 3  # InvalidArgument
+  }
+}
+
+cases {
+  name: "rejects_missing_expression"
+  request {
+    notebook_id: "mybook"
+  }
+  expected {
+    status: 3  # InvalidArgument
+  }
+}

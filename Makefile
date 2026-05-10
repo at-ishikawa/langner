@@ -42,7 +42,9 @@ dev:
 
 .PHONY: proto
 proto:
-	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate --template buf.gen.backend.yaml
+	go run ./go/gen-test-suites ./proto ./proto/testing/cases
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate --template buf.gen.testrunner.yaml --path proto/testing/v1
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate --template buf.gen.backend.yaml --path proto/api --path proto/testing/cases
 	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate --template buf.gen.frontend.yaml
 
 .PHONY: fix

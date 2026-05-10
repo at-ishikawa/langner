@@ -5,7 +5,7 @@ package testing.v1;
 import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 
-option go_package = "github.com/at-ishikawa/langner/gen-protos/testing/v1;testingv1";
+option go_package = "github.com/at-ishikawa/langner/testrunner/gen-protos/testing/v1;testingv1";
 
 // TestCase is the unit of an RPC behavior test. The RPC under test is
 // determined by the directory the .textpb file lives in:

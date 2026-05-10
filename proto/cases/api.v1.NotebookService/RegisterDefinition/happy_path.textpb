@@ -1,7 +1,6 @@
-name: "happy_path_writes_definition_yaml"
-
-request {
-  [type.googleapis.com/api.v1.RegisterDefinitionRequest] {
+cases {
+  name: "writes_definition_yaml"
+  request {
     notebook_id: "mybook"
     notebook_file: "001-chapter-1.yml"
     scene_index: 0
@@ -9,15 +8,46 @@ request {
     meaning: "to become very angry"
     part_of_speech: "phrase"
   }
+  expected {
+    state {
+      file_contains {
+        path: "$TEMP_DIR/mybook.yml"
+        contains: "lose one's temper"
+        contains: "001-chapter-1.yml"
+      }
+    }
+  }
 }
 
-expected {
-  status: 0
-  state {
-    file_contains {
-      path: "$TEMP_DIR/mybook.yml"
-      contains: "lose one's temper"
-      contains: "001-chapter-1.yml"
+cases {
+  name: "writes_to_subdirectory_when_id_has_slash"
+  request {
+    notebook_id: "books/mybook"
+    notebook_file: "001-chapter-1.yml"
+    scene_index: 0
+    expression: "break the ice"
+    meaning: "to do something to relieve tension"
+    part_of_speech: "phrase"
+  }
+  expected {
+    state {
+      file_contains {
+        path: "$TEMP_DIR/books/mybook.yml"
+        contains: "break the ice"
+      }
     }
+  }
+}
+
+cases {
+  name: "rejects_path_traversal_in_notebook_id"
+  request {
+    notebook_id: "../../etc/passwd"
+    expression: "test"
+    meaning: "test meaning"
+  }
+  expected {
+    status: 3  # InvalidArgument
+    error { message_regex: "invalid notebook_id" }
   }
 }
