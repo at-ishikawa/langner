@@ -9,8 +9,6 @@ package testingv1
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	anypb "google.golang.org/protobuf/types/known/anypb"
-	emptypb "google.golang.org/protobuf/types/known/emptypb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -23,98 +21,12 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// TestCase is the unit of an RPC behavior test. The RPC under test is
-// determined by the directory the .textpb file lives in:
-//
-//	proto/cases/<service-fullname>/<method-name>/<scenario>.textpb
-type TestCase struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Setup         []*SetupStep           `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
-	Request       *anypb.Any             `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
-	Expected      *Expected              `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string      `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *TestCase) Reset() {
-	*x = TestCase{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[0]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *TestCase) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*TestCase) ProtoMessage() {}
-
-func (x *TestCase) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[0]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use TestCase.ProtoReflect.Descriptor instead.
-func (*TestCase) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *TestCase) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *TestCase) GetSetup() []*SetupStep {
-	if x != nil {
-		return x.Setup
-	}
-	return nil
-}
-
-func (x *TestCase) GetRequest() *anypb.Any {
-	if x != nil {
-		return x.Request
-	}
-	return nil
-}
-
-func (x *TestCase) GetExpected() *Expected {
-	if x != nil {
-		return x.Expected
-	}
-	return nil
-}
-
-func (x *TestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SetupStep struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Step:
 	//
-	//	*SetupStep_ClearTables
-	//	*SetupStep_InsertRows
-	//	*SetupStep_ClearDirs
 	//	*SetupStep_WriteFile
-	//	*SetupStep_RemoveFiles
-	//	*SetupStep_SetClock
-	//	*SetupStep_SetEnv
-	//	*SetupStep_StubResponse
+	//	*SetupStep_ClearDir
 	Step          isSetupStep_Step `protobuf_oneof:"step"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -122,7 +34,7 @@ type SetupStep struct {
 
 func (x *SetupStep) Reset() {
 	*x = SetupStep{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[1]
+	mi := &file_testing_v1_test_case_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -134,7 +46,7 @@ func (x *SetupStep) String() string {
 func (*SetupStep) ProtoMessage() {}
 
 func (x *SetupStep) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[1]
+	mi := &file_testing_v1_test_case_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -147,39 +59,12 @@ func (x *SetupStep) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetupStep.ProtoReflect.Descriptor instead.
 func (*SetupStep) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{1}
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *SetupStep) GetStep() isSetupStep_Step {
 	if x != nil {
 		return x.Step
-	}
-	return nil
-}
-
-func (x *SetupStep) GetClearTables() *ClearTables {
-	if x != nil {
-		if x, ok := x.Step.(*SetupStep_ClearTables); ok {
-			return x.ClearTables
-		}
-	}
-	return nil
-}
-
-func (x *SetupStep) GetInsertRows() *InsertRows {
-	if x != nil {
-		if x, ok := x.Step.(*SetupStep_InsertRows); ok {
-			return x.InsertRows
-		}
-	}
-	return nil
-}
-
-func (x *SetupStep) GetClearDirs() *ClearDirs {
-	if x != nil {
-		if x, ok := x.Step.(*SetupStep_ClearDirs); ok {
-			return x.ClearDirs
-		}
 	}
 	return nil
 }
@@ -193,37 +78,10 @@ func (x *SetupStep) GetWriteFile() *WriteFile {
 	return nil
 }
 
-func (x *SetupStep) GetRemoveFiles() *RemoveFiles {
+func (x *SetupStep) GetClearDir() *ClearDir {
 	if x != nil {
-		if x, ok := x.Step.(*SetupStep_RemoveFiles); ok {
-			return x.RemoveFiles
-		}
-	}
-	return nil
-}
-
-func (x *SetupStep) GetSetClock() *SetClock {
-	if x != nil {
-		if x, ok := x.Step.(*SetupStep_SetClock); ok {
-			return x.SetClock
-		}
-	}
-	return nil
-}
-
-func (x *SetupStep) GetSetEnv() *SetEnv {
-	if x != nil {
-		if x, ok := x.Step.(*SetupStep_SetEnv); ok {
-			return x.SetEnv
-		}
-	}
-	return nil
-}
-
-func (x *SetupStep) GetStubResponse() *StubResponse {
-	if x != nil {
-		if x, ok := x.Step.(*SetupStep_StubResponse); ok {
-			return x.StubResponse
+		if x, ok := x.Step.(*SetupStep_ClearDir); ok {
+			return x.ClearDir
 		}
 	}
 	return nil
@@ -233,197 +91,21 @@ type isSetupStep_Step interface {
 	isSetupStep_Step()
 }
 
-type SetupStep_ClearTables struct {
-	ClearTables *ClearTables `protobuf:"bytes,1,opt,name=clear_tables,json=clearTables,proto3,oneof"`
-}
-
-type SetupStep_InsertRows struct {
-	InsertRows *InsertRows `protobuf:"bytes,2,opt,name=insert_rows,json=insertRows,proto3,oneof"`
-}
-
-type SetupStep_ClearDirs struct {
-	ClearDirs *ClearDirs `protobuf:"bytes,3,opt,name=clear_dirs,json=clearDirs,proto3,oneof"`
-}
-
 type SetupStep_WriteFile struct {
-	WriteFile *WriteFile `protobuf:"bytes,4,opt,name=write_file,json=writeFile,proto3,oneof"`
+	WriteFile *WriteFile `protobuf:"bytes,1,opt,name=write_file,json=writeFile,proto3,oneof"` // seed a file inside the per-case sandbox
 }
 
-type SetupStep_RemoveFiles struct {
-	RemoveFiles *RemoveFiles `protobuf:"bytes,5,opt,name=remove_files,json=removeFiles,proto3,oneof"`
+type SetupStep_ClearDir struct {
+	ClearDir *ClearDir `protobuf:"bytes,2,opt,name=clear_dir,json=clearDir,proto3,oneof"` // wipe and recreate a directory in the sandbox
 }
-
-type SetupStep_SetClock struct {
-	SetClock *SetClock `protobuf:"bytes,10,opt,name=set_clock,json=setClock,proto3,oneof"`
-}
-
-type SetupStep_SetEnv struct {
-	SetEnv *SetEnv `protobuf:"bytes,11,opt,name=set_env,json=setEnv,proto3,oneof"`
-}
-
-type SetupStep_StubResponse struct {
-	StubResponse *StubResponse `protobuf:"bytes,12,opt,name=stub_response,json=stubResponse,proto3,oneof"`
-}
-
-func (*SetupStep_ClearTables) isSetupStep_Step() {}
-
-func (*SetupStep_InsertRows) isSetupStep_Step() {}
-
-func (*SetupStep_ClearDirs) isSetupStep_Step() {}
 
 func (*SetupStep_WriteFile) isSetupStep_Step() {}
 
-func (*SetupStep_RemoveFiles) isSetupStep_Step() {}
-
-func (*SetupStep_SetClock) isSetupStep_Step() {}
-
-func (*SetupStep_SetEnv) isSetupStep_Step() {}
-
-func (*SetupStep_StubResponse) isSetupStep_Step() {}
-
-type ClearTables struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tables        []string               `protobuf:"bytes,1,rep,name=tables,proto3" json:"tables,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ClearTables) Reset() {
-	*x = ClearTables{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[2]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ClearTables) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ClearTables) ProtoMessage() {}
-
-func (x *ClearTables) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[2]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ClearTables.ProtoReflect.Descriptor instead.
-func (*ClearTables) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ClearTables) GetTables() []string {
-	if x != nil {
-		return x.Tables
-	}
-	return nil
-}
-
-type InsertRows struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Table         string                 `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
-	Rows          []*anypb.Any           `protobuf:"bytes,2,rep,name=rows,proto3" json:"rows,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *InsertRows) Reset() {
-	*x = InsertRows{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[3]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *InsertRows) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*InsertRows) ProtoMessage() {}
-
-func (x *InsertRows) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[3]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use InsertRows.ProtoReflect.Descriptor instead.
-func (*InsertRows) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *InsertRows) GetTable() string {
-	if x != nil {
-		return x.Table
-	}
-	return ""
-}
-
-func (x *InsertRows) GetRows() []*anypb.Any {
-	if x != nil {
-		return x.Rows
-	}
-	return nil
-}
-
-type ClearDirs struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Paths         []string               `protobuf:"bytes,1,rep,name=paths,proto3" json:"paths,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ClearDirs) Reset() {
-	*x = ClearDirs{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ClearDirs) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ClearDirs) ProtoMessage() {}
-
-func (x *ClearDirs) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ClearDirs.ProtoReflect.Descriptor instead.
-func (*ClearDirs) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *ClearDirs) GetPaths() []string {
-	if x != nil {
-		return x.Paths
-	}
-	return nil
-}
+func (*SetupStep_ClearDir) isSetupStep_Step() {}
 
 type WriteFile struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // sandbox-relative; absolute path is passed through
 	Content       []byte                 `protobuf:"bytes,2,opt,name=content,proto3" json:"content,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -431,7 +113,7 @@ type WriteFile struct {
 
 func (x *WriteFile) Reset() {
 	*x = WriteFile{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[5]
+	mi := &file_testing_v1_test_case_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -443,7 +125,7 @@ func (x *WriteFile) String() string {
 func (*WriteFile) ProtoMessage() {}
 
 func (x *WriteFile) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[5]
+	mi := &file_testing_v1_test_case_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -456,7 +138,7 @@ func (x *WriteFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WriteFile.ProtoReflect.Descriptor instead.
 func (*WriteFile) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{5}
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *WriteFile) GetPath() string {
@@ -473,28 +155,28 @@ func (x *WriteFile) GetContent() []byte {
 	return nil
 }
 
-type RemoveFiles struct {
+type ClearDir struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Paths         []string               `protobuf:"bytes,1,rep,name=paths,proto3" json:"paths,omitempty"`
+	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // sandbox-relative; "" means the sandbox root
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *RemoveFiles) Reset() {
-	*x = RemoveFiles{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[6]
+func (x *ClearDir) Reset() {
+	*x = ClearDir{}
+	mi := &file_testing_v1_test_case_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *RemoveFiles) String() string {
+func (x *ClearDir) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RemoveFiles) ProtoMessage() {}
+func (*ClearDir) ProtoMessage() {}
 
-func (x *RemoveFiles) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[6]
+func (x *ClearDir) ProtoReflect() protoreflect.Message {
+	mi := &file_testing_v1_test_case_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -505,261 +187,28 @@ func (x *RemoveFiles) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RemoveFiles.ProtoReflect.Descriptor instead.
-func (*RemoveFiles) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{6}
+// Deprecated: Use ClearDir.ProtoReflect.Descriptor instead.
+func (*ClearDir) Descriptor() ([]byte, []int) {
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *RemoveFiles) GetPaths() []string {
+func (x *ClearDir) GetPath() string {
 	if x != nil {
-		return x.Paths
-	}
-	return nil
-}
-
-type SetClock struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Rfc3339       string                 `protobuf:"bytes,1,opt,name=rfc3339,proto3" json:"rfc3339,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetClock) Reset() {
-	*x = SetClock{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[7]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetClock) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetClock) ProtoMessage() {}
-
-func (x *SetClock) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[7]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetClock.ProtoReflect.Descriptor instead.
-func (*SetClock) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{7}
-}
-
-func (x *SetClock) GetRfc3339() string {
-	if x != nil {
-		return x.Rfc3339
+		return x.Path
 	}
 	return ""
-}
-
-type SetEnv struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Entries       map[string]string      `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SetEnv) Reset() {
-	*x = SetEnv{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SetEnv) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SetEnv) ProtoMessage() {}
-
-func (x *SetEnv) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SetEnv.ProtoReflect.Descriptor instead.
-func (*SetEnv) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *SetEnv) GetEntries() map[string]string {
-	if x != nil {
-		return x.Entries
-	}
-	return nil
-}
-
-type StubResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Upstream      string                 `protobuf:"bytes,1,opt,name=upstream,proto3" json:"upstream,omitempty"`
-	MatchRequest  string                 `protobuf:"bytes,2,opt,name=match_request,json=matchRequest,proto3" json:"match_request,omitempty"`
-	Response      *anypb.Any             `protobuf:"bytes,3,opt,name=response,proto3" json:"response,omitempty"`
-	ErrorCode     string                 `protobuf:"bytes,4,opt,name=error_code,json=errorCode,proto3" json:"error_code,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *StubResponse) Reset() {
-	*x = StubResponse{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StubResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StubResponse) ProtoMessage() {}
-
-func (x *StubResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StubResponse.ProtoReflect.Descriptor instead.
-func (*StubResponse) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *StubResponse) GetUpstream() string {
-	if x != nil {
-		return x.Upstream
-	}
-	return ""
-}
-
-func (x *StubResponse) GetMatchRequest() string {
-	if x != nil {
-		return x.MatchRequest
-	}
-	return ""
-}
-
-func (x *StubResponse) GetResponse() *anypb.Any {
-	if x != nil {
-		return x.Response
-	}
-	return nil
-}
-
-func (x *StubResponse) GetErrorCode() string {
-	if x != nil {
-		return x.ErrorCode
-	}
-	return ""
-}
-
-type Expected struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Status            uint32                 `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"` // Connect/gRPC code; 0 = OK
-	Body              *anypb.Any             `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`      // for OK responses (partial match)
-	Error             *ExpectedError         `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`    // for non-OK responses
-	FieldExpectations []*FieldExpectation    `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*StateAssertion      `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
-}
-
-func (x *Expected) Reset() {
-	*x = Expected{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[10]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Expected) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Expected) ProtoMessage() {}
-
-func (x *Expected) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[10]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Expected.ProtoReflect.Descriptor instead.
-func (*Expected) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{10}
-}
-
-func (x *Expected) GetStatus() uint32 {
-	if x != nil {
-		return x.Status
-	}
-	return 0
-}
-
-func (x *Expected) GetBody() *anypb.Any {
-	if x != nil {
-		return x.Body
-	}
-	return nil
-}
-
-func (x *Expected) GetError() *ExpectedError {
-	if x != nil {
-		return x.Error
-	}
-	return nil
-}
-
-func (x *Expected) GetFieldExpectations() []*FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
-	}
-	return nil
-}
-
-func (x *Expected) GetState() []*StateAssertion {
-	if x != nil {
-		return x.State
-	}
-	return nil
 }
 
 type ExpectedError struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	MessageRegex  string                 `protobuf:"bytes,1,opt,name=message_regex,json=messageRegex,proto3" json:"message_regex,omitempty"`
-	Details       []*anypb.Any           `protobuf:"bytes,2,rep,name=details,proto3" json:"details,omitempty"`
+	MessageRegex  string                 `protobuf:"bytes,1,opt,name=message_regex,json=messageRegex,proto3" json:"message_regex,omitempty"` // regex applied to err.Error()
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExpectedError) Reset() {
 	*x = ExpectedError{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[11]
+	mi := &file_testing_v1_test_case_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -771,7 +220,7 @@ func (x *ExpectedError) String() string {
 func (*ExpectedError) ProtoMessage() {}
 
 func (x *ExpectedError) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[11]
+	mi := &file_testing_v1_test_case_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -784,7 +233,7 @@ func (x *ExpectedError) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExpectedError.ProtoReflect.Descriptor instead.
 func (*ExpectedError) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{11}
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ExpectedError) GetMessageRegex() string {
@@ -794,211 +243,6 @@ func (x *ExpectedError) GetMessageRegex() string {
 	return ""
 }
 
-func (x *ExpectedError) GetDetails() []*anypb.Any {
-	if x != nil {
-		return x.Details
-	}
-	return nil
-}
-
-type FieldExpectation struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	Path  string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	// Types that are valid to be assigned to Rule:
-	//
-	//	*FieldExpectation_Present
-	//	*FieldExpectation_Unset
-	//	*FieldExpectation_Regex
-	//	*FieldExpectation_Range
-	//	*FieldExpectation_EqualsVar
-	Rule          isFieldExpectation_Rule `protobuf_oneof:"rule"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *FieldExpectation) Reset() {
-	*x = FieldExpectation{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[12]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *FieldExpectation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*FieldExpectation) ProtoMessage() {}
-
-func (x *FieldExpectation) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[12]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use FieldExpectation.ProtoReflect.Descriptor instead.
-func (*FieldExpectation) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{12}
-}
-
-func (x *FieldExpectation) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *FieldExpectation) GetRule() isFieldExpectation_Rule {
-	if x != nil {
-		return x.Rule
-	}
-	return nil
-}
-
-func (x *FieldExpectation) GetPresent() *emptypb.Empty {
-	if x != nil {
-		if x, ok := x.Rule.(*FieldExpectation_Present); ok {
-			return x.Present
-		}
-	}
-	return nil
-}
-
-func (x *FieldExpectation) GetUnset() *emptypb.Empty {
-	if x != nil {
-		if x, ok := x.Rule.(*FieldExpectation_Unset); ok {
-			return x.Unset
-		}
-	}
-	return nil
-}
-
-func (x *FieldExpectation) GetRegex() string {
-	if x != nil {
-		if x, ok := x.Rule.(*FieldExpectation_Regex); ok {
-			return x.Regex
-		}
-	}
-	return ""
-}
-
-func (x *FieldExpectation) GetRange() *NumberRange {
-	if x != nil {
-		if x, ok := x.Rule.(*FieldExpectation_Range); ok {
-			return x.Range
-		}
-	}
-	return nil
-}
-
-func (x *FieldExpectation) GetEqualsVar() string {
-	if x != nil {
-		if x, ok := x.Rule.(*FieldExpectation_EqualsVar); ok {
-			return x.EqualsVar
-		}
-	}
-	return ""
-}
-
-type isFieldExpectation_Rule interface {
-	isFieldExpectation_Rule()
-}
-
-type FieldExpectation_Present struct {
-	Present *emptypb.Empty `protobuf:"bytes,2,opt,name=present,proto3,oneof"` // any non-zero value, must be set
-}
-
-type FieldExpectation_Unset struct {
-	Unset *emptypb.Empty `protobuf:"bytes,3,opt,name=unset,proto3,oneof"` // must be null/zero/absent
-}
-
-type FieldExpectation_Regex struct {
-	Regex string `protobuf:"bytes,4,opt,name=regex,proto3,oneof"`
-}
-
-type FieldExpectation_Range struct {
-	Range *NumberRange `protobuf:"bytes,5,opt,name=range,proto3,oneof"`
-}
-
-type FieldExpectation_EqualsVar struct {
-	EqualsVar string `protobuf:"bytes,6,opt,name=equals_var,json=equalsVar,proto3,oneof"`
-}
-
-func (*FieldExpectation_Present) isFieldExpectation_Rule() {}
-
-func (*FieldExpectation_Unset) isFieldExpectation_Rule() {}
-
-func (*FieldExpectation_Regex) isFieldExpectation_Rule() {}
-
-func (*FieldExpectation_Range) isFieldExpectation_Rule() {}
-
-func (*FieldExpectation_EqualsVar) isFieldExpectation_Rule() {}
-
-type NumberRange struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Min           float64                `protobuf:"fixed64,1,opt,name=min,proto3" json:"min,omitempty"`
-	Max           float64                `protobuf:"fixed64,2,opt,name=max,proto3" json:"max,omitempty"`
-	MaxInclusive  bool                   `protobuf:"varint,3,opt,name=max_inclusive,json=maxInclusive,proto3" json:"max_inclusive,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *NumberRange) Reset() {
-	*x = NumberRange{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[13]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *NumberRange) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*NumberRange) ProtoMessage() {}
-
-func (x *NumberRange) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[13]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use NumberRange.ProtoReflect.Descriptor instead.
-func (*NumberRange) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{13}
-}
-
-func (x *NumberRange) GetMin() float64 {
-	if x != nil {
-		return x.Min
-	}
-	return 0
-}
-
-func (x *NumberRange) GetMax() float64 {
-	if x != nil {
-		return x.Max
-	}
-	return 0
-}
-
-func (x *NumberRange) GetMaxInclusive() bool {
-	if x != nil {
-		return x.MaxInclusive
-	}
-	return false
-}
-
 type StateAssertion struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Types that are valid to be assigned to Assertion:
@@ -1006,8 +250,6 @@ type StateAssertion struct {
 	//	*StateAssertion_FileExists
 	//	*StateAssertion_FileAbsent
 	//	*StateAssertion_FileContains
-	//	*StateAssertion_RowExists
-	//	*StateAssertion_RowAbsent
 	Assertion     isStateAssertion_Assertion `protobuf_oneof:"assertion"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1015,7 +257,7 @@ type StateAssertion struct {
 
 func (x *StateAssertion) Reset() {
 	*x = StateAssertion{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[14]
+	mi := &file_testing_v1_test_case_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1027,7 +269,7 @@ func (x *StateAssertion) String() string {
 func (*StateAssertion) ProtoMessage() {}
 
 func (x *StateAssertion) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[14]
+	mi := &file_testing_v1_test_case_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1040,7 +282,7 @@ func (x *StateAssertion) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StateAssertion.ProtoReflect.Descriptor instead.
 func (*StateAssertion) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{14}
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *StateAssertion) GetAssertion() isStateAssertion_Assertion {
@@ -1077,24 +319,6 @@ func (x *StateAssertion) GetFileContains() *FileContains {
 	return nil
 }
 
-func (x *StateAssertion) GetRowExists() *RowExists {
-	if x != nil {
-		if x, ok := x.Assertion.(*StateAssertion_RowExists); ok {
-			return x.RowExists
-		}
-	}
-	return nil
-}
-
-func (x *StateAssertion) GetRowAbsent() *RowAbsent {
-	if x != nil {
-		if x, ok := x.Assertion.(*StateAssertion_RowAbsent); ok {
-			return x.RowAbsent
-		}
-	}
-	return nil
-}
-
 type isStateAssertion_Assertion interface {
 	isStateAssertion_Assertion()
 }
@@ -1111,23 +335,11 @@ type StateAssertion_FileContains struct {
 	FileContains *FileContains `protobuf:"bytes,3,opt,name=file_contains,json=fileContains,proto3,oneof"`
 }
 
-type StateAssertion_RowExists struct {
-	RowExists *RowExists `protobuf:"bytes,4,opt,name=row_exists,json=rowExists,proto3,oneof"`
-}
-
-type StateAssertion_RowAbsent struct {
-	RowAbsent *RowAbsent `protobuf:"bytes,5,opt,name=row_absent,json=rowAbsent,proto3,oneof"`
-}
-
 func (*StateAssertion_FileExists) isStateAssertion_Assertion() {}
 
 func (*StateAssertion_FileAbsent) isStateAssertion_Assertion() {}
 
 func (*StateAssertion_FileContains) isStateAssertion_Assertion() {}
-
-func (*StateAssertion_RowExists) isStateAssertion_Assertion() {}
-
-func (*StateAssertion_RowAbsent) isStateAssertion_Assertion() {}
 
 type FileExists struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -1138,7 +350,7 @@ type FileExists struct {
 
 func (x *FileExists) Reset() {
 	*x = FileExists{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[15]
+	mi := &file_testing_v1_test_case_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1150,7 +362,7 @@ func (x *FileExists) String() string {
 func (*FileExists) ProtoMessage() {}
 
 func (x *FileExists) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[15]
+	mi := &file_testing_v1_test_case_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1163,7 +375,7 @@ func (x *FileExists) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileExists.ProtoReflect.Descriptor instead.
 func (*FileExists) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{15}
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *FileExists) GetPath() string {
@@ -1182,7 +394,7 @@ type FileAbsent struct {
 
 func (x *FileAbsent) Reset() {
 	*x = FileAbsent{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[16]
+	mi := &file_testing_v1_test_case_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1194,7 +406,7 @@ func (x *FileAbsent) String() string {
 func (*FileAbsent) ProtoMessage() {}
 
 func (x *FileAbsent) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[16]
+	mi := &file_testing_v1_test_case_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1207,7 +419,7 @@ func (x *FileAbsent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileAbsent.ProtoReflect.Descriptor instead.
 func (*FileAbsent) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{16}
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *FileAbsent) GetPath() string {
@@ -1220,14 +432,14 @@ func (x *FileAbsent) GetPath() string {
 type FileContains struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Contains      []string               `protobuf:"bytes,2,rep,name=contains,proto3" json:"contains,omitempty"`
+	Contains      []string               `protobuf:"bytes,2,rep,name=contains,proto3" json:"contains,omitempty"` // every entry must appear in the file
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *FileContains) Reset() {
 	*x = FileContains{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[17]
+	mi := &file_testing_v1_test_case_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1239,7 +451,7 @@ func (x *FileContains) String() string {
 func (*FileContains) ProtoMessage() {}
 
 func (x *FileContains) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[17]
+	mi := &file_testing_v1_test_case_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1252,7 +464,7 @@ func (x *FileContains) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileContains.ProtoReflect.Descriptor instead.
 func (*FileContains) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{17}
+	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *FileContains) GetPath() string {
@@ -1269,197 +481,30 @@ func (x *FileContains) GetContains() []string {
 	return nil
 }
 
-type RowExists struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Table         string                 `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
-	RowMatch      *anypb.Any             `protobuf:"bytes,2,opt,name=row_match,json=rowMatch,proto3" json:"row_match,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RowExists) Reset() {
-	*x = RowExists{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[18]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RowExists) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RowExists) ProtoMessage() {}
-
-func (x *RowExists) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[18]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RowExists.ProtoReflect.Descriptor instead.
-func (*RowExists) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *RowExists) GetTable() string {
-	if x != nil {
-		return x.Table
-	}
-	return ""
-}
-
-func (x *RowExists) GetRowMatch() *anypb.Any {
-	if x != nil {
-		return x.RowMatch
-	}
-	return nil
-}
-
-type RowAbsent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Table         string                 `protobuf:"bytes,1,opt,name=table,proto3" json:"table,omitempty"`
-	RowMatch      *anypb.Any             `protobuf:"bytes,2,opt,name=row_match,json=rowMatch,proto3" json:"row_match,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RowAbsent) Reset() {
-	*x = RowAbsent{}
-	mi := &file_testing_v1_test_case_proto_msgTypes[19]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RowAbsent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RowAbsent) ProtoMessage() {}
-
-func (x *RowAbsent) ProtoReflect() protoreflect.Message {
-	mi := &file_testing_v1_test_case_proto_msgTypes[19]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RowAbsent.ProtoReflect.Descriptor instead.
-func (*RowAbsent) Descriptor() ([]byte, []int) {
-	return file_testing_v1_test_case_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *RowAbsent) GetTable() string {
-	if x != nil {
-		return x.Table
-	}
-	return ""
-}
-
-func (x *RowAbsent) GetRowMatch() *anypb.Any {
-	if x != nil {
-		return x.RowMatch
-	}
-	return nil
-}
-
 var File_testing_v1_test_case_proto protoreflect.FileDescriptor
 
 const file_testing_v1_test_case_proto_rawDesc = "" +
 	"\n" +
 	"\x1atesting/v1/test_case.proto\x12\n" +
-	"testing.v1\x1a\x19google/protobuf/any.proto\x1a\x1bgoogle/protobuf/empty.proto\"\x9a\x02\n" +
-	"\bTestCase\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
-	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12.\n" +
-	"\arequest\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\arequest\x120\n" +
-	"\bexpected\x18\x04 \x01(\v2\x14.testing.v1.ExpectedR\bexpected\x122\n" +
-	"\x04vars\x18\x05 \x03(\v2\x1e.testing.v1.TestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xdf\x03\n" +
-	"\tSetupStep\x12<\n" +
-	"\fclear_tables\x18\x01 \x01(\v2\x17.testing.v1.ClearTablesH\x00R\vclearTables\x129\n" +
-	"\vinsert_rows\x18\x02 \x01(\v2\x16.testing.v1.InsertRowsH\x00R\n" +
-	"insertRows\x126\n" +
+	"testing.v1\"\x80\x01\n" +
+	"\tSetupStep\x126\n" +
 	"\n" +
-	"clear_dirs\x18\x03 \x01(\v2\x15.testing.v1.ClearDirsH\x00R\tclearDirs\x126\n" +
-	"\n" +
-	"write_file\x18\x04 \x01(\v2\x15.testing.v1.WriteFileH\x00R\twriteFile\x12<\n" +
-	"\fremove_files\x18\x05 \x01(\v2\x17.testing.v1.RemoveFilesH\x00R\vremoveFiles\x123\n" +
-	"\tset_clock\x18\n" +
-	" \x01(\v2\x14.testing.v1.SetClockH\x00R\bsetClock\x12-\n" +
-	"\aset_env\x18\v \x01(\v2\x12.testing.v1.SetEnvH\x00R\x06setEnv\x12?\n" +
-	"\rstub_response\x18\f \x01(\v2\x18.testing.v1.StubResponseH\x00R\fstubResponseB\x06\n" +
-	"\x04step\"%\n" +
-	"\vClearTables\x12\x16\n" +
-	"\x06tables\x18\x01 \x03(\tR\x06tables\"L\n" +
-	"\n" +
-	"InsertRows\x12\x14\n" +
-	"\x05table\x18\x01 \x01(\tR\x05table\x12(\n" +
-	"\x04rows\x18\x02 \x03(\v2\x14.google.protobuf.AnyR\x04rows\"!\n" +
-	"\tClearDirs\x12\x14\n" +
-	"\x05paths\x18\x01 \x03(\tR\x05paths\"9\n" +
+	"write_file\x18\x01 \x01(\v2\x15.testing.v1.WriteFileH\x00R\twriteFile\x123\n" +
+	"\tclear_dir\x18\x02 \x01(\v2\x14.testing.v1.ClearDirH\x00R\bclearDirB\x06\n" +
+	"\x04step\"9\n" +
 	"\tWriteFile\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
-	"\acontent\x18\x02 \x01(\fR\acontent\"#\n" +
-	"\vRemoveFiles\x12\x14\n" +
-	"\x05paths\x18\x01 \x03(\tR\x05paths\"$\n" +
-	"\bSetClock\x12\x18\n" +
-	"\arfc3339\x18\x01 \x01(\tR\arfc3339\"\x7f\n" +
-	"\x06SetEnv\x129\n" +
-	"\aentries\x18\x01 \x03(\v2\x1f.testing.v1.SetEnv.EntriesEntryR\aentries\x1a:\n" +
-	"\fEntriesEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa0\x01\n" +
-	"\fStubResponse\x12\x1a\n" +
-	"\bupstream\x18\x01 \x01(\tR\bupstream\x12#\n" +
-	"\rmatch_request\x18\x02 \x01(\tR\fmatchRequest\x120\n" +
-	"\bresponse\x18\x03 \x01(\v2\x14.google.protobuf.AnyR\bresponse\x12\x1d\n" +
-	"\n" +
-	"error_code\x18\x04 \x01(\tR\terrorCode\"\xfc\x01\n" +
-	"\bExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12(\n" +
-	"\x04body\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"d\n" +
+	"\acontent\x18\x02 \x01(\fR\acontent\"\x1e\n" +
+	"\bClearDir\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\"4\n" +
 	"\rExpectedError\x12#\n" +
-	"\rmessage_regex\x18\x01 \x01(\tR\fmessageRegex\x12.\n" +
-	"\adetails\x18\x02 \x03(\v2\x14.google.protobuf.AnyR\adetails\"\xfc\x01\n" +
-	"\x10FieldExpectation\x12\x12\n" +
-	"\x04path\x18\x01 \x01(\tR\x04path\x122\n" +
-	"\apresent\x18\x02 \x01(\v2\x16.google.protobuf.EmptyH\x00R\apresent\x12.\n" +
-	"\x05unset\x18\x03 \x01(\v2\x16.google.protobuf.EmptyH\x00R\x05unset\x12\x16\n" +
-	"\x05regex\x18\x04 \x01(\tH\x00R\x05regex\x12/\n" +
-	"\x05range\x18\x05 \x01(\v2\x17.testing.v1.NumberRangeH\x00R\x05range\x12\x1f\n" +
-	"\n" +
-	"equals_var\x18\x06 \x01(\tH\x00R\tequalsVarB\x06\n" +
-	"\x04rule\"V\n" +
-	"\vNumberRange\x12\x10\n" +
-	"\x03min\x18\x01 \x01(\x01R\x03min\x12\x10\n" +
-	"\x03max\x18\x02 \x01(\x01R\x03max\x12#\n" +
-	"\rmax_inclusive\x18\x03 \x01(\bR\fmaxInclusive\"\xc4\x02\n" +
+	"\rmessage_regex\x18\x01 \x01(\tR\fmessageRegex\"\xd4\x01\n" +
 	"\x0eStateAssertion\x129\n" +
 	"\vfile_exists\x18\x01 \x01(\v2\x16.testing.v1.FileExistsH\x00R\n" +
 	"fileExists\x129\n" +
 	"\vfile_absent\x18\x02 \x01(\v2\x16.testing.v1.FileAbsentH\x00R\n" +
 	"fileAbsent\x12?\n" +
-	"\rfile_contains\x18\x03 \x01(\v2\x18.testing.v1.FileContainsH\x00R\ffileContains\x126\n" +
-	"\n" +
-	"row_exists\x18\x04 \x01(\v2\x15.testing.v1.RowExistsH\x00R\trowExists\x126\n" +
-	"\n" +
-	"row_absent\x18\x05 \x01(\v2\x15.testing.v1.RowAbsentH\x00R\trowAbsentB\v\n" +
+	"\rfile_contains\x18\x03 \x01(\v2\x18.testing.v1.FileContainsH\x00R\ffileContainsB\v\n" +
 	"\tassertion\" \n" +
 	"\n" +
 	"FileExists\x12\x12\n" +
@@ -1469,13 +514,7 @@ const file_testing_v1_test_case_proto_rawDesc = "" +
 	"\x04path\x18\x01 \x01(\tR\x04path\">\n" +
 	"\fFileContains\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x1a\n" +
-	"\bcontains\x18\x02 \x03(\tR\bcontains\"T\n" +
-	"\tRowExists\x12\x14\n" +
-	"\x05table\x18\x01 \x01(\tR\x05table\x121\n" +
-	"\trow_match\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\browMatch\"T\n" +
-	"\tRowAbsent\x12\x14\n" +
-	"\x05table\x18\x01 \x01(\tR\x05table\x121\n" +
-	"\trow_match\x18\x02 \x01(\v2\x14.google.protobuf.AnyR\browMatchBKZIgithub.com/at-ishikawa/langner/testrunner/gen-protos/testing/v1;testingv1b\x06proto3"
+	"\bcontains\x18\x02 \x03(\tR\bcontainsBKZIgithub.com/at-ishikawa/langner/testrunner/gen-protos/testing/v1;testingv1b\x06proto3"
 
 var (
 	file_testing_v1_test_case_proto_rawDescOnce sync.Once
@@ -1489,69 +528,28 @@ func file_testing_v1_test_case_proto_rawDescGZIP() []byte {
 	return file_testing_v1_test_case_proto_rawDescData
 }
 
-var file_testing_v1_test_case_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
+var file_testing_v1_test_case_proto_msgTypes = make([]protoimpl.MessageInfo, 8)
 var file_testing_v1_test_case_proto_goTypes = []any{
-	(*TestCase)(nil),         // 0: testing.v1.TestCase
-	(*SetupStep)(nil),        // 1: testing.v1.SetupStep
-	(*ClearTables)(nil),      // 2: testing.v1.ClearTables
-	(*InsertRows)(nil),       // 3: testing.v1.InsertRows
-	(*ClearDirs)(nil),        // 4: testing.v1.ClearDirs
-	(*WriteFile)(nil),        // 5: testing.v1.WriteFile
-	(*RemoveFiles)(nil),      // 6: testing.v1.RemoveFiles
-	(*SetClock)(nil),         // 7: testing.v1.SetClock
-	(*SetEnv)(nil),           // 8: testing.v1.SetEnv
-	(*StubResponse)(nil),     // 9: testing.v1.StubResponse
-	(*Expected)(nil),         // 10: testing.v1.Expected
-	(*ExpectedError)(nil),    // 11: testing.v1.ExpectedError
-	(*FieldExpectation)(nil), // 12: testing.v1.FieldExpectation
-	(*NumberRange)(nil),      // 13: testing.v1.NumberRange
-	(*StateAssertion)(nil),   // 14: testing.v1.StateAssertion
-	(*FileExists)(nil),       // 15: testing.v1.FileExists
-	(*FileAbsent)(nil),       // 16: testing.v1.FileAbsent
-	(*FileContains)(nil),     // 17: testing.v1.FileContains
-	(*RowExists)(nil),        // 18: testing.v1.RowExists
-	(*RowAbsent)(nil),        // 19: testing.v1.RowAbsent
-	nil,                      // 20: testing.v1.TestCase.VarsEntry
-	nil,                      // 21: testing.v1.SetEnv.EntriesEntry
-	(*anypb.Any)(nil),        // 22: google.protobuf.Any
-	(*emptypb.Empty)(nil),    // 23: google.protobuf.Empty
+	(*SetupStep)(nil),      // 0: testing.v1.SetupStep
+	(*WriteFile)(nil),      // 1: testing.v1.WriteFile
+	(*ClearDir)(nil),       // 2: testing.v1.ClearDir
+	(*ExpectedError)(nil),  // 3: testing.v1.ExpectedError
+	(*StateAssertion)(nil), // 4: testing.v1.StateAssertion
+	(*FileExists)(nil),     // 5: testing.v1.FileExists
+	(*FileAbsent)(nil),     // 6: testing.v1.FileAbsent
+	(*FileContains)(nil),   // 7: testing.v1.FileContains
 }
 var file_testing_v1_test_case_proto_depIdxs = []int32{
-	1,  // 0: testing.v1.TestCase.setup:type_name -> testing.v1.SetupStep
-	22, // 1: testing.v1.TestCase.request:type_name -> google.protobuf.Any
-	10, // 2: testing.v1.TestCase.expected:type_name -> testing.v1.Expected
-	20, // 3: testing.v1.TestCase.vars:type_name -> testing.v1.TestCase.VarsEntry
-	2,  // 4: testing.v1.SetupStep.clear_tables:type_name -> testing.v1.ClearTables
-	3,  // 5: testing.v1.SetupStep.insert_rows:type_name -> testing.v1.InsertRows
-	4,  // 6: testing.v1.SetupStep.clear_dirs:type_name -> testing.v1.ClearDirs
-	5,  // 7: testing.v1.SetupStep.write_file:type_name -> testing.v1.WriteFile
-	6,  // 8: testing.v1.SetupStep.remove_files:type_name -> testing.v1.RemoveFiles
-	7,  // 9: testing.v1.SetupStep.set_clock:type_name -> testing.v1.SetClock
-	8,  // 10: testing.v1.SetupStep.set_env:type_name -> testing.v1.SetEnv
-	9,  // 11: testing.v1.SetupStep.stub_response:type_name -> testing.v1.StubResponse
-	22, // 12: testing.v1.InsertRows.rows:type_name -> google.protobuf.Any
-	21, // 13: testing.v1.SetEnv.entries:type_name -> testing.v1.SetEnv.EntriesEntry
-	22, // 14: testing.v1.StubResponse.response:type_name -> google.protobuf.Any
-	22, // 15: testing.v1.Expected.body:type_name -> google.protobuf.Any
-	11, // 16: testing.v1.Expected.error:type_name -> testing.v1.ExpectedError
-	12, // 17: testing.v1.Expected.field_expectations:type_name -> testing.v1.FieldExpectation
-	14, // 18: testing.v1.Expected.state:type_name -> testing.v1.StateAssertion
-	22, // 19: testing.v1.ExpectedError.details:type_name -> google.protobuf.Any
-	23, // 20: testing.v1.FieldExpectation.present:type_name -> google.protobuf.Empty
-	23, // 21: testing.v1.FieldExpectation.unset:type_name -> google.protobuf.Empty
-	13, // 22: testing.v1.FieldExpectation.range:type_name -> testing.v1.NumberRange
-	15, // 23: testing.v1.StateAssertion.file_exists:type_name -> testing.v1.FileExists
-	16, // 24: testing.v1.StateAssertion.file_absent:type_name -> testing.v1.FileAbsent
-	17, // 25: testing.v1.StateAssertion.file_contains:type_name -> testing.v1.FileContains
-	18, // 26: testing.v1.StateAssertion.row_exists:type_name -> testing.v1.RowExists
-	19, // 27: testing.v1.StateAssertion.row_absent:type_name -> testing.v1.RowAbsent
-	22, // 28: testing.v1.RowExists.row_match:type_name -> google.protobuf.Any
-	22, // 29: testing.v1.RowAbsent.row_match:type_name -> google.protobuf.Any
-	30, // [30:30] is the sub-list for method output_type
-	30, // [30:30] is the sub-list for method input_type
-	30, // [30:30] is the sub-list for extension type_name
-	30, // [30:30] is the sub-list for extension extendee
-	0,  // [0:30] is the sub-list for field type_name
+	1, // 0: testing.v1.SetupStep.write_file:type_name -> testing.v1.WriteFile
+	2, // 1: testing.v1.SetupStep.clear_dir:type_name -> testing.v1.ClearDir
+	5, // 2: testing.v1.StateAssertion.file_exists:type_name -> testing.v1.FileExists
+	6, // 3: testing.v1.StateAssertion.file_absent:type_name -> testing.v1.FileAbsent
+	7, // 4: testing.v1.StateAssertion.file_contains:type_name -> testing.v1.FileContains
+	5, // [5:5] is the sub-list for method output_type
+	5, // [5:5] is the sub-list for method input_type
+	5, // [5:5] is the sub-list for extension type_name
+	5, // [5:5] is the sub-list for extension extendee
+	0, // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_testing_v1_test_case_proto_init() }
@@ -1559,29 +557,14 @@ func file_testing_v1_test_case_proto_init() {
 	if File_testing_v1_test_case_proto != nil {
 		return
 	}
-	file_testing_v1_test_case_proto_msgTypes[1].OneofWrappers = []any{
-		(*SetupStep_ClearTables)(nil),
-		(*SetupStep_InsertRows)(nil),
-		(*SetupStep_ClearDirs)(nil),
+	file_testing_v1_test_case_proto_msgTypes[0].OneofWrappers = []any{
 		(*SetupStep_WriteFile)(nil),
-		(*SetupStep_RemoveFiles)(nil),
-		(*SetupStep_SetClock)(nil),
-		(*SetupStep_SetEnv)(nil),
-		(*SetupStep_StubResponse)(nil),
+		(*SetupStep_ClearDir)(nil),
 	}
-	file_testing_v1_test_case_proto_msgTypes[12].OneofWrappers = []any{
-		(*FieldExpectation_Present)(nil),
-		(*FieldExpectation_Unset)(nil),
-		(*FieldExpectation_Regex)(nil),
-		(*FieldExpectation_Range)(nil),
-		(*FieldExpectation_EqualsVar)(nil),
-	}
-	file_testing_v1_test_case_proto_msgTypes[14].OneofWrappers = []any{
+	file_testing_v1_test_case_proto_msgTypes[4].OneofWrappers = []any{
 		(*StateAssertion_FileExists)(nil),
 		(*StateAssertion_FileAbsent)(nil),
 		(*StateAssertion_FileContains)(nil),
-		(*StateAssertion_RowExists)(nil),
-		(*StateAssertion_RowAbsent)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1589,7 +572,7 @@ func file_testing_v1_test_case_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_testing_v1_test_case_proto_rawDesc), len(file_testing_v1_test_case_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   22,
+			NumMessages:   8,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

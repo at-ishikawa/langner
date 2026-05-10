@@ -4,7 +4,7 @@ cases {
     expression: "lose one's temper"
   }
   expected {
-    status: 3  # InvalidArgument
+    status: "INVALID_ARGUMENT"
   }
 }
 
@@ -14,6 +14,6 @@ cases {
     notebook_id: "mybook"
   }
   expected {
-    status: 3  # InvalidArgument
+    status: "INVALID_ARGUMENT"
   }
 }

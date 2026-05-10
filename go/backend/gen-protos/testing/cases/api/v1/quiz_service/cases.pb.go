@@ -75,7 +75,6 @@ type GetQuizOptionsTestCase struct {
 	Setup         []*v1.SetupStep            `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.GetQuizOptionsRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *GetQuizOptionsExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string          `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -138,22 +137,14 @@ func (x *GetQuizOptionsTestCase) GetExpected() *GetQuizOptionsExpected {
 	return nil
 }
 
-func (x *GetQuizOptionsTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type GetQuizOptionsExpected struct {
-	state             protoimpl.MessageState      `protogen:"open.v1"`
-	Status            uint32                      `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.GetQuizOptionsResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError           `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation      `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion        `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Status        string                      `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.GetQuizOptionsResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError           `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion        `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetQuizOptionsExpected) Reset() {
@@ -186,11 +177,11 @@ func (*GetQuizOptionsExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *GetQuizOptionsExpected) GetStatus() uint32 {
+func (x *GetQuizOptionsExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *GetQuizOptionsExpected) GetBody() *v11.GetQuizOptionsResponse {
@@ -203,13 +194,6 @@ func (x *GetQuizOptionsExpected) GetBody() *v11.GetQuizOptionsResponse {
 func (x *GetQuizOptionsExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *GetQuizOptionsExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -271,7 +255,6 @@ type StartQuizTestCase struct {
 	Setup         []*v1.SetupStep        `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.StartQuizRequest  `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *StartQuizExpected     `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string      `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -334,22 +317,14 @@ func (x *StartQuizTestCase) GetExpected() *StartQuizExpected {
 	return nil
 }
 
-func (x *StartQuizTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type StartQuizExpected struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Status            uint32                 `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.StartQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError      `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion   `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.StartQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError      `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion   `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartQuizExpected) Reset() {
@@ -382,11 +357,11 @@ func (*StartQuizExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *StartQuizExpected) GetStatus() uint32 {
+func (x *StartQuizExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *StartQuizExpected) GetBody() *v11.StartQuizResponse {
@@ -399,13 +374,6 @@ func (x *StartQuizExpected) GetBody() *v11.StartQuizResponse {
 func (x *StartQuizExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *StartQuizExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -467,7 +435,6 @@ type SubmitAnswerTestCase struct {
 	Setup         []*v1.SetupStep          `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.SubmitAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *SubmitAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string        `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -530,22 +497,14 @@ func (x *SubmitAnswerTestCase) GetExpected() *SubmitAnswerExpected {
 	return nil
 }
 
-func (x *SubmitAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SubmitAnswerExpected struct {
-	state             protoimpl.MessageState    `protogen:"open.v1"`
-	Status            uint32                    `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.SubmitAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError         `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation    `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion      `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState    `protogen:"open.v1"`
+	Status        string                    `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.SubmitAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError         `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion      `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitAnswerExpected) Reset() {
@@ -578,11 +537,11 @@ func (*SubmitAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *SubmitAnswerExpected) GetStatus() uint32 {
+func (x *SubmitAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *SubmitAnswerExpected) GetBody() *v11.SubmitAnswerResponse {
@@ -595,13 +554,6 @@ func (x *SubmitAnswerExpected) GetBody() *v11.SubmitAnswerResponse {
 func (x *SubmitAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *SubmitAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -663,7 +615,6 @@ type BatchSubmitAnswersTestCase struct {
 	Setup         []*v1.SetupStep                `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.BatchSubmitAnswersRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *BatchSubmitAnswersExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string              `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -726,22 +677,14 @@ func (x *BatchSubmitAnswersTestCase) GetExpected() *BatchSubmitAnswersExpected {
 	return nil
 }
 
-func (x *BatchSubmitAnswersTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type BatchSubmitAnswersExpected struct {
-	state             protoimpl.MessageState          `protogen:"open.v1"`
-	Status            uint32                          `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.BatchSubmitAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation          `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion            `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	Status        string                          `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.BatchSubmitAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion            `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BatchSubmitAnswersExpected) Reset() {
@@ -774,11 +717,11 @@ func (*BatchSubmitAnswersExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *BatchSubmitAnswersExpected) GetStatus() uint32 {
+func (x *BatchSubmitAnswersExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *BatchSubmitAnswersExpected) GetBody() *v11.BatchSubmitAnswersResponse {
@@ -791,13 +734,6 @@ func (x *BatchSubmitAnswersExpected) GetBody() *v11.BatchSubmitAnswersResponse {
 func (x *BatchSubmitAnswersExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *BatchSubmitAnswersExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -859,7 +795,6 @@ type StartReverseQuizTestCase struct {
 	Setup         []*v1.SetupStep              `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.StartReverseQuizRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *StartReverseQuizExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string            `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -922,22 +857,14 @@ func (x *StartReverseQuizTestCase) GetExpected() *StartReverseQuizExpected {
 	return nil
 }
 
-func (x *StartReverseQuizTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type StartReverseQuizExpected struct {
-	state             protoimpl.MessageState        `protogen:"open.v1"`
-	Status            uint32                        `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.StartReverseQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError             `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation        `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion          `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState        `protogen:"open.v1"`
+	Status        string                        `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.StartReverseQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError             `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion          `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartReverseQuizExpected) Reset() {
@@ -970,11 +897,11 @@ func (*StartReverseQuizExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *StartReverseQuizExpected) GetStatus() uint32 {
+func (x *StartReverseQuizExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *StartReverseQuizExpected) GetBody() *v11.StartReverseQuizResponse {
@@ -987,13 +914,6 @@ func (x *StartReverseQuizExpected) GetBody() *v11.StartReverseQuizResponse {
 func (x *StartReverseQuizExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *StartReverseQuizExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -1055,7 +975,6 @@ type SubmitReverseAnswerTestCase struct {
 	Setup         []*v1.SetupStep                 `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.SubmitReverseAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *SubmitReverseAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string               `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1118,22 +1037,14 @@ func (x *SubmitReverseAnswerTestCase) GetExpected() *SubmitReverseAnswerExpected
 	return nil
 }
 
-func (x *SubmitReverseAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SubmitReverseAnswerExpected struct {
-	state             protoimpl.MessageState           `protogen:"open.v1"`
-	Status            uint32                           `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.SubmitReverseAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation           `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion             `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState           `protogen:"open.v1"`
+	Status        string                           `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.SubmitReverseAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion             `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitReverseAnswerExpected) Reset() {
@@ -1166,11 +1077,11 @@ func (*SubmitReverseAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *SubmitReverseAnswerExpected) GetStatus() uint32 {
+func (x *SubmitReverseAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *SubmitReverseAnswerExpected) GetBody() *v11.SubmitReverseAnswerResponse {
@@ -1183,13 +1094,6 @@ func (x *SubmitReverseAnswerExpected) GetBody() *v11.SubmitReverseAnswerResponse
 func (x *SubmitReverseAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *SubmitReverseAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -1251,7 +1155,6 @@ type BatchSubmitReverseAnswersTestCase struct {
 	Setup         []*v1.SetupStep                       `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.BatchSubmitReverseAnswersRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *BatchSubmitReverseAnswersExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                     `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1314,22 +1217,14 @@ func (x *BatchSubmitReverseAnswersTestCase) GetExpected() *BatchSubmitReverseAns
 	return nil
 }
 
-func (x *BatchSubmitReverseAnswersTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type BatchSubmitReverseAnswersExpected struct {
-	state             protoimpl.MessageState                 `protogen:"open.v1"`
-	Status            uint32                                 `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.BatchSubmitReverseAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                      `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation                 `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion                   `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState                 `protogen:"open.v1"`
+	Status        string                                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.BatchSubmitReverseAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                      `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion                   `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BatchSubmitReverseAnswersExpected) Reset() {
@@ -1362,11 +1257,11 @@ func (*BatchSubmitReverseAnswersExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{20}
 }
 
-func (x *BatchSubmitReverseAnswersExpected) GetStatus() uint32 {
+func (x *BatchSubmitReverseAnswersExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *BatchSubmitReverseAnswersExpected) GetBody() *v11.BatchSubmitReverseAnswersResponse {
@@ -1379,13 +1274,6 @@ func (x *BatchSubmitReverseAnswersExpected) GetBody() *v11.BatchSubmitReverseAns
 func (x *BatchSubmitReverseAnswersExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *BatchSubmitReverseAnswersExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -1447,7 +1335,6 @@ type StartFreeformQuizTestCase struct {
 	Setup         []*v1.SetupStep               `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.StartFreeformQuizRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *StartFreeformQuizExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string             `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1510,22 +1397,14 @@ func (x *StartFreeformQuizTestCase) GetExpected() *StartFreeformQuizExpected {
 	return nil
 }
 
-func (x *StartFreeformQuizTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type StartFreeformQuizExpected struct {
-	state             protoimpl.MessageState         `protogen:"open.v1"`
-	Status            uint32                         `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.StartFreeformQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError              `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation         `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion           `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState         `protogen:"open.v1"`
+	Status        string                         `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.StartFreeformQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError              `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion           `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartFreeformQuizExpected) Reset() {
@@ -1558,11 +1437,11 @@ func (*StartFreeformQuizExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{23}
 }
 
-func (x *StartFreeformQuizExpected) GetStatus() uint32 {
+func (x *StartFreeformQuizExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *StartFreeformQuizExpected) GetBody() *v11.StartFreeformQuizResponse {
@@ -1575,13 +1454,6 @@ func (x *StartFreeformQuizExpected) GetBody() *v11.StartFreeformQuizResponse {
 func (x *StartFreeformQuizExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *StartFreeformQuizExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -1643,7 +1515,6 @@ type SubmitFreeformAnswerTestCase struct {
 	Setup         []*v1.SetupStep                  `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.SubmitFreeformAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *SubmitFreeformAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1706,22 +1577,14 @@ func (x *SubmitFreeformAnswerTestCase) GetExpected() *SubmitFreeformAnswerExpect
 	return nil
 }
 
-func (x *SubmitFreeformAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SubmitFreeformAnswerExpected struct {
-	state             protoimpl.MessageState            `protogen:"open.v1"`
-	Status            uint32                            `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.SubmitFreeformAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation            `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion              `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState            `protogen:"open.v1"`
+	Status        string                            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.SubmitFreeformAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion              `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitFreeformAnswerExpected) Reset() {
@@ -1754,11 +1617,11 @@ func (*SubmitFreeformAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{26}
 }
 
-func (x *SubmitFreeformAnswerExpected) GetStatus() uint32 {
+func (x *SubmitFreeformAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *SubmitFreeformAnswerExpected) GetBody() *v11.SubmitFreeformAnswerResponse {
@@ -1771,13 +1634,6 @@ func (x *SubmitFreeformAnswerExpected) GetBody() *v11.SubmitFreeformAnswerRespon
 func (x *SubmitFreeformAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *SubmitFreeformAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -1839,7 +1695,6 @@ type OverrideAnswerTestCase struct {
 	Setup         []*v1.SetupStep            `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.OverrideAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *OverrideAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string          `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1902,22 +1757,14 @@ func (x *OverrideAnswerTestCase) GetExpected() *OverrideAnswerExpected {
 	return nil
 }
 
-func (x *OverrideAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type OverrideAnswerExpected struct {
-	state             protoimpl.MessageState      `protogen:"open.v1"`
-	Status            uint32                      `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.OverrideAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError           `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation      `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion        `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	Status        string                      `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.OverrideAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError           `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion        `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *OverrideAnswerExpected) Reset() {
@@ -1950,11 +1797,11 @@ func (*OverrideAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{29}
 }
 
-func (x *OverrideAnswerExpected) GetStatus() uint32 {
+func (x *OverrideAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *OverrideAnswerExpected) GetBody() *v11.OverrideAnswerResponse {
@@ -1967,13 +1814,6 @@ func (x *OverrideAnswerExpected) GetBody() *v11.OverrideAnswerResponse {
 func (x *OverrideAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *OverrideAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -2035,7 +1875,6 @@ type UndoOverrideAnswerTestCase struct {
 	Setup         []*v1.SetupStep                `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.UndoOverrideAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *UndoOverrideAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string              `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2098,22 +1937,14 @@ func (x *UndoOverrideAnswerTestCase) GetExpected() *UndoOverrideAnswerExpected {
 	return nil
 }
 
-func (x *UndoOverrideAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type UndoOverrideAnswerExpected struct {
-	state             protoimpl.MessageState          `protogen:"open.v1"`
-	Status            uint32                          `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.UndoOverrideAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation          `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion            `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	Status        string                          `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.UndoOverrideAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion            `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UndoOverrideAnswerExpected) Reset() {
@@ -2146,11 +1977,11 @@ func (*UndoOverrideAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{32}
 }
 
-func (x *UndoOverrideAnswerExpected) GetStatus() uint32 {
+func (x *UndoOverrideAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *UndoOverrideAnswerExpected) GetBody() *v11.UndoOverrideAnswerResponse {
@@ -2163,13 +1994,6 @@ func (x *UndoOverrideAnswerExpected) GetBody() *v11.UndoOverrideAnswerResponse {
 func (x *UndoOverrideAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *UndoOverrideAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -2231,7 +2055,6 @@ type SkipWordTestCase struct {
 	Setup         []*v1.SetupStep        `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.SkipWordRequest   `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *SkipWordExpected      `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string      `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2294,22 +2117,14 @@ func (x *SkipWordTestCase) GetExpected() *SkipWordExpected {
 	return nil
 }
 
-func (x *SkipWordTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SkipWordExpected struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	Status            uint32                 `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.SkipWordResponse  `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError      `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion   `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.SkipWordResponse  `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError      `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion   `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SkipWordExpected) Reset() {
@@ -2342,11 +2157,11 @@ func (*SkipWordExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{35}
 }
 
-func (x *SkipWordExpected) GetStatus() uint32 {
+func (x *SkipWordExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *SkipWordExpected) GetBody() *v11.SkipWordResponse {
@@ -2359,13 +2174,6 @@ func (x *SkipWordExpected) GetBody() *v11.SkipWordResponse {
 func (x *SkipWordExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *SkipWordExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -2427,7 +2235,6 @@ type ResumeWordTestCase struct {
 	Setup         []*v1.SetupStep        `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.ResumeWordRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *ResumeWordExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string      `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2490,22 +2297,14 @@ func (x *ResumeWordTestCase) GetExpected() *ResumeWordExpected {
 	return nil
 }
 
-func (x *ResumeWordTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type ResumeWordExpected struct {
-	state             protoimpl.MessageState  `protogen:"open.v1"`
-	Status            uint32                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.ResumeWordResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError       `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation  `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion    `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Status        string                  `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.ResumeWordResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError       `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion    `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ResumeWordExpected) Reset() {
@@ -2538,11 +2337,11 @@ func (*ResumeWordExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{38}
 }
 
-func (x *ResumeWordExpected) GetStatus() uint32 {
+func (x *ResumeWordExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *ResumeWordExpected) GetBody() *v11.ResumeWordResponse {
@@ -2555,13 +2354,6 @@ func (x *ResumeWordExpected) GetBody() *v11.ResumeWordResponse {
 func (x *ResumeWordExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *ResumeWordExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -2623,7 +2415,6 @@ type StartEtymologyQuizTestCase struct {
 	Setup         []*v1.SetupStep                `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.StartEtymologyQuizRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *StartEtymologyQuizExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string              `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2686,22 +2477,14 @@ func (x *StartEtymologyQuizTestCase) GetExpected() *StartEtymologyQuizExpected {
 	return nil
 }
 
-func (x *StartEtymologyQuizTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type StartEtymologyQuizExpected struct {
-	state             protoimpl.MessageState          `protogen:"open.v1"`
-	Status            uint32                          `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.StartEtymologyQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation          `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion            `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	Status        string                          `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.StartEtymologyQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion            `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartEtymologyQuizExpected) Reset() {
@@ -2734,11 +2517,11 @@ func (*StartEtymologyQuizExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{41}
 }
 
-func (x *StartEtymologyQuizExpected) GetStatus() uint32 {
+func (x *StartEtymologyQuizExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *StartEtymologyQuizExpected) GetBody() *v11.StartEtymologyQuizResponse {
@@ -2751,13 +2534,6 @@ func (x *StartEtymologyQuizExpected) GetBody() *v11.StartEtymologyQuizResponse {
 func (x *StartEtymologyQuizExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *StartEtymologyQuizExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -2819,7 +2595,6 @@ type SubmitEtymologyStandardAnswerTestCase struct {
 	Setup         []*v1.SetupStep                           `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.SubmitEtymologyStandardAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *SubmitEtymologyStandardAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                         `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2882,22 +2657,14 @@ func (x *SubmitEtymologyStandardAnswerTestCase) GetExpected() *SubmitEtymologySt
 	return nil
 }
 
-func (x *SubmitEtymologyStandardAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SubmitEtymologyStandardAnswerExpected struct {
-	state             protoimpl.MessageState                     `protogen:"open.v1"`
-	Status            uint32                                     `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.SubmitEtymologyStandardAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                          `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation                     `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion                       `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState                     `protogen:"open.v1"`
+	Status        string                                     `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.SubmitEtymologyStandardAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                          `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion                       `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitEtymologyStandardAnswerExpected) Reset() {
@@ -2930,11 +2697,11 @@ func (*SubmitEtymologyStandardAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{44}
 }
 
-func (x *SubmitEtymologyStandardAnswerExpected) GetStatus() uint32 {
+func (x *SubmitEtymologyStandardAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *SubmitEtymologyStandardAnswerExpected) GetBody() *v11.SubmitEtymologyStandardAnswerResponse {
@@ -2947,13 +2714,6 @@ func (x *SubmitEtymologyStandardAnswerExpected) GetBody() *v11.SubmitEtymologySt
 func (x *SubmitEtymologyStandardAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *SubmitEtymologyStandardAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -3015,7 +2775,6 @@ type BatchSubmitEtymologyStandardAnswersTestCase struct {
 	Setup         []*v1.SetupStep                                 `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.BatchSubmitEtymologyStandardAnswersRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *BatchSubmitEtymologyStandardAnswersExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                               `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3078,22 +2837,14 @@ func (x *BatchSubmitEtymologyStandardAnswersTestCase) GetExpected() *BatchSubmit
 	return nil
 }
 
-func (x *BatchSubmitEtymologyStandardAnswersTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type BatchSubmitEtymologyStandardAnswersExpected struct {
-	state             protoimpl.MessageState                           `protogen:"open.v1"`
-	Status            uint32                                           `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.BatchSubmitEtymologyStandardAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                                `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation                           `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion                             `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState                           `protogen:"open.v1"`
+	Status        string                                           `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.BatchSubmitEtymologyStandardAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                                `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion                             `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BatchSubmitEtymologyStandardAnswersExpected) Reset() {
@@ -3126,11 +2877,11 @@ func (*BatchSubmitEtymologyStandardAnswersExpected) Descriptor() ([]byte, []int)
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{47}
 }
 
-func (x *BatchSubmitEtymologyStandardAnswersExpected) GetStatus() uint32 {
+func (x *BatchSubmitEtymologyStandardAnswersExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *BatchSubmitEtymologyStandardAnswersExpected) GetBody() *v11.BatchSubmitEtymologyStandardAnswersResponse {
@@ -3143,13 +2894,6 @@ func (x *BatchSubmitEtymologyStandardAnswersExpected) GetBody() *v11.BatchSubmit
 func (x *BatchSubmitEtymologyStandardAnswersExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *BatchSubmitEtymologyStandardAnswersExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -3211,7 +2955,6 @@ type SubmitEtymologyReverseAnswerTestCase struct {
 	Setup         []*v1.SetupStep                          `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.SubmitEtymologyReverseAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *SubmitEtymologyReverseAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                        `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3274,22 +3017,14 @@ func (x *SubmitEtymologyReverseAnswerTestCase) GetExpected() *SubmitEtymologyRev
 	return nil
 }
 
-func (x *SubmitEtymologyReverseAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SubmitEtymologyReverseAnswerExpected struct {
-	state             protoimpl.MessageState                    `protogen:"open.v1"`
-	Status            uint32                                    `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.SubmitEtymologyReverseAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                         `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation                    `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion                      `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState                    `protogen:"open.v1"`
+	Status        string                                    `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.SubmitEtymologyReverseAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                         `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion                      `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitEtymologyReverseAnswerExpected) Reset() {
@@ -3322,11 +3057,11 @@ func (*SubmitEtymologyReverseAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{50}
 }
 
-func (x *SubmitEtymologyReverseAnswerExpected) GetStatus() uint32 {
+func (x *SubmitEtymologyReverseAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *SubmitEtymologyReverseAnswerExpected) GetBody() *v11.SubmitEtymologyReverseAnswerResponse {
@@ -3339,13 +3074,6 @@ func (x *SubmitEtymologyReverseAnswerExpected) GetBody() *v11.SubmitEtymologyRev
 func (x *SubmitEtymologyReverseAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *SubmitEtymologyReverseAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -3407,7 +3135,6 @@ type BatchSubmitEtymologyReverseAnswersTestCase struct {
 	Setup         []*v1.SetupStep                                `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.BatchSubmitEtymologyReverseAnswersRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *BatchSubmitEtymologyReverseAnswersExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                              `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3470,22 +3197,14 @@ func (x *BatchSubmitEtymologyReverseAnswersTestCase) GetExpected() *BatchSubmitE
 	return nil
 }
 
-func (x *BatchSubmitEtymologyReverseAnswersTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type BatchSubmitEtymologyReverseAnswersExpected struct {
-	state             protoimpl.MessageState                          `protogen:"open.v1"`
-	Status            uint32                                          `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.BatchSubmitEtymologyReverseAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation                          `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion                            `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState                          `protogen:"open.v1"`
+	Status        string                                          `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.BatchSubmitEtymologyReverseAnswersResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion                            `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BatchSubmitEtymologyReverseAnswersExpected) Reset() {
@@ -3518,11 +3237,11 @@ func (*BatchSubmitEtymologyReverseAnswersExpected) Descriptor() ([]byte, []int) 
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{53}
 }
 
-func (x *BatchSubmitEtymologyReverseAnswersExpected) GetStatus() uint32 {
+func (x *BatchSubmitEtymologyReverseAnswersExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *BatchSubmitEtymologyReverseAnswersExpected) GetBody() *v11.BatchSubmitEtymologyReverseAnswersResponse {
@@ -3535,13 +3254,6 @@ func (x *BatchSubmitEtymologyReverseAnswersExpected) GetBody() *v11.BatchSubmitE
 func (x *BatchSubmitEtymologyReverseAnswersExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *BatchSubmitEtymologyReverseAnswersExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -3603,7 +3315,6 @@ type StartEtymologyFreeformQuizTestCase struct {
 	Setup         []*v1.SetupStep                        `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.StartEtymologyFreeformQuizRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *StartEtymologyFreeformQuizExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                      `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3666,22 +3377,14 @@ func (x *StartEtymologyFreeformQuizTestCase) GetExpected() *StartEtymologyFreefo
 	return nil
 }
 
-func (x *StartEtymologyFreeformQuizTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type StartEtymologyFreeformQuizExpected struct {
-	state             protoimpl.MessageState                  `protogen:"open.v1"`
-	Status            uint32                                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.StartEtymologyFreeformQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                       `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation                  `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion                    `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState                  `protogen:"open.v1"`
+	Status        string                                  `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.StartEtymologyFreeformQuizResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                       `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion                    `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *StartEtymologyFreeformQuizExpected) Reset() {
@@ -3714,11 +3417,11 @@ func (*StartEtymologyFreeformQuizExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{56}
 }
 
-func (x *StartEtymologyFreeformQuizExpected) GetStatus() uint32 {
+func (x *StartEtymologyFreeformQuizExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *StartEtymologyFreeformQuizExpected) GetBody() *v11.StartEtymologyFreeformQuizResponse {
@@ -3731,13 +3434,6 @@ func (x *StartEtymologyFreeformQuizExpected) GetBody() *v11.StartEtymologyFreefo
 func (x *StartEtymologyFreeformQuizExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *StartEtymologyFreeformQuizExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -3799,7 +3495,6 @@ type SubmitEtymologyFreeformAnswerTestCase struct {
 	Setup         []*v1.SetupStep                           `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.SubmitEtymologyFreeformAnswerRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *SubmitEtymologyFreeformAnswerExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                         `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3862,22 +3557,14 @@ func (x *SubmitEtymologyFreeformAnswerTestCase) GetExpected() *SubmitEtymologyFr
 	return nil
 }
 
-func (x *SubmitEtymologyFreeformAnswerTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type SubmitEtymologyFreeformAnswerExpected struct {
-	state             protoimpl.MessageState                     `protogen:"open.v1"`
-	Status            uint32                                     `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.SubmitEtymologyFreeformAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                          `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation                     `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion                       `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState                     `protogen:"open.v1"`
+	Status        string                                     `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.SubmitEtymologyFreeformAnswerResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                          `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion                       `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitEtymologyFreeformAnswerExpected) Reset() {
@@ -3910,11 +3597,11 @@ func (*SubmitEtymologyFreeformAnswerExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP(), []int{59}
 }
 
-func (x *SubmitEtymologyFreeformAnswerExpected) GetStatus() uint32 {
+func (x *SubmitEtymologyFreeformAnswerExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *SubmitEtymologyFreeformAnswerExpected) GetBody() *v11.SubmitEtymologyFreeformAnswerResponse {
@@ -3927,13 +3614,6 @@ func (x *SubmitEtymologyFreeformAnswerExpected) GetBody() *v11.SubmitEtymologyFr
 func (x *SubmitEtymologyFreeformAnswerExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *SubmitEtymologyFreeformAnswerExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -3951,345 +3631,245 @@ const file_testing_cases_api_v1_quiz_service_cases_proto_rawDesc = "" +
 	"\n" +
 	"-testing/cases/api/v1/quiz_service/cases.proto\x12!testing.cases.api.v1.quiz_service\x1a\x11api/v1/quiz.proto\x1a\x1atesting/v1/test_case.proto\"j\n" +
 	"\x17GetQuizOptionsTestSuite\x12O\n" +
-	"\x05cases\x18\x01 \x03(\v29.testing.cases.api.v1.quiz_service.GetQuizOptionsTestCaseR\x05cases\"\xfb\x02\n" +
+	"\x05cases\x18\x01 \x03(\v29.testing.cases.api.v1.quiz_service.GetQuizOptionsTestCaseR\x05cases\"\xe9\x01\n" +
 	"\x16GetQuizOptionsTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x127\n" +
 	"\arequest\x18\x03 \x01(\v2\x1d.api.v1.GetQuizOptionsRequestR\arequest\x12U\n" +
-	"\bexpected\x18\x04 \x01(\v29.testing.cases.api.v1.quiz_service.GetQuizOptionsExpectedR\bexpected\x12W\n" +
-	"\x04vars\x18\x05 \x03(\v2C.testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x94\x02\n" +
+	"\bexpected\x18\x04 \x01(\v29.testing.cases.api.v1.quiz_service.GetQuizOptionsExpectedR\bexpected\"\xc7\x01\n" +
 	"\x16GetQuizOptionsExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x122\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x122\n" +
 	"\x04body\x18\x02 \x01(\v2\x1e.api.v1.GetQuizOptionsResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"`\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"`\n" +
 	"\x12StartQuizTestSuite\x12J\n" +
-	"\x05cases\x18\x01 \x03(\v24.testing.cases.api.v1.quiz_service.StartQuizTestCaseR\x05cases\"\xe7\x02\n" +
+	"\x05cases\x18\x01 \x03(\v24.testing.cases.api.v1.quiz_service.StartQuizTestCaseR\x05cases\"\xda\x01\n" +
 	"\x11StartQuizTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x122\n" +
 	"\arequest\x18\x03 \x01(\v2\x18.api.v1.StartQuizRequestR\arequest\x12P\n" +
-	"\bexpected\x18\x04 \x01(\v24.testing.cases.api.v1.quiz_service.StartQuizExpectedR\bexpected\x12R\n" +
-	"\x04vars\x18\x05 \x03(\v2>.testing.cases.api.v1.quiz_service.StartQuizTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8a\x02\n" +
+	"\bexpected\x18\x04 \x01(\v24.testing.cases.api.v1.quiz_service.StartQuizExpectedR\bexpected\"\xbd\x01\n" +
 	"\x11StartQuizExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12-\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12-\n" +
 	"\x04body\x18\x02 \x01(\v2\x19.api.v1.StartQuizResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"f\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"f\n" +
 	"\x15SubmitAnswerTestSuite\x12M\n" +
-	"\x05cases\x18\x01 \x03(\v27.testing.cases.api.v1.quiz_service.SubmitAnswerTestCaseR\x05cases\"\xf3\x02\n" +
+	"\x05cases\x18\x01 \x03(\v27.testing.cases.api.v1.quiz_service.SubmitAnswerTestCaseR\x05cases\"\xe3\x01\n" +
 	"\x14SubmitAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x125\n" +
 	"\arequest\x18\x03 \x01(\v2\x1b.api.v1.SubmitAnswerRequestR\arequest\x12S\n" +
-	"\bexpected\x18\x04 \x01(\v27.testing.cases.api.v1.quiz_service.SubmitAnswerExpectedR\bexpected\x12U\n" +
-	"\x04vars\x18\x05 \x03(\v2A.testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x90\x02\n" +
+	"\bexpected\x18\x04 \x01(\v27.testing.cases.api.v1.quiz_service.SubmitAnswerExpectedR\bexpected\"\xc3\x01\n" +
 	"\x14SubmitAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x120\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x120\n" +
 	"\x04body\x18\x02 \x01(\v2\x1c.api.v1.SubmitAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
 	"\x1bBatchSubmitAnswersTestSuite\x12S\n" +
-	"\x05cases\x18\x01 \x03(\v2=.testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCaseR\x05cases\"\x8b\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2=.testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCaseR\x05cases\"\xf5\x01\n" +
 	"\x1aBatchSubmitAnswersTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12;\n" +
 	"\arequest\x18\x03 \x01(\v2!.api.v1.BatchSubmitAnswersRequestR\arequest\x12Y\n" +
-	"\bexpected\x18\x04 \x01(\v2=.testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpectedR\bexpected\x12[\n" +
-	"\x04vars\x18\x05 \x03(\v2G.testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9c\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2=.testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpectedR\bexpected\"\xcf\x01\n" +
 	"\x1aBatchSubmitAnswersExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x126\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x126\n" +
 	"\x04body\x18\x02 \x01(\v2\".api.v1.BatchSubmitAnswersResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"n\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"n\n" +
 	"\x19StartReverseQuizTestSuite\x12Q\n" +
-	"\x05cases\x18\x01 \x03(\v2;.testing.cases.api.v1.quiz_service.StartReverseQuizTestCaseR\x05cases\"\x83\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2;.testing.cases.api.v1.quiz_service.StartReverseQuizTestCaseR\x05cases\"\xef\x01\n" +
 	"\x18StartReverseQuizTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x129\n" +
 	"\arequest\x18\x03 \x01(\v2\x1f.api.v1.StartReverseQuizRequestR\arequest\x12W\n" +
-	"\bexpected\x18\x04 \x01(\v2;.testing.cases.api.v1.quiz_service.StartReverseQuizExpectedR\bexpected\x12Y\n" +
-	"\x04vars\x18\x05 \x03(\v2E.testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x98\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2;.testing.cases.api.v1.quiz_service.StartReverseQuizExpectedR\bexpected\"\xcb\x01\n" +
 	"\x18StartReverseQuizExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x124\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x124\n" +
 	"\x04body\x18\x02 \x01(\v2 .api.v1.StartReverseQuizResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"t\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"t\n" +
 	"\x1cSubmitReverseAnswerTestSuite\x12T\n" +
-	"\x05cases\x18\x01 \x03(\v2>.testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCaseR\x05cases\"\x8f\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2>.testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCaseR\x05cases\"\xf8\x01\n" +
 	"\x1bSubmitReverseAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12<\n" +
 	"\arequest\x18\x03 \x01(\v2\".api.v1.SubmitReverseAnswerRequestR\arequest\x12Z\n" +
-	"\bexpected\x18\x04 \x01(\v2>.testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpectedR\bexpected\x12\\\n" +
-	"\x04vars\x18\x05 \x03(\v2H.testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9e\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2>.testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpectedR\bexpected\"\xd1\x01\n" +
 	"\x1bSubmitReverseAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x127\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x127\n" +
 	"\x04body\x18\x02 \x01(\v2#.api.v1.SubmitReverseAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x80\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x80\x01\n" +
 	"\"BatchSubmitReverseAnswersTestSuite\x12Z\n" +
-	"\x05cases\x18\x01 \x03(\v2D.testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCaseR\x05cases\"\xa7\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2D.testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCaseR\x05cases\"\x8a\x02\n" +
 	"!BatchSubmitReverseAnswersTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12B\n" +
 	"\arequest\x18\x03 \x01(\v2(.api.v1.BatchSubmitReverseAnswersRequestR\arequest\x12`\n" +
-	"\bexpected\x18\x04 \x01(\v2D.testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpectedR\bexpected\x12b\n" +
-	"\x04vars\x18\x05 \x03(\v2N.testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xaa\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2D.testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpectedR\bexpected\"\xdd\x01\n" +
 	"!BatchSubmitReverseAnswersExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12=\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12=\n" +
 	"\x04body\x18\x02 \x01(\v2).api.v1.BatchSubmitReverseAnswersResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"p\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"p\n" +
 	"\x1aStartFreeformQuizTestSuite\x12R\n" +
-	"\x05cases\x18\x01 \x03(\v2<.testing.cases.api.v1.quiz_service.StartFreeformQuizTestCaseR\x05cases\"\x87\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2<.testing.cases.api.v1.quiz_service.StartFreeformQuizTestCaseR\x05cases\"\xf2\x01\n" +
 	"\x19StartFreeformQuizTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12:\n" +
 	"\arequest\x18\x03 \x01(\v2 .api.v1.StartFreeformQuizRequestR\arequest\x12X\n" +
-	"\bexpected\x18\x04 \x01(\v2<.testing.cases.api.v1.quiz_service.StartFreeformQuizExpectedR\bexpected\x12Z\n" +
-	"\x04vars\x18\x05 \x03(\v2F.testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9a\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2<.testing.cases.api.v1.quiz_service.StartFreeformQuizExpectedR\bexpected\"\xcd\x01\n" +
 	"\x19StartFreeformQuizExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x125\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x125\n" +
 	"\x04body\x18\x02 \x01(\v2!.api.v1.StartFreeformQuizResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"v\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"v\n" +
 	"\x1dSubmitFreeformAnswerTestSuite\x12U\n" +
-	"\x05cases\x18\x01 \x03(\v2?.testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCaseR\x05cases\"\x93\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2?.testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCaseR\x05cases\"\xfb\x01\n" +
 	"\x1cSubmitFreeformAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12=\n" +
 	"\arequest\x18\x03 \x01(\v2#.api.v1.SubmitFreeformAnswerRequestR\arequest\x12[\n" +
-	"\bexpected\x18\x04 \x01(\v2?.testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpectedR\bexpected\x12]\n" +
-	"\x04vars\x18\x05 \x03(\v2I.testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa0\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2?.testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpectedR\bexpected\"\xd3\x01\n" +
 	"\x1cSubmitFreeformAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x128\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x128\n" +
 	"\x04body\x18\x02 \x01(\v2$.api.v1.SubmitFreeformAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"j\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"j\n" +
 	"\x17OverrideAnswerTestSuite\x12O\n" +
-	"\x05cases\x18\x01 \x03(\v29.testing.cases.api.v1.quiz_service.OverrideAnswerTestCaseR\x05cases\"\xfb\x02\n" +
+	"\x05cases\x18\x01 \x03(\v29.testing.cases.api.v1.quiz_service.OverrideAnswerTestCaseR\x05cases\"\xe9\x01\n" +
 	"\x16OverrideAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x127\n" +
 	"\arequest\x18\x03 \x01(\v2\x1d.api.v1.OverrideAnswerRequestR\arequest\x12U\n" +
-	"\bexpected\x18\x04 \x01(\v29.testing.cases.api.v1.quiz_service.OverrideAnswerExpectedR\bexpected\x12W\n" +
-	"\x04vars\x18\x05 \x03(\v2C.testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x94\x02\n" +
+	"\bexpected\x18\x04 \x01(\v29.testing.cases.api.v1.quiz_service.OverrideAnswerExpectedR\bexpected\"\xc7\x01\n" +
 	"\x16OverrideAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x122\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x122\n" +
 	"\x04body\x18\x02 \x01(\v2\x1e.api.v1.OverrideAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
 	"\x1bUndoOverrideAnswerTestSuite\x12S\n" +
-	"\x05cases\x18\x01 \x03(\v2=.testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCaseR\x05cases\"\x8b\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2=.testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCaseR\x05cases\"\xf5\x01\n" +
 	"\x1aUndoOverrideAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12;\n" +
 	"\arequest\x18\x03 \x01(\v2!.api.v1.UndoOverrideAnswerRequestR\arequest\x12Y\n" +
-	"\bexpected\x18\x04 \x01(\v2=.testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpectedR\bexpected\x12[\n" +
-	"\x04vars\x18\x05 \x03(\v2G.testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9c\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2=.testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpectedR\bexpected\"\xcf\x01\n" +
 	"\x1aUndoOverrideAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x126\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x126\n" +
 	"\x04body\x18\x02 \x01(\v2\".api.v1.UndoOverrideAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"^\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"^\n" +
 	"\x11SkipWordTestSuite\x12I\n" +
-	"\x05cases\x18\x01 \x03(\v23.testing.cases.api.v1.quiz_service.SkipWordTestCaseR\x05cases\"\xe3\x02\n" +
+	"\x05cases\x18\x01 \x03(\v23.testing.cases.api.v1.quiz_service.SkipWordTestCaseR\x05cases\"\xd7\x01\n" +
 	"\x10SkipWordTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x121\n" +
 	"\arequest\x18\x03 \x01(\v2\x17.api.v1.SkipWordRequestR\arequest\x12O\n" +
-	"\bexpected\x18\x04 \x01(\v23.testing.cases.api.v1.quiz_service.SkipWordExpectedR\bexpected\x12Q\n" +
-	"\x04vars\x18\x05 \x03(\v2=.testing.cases.api.v1.quiz_service.SkipWordTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x88\x02\n" +
+	"\bexpected\x18\x04 \x01(\v23.testing.cases.api.v1.quiz_service.SkipWordExpectedR\bexpected\"\xbb\x01\n" +
 	"\x10SkipWordExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12,\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12,\n" +
 	"\x04body\x18\x02 \x01(\v2\x18.api.v1.SkipWordResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"b\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"b\n" +
 	"\x13ResumeWordTestSuite\x12K\n" +
-	"\x05cases\x18\x01 \x03(\v25.testing.cases.api.v1.quiz_service.ResumeWordTestCaseR\x05cases\"\xeb\x02\n" +
+	"\x05cases\x18\x01 \x03(\v25.testing.cases.api.v1.quiz_service.ResumeWordTestCaseR\x05cases\"\xdd\x01\n" +
 	"\x12ResumeWordTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x123\n" +
 	"\arequest\x18\x03 \x01(\v2\x19.api.v1.ResumeWordRequestR\arequest\x12Q\n" +
-	"\bexpected\x18\x04 \x01(\v25.testing.cases.api.v1.quiz_service.ResumeWordExpectedR\bexpected\x12S\n" +
-	"\x04vars\x18\x05 \x03(\v2?.testing.cases.api.v1.quiz_service.ResumeWordTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
+	"\bexpected\x18\x04 \x01(\v25.testing.cases.api.v1.quiz_service.ResumeWordExpectedR\bexpected\"\xbf\x01\n" +
 	"\x12ResumeWordExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12.\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12.\n" +
 	"\x04body\x18\x02 \x01(\v2\x1a.api.v1.ResumeWordResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
 	"\x1bStartEtymologyQuizTestSuite\x12S\n" +
-	"\x05cases\x18\x01 \x03(\v2=.testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCaseR\x05cases\"\x8b\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2=.testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCaseR\x05cases\"\xf5\x01\n" +
 	"\x1aStartEtymologyQuizTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12;\n" +
 	"\arequest\x18\x03 \x01(\v2!.api.v1.StartEtymologyQuizRequestR\arequest\x12Y\n" +
-	"\bexpected\x18\x04 \x01(\v2=.testing.cases.api.v1.quiz_service.StartEtymologyQuizExpectedR\bexpected\x12[\n" +
-	"\x04vars\x18\x05 \x03(\v2G.testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9c\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2=.testing.cases.api.v1.quiz_service.StartEtymologyQuizExpectedR\bexpected\"\xcf\x01\n" +
 	"\x1aStartEtymologyQuizExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x126\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x126\n" +
 	"\x04body\x18\x02 \x01(\v2\".api.v1.StartEtymologyQuizResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x88\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x88\x01\n" +
 	"&SubmitEtymologyStandardAnswerTestSuite\x12^\n" +
-	"\x05cases\x18\x01 \x03(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCaseR\x05cases\"\xb7\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCaseR\x05cases\"\x96\x02\n" +
 	"%SubmitEtymologyStandardAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12F\n" +
 	"\arequest\x18\x03 \x01(\v2,.api.v1.SubmitEtymologyStandardAnswerRequestR\arequest\x12d\n" +
-	"\bexpected\x18\x04 \x01(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpectedR\bexpected\x12f\n" +
-	"\x04vars\x18\x05 \x03(\v2R.testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb2\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpectedR\bexpected\"\xe5\x01\n" +
 	"%SubmitEtymologyStandardAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12A\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12A\n" +
 	"\x04body\x18\x02 \x01(\v2-.api.v1.SubmitEtymologyStandardAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x94\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x94\x01\n" +
 	",BatchSubmitEtymologyStandardAnswersTestSuite\x12d\n" +
-	"\x05cases\x18\x01 \x03(\v2N.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCaseR\x05cases\"\xcf\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2N.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCaseR\x05cases\"\xa8\x02\n" +
 	"+BatchSubmitEtymologyStandardAnswersTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12L\n" +
 	"\arequest\x18\x03 \x01(\v22.api.v1.BatchSubmitEtymologyStandardAnswersRequestR\arequest\x12j\n" +
-	"\bexpected\x18\x04 \x01(\v2N.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpectedR\bexpected\x12l\n" +
-	"\x04vars\x18\x05 \x03(\v2X.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbe\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2N.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpectedR\bexpected\"\xf1\x01\n" +
 	"+BatchSubmitEtymologyStandardAnswersExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12G\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12G\n" +
 	"\x04body\x18\x02 \x01(\v23.api.v1.BatchSubmitEtymologyStandardAnswersResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x86\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x86\x01\n" +
 	"%SubmitEtymologyReverseAnswerTestSuite\x12]\n" +
-	"\x05cases\x18\x01 \x03(\v2G.testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCaseR\x05cases\"\xb3\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2G.testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCaseR\x05cases\"\x93\x02\n" +
 	"$SubmitEtymologyReverseAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12E\n" +
 	"\arequest\x18\x03 \x01(\v2+.api.v1.SubmitEtymologyReverseAnswerRequestR\arequest\x12c\n" +
-	"\bexpected\x18\x04 \x01(\v2G.testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpectedR\bexpected\x12e\n" +
-	"\x04vars\x18\x05 \x03(\v2Q.testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb0\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2G.testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpectedR\bexpected\"\xe3\x01\n" +
 	"$SubmitEtymologyReverseAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12@\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12@\n" +
 	"\x04body\x18\x02 \x01(\v2,.api.v1.SubmitEtymologyReverseAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x92\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x92\x01\n" +
 	"+BatchSubmitEtymologyReverseAnswersTestSuite\x12c\n" +
-	"\x05cases\x18\x01 \x03(\v2M.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCaseR\x05cases\"\xcb\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2M.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCaseR\x05cases\"\xa5\x02\n" +
 	"*BatchSubmitEtymologyReverseAnswersTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12K\n" +
 	"\arequest\x18\x03 \x01(\v21.api.v1.BatchSubmitEtymologyReverseAnswersRequestR\arequest\x12i\n" +
-	"\bexpected\x18\x04 \x01(\v2M.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpectedR\bexpected\x12k\n" +
-	"\x04vars\x18\x05 \x03(\v2W.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbc\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2M.testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpectedR\bexpected\"\xef\x01\n" +
 	"*BatchSubmitEtymologyReverseAnswersExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12F\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12F\n" +
 	"\x04body\x18\x02 \x01(\v22.api.v1.BatchSubmitEtymologyReverseAnswersResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x82\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x82\x01\n" +
 	"#StartEtymologyFreeformQuizTestSuite\x12[\n" +
-	"\x05cases\x18\x01 \x03(\v2E.testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCaseR\x05cases\"\xab\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2E.testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCaseR\x05cases\"\x8d\x02\n" +
 	"\"StartEtymologyFreeformQuizTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12C\n" +
 	"\arequest\x18\x03 \x01(\v2).api.v1.StartEtymologyFreeformQuizRequestR\arequest\x12a\n" +
-	"\bexpected\x18\x04 \x01(\v2E.testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpectedR\bexpected\x12c\n" +
-	"\x04vars\x18\x05 \x03(\v2O.testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xac\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2E.testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpectedR\bexpected\"\xdf\x01\n" +
 	"\"StartEtymologyFreeformQuizExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12>\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12>\n" +
 	"\x04body\x18\x02 \x01(\v2*.api.v1.StartEtymologyFreeformQuizResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x88\x01\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"\x88\x01\n" +
 	"&SubmitEtymologyFreeformAnswerTestSuite\x12^\n" +
-	"\x05cases\x18\x01 \x03(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCaseR\x05cases\"\xb7\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCaseR\x05cases\"\x96\x02\n" +
 	"%SubmitEtymologyFreeformAnswerTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12F\n" +
 	"\arequest\x18\x03 \x01(\v2,.api.v1.SubmitEtymologyFreeformAnswerRequestR\arequest\x12d\n" +
-	"\bexpected\x18\x04 \x01(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpectedR\bexpected\x12f\n" +
-	"\x04vars\x18\x05 \x03(\v2R.testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xb2\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2H.testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpectedR\bexpected\"\xe5\x01\n" +
 	"%SubmitEtymologyFreeformAnswerExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12A\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12A\n" +
 	"\x04body\x18\x02 \x01(\v2-.api.v1.SubmitEtymologyFreeformAnswerResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05stateB`Z^github.com/at-ishikawa/langner/gen-protos/testing/cases/api/v1/quiz_service;quizservicecasesv1b\x06proto3"
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05stateB`Z^github.com/at-ishikawa/langner/gen-protos/testing/cases/api/v1/quiz_service;quizservicecasesv1b\x06proto3"
 
 var (
 	file_testing_cases_api_v1_quiz_service_cases_proto_rawDescOnce sync.Once
@@ -4303,319 +3883,258 @@ func file_testing_cases_api_v1_quiz_service_cases_proto_rawDescGZIP() []byte {
 	return file_testing_cases_api_v1_quiz_service_cases_proto_rawDescData
 }
 
-var file_testing_cases_api_v1_quiz_service_cases_proto_msgTypes = make([]protoimpl.MessageInfo, 80)
+var file_testing_cases_api_v1_quiz_service_cases_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
 var file_testing_cases_api_v1_quiz_service_cases_proto_goTypes = []any{
-	(*GetQuizOptionsTestSuite)(nil),                      // 0: testing.cases.api.v1.quiz_service.GetQuizOptionsTestSuite
-	(*GetQuizOptionsTestCase)(nil),                       // 1: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase
-	(*GetQuizOptionsExpected)(nil),                       // 2: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected
-	(*StartQuizTestSuite)(nil),                           // 3: testing.cases.api.v1.quiz_service.StartQuizTestSuite
-	(*StartQuizTestCase)(nil),                            // 4: testing.cases.api.v1.quiz_service.StartQuizTestCase
-	(*StartQuizExpected)(nil),                            // 5: testing.cases.api.v1.quiz_service.StartQuizExpected
-	(*SubmitAnswerTestSuite)(nil),                        // 6: testing.cases.api.v1.quiz_service.SubmitAnswerTestSuite
-	(*SubmitAnswerTestCase)(nil),                         // 7: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase
-	(*SubmitAnswerExpected)(nil),                         // 8: testing.cases.api.v1.quiz_service.SubmitAnswerExpected
-	(*BatchSubmitAnswersTestSuite)(nil),                  // 9: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestSuite
-	(*BatchSubmitAnswersTestCase)(nil),                   // 10: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase
-	(*BatchSubmitAnswersExpected)(nil),                   // 11: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected
-	(*StartReverseQuizTestSuite)(nil),                    // 12: testing.cases.api.v1.quiz_service.StartReverseQuizTestSuite
-	(*StartReverseQuizTestCase)(nil),                     // 13: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase
-	(*StartReverseQuizExpected)(nil),                     // 14: testing.cases.api.v1.quiz_service.StartReverseQuizExpected
-	(*SubmitReverseAnswerTestSuite)(nil),                 // 15: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestSuite
-	(*SubmitReverseAnswerTestCase)(nil),                  // 16: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase
-	(*SubmitReverseAnswerExpected)(nil),                  // 17: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected
-	(*BatchSubmitReverseAnswersTestSuite)(nil),           // 18: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestSuite
-	(*BatchSubmitReverseAnswersTestCase)(nil),            // 19: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase
-	(*BatchSubmitReverseAnswersExpected)(nil),            // 20: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected
-	(*StartFreeformQuizTestSuite)(nil),                   // 21: testing.cases.api.v1.quiz_service.StartFreeformQuizTestSuite
-	(*StartFreeformQuizTestCase)(nil),                    // 22: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase
-	(*StartFreeformQuizExpected)(nil),                    // 23: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected
-	(*SubmitFreeformAnswerTestSuite)(nil),                // 24: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestSuite
-	(*SubmitFreeformAnswerTestCase)(nil),                 // 25: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase
-	(*SubmitFreeformAnswerExpected)(nil),                 // 26: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected
-	(*OverrideAnswerTestSuite)(nil),                      // 27: testing.cases.api.v1.quiz_service.OverrideAnswerTestSuite
-	(*OverrideAnswerTestCase)(nil),                       // 28: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase
-	(*OverrideAnswerExpected)(nil),                       // 29: testing.cases.api.v1.quiz_service.OverrideAnswerExpected
-	(*UndoOverrideAnswerTestSuite)(nil),                  // 30: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestSuite
-	(*UndoOverrideAnswerTestCase)(nil),                   // 31: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase
-	(*UndoOverrideAnswerExpected)(nil),                   // 32: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected
-	(*SkipWordTestSuite)(nil),                            // 33: testing.cases.api.v1.quiz_service.SkipWordTestSuite
-	(*SkipWordTestCase)(nil),                             // 34: testing.cases.api.v1.quiz_service.SkipWordTestCase
-	(*SkipWordExpected)(nil),                             // 35: testing.cases.api.v1.quiz_service.SkipWordExpected
-	(*ResumeWordTestSuite)(nil),                          // 36: testing.cases.api.v1.quiz_service.ResumeWordTestSuite
-	(*ResumeWordTestCase)(nil),                           // 37: testing.cases.api.v1.quiz_service.ResumeWordTestCase
-	(*ResumeWordExpected)(nil),                           // 38: testing.cases.api.v1.quiz_service.ResumeWordExpected
-	(*StartEtymologyQuizTestSuite)(nil),                  // 39: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestSuite
-	(*StartEtymologyQuizTestCase)(nil),                   // 40: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase
-	(*StartEtymologyQuizExpected)(nil),                   // 41: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected
-	(*SubmitEtymologyStandardAnswerTestSuite)(nil),       // 42: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestSuite
-	(*SubmitEtymologyStandardAnswerTestCase)(nil),        // 43: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase
-	(*SubmitEtymologyStandardAnswerExpected)(nil),        // 44: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected
-	(*BatchSubmitEtymologyStandardAnswersTestSuite)(nil), // 45: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestSuite
-	(*BatchSubmitEtymologyStandardAnswersTestCase)(nil),  // 46: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase
-	(*BatchSubmitEtymologyStandardAnswersExpected)(nil),  // 47: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected
-	(*SubmitEtymologyReverseAnswerTestSuite)(nil),        // 48: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestSuite
-	(*SubmitEtymologyReverseAnswerTestCase)(nil),         // 49: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase
-	(*SubmitEtymologyReverseAnswerExpected)(nil),         // 50: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected
-	(*BatchSubmitEtymologyReverseAnswersTestSuite)(nil),  // 51: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestSuite
-	(*BatchSubmitEtymologyReverseAnswersTestCase)(nil),   // 52: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase
-	(*BatchSubmitEtymologyReverseAnswersExpected)(nil),   // 53: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected
-	(*StartEtymologyFreeformQuizTestSuite)(nil),          // 54: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestSuite
-	(*StartEtymologyFreeformQuizTestCase)(nil),           // 55: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase
-	(*StartEtymologyFreeformQuizExpected)(nil),           // 56: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected
-	(*SubmitEtymologyFreeformAnswerTestSuite)(nil),       // 57: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestSuite
-	(*SubmitEtymologyFreeformAnswerTestCase)(nil),        // 58: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase
-	(*SubmitEtymologyFreeformAnswerExpected)(nil),        // 59: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected
-	nil,                                     // 60: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.VarsEntry
-	nil,                                     // 61: testing.cases.api.v1.quiz_service.StartQuizTestCase.VarsEntry
-	nil,                                     // 62: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.VarsEntry
-	nil,                                     // 63: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.VarsEntry
-	nil,                                     // 64: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.VarsEntry
-	nil,                                     // 65: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.VarsEntry
-	nil,                                     // 66: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.VarsEntry
-	nil,                                     // 67: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.VarsEntry
-	nil,                                     // 68: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.VarsEntry
-	nil,                                     // 69: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.VarsEntry
-	nil,                                     // 70: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.VarsEntry
-	nil,                                     // 71: testing.cases.api.v1.quiz_service.SkipWordTestCase.VarsEntry
-	nil,                                     // 72: testing.cases.api.v1.quiz_service.ResumeWordTestCase.VarsEntry
-	nil,                                     // 73: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.VarsEntry
-	nil,                                     // 74: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.VarsEntry
-	nil,                                     // 75: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.VarsEntry
-	nil,                                     // 76: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.VarsEntry
-	nil,                                     // 77: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.VarsEntry
-	nil,                                     // 78: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.VarsEntry
-	nil,                                     // 79: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.VarsEntry
-	(*v1.SetupStep)(nil),                    // 80: testing.v1.SetupStep
-	(*v11.GetQuizOptionsRequest)(nil),       // 81: api.v1.GetQuizOptionsRequest
-	(*v11.GetQuizOptionsResponse)(nil),      // 82: api.v1.GetQuizOptionsResponse
-	(*v1.ExpectedError)(nil),                // 83: testing.v1.ExpectedError
-	(*v1.FieldExpectation)(nil),             // 84: testing.v1.FieldExpectation
-	(*v1.StateAssertion)(nil),               // 85: testing.v1.StateAssertion
-	(*v11.StartQuizRequest)(nil),            // 86: api.v1.StartQuizRequest
-	(*v11.StartQuizResponse)(nil),           // 87: api.v1.StartQuizResponse
-	(*v11.SubmitAnswerRequest)(nil),         // 88: api.v1.SubmitAnswerRequest
-	(*v11.SubmitAnswerResponse)(nil),        // 89: api.v1.SubmitAnswerResponse
-	(*v11.BatchSubmitAnswersRequest)(nil),   // 90: api.v1.BatchSubmitAnswersRequest
-	(*v11.BatchSubmitAnswersResponse)(nil),  // 91: api.v1.BatchSubmitAnswersResponse
-	(*v11.StartReverseQuizRequest)(nil),     // 92: api.v1.StartReverseQuizRequest
-	(*v11.StartReverseQuizResponse)(nil),    // 93: api.v1.StartReverseQuizResponse
-	(*v11.SubmitReverseAnswerRequest)(nil),  // 94: api.v1.SubmitReverseAnswerRequest
-	(*v11.SubmitReverseAnswerResponse)(nil), // 95: api.v1.SubmitReverseAnswerResponse
-	(*v11.BatchSubmitReverseAnswersRequest)(nil),            // 96: api.v1.BatchSubmitReverseAnswersRequest
-	(*v11.BatchSubmitReverseAnswersResponse)(nil),           // 97: api.v1.BatchSubmitReverseAnswersResponse
-	(*v11.StartFreeformQuizRequest)(nil),                    // 98: api.v1.StartFreeformQuizRequest
-	(*v11.StartFreeformQuizResponse)(nil),                   // 99: api.v1.StartFreeformQuizResponse
-	(*v11.SubmitFreeformAnswerRequest)(nil),                 // 100: api.v1.SubmitFreeformAnswerRequest
-	(*v11.SubmitFreeformAnswerResponse)(nil),                // 101: api.v1.SubmitFreeformAnswerResponse
-	(*v11.OverrideAnswerRequest)(nil),                       // 102: api.v1.OverrideAnswerRequest
-	(*v11.OverrideAnswerResponse)(nil),                      // 103: api.v1.OverrideAnswerResponse
-	(*v11.UndoOverrideAnswerRequest)(nil),                   // 104: api.v1.UndoOverrideAnswerRequest
-	(*v11.UndoOverrideAnswerResponse)(nil),                  // 105: api.v1.UndoOverrideAnswerResponse
-	(*v11.SkipWordRequest)(nil),                             // 106: api.v1.SkipWordRequest
-	(*v11.SkipWordResponse)(nil),                            // 107: api.v1.SkipWordResponse
-	(*v11.ResumeWordRequest)(nil),                           // 108: api.v1.ResumeWordRequest
-	(*v11.ResumeWordResponse)(nil),                          // 109: api.v1.ResumeWordResponse
-	(*v11.StartEtymologyQuizRequest)(nil),                   // 110: api.v1.StartEtymologyQuizRequest
-	(*v11.StartEtymologyQuizResponse)(nil),                  // 111: api.v1.StartEtymologyQuizResponse
-	(*v11.SubmitEtymologyStandardAnswerRequest)(nil),        // 112: api.v1.SubmitEtymologyStandardAnswerRequest
-	(*v11.SubmitEtymologyStandardAnswerResponse)(nil),       // 113: api.v1.SubmitEtymologyStandardAnswerResponse
-	(*v11.BatchSubmitEtymologyStandardAnswersRequest)(nil),  // 114: api.v1.BatchSubmitEtymologyStandardAnswersRequest
-	(*v11.BatchSubmitEtymologyStandardAnswersResponse)(nil), // 115: api.v1.BatchSubmitEtymologyStandardAnswersResponse
-	(*v11.SubmitEtymologyReverseAnswerRequest)(nil),         // 116: api.v1.SubmitEtymologyReverseAnswerRequest
-	(*v11.SubmitEtymologyReverseAnswerResponse)(nil),        // 117: api.v1.SubmitEtymologyReverseAnswerResponse
-	(*v11.BatchSubmitEtymologyReverseAnswersRequest)(nil),   // 118: api.v1.BatchSubmitEtymologyReverseAnswersRequest
-	(*v11.BatchSubmitEtymologyReverseAnswersResponse)(nil),  // 119: api.v1.BatchSubmitEtymologyReverseAnswersResponse
-	(*v11.StartEtymologyFreeformQuizRequest)(nil),           // 120: api.v1.StartEtymologyFreeformQuizRequest
-	(*v11.StartEtymologyFreeformQuizResponse)(nil),          // 121: api.v1.StartEtymologyFreeformQuizResponse
-	(*v11.SubmitEtymologyFreeformAnswerRequest)(nil),        // 122: api.v1.SubmitEtymologyFreeformAnswerRequest
-	(*v11.SubmitEtymologyFreeformAnswerResponse)(nil),       // 123: api.v1.SubmitEtymologyFreeformAnswerResponse
+	(*GetQuizOptionsTestSuite)(nil),                         // 0: testing.cases.api.v1.quiz_service.GetQuizOptionsTestSuite
+	(*GetQuizOptionsTestCase)(nil),                          // 1: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase
+	(*GetQuizOptionsExpected)(nil),                          // 2: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected
+	(*StartQuizTestSuite)(nil),                              // 3: testing.cases.api.v1.quiz_service.StartQuizTestSuite
+	(*StartQuizTestCase)(nil),                               // 4: testing.cases.api.v1.quiz_service.StartQuizTestCase
+	(*StartQuizExpected)(nil),                               // 5: testing.cases.api.v1.quiz_service.StartQuizExpected
+	(*SubmitAnswerTestSuite)(nil),                           // 6: testing.cases.api.v1.quiz_service.SubmitAnswerTestSuite
+	(*SubmitAnswerTestCase)(nil),                            // 7: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase
+	(*SubmitAnswerExpected)(nil),                            // 8: testing.cases.api.v1.quiz_service.SubmitAnswerExpected
+	(*BatchSubmitAnswersTestSuite)(nil),                     // 9: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestSuite
+	(*BatchSubmitAnswersTestCase)(nil),                      // 10: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase
+	(*BatchSubmitAnswersExpected)(nil),                      // 11: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected
+	(*StartReverseQuizTestSuite)(nil),                       // 12: testing.cases.api.v1.quiz_service.StartReverseQuizTestSuite
+	(*StartReverseQuizTestCase)(nil),                        // 13: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase
+	(*StartReverseQuizExpected)(nil),                        // 14: testing.cases.api.v1.quiz_service.StartReverseQuizExpected
+	(*SubmitReverseAnswerTestSuite)(nil),                    // 15: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestSuite
+	(*SubmitReverseAnswerTestCase)(nil),                     // 16: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase
+	(*SubmitReverseAnswerExpected)(nil),                     // 17: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected
+	(*BatchSubmitReverseAnswersTestSuite)(nil),              // 18: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestSuite
+	(*BatchSubmitReverseAnswersTestCase)(nil),               // 19: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase
+	(*BatchSubmitReverseAnswersExpected)(nil),               // 20: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected
+	(*StartFreeformQuizTestSuite)(nil),                      // 21: testing.cases.api.v1.quiz_service.StartFreeformQuizTestSuite
+	(*StartFreeformQuizTestCase)(nil),                       // 22: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase
+	(*StartFreeformQuizExpected)(nil),                       // 23: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected
+	(*SubmitFreeformAnswerTestSuite)(nil),                   // 24: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestSuite
+	(*SubmitFreeformAnswerTestCase)(nil),                    // 25: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase
+	(*SubmitFreeformAnswerExpected)(nil),                    // 26: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected
+	(*OverrideAnswerTestSuite)(nil),                         // 27: testing.cases.api.v1.quiz_service.OverrideAnswerTestSuite
+	(*OverrideAnswerTestCase)(nil),                          // 28: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase
+	(*OverrideAnswerExpected)(nil),                          // 29: testing.cases.api.v1.quiz_service.OverrideAnswerExpected
+	(*UndoOverrideAnswerTestSuite)(nil),                     // 30: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestSuite
+	(*UndoOverrideAnswerTestCase)(nil),                      // 31: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase
+	(*UndoOverrideAnswerExpected)(nil),                      // 32: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected
+	(*SkipWordTestSuite)(nil),                               // 33: testing.cases.api.v1.quiz_service.SkipWordTestSuite
+	(*SkipWordTestCase)(nil),                                // 34: testing.cases.api.v1.quiz_service.SkipWordTestCase
+	(*SkipWordExpected)(nil),                                // 35: testing.cases.api.v1.quiz_service.SkipWordExpected
+	(*ResumeWordTestSuite)(nil),                             // 36: testing.cases.api.v1.quiz_service.ResumeWordTestSuite
+	(*ResumeWordTestCase)(nil),                              // 37: testing.cases.api.v1.quiz_service.ResumeWordTestCase
+	(*ResumeWordExpected)(nil),                              // 38: testing.cases.api.v1.quiz_service.ResumeWordExpected
+	(*StartEtymologyQuizTestSuite)(nil),                     // 39: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestSuite
+	(*StartEtymologyQuizTestCase)(nil),                      // 40: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase
+	(*StartEtymologyQuizExpected)(nil),                      // 41: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected
+	(*SubmitEtymologyStandardAnswerTestSuite)(nil),          // 42: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestSuite
+	(*SubmitEtymologyStandardAnswerTestCase)(nil),           // 43: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase
+	(*SubmitEtymologyStandardAnswerExpected)(nil),           // 44: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected
+	(*BatchSubmitEtymologyStandardAnswersTestSuite)(nil),    // 45: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestSuite
+	(*BatchSubmitEtymologyStandardAnswersTestCase)(nil),     // 46: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase
+	(*BatchSubmitEtymologyStandardAnswersExpected)(nil),     // 47: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected
+	(*SubmitEtymologyReverseAnswerTestSuite)(nil),           // 48: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestSuite
+	(*SubmitEtymologyReverseAnswerTestCase)(nil),            // 49: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase
+	(*SubmitEtymologyReverseAnswerExpected)(nil),            // 50: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected
+	(*BatchSubmitEtymologyReverseAnswersTestSuite)(nil),     // 51: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestSuite
+	(*BatchSubmitEtymologyReverseAnswersTestCase)(nil),      // 52: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase
+	(*BatchSubmitEtymologyReverseAnswersExpected)(nil),      // 53: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected
+	(*StartEtymologyFreeformQuizTestSuite)(nil),             // 54: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestSuite
+	(*StartEtymologyFreeformQuizTestCase)(nil),              // 55: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase
+	(*StartEtymologyFreeformQuizExpected)(nil),              // 56: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected
+	(*SubmitEtymologyFreeformAnswerTestSuite)(nil),          // 57: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestSuite
+	(*SubmitEtymologyFreeformAnswerTestCase)(nil),           // 58: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase
+	(*SubmitEtymologyFreeformAnswerExpected)(nil),           // 59: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected
+	(*v1.SetupStep)(nil),                                    // 60: testing.v1.SetupStep
+	(*v11.GetQuizOptionsRequest)(nil),                       // 61: api.v1.GetQuizOptionsRequest
+	(*v11.GetQuizOptionsResponse)(nil),                      // 62: api.v1.GetQuizOptionsResponse
+	(*v1.ExpectedError)(nil),                                // 63: testing.v1.ExpectedError
+	(*v1.StateAssertion)(nil),                               // 64: testing.v1.StateAssertion
+	(*v11.StartQuizRequest)(nil),                            // 65: api.v1.StartQuizRequest
+	(*v11.StartQuizResponse)(nil),                           // 66: api.v1.StartQuizResponse
+	(*v11.SubmitAnswerRequest)(nil),                         // 67: api.v1.SubmitAnswerRequest
+	(*v11.SubmitAnswerResponse)(nil),                        // 68: api.v1.SubmitAnswerResponse
+	(*v11.BatchSubmitAnswersRequest)(nil),                   // 69: api.v1.BatchSubmitAnswersRequest
+	(*v11.BatchSubmitAnswersResponse)(nil),                  // 70: api.v1.BatchSubmitAnswersResponse
+	(*v11.StartReverseQuizRequest)(nil),                     // 71: api.v1.StartReverseQuizRequest
+	(*v11.StartReverseQuizResponse)(nil),                    // 72: api.v1.StartReverseQuizResponse
+	(*v11.SubmitReverseAnswerRequest)(nil),                  // 73: api.v1.SubmitReverseAnswerRequest
+	(*v11.SubmitReverseAnswerResponse)(nil),                 // 74: api.v1.SubmitReverseAnswerResponse
+	(*v11.BatchSubmitReverseAnswersRequest)(nil),            // 75: api.v1.BatchSubmitReverseAnswersRequest
+	(*v11.BatchSubmitReverseAnswersResponse)(nil),           // 76: api.v1.BatchSubmitReverseAnswersResponse
+	(*v11.StartFreeformQuizRequest)(nil),                    // 77: api.v1.StartFreeformQuizRequest
+	(*v11.StartFreeformQuizResponse)(nil),                   // 78: api.v1.StartFreeformQuizResponse
+	(*v11.SubmitFreeformAnswerRequest)(nil),                 // 79: api.v1.SubmitFreeformAnswerRequest
+	(*v11.SubmitFreeformAnswerResponse)(nil),                // 80: api.v1.SubmitFreeformAnswerResponse
+	(*v11.OverrideAnswerRequest)(nil),                       // 81: api.v1.OverrideAnswerRequest
+	(*v11.OverrideAnswerResponse)(nil),                      // 82: api.v1.OverrideAnswerResponse
+	(*v11.UndoOverrideAnswerRequest)(nil),                   // 83: api.v1.UndoOverrideAnswerRequest
+	(*v11.UndoOverrideAnswerResponse)(nil),                  // 84: api.v1.UndoOverrideAnswerResponse
+	(*v11.SkipWordRequest)(nil),                             // 85: api.v1.SkipWordRequest
+	(*v11.SkipWordResponse)(nil),                            // 86: api.v1.SkipWordResponse
+	(*v11.ResumeWordRequest)(nil),                           // 87: api.v1.ResumeWordRequest
+	(*v11.ResumeWordResponse)(nil),                          // 88: api.v1.ResumeWordResponse
+	(*v11.StartEtymologyQuizRequest)(nil),                   // 89: api.v1.StartEtymologyQuizRequest
+	(*v11.StartEtymologyQuizResponse)(nil),                  // 90: api.v1.StartEtymologyQuizResponse
+	(*v11.SubmitEtymologyStandardAnswerRequest)(nil),        // 91: api.v1.SubmitEtymologyStandardAnswerRequest
+	(*v11.SubmitEtymologyStandardAnswerResponse)(nil),       // 92: api.v1.SubmitEtymologyStandardAnswerResponse
+	(*v11.BatchSubmitEtymologyStandardAnswersRequest)(nil),  // 93: api.v1.BatchSubmitEtymologyStandardAnswersRequest
+	(*v11.BatchSubmitEtymologyStandardAnswersResponse)(nil), // 94: api.v1.BatchSubmitEtymologyStandardAnswersResponse
+	(*v11.SubmitEtymologyReverseAnswerRequest)(nil),         // 95: api.v1.SubmitEtymologyReverseAnswerRequest
+	(*v11.SubmitEtymologyReverseAnswerResponse)(nil),        // 96: api.v1.SubmitEtymologyReverseAnswerResponse
+	(*v11.BatchSubmitEtymologyReverseAnswersRequest)(nil),   // 97: api.v1.BatchSubmitEtymologyReverseAnswersRequest
+	(*v11.BatchSubmitEtymologyReverseAnswersResponse)(nil),  // 98: api.v1.BatchSubmitEtymologyReverseAnswersResponse
+	(*v11.StartEtymologyFreeformQuizRequest)(nil),           // 99: api.v1.StartEtymologyFreeformQuizRequest
+	(*v11.StartEtymologyFreeformQuizResponse)(nil),          // 100: api.v1.StartEtymologyFreeformQuizResponse
+	(*v11.SubmitEtymologyFreeformAnswerRequest)(nil),        // 101: api.v1.SubmitEtymologyFreeformAnswerRequest
+	(*v11.SubmitEtymologyFreeformAnswerResponse)(nil),       // 102: api.v1.SubmitEtymologyFreeformAnswerResponse
 }
 var file_testing_cases_api_v1_quiz_service_cases_proto_depIdxs = []int32{
 	1,   // 0: testing.cases.api.v1.quiz_service.GetQuizOptionsTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase
-	80,  // 1: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.setup:type_name -> testing.v1.SetupStep
-	81,  // 2: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.request:type_name -> api.v1.GetQuizOptionsRequest
+	60,  // 1: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.setup:type_name -> testing.v1.SetupStep
+	61,  // 2: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.request:type_name -> api.v1.GetQuizOptionsRequest
 	2,   // 3: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.GetQuizOptionsExpected
-	60,  // 4: testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.GetQuizOptionsTestCase.VarsEntry
-	82,  // 5: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected.body:type_name -> api.v1.GetQuizOptionsResponse
-	83,  // 6: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 7: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 8: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected.state:type_name -> testing.v1.StateAssertion
-	4,   // 9: testing.cases.api.v1.quiz_service.StartQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartQuizTestCase
-	80,  // 10: testing.cases.api.v1.quiz_service.StartQuizTestCase.setup:type_name -> testing.v1.SetupStep
-	86,  // 11: testing.cases.api.v1.quiz_service.StartQuizTestCase.request:type_name -> api.v1.StartQuizRequest
-	5,   // 12: testing.cases.api.v1.quiz_service.StartQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartQuizExpected
-	61,  // 13: testing.cases.api.v1.quiz_service.StartQuizTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.StartQuizTestCase.VarsEntry
-	87,  // 14: testing.cases.api.v1.quiz_service.StartQuizExpected.body:type_name -> api.v1.StartQuizResponse
-	83,  // 15: testing.cases.api.v1.quiz_service.StartQuizExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 16: testing.cases.api.v1.quiz_service.StartQuizExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 17: testing.cases.api.v1.quiz_service.StartQuizExpected.state:type_name -> testing.v1.StateAssertion
-	7,   // 18: testing.cases.api.v1.quiz_service.SubmitAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitAnswerTestCase
-	80,  // 19: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	88,  // 20: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.request:type_name -> api.v1.SubmitAnswerRequest
-	8,   // 21: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitAnswerExpected
-	62,  // 22: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.VarsEntry
-	89,  // 23: testing.cases.api.v1.quiz_service.SubmitAnswerExpected.body:type_name -> api.v1.SubmitAnswerResponse
-	83,  // 24: testing.cases.api.v1.quiz_service.SubmitAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 25: testing.cases.api.v1.quiz_service.SubmitAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 26: testing.cases.api.v1.quiz_service.SubmitAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	10,  // 27: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase
-	80,  // 28: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.setup:type_name -> testing.v1.SetupStep
-	90,  // 29: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.request:type_name -> api.v1.BatchSubmitAnswersRequest
-	11,  // 30: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected
-	63,  // 31: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.VarsEntry
-	91,  // 32: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected.body:type_name -> api.v1.BatchSubmitAnswersResponse
-	83,  // 33: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 34: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 35: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected.state:type_name -> testing.v1.StateAssertion
-	13,  // 36: testing.cases.api.v1.quiz_service.StartReverseQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartReverseQuizTestCase
-	80,  // 37: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.setup:type_name -> testing.v1.SetupStep
-	92,  // 38: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.request:type_name -> api.v1.StartReverseQuizRequest
-	14,  // 39: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartReverseQuizExpected
-	64,  // 40: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.VarsEntry
-	93,  // 41: testing.cases.api.v1.quiz_service.StartReverseQuizExpected.body:type_name -> api.v1.StartReverseQuizResponse
-	83,  // 42: testing.cases.api.v1.quiz_service.StartReverseQuizExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 43: testing.cases.api.v1.quiz_service.StartReverseQuizExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 44: testing.cases.api.v1.quiz_service.StartReverseQuizExpected.state:type_name -> testing.v1.StateAssertion
-	16,  // 45: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase
-	80,  // 46: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	94,  // 47: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.request:type_name -> api.v1.SubmitReverseAnswerRequest
-	17,  // 48: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected
-	65,  // 49: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.VarsEntry
-	95,  // 50: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected.body:type_name -> api.v1.SubmitReverseAnswerResponse
-	83,  // 51: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 52: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 53: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	19,  // 54: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase
-	80,  // 55: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.setup:type_name -> testing.v1.SetupStep
-	96,  // 56: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.request:type_name -> api.v1.BatchSubmitReverseAnswersRequest
-	20,  // 57: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected
-	66,  // 58: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.VarsEntry
-	97,  // 59: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected.body:type_name -> api.v1.BatchSubmitReverseAnswersResponse
-	83,  // 60: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 61: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 62: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected.state:type_name -> testing.v1.StateAssertion
-	22,  // 63: testing.cases.api.v1.quiz_service.StartFreeformQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase
-	80,  // 64: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.setup:type_name -> testing.v1.SetupStep
-	98,  // 65: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.request:type_name -> api.v1.StartFreeformQuizRequest
-	23,  // 66: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartFreeformQuizExpected
-	67,  // 67: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.VarsEntry
-	99,  // 68: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected.body:type_name -> api.v1.StartFreeformQuizResponse
-	83,  // 69: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 70: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 71: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected.state:type_name -> testing.v1.StateAssertion
-	25,  // 72: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase
-	80,  // 73: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	100, // 74: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.request:type_name -> api.v1.SubmitFreeformAnswerRequest
-	26,  // 75: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected
-	68,  // 76: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.VarsEntry
-	101, // 77: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected.body:type_name -> api.v1.SubmitFreeformAnswerResponse
-	83,  // 78: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 79: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 80: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	28,  // 81: testing.cases.api.v1.quiz_service.OverrideAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.OverrideAnswerTestCase
-	80,  // 82: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	102, // 83: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.request:type_name -> api.v1.OverrideAnswerRequest
-	29,  // 84: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.OverrideAnswerExpected
-	69,  // 85: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.VarsEntry
-	103, // 86: testing.cases.api.v1.quiz_service.OverrideAnswerExpected.body:type_name -> api.v1.OverrideAnswerResponse
-	83,  // 87: testing.cases.api.v1.quiz_service.OverrideAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 88: testing.cases.api.v1.quiz_service.OverrideAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 89: testing.cases.api.v1.quiz_service.OverrideAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	31,  // 90: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase
-	80,  // 91: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	104, // 92: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.request:type_name -> api.v1.UndoOverrideAnswerRequest
-	32,  // 93: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected
-	70,  // 94: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.VarsEntry
-	105, // 95: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected.body:type_name -> api.v1.UndoOverrideAnswerResponse
-	83,  // 96: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 97: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 98: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	34,  // 99: testing.cases.api.v1.quiz_service.SkipWordTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SkipWordTestCase
-	80,  // 100: testing.cases.api.v1.quiz_service.SkipWordTestCase.setup:type_name -> testing.v1.SetupStep
-	106, // 101: testing.cases.api.v1.quiz_service.SkipWordTestCase.request:type_name -> api.v1.SkipWordRequest
-	35,  // 102: testing.cases.api.v1.quiz_service.SkipWordTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SkipWordExpected
-	71,  // 103: testing.cases.api.v1.quiz_service.SkipWordTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.SkipWordTestCase.VarsEntry
-	107, // 104: testing.cases.api.v1.quiz_service.SkipWordExpected.body:type_name -> api.v1.SkipWordResponse
-	83,  // 105: testing.cases.api.v1.quiz_service.SkipWordExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 106: testing.cases.api.v1.quiz_service.SkipWordExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 107: testing.cases.api.v1.quiz_service.SkipWordExpected.state:type_name -> testing.v1.StateAssertion
-	37,  // 108: testing.cases.api.v1.quiz_service.ResumeWordTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.ResumeWordTestCase
-	80,  // 109: testing.cases.api.v1.quiz_service.ResumeWordTestCase.setup:type_name -> testing.v1.SetupStep
-	108, // 110: testing.cases.api.v1.quiz_service.ResumeWordTestCase.request:type_name -> api.v1.ResumeWordRequest
-	38,  // 111: testing.cases.api.v1.quiz_service.ResumeWordTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.ResumeWordExpected
-	72,  // 112: testing.cases.api.v1.quiz_service.ResumeWordTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.ResumeWordTestCase.VarsEntry
-	109, // 113: testing.cases.api.v1.quiz_service.ResumeWordExpected.body:type_name -> api.v1.ResumeWordResponse
-	83,  // 114: testing.cases.api.v1.quiz_service.ResumeWordExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 115: testing.cases.api.v1.quiz_service.ResumeWordExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 116: testing.cases.api.v1.quiz_service.ResumeWordExpected.state:type_name -> testing.v1.StateAssertion
-	40,  // 117: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase
-	80,  // 118: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.setup:type_name -> testing.v1.SetupStep
-	110, // 119: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.request:type_name -> api.v1.StartEtymologyQuizRequest
-	41,  // 120: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected
-	73,  // 121: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.VarsEntry
-	111, // 122: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected.body:type_name -> api.v1.StartEtymologyQuizResponse
-	83,  // 123: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 124: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 125: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected.state:type_name -> testing.v1.StateAssertion
-	43,  // 126: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase
-	80,  // 127: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	112, // 128: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.request:type_name -> api.v1.SubmitEtymologyStandardAnswerRequest
-	44,  // 129: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected
-	74,  // 130: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.VarsEntry
-	113, // 131: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected.body:type_name -> api.v1.SubmitEtymologyStandardAnswerResponse
-	83,  // 132: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 133: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 134: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	46,  // 135: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase
-	80,  // 136: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.setup:type_name -> testing.v1.SetupStep
-	114, // 137: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.request:type_name -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
-	47,  // 138: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected
-	75,  // 139: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.VarsEntry
-	115, // 140: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected.body:type_name -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
-	83,  // 141: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 142: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 143: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected.state:type_name -> testing.v1.StateAssertion
-	49,  // 144: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase
-	80,  // 145: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	116, // 146: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.request:type_name -> api.v1.SubmitEtymologyReverseAnswerRequest
-	50,  // 147: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected
-	76,  // 148: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.VarsEntry
-	117, // 149: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected.body:type_name -> api.v1.SubmitEtymologyReverseAnswerResponse
-	83,  // 150: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 151: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 152: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	52,  // 153: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase
-	80,  // 154: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.setup:type_name -> testing.v1.SetupStep
-	118, // 155: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.request:type_name -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
-	53,  // 156: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected
-	77,  // 157: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.VarsEntry
-	119, // 158: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected.body:type_name -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
-	83,  // 159: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 160: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 161: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected.state:type_name -> testing.v1.StateAssertion
-	55,  // 162: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase
-	80,  // 163: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.setup:type_name -> testing.v1.SetupStep
-	120, // 164: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.request:type_name -> api.v1.StartEtymologyFreeformQuizRequest
-	56,  // 165: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected
-	78,  // 166: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.VarsEntry
-	121, // 167: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected.body:type_name -> api.v1.StartEtymologyFreeformQuizResponse
-	83,  // 168: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 169: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 170: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected.state:type_name -> testing.v1.StateAssertion
-	58,  // 171: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase
-	80,  // 172: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.setup:type_name -> testing.v1.SetupStep
-	122, // 173: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.request:type_name -> api.v1.SubmitEtymologyFreeformAnswerRequest
-	59,  // 174: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected
-	79,  // 175: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.vars:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.VarsEntry
-	123, // 176: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected.body:type_name -> api.v1.SubmitEtymologyFreeformAnswerResponse
-	83,  // 177: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected.error:type_name -> testing.v1.ExpectedError
-	84,  // 178: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	85,  // 179: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected.state:type_name -> testing.v1.StateAssertion
-	180, // [180:180] is the sub-list for method output_type
-	180, // [180:180] is the sub-list for method input_type
-	180, // [180:180] is the sub-list for extension type_name
-	180, // [180:180] is the sub-list for extension extendee
-	0,   // [0:180] is the sub-list for field type_name
+	62,  // 4: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected.body:type_name -> api.v1.GetQuizOptionsResponse
+	63,  // 5: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 6: testing.cases.api.v1.quiz_service.GetQuizOptionsExpected.state:type_name -> testing.v1.StateAssertion
+	4,   // 7: testing.cases.api.v1.quiz_service.StartQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartQuizTestCase
+	60,  // 8: testing.cases.api.v1.quiz_service.StartQuizTestCase.setup:type_name -> testing.v1.SetupStep
+	65,  // 9: testing.cases.api.v1.quiz_service.StartQuizTestCase.request:type_name -> api.v1.StartQuizRequest
+	5,   // 10: testing.cases.api.v1.quiz_service.StartQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartQuizExpected
+	66,  // 11: testing.cases.api.v1.quiz_service.StartQuizExpected.body:type_name -> api.v1.StartQuizResponse
+	63,  // 12: testing.cases.api.v1.quiz_service.StartQuizExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 13: testing.cases.api.v1.quiz_service.StartQuizExpected.state:type_name -> testing.v1.StateAssertion
+	7,   // 14: testing.cases.api.v1.quiz_service.SubmitAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitAnswerTestCase
+	60,  // 15: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	67,  // 16: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.request:type_name -> api.v1.SubmitAnswerRequest
+	8,   // 17: testing.cases.api.v1.quiz_service.SubmitAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitAnswerExpected
+	68,  // 18: testing.cases.api.v1.quiz_service.SubmitAnswerExpected.body:type_name -> api.v1.SubmitAnswerResponse
+	63,  // 19: testing.cases.api.v1.quiz_service.SubmitAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 20: testing.cases.api.v1.quiz_service.SubmitAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	10,  // 21: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase
+	60,  // 22: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.setup:type_name -> testing.v1.SetupStep
+	69,  // 23: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.request:type_name -> api.v1.BatchSubmitAnswersRequest
+	11,  // 24: testing.cases.api.v1.quiz_service.BatchSubmitAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected
+	70,  // 25: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected.body:type_name -> api.v1.BatchSubmitAnswersResponse
+	63,  // 26: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 27: testing.cases.api.v1.quiz_service.BatchSubmitAnswersExpected.state:type_name -> testing.v1.StateAssertion
+	13,  // 28: testing.cases.api.v1.quiz_service.StartReverseQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartReverseQuizTestCase
+	60,  // 29: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.setup:type_name -> testing.v1.SetupStep
+	71,  // 30: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.request:type_name -> api.v1.StartReverseQuizRequest
+	14,  // 31: testing.cases.api.v1.quiz_service.StartReverseQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartReverseQuizExpected
+	72,  // 32: testing.cases.api.v1.quiz_service.StartReverseQuizExpected.body:type_name -> api.v1.StartReverseQuizResponse
+	63,  // 33: testing.cases.api.v1.quiz_service.StartReverseQuizExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 34: testing.cases.api.v1.quiz_service.StartReverseQuizExpected.state:type_name -> testing.v1.StateAssertion
+	16,  // 35: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase
+	60,  // 36: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	73,  // 37: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.request:type_name -> api.v1.SubmitReverseAnswerRequest
+	17,  // 38: testing.cases.api.v1.quiz_service.SubmitReverseAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected
+	74,  // 39: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected.body:type_name -> api.v1.SubmitReverseAnswerResponse
+	63,  // 40: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 41: testing.cases.api.v1.quiz_service.SubmitReverseAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	19,  // 42: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase
+	60,  // 43: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.setup:type_name -> testing.v1.SetupStep
+	75,  // 44: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.request:type_name -> api.v1.BatchSubmitReverseAnswersRequest
+	20,  // 45: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected
+	76,  // 46: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected.body:type_name -> api.v1.BatchSubmitReverseAnswersResponse
+	63,  // 47: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 48: testing.cases.api.v1.quiz_service.BatchSubmitReverseAnswersExpected.state:type_name -> testing.v1.StateAssertion
+	22,  // 49: testing.cases.api.v1.quiz_service.StartFreeformQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase
+	60,  // 50: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.setup:type_name -> testing.v1.SetupStep
+	77,  // 51: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.request:type_name -> api.v1.StartFreeformQuizRequest
+	23,  // 52: testing.cases.api.v1.quiz_service.StartFreeformQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartFreeformQuizExpected
+	78,  // 53: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected.body:type_name -> api.v1.StartFreeformQuizResponse
+	63,  // 54: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 55: testing.cases.api.v1.quiz_service.StartFreeformQuizExpected.state:type_name -> testing.v1.StateAssertion
+	25,  // 56: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase
+	60,  // 57: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	79,  // 58: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.request:type_name -> api.v1.SubmitFreeformAnswerRequest
+	26,  // 59: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected
+	80,  // 60: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected.body:type_name -> api.v1.SubmitFreeformAnswerResponse
+	63,  // 61: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 62: testing.cases.api.v1.quiz_service.SubmitFreeformAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	28,  // 63: testing.cases.api.v1.quiz_service.OverrideAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.OverrideAnswerTestCase
+	60,  // 64: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	81,  // 65: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.request:type_name -> api.v1.OverrideAnswerRequest
+	29,  // 66: testing.cases.api.v1.quiz_service.OverrideAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.OverrideAnswerExpected
+	82,  // 67: testing.cases.api.v1.quiz_service.OverrideAnswerExpected.body:type_name -> api.v1.OverrideAnswerResponse
+	63,  // 68: testing.cases.api.v1.quiz_service.OverrideAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 69: testing.cases.api.v1.quiz_service.OverrideAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	31,  // 70: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase
+	60,  // 71: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	83,  // 72: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.request:type_name -> api.v1.UndoOverrideAnswerRequest
+	32,  // 73: testing.cases.api.v1.quiz_service.UndoOverrideAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected
+	84,  // 74: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected.body:type_name -> api.v1.UndoOverrideAnswerResponse
+	63,  // 75: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 76: testing.cases.api.v1.quiz_service.UndoOverrideAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	34,  // 77: testing.cases.api.v1.quiz_service.SkipWordTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SkipWordTestCase
+	60,  // 78: testing.cases.api.v1.quiz_service.SkipWordTestCase.setup:type_name -> testing.v1.SetupStep
+	85,  // 79: testing.cases.api.v1.quiz_service.SkipWordTestCase.request:type_name -> api.v1.SkipWordRequest
+	35,  // 80: testing.cases.api.v1.quiz_service.SkipWordTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SkipWordExpected
+	86,  // 81: testing.cases.api.v1.quiz_service.SkipWordExpected.body:type_name -> api.v1.SkipWordResponse
+	63,  // 82: testing.cases.api.v1.quiz_service.SkipWordExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 83: testing.cases.api.v1.quiz_service.SkipWordExpected.state:type_name -> testing.v1.StateAssertion
+	37,  // 84: testing.cases.api.v1.quiz_service.ResumeWordTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.ResumeWordTestCase
+	60,  // 85: testing.cases.api.v1.quiz_service.ResumeWordTestCase.setup:type_name -> testing.v1.SetupStep
+	87,  // 86: testing.cases.api.v1.quiz_service.ResumeWordTestCase.request:type_name -> api.v1.ResumeWordRequest
+	38,  // 87: testing.cases.api.v1.quiz_service.ResumeWordTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.ResumeWordExpected
+	88,  // 88: testing.cases.api.v1.quiz_service.ResumeWordExpected.body:type_name -> api.v1.ResumeWordResponse
+	63,  // 89: testing.cases.api.v1.quiz_service.ResumeWordExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 90: testing.cases.api.v1.quiz_service.ResumeWordExpected.state:type_name -> testing.v1.StateAssertion
+	40,  // 91: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase
+	60,  // 92: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.setup:type_name -> testing.v1.SetupStep
+	89,  // 93: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.request:type_name -> api.v1.StartEtymologyQuizRequest
+	41,  // 94: testing.cases.api.v1.quiz_service.StartEtymologyQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected
+	90,  // 95: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected.body:type_name -> api.v1.StartEtymologyQuizResponse
+	63,  // 96: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 97: testing.cases.api.v1.quiz_service.StartEtymologyQuizExpected.state:type_name -> testing.v1.StateAssertion
+	43,  // 98: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase
+	60,  // 99: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	91,  // 100: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.request:type_name -> api.v1.SubmitEtymologyStandardAnswerRequest
+	44,  // 101: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected
+	92,  // 102: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected.body:type_name -> api.v1.SubmitEtymologyStandardAnswerResponse
+	63,  // 103: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 104: testing.cases.api.v1.quiz_service.SubmitEtymologyStandardAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	46,  // 105: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase
+	60,  // 106: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.setup:type_name -> testing.v1.SetupStep
+	93,  // 107: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.request:type_name -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
+	47,  // 108: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected
+	94,  // 109: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected.body:type_name -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
+	63,  // 110: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 111: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyStandardAnswersExpected.state:type_name -> testing.v1.StateAssertion
+	49,  // 112: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase
+	60,  // 113: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	95,  // 114: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.request:type_name -> api.v1.SubmitEtymologyReverseAnswerRequest
+	50,  // 115: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected
+	96,  // 116: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected.body:type_name -> api.v1.SubmitEtymologyReverseAnswerResponse
+	63,  // 117: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 118: testing.cases.api.v1.quiz_service.SubmitEtymologyReverseAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	52,  // 119: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase
+	60,  // 120: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.setup:type_name -> testing.v1.SetupStep
+	97,  // 121: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.request:type_name -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
+	53,  // 122: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected
+	98,  // 123: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected.body:type_name -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
+	63,  // 124: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 125: testing.cases.api.v1.quiz_service.BatchSubmitEtymologyReverseAnswersExpected.state:type_name -> testing.v1.StateAssertion
+	55,  // 126: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase
+	60,  // 127: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.setup:type_name -> testing.v1.SetupStep
+	99,  // 128: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.request:type_name -> api.v1.StartEtymologyFreeformQuizRequest
+	56,  // 129: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected
+	100, // 130: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected.body:type_name -> api.v1.StartEtymologyFreeformQuizResponse
+	63,  // 131: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 132: testing.cases.api.v1.quiz_service.StartEtymologyFreeformQuizExpected.state:type_name -> testing.v1.StateAssertion
+	58,  // 133: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestSuite.cases:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase
+	60,  // 134: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.setup:type_name -> testing.v1.SetupStep
+	101, // 135: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.request:type_name -> api.v1.SubmitEtymologyFreeformAnswerRequest
+	59,  // 136: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerTestCase.expected:type_name -> testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected
+	102, // 137: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected.body:type_name -> api.v1.SubmitEtymologyFreeformAnswerResponse
+	63,  // 138: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected.error:type_name -> testing.v1.ExpectedError
+	64,  // 139: testing.cases.api.v1.quiz_service.SubmitEtymologyFreeformAnswerExpected.state:type_name -> testing.v1.StateAssertion
+	140, // [140:140] is the sub-list for method output_type
+	140, // [140:140] is the sub-list for method input_type
+	140, // [140:140] is the sub-list for extension type_name
+	140, // [140:140] is the sub-list for extension extendee
+	0,   // [0:140] is the sub-list for field type_name
 }
 
 func init() { file_testing_cases_api_v1_quiz_service_cases_proto_init() }
@@ -4629,7 +4148,7 @@ func file_testing_cases_api_v1_quiz_service_cases_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_testing_cases_api_v1_quiz_service_cases_proto_rawDesc), len(file_testing_cases_api_v1_quiz_service_cases_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   80,
+			NumMessages:   60,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

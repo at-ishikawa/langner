@@ -160,15 +160,13 @@ func render(s serviceDef) []byte {
 		fmt.Fprintf(&b, "  repeated testing.v1.SetupStep setup = 2;\n")
 		fmt.Fprintf(&b, "  .%s.%s request = 3;\n", s.pkg, r.input)
 		fmt.Fprintf(&b, "  %sExpected expected = 4;\n", r.name)
-		fmt.Fprintf(&b, "  map<string, string> vars = 5;\n")
 		fmt.Fprintf(&b, "}\n\n")
 
 		fmt.Fprintf(&b, "message %sExpected {\n", r.name)
-		fmt.Fprintf(&b, "  uint32 status = 1;\n")
+		fmt.Fprintf(&b, "  string status = 1;            // \"\", \"OK\", \"INVALID_ARGUMENT\", \"NOT_FOUND\", ...\n")
 		fmt.Fprintf(&b, "  .%s.%s body = 2;\n", s.pkg, r.output)
 		fmt.Fprintf(&b, "  testing.v1.ExpectedError error = 3;\n")
-		fmt.Fprintf(&b, "  repeated testing.v1.FieldExpectation field_expectations = 4;\n")
-		fmt.Fprintf(&b, "  repeated testing.v1.StateAssertion state = 5;\n")
+		fmt.Fprintf(&b, "  repeated testing.v1.StateAssertion state = 4;\n")
 		fmt.Fprintf(&b, "}\n\n")
 	}
 	return []byte(b.String())

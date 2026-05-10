@@ -1,0 +1,8 @@
+cases {
+  name: "rejects_empty_notebook_id"
+  request {
+  }
+  expected {
+    status: "INVALID_ARGUMENT"
+  }
+}

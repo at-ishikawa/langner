@@ -17,15 +17,13 @@ message GetQuizOptionsTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.GetQuizOptionsRequest request = 3;
   GetQuizOptionsExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message GetQuizOptionsExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.GetQuizOptionsResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message StartQuizTestSuite {
@@ -37,15 +35,13 @@ message StartQuizTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.StartQuizRequest request = 3;
   StartQuizExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message StartQuizExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.StartQuizResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message SubmitAnswerTestSuite {
@@ -57,15 +53,13 @@ message SubmitAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.SubmitAnswerRequest request = 3;
   SubmitAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message SubmitAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.SubmitAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message BatchSubmitAnswersTestSuite {
@@ -77,15 +71,13 @@ message BatchSubmitAnswersTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.BatchSubmitAnswersRequest request = 3;
   BatchSubmitAnswersExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message BatchSubmitAnswersExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.BatchSubmitAnswersResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message StartReverseQuizTestSuite {
@@ -97,15 +89,13 @@ message StartReverseQuizTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.StartReverseQuizRequest request = 3;
   StartReverseQuizExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message StartReverseQuizExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.StartReverseQuizResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message SubmitReverseAnswerTestSuite {
@@ -117,15 +107,13 @@ message SubmitReverseAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.SubmitReverseAnswerRequest request = 3;
   SubmitReverseAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message SubmitReverseAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.SubmitReverseAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message BatchSubmitReverseAnswersTestSuite {
@@ -137,15 +125,13 @@ message BatchSubmitReverseAnswersTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.BatchSubmitReverseAnswersRequest request = 3;
   BatchSubmitReverseAnswersExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message BatchSubmitReverseAnswersExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.BatchSubmitReverseAnswersResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message StartFreeformQuizTestSuite {
@@ -157,15 +143,13 @@ message StartFreeformQuizTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.StartFreeformQuizRequest request = 3;
   StartFreeformQuizExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message StartFreeformQuizExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.StartFreeformQuizResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message SubmitFreeformAnswerTestSuite {
@@ -177,15 +161,13 @@ message SubmitFreeformAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.SubmitFreeformAnswerRequest request = 3;
   SubmitFreeformAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message SubmitFreeformAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.SubmitFreeformAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message OverrideAnswerTestSuite {
@@ -197,15 +179,13 @@ message OverrideAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.OverrideAnswerRequest request = 3;
   OverrideAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message OverrideAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.OverrideAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message UndoOverrideAnswerTestSuite {
@@ -217,15 +197,13 @@ message UndoOverrideAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.UndoOverrideAnswerRequest request = 3;
   UndoOverrideAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message UndoOverrideAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.UndoOverrideAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message SkipWordTestSuite {
@@ -237,15 +215,13 @@ message SkipWordTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.SkipWordRequest request = 3;
   SkipWordExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message SkipWordExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.SkipWordResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message ResumeWordTestSuite {
@@ -257,15 +233,13 @@ message ResumeWordTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.ResumeWordRequest request = 3;
   ResumeWordExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message ResumeWordExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.ResumeWordResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message StartEtymologyQuizTestSuite {
@@ -277,15 +251,13 @@ message StartEtymologyQuizTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.StartEtymologyQuizRequest request = 3;
   StartEtymologyQuizExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message StartEtymologyQuizExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.StartEtymologyQuizResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message SubmitEtymologyStandardAnswerTestSuite {
@@ -297,15 +269,13 @@ message SubmitEtymologyStandardAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.SubmitEtymologyStandardAnswerRequest request = 3;
   SubmitEtymologyStandardAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message SubmitEtymologyStandardAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.SubmitEtymologyStandardAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message BatchSubmitEtymologyStandardAnswersTestSuite {
@@ -317,15 +287,13 @@ message BatchSubmitEtymologyStandardAnswersTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.BatchSubmitEtymologyStandardAnswersRequest request = 3;
   BatchSubmitEtymologyStandardAnswersExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message BatchSubmitEtymologyStandardAnswersExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.BatchSubmitEtymologyStandardAnswersResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message SubmitEtymologyReverseAnswerTestSuite {
@@ -337,15 +305,13 @@ message SubmitEtymologyReverseAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.SubmitEtymologyReverseAnswerRequest request = 3;
   SubmitEtymologyReverseAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message SubmitEtymologyReverseAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.SubmitEtymologyReverseAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message BatchSubmitEtymologyReverseAnswersTestSuite {
@@ -357,15 +323,13 @@ message BatchSubmitEtymologyReverseAnswersTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.BatchSubmitEtymologyReverseAnswersRequest request = 3;
   BatchSubmitEtymologyReverseAnswersExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message BatchSubmitEtymologyReverseAnswersExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.BatchSubmitEtymologyReverseAnswersResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message StartEtymologyFreeformQuizTestSuite {
@@ -377,15 +341,13 @@ message StartEtymologyFreeformQuizTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.StartEtymologyFreeformQuizRequest request = 3;
   StartEtymologyFreeformQuizExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message StartEtymologyFreeformQuizExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.StartEtymologyFreeformQuizResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message SubmitEtymologyFreeformAnswerTestSuite {
@@ -397,14 +359,12 @@ message SubmitEtymologyFreeformAnswerTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.SubmitEtymologyFreeformAnswerRequest request = 3;
   SubmitEtymologyFreeformAnswerExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message SubmitEtymologyFreeformAnswerExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.SubmitEtymologyFreeformAnswerResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 

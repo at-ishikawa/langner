@@ -29,54 +29,60 @@ func TestNotebookService_Cases(t *testing.T) {
 				Invoker: invokeDeleteDefinition,
 			},
 			"GetNotebookDetail": {
-				Suite: func() proto.Message { return &notebookcases.GetNotebookDetailTestSuite{} },
+				Suite:   func() proto.Message { return &notebookcases.GetNotebookDetailTestSuite{} },
+				Invoker: invokeGetNotebookDetail,
 			},
 			"ExportNotebookPDF": {
-				Suite: func() proto.Message { return &notebookcases.ExportNotebookPDFTestSuite{} },
+				Suite:   func() proto.Message { return &notebookcases.ExportNotebookPDFTestSuite{} },
+				Invoker: invokeExportNotebookPDF,
 			},
 			"LookupWord": {
-				Suite: func() proto.Message { return &notebookcases.LookupWordTestSuite{} },
+				Suite:   func() proto.Message { return &notebookcases.LookupWordTestSuite{} },
+				Invoker: invokeLookupWord,
 			},
 			"GetEtymologyNotebook": {
-				Suite: func() proto.Message { return &notebookcases.GetEtymologyNotebookTestSuite{} },
+				Suite:   func() proto.Message { return &notebookcases.GetEtymologyNotebookTestSuite{} },
+				Invoker: invokeGetEtymologyNotebook,
 			},
 		},
 	})
 }
 
 // TestQuizService_Cases runs every .textpb case under
-// proto/cases/api.v1.QuizService/<Method>/. All entries provide a Suite
-// factory so cases parse and validate; per-RPC invokers land in follow-up
-// PRs as quiz handler dependencies are made test-friendly.
+// proto/cases/api.v1.QuizService/<Method>/. Invokers come from
+// quizInvokers(); each builds a QuizHandler with zero-valued deps which is
+// enough to exercise the validation layer that runs at handler entry.
 func TestQuizService_Cases(t *testing.T) {
+	suiteFactories := map[string]func() proto.Message{
+		"GetQuizOptions":                      func() proto.Message { return &quizcases.GetQuizOptionsTestSuite{} },
+		"StartQuiz":                           func() proto.Message { return &quizcases.StartQuizTestSuite{} },
+		"SubmitAnswer":                        func() proto.Message { return &quizcases.SubmitAnswerTestSuite{} },
+		"BatchSubmitAnswers":                  func() proto.Message { return &quizcases.BatchSubmitAnswersTestSuite{} },
+		"StartReverseQuiz":                    func() proto.Message { return &quizcases.StartReverseQuizTestSuite{} },
+		"SubmitReverseAnswer":                 func() proto.Message { return &quizcases.SubmitReverseAnswerTestSuite{} },
+		"BatchSubmitReverseAnswers":           func() proto.Message { return &quizcases.BatchSubmitReverseAnswersTestSuite{} },
+		"StartFreeformQuiz":                   func() proto.Message { return &quizcases.StartFreeformQuizTestSuite{} },
+		"SubmitFreeformAnswer":                func() proto.Message { return &quizcases.SubmitFreeformAnswerTestSuite{} },
+		"OverrideAnswer":                      func() proto.Message { return &quizcases.OverrideAnswerTestSuite{} },
+		"UndoOverrideAnswer":                  func() proto.Message { return &quizcases.UndoOverrideAnswerTestSuite{} },
+		"SkipWord":                            func() proto.Message { return &quizcases.SkipWordTestSuite{} },
+		"ResumeWord":                          func() proto.Message { return &quizcases.ResumeWordTestSuite{} },
+		"StartEtymologyQuiz":                  func() proto.Message { return &quizcases.StartEtymologyQuizTestSuite{} },
+		"SubmitEtymologyStandardAnswer":       func() proto.Message { return &quizcases.SubmitEtymologyStandardAnswerTestSuite{} },
+		"BatchSubmitEtymologyStandardAnswers": func() proto.Message { return &quizcases.BatchSubmitEtymologyStandardAnswersTestSuite{} },
+		"SubmitEtymologyReverseAnswer":        func() proto.Message { return &quizcases.SubmitEtymologyReverseAnswerTestSuite{} },
+		"BatchSubmitEtymologyReverseAnswers":  func() proto.Message { return &quizcases.BatchSubmitEtymologyReverseAnswersTestSuite{} },
+		"StartEtymologyFreeformQuiz":          func() proto.Message { return &quizcases.StartEtymologyFreeformQuizTestSuite{} },
+		"SubmitEtymologyFreeformAnswer":       func() proto.Message { return &quizcases.SubmitEtymologyFreeformAnswerTestSuite{} },
+	}
+	bindings := make(map[string]testrunner.MethodBinding, len(suiteFactories))
+	invokers := quizInvokers()
+	for method, factory := range suiteFactories {
+		bindings[method] = testrunner.MethodBinding{Suite: factory, Invoker: invokers[method]}
+	}
 	testrunner.Run(t, testrunner.Config{
 		CasesRoot: casesRoot,
 		Service:   "api.v1.QuizService",
-		Methods:   quizSuiteFactories(),
+		Methods:   bindings,
 	})
-}
-
-func quizSuiteFactories() map[string]testrunner.MethodBinding {
-	return map[string]testrunner.MethodBinding{
-		"GetQuizOptions":                       {Suite: func() proto.Message { return &quizcases.GetQuizOptionsTestSuite{} }},
-		"StartQuiz":                            {Suite: func() proto.Message { return &quizcases.StartQuizTestSuite{} }},
-		"SubmitAnswer":                         {Suite: func() proto.Message { return &quizcases.SubmitAnswerTestSuite{} }},
-		"BatchSubmitAnswers":                   {Suite: func() proto.Message { return &quizcases.BatchSubmitAnswersTestSuite{} }},
-		"StartReverseQuiz":                     {Suite: func() proto.Message { return &quizcases.StartReverseQuizTestSuite{} }},
-		"SubmitReverseAnswer":                  {Suite: func() proto.Message { return &quizcases.SubmitReverseAnswerTestSuite{} }},
-		"BatchSubmitReverseAnswers":            {Suite: func() proto.Message { return &quizcases.BatchSubmitReverseAnswersTestSuite{} }},
-		"StartFreeformQuiz":                    {Suite: func() proto.Message { return &quizcases.StartFreeformQuizTestSuite{} }},
-		"SubmitFreeformAnswer":                 {Suite: func() proto.Message { return &quizcases.SubmitFreeformAnswerTestSuite{} }},
-		"OverrideAnswer":                       {Suite: func() proto.Message { return &quizcases.OverrideAnswerTestSuite{} }},
-		"UndoOverrideAnswer":                   {Suite: func() proto.Message { return &quizcases.UndoOverrideAnswerTestSuite{} }},
-		"SkipWord":                             {Suite: func() proto.Message { return &quizcases.SkipWordTestSuite{} }},
-		"ResumeWord":                           {Suite: func() proto.Message { return &quizcases.ResumeWordTestSuite{} }},
-		"StartEtymologyQuiz":                   {Suite: func() proto.Message { return &quizcases.StartEtymologyQuizTestSuite{} }},
-		"SubmitEtymologyStandardAnswer":        {Suite: func() proto.Message { return &quizcases.SubmitEtymologyStandardAnswerTestSuite{} }},
-		"BatchSubmitEtymologyStandardAnswers":  {Suite: func() proto.Message { return &quizcases.BatchSubmitEtymologyStandardAnswersTestSuite{} }},
-		"SubmitEtymologyReverseAnswer":         {Suite: func() proto.Message { return &quizcases.SubmitEtymologyReverseAnswerTestSuite{} }},
-		"BatchSubmitEtymologyReverseAnswers":   {Suite: func() proto.Message { return &quizcases.BatchSubmitEtymologyReverseAnswersTestSuite{} }},
-		"StartEtymologyFreeformQuiz":           {Suite: func() proto.Message { return &quizcases.StartEtymologyFreeformQuizTestSuite{} }},
-		"SubmitEtymologyFreeformAnswer":        {Suite: func() proto.Message { return &quizcases.SubmitEtymologyFreeformAnswerTestSuite{} }},
-	}
 }

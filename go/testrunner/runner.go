@@ -2,16 +2,14 @@
 //
 // The runner is generic via proto reflection — it does not depend on any
 // specific schema. Callers provide, per RPC method:
-//   - a SuiteFactory that returns an empty per-RPC TestSuite proto.Message.
-//     The TestSuite type defines `cases` (repeated TestCase), and each
-//     TestCase defines `name` (string), `setup` (repeated SetupStep),
-//     `request` (the typed request), and `expected` (Expected).
+//   - a SuiteFactory returning an empty per-RPC TestSuite proto.Message
+//     whose shape is: cases (repeated TestCase), and each TestCase has
+//     name (string), setup (repeated SetupStep), request (typed),
+//     expected (Expected with status string + body + error + state).
 //   - an Invoker that calls the handler with the typed request.
 //
-// The runner walks these by field name via protoreflect, so any schema
-// that follows the convention above will work.
-//
-// Case files live at <CasesRoot>/<Service>/<Method>/*.textpb.
+// Case files live at <CasesRoot>/<Service>/<Method>/*.textpb. Sandbox-relative
+// paths in setup/state assertions are resolved against a per-case tempdir.
 package testrunner
 
 import (
@@ -32,32 +30,25 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 )
 
-// Deps is the per-case sandbox provided to invokers.
 type Deps struct {
 	TempDir string
-	Vars    map[string]string
 }
 
-// Invoker invokes one RPC with a typed request and returns its typed response.
 type Invoker func(ctx context.Context, deps Deps, req proto.Message) (proto.Message, error)
 
-// SuiteFactory returns an empty per-RPC TestSuite proto.Message.
 type SuiteFactory func() proto.Message
 
-// MethodBinding wires one RPC method.
 type MethodBinding struct {
 	Suite   SuiteFactory
 	Invoker Invoker
 }
 
-// Config is the runner configuration.
 type Config struct {
 	CasesRoot string
-	Service   string                   // service fullname, e.g. "api.v1.NotebookService"
-	Methods   map[string]MethodBinding // method name → binding (nil/missing = smoke only)
+	Service   string
+	Methods   map[string]MethodBinding
 }
 
-// Run discovers all .textpb cases for cfg.Service and runs each as a subtest.
 func Run(t *testing.T, cfg Config) {
 	t.Helper()
 	svcDir := filepath.Join(cfg.CasesRoot, cfg.Service)
@@ -96,7 +87,7 @@ func runMethod(t *testing.T, cfg Config, svcDir, method string) {
 
 		if !hasBinding {
 			t.Run(filepath.Base(f), func(t *testing.T) {
-				t.Logf("%s/%s: no binding registered; smoke check only", cfg.Service, method)
+				t.Logf("%s/%s: no binding registered; case file not parsed", cfg.Service, method)
 			})
 			continue
 		}
@@ -126,9 +117,7 @@ func runMethod(t *testing.T, cfg Config, svcDir, method string) {
 			if name == "" {
 				name = strings.TrimSuffix(filepath.Base(f), ".textpb")
 			}
-			t.Run(name, func(t *testing.T) {
-				runOne(t, c, binding.Invoker)
-			})
+			t.Run(name, func(t *testing.T) { runOne(t, c, binding.Invoker) })
 		}
 	}
 }
@@ -138,7 +127,6 @@ type oneCase struct {
 	setup    []protoreflect.Message
 	request  proto.Message
 	expected protoreflect.Message
-	vars     map[string]string
 }
 
 func extractCases(suite proto.Message) ([]oneCase, error) {
@@ -154,20 +142,14 @@ func extractCases(suite proto.Message) ([]oneCase, error) {
 	list := msg.Get(casesField).List()
 	out := make([]oneCase, 0, list.Len())
 	for i := 0; i < list.Len(); i++ {
-		caseMsg := list.Get(i).Message()
-		c, err := parseCase(caseMsg)
-		if err != nil {
-			return nil, fmt.Errorf("case %d: %w", i, err)
-		}
-		out = append(out, c)
+		out = append(out, parseCase(list.Get(i).Message()))
 	}
 	return out, nil
 }
 
-func parseCase(m protoreflect.Message) (oneCase, error) {
+func parseCase(m protoreflect.Message) oneCase {
 	desc := m.Descriptor()
-	c := oneCase{vars: map[string]string{}}
-
+	c := oneCase{}
 	if f := desc.Fields().ByName("name"); f != nil {
 		c.name = m.Get(f).String()
 	}
@@ -177,25 +159,18 @@ func parseCase(m protoreflect.Message) (oneCase, error) {
 			c.setup = append(c.setup, list.Get(i).Message())
 		}
 	}
-	if f := desc.Fields().ByName("vars"); f != nil && f.IsMap() {
-		mp := m.Get(f).Map()
-		mp.Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
-			c.vars[k.String()] = v.String()
-			return true
-		})
-	}
 	if f := desc.Fields().ByName("request"); f != nil && f.Kind() == protoreflect.MessageKind {
 		c.request = m.Get(f).Message().Interface()
 	}
 	if f := desc.Fields().ByName("expected"); f != nil && f.Kind() == protoreflect.MessageKind {
 		c.expected = m.Get(f).Message()
 	}
-	return c, nil
+	return c
 }
 
 func runOne(t *testing.T, c oneCase, invoker Invoker) {
 	t.Helper()
-	deps := Deps{TempDir: t.TempDir(), Vars: c.vars}
+	deps := Deps{TempDir: t.TempDir()}
 
 	if err := applySetup(deps, c.setup); err != nil {
 		t.Fatalf("setup: %v", err)
@@ -209,73 +184,55 @@ func runOne(t *testing.T, c oneCase, invoker Invoker) {
 	assertExpected(t, c.expected, resp, err, deps)
 }
 
-// applySetup interprets standard SetupStep oneof variants by field name.
-// Unknown step kinds are ignored — easy to extend later.
+// applySetup interprets SetupStep oneof variants by field name. Unknown
+// kinds are ignored.
 func applySetup(deps Deps, steps []protoreflect.Message) error {
 	for _, s := range steps {
-		if err := applyOneStep(deps, s); err != nil {
-			return err
+		var firstErr error
+		s.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
+			switch fd.Name() {
+			case "write_file":
+				wf := v.Message()
+				path := resolvePath(getStringField(wf, "path"), deps)
+				content := getBytesField(wf, "content")
+				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+					firstErr = fmt.Errorf("write_file mkdir: %w", err)
+					return false
+				}
+				if err := os.WriteFile(path, content, 0o644); err != nil {
+					firstErr = fmt.Errorf("write_file %q: %w", path, err)
+					return false
+				}
+			case "clear_dir":
+				path := resolvePath(getStringField(v.Message(), "path"), deps)
+				if err := os.RemoveAll(path); err != nil {
+					firstErr = fmt.Errorf("clear_dir %q: %w", path, err)
+					return false
+				}
+				if err := os.MkdirAll(path, 0o755); err != nil {
+					firstErr = fmt.Errorf("clear_dir mkdir %q: %w", path, err)
+					return false
+				}
+			}
+			return true
+		})
+		if firstErr != nil {
+			return firstErr
 		}
 	}
 	return nil
 }
 
-func applyOneStep(deps Deps, s protoreflect.Message) error {
-	var firstErr error
-	s.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
-		switch fd.Name() {
-		case "clear_dirs":
-			cd := v.Message()
-			pathsField := cd.Descriptor().Fields().ByName("paths")
-			if pathsField == nil || !pathsField.IsList() {
-				return true
-			}
-			paths := cd.Get(pathsField).List()
-			for i := 0; i < paths.Len(); i++ {
-				resolved := substitute(paths.Get(i).String(), deps)
-				if err := os.RemoveAll(resolved); err != nil {
-					firstErr = fmt.Errorf("clear_dirs %q: %w", resolved, err)
-					return false
-				}
-				if err := os.MkdirAll(resolved, 0o755); err != nil {
-					firstErr = fmt.Errorf("clear_dirs mkdir %q: %w", resolved, err)
-					return false
-				}
-			}
-		case "write_file":
-			wf := v.Message()
-			path := substitute(getStringField(wf, "path"), deps)
-			content := getBytesField(wf, "content")
-			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-				firstErr = fmt.Errorf("write_file mkdir: %w", err)
-				return false
-			}
-			if err := os.WriteFile(path, content, 0o644); err != nil {
-				firstErr = fmt.Errorf("write_file %q: %w", path, err)
-				return false
-			}
-		case "remove_files":
-			rm := v.Message()
-			pathsField := rm.Descriptor().Fields().ByName("paths")
-			if pathsField == nil || !pathsField.IsList() {
-				return true
-			}
-			paths := rm.Get(pathsField).List()
-			for i := 0; i < paths.Len(); i++ {
-				_ = os.Remove(substitute(paths.Get(i).String(), deps))
-			}
-		}
-		return true
-	})
-	return firstErr
-}
-
-func substitute(s string, deps Deps) string {
-	s = strings.ReplaceAll(s, "$TEMP_DIR", deps.TempDir)
-	for k, v := range deps.Vars {
-		s = strings.ReplaceAll(s, "$"+k, v)
+// resolvePath joins a sandbox-relative path against the per-case tempdir.
+// Absolute paths are passed through.
+func resolvePath(p string, deps Deps) string {
+	if p == "" {
+		return deps.TempDir
 	}
-	return s
+	if filepath.IsAbs(p) {
+		return p
+	}
+	return filepath.Join(deps.TempDir, p)
 }
 
 func assertExpected(t *testing.T, expected protoreflect.Message, gotMsg proto.Message, gotErr error, deps Deps) {
@@ -287,22 +244,26 @@ func assertExpected(t *testing.T, expected protoreflect.Message, gotMsg proto.Me
 
 	wantStatus := connect.Code(0)
 	if f := desc.Fields().ByName("status"); f != nil {
-		wantStatus = connect.Code(uint32(expected.Get(f).Uint()))
+		statusStr := strings.TrimSpace(expected.Get(f).String())
+		code, err := codeFromString(statusStr)
+		if err != nil {
+			t.Fatalf("status: %v", err)
+		}
+		wantStatus = code
 	}
 	if wantStatus != 0 {
 		if gotErr == nil {
-			t.Fatalf("want code %v, got nil error", wantStatus)
+			t.Fatalf("want code %s, got nil error", wantStatus)
 		}
 		var ce *connect.Error
 		if !errors.As(gotErr, &ce) {
 			t.Fatalf("want connect error, got %T: %v", gotErr, gotErr)
 		}
 		if ce.Code() != wantStatus {
-			t.Fatalf("want code %v, got %v: %v", wantStatus, ce.Code(), gotErr)
+			t.Fatalf("want code %s, got %s: %v", wantStatus, ce.Code(), gotErr)
 		}
 		if errField := desc.Fields().ByName("error"); errField != nil && errField.Kind() == protoreflect.MessageKind {
-			errMsg := expected.Get(errField).Message()
-			rx := getStringField(errMsg, "message_regex")
+			rx := getStringField(expected.Get(errField).Message(), "message_regex")
 			if rx != "" {
 				ok, err := regexp.MatchString(rx, gotErr.Error())
 				if err != nil {
@@ -336,12 +297,55 @@ func assertExpected(t *testing.T, expected protoreflect.Message, gotMsg proto.Me
 	}
 }
 
+// codeFromString translates the human-readable status string used in
+// .textpb files into a Connect code. "" and "OK" both mean success.
+func codeFromString(s string) (connect.Code, error) {
+	if s == "" {
+		return 0, nil
+	}
+	upper := strings.ToUpper(s)
+	switch upper {
+	case "OK":
+		return 0, nil
+	case "CANCELED", "CANCELLED":
+		return connect.CodeCanceled, nil
+	case "UNKNOWN":
+		return connect.CodeUnknown, nil
+	case "INVALID_ARGUMENT", "INVALIDARGUMENT":
+		return connect.CodeInvalidArgument, nil
+	case "DEADLINE_EXCEEDED", "DEADLINEEXCEEDED":
+		return connect.CodeDeadlineExceeded, nil
+	case "NOT_FOUND", "NOTFOUND":
+		return connect.CodeNotFound, nil
+	case "ALREADY_EXISTS", "ALREADYEXISTS":
+		return connect.CodeAlreadyExists, nil
+	case "PERMISSION_DENIED", "PERMISSIONDENIED":
+		return connect.CodePermissionDenied, nil
+	case "RESOURCE_EXHAUSTED", "RESOURCEEXHAUSTED":
+		return connect.CodeResourceExhausted, nil
+	case "FAILED_PRECONDITION", "FAILEDPRECONDITION":
+		return connect.CodeFailedPrecondition, nil
+	case "ABORTED":
+		return connect.CodeAborted, nil
+	case "OUT_OF_RANGE", "OUTOFRANGE":
+		return connect.CodeOutOfRange, nil
+	case "UNIMPLEMENTED":
+		return connect.CodeUnimplemented, nil
+	case "INTERNAL":
+		return connect.CodeInternal, nil
+	case "UNAVAILABLE":
+		return connect.CodeUnavailable, nil
+	case "DATA_LOSS", "DATALOSS":
+		return connect.CodeDataLoss, nil
+	case "UNAUTHENTICATED":
+		return connect.CodeUnauthenticated, nil
+	}
+	return 0, fmt.Errorf("unknown status %q", s)
+}
+
 func hasAnyField(m protoreflect.Message) bool {
 	any := false
-	m.Range(func(protoreflect.FieldDescriptor, protoreflect.Value) bool {
-		any = true
-		return false
-	})
+	m.Range(func(protoreflect.FieldDescriptor, protoreflect.Value) bool { any = true; return false })
 	return any
 }
 
@@ -370,20 +374,20 @@ func assertStateOne(s protoreflect.Message, deps Deps) error {
 	s.Range(func(fd protoreflect.FieldDescriptor, v protoreflect.Value) bool {
 		switch fd.Name() {
 		case "file_exists":
-			path := substitute(getStringField(v.Message(), "path"), deps)
+			path := resolvePath(getStringField(v.Message(), "path"), deps)
 			if _, err := os.Stat(path); err != nil {
 				firstErr = fmt.Errorf("file_exists %q: %w", path, err)
 				return false
 			}
 		case "file_absent":
-			path := substitute(getStringField(v.Message(), "path"), deps)
+			path := resolvePath(getStringField(v.Message(), "path"), deps)
 			if _, err := os.Stat(path); err == nil {
 				firstErr = fmt.Errorf("file_absent %q: file exists", path)
 				return false
 			}
 		case "file_contains":
 			fc := v.Message()
-			path := substitute(getStringField(fc, "path"), deps)
+			path := resolvePath(getStringField(fc, "path"), deps)
 			data, err := os.ReadFile(path)
 			if err != nil {
 				firstErr = fmt.Errorf("file_contains read %q: %w", path, err)

@@ -75,7 +75,6 @@ type GetNotebookDetailTestCase struct {
 	Setup         []*v1.SetupStep               `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.GetNotebookDetailRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *GetNotebookDetailExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string             `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -138,22 +137,14 @@ func (x *GetNotebookDetailTestCase) GetExpected() *GetNotebookDetailExpected {
 	return nil
 }
 
-func (x *GetNotebookDetailTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type GetNotebookDetailExpected struct {
-	state             protoimpl.MessageState         `protogen:"open.v1"`
-	Status            uint32                         `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.GetNotebookDetailResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError              `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation         `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion           `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState         `protogen:"open.v1"`
+	Status        string                         `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.GetNotebookDetailResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError              `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion           `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetNotebookDetailExpected) Reset() {
@@ -186,11 +177,11 @@ func (*GetNotebookDetailExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_notebook_service_cases_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *GetNotebookDetailExpected) GetStatus() uint32 {
+func (x *GetNotebookDetailExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *GetNotebookDetailExpected) GetBody() *v11.GetNotebookDetailResponse {
@@ -203,13 +194,6 @@ func (x *GetNotebookDetailExpected) GetBody() *v11.GetNotebookDetailResponse {
 func (x *GetNotebookDetailExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *GetNotebookDetailExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -271,7 +255,6 @@ type ExportNotebookPDFTestCase struct {
 	Setup         []*v1.SetupStep               `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.ExportNotebookPDFRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *ExportNotebookPDFExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string             `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -334,22 +317,14 @@ func (x *ExportNotebookPDFTestCase) GetExpected() *ExportNotebookPDFExpected {
 	return nil
 }
 
-func (x *ExportNotebookPDFTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type ExportNotebookPDFExpected struct {
-	state             protoimpl.MessageState         `protogen:"open.v1"`
-	Status            uint32                         `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.ExportNotebookPDFResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError              `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation         `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion           `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState         `protogen:"open.v1"`
+	Status        string                         `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.ExportNotebookPDFResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError              `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion           `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ExportNotebookPDFExpected) Reset() {
@@ -382,11 +357,11 @@ func (*ExportNotebookPDFExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_notebook_service_cases_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *ExportNotebookPDFExpected) GetStatus() uint32 {
+func (x *ExportNotebookPDFExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *ExportNotebookPDFExpected) GetBody() *v11.ExportNotebookPDFResponse {
@@ -399,13 +374,6 @@ func (x *ExportNotebookPDFExpected) GetBody() *v11.ExportNotebookPDFResponse {
 func (x *ExportNotebookPDFExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *ExportNotebookPDFExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -467,7 +435,6 @@ type LookupWordTestCase struct {
 	Setup         []*v1.SetupStep        `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.LookupWordRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *LookupWordExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string      `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -530,22 +497,14 @@ func (x *LookupWordTestCase) GetExpected() *LookupWordExpected {
 	return nil
 }
 
-func (x *LookupWordTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type LookupWordExpected struct {
-	state             protoimpl.MessageState  `protogen:"open.v1"`
-	Status            uint32                  `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.LookupWordResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError       `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation  `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion    `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState  `protogen:"open.v1"`
+	Status        string                  `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.LookupWordResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError       `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion    `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *LookupWordExpected) Reset() {
@@ -578,11 +537,11 @@ func (*LookupWordExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_notebook_service_cases_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *LookupWordExpected) GetStatus() uint32 {
+func (x *LookupWordExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *LookupWordExpected) GetBody() *v11.LookupWordResponse {
@@ -595,13 +554,6 @@ func (x *LookupWordExpected) GetBody() *v11.LookupWordResponse {
 func (x *LookupWordExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *LookupWordExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -663,7 +615,6 @@ type RegisterDefinitionTestCase struct {
 	Setup         []*v1.SetupStep                `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.RegisterDefinitionRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *RegisterDefinitionExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string              `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -726,22 +677,14 @@ func (x *RegisterDefinitionTestCase) GetExpected() *RegisterDefinitionExpected {
 	return nil
 }
 
-func (x *RegisterDefinitionTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type RegisterDefinitionExpected struct {
-	state             protoimpl.MessageState          `protogen:"open.v1"`
-	Status            uint32                          `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.RegisterDefinitionResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation          `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion            `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState          `protogen:"open.v1"`
+	Status        string                          `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.RegisterDefinitionResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError               `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion            `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RegisterDefinitionExpected) Reset() {
@@ -774,11 +717,11 @@ func (*RegisterDefinitionExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_notebook_service_cases_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *RegisterDefinitionExpected) GetStatus() uint32 {
+func (x *RegisterDefinitionExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *RegisterDefinitionExpected) GetBody() *v11.RegisterDefinitionResponse {
@@ -791,13 +734,6 @@ func (x *RegisterDefinitionExpected) GetBody() *v11.RegisterDefinitionResponse {
 func (x *RegisterDefinitionExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *RegisterDefinitionExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -859,7 +795,6 @@ type DeleteDefinitionTestCase struct {
 	Setup         []*v1.SetupStep              `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.DeleteDefinitionRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *DeleteDefinitionExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string            `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -922,22 +857,14 @@ func (x *DeleteDefinitionTestCase) GetExpected() *DeleteDefinitionExpected {
 	return nil
 }
 
-func (x *DeleteDefinitionTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type DeleteDefinitionExpected struct {
-	state             protoimpl.MessageState        `protogen:"open.v1"`
-	Status            uint32                        `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.DeleteDefinitionResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError             `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation        `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion          `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState        `protogen:"open.v1"`
+	Status        string                        `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.DeleteDefinitionResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError             `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion          `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteDefinitionExpected) Reset() {
@@ -970,11 +897,11 @@ func (*DeleteDefinitionExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_notebook_service_cases_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *DeleteDefinitionExpected) GetStatus() uint32 {
+func (x *DeleteDefinitionExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *DeleteDefinitionExpected) GetBody() *v11.DeleteDefinitionResponse {
@@ -987,13 +914,6 @@ func (x *DeleteDefinitionExpected) GetBody() *v11.DeleteDefinitionResponse {
 func (x *DeleteDefinitionExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *DeleteDefinitionExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -1055,7 +975,6 @@ type GetEtymologyNotebookTestCase struct {
 	Setup         []*v1.SetupStep                  `protobuf:"bytes,2,rep,name=setup,proto3" json:"setup,omitempty"`
 	Request       *v11.GetEtymologyNotebookRequest `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
 	Expected      *GetEtymologyNotebookExpected    `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`
-	Vars          map[string]string                `protobuf:"bytes,5,rep,name=vars,proto3" json:"vars,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1118,22 +1037,14 @@ func (x *GetEtymologyNotebookTestCase) GetExpected() *GetEtymologyNotebookExpect
 	return nil
 }
 
-func (x *GetEtymologyNotebookTestCase) GetVars() map[string]string {
-	if x != nil {
-		return x.Vars
-	}
-	return nil
-}
-
 type GetEtymologyNotebookExpected struct {
-	state             protoimpl.MessageState            `protogen:"open.v1"`
-	Status            uint32                            `protobuf:"varint,1,opt,name=status,proto3" json:"status,omitempty"`
-	Body              *v11.GetEtymologyNotebookResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
-	Error             *v1.ExpectedError                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
-	FieldExpectations []*v1.FieldExpectation            `protobuf:"bytes,4,rep,name=field_expectations,json=fieldExpectations,proto3" json:"field_expectations,omitempty"`
-	State             []*v1.StateAssertion              `protobuf:"bytes,5,rep,name=state,proto3" json:"state,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state         protoimpl.MessageState            `protogen:"open.v1"`
+	Status        string                            `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"` // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
+	Body          *v11.GetEtymologyNotebookResponse `protobuf:"bytes,2,opt,name=body,proto3" json:"body,omitempty"`
+	Error         *v1.ExpectedError                 `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`
+	State         []*v1.StateAssertion              `protobuf:"bytes,4,rep,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetEtymologyNotebookExpected) Reset() {
@@ -1166,11 +1077,11 @@ func (*GetEtymologyNotebookExpected) Descriptor() ([]byte, []int) {
 	return file_testing_cases_api_v1_notebook_service_cases_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *GetEtymologyNotebookExpected) GetStatus() uint32 {
+func (x *GetEtymologyNotebookExpected) GetStatus() string {
 	if x != nil {
 		return x.Status
 	}
-	return 0
+	return ""
 }
 
 func (x *GetEtymologyNotebookExpected) GetBody() *v11.GetEtymologyNotebookResponse {
@@ -1183,13 +1094,6 @@ func (x *GetEtymologyNotebookExpected) GetBody() *v11.GetEtymologyNotebookRespon
 func (x *GetEtymologyNotebookExpected) GetError() *v1.ExpectedError {
 	if x != nil {
 		return x.Error
-	}
-	return nil
-}
-
-func (x *GetEtymologyNotebookExpected) GetFieldExpectations() []*v1.FieldExpectation {
-	if x != nil {
-		return x.FieldExpectations
 	}
 	return nil
 }
@@ -1207,107 +1111,77 @@ const file_testing_cases_api_v1_notebook_service_cases_proto_rawDesc = "" +
 	"\n" +
 	"1testing/cases/api/v1/notebook_service/cases.proto\x12%testing.cases.api.v1.notebook_service\x1a\x15api/v1/notebook.proto\x1a\x1atesting/v1/test_case.proto\"t\n" +
 	"\x1aGetNotebookDetailTestSuite\x12V\n" +
-	"\x05cases\x18\x01 \x03(\v2@.testing.cases.api.v1.notebook_service.GetNotebookDetailTestCaseR\x05cases\"\x8f\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2@.testing.cases.api.v1.notebook_service.GetNotebookDetailTestCaseR\x05cases\"\xf6\x01\n" +
 	"\x19GetNotebookDetailTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12:\n" +
 	"\arequest\x18\x03 \x01(\v2 .api.v1.GetNotebookDetailRequestR\arequest\x12\\\n" +
-	"\bexpected\x18\x04 \x01(\v2@.testing.cases.api.v1.notebook_service.GetNotebookDetailExpectedR\bexpected\x12^\n" +
-	"\x04vars\x18\x05 \x03(\v2J.testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9a\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2@.testing.cases.api.v1.notebook_service.GetNotebookDetailExpectedR\bexpected\"\xcd\x01\n" +
 	"\x19GetNotebookDetailExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x125\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x125\n" +
 	"\x04body\x18\x02 \x01(\v2!.api.v1.GetNotebookDetailResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"t\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"t\n" +
 	"\x1aExportNotebookPDFTestSuite\x12V\n" +
-	"\x05cases\x18\x01 \x03(\v2@.testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCaseR\x05cases\"\x8f\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2@.testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCaseR\x05cases\"\xf6\x01\n" +
 	"\x19ExportNotebookPDFTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12:\n" +
 	"\arequest\x18\x03 \x01(\v2 .api.v1.ExportNotebookPDFRequestR\arequest\x12\\\n" +
-	"\bexpected\x18\x04 \x01(\v2@.testing.cases.api.v1.notebook_service.ExportNotebookPDFExpectedR\bexpected\x12^\n" +
-	"\x04vars\x18\x05 \x03(\v2J.testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9a\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2@.testing.cases.api.v1.notebook_service.ExportNotebookPDFExpectedR\bexpected\"\xcd\x01\n" +
 	"\x19ExportNotebookPDFExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x125\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x125\n" +
 	"\x04body\x18\x02 \x01(\v2!.api.v1.ExportNotebookPDFResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"f\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"f\n" +
 	"\x13LookupWordTestSuite\x12O\n" +
-	"\x05cases\x18\x01 \x03(\v29.testing.cases.api.v1.notebook_service.LookupWordTestCaseR\x05cases\"\xf3\x02\n" +
+	"\x05cases\x18\x01 \x03(\v29.testing.cases.api.v1.notebook_service.LookupWordTestCaseR\x05cases\"\xe1\x01\n" +
 	"\x12LookupWordTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x123\n" +
 	"\arequest\x18\x03 \x01(\v2\x19.api.v1.LookupWordRequestR\arequest\x12U\n" +
-	"\bexpected\x18\x04 \x01(\v29.testing.cases.api.v1.notebook_service.LookupWordExpectedR\bexpected\x12W\n" +
-	"\x04vars\x18\x05 \x03(\v2C.testing.cases.api.v1.notebook_service.LookupWordTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8c\x02\n" +
+	"\bexpected\x18\x04 \x01(\v29.testing.cases.api.v1.notebook_service.LookupWordExpectedR\bexpected\"\xbf\x01\n" +
 	"\x12LookupWordExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x12.\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x12.\n" +
 	"\x04body\x18\x02 \x01(\v2\x1a.api.v1.LookupWordResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"v\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"v\n" +
 	"\x1bRegisterDefinitionTestSuite\x12W\n" +
-	"\x05cases\x18\x01 \x03(\v2A.testing.cases.api.v1.notebook_service.RegisterDefinitionTestCaseR\x05cases\"\x93\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2A.testing.cases.api.v1.notebook_service.RegisterDefinitionTestCaseR\x05cases\"\xf9\x01\n" +
 	"\x1aRegisterDefinitionTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12;\n" +
 	"\arequest\x18\x03 \x01(\v2!.api.v1.RegisterDefinitionRequestR\arequest\x12]\n" +
-	"\bexpected\x18\x04 \x01(\v2A.testing.cases.api.v1.notebook_service.RegisterDefinitionExpectedR\bexpected\x12_\n" +
-	"\x04vars\x18\x05 \x03(\v2K.testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x9c\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2A.testing.cases.api.v1.notebook_service.RegisterDefinitionExpectedR\bexpected\"\xcf\x01\n" +
 	"\x1aRegisterDefinitionExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x126\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x126\n" +
 	"\x04body\x18\x02 \x01(\v2\".api.v1.RegisterDefinitionResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"r\n" +
 	"\x19DeleteDefinitionTestSuite\x12U\n" +
-	"\x05cases\x18\x01 \x03(\v2?.testing.cases.api.v1.notebook_service.DeleteDefinitionTestCaseR\x05cases\"\x8b\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2?.testing.cases.api.v1.notebook_service.DeleteDefinitionTestCaseR\x05cases\"\xf3\x01\n" +
 	"\x18DeleteDefinitionTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x129\n" +
 	"\arequest\x18\x03 \x01(\v2\x1f.api.v1.DeleteDefinitionRequestR\arequest\x12[\n" +
-	"\bexpected\x18\x04 \x01(\v2?.testing.cases.api.v1.notebook_service.DeleteDefinitionExpectedR\bexpected\x12]\n" +
-	"\x04vars\x18\x05 \x03(\v2I.testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x98\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2?.testing.cases.api.v1.notebook_service.DeleteDefinitionExpectedR\bexpected\"\xcb\x01\n" +
 	"\x18DeleteDefinitionExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x124\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x124\n" +
 	"\x04body\x18\x02 \x01(\v2 .api.v1.DeleteDefinitionResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"z\n" +
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05state\"z\n" +
 	"\x1dGetEtymologyNotebookTestSuite\x12Y\n" +
-	"\x05cases\x18\x01 \x03(\v2C.testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCaseR\x05cases\"\x9b\x03\n" +
+	"\x05cases\x18\x01 \x03(\v2C.testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCaseR\x05cases\"\xff\x01\n" +
 	"\x1cGetEtymologyNotebookTestCase\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
 	"\x05setup\x18\x02 \x03(\v2\x15.testing.v1.SetupStepR\x05setup\x12=\n" +
 	"\arequest\x18\x03 \x01(\v2#.api.v1.GetEtymologyNotebookRequestR\arequest\x12_\n" +
-	"\bexpected\x18\x04 \x01(\v2C.testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpectedR\bexpected\x12a\n" +
-	"\x04vars\x18\x05 \x03(\v2M.testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.VarsEntryR\x04vars\x1a7\n" +
-	"\tVarsEntry\x12\x10\n" +
-	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xa0\x02\n" +
+	"\bexpected\x18\x04 \x01(\v2C.testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpectedR\bexpected\"\xd3\x01\n" +
 	"\x1cGetEtymologyNotebookExpected\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\rR\x06status\x128\n" +
+	"\x06status\x18\x01 \x01(\tR\x06status\x128\n" +
 	"\x04body\x18\x02 \x01(\v2$.api.v1.GetEtymologyNotebookResponseR\x04body\x12/\n" +
-	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x12K\n" +
-	"\x12field_expectations\x18\x04 \x03(\v2\x1c.testing.v1.FieldExpectationR\x11fieldExpectations\x120\n" +
-	"\x05state\x18\x05 \x03(\v2\x1a.testing.v1.StateAssertionR\x05stateBhZfgithub.com/at-ishikawa/langner/gen-protos/testing/cases/api/v1/notebook_service;notebookservicecasesv1b\x06proto3"
+	"\x05error\x18\x03 \x01(\v2\x19.testing.v1.ExpectedErrorR\x05error\x120\n" +
+	"\x05state\x18\x04 \x03(\v2\x1a.testing.v1.StateAssertionR\x05stateBhZfgithub.com/at-ishikawa/langner/gen-protos/testing/cases/api/v1/notebook_service;notebookservicecasesv1b\x06proto3"
 
 var (
 	file_testing_cases_api_v1_notebook_service_cases_proto_rawDescOnce sync.Once
@@ -1321,7 +1195,7 @@ func file_testing_cases_api_v1_notebook_service_cases_proto_rawDescGZIP() []byte
 	return file_testing_cases_api_v1_notebook_service_cases_proto_rawDescData
 }
 
-var file_testing_cases_api_v1_notebook_service_cases_proto_msgTypes = make([]protoimpl.MessageInfo, 24)
+var file_testing_cases_api_v1_notebook_service_cases_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_testing_cases_api_v1_notebook_service_cases_proto_goTypes = []any{
 	(*GetNotebookDetailTestSuite)(nil),       // 0: testing.cases.api.v1.notebook_service.GetNotebookDetailTestSuite
 	(*GetNotebookDetailTestCase)(nil),        // 1: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase
@@ -1341,89 +1215,70 @@ var file_testing_cases_api_v1_notebook_service_cases_proto_goTypes = []any{
 	(*GetEtymologyNotebookTestSuite)(nil),    // 15: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestSuite
 	(*GetEtymologyNotebookTestCase)(nil),     // 16: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase
 	(*GetEtymologyNotebookExpected)(nil),     // 17: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected
-	nil,                                      // 18: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.VarsEntry
-	nil,                                      // 19: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.VarsEntry
-	nil,                                      // 20: testing.cases.api.v1.notebook_service.LookupWordTestCase.VarsEntry
-	nil,                                      // 21: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.VarsEntry
-	nil,                                      // 22: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.VarsEntry
-	nil,                                      // 23: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.VarsEntry
-	(*v1.SetupStep)(nil),                     // 24: testing.v1.SetupStep
-	(*v11.GetNotebookDetailRequest)(nil),     // 25: api.v1.GetNotebookDetailRequest
-	(*v11.GetNotebookDetailResponse)(nil),    // 26: api.v1.GetNotebookDetailResponse
-	(*v1.ExpectedError)(nil),                 // 27: testing.v1.ExpectedError
-	(*v1.FieldExpectation)(nil),              // 28: testing.v1.FieldExpectation
-	(*v1.StateAssertion)(nil),                // 29: testing.v1.StateAssertion
-	(*v11.ExportNotebookPDFRequest)(nil),     // 30: api.v1.ExportNotebookPDFRequest
-	(*v11.ExportNotebookPDFResponse)(nil),    // 31: api.v1.ExportNotebookPDFResponse
-	(*v11.LookupWordRequest)(nil),            // 32: api.v1.LookupWordRequest
-	(*v11.LookupWordResponse)(nil),           // 33: api.v1.LookupWordResponse
-	(*v11.RegisterDefinitionRequest)(nil),    // 34: api.v1.RegisterDefinitionRequest
-	(*v11.RegisterDefinitionResponse)(nil),   // 35: api.v1.RegisterDefinitionResponse
-	(*v11.DeleteDefinitionRequest)(nil),      // 36: api.v1.DeleteDefinitionRequest
-	(*v11.DeleteDefinitionResponse)(nil),     // 37: api.v1.DeleteDefinitionResponse
-	(*v11.GetEtymologyNotebookRequest)(nil),  // 38: api.v1.GetEtymologyNotebookRequest
-	(*v11.GetEtymologyNotebookResponse)(nil), // 39: api.v1.GetEtymologyNotebookResponse
+	(*v1.SetupStep)(nil),                     // 18: testing.v1.SetupStep
+	(*v11.GetNotebookDetailRequest)(nil),     // 19: api.v1.GetNotebookDetailRequest
+	(*v11.GetNotebookDetailResponse)(nil),    // 20: api.v1.GetNotebookDetailResponse
+	(*v1.ExpectedError)(nil),                 // 21: testing.v1.ExpectedError
+	(*v1.StateAssertion)(nil),                // 22: testing.v1.StateAssertion
+	(*v11.ExportNotebookPDFRequest)(nil),     // 23: api.v1.ExportNotebookPDFRequest
+	(*v11.ExportNotebookPDFResponse)(nil),    // 24: api.v1.ExportNotebookPDFResponse
+	(*v11.LookupWordRequest)(nil),            // 25: api.v1.LookupWordRequest
+	(*v11.LookupWordResponse)(nil),           // 26: api.v1.LookupWordResponse
+	(*v11.RegisterDefinitionRequest)(nil),    // 27: api.v1.RegisterDefinitionRequest
+	(*v11.RegisterDefinitionResponse)(nil),   // 28: api.v1.RegisterDefinitionResponse
+	(*v11.DeleteDefinitionRequest)(nil),      // 29: api.v1.DeleteDefinitionRequest
+	(*v11.DeleteDefinitionResponse)(nil),     // 30: api.v1.DeleteDefinitionResponse
+	(*v11.GetEtymologyNotebookRequest)(nil),  // 31: api.v1.GetEtymologyNotebookRequest
+	(*v11.GetEtymologyNotebookResponse)(nil), // 32: api.v1.GetEtymologyNotebookResponse
 }
 var file_testing_cases_api_v1_notebook_service_cases_proto_depIdxs = []int32{
 	1,  // 0: testing.cases.api.v1.notebook_service.GetNotebookDetailTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase
-	24, // 1: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.setup:type_name -> testing.v1.SetupStep
-	25, // 2: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.request:type_name -> api.v1.GetNotebookDetailRequest
+	18, // 1: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.setup:type_name -> testing.v1.SetupStep
+	19, // 2: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.request:type_name -> api.v1.GetNotebookDetailRequest
 	2,  // 3: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.GetNotebookDetailExpected
-	18, // 4: testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.vars:type_name -> testing.cases.api.v1.notebook_service.GetNotebookDetailTestCase.VarsEntry
-	26, // 5: testing.cases.api.v1.notebook_service.GetNotebookDetailExpected.body:type_name -> api.v1.GetNotebookDetailResponse
-	27, // 6: testing.cases.api.v1.notebook_service.GetNotebookDetailExpected.error:type_name -> testing.v1.ExpectedError
-	28, // 7: testing.cases.api.v1.notebook_service.GetNotebookDetailExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	29, // 8: testing.cases.api.v1.notebook_service.GetNotebookDetailExpected.state:type_name -> testing.v1.StateAssertion
-	4,  // 9: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase
-	24, // 10: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.setup:type_name -> testing.v1.SetupStep
-	30, // 11: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.request:type_name -> api.v1.ExportNotebookPDFRequest
-	5,  // 12: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected
-	19, // 13: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.vars:type_name -> testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.VarsEntry
-	31, // 14: testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected.body:type_name -> api.v1.ExportNotebookPDFResponse
-	27, // 15: testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected.error:type_name -> testing.v1.ExpectedError
-	28, // 16: testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	29, // 17: testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected.state:type_name -> testing.v1.StateAssertion
-	7,  // 18: testing.cases.api.v1.notebook_service.LookupWordTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.LookupWordTestCase
-	24, // 19: testing.cases.api.v1.notebook_service.LookupWordTestCase.setup:type_name -> testing.v1.SetupStep
-	32, // 20: testing.cases.api.v1.notebook_service.LookupWordTestCase.request:type_name -> api.v1.LookupWordRequest
-	8,  // 21: testing.cases.api.v1.notebook_service.LookupWordTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.LookupWordExpected
-	20, // 22: testing.cases.api.v1.notebook_service.LookupWordTestCase.vars:type_name -> testing.cases.api.v1.notebook_service.LookupWordTestCase.VarsEntry
-	33, // 23: testing.cases.api.v1.notebook_service.LookupWordExpected.body:type_name -> api.v1.LookupWordResponse
-	27, // 24: testing.cases.api.v1.notebook_service.LookupWordExpected.error:type_name -> testing.v1.ExpectedError
-	28, // 25: testing.cases.api.v1.notebook_service.LookupWordExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	29, // 26: testing.cases.api.v1.notebook_service.LookupWordExpected.state:type_name -> testing.v1.StateAssertion
-	10, // 27: testing.cases.api.v1.notebook_service.RegisterDefinitionTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase
-	24, // 28: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.setup:type_name -> testing.v1.SetupStep
-	34, // 29: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.request:type_name -> api.v1.RegisterDefinitionRequest
-	11, // 30: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.RegisterDefinitionExpected
-	21, // 31: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.vars:type_name -> testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.VarsEntry
-	35, // 32: testing.cases.api.v1.notebook_service.RegisterDefinitionExpected.body:type_name -> api.v1.RegisterDefinitionResponse
-	27, // 33: testing.cases.api.v1.notebook_service.RegisterDefinitionExpected.error:type_name -> testing.v1.ExpectedError
-	28, // 34: testing.cases.api.v1.notebook_service.RegisterDefinitionExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	29, // 35: testing.cases.api.v1.notebook_service.RegisterDefinitionExpected.state:type_name -> testing.v1.StateAssertion
-	13, // 36: testing.cases.api.v1.notebook_service.DeleteDefinitionTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase
-	24, // 37: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.setup:type_name -> testing.v1.SetupStep
-	36, // 38: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.request:type_name -> api.v1.DeleteDefinitionRequest
-	14, // 39: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.DeleteDefinitionExpected
-	22, // 40: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.vars:type_name -> testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.VarsEntry
-	37, // 41: testing.cases.api.v1.notebook_service.DeleteDefinitionExpected.body:type_name -> api.v1.DeleteDefinitionResponse
-	27, // 42: testing.cases.api.v1.notebook_service.DeleteDefinitionExpected.error:type_name -> testing.v1.ExpectedError
-	28, // 43: testing.cases.api.v1.notebook_service.DeleteDefinitionExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	29, // 44: testing.cases.api.v1.notebook_service.DeleteDefinitionExpected.state:type_name -> testing.v1.StateAssertion
-	16, // 45: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase
-	24, // 46: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.setup:type_name -> testing.v1.SetupStep
-	38, // 47: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.request:type_name -> api.v1.GetEtymologyNotebookRequest
-	17, // 48: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected
-	23, // 49: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.vars:type_name -> testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.VarsEntry
-	39, // 50: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected.body:type_name -> api.v1.GetEtymologyNotebookResponse
-	27, // 51: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected.error:type_name -> testing.v1.ExpectedError
-	28, // 52: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected.field_expectations:type_name -> testing.v1.FieldExpectation
-	29, // 53: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected.state:type_name -> testing.v1.StateAssertion
-	54, // [54:54] is the sub-list for method output_type
-	54, // [54:54] is the sub-list for method input_type
-	54, // [54:54] is the sub-list for extension type_name
-	54, // [54:54] is the sub-list for extension extendee
-	0,  // [0:54] is the sub-list for field type_name
+	20, // 4: testing.cases.api.v1.notebook_service.GetNotebookDetailExpected.body:type_name -> api.v1.GetNotebookDetailResponse
+	21, // 5: testing.cases.api.v1.notebook_service.GetNotebookDetailExpected.error:type_name -> testing.v1.ExpectedError
+	22, // 6: testing.cases.api.v1.notebook_service.GetNotebookDetailExpected.state:type_name -> testing.v1.StateAssertion
+	4,  // 7: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase
+	18, // 8: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.setup:type_name -> testing.v1.SetupStep
+	23, // 9: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.request:type_name -> api.v1.ExportNotebookPDFRequest
+	5,  // 10: testing.cases.api.v1.notebook_service.ExportNotebookPDFTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected
+	24, // 11: testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected.body:type_name -> api.v1.ExportNotebookPDFResponse
+	21, // 12: testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected.error:type_name -> testing.v1.ExpectedError
+	22, // 13: testing.cases.api.v1.notebook_service.ExportNotebookPDFExpected.state:type_name -> testing.v1.StateAssertion
+	7,  // 14: testing.cases.api.v1.notebook_service.LookupWordTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.LookupWordTestCase
+	18, // 15: testing.cases.api.v1.notebook_service.LookupWordTestCase.setup:type_name -> testing.v1.SetupStep
+	25, // 16: testing.cases.api.v1.notebook_service.LookupWordTestCase.request:type_name -> api.v1.LookupWordRequest
+	8,  // 17: testing.cases.api.v1.notebook_service.LookupWordTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.LookupWordExpected
+	26, // 18: testing.cases.api.v1.notebook_service.LookupWordExpected.body:type_name -> api.v1.LookupWordResponse
+	21, // 19: testing.cases.api.v1.notebook_service.LookupWordExpected.error:type_name -> testing.v1.ExpectedError
+	22, // 20: testing.cases.api.v1.notebook_service.LookupWordExpected.state:type_name -> testing.v1.StateAssertion
+	10, // 21: testing.cases.api.v1.notebook_service.RegisterDefinitionTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase
+	18, // 22: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.setup:type_name -> testing.v1.SetupStep
+	27, // 23: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.request:type_name -> api.v1.RegisterDefinitionRequest
+	11, // 24: testing.cases.api.v1.notebook_service.RegisterDefinitionTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.RegisterDefinitionExpected
+	28, // 25: testing.cases.api.v1.notebook_service.RegisterDefinitionExpected.body:type_name -> api.v1.RegisterDefinitionResponse
+	21, // 26: testing.cases.api.v1.notebook_service.RegisterDefinitionExpected.error:type_name -> testing.v1.ExpectedError
+	22, // 27: testing.cases.api.v1.notebook_service.RegisterDefinitionExpected.state:type_name -> testing.v1.StateAssertion
+	13, // 28: testing.cases.api.v1.notebook_service.DeleteDefinitionTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase
+	18, // 29: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.setup:type_name -> testing.v1.SetupStep
+	29, // 30: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.request:type_name -> api.v1.DeleteDefinitionRequest
+	14, // 31: testing.cases.api.v1.notebook_service.DeleteDefinitionTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.DeleteDefinitionExpected
+	30, // 32: testing.cases.api.v1.notebook_service.DeleteDefinitionExpected.body:type_name -> api.v1.DeleteDefinitionResponse
+	21, // 33: testing.cases.api.v1.notebook_service.DeleteDefinitionExpected.error:type_name -> testing.v1.ExpectedError
+	22, // 34: testing.cases.api.v1.notebook_service.DeleteDefinitionExpected.state:type_name -> testing.v1.StateAssertion
+	16, // 35: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestSuite.cases:type_name -> testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase
+	18, // 36: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.setup:type_name -> testing.v1.SetupStep
+	31, // 37: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.request:type_name -> api.v1.GetEtymologyNotebookRequest
+	17, // 38: testing.cases.api.v1.notebook_service.GetEtymologyNotebookTestCase.expected:type_name -> testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected
+	32, // 39: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected.body:type_name -> api.v1.GetEtymologyNotebookResponse
+	21, // 40: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected.error:type_name -> testing.v1.ExpectedError
+	22, // 41: testing.cases.api.v1.notebook_service.GetEtymologyNotebookExpected.state:type_name -> testing.v1.StateAssertion
+	42, // [42:42] is the sub-list for method output_type
+	42, // [42:42] is the sub-list for method input_type
+	42, // [42:42] is the sub-list for extension type_name
+	42, // [42:42] is the sub-list for extension extendee
+	0,  // [0:42] is the sub-list for field type_name
 }
 
 func init() { file_testing_cases_api_v1_notebook_service_cases_proto_init() }
@@ -1437,7 +1292,7 @@ func file_testing_cases_api_v1_notebook_service_cases_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_testing_cases_api_v1_notebook_service_cases_proto_rawDesc), len(file_testing_cases_api_v1_notebook_service_cases_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   24,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

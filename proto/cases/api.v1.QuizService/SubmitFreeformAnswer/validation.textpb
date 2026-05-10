@@ -1,0 +1,8 @@
+cases {
+  name: "rejects_empty_word_and_meaning"
+  request {
+  }
+  expected {
+    status: "INVALID_ARGUMENT"
+  }
+}

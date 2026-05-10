@@ -11,7 +11,7 @@ cases {
   expected {
     state {
       file_contains {
-        path: "$TEMP_DIR/mybook.yml"
+        path: "mybook.yml"
         contains: "lose one's temper"
         contains: "001-chapter-1.yml"
       }
@@ -32,7 +32,7 @@ cases {
   expected {
     state {
       file_contains {
-        path: "$TEMP_DIR/books/mybook.yml"
+        path: "books/mybook.yml"
         contains: "break the ice"
       }
     }
@@ -47,7 +47,7 @@ cases {
     meaning: "test meaning"
   }
   expected {
-    status: 3  # InvalidArgument
+    status: "INVALID_ARGUMENT"
     error { message_regex: "invalid notebook_id" }
   }
 }

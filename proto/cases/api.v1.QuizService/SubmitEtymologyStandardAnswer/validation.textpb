@@ -1,0 +1,9 @@
+cases {
+  name: "rejects_zero_card_id"
+  request {
+    answer: "anything"
+  }
+  expected {
+    status: "INVALID_ARGUMENT"
+  }
+}

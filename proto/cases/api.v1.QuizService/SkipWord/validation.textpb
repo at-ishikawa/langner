@@ -1,0 +1,8 @@
+cases {
+  name: "rejects_zero_note_id"
+  request {
+  }
+  expected {
+    status: "INVALID_ARGUMENT"
+  }
+}

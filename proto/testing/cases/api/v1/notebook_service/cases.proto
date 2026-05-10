@@ -17,15 +17,13 @@ message GetNotebookDetailTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.GetNotebookDetailRequest request = 3;
   GetNotebookDetailExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message GetNotebookDetailExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.GetNotebookDetailResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message ExportNotebookPDFTestSuite {
@@ -37,15 +35,13 @@ message ExportNotebookPDFTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.ExportNotebookPDFRequest request = 3;
   ExportNotebookPDFExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message ExportNotebookPDFExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.ExportNotebookPDFResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message LookupWordTestSuite {
@@ -57,15 +53,13 @@ message LookupWordTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.LookupWordRequest request = 3;
   LookupWordExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message LookupWordExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.LookupWordResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message RegisterDefinitionTestSuite {
@@ -77,15 +71,13 @@ message RegisterDefinitionTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.RegisterDefinitionRequest request = 3;
   RegisterDefinitionExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message RegisterDefinitionExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.RegisterDefinitionResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message DeleteDefinitionTestSuite {
@@ -97,15 +89,13 @@ message DeleteDefinitionTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.DeleteDefinitionRequest request = 3;
   DeleteDefinitionExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message DeleteDefinitionExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.DeleteDefinitionResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 
 message GetEtymologyNotebookTestSuite {
@@ -117,14 +107,12 @@ message GetEtymologyNotebookTestCase {
   repeated testing.v1.SetupStep setup = 2;
   .api.v1.GetEtymologyNotebookRequest request = 3;
   GetEtymologyNotebookExpected expected = 4;
-  map<string, string> vars = 5;
 }
 
 message GetEtymologyNotebookExpected {
-  uint32 status = 1;
+  string status = 1;            // "", "OK", "INVALID_ARGUMENT", "NOT_FOUND", ...
   .api.v1.GetEtymologyNotebookResponse body = 2;
   testing.v1.ExpectedError error = 3;
-  repeated testing.v1.FieldExpectation field_expectations = 4;
-  repeated testing.v1.StateAssertion state = 5;
+  repeated testing.v1.StateAssertion state = 4;
 }
 

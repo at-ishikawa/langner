@@ -1,0 +1,9 @@
+cases {
+  name: "rejects_zero_note_id"
+  request {
+    learned_at: "2026-05-10"
+  }
+  expected {
+    status: "INVALID_ARGUMENT"
+  }
+}

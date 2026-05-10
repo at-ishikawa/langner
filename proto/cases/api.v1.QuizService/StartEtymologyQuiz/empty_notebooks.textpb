@@ -1,0 +1,9 @@
+cases {
+  name: "returns_empty_when_no_notebooks_configured"
+  request {
+  }
+  expected {
+    body {
+    }
+  }
+}

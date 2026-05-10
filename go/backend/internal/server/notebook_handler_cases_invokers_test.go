@@ -56,3 +56,60 @@ func invokeDeleteDefinition(ctx context.Context, deps testrunner.Deps, req proto
 	}
 	return resp.Msg, nil
 }
+
+// The four invokers below build a NotebookHandler with zero-valued upstream
+// dependencies. They are sufficient for cases that exercise the validation
+// layer that runs first; cases that need real handler behavior require
+// upstream stubbing (separate PR).
+
+func invokeGetNotebookDetail(ctx context.Context, deps testrunner.Deps, req proto.Message) (proto.Message, error) {
+	typedReq, ok := req.(*apiv1.GetNotebookDetailRequest)
+	if !ok || typedReq == nil {
+		return nil, fmt.Errorf("GetNotebookDetail: nil or wrong-type request")
+	}
+	handler := newNotebookHandlerForCases(deps)
+	resp, err := handler.GetNotebookDetail(ctx, connect.NewRequest(typedReq))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+func invokeExportNotebookPDF(ctx context.Context, deps testrunner.Deps, req proto.Message) (proto.Message, error) {
+	typedReq, ok := req.(*apiv1.ExportNotebookPDFRequest)
+	if !ok || typedReq == nil {
+		return nil, fmt.Errorf("ExportNotebookPDF: nil or wrong-type request")
+	}
+	handler := newNotebookHandlerForCases(deps)
+	resp, err := handler.ExportNotebookPDF(ctx, connect.NewRequest(typedReq))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+func invokeLookupWord(ctx context.Context, deps testrunner.Deps, req proto.Message) (proto.Message, error) {
+	typedReq, ok := req.(*apiv1.LookupWordRequest)
+	if !ok || typedReq == nil {
+		return nil, fmt.Errorf("LookupWord: nil or wrong-type request")
+	}
+	handler := newNotebookHandlerForCases(deps)
+	resp, err := handler.LookupWord(ctx, connect.NewRequest(typedReq))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
+func invokeGetEtymologyNotebook(ctx context.Context, deps testrunner.Deps, req proto.Message) (proto.Message, error) {
+	typedReq, ok := req.(*apiv1.GetEtymologyNotebookRequest)
+	if !ok || typedReq == nil {
+		return nil, fmt.Errorf("GetEtymologyNotebook: nil or wrong-type request")
+	}
+	handler := newNotebookHandlerForCases(deps)
+	resp, err := handler.GetEtymologyNotebook(ctx, connect.NewRequest(typedReq))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
