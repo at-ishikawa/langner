@@ -118,6 +118,7 @@ Then("I should be on the Quiz page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz(\/?|$)/);
 });
 
+// covers route: /quiz/complete
 Then("I should be on the Quiz Complete page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz\/complete/);
 });
