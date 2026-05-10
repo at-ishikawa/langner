@@ -27,6 +27,7 @@ type Config struct {
 	Templates    TemplatesConfig    `mapstructure:"templates"`
 	Outputs      OutputsConfig      `mapstructure:"outputs"`
 	OpenAI       OpenAIConfig       `mapstructure:"openai"`
+	Inference    InferenceConfig    `mapstructure:"inference"`
 	Books        BooksConfig        `mapstructure:"books"`
 	Database     DatabaseConfig     `mapstructure:"database"`
 	Quiz         QuizConfig         `mapstructure:"quiz"`
@@ -84,6 +85,13 @@ type RapidAPIConfig struct {
 type OpenAIConfig struct {
 	APIKey string `mapstructure:"api_key"`
 	Model  string `mapstructure:"model"`
+}
+
+// InferenceConfig selects which inference client backs quiz grading.
+// Mode "openai" (default) uses the live OpenAI client.
+// Mode "mock" uses a deterministic substring-match grader, used by e2e tests.
+type InferenceConfig struct {
+	Mode string `mapstructure:"mode"`
 }
 
 type BooksConfig struct {

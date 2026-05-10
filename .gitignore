@@ -14,4 +14,8 @@ ebooks/
 frontend/node_modules/
 frontend/.next/
 frontend/next-env.d.ts
+frontend/.features-gen/
+frontend/playwright-report/
+frontend/test-results/
+frontend/tsconfig.tsbuildinfo
 langner-server

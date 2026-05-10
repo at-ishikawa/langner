@@ -1,0 +1,5 @@
+id: word-roots
+kind: Etymology
+name: "Word Roots"
+notebooks:
+  - ./origins.yml

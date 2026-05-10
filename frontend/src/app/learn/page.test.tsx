@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
-import LearnHubPage from "../learn/page";
+import LearnHubPage from "./page";
 import * as client from "@/lib/client";
 
 vi.mock("@/lib/client", () => ({

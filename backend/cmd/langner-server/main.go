@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -54,14 +55,21 @@ func run(ctx context.Context) error {
 		return fmt.Errorf("loadConfig() > %w", err)
 	}
 
-	var openaiClient *openai.Client
-	if cfg.OpenAI.APIKey != "" {
-		openaiClient = openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
-		defer func() {
-			_ = openaiClient.Close()
-		}()
-	} else {
-		slog.Warn("OPENAI_API_KEY is not set; quiz grading features will be unavailable")
+	var inferenceClient inference.Client
+	switch cfg.Inference.Mode {
+	case "mock":
+		inferenceClient = mock.NewClient()
+		slog.Info("using mock inference client (substring grader)")
+	default:
+		if cfg.OpenAI.APIKey != "" {
+			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+			defer func() {
+				_ = openaiClient.Close()
+			}()
+			inferenceClient = openaiClient
+		} else {
+			slog.Warn("OPENAI_API_KEY is not set; quiz grading features will be unavailable")
+		}
 	}
 
 	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
@@ -106,14 +114,14 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	svc := quiz.NewService(cfg.Notebooks, openaiClient, dictionaryMap, learningRepo, cfg.Quiz)
+	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
 		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
 	}
 	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
-	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, openaiClient, noteRepo)
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
 
 	handler := server.NewQuizHandler(svc)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)

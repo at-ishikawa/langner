@@ -1,0 +1,16 @@
+- title: "Idioms"
+  description: "Common idioms used for e2e tests"
+  date: 2026-01-01T00:00:00Z
+  cards:
+    - expression: "break the ice"
+      meaning: "a way to start a conversation in a social setting"
+      part_of_speech: "phrase"
+      examples:
+        - "She told a joke to break the ice."
+      synonyms:
+        - "start a conversation"
+    - expression: "lose one's temper"
+      meaning: "to become angry"
+      part_of_speech: "phrase"
+      examples:
+        - "He lost his temper when he heard the news."

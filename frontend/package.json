@@ -9,9 +9,10 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:integration": "playwright test --config playwright.e2e.config.ts"
+    "test:e2e": "bddgen && playwright test",
+    "test:e2e:ui": "bddgen && playwright test --ui",
+    "test:e2e:coverage": "tsx scripts/check-feature-coverage.ts",
+    "bddgen": "bddgen"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.0.0",
@@ -41,6 +42,9 @@
     "eslint": "^9.0.0",
     "eslint-config-next": "^16.0.0",
     "jsdom": "^26.0.0",
+    "mysql2": "^3.22.3",
+    "playwright-bdd": "^8.5.0",
+    "tsx": "^4.21.0",
     "typescript": "^5.0.0",
     "vitest": "^4.0.0"
   }

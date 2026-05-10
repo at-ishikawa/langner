@@ -1,0 +1,11 @@
+metadata:
+  title: "Word Roots"
+origins:
+  - origin: graph
+    type: root
+    language: Greek
+    meaning: writing
+  - origin: tele
+    type: prefix
+    language: Greek
+    meaning: distant
