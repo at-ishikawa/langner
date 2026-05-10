@@ -7,12 +7,12 @@ pre-commit: generate validate test
 
 .PHONY: generate
 generate: proto
-	$(MAKE) -C backend generate
+	$(MAKE) -C go/backend generate
 
 .PHONY: setup
 setup:
 	docker compose up -d --wait
-	$(MAKE) -C backend install-tools
+	$(MAKE) -C go/backend install-tools
 	$(MAKE) -C frontend install
 	$(MAKE) proto
 	$(MAKE) db-migrate
@@ -23,7 +23,7 @@ dev-backend:
 		echo "ERROR: OPENAI_API_KEY is not set"; \
 		exit 1; \
 	fi
-	$(MAKE) -C backend build
+	$(MAKE) -C go/backend build
 	./langner-server
 
 .PHONY: dev-frontend
@@ -42,37 +42,38 @@ dev:
 
 .PHONY: proto
 proto:
-	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate --template buf.gen.backend.yaml
+	go run github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) generate --template buf.gen.frontend.yaml
 
 .PHONY: fix
 fix:
-	$(MAKE) -C backend fix
+	$(MAKE) -C go/backend fix
 
 .PHONY: validate
 validate:
-	$(MAKE) -C backend validate
+	$(MAKE) -C go/backend validate
 
 .PHONY: test
 test:
-	$(MAKE) -C backend test
+	$(MAKE) -C go/backend test
 
 .PHONY: test-coverage
 test-coverage:
-	$(MAKE) -C backend test-coverage
+	$(MAKE) -C go/backend test-coverage
 
 .PHONY: test-integration
 test-integration:
 	@echo "Running OpenAI integration tests..."
-	@cd backend && OPENAI_API_KEY=$(OPENAI_API_KEY) \
+	@cd go/backend && OPENAI_API_KEY=$(OPENAI_API_KEY) \
 		go test -v ./internal/inference/openai -run Integration -timeout 60s
 
 .PHONY: db-migrate
 db-migrate:
-	$(MAKE) -C backend db-migrate DATABASE_URL="$(DATABASE_URL)"
+	$(MAKE) -C go/backend db-migrate DATABASE_URL="$(DATABASE_URL)"
 
 .PHONY: db-import
 db-import:
-	$(MAKE) -C backend db-import
+	$(MAKE) -C go/backend db-import
 
 .PHONY: docs-setup
 docs-setup:

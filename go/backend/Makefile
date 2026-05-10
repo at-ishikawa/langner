@@ -14,7 +14,7 @@ generate:
 
 .PHONY: build
 build:
-	$(GO) build -o ../langner-server ./cmd/langner-server
+	$(GO) build -o ../../langner-server ./cmd/langner-server
 
 .PHONY: test
 test:
@@ -22,7 +22,7 @@ test:
 
 .PHONY: test-coverage
 test-coverage:
-	$(GO) test -coverprofile=coverage.out $$($(GO) list ./... | grep -v -e /gen-protos/ -e /internal/mocks/)
+	$(GO) test -coverprofile=coverage.out $$($(GO) list ./... | grep -v -e /gen-protos/ -e /internal/mocks/ -e /cmd/langner-server)
 	@COVERAGE=$$($(GO) tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
 	echo "Total coverage: $${COVERAGE}%"
 
@@ -43,8 +43,8 @@ db-migrate:
 
 .PHONY: db-import
 db-import:
-	$(GO) build -o ../langner ./cmd/langner
-	cd .. && ./langner migrate import-db --config config.example.yml
+	$(GO) build -o ../../langner ./cmd/langner
+	cd ../.. && ./langner migrate import-db --config config.example.yml
 
 .PHONY: install-tools
 install-tools:

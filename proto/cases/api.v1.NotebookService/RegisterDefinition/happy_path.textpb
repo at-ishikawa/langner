@@ -1,0 +1,23 @@
+name: "happy_path_writes_definition_yaml"
+
+request {
+  [type.googleapis.com/api.v1.RegisterDefinitionRequest] {
+    notebook_id: "mybook"
+    notebook_file: "001-chapter-1.yml"
+    scene_index: 0
+    expression: "lose one's temper"
+    meaning: "to become very angry"
+    part_of_speech: "phrase"
+  }
+}
+
+expected {
+  status: 0
+  state {
+    file_contains {
+      path: "$TEMP_DIR/mybook.yml"
+      contains: "lose one's temper"
+      contains: "001-chapter-1.yml"
+    }
+  }
+}

@@ -4,12 +4,18 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'backend/**'
+      - 'go/**'
+      - 'proto/**'
+      - 'buf.gen.backend.yaml'
+      - 'buf.yaml'
       - '.github/workflows/backend.yml'
   pull_request:
     branches: [ main ]
     paths:
-      - 'backend/**'
+      - 'go/**'
+      - 'proto/**'
+      - 'buf.gen.backend.yaml'
+      - 'buf.yaml'
       - '.github/workflows/backend.yml'
 
 jobs:
@@ -22,13 +28,13 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'backend/go.mod'
+          go-version-file: 'go/backend/go.mod'
 
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.6.1
-          working-directory: backend
+          working-directory: go/backend
 
   test:
     name: Backend Test
@@ -39,9 +45,22 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'backend/go.mod'
+          go-version-file: 'go/backend/go.mod'
       - name: Run tests with coverage check
         run: make test-coverage
+
+  case-coverage:
+    name: RPC Case Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go/backend/go.mod'
+      - name: Check every RPC has at least one case
+        run: cd go/check-case-coverage && go run . ../../proto
 
   validate-examples:
     name: Validate example configurations
@@ -67,10 +86,10 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'backend/go.mod'
+          go-version-file: 'go/backend/go.mod'
 
       - name: Build langner
-        run: cd backend && go build -o ../langner ./cmd/langner
+        run: cd go/backend && go build -o ../../langner ./cmd/langner
 
       - name: Run langner validate
         run: ./langner validate --config config.example.yml
@@ -82,7 +101,7 @@ jobs:
         run: go install -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
       - name: Run database migrations
-        run: migrate -source file://backend/schemas/migrations -database "mysql://user:password@tcp(localhost:3306)/local" up
+        run: migrate -source file://go/backend/schemas/migrations -database "mysql://user:password@tcp(localhost:3306)/local" up
 
       - name: Import example data to DB
         run: ./langner migrate import-db --config config.example.yml

@@ -1,0 +1,90 @@
+syntax = "proto3";
+
+package testing.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/empty.proto";
+
+option go_package = "github.com/at-ishikawa/langner/gen-protos/testing/v1;testingv1";
+
+// TestCase is the unit of an RPC behavior test. The RPC under test is
+// determined by the directory the .textpb file lives in:
+//   proto/cases/<service-fullname>/<method-name>/<scenario>.textpb
+message TestCase {
+  string name = 1;
+  repeated SetupStep setup = 2;
+  google.protobuf.Any request = 3;
+  Expected expected = 4;
+  map<string, string> vars = 5;
+}
+
+message SetupStep {
+  oneof step {
+    ClearTables clear_tables = 1;
+    InsertRows insert_rows = 2;
+    ClearDirs clear_dirs = 3;
+    WriteFile write_file = 4;
+    RemoveFiles remove_files = 5;
+    SetClock set_clock = 10;
+    SetEnv set_env = 11;
+    StubResponse stub_response = 12;
+  }
+}
+
+message ClearTables { repeated string tables = 1; }
+message InsertRows { string table = 1; repeated google.protobuf.Any rows = 2; }
+message ClearDirs { repeated string paths = 1; }
+message WriteFile { string path = 1; bytes content = 2; }
+message RemoveFiles { repeated string paths = 1; }
+message SetClock { string rfc3339 = 1; }
+message SetEnv { map<string, string> entries = 1; }
+message StubResponse {
+  string upstream = 1;
+  string match_request = 2;
+  google.protobuf.Any response = 3;
+  string error_code = 4;
+}
+
+message Expected {
+  uint32 status = 1;                        // Connect/gRPC code; 0 = OK
+  google.protobuf.Any body = 2;             // for OK responses (partial match)
+  ExpectedError error = 3;                  // for non-OK responses
+  repeated FieldExpectation field_expectations = 4;
+  repeated StateAssertion state = 5;
+}
+
+message ExpectedError {
+  string message_regex = 1;
+  repeated google.protobuf.Any details = 2;
+}
+
+message FieldExpectation {
+  string path = 1;
+  oneof rule {
+    google.protobuf.Empty present = 2;     // any non-zero value, must be set
+    google.protobuf.Empty unset = 3;       // must be null/zero/absent
+    string regex = 4;
+    NumberRange range = 5;
+    string equals_var = 6;
+  }
+}
+message NumberRange {
+  double min = 1;
+  double max = 2;
+  bool max_inclusive = 3;
+}
+
+message StateAssertion {
+  oneof assertion {
+    FileExists file_exists = 1;
+    FileAbsent file_absent = 2;
+    FileContains file_contains = 3;
+    RowExists row_exists = 4;
+    RowAbsent row_absent = 5;
+  }
+}
+message FileExists { string path = 1; }
+message FileAbsent { string path = 1; }
+message FileContains { string path = 1; repeated string contains = 2; }
+message RowExists { string table = 1; google.protobuf.Any row_match = 2; }
+message RowAbsent { string table = 1; google.protobuf.Any row_match = 2; }
