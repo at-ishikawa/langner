@@ -4,8 +4,9 @@
 //
 // Steps:
 //   1. Drop + create the test database.
-//   2. Apply backend/schemas/migrations/*.up.sql in numeric order.
-//   3. Build the langner CLI and import notebook fixtures into the DB.
+//   2. Build the langner CLI.
+//   3. Run `langner migrate import-db`, which applies schema migrations and
+//      imports notebook fixtures in one pass.
 //
 // Env vars (with defaults for local dev):
 //   LANGNER_TEST_DB_HOST     127.0.0.1
@@ -15,7 +16,6 @@
 //   LANGNER_TEST_DB_NAME     langner_e2e
 
 import { execSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import mysql from "mysql2/promise";
 
@@ -26,17 +26,14 @@ const PASSWORD = process.env.LANGNER_TEST_DB_PASSWORD ?? "password";
 const NAME = process.env.LANGNER_TEST_DB_NAME ?? "langner_e2e";
 
 const REPO_ROOT = join(__dirname, "..", "..");
-const MIGRATIONS_DIR = join(REPO_ROOT, "backend", "schemas", "migrations");
 const CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.test.yml";
 
 export default async function globalSetup() {
-  // Step 1: drop + create the schema.
   const admin = await mysql.createConnection({
     host: HOST,
     port: PORT,
     user: USER,
     password: PASSWORD,
-    multipleStatements: true,
   });
   await admin.query(`DROP DATABASE IF EXISTS \`${NAME}\``);
   await admin.query(
@@ -44,28 +41,6 @@ export default async function globalSetup() {
   );
   await admin.end();
 
-  // Step 2: apply schema migrations in order.
-  const migrations = readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith(".up.sql"))
-    .sort();
-  const conn = await mysql.createConnection({
-    host: HOST,
-    port: PORT,
-    user: USER,
-    password: PASSWORD,
-    database: NAME,
-    multipleStatements: true,
-  });
-  for (const file of migrations) {
-    const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    if (sql.trim()) {
-      await conn.query(sql);
-    }
-  }
-  await conn.end();
-
-  // Step 3: build the langner CLI (the backend Makefile's `build` target only
-  // produces langner-server) and import notebook fixtures.
   execSync("go build -o ../langner ./cmd/langner", {
     cwd: join(REPO_ROOT, "backend"),
     stdio: "inherit",
