@@ -64,8 +64,12 @@ export default async function globalSetup() {
   }
   await conn.end();
 
-  // Step 3: build langner CLI and import notebook fixtures.
-  execSync("make -C backend build", { cwd: REPO_ROOT, stdio: "inherit" });
+  // Step 3: build the langner CLI (the backend Makefile's `build` target only
+  // produces langner-server) and import notebook fixtures.
+  execSync("go build -o ../langner ./cmd/langner", {
+    cwd: join(REPO_ROOT, "backend"),
+    stdio: "inherit",
+  });
   execSync(`./langner migrate import-db --config ${CONFIG_PATH}`, {
     cwd: REPO_ROOT,
     stdio: "inherit",
