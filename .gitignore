@@ -8,7 +8,7 @@ config.yml
 .vscode
 /backend/langner
 
-ebooks/
+/ebooks/
 
 # Frontend
 frontend/node_modules/
