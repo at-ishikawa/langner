@@ -5,13 +5,25 @@
   expressions:
     - expression: break the ice
       learned_logs:
-        - status: misunderstood
+        - status: understood
           learned_at: "2025-01-01T00:00:00Z"
+          quality: 4
+          quiz_type: freeform
+          interval_days: 1
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
           quality: 1
+          quiz_type: notebook
           interval_days: 1
     - expression: lose one's temper
       learned_logs:
-        - status: misunderstood
+        - status: understood
           learned_at: "2025-01-01T00:00:00Z"
+          quality: 4
+          quiz_type: freeform
+          interval_days: 1
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
           quality: 1
+          quiz_type: notebook
           interval_days: 1
