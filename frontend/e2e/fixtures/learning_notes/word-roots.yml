@@ -1,0 +1,18 @@
+- metadata:
+    notebook_id: word-roots
+    title: "Word Roots"
+  expressions:
+    - expression: graph
+      etymology_breakdown_logs:
+        - status: misunderstood
+          learned_at: "2025-01-01T00:00:00Z"
+          quality: 1
+          quiz_type: etymology_standard
+          interval_days: 1
+    - expression: tele
+      etymology_breakdown_logs:
+        - status: misunderstood
+          learned_at: "2025-01-01T00:00:00Z"
+          quality: 1
+          quiz_type: etymology_standard
+          interval_days: 1

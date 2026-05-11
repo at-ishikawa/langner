@@ -187,14 +187,17 @@ When("I submit my answer", async ({ page }) => {
 
 // Between non-final cards the quiz pages auto-advance — there's no button to
 // click. At a batch boundary or the final card, BatchFeedback shows a
-// "Continue" or "See Results" button. We click whichever is visible, and
-// otherwise treat the step as a no-op so the feature reads naturally.
+// "Continue" or "See Results" button after async grading finishes. Wait for
+// either to appear (up to 5s) before deciding it's a non-final card.
 When("I continue to the next card", async ({ page }) => {
   const button = page
     .getByRole("button", { name: /^(continue|see results)$/i })
     .first();
-  if (await button.isVisible().catch(() => false)) {
+  try {
+    await button.waitFor({ state: "visible", timeout: 5000 });
     await button.click();
+  } catch {
+    // No BatchFeedback button appeared within 5s — non-final card auto-advanced.
   }
 });
 

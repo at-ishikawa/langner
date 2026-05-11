@@ -1,0 +1,17 @@
+- metadata:
+    id: idioms
+    title: flashcards
+    type: flashcard
+  expressions:
+    - expression: break the ice
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2025-01-01T00:00:00Z"
+          quality: 1
+          interval_days: 1
+    - expression: lose one's temper
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2025-01-01T00:00:00Z"
+          quality: 1
+          interval_days: 1
