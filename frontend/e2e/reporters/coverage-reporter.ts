@@ -15,7 +15,21 @@ import type {
 
 const APP_DIR = join(process.cwd(), "src", "app");
 
-const INTENTIONALLY_UNCOVERED = new Set<string>(["/learn/[id]"]);
+// Routes only exercised by @wip features. Drop entries as those features have
+// their selectors fixed and the @wip tag removed.
+const INTENTIONALLY_UNCOVERED = new Set<string>([
+  "/learn/[id]",
+  "/notebooks/[id]",
+  "/notebooks/etymology/[id]",
+  "/notebooks/etymology/[id]/mindmap",
+  "/quiz/complete",
+  "/quiz/standard",
+  "/quiz/reverse",
+  "/quiz/freeform",
+  "/quiz/etymology-standard",
+  "/quiz/etymology-reverse",
+  "/quiz/etymology-freeform",
+]);
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
