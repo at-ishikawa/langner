@@ -18,10 +18,13 @@ export default defineConfig({
   globalTeardown: "./e2e/global-teardown.ts",
   reporter: [
     ["list"],
+    ["html", { open: "never" }],
     ["./e2e/reporters/coverage-reporter.ts"],
   ],
   use: {
     baseURL: `http://localhost:${FRONTEND_PORT}`,
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
   projects: [
     {
