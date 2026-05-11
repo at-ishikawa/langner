@@ -1,7 +1,6 @@
 // Layer 3 coverage: a Playwright reporter that records every URL visited during
 // the run and diffs against the routes derived from src/app/**/page.tsx.
-// Emits a summary at the end and exits non-zero when a route's coverage status
-// disagrees with INTENTIONALLY_UNCOVERED in scripts/check-feature-coverage.ts.
+// Exits non-zero when any route isn't navigated to by any scenario.
 
 import { readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
@@ -9,27 +8,16 @@ import type {
   Reporter,
   TestCase,
   TestResult,
+  TestStep,
   FullConfig,
   Suite,
 } from "@playwright/test/reporter";
 
-const APP_DIR = join(process.cwd(), "src", "app");
+// Playwright's public TestStep interface omits `params`, but the in-process
+// reporter receives it at runtime — that's how page.goto step urls reach us.
+type StepWithParams = TestStep & { params?: { url?: string } };
 
-// Routes only exercised by @wip features. Drop entries as those features have
-// their selectors fixed and the @wip tag removed.
-const INTENTIONALLY_UNCOVERED = new Set<string>([
-  "/learn/[id]",
-  "/notebooks/[id]",
-  "/notebooks/etymology/[id]",
-  "/notebooks/etymology/[id]/mindmap",
-  "/quiz/complete",
-  "/quiz/standard",
-  "/quiz/reverse",
-  "/quiz/freeform",
-  "/quiz/etymology-standard",
-  "/quiz/etymology-reverse",
-  "/quiz/etymology-freeform",
-]);
+const APP_DIR = join(process.cwd(), "src", "app");
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -53,7 +41,6 @@ function urlToRoute(url: string, routes: string[]): string | undefined {
   } catch {
     return undefined;
   }
-  // Prefer the longest static-prefix match against known routes.
   const candidates = routes
     .map((route) => {
       const pattern =
@@ -74,42 +61,55 @@ export default class CoverageReporter implements Reporter {
     this.routes = walk(APP_DIR).map(routeFromPagePath);
   }
 
-  onTestEnd(_test: TestCase, result: TestResult) {
-    for (const step of result.steps ?? []) {
-      // Playwright records navigations as steps with the URL in the title.
-      const url = step.params?.url ?? step.title?.match(/^Navigate to "([^"]+)"/)?.[1];
-      if (typeof url === "string") {
-        const route = urlToRoute(url, this.routes);
+  onTestEnd(test: TestCase, result: TestResult) {
+    // Primary source: `visited-url` annotations recorded by the BeforeScenario
+    // hook in steps/common.ts. Each framenavigated event (including the
+    // click-driven router.push redirects) lands here. The annotations appear
+    // on both TestCase (aggregated across retries) and TestResult (this run).
+    const annotations = [...test.annotations, ...(result.annotations ?? [])];
+    for (const annotation of annotations) {
+      if (annotation.type === "visited-url" && annotation.description) {
+        const route = urlToRoute(annotation.description, this.routes);
         if (route) this.visited.add(route);
       }
     }
-    for (const attachment of result.attachments) {
-      if (attachment.name === "trace" || attachment.contentType?.includes("video")) continue;
-    }
+
+    // Fallback: TestStep.params?.url for explicit page.goto in steps, plus
+    // inner-step titles like `navigated to "<url>"`. Walks the full step
+    // tree because the bdd Given/When/Then steps wrap the underlying
+    // playwright actions.
+    const TITLE_URL = /(?:Navigate(?:d)? to|page\.goto|navigated to)\s+"([^"]+)"/;
+
+    const visit = (steps: TestStep[]) => {
+      for (const step of steps ?? []) {
+        const s = step as StepWithParams;
+        const url = s.params?.url ?? step.title?.match(TITLE_URL)?.[1];
+        if (typeof url === "string") {
+          const route = urlToRoute(url, this.routes);
+          if (route) this.visited.add(route);
+        }
+        if (step.steps && step.steps.length > 0) {
+          visit(step.steps);
+        }
+      }
+    };
+    visit(result.steps);
   }
 
   async onEnd() {
-    const uncovered = this.routes.filter(
-      (r) => !this.visited.has(r) && !INTENTIONALLY_UNCOVERED.has(r),
-    );
-    const skipped = this.routes.filter((r) => INTENTIONALLY_UNCOVERED.has(r));
+    const uncovered = this.routes.filter((r) => !this.visited.has(r));
 
     console.log();
     console.log(`Route coverage (Layer 3, from actual navigations):`);
-    console.log(
-      `  visited:        ${this.visited.size}/${this.routes.length}`,
-    );
-    console.log(`  intentional:    ${skipped.length}`);
-    console.log(`  uncovered:      ${uncovered.length}`);
+    console.log(`  visited:   ${this.visited.size}/${this.routes.length}`);
+    console.log(`  uncovered: ${uncovered.length}`);
     if (uncovered.length > 0) {
       console.log(`\n  ✗ Not visited by any scenario:`);
       for (const r of uncovered) console.log(`      ${r}`);
-      console.log(
-        `\n    Add a scenario that navigates there, or document the gap in INTENTIONALLY_UNCOVERED.`,
-      );
+      console.log(`\n    Add a scenario that navigates there.`);
       process.exitCode = 1;
     } else {
-      console.log(`\n  ✓ Every required route was navigated to.`);
+      console.log(`\n  ✓ Every route was navigated to.`);
     }
   }
 }

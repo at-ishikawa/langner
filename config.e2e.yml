@@ -16,7 +16,8 @@ inference:
   mode: mock
 
 notebooks:
-  stories_directories: []
+  stories_directories:
+    - frontend/e2e/fixtures/stories
   flashcards_directories:
     - frontend/e2e/fixtures/flashcards
   books_directories: []

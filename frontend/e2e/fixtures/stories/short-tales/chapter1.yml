@@ -1,0 +1,14 @@
+- event: "Chapter 1 - First Meeting"
+  date: 2026-01-01T00:00:00Z
+  scenes:
+    - scene: "An awkward introduction"
+      statements:
+        - "Two strangers met at a quiet cafe and tried to make small talk."
+      conversations:
+        - speaker: Alex
+          quote: "I wasn't sure how to {{ break the ice }}, so I asked about the weather."
+        - speaker: Jamie
+          quote: "Talking about the rain is one way to {{ break the ice }}."
+      definitions:
+        - expression: break the ice
+          meaning: To initiate conversation or relieve tension in a social situation

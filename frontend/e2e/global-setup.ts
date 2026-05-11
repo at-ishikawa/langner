@@ -26,7 +26,7 @@ const PASSWORD = process.env.LANGNER_TEST_DB_PASSWORD ?? "password";
 const NAME = process.env.LANGNER_TEST_DB_NAME ?? "langner_e2e";
 
 const REPO_ROOT = join(__dirname, "..", "..");
-const CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.test.yml";
+const CONFIG_PATH = process.env.LANGNER_TEST_CONFIG ?? "config.e2e.yml";
 
 export default async function globalSetup() {
   const admin = await mysql.createConnection({

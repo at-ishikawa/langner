@@ -1,4 +1,3 @@
-@wip
 Feature: Reverse vocabulary quiz
   In Reverse mode, the user is shown a meaning and types the matching word.
 

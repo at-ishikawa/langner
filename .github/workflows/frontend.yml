@@ -6,14 +6,14 @@ on:
     paths:
       - 'frontend/**'
       - 'backend/**'
-      - 'config.test.yml'
+      - 'config.e2e.yml'
       - '.github/workflows/frontend.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'frontend/**'
       - 'backend/**'
-      - 'config.test.yml'
+      - 'config.e2e.yml'
       - '.github/workflows/frontend.yml'
 
 jobs:
@@ -82,7 +82,7 @@ jobs:
       LANGNER_TEST_DB_USER: root
       LANGNER_TEST_DB_PASSWORD: password
       LANGNER_TEST_DB_NAME: langner_e2e
-      LANGNER_TEST_CONFIG: config.test.yml
+      LANGNER_TEST_CONFIG: config.e2e.yml
     defaults:
       run:
         working-directory: frontend

@@ -12,12 +12,6 @@ const APP_DIR = join(process.cwd(), "src", "app");
 const FEATURES_DIR = join(process.cwd(), "e2e", "features");
 const STEPS_DIR = join(process.cwd(), "e2e", "steps");
 
-// Routes intentionally not exercised by any scenario yet. Each entry needs a
-// reason so the gap is documented. Remove from this list once a feature covers it.
-const INTENTIONALLY_UNCOVERED: Record<string, string> = {
-  "/learn/[id]": "Story-notebook detail page; no story fixture in the test seed.",
-};
-
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
     const full = join(dir, entry);
@@ -64,33 +58,14 @@ const pages = walk(APP_DIR);
 const routes = pages.map(routeFromPagePath);
 const featureText = readSources();
 
-const uncovered: string[] = [];
-const skipped: { route: string; reason: string }[] = [];
-for (const route of routes) {
-  if (routeMatchesText(route, featureText)) continue;
-  if (route in INTENTIONALLY_UNCOVERED) {
-    skipped.push({ route, reason: INTENTIONALLY_UNCOVERED[route] });
-  } else {
-    uncovered.push(route);
-  }
-}
-
-if (skipped.length > 0) {
-  console.log(`Skipped (intentional, see INTENTIONALLY_UNCOVERED):`);
-  for (const { route, reason } of skipped) console.log(`  ${route} — ${reason}`);
-  console.log();
-}
+const uncovered = routes.filter((route) => !routeMatchesText(route, featureText));
 
 if (uncovered.length === 0) {
-  console.log(
-    `✓ ${routes.length - skipped.length}/${routes.length} routes referenced by .feature scenarios; ${skipped.length} intentionally skipped.`,
-  );
+  console.log(`✓ All ${routes.length} routes referenced by .feature scenarios.`);
   process.exit(0);
 }
 
 console.error("✗ Uncovered routes (no .feature scenario visits them):");
 for (const r of uncovered) console.error(`  ${r}`);
-console.error(
-  `\nAdd a scenario that navigates to each uncovered route, or add it to INTENTIONALLY_UNCOVERED in this script with a reason.`,
-);
+console.error(`\nAdd a scenario that navigates to each uncovered route.`);
 process.exit(1);
