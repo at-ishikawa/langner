@@ -11,7 +11,7 @@
               learned_at: "2025-01-01T00:00:00Z"
               quality: 4
               quiz_type: etymology_freeform
-              interval_days: 1
+              interval_days: 0
             - status: misunderstood
               learned_at: "2025-01-02T00:00:00Z"
               quality: 1
@@ -23,7 +23,7 @@
               learned_at: "2025-01-01T00:00:00Z"
               quality: 4
               quiz_type: etymology_freeform
-              interval_days: 1
+              interval_days: 0
             - status: misunderstood
               learned_at: "2025-01-02T00:00:00Z"
               quality: 1
