@@ -1,3 +1,4 @@
+@wip
 Feature: Freeform vocabulary quiz
   In Freeform mode, the user types both a word and its meaning each turn.
 

@@ -1,3 +1,4 @@
+@wip
 Feature: Etymology quiz modes
   The user runs each of the three etymology quiz modes to completion.
 

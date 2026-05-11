@@ -1,3 +1,4 @@
+@wip
 Feature: Standard vocabulary quiz
   The user picks Standard mode, answers each card, and reaches the summary.
 

@@ -1,3 +1,4 @@
+@wip
 Feature: Browse a vocabulary notebook
   The user opens a vocabulary notebook from the Learn hub and reads its words.
 

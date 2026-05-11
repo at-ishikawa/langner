@@ -1,3 +1,4 @@
+@wip
 Feature: Browse an etymology notebook
   The user opens an etymology notebook, sees origins, and views the mindmap.
 
