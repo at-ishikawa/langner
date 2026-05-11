@@ -64,8 +64,15 @@ When("I choose the {string} quiz mode", async ({ page }, mode: string) => {
   await page.getByText(mode, { exact: true }).first().click();
 });
 
+When("I include unstudied words", async ({ page }) => {
+  await page.getByText("Include unstudied words").click();
+});
+
+// Chakra v3 Checkbox.Label wraps the visible label; clicking the label toggles
+// the associated hidden input. Using role="checkbox" doesn't work because the
+// accessible name is split across nested elements.
 When("I select the {string} notebook", async ({ page }, name: string) => {
-  await page.getByRole("checkbox", { name: new RegExp(name) }).click({ force: true });
+  await page.getByText(name, { exact: true }).first().click();
 });
 
 // Starting a quiz navigates to one of the per-mode pages:

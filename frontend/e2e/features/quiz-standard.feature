@@ -4,6 +4,7 @@ Feature: Standard vocabulary quiz
   Scenario: Finish a Standard quiz across two cards
     Given I am on the Quiz page
     When I choose the "Standard" quiz mode
+    And I include unstudied words
     And I select the "Idioms" notebook
     And I start the quiz
     Then I see the card "break the ice"

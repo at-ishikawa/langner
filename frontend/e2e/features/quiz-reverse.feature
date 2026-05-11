@@ -4,6 +4,7 @@ Feature: Reverse vocabulary quiz
   Scenario: Finish a Reverse quiz across two cards
     Given I am on the Quiz page
     When I choose the "Reverse" quiz mode
+    And I include unstudied words
     And I select the "Idioms" notebook
     And I start the quiz
     Then I see a meaning prompt
