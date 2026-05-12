@@ -112,11 +112,15 @@ Given(
   async ({ page }) => {
     let failed = false;
     await page.route("**/BatchSubmitAnswers", async (route) => {
+      const url = route.request().url();
+      // eslint-disable-next-line no-console
+      console.log(`[e2e route] BatchSubmitAnswers hit failed=${failed} url=${url}`);
       if (!failed) {
         failed = true;
         await route.fulfill({
           status: 500,
           contentType: "application/json",
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             code: "internal",
             message: "Mock transient failure",
@@ -125,6 +129,17 @@ Given(
         return;
       }
       await route.continue();
+    });
+    page.on("console", (msg) => {
+      const text = msg.text();
+      if (text.includes("Failed to submit") || text.includes("batchSubmit") || msg.type() === "error") {
+        // eslint-disable-next-line no-console
+        console.log(`[browser] ${msg.type()}: ${text}`);
+      }
+    });
+    page.on("requestfailed", (req) => {
+      // eslint-disable-next-line no-console
+      console.log(`[requestfailed] ${req.method()} ${req.url()} ${req.failure()?.errorText}`);
     });
   },
 );
