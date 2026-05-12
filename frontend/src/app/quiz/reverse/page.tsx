@@ -67,7 +67,6 @@ export default function ReverseQuizPage() {
   useEffect(() => {
     startTimeRef.current = Date.now();
     setAnswer("");
-    setError(null);
     if (phase === "answering" || phase === "synonym-retry") {
       setTimeout(() => inputRef.current?.focus(), 100);
     }
