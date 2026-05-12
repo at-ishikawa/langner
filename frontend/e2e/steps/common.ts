@@ -35,6 +35,12 @@ When("I follow the {string} link", async ({ page }, name: string) => {
   await page.getByRole("link", { name: new RegExp(name, "i") }).first().click();
 });
 
+// Generic button click used by "Back to Start" on /quiz/complete and any other
+// page that exposes a single button by visible text.
+When("I follow the {string} button", async ({ page }, name: string) => {
+  await page.getByRole("button", { name: new RegExp(`^${name}$`, "i") }).first().click();
+});
+
 When("I switch to the {string} tab", async ({ page }, name: string) => {
   // Tab labels are <Text> inside a clickable <Box>. There is exactly one
   // visible match per tab (Vocabulary / Etymology / All Origins / By Meaning).

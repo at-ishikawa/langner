@@ -18,26 +18,32 @@ actual navigation).
 | `/learn/[id]`                       | learn-vocabulary  | Open the Short Tales story reader                       |
 | `/notebooks/[id]`                   | learn-vocabulary  | Open the Idioms flashcard notebook from the Learn hub   |
 | `/notebooks/[id]`                   | learn-vocabulary  | Expand a flashcard word card to see its meaning         |
+| `/notebooks/[id]`                   | learn-vocabulary  | Filter Idioms words by Misunderstood learning status    |
 | `/notebooks/etymology/[id]`         | learn-etymology   | Open the Word Roots etymology notebook                  |
 | `/notebooks/etymology/[id]`         | learn-etymology   | Open the mindmap for an origin                          |
 | `/notebooks/etymology/[id]/mindmap` | learn-etymology   | Open the mindmap for an origin                          |
 | `/quiz`                             | home-navigation   | Open the Quiz hub from home                             |
 | `/quiz`                             | quiz-standard     | Finish a Standard quiz across two cards                 |
+| `/quiz`                             | quiz-standard     | Skip a Standard quiz card with "Don't Know"             |
+| `/quiz`                             | quiz-standard     | Override an answer on the BatchFeedback view            |
+| `/quiz`                             | quiz-standard     | Override, exclude, then restart from the summary        |
+| `/quiz`                             | quiz-standard     | Retry grading after a transient failure                 |
 | `/quiz`                             | quiz-reverse      | Finish a Reverse quiz across two cards                  |
+| `/quiz`                             | quiz-reverse      | Reverse quiz with the "List words missing context" filter |
 | `/quiz`                             | quiz-freeform     | Submit one freeform answer and finish                   |
 | `/quiz`                             | quiz-etymology    | Finish an etymology quiz in Freeform mode               |
 | `/quiz`                             | quiz-etymology    | Finish an etymology quiz in Standard mode               |
 | `/quiz`                             | quiz-etymology    | Finish an etymology quiz in Reverse mode                |
-| `/quiz/standard`                    | quiz-standard     | Finish a Standard quiz across two cards                 |
-| `/quiz/reverse`                     | quiz-reverse      | Finish a Reverse quiz across two cards                  |
+| `/quiz/standard`                    | quiz-standard     | (all 5 standard scenarios)                              |
+| `/quiz/reverse`                     | quiz-reverse      | (both reverse scenarios)                                |
 | `/quiz/freeform`                    | quiz-freeform     | Submit one freeform answer and finish                   |
 | `/quiz/etymology-standard`          | quiz-etymology    | Finish an etymology quiz in Standard mode               |
 | `/quiz/etymology-reverse`           | quiz-etymology    | Finish an etymology quiz in Reverse mode                |
 | `/quiz/etymology-freeform`          | quiz-etymology    | Finish an etymology quiz in Freeform mode               |
-| `/quiz/complete`                    | quiz-standard     | Finish a Standard quiz across two cards                 |
-| `/quiz/complete`                    | quiz-reverse      | Finish a Reverse quiz across two cards                  |
+| `/quiz/complete`                    | quiz-standard     | (all 5 standard scenarios reach it)                     |
+| `/quiz/complete`                    | quiz-reverse      | (both reverse scenarios reach it)                       |
 | `/quiz/complete`                    | quiz-freeform     | Submit one freeform answer and finish                   |
-| `/quiz/complete`                    | quiz-etymology    | Finish an etymology quiz in each mode                   |
+| `/quiz/complete`                    | quiz-etymology    | (all 3 etymology scenarios reach it)                    |
 
 ## Interactions per page
 
@@ -69,7 +75,7 @@ Tick the box when at least one scenario hits the interaction.
 - [x] Click a story row → see its word cards (e.g. "Common Idioms" → cards)
 - [x] See expression text on each word card ("break the ice", "lose one's temper")
 - [x] Click a word card → see expanded card with example sentence
-- [ ] Filter words by learning status _(no scenario)_
+- [x] Filter words by learning status via the `<select>` dropdown
 
 ### `/notebooks/etymology/[id]`
 
@@ -82,7 +88,8 @@ Tick the box when at least one scenario hits the interaction.
 ### `/notebooks/etymology/[id]/mindmap`
 
 - [x] See the focused origin's ReactFlow node ("graph")
-- [ ] Pan / zoom interactions _(not asserted)_
+- [ ] Pan / zoom interactions — _not asserted: testing ReactFlow's internal
+      viewport math is library coverage, not app coverage. Skip._
 
 ### `/quiz` (quiz hub)
 
@@ -90,6 +97,7 @@ Tick the box when at least one scenario hits the interaction.
 - [x] Switch to the Etymology tab
 - [x] Choose a quiz mode (Standard / Reverse / Freeform — exercised by both Vocabulary and Etymology tabs)
 - [x] Toggle "Include unstudied words" switch (used by Standard/Reverse — vocab and etymology)
+- [x] Toggle "List words missing context" switch (Reverse-only, see quiz-reverse.feature)
 - [x] Select a notebook via the Checkbox.Root label
 - [x] Click "Start" → navigate to the per-mode quiz page
 
@@ -98,17 +106,17 @@ Tick the box when at least one scenario hits the interaction.
 - [x] See the current card's expression as a heading
 - [x] Type into the single answer input
 - [x] Click "Submit" (auto-advance between cards; BatchFeedback only on the final card)
+- [x] Click "Don't Know" to skip a card
+- [x] Click "Retry grading" after a transient grading-RPC failure
+- [x] Override (Mark Correct/Incorrect) on the BatchFeedback view
 - [x] Reach `/quiz/complete` and see "Total: 2 words"
-- [ ] Override grading result _(no scenario)_
-- [ ] Skip a card _(no scenario)_
-- [ ] Retry grading after a network error _(no scenario)_
 
 ### `/quiz/reverse`
 
 - [x] See the meaning prompt + "Type the word" input
 - [x] Type a word and click Submit, twice (across two cards)
-- [x] Reach `/quiz/complete` and see "Total: 2 words"
-- [ ] List words missing context (Reverse-only toggle) _(no scenario)_
+- [x] Honor the "List words missing context" filter (one matching card runs end-to-end)
+- [x] Reach `/quiz/complete` and see "Total: N words"
 
 ### `/quiz/freeform`
 
@@ -138,18 +146,9 @@ Tick the box when at least one scenario hits the interaction.
 ### `/quiz/complete`
 
 - [x] See "Total: N words" summary
-- [ ] Restart / new quiz action _(no scenario)_
-- [ ] Per-card override/skip actions on the summary _(no scenario)_
-
-## Known gaps
-
-These exist as `[ ]` items above and are listed here as a single backlog:
-
-- `/notebooks/[id]`: filter words by learning status
-- `/notebooks/etymology/[id]/mindmap`: pan/zoom
-- `/quiz/standard`: override grading, skip a card, retry grading
-- `/quiz/reverse`: "List words missing context" toggle
-- `/quiz/complete`: restart, per-card override/skip from the summary
+- [x] Override (Mark Correct/Incorrect) on a result card
+- [x] Click "Exclude" to mark a result as skipped
+- [x] Click "Back to Start" → navigate back to `/quiz`
 
 ## Add a row when you...
 

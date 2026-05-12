@@ -73,3 +73,9 @@ Then("I see the origin {string}", async ({ page }, origin: string) => {
 Then("I see the node {string}", async ({ page }, label: string) => {
   await expect(page.getByText(new RegExp(label, "i")).first()).toBeVisible();
 });
+
+// /notebooks/[id] renders a single native <select> for filtering displayed
+// words by learning status. The option labels mirror filterOptions in the page.
+When("I filter by the {string} status", async ({ page }, label: string) => {
+  await page.locator("select").first().selectOption({ label });
+});

@@ -1,7 +1,7 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
 
-const { When, Then } = createBdd();
+const { Given, When, Then } = createBdd();
 
 // Chakra v3 wraps Switch.Root and Checkbox.Root in a real <label> tagged with
 // data-scope/data-part. That gives us a stable hook even when the visible
@@ -28,6 +28,12 @@ When("I choose the {string} quiz mode", async ({ page }, mode: string) => {
 
 When("I include unstudied words", async ({ page }) => {
   await switchLabel(page, "Include unstudied words").click();
+});
+
+// Generic Chakra v3 Switch toggle for any labeled switch on /quiz (currently
+// used by "List words missing context" on Reverse mode).
+When("I enable {string}", async ({ page }, label: string) => {
+  await switchLabel(page, label).click();
 });
 
 // Clicking the Chakra v3 Checkbox.Root <label> toggles the hidden input. We
@@ -86,6 +92,51 @@ When("I submit my answer", async ({ page }) => {
     .getByRole("button", { name: /^(submit|check answer)$/i })
     .first()
     .click();
+});
+
+// AnswerInput renders a secondary "Don't Know" button next to Submit when its
+// onSkip handler is wired (Standard, Reverse, Etymology Standard/Reverse).
+When("I skip the card", async ({ page }) => {
+  await page.getByRole("button", { name: /^don'?t know$/i }).first().click();
+});
+
+// Fail the next BatchSubmitAnswers RPC exactly once so the Standard quiz
+// surfaces its "Retry grading" button. Subsequent calls go through as normal,
+// letting the test resume after the retry.
+Given(
+  "the next answer submission will fail once",
+  async ({ page }) => {
+    let failed = false;
+    await page.route(/BatchSubmitAnswers/, async (route) => {
+      if (!failed) {
+        failed = true;
+        await route.abort("failed");
+        return;
+      }
+      await route.continue();
+    });
+  },
+);
+
+When("I retry grading", async ({ page }) => {
+  await page.getByRole("button", { name: /^retry grading$/i }).first().click();
+});
+
+// QuizResultCard renders "Mark as Correct"/"Mark as Incorrect" depending on
+// the card's current state. The standard quiz's mock grader marks every
+// non-empty answer correct, so the first such button is always "Mark as
+// Incorrect" right after submitting valid answers.
+When("I override the first answer", async ({ page }) => {
+  await page
+    .getByRole("button", { name: /^Mark as (Correct|Incorrect)$/ })
+    .first()
+    .click();
+});
+
+// QuizResultCard renders an "Exclude" outline button next to the override
+// toggle. Clicking it marks the result as skipped on the summary view.
+When("I exclude the first answer", async ({ page }) => {
+  await page.getByRole("button", { name: /^exclude$/i }).first().click();
 });
 
 // Between non-final cards the quiz pages auto-advance — there's no button to

@@ -23,3 +23,12 @@ Feature: Browse a vocabulary notebook
     Then I should be on the Learn content page
     And I see the heading "Short Tales"
     And I see the example "Talking about the rain is one way to"
+
+  # Both fixture cards have a "misunderstood" learned_log entry, so filtering
+  # by Misunderstood should keep both visible after opening the story.
+  Scenario: Filter Idioms words by Misunderstood learning status
+    Given I am on the "Idioms" notebook detail page
+    When I open the "Common Idioms" story
+    And I filter by the "Misunderstood" status
+    Then I see the word "break the ice"
+    And I see the word "lose one's temper"

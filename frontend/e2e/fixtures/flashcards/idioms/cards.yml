@@ -9,8 +9,8 @@
         - "She told a joke to break the ice."
       synonyms:
         - "start a conversation"
+    # No examples so the "List words missing context" Reverse-mode toggle has
+    # exactly one card to surface.
     - expression: "lose one's temper"
       meaning: "to become angry"
       part_of_speech: "phrase"
-      examples:
-        - "He lost his temper when he heard the news."
