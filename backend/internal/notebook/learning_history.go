@@ -560,15 +560,26 @@ func (exp LearningHistoryExpression) HasEtymologyFreeformAnswer() bool {
 }
 
 // HasCorrectEtymologyAnswer returns true if the expression has at least one
-// correct answer recorded in EtymologyBreakdownLogs. Origins must have been
-// answered correctly at least once (in any etymology mode) before becoming
-// eligible for etymology standard or reverse quizzes — otherwise the user
-// would be drilled on origins they have never actually understood.
+// correct answer recorded in either etymology log slot. Origins must have
+// been answered correctly at least once (in any etymology mode) before
+// becoming eligible for etymology standard or reverse quizzes — otherwise
+// the user would be drilled on origins they have never actually
+// understood. Checks both breakdown (etymology_standard /
+// etymology_freeform) and assembly (etymology_reverse) so a correct
+// reverse answer also lifts the eligibility gate.
 func (exp LearningHistoryExpression) HasCorrectEtymologyAnswer() bool {
+	isCorrect := func(s LearnedStatus) bool {
+		return s == LearnedStatusUnderstood ||
+			s == LearnedStatusCanBeUsed ||
+			s == learnedStatusIntuitivelyUsed
+	}
 	for _, log := range exp.EtymologyBreakdownLogs {
-		if log.Status == LearnedStatusUnderstood ||
-			log.Status == LearnedStatusCanBeUsed ||
-			log.Status == learnedStatusIntuitivelyUsed {
+		if isCorrect(log.Status) {
+			return true
+		}
+	}
+	for _, log := range exp.EtymologyAssemblyLogs {
+		if isCorrect(log.Status) {
 			return true
 		}
 	}

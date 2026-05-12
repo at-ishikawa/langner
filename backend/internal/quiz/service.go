@@ -111,8 +111,11 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", id, err)
 		}
 
+		// Summary counts use includeNoCorrectAnswers=false so the "due"
+		// number on the quiz start page matches what a standard quiz
+		// (without "Include unstudied") will actually load.
 		filtered, err := notebook.FilterFlashcardNotebooks(
-			notebooks, learningHistories[id], s.dictionaryMap, false, notebook.QuizTypeNotebook,
+			notebooks, learningHistories[id], s.dictionaryMap, false, false, notebook.QuizTypeNotebook,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
@@ -257,9 +260,13 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, section
 		sectionFilter := sectionTitlesByID[notebookID]
 
 		if !isStory && !isFlashcard {
-			// Try definitions-only book as fallback
-			defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap, sectionFilter)
-			if len(defCards) > 0 {
+			// Try definitions-only book as fallback. The notebook exists
+			// if it's in the definitions index even when no cards are
+			// currently due — return empty rather than NotFound so the
+			// "Include unstudied" toggle controls visibility instead of
+			// the very existence of the notebook.
+			if _, ok := reader.GetDefinitionsNotes(notebookID); ok {
+				defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap, sectionFilter)
 				cards = append(cards, defCards...)
 				continue
 			}
@@ -395,7 +402,7 @@ func (s *Service) loadFlashcardCards(
 	}
 
 	filtered, err := notebook.FilterFlashcardNotebooks(
-		notebooks, learningHistories[notebookID], s.dictionaryMap, false, notebook.QuizTypeNotebook,
+		notebooks, learningHistories[notebookID], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
@@ -1763,6 +1770,11 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 }
 
 // needsDefinitionReview checks if a definition note needs forward quiz review.
+// Mirrors needsReverseReview's eligibility gate: a word must have been
+// freeform-answered first AND have at least one correct answer before it
+// appears in standard quiz. Without the has-correct-answer gate, a word
+// the user only freeform-failed would still be served by the standard
+// quiz even with "Include unstudied" off.
 func needsDefinitionReview(
 	histories []notebook.LearningHistory,
 	storyTitle, sceneTitle string,
@@ -1780,8 +1792,10 @@ func needsDefinitionReview(
 				if expr.Expression != note.Expression && expr.Expression != note.Definition {
 					continue
 				}
-				// Words must be answered in freeform first.
-				if !expr.HasFreeformAnswer() {
+				// Words must be answered in freeform first AND have at
+				// least one correct answer before becoming eligible for
+				// standard quiz.
+				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
 					return false
 				}
 				return expr.NeedsForwardReview()

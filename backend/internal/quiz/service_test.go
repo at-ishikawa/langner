@@ -145,7 +145,12 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	vocabSummary, ok := summaryMap["test-vocab"]
 	require.True(t, ok)
 	assert.Equal(t, "Test Vocabulary", vocabSummary.Name)
-	assert.Equal(t, 1, vocabSummary.ReviewCount)
+	// Flashcard fixture has serendipity with only a misunderstood
+	// freeform log → no correct answer → ReviewCount=0. Previously
+	// FilterFlashcardNotebooks lacked the has-correct gate and this
+	// asserted 1 (the bug the user reported); the fix aligns flashcards
+	// with story notebooks.
+	assert.Equal(t, 0, vocabSummary.ReviewCount)
 	assert.Equal(t, 0, vocabSummary.ReverseReviewCount)
 }
 
@@ -250,7 +255,10 @@ notebooks:
 	assert.Equal(t, 1, storySummary.ReverseReviewCount, "only the word with a correct answer is eligible for reverse")
 
 	vocabSummary := summaryMap["my-vocab"]
-	assert.Equal(t, 2, vocabSummary.ReviewCount)
+	// Same gate applies to flashcards as stories: ephemeral has only a
+	// misunderstood log → not counted. Only serendipity (correct, usable)
+	// makes ReviewCount.
+	assert.Equal(t, 1, vocabSummary.ReviewCount)
 	assert.Equal(t, 1, vocabSummary.ReverseReviewCount, "only the word with a correct answer is eligible for reverse")
 }
 
@@ -312,6 +320,112 @@ func TestService_LoadCards_FlashcardNotebook(t *testing.T) {
 	assert.Empty(t, cards[0].SceneTitle)
 	require.Len(t, cards[0].Examples, 1)
 	assert.Equal(t, "It was pure serendipity that they met.", cards[0].Examples[0].Text)
+}
+
+// TestService_LoadCards_FlashcardNotebook_HidesFreeformWrongWhenNotIncludingUnstudied
+// pins the gate: a flashcard the user only ever freeform-failed (no
+// correct answer anywhere) must NOT appear in the standard quiz unless
+// the user enables "Include unstudied words". The previous filter
+// always served misunderstood words, contradicting the rule that
+// applies to story notebooks.
+func TestService_LoadCards_FlashcardNotebook_HidesFreeformWrongWhenNotIncludingUnstudied(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	flashcardsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	vocabDir := filepath.Join(flashcardsDir, "fail-vocab")
+	require.NoError(t, os.MkdirAll(vocabDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "index.yml"), []byte(`id: fail-vocab
+name: Fail Vocab
+notebooks:
+  - ./cards.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "cards.yml"), []byte(`- title: "Basic Words"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "serendipity"
+      meaning: "a fortunate discovery by accident"
+`), 0644))
+	// Freeform answered — but with status=misunderstood. No correct
+	// answer recorded anywhere.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "fail-vocab.yml"), []byte(`- metadata:
+    notebook_id: fail-vocab
+    title: "Basic Words"
+    type: "flashcard"
+  expressions:
+    - expression: "serendipity"
+      learned_logs:
+        - status: "misunderstood"
+          learned_at: "2025-01-14"
+          quiz_type: "freeform"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		FlashcardsDirectories:  []string{flashcardsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	// includeUnstudied=false: must NOT appear.
+	cards, err := svc.LoadCards([]string{"fail-vocab"}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "flashcard with only freeform-failed history must not appear when includeUnstudied=false")
+
+	// includeUnstudied=true: appears as expected.
+	cards, err = svc.LoadCards([]string{"fail-vocab"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	assert.Equal(t, "serendipity", cards[0].Entry)
+}
+
+// TestService_LoadCards_DefinitionsBook_HidesFreeformWrongWhenNotIncludingUnstudied
+// is the definitions-only counterpart of the flashcard test. The
+// previous needsDefinitionReview gate only checked HasFreeformAnswer;
+// a freeform-failed word would still leak into the standard quiz.
+func TestService_LoadCards_DefinitionsBook_HidesFreeformWrongWhenNotIncludingUnstudied(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "fail-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: fail-defs
+notebooks:
+  - ./session1.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "fail-defs.yml"), []byte(`- metadata:
+    notebook_id: fail-defs
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"fail-defs"}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "definitions-only word with only freeform-failed history must not appear when includeUnstudied=false")
 }
 
 func TestService_LoadCards_MultipleNotebooks(t *testing.T) {

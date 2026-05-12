@@ -41,7 +41,10 @@ func (writer FlashcardNotebookWriter) OutputFlashcardNotebooks(
 	}
 	learningHistory := learningHistories[flashcardID]
 
-	notebooks, err = FilterFlashcardNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, QuizTypeNotebook)
+	// Export paths include every card regardless of whether it has a
+	// correct answer yet — the export is for offline review, not quiz
+	// generation. Pass includeNoCorrectAnswers=true.
+	notebooks, err = FilterFlashcardNotebooks(notebooks, learningHistory, dictionaryMap, sortDesc, true, QuizTypeNotebook)
 	if err != nil {
 		return fmt.Errorf("FilterFlashcardNotebooks() > %w", err)
 	}

@@ -321,7 +321,13 @@ func TestNewFlashcardQuizCLI(t *testing.T) {
 		wantErr           bool
 	}{
 		{
-			name: "loads flashcard with learning history - misunderstood word included",
+			// The fixture's only card has a misunderstood-freeform log
+			// and no correct answer. The web app and CLI now share the
+			// same has-correct gate on flashcards: such a card stays out
+			// of the standard quiz unless the user opts to include
+			// unstudied/never-correct words. Previously this asserted 1
+			// (the bug the user reported).
+			name: "skips flashcard with only misunderstood logs (no correct answer)",
 			setupFunc: func(t *testing.T) (string, string) {
 				flashcardsDir := t.TempDir()
 				learningNotesDir := t.TempDir()
@@ -329,7 +335,7 @@ func TestNewFlashcardQuizCLI(t *testing.T) {
 				return flashcardsDir, learningNotesDir
 			},
 			notebookName:      "test-flashcard",
-			expectedCardCount: 1,
+			expectedCardCount: 0,
 		},
 		{
 			name: "no learning history returns error",
