@@ -30,6 +30,18 @@ When("I include unstudied words", async ({ page }) => {
   await switchLabel(page, "Include unstudied words").click();
 });
 
+// The "Questions per feedback screen" number input is the only number-typed
+// input on the quiz hub. Setting it to 1 makes every submitted answer trigger
+// a BatchFeedback (batch boundary fires on every card) — useful for tests
+// that need a flushBatch call on the very first submission.
+When(
+  "I set the feedback interval to {int}",
+  async ({ page }, value: number) => {
+    const input = page.getByPlaceholder("10").first();
+    await input.fill(String(value));
+  },
+);
+
 // Generic Chakra v3 Switch toggle for any labeled switch on /quiz (currently
 // used by "List words missing context" on Reverse mode).
 When("I enable {string}", async ({ page }, label: string) => {
@@ -112,15 +124,11 @@ Given(
   async ({ page }) => {
     let failed = false;
     await page.route("**/BatchSubmitAnswers", async (route) => {
-      const url = route.request().url();
-      // eslint-disable-next-line no-console
-      console.log(`[e2e route] BatchSubmitAnswers hit failed=${failed} url=${url}`);
       if (!failed) {
         failed = true;
         await route.fulfill({
           status: 500,
           contentType: "application/json",
-          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             code: "internal",
             message: "Mock transient failure",
@@ -129,17 +137,6 @@ Given(
         return;
       }
       await route.continue();
-    });
-    page.on("console", (msg) => {
-      const text = msg.text();
-      if (text.includes("Failed to submit") || text.includes("batchSubmit") || msg.type() === "error") {
-        // eslint-disable-next-line no-console
-        console.log(`[browser] ${msg.type()}: ${text}`);
-      }
-    });
-    page.on("requestfailed", (req) => {
-      // eslint-disable-next-line no-console
-      console.log(`[requestfailed] ${req.method()} ${req.url()} ${req.failure()?.errorText}`);
     });
   },
 );

@@ -79,23 +79,22 @@ Feature: Standard vocabulary quiz
     And I follow the "Back to Start" button
     Then I should be on the Quiz page
 
-  # page.route intercepts the first BatchSubmitAnswers RPC and aborts it, so
+  # page.route intercepts the first BatchSubmitAnswers RPC and 500s it, so
   # the standard quiz page surfaces its "Retry grading" outline button.
   # Clicking retry replays the batch successfully (route lets the second call
-  # through).
+  # through). feedbackInterval=1 makes flushBatch fire on the very first
+  # submission so the test doesn't depend on how many cards the notebook
+  # currently has — accumulated state from earlier scenarios changes that.
   Scenario: Retry grading after a transient failure
     Given I am on the Quiz page
     When I choose the "Standard" quiz mode
     And I include unstudied words
     And I select the "Idioms" notebook
+    And I set the feedback interval to 1
     And the next answer submission will fail once
     And I start the quiz
 
-    When I type the answer "a way to start a conversation"
-    And I submit my answer
-    And I continue to the next card
-    When I type the answer "to become angry"
+    When I type the answer "an answer to grade"
     And I submit my answer
     And I retry grading
-    And I continue to the next card
-    Then I should be on the Quiz Complete page
+    Then I see the heading "Feedback"
