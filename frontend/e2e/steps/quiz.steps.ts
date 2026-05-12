@@ -111,7 +111,13 @@ Given(
   "the next answer submission will fail once",
   async ({ page }) => {
     let failed = false;
-    await page.route(/BatchSubmitAnswers/, async (route) => {
+    // Route on **/BatchSubmitAnswers as a glob so the matcher uses the same
+    // logic as page.waitForRequest. Regex matching was silently missing the
+    // request, leaving the route handler un-invoked.
+    await page.route("**/BatchSubmitAnswers", async (route) => {
+      const url = route.request().url();
+      // eslint-disable-next-line no-console
+      console.log(`[e2e route] BatchSubmitAnswers hit, failed=${failed}, url=${url}`);
       if (!failed) {
         failed = true;
         await route.fulfill({
