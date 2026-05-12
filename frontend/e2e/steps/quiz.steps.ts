@@ -103,6 +103,10 @@ When("I skip the card", async ({ page }) => {
 // Fail the next BatchSubmitAnswers RPC exactly once so the Standard quiz
 // surfaces its "Retry grading" button. Subsequent calls go through as normal,
 // letting the test resume after the retry.
+//
+// route.fulfill with a 500 response is more reliable than route.abort —
+// connect-rpc-web converts HTTP errors into client errors that the page's
+// `try/catch` around `quizClient.batchSubmitAnswers` actually surfaces.
 Given(
   "the next answer submission will fail once",
   async ({ page }) => {
@@ -110,7 +114,14 @@ Given(
     await page.route(/BatchSubmitAnswers/, async (route) => {
       if (!failed) {
         failed = true;
-        await route.abort("failed");
+        await route.fulfill({
+          status: 500,
+          contentType: "application/json",
+          body: JSON.stringify({
+            code: "internal",
+            message: "Mock transient failure",
+          }),
+        });
         return;
       }
       await route.continue();
