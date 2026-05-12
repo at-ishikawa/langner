@@ -95,6 +95,10 @@ export interface FreeformResult {
   wordDetail?: WordDetail;
   nextReviewDate?: string;
   learnedAt?: string;
+  // noteId is required for per-result override/undo/skip on the
+  // complete page and on the batch feedback that freeform now uses.
+  // The freeform RPC returns it when the typed word matches a card.
+  noteId?: bigint;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;

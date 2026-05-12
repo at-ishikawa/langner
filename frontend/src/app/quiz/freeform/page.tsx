@@ -12,10 +12,11 @@ import {
   Textarea,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient, QuizType as ProtoQuizType } from "@/lib/client";
-import { useQuizStore, type WordDetail } from "@/store/quizStore";
-import { FeedbackActions } from "@/components/FeedbackActions";
-import { WordDetailView } from "@/components/WordDetailView";
+import { quizClient } from "@/lib/client";
+import { useQuizStore } from "@/store/quizStore";
+import { BatchFeedback } from "@/components/BatchFeedback";
+import { freeformResultToItem } from "@/lib/quizResultItems";
+import { useQuizResultActions } from "@/lib/useQuizResultActions";
 
 export default function FreeformQuizPage() {
   const router = useRouter();
@@ -23,40 +24,24 @@ export default function FreeformQuizPage() {
   const wordCount = useQuizStore((s) => s.wordCount);
   const storeSubmitResult = useQuizStore((s) => s.submitFreeformResult);
   const freeformResults = useQuizStore((s) => s.freeformResults);
-  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
-  const storeUndoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
-  const storeSkipResult = useQuizStore((s) => s.skipResult);
   const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
   const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
   const recordFreeformAnswered = useQuizStore((s) => s.recordFreeformAnswered);
   const reset = useQuizStore((s) => s.reset);
 
+  const { handleOverride, handleUndo, handleSkip, handleResume } =
+    useQuizResultActions("freeform");
+
   const [word, setWord] = useState("");
   const [meaning, setMeaning] = useState("");
   const [loading, setLoading] = useState(false);
-  const [feedback, setFeedback] = useState<{
-    correct: boolean;
-    word: string;
-    meaning: string;
-    reason: string;
-    notebookName: string;
-    context?: string;
-    pronunciation?: string;
-    partOfSpeech?: string;
-    learnedAt?: string;
-    noteId?: bigint;
-    images?: string[];
-    wordDetail?: WordDetail;
-  } | null>(null);
+  // showFeedback flips true after a successful submit and false after
+  // the user clicks Continue. We read the actual result from
+  // freeformResults[last] so per-result override/undo/skip from
+  // useQuizResultActions stays the single source of truth — same shape
+  // the complete page uses.
+  const [showFeedback, setShowFeedback] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [overridden, setOverridden] = useState(false);
-  const [skipped, setSkipped] = useState(false);
-  const [displayCorrect, setDisplayCorrect] = useState(false);
-  const [overrideOriginals, setOverrideOriginals] = useState<{
-    quality: number;
-    status: string;
-    intervalDays: number;
-  } | null>(null);
   const startTimeRef = useRef(Date.now());
   const wordInputRef = useRef<HTMLInputElement>(null);
 
@@ -84,7 +69,7 @@ export default function FreeformQuizPage() {
 
     const responseTimeMs = Date.now() - startTimeRef.current;
     setLoading(true);
-    setFeedback(null);
+    setShowFeedback(false);
     setError(null);
 
     try {
@@ -94,21 +79,6 @@ export default function FreeformQuizPage() {
         responseTimeMs: BigInt(responseTimeMs),
       });
 
-      setFeedback({
-        correct: res.correct,
-        word: res.word,
-        meaning: res.meaning,
-        reason: res.reason,
-        notebookName: res.notebookName,
-        context: res.context,
-        pronunciation: res.wordDetail?.pronunciation?.trim() || undefined,
-        partOfSpeech: res.wordDetail?.partOfSpeech?.trim() || undefined,
-        learnedAt: res.learnedAt || undefined,
-        noteId: res.noteId || undefined,
-        images: (res.images ?? []).length > 0 ? res.images : undefined,
-        wordDetail: res.wordDetail,
-      });
-      setDisplayCorrect(res.correct);
       storeSubmitResult({
         word: res.word,
         answer: meaning.trim(),
@@ -119,8 +89,10 @@ export default function FreeformQuizPage() {
         contexts: res.context ? [res.context] : [],
         wordDetail: res.wordDetail,
         learnedAt: res.learnedAt || undefined,
+        noteId: res.noteId || undefined,
         images: (res.images ?? []).length > 0 ? res.images : undefined,
       });
+      setShowFeedback(true);
       // Mark this word as answered for the current session so the user
       // cannot re-submit the same word until its next review date.
       recordFreeformAnswered(word.trim(), res.nextReviewDate);
@@ -134,14 +106,23 @@ export default function FreeformQuizPage() {
   const handleNext = () => {
     setWord("");
     setMeaning("");
-    setFeedback(null);
+    setShowFeedback(false);
     setError(null);
-    setOverridden(false);
-    setSkipped(false);
-    setOverrideOriginals(null);
     startTimeRef.current = Date.now();
     wordInputRef.current?.focus();
   };
+
+  // Latest result rendered as a one-element batch. Mirrors how
+  // standard/reverse quizzes feed BatchFeedback so per-result actions
+  // (override/undo/skip/resume) live in one component across all modes.
+  const latestIndex = freeformResults.length - 1;
+  const batchItems = useMemo(
+    () =>
+      showFeedback && latestIndex >= 0
+        ? [freeformResultToItem(freeformResults[latestIndex], latestIndex)]
+        : [],
+    [showFeedback, freeformResults, latestIndex],
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && e.shiftKey) {
@@ -179,124 +160,19 @@ export default function FreeformQuizPage() {
             Retry
           </Button>
         </VStack>
-      ) : feedback ? (
+      ) : showFeedback && batchItems.length > 0 ? (
         <VStack align="stretch" gap={4}>
-          <FeedbackActions
-            isCorrect={displayCorrect}
-            noteId={feedback.noteId}
-            isOverridden={overridden}
-            isSkipped={skipped}
-            nextLabel="Next Word"
-            onNext={handleNext}
-            onOverride={async () => {
-              if (!feedback.noteId || !feedback.learnedAt) return;
-              try {
-                const res = await quizClient.overrideAnswer({
-                  noteId: feedback.noteId,
-                  quizType: ProtoQuizType.FREEFORM,
-                  learnedAt: feedback.learnedAt,
-                  markCorrect: !displayCorrect,
-                });
-                setOverridden(true);
-                setDisplayCorrect(!displayCorrect);
-                setOverrideOriginals({
-                  quality: res.originalQuality,
-                  status: res.originalStatus,
-                  intervalDays: res.originalIntervalDays,
-                });
-                storeOverrideResult(freeformResults.length - 1, "freeform", res.nextReviewDate || "", {
-                  quality: res.originalQuality,
-                  status: res.originalStatus,
-                  intervalDays: res.originalIntervalDays,
-                });
-              } catch { /* silently fail */ }
-            }}
-            onUndo={async () => {
-              if (!feedback.noteId || !feedback.learnedAt) return;
-              try {
-                const res = await quizClient.undoOverrideAnswer({
-                  noteId: feedback.noteId,
-                  quizType: ProtoQuizType.FREEFORM,
-                  learnedAt: feedback.learnedAt,
-                  originalQuality: overrideOriginals?.quality ?? 0,
-                  originalStatus: overrideOriginals?.status ?? "",
-                  originalIntervalDays: overrideOriginals?.intervalDays ?? 0,
-                });
-                setOverridden(false);
-                setOverrideOriginals(null);
-                setDisplayCorrect(res.correct);
-                storeUndoOverrideResult(freeformResults.length - 1, "freeform", res.correct, res.nextReviewDate || "");
-              } catch {
-                setOverridden(false);
-                setOverrideOriginals(null);
-                setDisplayCorrect(feedback.correct);
-                storeUndoOverrideResult(freeformResults.length - 1, "freeform", feedback.correct, "");
-              }
-            }}
-            onSkip={async () => {
-              if (!feedback.noteId) return;
-              try {
-                await quizClient.skipWord({
-                  noteId: feedback.noteId,
-                  quizTypes: [ProtoQuizType.FREEFORM],
-                });
-                setSkipped(true);
-                storeSkipResult(freeformResults.length - 1, "freeform");
-              } catch { /* silently fail */ }
-            }}
-            onSeeResults={freeformResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
-          >
-            <Box>
-              <Text fontWeight="bold">Word</Text>
-              <Text fontSize="xl">
-                {feedback.word}
-                {(feedback.pronunciation || feedback.partOfSpeech) && (
-                  <Text as="span" fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                    {" "}
-                    {[
-                      feedback.pronunciation && `/${feedback.pronunciation}/`,
-                      feedback.partOfSpeech,
-                    ].filter(Boolean).join(" · ")}
-                  </Text>
-                )}
-              </Text>
-            </Box>
-
-            <Box>
-              <Text fontWeight="bold">Expected meaning</Text>
-              <Text fontStyle="italic">{feedback.meaning}</Text>
-            </Box>
-
-            {feedback.reason && (
-              <Box>
-                <Text fontWeight="bold">Reason</Text>
-                <Text>{feedback.reason}</Text>
-              </Box>
-            )}
-
-            {feedback.notebookName && (
-              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                Found in: {feedback.notebookName}
-              </Text>
-            )}
-
-            {feedback.context && (
-              <Box>
-                <Text fontWeight="bold">Context</Text>
-                <Text fontStyle="italic">{feedback.context}</Text>
-              </Box>
-            )}
-
-            {feedback.images && feedback.images.length > 0 && (
-              <Box display="flex" gap={2} flexWrap="wrap">
-                {feedback.images.map((src, i) => (
-                  <img key={i} src={src} alt="" style={{ maxHeight: "150px", borderRadius: "4px" }} />
-                ))}
-              </Box>
-            )}
-
-            <WordDetailView wordDetail={feedback.wordDetail} />
-          </FeedbackActions>
+          <BatchFeedback
+            items={batchItems}
+            isEtymology={false}
+            isFinal={false}
+            onContinue={handleNext}
+            onSeeResults={() => router.push("/quiz/complete")}
+            onOverride={handleOverride}
+            onUndo={handleUndo}
+            onSkip={handleSkip}
+            onResume={handleResume}
+          />
 
           <Button
             variant="ghost"

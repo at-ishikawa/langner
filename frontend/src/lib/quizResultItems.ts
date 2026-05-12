@@ -65,11 +65,12 @@ export function reverseResultToItem(r: ReverseQuizResult, index: number): Result
 export function freeformResultToItem(r: FreeformResult, index: number): ResultItem {
   return {
     index,
-    key: `freeform-${index}`,
+    key: r.noteId ? `freeform-${r.noteId.toString()}-${index}` : `freeform-${index}`,
     entry: r.word,
     meaning: r.meaning,
     correct: r.correct,
     contexts: r.contexts,
+    noteId: r.noteId,
     learnedAt: r.learnedAt,
     isOverridden: r.isOverridden,
     isSkipped: r.isSkipped,
