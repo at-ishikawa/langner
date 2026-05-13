@@ -88,8 +88,11 @@ Tick the box when at least one scenario hits the interaction.
 ### `/notebooks/etymology/[id]/mindmap`
 
 - [x] See the focused origin's ReactFlow node ("graph")
-- [ ] Pan / zoom interactions — _not asserted: testing ReactFlow's internal
-      viewport math is library coverage, not app coverage. Skip._
+
+> **Out of scope:** pan / zoom is handled internally by ReactFlow. Driving
+> wheel/drag events from Playwright and asserting that the viewport math
+> changed would be testing the third-party library, not our app, so it is
+> not part of this matrix.
 
 ### `/quiz` (quiz hub)
 
