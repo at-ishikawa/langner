@@ -16,25 +16,48 @@ func NewClient() *Client {
 	return &Client{}
 }
 
+// isWrongAnswer returns true for sentinel answers a test scenario can use to
+// force the mock grader to mark a card incorrect. Any answer starting with
+// "wrong" (case-insensitive), the literal "I don't know", or empty input is
+// treated as incorrect. Every other non-empty answer is marked correct so
+// happy-path tests don't need to know the expected meaning in advance.
+func isWrongAnswer(userAnswer string) bool {
+	trimmed := strings.ToLower(strings.TrimSpace(userAnswer))
+	if trimmed == "" || trimmed == "i don't know" {
+		return true
+	}
+	return strings.HasPrefix(trimmed, "wrong")
+}
+
+func gradeResult(userAnswer string) (correct bool, reason string) {
+	if isWrongAnswer(userAnswer) {
+		return false, "mock grader: answer matches the wrong-answer sentinel"
+	}
+	return true, "mock grader: marked correct because the answer was non-empty"
+}
+
 func (c *Client) AnswerMeanings(_ context.Context, params inference.AnswerMeaningsRequest) (inference.AnswerMeaningsResponse, error) {
 	answers := make([]inference.AnswerMeaning, 0, len(params.Expressions))
 	for _, expr := range params.Expressions {
-		userAnswer := strings.ToLower(strings.TrimSpace(expr.Meaning))
+		correct, reason := gradeResult(expr.Meaning)
+		quality := 3
+		if !correct {
+			quality = 1
+		}
 		contexts := make([]inference.AnswersForContext, 0, len(expr.Contexts))
 		for _, ctx := range expr.Contexts {
-			correct := userAnswer != "" && userAnswer != "i don't know"
 			contexts = append(contexts, inference.AnswersForContext{
 				Correct: correct,
 				Context: ctx.Context,
-				Reason:  "mock grader: marked correct because the answer was non-empty",
-				Quality: 3,
+				Reason:  reason,
+				Quality: quality,
 			})
 		}
 		if len(contexts) == 0 {
 			contexts = append(contexts, inference.AnswersForContext{
-				Correct: userAnswer != "" && userAnswer != "i don't know",
-				Reason:  "mock grader: marked correct because the answer was non-empty",
-				Quality: 3,
+				Correct: correct,
+				Reason:  reason,
+				Quality: quality,
 			})
 		}
 		answers = append(answers, inference.AnswerMeaning{

@@ -23,6 +23,7 @@ type Service struct {
 	dictionaryMap      map[string]rapidapi.Response
 	learningRepository learning.LearningRepository
 	calculator         notebook.IntervalCalculator
+	disableShuffle     bool
 }
 
 // NewService creates a new Service.
@@ -34,6 +35,7 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 		dictionaryMap:      dictionaryMap,
 		learningRepository: learningRepo,
 		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
+		disableShuffle:     quizCfg.DisableShuffle,
 	}
 }
 
@@ -274,9 +276,11 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 	}
 
 	cards = deduplicateCards(cards)
-	rand.Shuffle(len(cards), func(i, j int) {
-		cards[i], cards[j] = cards[j], cards[i]
-	})
+	if !s.disableShuffle {
+		rand.Shuffle(len(cards), func(i, j int) {
+			cards[i], cards[j] = cards[j], cards[i]
+		})
+	}
 	return cards, nil
 }
 
@@ -698,9 +702,11 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 	}
 
 	cards = deduplicateReverseCards(cards)
-	rand.Shuffle(len(cards), func(i, j int) {
-		cards[i], cards[j] = cards[j], cards[i]
-	})
+	if !s.disableShuffle {
+		rand.Shuffle(len(cards), func(i, j int) {
+			cards[i], cards[j] = cards[j], cards[i]
+		})
+	}
 	applyForwardMask(cards)
 	return cards, nil
 }

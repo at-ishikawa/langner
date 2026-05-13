@@ -36,6 +36,10 @@ type Config struct {
 type QuizConfig struct {
 	Algorithm      string `mapstructure:"algorithm"`
 	FixedIntervals []int  `mapstructure:"fixed_intervals"`
+	// DisableShuffle preserves the source order of cards/origins instead of
+	// shuffling them. e2e tests rely on this so scenarios can assert which
+	// card appears first.
+	DisableShuffle bool `mapstructure:"disable_shuffle"`
 }
 
 type DatabaseConfig struct {

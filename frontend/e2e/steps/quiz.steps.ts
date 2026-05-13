@@ -226,3 +226,24 @@ Then(
     ).toBeVisible();
   },
 );
+
+// The Quiz Complete summary renders the count next to a fixed "Correct:" /
+// "Incorrect:" label. BatchFeedback uses identical labels mid-quiz, so the
+// regex is anchored to the exact label.
+Then(
+  "the summary shows {int} correct {word}",
+  async ({ page }, count: number) => {
+    await expect(
+      page.getByText(new RegExp(`Correct:\\s*${count}\\b`)),
+    ).toBeVisible();
+  },
+);
+
+Then(
+  "the summary shows {int} incorrect {word}",
+  async ({ page }, count: number) => {
+    await expect(
+      page.getByText(new RegExp(`Incorrect:\\s*${count}\\b`)),
+    ).toBeVisible();
+  },
+);

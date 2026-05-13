@@ -134,9 +134,11 @@ func (s *Service) LoadEtymologyOriginCards(
 		}
 	}
 
-	rand.Shuffle(len(cards), func(i, j int) {
-		cards[i], cards[j] = cards[j], cards[i]
-	})
+	if !s.disableShuffle {
+		rand.Shuffle(len(cards), func(i, j int) {
+			cards[i], cards[j] = cards[j], cards[i]
+		})
+	}
 	return cards, nil
 }
 

@@ -15,6 +15,10 @@ database:
 inference:
   mode: mock
 
+quiz:
+  # Preserve fixture order so e2e scenarios can assert which card appears first.
+  disable_shuffle: true
+
 notebooks:
   stories_directories:
     - frontend/e2e/fixtures/stories
