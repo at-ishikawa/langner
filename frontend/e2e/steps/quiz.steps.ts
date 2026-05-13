@@ -164,15 +164,16 @@ When("I exclude the first answer", async ({ page }) => {
 
 // Locates the result-card section containing the given entry text. Works
 // both for BatchFeedback (multiple QuizResultCards) and FeedbackActions
-// (single per-answer feedback in the freeform quiz pages). The XPath walks
-// up from the entry's <p> to the nearest <div> ancestor that also holds an
-// action button — that's the card container.
+// (single per-answer feedback in the freeform quiz pages). FeedbackActions
+// renders "Undo" as a clickable <span>, not a <button>, so the xpath looks
+// at any descendant element (button or span) whose text matches an action
+// label.
 function cardSection(page: Page, entry: string): Locator {
   return page
     .getByText(entry, { exact: true })
     .locator(
       "xpath=ancestor::div[" +
-        ".//button[" +
+        ".//*[" +
         "  normalize-space(.) = 'Exclude'" +
         "  or normalize-space(.) = 'Exclude from Quizzes'" +
         "  or normalize-space(.) = 'Resume'" +
