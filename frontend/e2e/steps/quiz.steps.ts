@@ -162,6 +162,66 @@ When("I exclude the first answer", async ({ page }) => {
   await page.getByRole("button", { name: /^exclude$/i }).first().click();
 });
 
+// Locates the result-card section containing the given entry text. Works
+// both for BatchFeedback (multiple QuizResultCards) and FeedbackActions
+// (single per-answer feedback in the freeform quiz pages). The XPath walks
+// up from the entry's <p> to the nearest <div> ancestor that also holds an
+// action button — that's the card container.
+function cardSection(page: Page, entry: string): Locator {
+  return page
+    .getByText(entry, { exact: true })
+    .locator(
+      "xpath=ancestor::div[" +
+        ".//button[" +
+        "  normalize-space(.) = 'Exclude'" +
+        "  or normalize-space(.) = 'Exclude from Quizzes'" +
+        "  or normalize-space(.) = 'Resume'" +
+        "  or starts-with(normalize-space(.), 'Mark as')" +
+        "  or starts-with(normalize-space(.), 'Undo')" +
+        "]" +
+        "][1]",
+    );
+}
+
+When(
+  "I mark {string} as correct",
+  async ({ page }, entry: string) => {
+    await cardSection(page, entry)
+      .getByRole("button", { name: /^Mark as Correct$/ })
+      .click();
+  },
+);
+
+When(
+  "I mark {string} as incorrect",
+  async ({ page }, entry: string) => {
+    await cardSection(page, entry)
+      .getByRole("button", { name: /^Mark as Incorrect$/ })
+      .click();
+  },
+);
+
+// QuizResultCard uses "Undo override"; FeedbackActions (freeform variants)
+// uses just "Undo" — match either.
+When(
+  "I undo the override for {string}",
+  async ({ page }, entry: string) => {
+    await cardSection(page, entry)
+      .getByRole("button", { name: /^Undo( override)?$/ })
+      .click();
+  },
+);
+
+// QuizResultCard uses "Exclude"; FeedbackActions uses "Exclude from Quizzes".
+When(
+  "I exclude {string}",
+  async ({ page }, entry: string) => {
+    await cardSection(page, entry)
+      .getByRole("button", { name: /^Exclude( from Quizzes)?$/ })
+      .click();
+  },
+);
+
 // Between non-final cards the quiz pages auto-advance — there's no button to
 // click. At a batch boundary or the final card, BatchFeedback shows a
 // "Continue" or "See Results" button after async grading finishes. Wait for
