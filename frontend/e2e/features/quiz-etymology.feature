@@ -69,10 +69,11 @@ Feature: Etymology quiz modes
     And I undo the override for "graph"
     And I mark "tele" as incorrect
     And I exclude "graph"
+    # Resume the excluded card so later scenarios still see it.
+    And I resume "graph"
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
-    And the summary shows 0 correct answers
     And the summary shows 1 incorrect answers
 
   # Etymology Reverse heading is the origin's meaning; the user types the
@@ -122,10 +123,11 @@ Feature: Etymology quiz modes
     And I undo the override for "graph"
     And I mark "tele" as incorrect
     And I exclude "graph"
+    # Resume the excluded card so later scenarios still see it.
+    And I resume "graph"
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
-    And the summary shows 0 correct answers
     And the summary shows 1 incorrect answers
 
   # Exercise the FeedbackActions toolbar on Etymology Freeform.

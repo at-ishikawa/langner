@@ -201,13 +201,14 @@ When(
   },
 );
 
-// QuizResultCard uses "Undo override"; FeedbackActions (freeform variants)
-// uses just "Undo" — match either.
+// QuizResultCard uses "Undo override" as a <button>; FeedbackActions uses
+// just "Undo" rendered as a clickable <span>. getByText matches both.
 When(
   "I undo the override for {string}",
   async ({ page }, entry: string) => {
     await cardSection(page, entry)
-      .getByRole("button", { name: /^Undo( override)?$/ })
+      .getByText(/^Undo( override)?$/)
+      .first()
       .click();
   },
 );
@@ -221,6 +222,22 @@ When(
       .click();
   },
 );
+
+// QuizResultCard renders a "Resume" button once a card is marked skipped.
+// Used to clean up state at the end of scenarios that Exclude so later
+// scenarios still see the card.
+When(
+  "I resume {string}",
+  async ({ page }, entry: string) => {
+    await cardSection(page, entry)
+      .getByRole("button", { name: /^Resume$/ })
+      .click();
+  },
+);
+
+When("I resume the first answer", async ({ page }) => {
+  await page.getByRole("button", { name: /^resume$/i }).first().click();
+});
 
 // Between non-final cards the quiz pages auto-advance — there's no button to
 // click. At a batch boundary or the final card, BatchFeedback shows a

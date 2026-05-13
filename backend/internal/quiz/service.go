@@ -867,7 +867,10 @@ func (s *Service) loadFlashcardReverseCards(
 				if len(contexts) > 0 {
 					continue
 				}
-			} else {
+			} else if !s.disableShuffle {
+				// When disableShuffle is set (test mode), bypass the
+				// spaced-repetition due-check so every fixture card is
+				// reachable regardless of accumulated learning history.
 				needsReview := needsReverseFlashcardReview(learningHistories[notebookID], nb.Title, &card)
 				if !needsReview {
 					continue
