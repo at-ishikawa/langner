@@ -12,6 +12,9 @@ export default function EtymologyFreeformQuizPage() {
   const quizType = useQuizStore((s) => s.quizType);
   const etymologyOriginResults = useQuizStore((s) => s.etymologyOriginResults);
   const storeSubmitResult = useQuizStore((s) => s.submitEtymologyOriginResult);
+  const storeOverrideResult = useQuizStore((s) => s.overrideResult);
+  const storeUndoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
+  const storeSkipResult = useQuizStore((s) => s.skipResult);
   const etymologyFreeformOrigins = useQuizStore((s) => s.etymologyFreeformOrigins);
   const etymologyFreeformNextReviewDates = useQuizStore((s) => s.etymologyFreeformNextReviewDates);
   const reset = useQuizStore((s) => s.reset);
@@ -113,15 +116,17 @@ export default function EtymologyFreeformQuizPage() {
                 const res = await quizClient.overrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_FREEFORM, learnedAt: feedback.learnedAt!, markCorrect: !displayCorrect });
                 setOverridden(true); setDisplayCorrect(!displayCorrect);
                 setOverrideOriginals({ quality: res.originalQuality, status: res.originalStatus, intervalDays: res.originalIntervalDays });
+                storeOverrideResult(etymologyOriginResults.length - 1, "etymology-freeform", res.nextReviewDate || "", { quality: res.originalQuality, status: res.originalStatus, intervalDays: res.originalIntervalDays });
               } catch {}
             } : undefined}
             onUndo={feedback.noteId ? async () => {
               try {
                 const res = await quizClient.undoOverrideAnswer({ noteId: feedback.noteId!, quizType: ProtoQuizType.ETYMOLOGY_FREEFORM, learnedAt: feedback.learnedAt!, originalQuality: overrideOriginals?.quality ?? 0, originalStatus: overrideOriginals?.status ?? "", originalIntervalDays: overrideOriginals?.intervalDays ?? 0 });
                 setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(res.correct);
-              } catch { setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(feedback.correct); }
+                storeUndoOverrideResult(etymologyOriginResults.length - 1, "etymology-freeform", res.correct, res.nextReviewDate || "");
+              } catch { setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(feedback.correct); storeUndoOverrideResult(etymologyOriginResults.length - 1, "etymology-freeform", feedback.correct, ""); }
             } : undefined}
-            onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId! }); setSkipped(true); } catch {} } : undefined}
+            onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId! }); setSkipped(true); storeSkipResult(etymologyOriginResults.length - 1, "etymology-freeform"); } catch {} } : undefined}
             onSeeResults={etymologyOriginResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
           >
             <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>

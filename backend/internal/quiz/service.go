@@ -1383,6 +1383,11 @@ func kindFromIndex(index notebook.Index) string {
 // GetFreeformNextReviewDates returns a map of lowercase expression -> next review date ("YYYY-MM-DD").
 // Only expressions that are NOT yet due are included; due or never-studied expressions are omitted.
 func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]string, error) {
+	// In test mode, never gate the freeform Submit button on a future review
+	// date — the test suite submits the same expression repeatedly across scenarios.
+	if s.disableShuffle {
+		return map[string]string{}, nil
+	}
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)

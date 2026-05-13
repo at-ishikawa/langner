@@ -24,6 +24,8 @@ export default function FreeformQuizPage() {
   const storeSubmitResult = useQuizStore((s) => s.submitFreeformResult);
   const freeformResults = useQuizStore((s) => s.freeformResults);
   const storeOverrideResult = useQuizStore((s) => s.overrideResult);
+  const storeUndoOverrideResult = useQuizStore((s) => s.undoOverrideResult);
+  const storeSkipResult = useQuizStore((s) => s.skipResult);
   const freeformExpressions = useQuizStore((s) => s.freeformExpressions);
   const freeformNextReviewDates = useQuizStore((s) => s.freeformNextReviewDates);
   const recordFreeformAnswered = useQuizStore((s) => s.recordFreeformAnswered);
@@ -223,10 +225,12 @@ export default function FreeformQuizPage() {
                 setOverridden(false);
                 setOverrideOriginals(null);
                 setDisplayCorrect(res.correct);
+                storeUndoOverrideResult(freeformResults.length - 1, "freeform", res.correct, res.nextReviewDate || "");
               } catch {
                 setOverridden(false);
                 setOverrideOriginals(null);
                 setDisplayCorrect(feedback.correct);
+                storeUndoOverrideResult(freeformResults.length - 1, "freeform", feedback.correct, "");
               }
             }}
             onSkip={async () => {
@@ -234,6 +238,7 @@ export default function FreeformQuizPage() {
               try {
                 await quizClient.skipWord({ noteId: feedback.noteId });
                 setSkipped(true);
+                storeSkipResult(freeformResults.length - 1, "freeform");
               } catch { /* silently fail */ }
             }}
             onSeeResults={freeformResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
