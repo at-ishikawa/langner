@@ -164,13 +164,17 @@ When("I exclude the first answer", async ({ page }) => {
 
 // Locates the result-card section containing the given entry text. Works
 // both for BatchFeedback (multiple QuizResultCards) and FeedbackActions
-// (single per-answer feedback in the freeform quiz pages). FeedbackActions
-// renders "Undo" as a clickable <span>, not a <button>, so the xpath looks
-// at any descendant element (button or span) whose text matches an action
-// label.
+// (single per-answer feedback in the freeform quiz pages).
+//
+// Match the entry as a *prefix* rather than an exact text — QuizResultCard
+// appends " (overridden)" when the result is overridden, and freeform pages
+// inline pronunciation/partOfSpeech in the same <p>. A prefix match still
+// uniquely identifies which card we mean while tolerating those suffixes.
 function cardSection(page: Page, entry: string): Locator {
+  const escaped = entry.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return page
-    .getByText(entry, { exact: true })
+    .getByText(new RegExp("^" + escaped))
+    .first()
     .locator(
       "xpath=ancestor::div[" +
         ".//*[" +
