@@ -80,7 +80,8 @@ export default function EtymologyFreeformQuizPage() {
       setFeedback(fb);
       setDisplayCorrect(fb.correct);
       storeSubmitResult({
-        noteId: fb.noteId, origin: origin.trim(), answer: meaning.trim(),
+        noteId: fb.noteId, origin: origin.trim(), meaning: res.correctMeaning,
+        answer: meaning.trim(),
         correct: res.correct, reason: res.reason, correctAnswer: res.correctMeaning,
         type: res.type, language: res.language, notebookName: res.notebookName || undefined,
         learnedAt: fb.learnedAt,

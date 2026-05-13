@@ -41,6 +41,7 @@ const mockEtymologyResult: EtymologyOriginResult = {
   noteId: BigInt(10),
   cardId: BigInt(10),
   origin: "bio",
+  meaning: "life",
   answer: "life",
   correct: true,
   reason: "Correct meaning identified",

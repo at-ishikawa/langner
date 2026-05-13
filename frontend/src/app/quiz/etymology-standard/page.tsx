@@ -88,6 +88,7 @@ export default function EtymologyStandardPage() {
           noteId: r.noteId ? BigInt(r.noteId) : undefined,
           cardId: b.card.cardId,
           origin: b.card.origin,
+          meaning: r.correctMeaning,
           answer: b.displayAnswer,
           correct: r.correct,
           reason: r.reason,
