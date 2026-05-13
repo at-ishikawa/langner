@@ -1,6 +1,11 @@
+# title must be "flashcards" — backend SaveResult/SaveReverseResult hardcode
+# StoryTitle to "flashcards" for flashcard notebooks. If this doesn't match,
+# UpdateOrCreate spawns a separate history entry instead of writing to this
+# one, and FindExpressionByName then returns the stale entry without any
+# reverse_logs (so the BatchFeedback Mark/Override buttons stay hidden).
 - metadata:
     id: idioms
-    title: "Common Idioms"
+    title: flashcards
     type: flashcard
   expressions:
     - expression: break the ice
