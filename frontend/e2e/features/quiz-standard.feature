@@ -155,9 +155,13 @@ Feature: Standard vocabulary quiz
     And I resume "break the ice"
     And I continue to the next card
 
+    # After Resume both cards are counted: "break the ice" returned to its
+    # original (incorrect) state, and "lose one's temper" was overridden to
+    # incorrect — net 0 correct, 2 incorrect.
     Then I should be on the Quiz Complete page
     And the summary shows 2 total words
-    And the summary shows 1 incorrect answers
+    And the summary shows 0 correct answers
+    And the summary shows 2 incorrect answers
 
   # page.route intercepts the first BatchSubmitAnswers RPC and 500s it, so
   # the standard quiz page surfaces its "Retry grading" outline button.

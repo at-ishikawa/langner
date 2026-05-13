@@ -74,7 +74,8 @@ Feature: Etymology quiz modes
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
-    And the summary shows 1 incorrect answers
+    And the summary shows 0 correct answers
+    And the summary shows 2 incorrect answers
 
   # Etymology Reverse heading is the origin's meaning; the user types the
   # origin name.
@@ -128,9 +129,13 @@ Feature: Etymology quiz modes
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
-    And the summary shows 1 incorrect answers
+    And the summary shows 0 correct answers
+    And the summary shows 2 incorrect answers
 
-  # Exercise the FeedbackActions toolbar on Etymology Freeform.
+  # Exercise the FeedbackActions toolbar on Etymology Freeform. The same
+  # state-machine constraint applies as the vocab freeform case: Mark
+  # toggles override, Exclude is only visible while not overridden, so the
+  # order is Mark → Undo → Exclude.
   Scenario: All per-card actions on the Etymology Freeform feedback view
     Given I am on the Quiz page
     When I switch to the "Etymology" tab
@@ -145,7 +150,6 @@ Feature: Etymology quiz modes
     # FeedbackActions now visible — answer was correct.
     And I mark "graph" as incorrect
     And I undo the override for "graph"
-    And I mark "graph" as incorrect
     And I exclude "graph"
     And I finish the quiz
 

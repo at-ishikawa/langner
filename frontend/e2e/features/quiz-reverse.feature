@@ -74,7 +74,8 @@ Feature: Reverse vocabulary quiz
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
-    And the summary shows 1 incorrect answers
+    And the summary shows 0 correct answers
+    And the summary shows 2 incorrect answers
 
   # Only "lose one's temper" has no example in the fixture, so the missing-
   # context filter narrows the Reverse queue to one card.
