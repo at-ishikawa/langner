@@ -23,6 +23,7 @@ type Service struct {
 	dictionaryMap      map[string]rapidapi.Response
 	learningRepository learning.LearningRepository
 	calculator         notebook.IntervalCalculator
+	disableShuffle     bool
 }
 
 // NewService creates a new Service.
@@ -34,6 +35,7 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 		dictionaryMap:      dictionaryMap,
 		learningRepository: learningRepo,
 		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
+		disableShuffle:     quizCfg.DisableShuffle,
 	}
 }
 
@@ -274,9 +276,11 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool) ([]Card
 	}
 
 	cards = deduplicateCards(cards)
-	rand.Shuffle(len(cards), func(i, j int) {
-		cards[i], cards[j] = cards[j], cards[i]
-	})
+	if !s.disableShuffle {
+		rand.Shuffle(len(cards), func(i, j int) {
+			cards[i], cards[j] = cards[j], cards[i]
+		})
+	}
 	return cards, nil
 }
 
@@ -698,9 +702,11 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 	}
 
 	cards = deduplicateReverseCards(cards)
-	rand.Shuffle(len(cards), func(i, j int) {
-		cards[i], cards[j] = cards[j], cards[i]
-	})
+	if !s.disableShuffle {
+		rand.Shuffle(len(cards), func(i, j int) {
+			cards[i], cards[j] = cards[j], cards[i]
+		})
+	}
 	applyForwardMask(cards)
 	return cards, nil
 }
@@ -861,7 +867,10 @@ func (s *Service) loadFlashcardReverseCards(
 				if len(contexts) > 0 {
 					continue
 				}
-			} else {
+			} else if !s.disableShuffle {
+				// When disableShuffle is set (test mode), bypass the
+				// spaced-repetition due-check so every fixture card is
+				// reachable regardless of accumulated learning history.
 				needsReview := needsReverseFlashcardReview(learningHistories[notebookID], nb.Title, &card)
 				if !needsReview {
 					continue
@@ -1374,6 +1383,11 @@ func kindFromIndex(index notebook.Index) string {
 // GetFreeformNextReviewDates returns a map of lowercase expression -> next review date ("YYYY-MM-DD").
 // Only expressions that are NOT yet due are included; due or never-studied expressions are omitted.
 func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]string, error) {
+	// In test mode, never gate the freeform Submit button on a future review
+	// date — the test suite submits the same expression repeatedly across scenarios.
+	if s.disableShuffle {
+		return map[string]string{}, nil
+	}
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)

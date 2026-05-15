@@ -1,0 +1,4 @@
+id: short-tales
+name: "Short Tales"
+notebooks:
+  - ./chapter1.yml

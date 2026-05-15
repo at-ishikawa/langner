@@ -1,0 +1,31 @@
+- metadata:
+    id: word-roots
+    title: "Word Roots"
+  scenes:
+    - metadata:
+        title: "Word Roots"
+      expressions:
+        - expression: graph
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01T00:00:00Z"
+              quality: 4
+              quiz_type: etymology_freeform
+              interval_days: 0
+            - status: misunderstood
+              learned_at: "2025-01-02T00:00:00Z"
+              quality: 1
+              quiz_type: etymology_standard
+              interval_days: 1
+        - expression: tele
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01T00:00:00Z"
+              quality: 4
+              quiz_type: etymology_freeform
+              interval_days: 0
+            - status: misunderstood
+              learned_at: "2025-01-02T00:00:00Z"
+              quality: 1
+              quiz_type: etymology_standard
+              interval_days: 1

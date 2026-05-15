@@ -1,0 +1,4 @@
+id: idioms
+name: "Idioms"
+notebooks:
+  - ./cards.yml

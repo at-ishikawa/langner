@@ -1,0 +1,44 @@
+server:
+  port: 8080
+  cors:
+    allowed_origins:
+      - "*"
+
+database:
+  host: 127.0.0.1
+  port: 3306
+  database: langner_e2e
+  username: root
+  password: password
+  tls: false
+
+inference:
+  mode: mock
+
+quiz:
+  # Preserve fixture order so e2e scenarios can assert which card appears first.
+  disable_shuffle: true
+
+notebooks:
+  stories_directories:
+    - frontend/e2e/fixtures/stories
+  flashcards_directories:
+    - frontend/e2e/fixtures/flashcards
+  books_directories: []
+  definitions_directories: []
+  etymology_directories:
+    - frontend/e2e/fixtures/etymology
+  learning_notes_directory: frontend/e2e/fixtures/learning_notes
+
+books:
+  repo_directory: frontend/e2e/fixtures/ebooks
+  repositories_file: frontend/e2e/fixtures/books.yml
+
+dictionaries:
+  rapidapi:
+    cache_directory: frontend/e2e/fixtures/dictionaries/rapidapi
+
+outputs:
+  story_directory: frontend/e2e/fixtures/outputs
+  flashcard_directory: frontend/e2e/fixtures/outputs
+  etymology_directory: frontend/e2e/fixtures/outputs

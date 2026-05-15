@@ -8,10 +8,14 @@ config.yml
 .vscode
 /backend/langner
 
-ebooks/
+/ebooks/
 
 # Frontend
 frontend/node_modules/
 frontend/.next/
 frontend/next-env.d.ts
+frontend/.features-gen/
+frontend/playwright-report/
+frontend/test-results/
+frontend/tsconfig.tsbuildinfo
 langner-server

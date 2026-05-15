@@ -48,7 +48,6 @@ export default function EtymologyReversePage() {
   useEffect(() => {
     startTimeRef.current = Date.now();
     setAnswer("");
-    setError(null);
     if (phase === "answering") {
       setTimeout(() => inputRef.current?.focus(), 50);
     }

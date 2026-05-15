@@ -5,11 +5,15 @@ on:
     branches: [ main ]
     paths:
       - 'frontend/**'
+      - 'backend/**'
+      - 'config.e2e.yml'
       - '.github/workflows/frontend.yml'
   pull_request:
     branches: [ main ]
     paths:
       - 'frontend/**'
+      - 'backend/**'
+      - 'config.e2e.yml'
       - '.github/workflows/frontend.yml'
 
 jobs:
@@ -60,12 +64,35 @@ jobs:
   e2e:
     name: Frontend E2E Test
     runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+    env:
+      LANGNER_TEST_DB_HOST: 127.0.0.1
+      LANGNER_TEST_DB_PORT: 3306
+      LANGNER_TEST_DB_USER: root
+      LANGNER_TEST_DB_PASSWORD: password
+      LANGNER_TEST_DB_NAME: langner_e2e
+      LANGNER_TEST_CONFIG: config.e2e.yml
     defaults:
       run:
         working-directory: frontend
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -85,6 +112,8 @@ jobs:
         run: buf generate --template buf.gen.frontend.yaml
       - name: Install Playwright browsers
         run: npx playwright install chromium --with-deps
+      - name: Verify feature coverage
+        run: pnpm test:e2e:coverage
       - name: Run e2e tests
         run: pnpm test:e2e
       - name: Upload test results
