@@ -136,6 +136,37 @@ export default function EtymologyFreeformQuizPage() {
                 {feedback.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{feedback.type}</Text></Box>}
                 {feedback.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{feedback.language}</Text></Box>}
               </Box>
+              <Box
+                display="inline-flex"
+                alignItems="center"
+                gap={2}
+                px={2}
+                py={1}
+                mt={2}
+                borderWidth="1px"
+                borderColor={displayCorrect ? "green.300" : "red.300"}
+                borderRadius="md"
+                bg={displayCorrect ? "green.50" : "red.50"}
+                _dark={{
+                  bg: displayCorrect ? "green.950" : "red.950",
+                  borderColor: displayCorrect ? "green.700" : "red.700",
+                }}
+                maxW="full"
+              >
+                <Text
+                  as="span"
+                  fontSize="xs"
+                  fontWeight="bold"
+                  color={displayCorrect ? "green.600" : "red.600"}
+                  _dark={{ color: displayCorrect ? "green.300" : "red.300" }}
+                >
+                  {displayCorrect ? "✓" : "✗"}
+                </Text>
+                <Text fontSize="sm" color="fg.muted">
+                  <Text as="span" fontSize="xs">your answer · </Text>
+                  <Text as="span" color="fg">&ldquo;{meaning}&rdquo;</Text>
+                </Text>
+              </Box>
             </Box>
             {feedback.allSenses.length > 1 && (
               <Box p={3} borderWidth="1px" borderRadius="lg" bg="yellow.50" _dark={{ bg: "yellow.900", borderColor: "yellow.700" }}>
