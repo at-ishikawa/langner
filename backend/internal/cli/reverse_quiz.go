@@ -59,7 +59,7 @@ func NewReverseQuizCLI(
 		notebookIDs = []string{notebookName}
 	}
 
-	cards, err := svc.LoadReverseCards(notebookIDs, listMissingContext)
+	cards, err := svc.LoadReverseCards(notebookIDs, listMissingContext, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load reverse cards: %w", err)
 	}

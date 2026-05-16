@@ -404,8 +404,12 @@ type NotebookWord struct {
 	// "reverse", "etymology_breakdown") this expression is excluded from.
 	// Empty when not skipped from anywhere.
 	SkippedQuizTypes []string `protobuf:"bytes,15,rep,name=skipped_quiz_types,json=skippedQuizTypes,proto3" json:"skipped_quiz_types,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// note_id is the DB primary key of this expression's note row. Used by
+	// the notebook detail page to call SkipWord/ResumeWord directly. Zero
+	// when the DB hasn't been populated (no langner migrate import-db run).
+	NoteId        int64 `protobuf:"varint,16,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NotebookWord) Reset() {
@@ -534,6 +538,13 @@ func (x *NotebookWord) GetSkippedQuizTypes() []string {
 		return x.SkippedQuizTypes
 	}
 	return nil
+}
+
+func (x *NotebookWord) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
 }
 
 type LearningLogEntry struct {
@@ -1543,7 +1554,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"statements\">\n" +
 	"\fConversation\x12\x18\n" +
 	"\aspeaker\x18\x01 \x01(\tR\aspeaker\x12\x14\n" +
-	"\x05quote\x18\x02 \x01(\tR\x05quote\"\x83\x04\n" +
+	"\x05quote\x18\x02 \x01(\tR\x05quote\"\x9c\x04\n" +
 	"\fNotebookWord\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -1564,7 +1575,8 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\x06origin\x18\r \x01(\tR\x06origin\x12\x1d\n" +
 	"\n" +
 	"is_skipped\x18\x0e \x01(\bR\tisSkipped\x12,\n" +
-	"\x12skipped_quiz_types\x18\x0f \x03(\tR\x10skippedQuizTypesJ\x04\b\v\x10\f\"\xcf\x01\n" +
+	"\x12skipped_quiz_types\x18\x0f \x03(\tR\x10skippedQuizTypes\x12\x17\n" +
+	"\anote_id\x18\x10 \x01(\x03R\x06noteIdJ\x04\b\v\x10\f\"\xcf\x01\n" +
 	"\x10LearningLogEntry\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1d\n" +
 	"\n" +

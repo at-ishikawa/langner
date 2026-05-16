@@ -19,6 +19,7 @@ actual navigation).
 | `/notebooks/[id]`                   | learn-vocabulary  | Open the Idioms flashcard notebook from the Learn hub   |
 | `/notebooks/[id]`                   | learn-vocabulary  | Expand a flashcard word card to see its meaning         |
 | `/notebooks/[id]`                   | learn-vocabulary  | Filter Idioms words by Misunderstood learning status    |
+| `/notebooks/[id]`                   | learn-vocabulary  | Toggle a per-quiz-type skip on a word card              |
 | `/notebooks/etymology/[id]`         | learn-etymology   | Open the Word Roots etymology notebook                  |
 | `/notebooks/etymology/[id]`         | learn-etymology   | Open the mindmap for an origin                          |
 | `/notebooks/etymology/[id]/mindmap` | learn-etymology   | Open the mindmap for an origin                          |
@@ -76,6 +77,7 @@ Tick the box when at least one scenario hits the interaction.
 - [x] See expression text on each word card ("break the ice", "lose one's temper")
 - [x] Click a word card → see expanded card with example sentence
 - [x] Filter words by learning status via the `<select>` dropdown
+- [x] Toggle a per-quiz-type "Skip from quiz" checkbox (Standard / Reverse / Freeform / All)
 
 ### `/notebooks/etymology/[id]`
 
@@ -131,18 +133,21 @@ Tick the box when at least one scenario hits the interaction.
 
 - [x] See the current origin and "type the meaning..." input
 - [x] Type a meaning and click Submit, twice
+- [x] See the "your answer" chip on the BatchFeedback card for a correct result
 - [x] Reach `/quiz/complete`
 
 ### `/quiz/etymology-reverse`
 
 - [x] See the current meaning and "type the origin..." input
 - [x] Type an origin and click Submit, twice
+- [x] See the "your answer" chip on the BatchFeedback card for a correct result
 - [x] Reach `/quiz/complete`
 
 ### `/quiz/etymology-freeform`
 
 - [x] See separate Origin (`e.g., spect`) and Meaning (`e.g., to look or see`) inputs
 - [x] Type both, click Submit, then click "See Results"
+- [x] See the "your answer" chip on the FeedbackActions card for a correct result
 - [x] Submit stays enabled when the origin is "due now" (seed sets
       `interval_days: 0` for the etymology_freeform log)
 

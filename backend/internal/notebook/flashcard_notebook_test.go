@@ -324,7 +324,9 @@ func TestFilterFlashcardNotebooks(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc, QuizTypeNotebook)
+			// Existing fixtures predate the includeNoCorrectAnswers gate;
+			// pass true to preserve the original assertions.
+			result, err := FilterFlashcardNotebooks(tt.notebooks, tt.history, tt.dictionaryMap, tt.sortDesc, true, QuizTypeNotebook)
 			if tt.wantErr {
 				assert.Error(t, err)
 				if tt.wantErrMsg != "" {

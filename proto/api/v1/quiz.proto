@@ -61,13 +61,38 @@ message NotebookSummary {
   // has_content is true when any scene in the notebook has statements or
   // conversations — i.e., there is prose/dialogue to read, not just flashcards.
   bool has_content = 7;
+  // sections lists the sections within this notebook in document order.
+  // Sections are story events (chapters/episodes) for vocabulary notebooks
+  // and session titles for etymology notebooks. Empty for flashcard or
+  // definitions-only notebooks that have no section hierarchy.
+  repeated NotebookSectionSummary sections = 8;
+}
+
+// NotebookSectionSummary holds the display title and per-mode review counts
+// for a single section within a notebook.
+message NotebookSectionSummary {
+  string title = 1;
+  int32 review_count = 2;
+  int32 reverse_review_count = 3;
+  int32 etymology_review_count = 4;
+}
+
+// NotebookSection narrows a quiz request to specific sections within a single
+// notebook. When section_titles is empty, every section of the notebook is
+// included (equivalent to passing the notebook_id alone).
+message NotebookSection {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  repeated string section_titles = 2;
 }
 
 message StartQuizRequest {
-  repeated string notebook_ids = 1 [
-    (buf.validate.field).repeated.min_items = 1
-  ];
+  repeated string notebook_ids = 1;
   bool include_unstudied = 2;
+  // notebook_sections, when non-empty, replaces notebook_ids and allows the
+  // caller to narrow the quiz to specific sections within each notebook.
+  repeated NotebookSection notebook_sections = 3;
 }
 
 message StartQuizResponse {
@@ -140,10 +165,11 @@ message BatchSubmitAnswersResponse {
 }
 
 message StartReverseQuizRequest {
-  repeated string notebook_ids = 1 [
-    (buf.validate.field).repeated.min_items = 1
-  ];
+  repeated string notebook_ids = 1;
   bool list_missing_context = 2;
+  // notebook_sections, when non-empty, replaces notebook_ids and allows the
+  // caller to narrow the quiz to specific sections within each notebook.
+  repeated NotebookSection notebook_sections = 3;
 }
 
 message StartReverseQuizResponse {
@@ -288,8 +314,15 @@ message SkipWordRequest {
   int64 note_id = 1 [
     (buf.validate.field).int64.gt = 0
   ];
-  QuizType quiz_type = 2;
+  // quiz_types lists every quiz mode the word should be excluded from. The
+  // server applies the whole set in one read-modify-write so multi-type
+  // skips ("All" toggle) cannot race with each other.
+  repeated QuizType quiz_types = 4 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
   string skip_until = 3;
+  reserved 2;
+  reserved "quiz_type";
 }
 
 message SkipWordResponse {}
@@ -299,7 +332,13 @@ message ResumeWordRequest {
   int64 note_id = 1 [
     (buf.validate.field).int64.gt = 0
   ];
-  QuizType quiz_type = 2;
+  // quiz_types lists every quiz mode whose skip should be cleared. Same
+  // rationale as SkipWordRequest.quiz_types.
+  repeated QuizType quiz_types = 3 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+  reserved 2;
+  reserved "quiz_type";
 }
 
 message ResumeWordResponse {}
@@ -328,6 +367,9 @@ message StartEtymologyQuizRequest {
   repeated string etymology_notebook_ids = 1;
   EtymologyQuizMode mode = 3;
   bool include_unstudied = 4;
+  // notebook_sections, when non-empty, replaces etymology_notebook_ids and
+  // narrows the quiz to specific sessions within each etymology notebook.
+  repeated NotebookSection notebook_sections = 5;
 }
 
 message StartEtymologyQuizResponse {

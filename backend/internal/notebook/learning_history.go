@@ -28,6 +28,13 @@ func NewLearningHistories(directory string) (map[string][]LearningHistory, error
 	})
 }
 
+// ReadLearningHistoryFile loads a single notebook's learning history YAML.
+// Use this on the hot path of Skip/Resume RPCs to avoid the cost of
+// NewLearningHistories, which walks and parses every file in the directory.
+func ReadLearningHistoryFile(path string) ([]LearningHistory, error) {
+	return readYamlFile[[]LearningHistory](path)
+}
+
 func (h LearningHistory) GetLogs(
 	notebookTitle, sceneTitle string, definition Note,
 ) []LearningRecord {
@@ -125,6 +132,15 @@ type LearningRecord struct {
 
 type LearningHistoryExpression struct {
 	Expression     string           `yaml:"expression"`
+	// Type distinguishes vocabulary entries from etymology-origin entries
+	// when their `expression` strings collide. "" or "vocabulary" means a
+	// regular vocab entry; "origin" means an etymology origin. Without
+	// this field, an entry with the same name in both senses (e.g. "ego"
+	// the English word AND the Latin root) would dedup into one record
+	// and the YAML would be ambiguous about which is being tracked.
+	// Backward-compatible: legacy entries without Type are treated as
+	// vocabulary by all readers.
+	Type           string           `yaml:"type,omitempty"`
 	LearnedLogs    []LearningRecord `yaml:"learned_logs"`
 	EasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
@@ -146,6 +162,44 @@ type LearningHistoryExpression struct {
 	// (a single timestamp meaning "skipped from everywhere") are upgraded to a
 	// fully-populated map at unmarshal time.
 	SkippedAt SkippedAtMap `yaml:"skipped_at,omitempty"`
+}
+
+// LearningExpressionType is the discriminator for LearningHistoryExpression.Type.
+// "" / "vocabulary" — a vocab word entry (default and legacy).
+// "origin" — an etymology origin (root, prefix, suffix).
+const (
+	LearningExpressionTypeVocabulary = "vocabulary"
+	LearningExpressionTypeOrigin     = "origin"
+)
+
+// ExpressionTypeForQuizType returns the LearningHistoryExpression.Type value
+// the quiz mode operates on. Etymology quiz modes target origin entries;
+// every other mode (standard, reverse, freeform) targets vocabulary
+// entries. Used by skip/resume and reader lookups so an "ego"-the-vocab
+// entry and an "ego"-the-origin entry can coexist in the same scene
+// without each kind clobbering the other's logs and skip state.
+func ExpressionTypeForQuizType(quizType QuizType) string {
+	switch quizType {
+	case QuizTypeEtymologyStandard, QuizTypeEtymologyReverse, QuizTypeEtymologyFreeform:
+		return LearningExpressionTypeOrigin
+	default:
+		return LearningExpressionTypeVocabulary
+	}
+}
+
+// MatchesExpressionType reports whether expr's Type field matches target.
+// "vocabulary" matches both empty and "vocabulary" (legacy back-compat);
+// "origin" matches only entries explicitly marked "origin".
+func MatchesExpressionType(expr *LearningHistoryExpression, target string) bool {
+	if expr == nil {
+		return false
+	}
+	switch target {
+	case LearningExpressionTypeOrigin:
+		return expr.Type == LearningExpressionTypeOrigin
+	default:
+		return expr.Type == "" || expr.Type == LearningExpressionTypeVocabulary
+	}
 }
 
 // SkippedAtMap maps a quiz type string (e.g. "reverse", "etymology_freeform")
@@ -506,15 +560,26 @@ func (exp LearningHistoryExpression) HasEtymologyFreeformAnswer() bool {
 }
 
 // HasCorrectEtymologyAnswer returns true if the expression has at least one
-// correct answer recorded in EtymologyBreakdownLogs. Origins must have been
-// answered correctly at least once (in any etymology mode) before becoming
-// eligible for etymology standard or reverse quizzes — otherwise the user
-// would be drilled on origins they have never actually understood.
+// correct answer recorded in either etymology log slot. Origins must have
+// been answered correctly at least once (in any etymology mode) before
+// becoming eligible for etymology standard or reverse quizzes — otherwise
+// the user would be drilled on origins they have never actually
+// understood. Checks both breakdown (etymology_standard /
+// etymology_freeform) and assembly (etymology_reverse) so a correct
+// reverse answer also lifts the eligibility gate.
 func (exp LearningHistoryExpression) HasCorrectEtymologyAnswer() bool {
+	isCorrect := func(s LearnedStatus) bool {
+		return s == LearnedStatusUnderstood ||
+			s == LearnedStatusCanBeUsed ||
+			s == learnedStatusIntuitivelyUsed
+	}
 	for _, log := range exp.EtymologyBreakdownLogs {
-		if log.Status == LearnedStatusUnderstood ||
-			log.Status == LearnedStatusCanBeUsed ||
-			log.Status == learnedStatusIntuitivelyUsed {
+		if isCorrect(log.Status) {
+			return true
+		}
+	}
+	for _, log := range exp.EtymologyAssemblyLogs {
+		if isCorrect(log.Status) {
 			return true
 		}
 	}

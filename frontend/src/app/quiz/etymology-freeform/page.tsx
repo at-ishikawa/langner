@@ -80,7 +80,8 @@ export default function EtymologyFreeformQuizPage() {
       setFeedback(fb);
       setDisplayCorrect(fb.correct);
       storeSubmitResult({
-        noteId: fb.noteId, origin: origin.trim(), answer: meaning.trim(),
+        noteId: fb.noteId, origin: origin.trim(), meaning: res.correctMeaning,
+        answer: meaning.trim(),
         correct: res.correct, reason: res.reason, correctAnswer: res.correctMeaning,
         type: res.type, language: res.language, notebookName: res.notebookName || undefined,
         learnedAt: fb.learnedAt,
@@ -126,7 +127,7 @@ export default function EtymologyFreeformQuizPage() {
                 storeUndoOverrideResult(etymologyOriginResults.length - 1, "etymology-freeform", res.correct, res.nextReviewDate || "");
               } catch { setOverridden(false); setOverrideOriginals(null); setDisplayCorrect(feedback.correct); storeUndoOverrideResult(etymologyOriginResults.length - 1, "etymology-freeform", feedback.correct, ""); }
             } : undefined}
-            onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId! }); setSkipped(true); storeSkipResult(etymologyOriginResults.length - 1, "etymology-freeform"); } catch {} } : undefined}
+            onSkip={feedback.noteId ? async () => { try { await quizClient.skipWord({ noteId: feedback.noteId!, quizTypes: [ProtoQuizType.ETYMOLOGY_FREEFORM] }); setSkipped(true); storeSkipResult(etymologyOriginResults.length - 1, "etymology-freeform"); } catch {} } : undefined}
             onSeeResults={etymologyOriginResults.length > 0 ? () => router.push("/quiz/complete") : undefined}
           >
             <Box p={4} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
@@ -134,6 +135,37 @@ export default function EtymologyFreeformQuizPage() {
               <Box display="flex" gap={2} mt={1}>
                 {feedback.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{feedback.type}</Text></Box>}
                 {feedback.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{feedback.language}</Text></Box>}
+              </Box>
+              <Box
+                display="inline-flex"
+                alignItems="center"
+                gap={2}
+                px={2}
+                py={1}
+                mt={2}
+                borderWidth="1px"
+                borderColor={displayCorrect ? "green.300" : "red.300"}
+                borderRadius="md"
+                bg={displayCorrect ? "green.50" : "red.50"}
+                _dark={{
+                  bg: displayCorrect ? "green.950" : "red.950",
+                  borderColor: displayCorrect ? "green.700" : "red.700",
+                }}
+                maxW="full"
+              >
+                <Text
+                  as="span"
+                  fontSize="xs"
+                  fontWeight="bold"
+                  color={displayCorrect ? "green.600" : "red.600"}
+                  _dark={{ color: displayCorrect ? "green.300" : "red.300" }}
+                >
+                  {displayCorrect ? "✓" : "✗"}
+                </Text>
+                <Text fontSize="sm" color="fg.muted">
+                  <Text as="span" fontSize="xs">your answer · </Text>
+                  <Text as="span" color="fg">&ldquo;{meaning}&rdquo;</Text>
+                </Text>
               </Box>
             </Box>
             {feedback.allSenses.length > 1 && (

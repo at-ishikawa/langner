@@ -151,6 +151,13 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// recompute interval_days and silently overwrite the skip.
 	fixedLearning := v.migrateLegacySkipIntervals(learningHistories, result)
 
+	// Migrate legacy etymology shape (notebook-name top-level + sessions
+	// as scenes + type=etymology) to the canonical per-session shape.
+	// Must run before fixMismatchedScenes/fixConsistency: those passes
+	// treat Shape A scenes as orphaned because the source story
+	// notebooks don't contain those scene titles.
+	fixedLearning = v.migrateEtymologyShape(fixedLearning, result)
+
 	// Fix mismatched scenes by moving expressions to correct scenes (do this first)
 	fixedLearning = v.fixMismatchedScenes(fixedLearning, storyNotebooks, result)
 
@@ -537,17 +544,27 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 			for sceneIdx := range file.contents[histIdx].Scenes {
 				scene := &file.contents[histIdx].Scenes[sceneIdx]
 
-				// First, merge duplicate expressions in the same scene
-				expressionMap := make(map[string]int) // map expression to index in mergedExpressions
+				// First, merge duplicate expressions in the same scene.
+				// Dedup key is (name, type) so a vocab "ego" and an
+				// origin "ego" can coexist without merging.
+				type exprKey struct{ name, typ string }
+				normaliseType := func(t string) string {
+					if t == LearningExpressionTypeVocabulary {
+						return ""
+					}
+					return t
+				}
+				expressionMap := make(map[exprKey]int)
 				var mergedExpressions []LearningHistoryExpression
 
 				for _, expr := range scene.Expressions {
-					exprKey := strings.TrimSpace(expr.Expression)
-					if exprKey == "" {
+					name := strings.TrimSpace(expr.Expression)
+					if name == "" {
 						continue
 					}
+					key := exprKey{name: name, typ: normaliseType(expr.Type)}
 
-					if existingIdx, found := expressionMap[exprKey]; found {
+					if existingIdx, found := expressionMap[key]; found {
 						// Merge learning logs into the existing expression
 						if len(expr.LearnedLogs) > 0 {
 							mergedExpressions[existingIdx].LearnedLogs = append(mergedExpressions[existingIdx].LearnedLogs, expr.LearnedLogs...)
@@ -559,10 +576,10 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 						}
 						result.AddWarning(ValidationError{
 							File:    file.path,
-							Message: fmt.Sprintf("Merged duplicate expression %q in scene %s::%s", exprKey, file.contents[histIdx].Metadata.Title, scene.Metadata.Title),
+							Message: fmt.Sprintf("Merged duplicate expression %q (type=%q) in scene %s::%s", name, key.typ, file.contents[histIdx].Metadata.Title, scene.Metadata.Title),
 						})
 					} else {
-						expressionMap[exprKey] = len(mergedExpressions)
+						expressionMap[key] = len(mergedExpressions)
 						mergedExpressions = append(mergedExpressions, expr)
 					}
 				}
@@ -593,64 +610,63 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 				continue
 			}
 
-			// Then, merge duplicate expressions across different scenes in the same episode
-			episodeExpressions := make(map[string]int) // expression -> scene index
+			// Then, merge duplicate expressions across different scenes in
+			// the same episode. Key by (name, type) so a vocab "ego" in
+			// one scene and an origin "ego" in another stay separate.
+			type crossKey struct{ name, typ string }
+			normaliseType := func(t string) string {
+				if t == LearningExpressionTypeVocabulary {
+					return ""
+				}
+				return t
+			}
+			episodeExpressions := make(map[crossKey]int) // -> scene index
 			for sceneIdx := range file.contents[histIdx].Scenes {
 				scene := &file.contents[histIdx].Scenes[sceneIdx]
 
-				// Track expressions and find duplicates
-				expressionsToRemove := make(map[int]bool) // indices to remove
+				expressionsToRemove := make(map[int]bool)
 				for exprIdx := range scene.Expressions {
 					expr := &scene.Expressions[exprIdx]
-					exprKey := strings.TrimSpace(expr.Expression)
-					if exprKey == "" {
+					name := strings.TrimSpace(expr.Expression)
+					if name == "" {
 						continue
 					}
+					ck := crossKey{name: name, typ: normaliseType(expr.Type)}
 
-					if firstSceneIdx, found := episodeExpressions[exprKey]; found {
-						// This expression already exists in another scene - merge into the first occurrence
+					if firstSceneIdx, found := episodeExpressions[ck]; found {
 						firstScene := &file.contents[histIdx].Scenes[firstSceneIdx]
-
-						// Find the first occurrence expression in the first scene
 						for firstExprIdx := range firstScene.Expressions {
-							if strings.TrimSpace(firstScene.Expressions[firstExprIdx].Expression) == exprKey {
-								// Merge learning logs
-								if len(expr.LearnedLogs) > 0 {
-									firstScene.Expressions[firstExprIdx].LearnedLogs = append(
-										firstScene.Expressions[firstExprIdx].LearnedLogs,
-										expr.LearnedLogs...,
-									)
-									_, firstScene.Expressions[firstExprIdx].LearnedLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].LearnedLogs, v.calculator)
-								}
-								if len(expr.ReverseLogs) > 0 {
-									firstScene.Expressions[firstExprIdx].ReverseLogs = append(
-										firstScene.Expressions[firstExprIdx].ReverseLogs,
-										expr.ReverseLogs...,
-									)
-									_, firstScene.Expressions[firstExprIdx].ReverseLogs, _ = recalculateLearningLogs(firstScene.Expressions[firstExprIdx].ReverseLogs, v.calculator)
-								}
-
-								// Mark this duplicate for removal
-								expressionsToRemove[exprIdx] = true
-
-								result.AddWarning(ValidationError{
-									File:    file.path,
-									Message: fmt.Sprintf("Merged duplicate expression %q from scene %s into scene %s in episode %s",
-										exprKey,
-										scene.Metadata.Title,
-										firstScene.Metadata.Title,
-										file.contents[histIdx].Metadata.Title),
-								})
-								break
+							firstExpr := &firstScene.Expressions[firstExprIdx]
+							if strings.TrimSpace(firstExpr.Expression) != name {
+								continue
 							}
+							if normaliseType(firstExpr.Type) != ck.typ {
+								continue
+							}
+							if len(expr.LearnedLogs) > 0 {
+								firstExpr.LearnedLogs = append(firstExpr.LearnedLogs, expr.LearnedLogs...)
+								_, firstExpr.LearnedLogs, _ = recalculateLearningLogs(firstExpr.LearnedLogs, v.calculator)
+							}
+							if len(expr.ReverseLogs) > 0 {
+								firstExpr.ReverseLogs = append(firstExpr.ReverseLogs, expr.ReverseLogs...)
+								_, firstExpr.ReverseLogs, _ = recalculateLearningLogs(firstExpr.ReverseLogs, v.calculator)
+							}
+							expressionsToRemove[exprIdx] = true
+							result.AddWarning(ValidationError{
+								File:    file.path,
+								Message: fmt.Sprintf("Merged duplicate expression %q (type=%q) from scene %s into scene %s in episode %s",
+									name, ck.typ,
+									scene.Metadata.Title,
+									firstScene.Metadata.Title,
+									file.contents[histIdx].Metadata.Title),
+							})
+							break
 						}
 					} else {
-						// First occurrence of this expression in the episode
-						episodeExpressions[exprKey] = sceneIdx
+						episodeExpressions[ck] = sceneIdx
 					}
 				}
 
-				// Remove duplicates from this scene
 				if len(expressionsToRemove) > 0 {
 					filteredExpressions := make([]LearningHistoryExpression, 0)
 					for exprIdx, expr := range scene.Expressions {
@@ -935,9 +951,13 @@ func (v *Validator) fixConsistency(
 
 					// Only keep expressions that either:
 					// 1. Have any logs (learned, reverse, or etymology), OR
-					// 2. Exist in the story (even with empty logs)
+					// 2. Exist in the story (even with empty logs), OR
+					// 3. Are skipped from at least one quiz mode — the
+					//    notebook detail page seeds skip-only stubs that
+					//    would otherwise be dropped on the next --fix.
 					hasLogs := len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || len(expr.EtymologyBreakdownLogs) > 0 || len(expr.EtymologyAssemblyLogs) > 0
-					if hasLogs || existsInStory {
+					hasSkip := expr.SkippedAt.IsSkippedAny()
+					if hasLogs || existsInStory || hasSkip {
 						validExpressions = append(validExpressions, expr)
 					} else {
 						// Remove orphaned expressions with no logs
@@ -1535,6 +1555,225 @@ func (v *Validator) validateSeparateDefinitionsInConversations(storyFiles []stor
 			}
 		}
 	}
+}
+
+// migrateEtymologyShape converts legacy etymology learning-history blocks
+// (top-level metadata.title = notebook display name, type=etymology, with
+// sessions as scenes) into the canonical per-session shape that
+// standard/reverse/freeform writers also use:
+//
+//	BEFORE                                  AFTER
+//	- metadata:                             - metadata:
+//	    title: "Word Power Made Easy"           title: "Session 2"
+//	    type: etymology                       scenes:
+//	  scenes:                                   - metadata:
+//	    - metadata:                                 title: "<scene>"
+//	        title: "Session 2"                  expressions:
+//	      expressions:                            - expression: "ana"
+//	        - expression: "ana"                     etymology_breakdown_logs: [...]
+//	          etymology_breakdown_logs: [...]
+//
+// For each origin in a legacy scene, the destination scene title comes
+// from the matching definitions file: the validator builds the same
+// origin → scene candidate map the Reader uses for legacy flat-shape
+// source files. Same-notebook+session match wins; falls back to
+// any-notebook globally; final fallback is the session title itself.
+//
+// When a per-session block already exists for the destination session
+// (e.g. populated by standard quiz writes), the migrated origin merges
+// into that block — same-name expressions consolidate their logs.
+//
+// Idempotent: running on already-migrated data is a no-op because no
+// blocks carry type=etymology after the first pass.
+func (v *Validator) migrateEtymologyShape(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	// Build the cross-notebook origin → scene candidate index using the
+	// validator's own directory inputs. Reusing NewReader keeps the
+	// projection logic identical to live read paths.
+	candidates := v.buildOriginSceneIndexForValidator()
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		var legacy []LearningHistory
+		var keep []LearningHistory
+		for _, h := range file.contents {
+			if h.Metadata.Type == "etymology" && len(h.Scenes) > 0 {
+				legacy = append(legacy, h)
+			} else {
+				keep = append(keep, h)
+			}
+		}
+		if len(legacy) == 0 {
+			continue
+		}
+
+		for _, src := range legacy {
+			notebookID := src.Metadata.NotebookID
+			for _, legacyScene := range src.Scenes {
+				sessionTitle := legacyScene.Metadata.Title
+				targetIdx := -1
+				for i := range keep {
+					if normalizeQuotes(keep[i].Metadata.Title) == normalizeQuotes(sessionTitle) {
+						targetIdx = i
+						break
+					}
+				}
+				if targetIdx < 0 {
+					keep = append(keep, LearningHistory{
+						Metadata: LearningHistoryMetadata{
+							NotebookID: notebookID,
+							Title:      sessionTitle,
+						},
+					})
+					targetIdx = len(keep) - 1
+				}
+
+				for _, expr := range legacyScene.Expressions {
+					// All entries pulled from a type=etymology block are
+					// origins by definition; tag them so they don't merge
+					// with vocab entries sharing the same name in the
+					// destination scene.
+					expr.Type = LearningExpressionTypeOrigin
+					sceneTitle := pickBestSceneForOrigin(candidates, expr.Expression, notebookID, sessionTitle)
+					if sceneTitle == "" {
+						sceneTitle = sessionTitle
+					}
+					sceneIdx := -1
+					for si := range keep[targetIdx].Scenes {
+						if normalizeQuotes(keep[targetIdx].Scenes[si].Metadata.Title) == normalizeQuotes(sceneTitle) {
+							sceneIdx = si
+							break
+						}
+					}
+					if sceneIdx < 0 {
+						keep[targetIdx].Scenes = append(keep[targetIdx].Scenes, LearningScene{
+							Metadata: LearningSceneMetadata{Title: sceneTitle},
+						})
+						sceneIdx = len(keep[targetIdx].Scenes) - 1
+					}
+					// Merge target: only an entry of the same type counts
+					// as a duplicate. A type=origin and a type=vocabulary
+					// entry with the same name coexist as separate records.
+					mergeIdx := -1
+					for ei := range keep[targetIdx].Scenes[sceneIdx].Expressions {
+						existing := &keep[targetIdx].Scenes[sceneIdx].Expressions[ei]
+						if existing.Expression != expr.Expression {
+							continue
+						}
+						if existing.Type == LearningExpressionTypeOrigin {
+							mergeIdx = ei
+							break
+						}
+					}
+					if mergeIdx < 0 {
+						keep[targetIdx].Scenes[sceneIdx].Expressions = append(keep[targetIdx].Scenes[sceneIdx].Expressions, expr)
+						continue
+					}
+					existing := &keep[targetIdx].Scenes[sceneIdx].Expressions[mergeIdx]
+					existing.LearnedLogs = append(existing.LearnedLogs, expr.LearnedLogs...)
+					existing.ReverseLogs = append(existing.ReverseLogs, expr.ReverseLogs...)
+					existing.EtymologyBreakdownLogs = append(existing.EtymologyBreakdownLogs, expr.EtymologyBreakdownLogs...)
+					existing.EtymologyAssemblyLogs = append(existing.EtymologyAssemblyLogs, expr.EtymologyAssemblyLogs...)
+					for k, val := range expr.SkippedAt {
+						if existing.SkippedAt == nil {
+							existing.SkippedAt = make(SkippedAtMap)
+						}
+						if _, dup := existing.SkippedAt[k]; !dup {
+							existing.SkippedAt[k] = val
+						}
+					}
+				}
+			}
+			result.AddWarning(ValidationError{
+				File:    file.path,
+				Message: fmt.Sprintf("Migrated etymology shape for notebook %q (legacy title=%q): %d session(s) folded into per-session top-level blocks", src.Metadata.NotebookID, src.Metadata.Title, len(src.Scenes)),
+			})
+		}
+		file.contents = keep
+	}
+	return files
+}
+
+// buildOriginSceneIndexForValidator constructs the same origin → scene
+// candidate map the Reader produces, but using the validator's own
+// directory inputs. Building a full Reader risks importing dictionary
+// state we don't need; instead we walk the dirs directly and reuse the
+// same per-source projection logic.
+func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginSceneCandidate {
+	add := func(out map[string][]OriginSceneCandidate, origin, notebookID, sessionTitle, sceneTitle string) {
+		key := strings.ToLower(strings.TrimSpace(origin))
+		if key == "" {
+			return
+		}
+		out[key] = append(out[key], OriginSceneCandidate{
+			NotebookID:   notebookID,
+			SessionTitle: sessionTitle,
+			SceneTitle:   sceneTitle,
+		})
+	}
+	out := make(map[string][]OriginSceneCandidate)
+
+	storyIndexes := make(map[string]Index)
+	for _, dir := range v.storyNotebooksDirs {
+		_ = walkIndexFiles(dir, storyIndexes, false)
+	}
+	for storyID, idx := range storyIndexes {
+		for _, nbPath := range idx.NotebookPaths {
+			path := filepath.Join(idx.Path, nbPath)
+			notebooks, err := readYamlFile[[]StoryNotebook](path)
+			if err != nil {
+				continue
+			}
+			for _, nb := range notebooks {
+				for _, scene := range nb.Scenes {
+					for _, def := range scene.Definitions {
+						for _, op := range def.OriginParts {
+							add(out, op.Origin, storyID, nb.Event, scene.Title)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	defsMap, defsRaw, _, err := NewDefinitionsMap(v.definitionsDirs)
+	if err == nil {
+		_ = defsMap
+		for bookID, defs := range defsRaw {
+			for _, fileDefs := range defs {
+				session := fileDefs.Metadata.Title
+				for _, scene := range fileDefs.Scenes {
+					sceneTitle := scene.Metadata.Title
+					for _, note := range scene.Expressions {
+						for _, op := range note.OriginParts {
+							add(out, op.Origin, bookID, session, sceneTitle)
+						}
+					}
+				}
+			}
+		}
+	}
+
+	etymIndexes := make(map[string]EtymologyIndex)
+	for _, dir := range v.etymologyDirs {
+		_ = walkEtymologyIndexFiles(dir, etymIndexes)
+	}
+	for etymID, idx := range etymIndexes {
+		for _, nbPath := range idx.NotebookPaths {
+			path := filepath.Join(idx.Path, nbPath)
+			wrapped, err := readYamlFile[etymologySessionFile](path)
+			if err != nil {
+				continue
+			}
+			session := wrapped.Metadata.Title
+			for _, def := range wrapped.Definitions {
+				for _, op := range def.OriginParts {
+					add(out, op.Origin, etymID, session, session)
+				}
+			}
+		}
+	}
+
+	return out
 }
 
 // migrateLegacySkipIntervals promotes the pre-Phase-2 skip representation

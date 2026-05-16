@@ -65,11 +65,12 @@ export function reverseResultToItem(r: ReverseQuizResult, index: number): Result
 export function freeformResultToItem(r: FreeformResult, index: number): ResultItem {
   return {
     index,
-    key: `freeform-${index}`,
+    key: r.noteId ? `freeform-${r.noteId.toString()}-${index}` : `freeform-${index}`,
     entry: r.word,
     meaning: r.meaning,
     correct: r.correct,
     contexts: r.contexts,
+    noteId: r.noteId,
     learnedAt: r.learnedAt,
     isOverridden: r.isOverridden,
     isSkipped: r.isSkipped,
@@ -85,11 +86,16 @@ export function freeformResultToItem(r: FreeformResult, index: number): ResultIt
 }
 
 export function etymologyResultToItem(r: EtymologyOriginResult, index: number): ResultItem {
+  // r.meaning is always the origin's English gloss regardless of which
+  // quiz side asked — set in both standard and reverse pages. Older
+  // saved results (pre-field-added) fall back to correctAnswer, which
+  // happens to be the meaning for standard quiz (the field's old role).
+  const meaning = r.meaning || r.correctAnswer;
   return {
     index,
     key: r.noteId ? r.noteId.toString() : `ety-${index}`,
     entry: r.origin,
-    meaning: r.correctAnswer,
+    meaning,
     correct: r.correct,
     noteId: r.noteId,
     learnedAt: r.learnedAt,
@@ -98,7 +104,7 @@ export function etymologyResultToItem(r: EtymologyOriginResult, index: number): 
     originalCorrect: r.isOverridden ? !r.correct : r.correct,
     originBreakdown: [{
       origin: r.origin,
-      meaning: r.correctAnswer,
+      meaning,
       language: r.language,
       type: r.type,
     }],

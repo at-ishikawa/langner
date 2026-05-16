@@ -50,6 +50,12 @@ func (r *YAMLNoteRepository) FindByID(_ context.Context, _ int64) (*NoteRecord, 
 // FindAll reads all story and flashcard notebooks, converts each YAML Note
 // to a NoteRecord, and deduplicates by (Usage, Entry) key.
 func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
+	if r.reader == nil {
+		// Constructed via NewYAMLNoteRepositoryWithDefsDir / Writer — no
+		// reader configured. Treat as an empty, read-only repository
+		// instead of panicking.
+		return nil, nil
+	}
 	storyIndexes, err := r.reader.ReadAllStoryNotebooks()
 	if err != nil {
 		return nil, fmt.Errorf("read all story notebooks: %w", err)
@@ -61,7 +67,9 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 	}
 
 	type noteKey struct{ usage, entry string }
+	type nnKey struct{ notebookType, notebookID, group, subgroup string }
 	noteMap := make(map[noteKey]*NoteRecord)
+	nnSeen := make(map[noteKey]map[nnKey]bool)
 	var order []noteKey
 
 	addNote := func(note Note, notebookType, notebookID, group, subgroup string) {
@@ -71,11 +79,32 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		existing, ok := noteMap[key]
 		if !ok {
 			noteMap[key] = &rec
+			seen := make(map[nnKey]bool, len(rec.NotebookNotes))
+			for _, nn := range rec.NotebookNotes {
+				seen[nnKey{nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+			}
+			nnSeen[key] = seen
 			order = append(order, key)
 			return
 		}
 
-		existing.NotebookNotes = append(existing.NotebookNotes, rec.NotebookNotes...)
+		// Dedup repeat NotebookNotes for the same expression. Two paths
+		// produce the same (type, id, group, subgroup) tuple: the
+		// MergeDefinitionsIntoNotebooks pass appends a definitions-YAML
+		// note onto the matching story-book scene, so the story-book
+		// walk visits the same expression once per source. Without
+		// dedup, classifyRecord's new-note branch passes the duplicates
+		// straight to BatchCreate, which trips the notebook_notes
+		// unique key on (note_id, notebook_type, notebook_id, group).
+		seen := nnSeen[key]
+		for _, nn := range rec.NotebookNotes {
+			k := nnKey{nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			existing.NotebookNotes = append(existing.NotebookNotes, nn)
+		}
 	}
 
 	// Sort story index keys for deterministic ordering
@@ -117,6 +146,43 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		for _, fn := range flashcardIndex.Notebooks {
 			for _, card := range fn.Cards {
 				addNote(card, "flashcard", flashcardID, fn.Title, "")
+			}
+		}
+	}
+
+	// Walk definitions books — these are reference vocabularies (e.g.
+	// Word Power Made Easy) loaded via DefinitionsDirectories. Without
+	// this pass, import-db wouldn't materialise their notes in the DB,
+	// and the notebook detail page couldn't surface per-word skip
+	// controls for them. The bookID matches the request's notebook_id.
+	//
+	// Skip bookIDs that are also story/flashcard indexes — some books
+	// (e.g. epistolary novels) appear under both books/ and
+	// definitions/books/, and we'd otherwise emit two notebook_notes
+	// rows with identical (note_id, notebook_type=book, notebook_id,
+	// group) tuples and trip the DB unique key.
+	bookIDs := r.reader.GetDefinitionsBookIDs()
+	sort.Strings(bookIDs)
+	for _, bookID := range bookIDs {
+		if _, isStory := storyIndexes[bookID]; isStory {
+			continue
+		}
+		if _, isFlashcard := flashcardIndexes[bookID]; isFlashcard {
+			continue
+		}
+		books, ok := r.reader.GetDefinitionsBook(bookID)
+		if !ok {
+			continue
+		}
+		for _, book := range books {
+			group := book.Metadata.Title
+			if group == "" {
+				group = book.Metadata.Notebook
+			}
+			for _, scene := range book.Scenes {
+				for _, expr := range scene.Expressions {
+					addNote(expr, "book", bookID, group, scene.Metadata.Title)
+				}
 			}
 		}
 	}

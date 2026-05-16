@@ -88,6 +88,11 @@ export default function EtymologyReversePage() {
           noteId: r.noteId ? BigInt(r.noteId) : undefined,
           cardId: b.card.cardId,
           origin: b.card.origin,
+          // The meaning was the question the user was shown — preserve
+          // it on the result card so the feedback view isn't just
+          // "origin: metron, meaning: metron" (the bug before this
+          // change, where meaning was misset to correctAnswer = origin).
+          meaning: b.card.meaning,
           answer: b.displayAnswer,
           correct: r.correct,
           reason: r.reason,

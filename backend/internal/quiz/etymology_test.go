@@ -98,6 +98,7 @@ func TestService_LoadEtymologyOriginCards(t *testing.T) {
 		true,
 		true,
 		notebook.QuizTypeEtymologyStandard,
+		nil,
 	)
 	require.NoError(t, err)
 
@@ -197,13 +198,13 @@ origins:
 	)
 
 	// When skipEligibility is false, only root-b should be eligible (standard/reverse gate).
-	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, false, notebook.QuizTypeEtymologyStandard)
+	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, false, notebook.QuizTypeEtymologyStandard, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1, "only origins that were freeformed AND answered correctly should be eligible")
 	assert.Equal(t, "root-b", cards[0].Origin)
 
 	// When skipEligibility is true (freeform mode), ALL origins are returned.
-	freeformCards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, true, notebook.QuizTypeEtymologyFreeform)
+	freeformCards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, true, notebook.QuizTypeEtymologyFreeform, nil)
 	require.NoError(t, err)
 	require.Len(t, freeformCards, 4, "freeform quiz should see all origins regardless of eligibility")
 }
@@ -280,9 +281,65 @@ origins:
 	// = different sources of truth, distinct cards under the new keying).
 	// Within a single notebook + session, duplicates would still collapse;
 	// here we have two notebooks, so two cards survive.
-	cards, err := svc.LoadEtymologyOriginCards([]string{"roots-1", "roots-2"}, true, true, notebook.QuizTypeEtymologyFreeform)
+	cards, err := svc.LoadEtymologyOriginCards([]string{"roots-1", "roots-2"}, true, true, notebook.QuizTypeEtymologyFreeform, nil)
 	require.NoError(t, err)
 	assert.Len(t, cards, 2, "the same origin in two notebooks remains as separate cards because each notebook is independently tracked")
+}
+
+func TestService_LoadEtymologyOriginCards_SectionFilter(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "two-sessions")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: two-sessions
+kind: Etymology
+name: Two Sessions
+notebooks:
+  - ./session-1.yml
+  - ./session-2.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session-1.yml"), []byte(`metadata:
+  title: "Session One"
+origins:
+  - origin: "alpha"
+    type: root
+    language: Latin
+    meaning: alpha meaning
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session-2.yml"), []byte(`metadata:
+  title: "Session Two"
+origins:
+  - origin: "beta"
+    type: root
+    language: Latin
+    meaning: beta meaning
+`), 0644))
+
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{},
+	)
+
+	all, err := svc.LoadEtymologyOriginCards(
+		[]string{"two-sessions"}, true, true, notebook.QuizTypeEtymologyFreeform, nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, all, 2, "no filter returns both sessions")
+
+	filtered, err := svc.LoadEtymologyOriginCards(
+		[]string{"two-sessions"}, true, true, notebook.QuizTypeEtymologyFreeform,
+		map[string][]string{"two-sessions": {"Session Two"}},
+	)
+	require.NoError(t, err)
+	require.Len(t, filtered, 1)
+	assert.Equal(t, "Session Two", filtered[0].SessionTitle)
+	assert.Equal(t, "beta", filtered[0].Origin)
 }
 
 // TestService_LoadEtymologyOriginCards_DedupesAcrossLanguageMetadata pins the
@@ -348,7 +405,7 @@ origins:
 		config.QuizConfig{},
 	)
 
-	cards, err := svc.LoadEtymologyOriginCards([]string{"messy-roots"}, true, false, notebook.QuizTypeEtymologyStandard)
+	cards, err := svc.LoadEtymologyOriginCards([]string{"messy-roots"}, true, false, notebook.QuizTypeEtymologyStandard, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1, "the same origin must collapse to one card regardless of language/whitespace differences")
 	assert.Equal(t, "spect", cards[0].Origin)

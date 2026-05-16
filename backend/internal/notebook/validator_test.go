@@ -3,12 +3,14 @@ package notebook
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestValidationError_Error(t *testing.T) {
@@ -1909,6 +1911,57 @@ func TestValidator_FixConsistency(t *testing.T) {
 		assert.Contains(t, result.Warnings[0].Message, "Removed orphaned expression")
 	})
 
+	t.Run("keeps expressions whose only data is skipped_at", func(t *testing.T) {
+		// Reproduces a real bug: a word skipped from the notebook detail
+		// page (no logs yet) was dropped by fixConsistency because the
+		// keep-condition only checked logs and story membership. The
+		// SkippedAt map was lost on the next `langner validate --fix`.
+		storyFiles := []storyNotebookFile{
+			{
+				path: "story.yml",
+				contents: []StoryNotebook{
+					{
+						Event: "Episode 1",
+						Scenes: []StoryScene{
+							{Title: "Scene A", Definitions: []Note{{Expression: "eager"}}},
+						},
+					},
+				},
+			},
+		}
+		learningFiles := []learningHistoryFile{
+			{
+				path: "learning.yml",
+				contents: []LearningHistory{
+					{
+						Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+						Scenes: []LearningScene{
+							{
+								Metadata: LearningSceneMetadata{Title: "Scene A"},
+								Expressions: []LearningHistoryExpression{
+									// orphaned (not in story scene), no logs,
+									// but skipped from a quiz mode — must
+									// survive the fix pass.
+									{
+										Expression: "introvert",
+										SkippedAt:  SkippedAtMap{"freeform": "2026-05-09T09:32:08-07:00"},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		}
+
+		result := &ValidationResult{}
+		fixed := v.fixConsistency(learningFiles, storyFiles, result)
+
+		require.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 1, "skipped-only expression must not be dropped")
+		assert.Equal(t, "introvert", fixed[0].contents[0].Scenes[0].Expressions[0].Expression)
+		assert.True(t, fixed[0].contents[0].Scenes[0].Expressions[0].SkippedAt.IsSkippedAny())
+	})
+
 	t.Run("keeps orphaned expressions with learned_logs", func(t *testing.T) {
 		storyFiles := []storyNotebookFile{
 			{
@@ -1949,6 +2002,455 @@ func TestValidator_FixConsistency(t *testing.T) {
 		assert.Len(t, fixed[0].contents[0].Scenes[0].Expressions, 2)
 		assert.Len(t, result.Warnings, 0)
 	})
+}
+
+// TestValidator_Fix_PreservesEveryPersistableField is a reflection-based
+// regression guard against the class of bug where a new field is added to
+// LearningHistoryExpression but the validator's fix pass forgets to honour
+// it — silently dropping data on the next `langner validate --fix`. The
+// concrete instance was SkippedAt: per-type skips were saved by SkipWord,
+// then fixConsistency dropped the expression because it had no logs and
+// wasn't in the story notebook.
+//
+// For every exported field on LearningHistoryExpression that participates
+// in YAML round-tripping, this test:
+//  1. builds a minimal expression with only Expression + that one field
+//     populated to a non-zero value,
+//  2. writes it to a learning_notes file with NO matching story file
+//     (so the expression is "orphaned" — the case fixConsistency drops),
+//  3. runs Validator.Fix(),
+//  4. reloads the YAML from disk,
+//  5. asserts the expression survived AND the field is still non-zero.
+//
+// Adding a new persisted field to LearningHistoryExpression will make this
+// test fail until the fix pipeline is updated to recognize the field — or
+// the field is explicitly added to the skip list below with a comment
+// explaining why losing it during --fix is intentional.
+func TestValidator_Fix_PreservesEveryPersistableField(t *testing.T) {
+	// Fields the fix pass is allowed to mutate or drop. Each entry must
+	// document why; an empty list keeps the guard tight.
+	skip := map[string]string{
+		"Expression":     "the identifier itself, always set",
+		"EasinessFactor": `yaml:"-" — derived on the fly`,
+		"ReverseEasinessFactor":            `yaml:"-" — derived`,
+		"EtymologyBreakdownEasinessFactor": `yaml:"-" — derived`,
+		"EtymologyAssemblyEasinessFactor":  `yaml:"-" — derived`,
+		// Type is a discriminator (vocabulary vs origin), not data. An
+		// entry whose only data is Type is empty by intent and is
+		// correctly dropped by fixConsistency. Round-tripping with
+		// other data populated is exercised by the migration tests.
+		"Type": "discriminator field, not 'data' that keeps an entry alive",
+	}
+
+	rt := reflect.TypeOf(LearningHistoryExpression{})
+	for i := 0; i < rt.NumField(); i++ {
+		field := rt.Field(i)
+		if reason, ok := skip[field.Name]; ok {
+			t.Logf("skipping %s: %s", field.Name, reason)
+			continue
+		}
+		// Skip yaml:"-" fields — they don't round-trip by design.
+		if tag := field.Tag.Get("yaml"); tag == "-" {
+			continue
+		}
+
+		t.Run(field.Name, func(t *testing.T) {
+			value, ok := nonZeroValueFor(field.Type)
+			if !ok {
+				t.Fatalf("test cannot generate a non-zero value for field %s of type %s — extend nonZeroValueFor", field.Name, field.Type)
+			}
+
+			expr := LearningHistoryExpression{Expression: "needle"}
+			reflect.ValueOf(&expr).Elem().FieldByName(field.Name).Set(value)
+
+			learningDir := t.TempDir()
+			storyDir := t.TempDir() // intentionally empty: forces the orphaned-expression code path
+
+			// Write the history file with our single-field expression, nested
+			// under a scene so it goes through fixConsistency (the path that
+			// dropped SkippedAt-only entries).
+			history := []LearningHistory{{
+				Metadata: LearningHistoryMetadata{NotebookID: "fixture", Title: "Episode"},
+				Scenes: []LearningScene{{
+					Metadata:    LearningSceneMetadata{Title: "Scene"},
+					Expressions: []LearningHistoryExpression{expr},
+				}},
+			}}
+			path := filepath.Join(learningDir, "fixture.yml")
+			require.NoError(t, WriteYamlFile(path, history))
+
+			v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "", nil)
+			_, err := v.Fix()
+			require.NoError(t, err)
+
+			raw, err := os.ReadFile(path)
+			require.NoError(t, err, "validate --fix must not delete the YAML file")
+
+			var got []LearningHistory
+			require.NoError(t, yaml.Unmarshal(raw, &got))
+			require.NotEmpty(t, got, "validate --fix dropped the entire history")
+			require.NotEmpty(t, got[0].Scenes, "validate --fix dropped the scene")
+			require.NotEmpty(t, got[0].Scenes[0].Expressions,
+				"validate --fix dropped the expression — field %s is not recognised as 'meaningful data' by fixConsistency",
+				field.Name,
+			)
+			roundTripped := got[0].Scenes[0].Expressions[0]
+			fieldValue := reflect.ValueOf(roundTripped).FieldByName(field.Name)
+			assert.False(t, fieldValue.IsZero(),
+				"field %s is zero after validate --fix; fix pipeline must preserve it",
+				field.Name,
+			)
+		})
+	}
+}
+
+// nonZeroValueFor returns a non-zero reflect.Value for a representative set
+// of types LearningHistoryExpression uses. Returning ok=false makes the
+// caller fail loudly when a new field type appears, so the test author has
+// to extend this helper rather than silently skip the new field.
+func nonZeroValueFor(t reflect.Type) (reflect.Value, bool) {
+	switch t.Kind() {
+	case reflect.String:
+		return reflect.ValueOf("test").Convert(t), true
+	case reflect.Int, reflect.Int32, reflect.Int64:
+		return reflect.ValueOf(int64(1)).Convert(t), true
+	case reflect.Float32, reflect.Float64:
+		return reflect.ValueOf(1.0).Convert(t), true
+	case reflect.Bool:
+		return reflect.ValueOf(true), true
+	case reflect.Slice:
+		// LearningRecord is a complex struct; provide a fully-populated
+		// element directly so a slice of one round-trips through YAML.
+		if t.Elem() == reflect.TypeOf(LearningRecord{}) {
+			elem := reflect.ValueOf(LearningRecord{
+				Status:       LearnedStatusUnderstood,
+				LearnedAt:    Date{Time: time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)},
+				Quality:      4,
+				QuizType:     "freeform",
+				IntervalDays: 7,
+			})
+			s := reflect.MakeSlice(t, 1, 1)
+			s.Index(0).Set(elem)
+			return s, true
+		}
+		elem, ok := nonZeroValueFor(t.Elem())
+		if !ok {
+			return reflect.Value{}, false
+		}
+		s := reflect.MakeSlice(t, 1, 1)
+		s.Index(0).Set(elem)
+		return s, true
+	case reflect.Map:
+		// SkippedAtMap is map[string]string under the hood.
+		m := reflect.MakeMapWithSize(t, 1)
+		key, ok1 := nonZeroValueFor(t.Key())
+		val, ok2 := nonZeroValueFor(t.Elem())
+		if !ok1 || !ok2 {
+			return reflect.Value{}, false
+		}
+		// Use a real quiz-type string so legacy-format unmarshaling is
+		// not surprised.
+		if t.Key().Kind() == reflect.String && t.Elem().Kind() == reflect.String {
+			key = reflect.ValueOf("freeform").Convert(t.Key())
+			val = reflect.ValueOf("2026-05-09T09:32:08-07:00").Convert(t.Elem())
+		}
+		m.SetMapIndex(key, val)
+		return m, true
+	case reflect.Struct:
+		// Date is a thin time wrapper; populate it with a non-zero time.
+		if t == reflect.TypeOf(Date{}) {
+			return reflect.ValueOf(Date{Time: time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)}), true
+		}
+		return reflect.Value{}, false
+	}
+	return reflect.Value{}, false
+}
+
+// TestValidator_Fix_TypeFieldRoundTrips proves that the new Type
+// discriminator on LearningHistoryExpression is preserved through a
+// full Validator.Fix run when the entry has actual data — origin and
+// vocabulary entries with the same name in the same scene must
+// coexist as separate records and each must keep its Type.
+func TestValidator_Fix_TypeFieldRoundTrips(t *testing.T) {
+	learningDir := t.TempDir()
+	storyDir := t.TempDir() // empty: orphan-detection isn't relevant here
+
+	// Same-name collision: vocab "ego" + origin "ego" in the same scene.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "wpme.yml"), []byte(`- metadata:
+    id: wpme
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "ego (self)"
+      expressions:
+        - expression: ego
+          type: vocabulary
+          learned_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: notebook
+        - expression: ego
+          type: origin
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+`), 0644))
+
+	v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "wpme.yml"))
+	require.NoError(t, err)
+	var got []LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Scenes, 1)
+	exprs := got[0].Scenes[0].Expressions
+	require.Lenf(t, exprs, 2, "vocab and origin entries with the same name must NOT merge — found: %+v", exprs)
+
+	byType := make(map[string]LearningHistoryExpression, 2)
+	for _, e := range exprs {
+		byType[e.Type] = e
+	}
+	vocab, ok := byType[LearningExpressionTypeVocabulary]
+	require.True(t, ok, "vocabulary entry missing")
+	assert.NotEmpty(t, vocab.LearnedLogs, "vocab entry must keep its learned_logs")
+	assert.Empty(t, vocab.EtymologyBreakdownLogs, "vocab entry must not absorb etymology logs")
+
+	origin, ok := byType[LearningExpressionTypeOrigin]
+	require.True(t, ok, "origin entry missing")
+	assert.NotEmpty(t, origin.EtymologyBreakdownLogs, "origin entry must keep its etymology_breakdown_logs")
+	assert.Empty(t, origin.LearnedLogs, "origin entry must not absorb vocab logs")
+}
+
+// TestValidator_Fix_MigratesEtymologyShape verifies that legacy etymology
+// blocks (top-level title = notebook display name, type=etymology, with
+// sessions stored as scenes) get rewritten into the canonical per-session
+// shape with origins under a scene whose title comes from the matching
+// definitions notebook.
+func TestValidator_Fix_MigratesEtymologyShape(t *testing.T) {
+	root := t.TempDir()
+	learningDir := filepath.Join(root, "learning")
+	storyDir := filepath.Join(root, "stories")
+	defsDir := filepath.Join(root, "definitions")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.MkdirAll(defsDir, 0755))
+
+	defsBookDir := filepath.Join(defsDir, "wpme")
+	require.NoError(t, os.MkdirAll(defsBookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBookDir, "index.yml"), []byte(`id: wpme
+notebooks:
+  - ./session2.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBookDir, "session2.yml"), []byte(`- metadata:
+    title: "Session 2"
+  scenes:
+    - metadata:
+        index: 0
+        title: "ana (up, back)"
+      expressions:
+        - expression: anabolic
+          meaning: "promoting cellular growth"
+          origin_parts:
+            - origin: ana
+              language: Greek
+`), 0644))
+
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "wpme.yml"), []byte(`- metadata:
+    id: wpme
+    title: "Word Power Made Easy"
+    type: etymology
+  scenes:
+    - metadata:
+        title: "Session 2"
+      expressions:
+        - expression: ana
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+        - expression: untracked-origin
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01"
+              quality: 4
+              quiz_type: etymology_freeform
+`), 0644))
+
+	v := NewValidator(learningDir, []string{storyDir}, nil, []string{defsDir}, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "wpme.yml"))
+	require.NoError(t, err)
+	var got []LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+
+	for _, h := range got {
+		assert.NotEqualf(t, "etymology", h.Metadata.Type,
+			"legacy etymology block (title=%q) was not migrated", h.Metadata.Title)
+		assert.NotEqualf(t, "Word Power Made Easy", h.Metadata.Title,
+			"notebook-name top-level block must be replaced by per-session blocks")
+	}
+	require.Len(t, got, 1)
+	require.Equal(t, "Session 2", got[0].Metadata.Title)
+
+	scenesByTitle := make(map[string]LearningScene, len(got[0].Scenes))
+	for _, scene := range got[0].Scenes {
+		scenesByTitle[scene.Metadata.Title] = scene
+	}
+	matched, ok := scenesByTitle["ana (up, back)"]
+	require.Truef(t, ok, "expected scene 'ana (up, back)' from definitions lookup; got: %v", keysOf(scenesByTitle))
+	require.Len(t, matched.Expressions, 1)
+	assert.Equal(t, "ana", matched.Expressions[0].Expression)
+
+	fallback, ok := scenesByTitle["Session 2"]
+	require.True(t, ok, "expected synthetic 'Session 2' scene for unmatched origins")
+	require.Len(t, fallback.Expressions, 1)
+	assert.Equal(t, "untracked-origin", fallback.Expressions[0].Expression)
+}
+
+func keysOf[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	return out
+}
+
+// TestValidator_Fix_PreservesSkippedOnlyOnDisk walks Validator.Fix end-to-end
+// against a real YAML file containing an expression whose only data is
+// SkippedAt. The previous fixConsistency keep-condition only checked logs
+// and story membership and dropped this expression. After the fix, the
+// expression and its SkippedAt map must survive a round trip through
+// Validator.Fix.
+func TestValidator_Fix_PreservesSkippedOnlyOnDisk(t *testing.T) {
+	learningDir := t.TempDir()
+	storyDir := t.TempDir() // intentionally empty so the expression is "orphaned"
+
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "fixture.yml"), []byte(`- metadata:
+    id: fixture
+    title: "Episode 1"
+  scenes:
+    - metadata:
+        title: "Scene A"
+      expressions:
+        - expression: "introvert"
+          learned_logs: []
+          skipped_at:
+            freeform: "2026-05-09T09:32:08-07:00"
+            reverse: "2026-05-09T09:32:08-07:00"
+`), 0644))
+
+	v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "fixture.yml"))
+	require.NoError(t, err)
+	var got []LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Scenes, 1)
+	require.Len(t, got[0].Scenes[0].Expressions, 1,
+		"validate --fix must NOT drop a skipped-only expression — the "+
+			"previous keep-condition lost SkippedAt-only entries on every "+
+			"--fix pass")
+	expr := got[0].Scenes[0].Expressions[0]
+	assert.Equal(t, "introvert", expr.Expression)
+	assert.Contains(t, expr.SkippedAt, "freeform")
+	assert.Contains(t, expr.SkippedAt, "reverse")
+}
+
+// TestValidator_Fix_RecomputesClampedIntervals walks a Validator.Fix run
+// end-to-end against a YAML that already has the corrupted state the
+// previous duration.Hours()/24 truncation produced: a misunderstood log
+// the previous evening followed by a correct log the next morning, with
+// the correct log's interval frozen at 1 (what the buggy guard wrote
+// on a prior --fix pass).
+//
+// After Fix, the correct log's IntervalDays must advance past 1 and the
+// YAML on disk must reflect that change. If this test passes but the
+// user still sees stale intervals, the binary they ran is older than
+// the calendar-day fix.
+func TestValidator_Fix_RecomputesClampedIntervals(t *testing.T) {
+	learningDir := t.TempDir()
+	storyDir := t.TempDir()
+
+	// One story scene matching the learning history so fixConsistency
+	// keeps the expression. Source structure mirrors a real notebook.
+	notebookDir := filepath.Join(storyDir, "fixture")
+	require.NoError(t, os.MkdirAll(notebookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(notebookDir, "index.yml"), []byte(`id: fixture
+name: Fixture
+notebooks:
+  - ./episode.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(notebookDir, "episode.yml"), []byte(`- event: "Episode 1"
+  date: 2026-05-09T00:00:00Z
+  scenes:
+    - scene: "Scene A"
+      conversations:
+        - speaker: "A"
+          quote: "Be careful not to lose your temper."
+      definitions:
+        - expression: "lose temper"
+          meaning: "to become very angry"
+`), 0644))
+
+	// learning_notes carrying the corrupted shape: correct log at Day 2
+	// 09:00 has interval=1, which the buggy validator clamped from 7.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "fixture.yml"), []byte(`- metadata:
+    id: fixture
+    title: "Episode 1"
+  scenes:
+    - metadata:
+        title: "Scene A"
+      expressions:
+        - expression: "lose temper"
+          learned_logs:
+            - status: understood
+              learned_at: "2026-05-10T09:00:00Z"
+              quality: 4
+              quiz_type: notebook
+              interval_days: 1
+            - status: misunderstood
+              learned_at: "2026-05-09T18:00:00Z"
+              quality: 1
+              quiz_type: notebook
+              interval_days: 1
+`), 0644))
+
+	v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "",
+		&FixedLevelCalculator{Intervals: DefaultFixedIntervals})
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "fixture.yml"))
+	require.NoError(t, err)
+	var got []LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Scenes, 1)
+	require.Len(t, got[0].Scenes[0].Expressions, 1)
+	logs := got[0].Scenes[0].Expressions[0].LearnedLogs
+	require.Len(t, logs, 2, "both logs must survive Fix")
+
+	// logs[0] is newest-first by validator's contract → the Day-2 correct.
+	assert.Equal(t, "2026-05-10", logs[0].LearnedAt.Format("2006-01-02"))
+	assert.Greater(t, logs[0].IntervalDays, 1,
+		"validate --fix must advance the corrupted interval=1 to the next "+
+			"fixed level (7); if this fires, the calendar-day guard isn't "+
+			"flowing through Validator.Fix end-to-end",
+	)
+	assert.Equal(t, 7, logs[0].IntervalDays,
+		"FixedLevelCalculator should land on 7 (level 1)")
 }
 
 func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {

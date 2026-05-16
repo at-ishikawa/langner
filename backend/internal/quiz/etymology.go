@@ -20,10 +20,16 @@ type EtymologyOriginCard struct {
 	NotebookName  string
 	NotebookTitle string
 	SessionTitle  string
-	Origin        string
-	Type          string
-	Language      string
-	Meaning       string
+	// SceneTitle is the canonical scene the origin belongs to, mirroring
+	// the matching definitions file's scene of the same name. Populated
+	// at read time by the reader's origin → scene projection (legacy
+	// flat-shape source files) or directly from the source's
+	// `event/scenes/origins` structure (new shape).
+	SceneTitle string
+	Origin     string
+	Type       string
+	Language   string
+	Meaning    string
 }
 
 // originDedupKey returns the canonical key used to deduplicate etymology
@@ -45,11 +51,15 @@ func originDedupKey(origin string) string {
 // When skipEligibility is true the hard gate (freeform-first + has-correct-answer)
 // is skipped — the freeform quiz needs this because it IS the entry point where
 // origins are encountered for the first time.
+//
+// sessionTitlesByID narrows the result to specific etymology sessions per
+// notebook. A nil/empty list for a notebook means "all sessions".
 func (s *Service) LoadEtymologyOriginCards(
 	etymologyNotebookIDs []string,
 	includeUnstudied bool,
 	skipEligibility bool,
 	quizType notebook.QuizType,
+	sessionTitlesByID map[string][]string,
 ) ([]EtymologyOriginCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
@@ -84,8 +94,12 @@ func (s *Service) LoadEtymologyOriginCards(
 		if idx, ok := etymIndexes[etymID]; ok {
 			nbTitle = idx.Name
 		}
+		sessionFilter := sessionTitlesByID[etymID]
 
 		for _, o := range origins {
+			if !inSectionFilter(sessionFilter, o.SessionTitle) {
+				continue
+			}
 			// Per-session dedup: an origin appearing twice within the
 			// same session (e.g. with inconsistent language metadata)
 			// collapses to one card, but the same origin in another
@@ -126,6 +140,7 @@ func (s *Service) LoadEtymologyOriginCards(
 				NotebookName:  etymID,
 				NotebookTitle: nbTitle,
 				SessionTitle:  o.SessionTitle,
+				SceneTitle:    o.SceneTitle,
 				Origin:        o.Origin,
 				Type:          o.Type,
 				Language:      o.Language,
@@ -231,14 +246,20 @@ func (s *Service) SaveEtymologyOriginResult(
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName], s.calculator)
-	// SessionTitle becomes the scene title — per-sense SR history is keyed by
-	// (notebook, session_title, origin) so two different senses of the same
-	// origin (ana = "up" in Session 13, "negative" in Session 16) get
-	// independent learning curves.
+	// Etymology learning history shares one top-level block per session
+	// with standard/reverse/freeform writes. Origins land in the same
+	// scene the matching vocab definition references (or a synthetic
+	// scene = session title when no match exists). Multi-sense origins
+	// remain disambiguated because each session is its own top-level
+	// block.
+	sceneTitle := card.SceneTitle
+	if sceneTitle == "" {
+		sceneTitle = card.SessionTitle
+	}
 	updater.UpdateOrCreateExpressionWithQualityForEtymology(
 		card.NotebookName,
-		card.NotebookTitle,
 		card.SessionTitle,
+		sceneTitle,
 		card.Origin,
 		card.Origin,
 		correct,
@@ -446,7 +467,19 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 
 		dueCount := 0
 		seen := make(map[string]bool)
+		seenSession := make(map[string]struct{})
+		// sectionDue tallies due origins per session in the order sessions
+		// first appear in the file so the start page lists them in document
+		// order rather than map-iteration order.
+		var sessionOrder []string
+		sectionDue := make(map[string]int)
 		for _, o := range origins {
+			if o.SessionTitle != "" {
+				if _, ok := seenSession[o.SessionTitle]; !ok {
+					seenSession[o.SessionTitle] = struct{}{}
+					sessionOrder = append(sessionOrder, o.SessionTitle)
+				}
+			}
 			// Per-(session, origin) dedup so multi-sense origins each
 			// contribute their own due-count slot. See
 			// LoadEtymologyOriginCards for the keying rationale.
@@ -466,7 +499,16 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 			}
 			if needsOriginReview(learningHistories[id], index.Name, o.SessionTitle, o.Origin, notebook.QuizTypeEtymologyStandard) {
 				dueCount++
+				sectionDue[o.SessionTitle]++
 			}
+		}
+
+		var sections []NotebookSectionSummary
+		for _, title := range sessionOrder {
+			sections = append(sections, NotebookSectionSummary{
+				Title:                title,
+				EtymologyReviewCount: sectionDue[title],
+			})
 		}
 
 		summaries = append(summaries, NotebookSummary{
@@ -475,95 +517,133 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 			EtymologyReviewCount: dueCount,
 			Kind:                 "Etymology",
 			LatestDate:           index.LatestDate,
+			Sections:             sections,
 		})
 	}
 
 	return summaries, nil
 }
 
-// isOriginEligible is the hard gate that must always pass for an origin to
-// appear in etymology standard or reverse quizzes. The user must have (1)
-// attempted the origin in etymology freeform mode at least once, and (2)
-// answered at least one etymology question about it correctly. Both checks
-// are enforced even when "include unstudied" is selected.
+// findOriginExpression returns the LearningHistoryExpression for an origin.
+// Prefers entries explicitly typed as origin so a vocab entry sharing the
+// name (e.g. "ego" the word vs the Latin root) isn't returned by mistake.
+// Falls back to legacy type-empty entries that carry etymology logs (the
+// pre-Type representation). Looks at canonical Shape B first, then legacy
+// Shape A for unmigrated learning-history files.
 //
-// Eligibility is per-(session_title, origin): two senses of the same origin
-// are evaluated independently, so progress on Session 13's "ana" doesn't
-// count toward Session 16's "ana".
+// Eligibility is per-(session_title, origin) so multi-sense origins
+// (ana = "up" in Session 13, "negative" in Session 16) keep independent
+// learning curves — different sessions live in different top-level blocks.
+func findOriginExpression(
+	histories []notebook.LearningHistory,
+	notebookTitle, sessionTitle, origin string,
+) *notebook.LearningHistoryExpression {
+	isOriginCandidate := func(expr *notebook.LearningHistoryExpression) bool {
+		if expr.Type == notebook.LearningExpressionTypeOrigin {
+			return true
+		}
+		if expr.Type == "" && (len(expr.EtymologyBreakdownLogs) > 0 || len(expr.EtymologyAssemblyLogs) > 0) {
+			return true
+		}
+		return false
+	}
+	scan := func(h *notebook.LearningHistory) *notebook.LearningHistoryExpression {
+		var typedHit, legacyHit *notebook.LearningHistoryExpression
+		check := func(expr *notebook.LearningHistoryExpression) {
+			if !strings.EqualFold(expr.Expression, origin) {
+				return
+			}
+			if expr.Type == notebook.LearningExpressionTypeOrigin && typedHit == nil {
+				typedHit = expr
+				return
+			}
+			if isOriginCandidate(expr) && legacyHit == nil {
+				legacyHit = expr
+			}
+		}
+		for ei := range h.Expressions {
+			check(&h.Expressions[ei])
+		}
+		for si := range h.Scenes {
+			for ei := range h.Scenes[si].Expressions {
+				check(&h.Scenes[si].Expressions[ei])
+			}
+		}
+		if typedHit != nil {
+			return typedHit
+		}
+		return legacyHit
+	}
+
+	// Canonical Shape B: top-level title is the session.
+	for hi := range histories {
+		if histories[hi].Metadata.Title != sessionTitle {
+			continue
+		}
+		if hit := scan(&histories[hi]); hit != nil {
+			return hit
+		}
+	}
+	// Legacy Shape A fallback: notebook-named top-level block, sessions
+	// as scenes.
+	for hi := range histories {
+		if histories[hi].Metadata.Title != notebookTitle {
+			continue
+		}
+		for si := range histories[hi].Scenes {
+			if histories[hi].Scenes[si].Metadata.Title != sessionTitle {
+				continue
+			}
+			for ei := range histories[hi].Scenes[si].Expressions {
+				expr := &histories[hi].Scenes[si].Expressions[ei]
+				if strings.EqualFold(expr.Expression, origin) && isOriginCandidate(expr) {
+					return expr
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// isOriginEligible is the hard gate that must always pass for an origin to
+// appear in etymology standard or reverse quizzes. The user must have
+// attempted the origin in etymology freeform mode at least once AND
+// answered at least one etymology question about it correctly.
 func isOriginEligible(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
 ) bool {
-	for _, h := range histories {
-		if h.Metadata.Title != notebookTitle {
-			continue
-		}
-		for _, scene := range h.Scenes {
-			if scene.Metadata.Title != sessionTitle {
-				continue
-			}
-			for _, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, origin) {
-					continue
-				}
-				return expr.HasEtymologyFreeformAnswer() && expr.HasCorrectEtymologyAnswer()
-			}
-		}
+	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
+	if expr == nil {
+		return false
 	}
-	return false
+	return expr.HasEtymologyFreeformAnswer() && expr.HasCorrectEtymologyAnswer()
 }
 
 // isOriginSkipped returns true when the origin's per-(notebook, session)
-// learning history records a skip for the given quiz type. Origins outside
-// the history (no record yet) are never skipped.
+// learning history records a skip for the given quiz type.
 func isOriginSkipped(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
 	quizType notebook.QuizType,
 ) bool {
-	for _, h := range histories {
-		if h.Metadata.Title != notebookTitle {
-			continue
-		}
-		for _, scene := range h.Scenes {
-			if scene.Metadata.Title != sessionTitle {
-				continue
-			}
-			for _, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, origin) {
-					continue
-				}
-				return expr.SkippedAt.IsSkipped(quizType)
-			}
-		}
+	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
+	if expr == nil {
+		return false
 	}
-	return false
+	return expr.SkippedAt.IsSkipped(quizType)
 }
 
 // needsOriginReview checks whether an origin is DUE for review under the
-// spaced-repetition schedule. Callers must first verify eligibility via
-// isOriginEligible; this function assumes the origin has already cleared
-// the freeform-first and has-correct-answer gates.
+// spaced-repetition schedule. Callers must first verify eligibility.
 func needsOriginReview(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
 	quizType notebook.QuizType,
 ) bool {
-	for _, h := range histories {
-		if h.Metadata.Title != notebookTitle {
-			continue
-		}
-		for _, scene := range h.Scenes {
-			if scene.Metadata.Title != sessionTitle {
-				continue
-			}
-			for _, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, origin) {
-					continue
-				}
-				return expr.NeedsEtymologyReview(quizType)
-			}
-		}
+	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
+	if expr == nil {
+		return false
 	}
-	return false
+	return expr.NeedsEtymologyReview(quizType)
 }

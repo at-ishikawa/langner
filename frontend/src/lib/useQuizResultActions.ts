@@ -73,18 +73,18 @@ export function useQuizResultActions(quizType: QuizType): QuizResultActions {
   const handleSkip = useCallback(async (item: ResultItem) => {
     if (!item.noteId) return;
     try {
-      await quizClient.skipWord({ noteId: item.noteId });
+      await quizClient.skipWord({ noteId: item.noteId, quizTypes: [protoQt] });
       skipResult(item.index, quizType);
     } catch { /* silently fail */ }
-  }, [quizType, skipResult]);
+  }, [protoQt, quizType, skipResult]);
 
   const handleResume = useCallback(async (item: ResultItem) => {
     if (!item.noteId) return;
     try {
-      await quizClient.resumeWord({ noteId: item.noteId });
+      await quizClient.resumeWord({ noteId: item.noteId, quizTypes: [protoQt] });
       resumeResult(item.index, quizType);
     } catch { /* silently fail */ }
-  }, [quizType, resumeResult]);
+  }, [protoQt, quizType, resumeResult]);
 
   return { handleOverride, handleUndo, handleSkip, handleResume };
 }

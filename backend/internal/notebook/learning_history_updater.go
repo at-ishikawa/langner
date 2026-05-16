@@ -419,11 +419,45 @@ func (u *LearningHistoryUpdater) SetSkippedAt(expression string, quizType QuizTy
 	return true
 }
 
-// UpdateOrCreateExpressionWithQualityForEtymology updates or creates an expression with SM-2 quality assessment for etymology quiz.
+// EnsureExpressionStubForSkip creates a learned-log-free stub for the
+// expression at (notebookID, storyTitle, sceneTitle) when no entry exists
+// yet. The stub holds only the expression name; SetSkippedAt then writes
+// the skip timestamp onto it. This is the path the notebook detail page's
+// per-type skip checkboxes take when the user clicks Skip on a word that
+// hasn't been studied yet — without it, the only way to record a skip
+// was UpdateOrCreateExpressionWithQuality, which fabricated a fake
+// "quality 5" learned_log entry that pretended the user had answered
+// the word correctly.
 //
-// Etymology learning history is stored under per-session scenes (sceneTitle =
-// the session's metadata.title) so multi-sense origins are tracked separately.
-// Callers must always pass a non-empty sceneTitle.
+// If the expression already exists anywhere in the history, this is a
+// no-op and SetSkippedAt updates the existing record in place.
+//
+// sceneTitle "" stores the stub at the top-level Expressions list
+// (flashcard-style); a non-empty value nests it under that scene.
+func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
+	notebookID, storyTitle, sceneTitle, expression string,
+) {
+	if u.FindExpressionByName(expression) != nil {
+		return
+	}
+	stub := LearningHistoryExpression{Expression: expression}
+	if sceneTitle == "" {
+		idx := u.findOrCreateStory(notebookID, storyTitle, "flashcard")
+		u.history[idx].Expressions = append(u.history[idx].Expressions, stub)
+		return
+	}
+	storyIdx := u.findOrCreateStory(notebookID, storyTitle, "")
+	sceneIdx := u.findOrCreateScene(storyIdx, sceneTitle)
+	u.history[storyIdx].Scenes[sceneIdx].Expressions = append(
+		u.history[storyIdx].Scenes[sceneIdx].Expressions, stub,
+	)
+}
+
+// UpdateOrCreateExpressionWithQualityForEtymology updates or creates an
+// origin entry. Lookup matches on (name, Type=origin) so a vocab entry
+// sharing the name doesn't get its etymology logs polluted. Legacy
+// type-empty entries with etymology logs are upgraded in place to
+// Type=origin so re-runs converge on the typed shape.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
@@ -447,6 +481,20 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
+				// Skip vocab entries — only update origin entries (or
+				// legacy type-empty entries that already carry etymology
+				// logs, which we can safely upgrade).
+				if exp.Type != LearningExpressionTypeOrigin {
+					if exp.Type != "" {
+						continue
+					}
+					if len(exp.EtymologyBreakdownLogs) == 0 && len(exp.EtymologyAssemblyLogs) == 0 {
+						continue
+					}
+				}
+				if exp.Type == "" {
+					exp.Type = LearningExpressionTypeOrigin
+				}
 				exp.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
@@ -458,7 +506,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 	return false
 }
 
-// createNewExpressionWithQualityForEtymology creates a new expression entry with quality data for etymology quiz
+// createNewExpressionWithQualityForEtymology creates a new expression entry
+// with quality data for etymology quizzes. The entry is tagged
+// Type=origin so it never collides with a vocab entry sharing the same
+// name in the same scene (e.g., "ego" the word vs the Latin root).
 func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression string,
 	isCorrect, isKnownWord bool,
@@ -467,14 +518,10 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 	quizType QuizType,
 ) {
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, "")
-	// Mark as etymology so the validator skips the per-scene duplicate check
-	// (multi-sense origins legitimately appear in multiple session scenes).
-	if u.history[storyIndex].Metadata.Type == "" {
-		u.history[storyIndex].Metadata.Type = "etymology"
-	}
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
+		Type:        LearningExpressionTypeOrigin,
 		LearnedLogs: []LearningRecord{},
 	}
 	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)

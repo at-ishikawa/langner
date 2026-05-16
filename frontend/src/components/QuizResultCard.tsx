@@ -237,7 +237,7 @@ export function QuizResultCard({
       {/* Etymology origin breakdown with badges */}
       {isEtymology && item.originBreakdown && item.originBreakdown.length > 0 && (
         <Box mb={2}>
-          {!item.correct && item.userAnswer && (
+          {item.userAnswer && (
             <Box
               display="inline-flex"
               alignItems="center"

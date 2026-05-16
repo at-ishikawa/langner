@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"gopkg.in/yaml.v3"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
@@ -243,6 +244,54 @@ func TestQuizHandler_StartQuiz_WithStoryNotebook(t *testing.T) {
 	assert.Greater(t, flashcards[0].GetNoteId(), int64(0))
 	// buildFromConversations should find the conversation containing "preposterous"
 	assert.NotEmpty(t, flashcards[0].GetExamples())
+}
+
+func TestQuizHandler_StartQuiz_WithNotebookSections(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
+
+	// Filter to a non-existent section so the result is empty even though
+	// the notebook itself has matching content.
+	resp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookSections: []*apiv1.NotebookSection{
+				{NotebookId: "test-story", SectionTitles: []string{"Other Chapter"}},
+			},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetFlashcards())
+
+	// Filter to the actual chapter — the flashcard appears.
+	resp, err = handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookSections: []*apiv1.NotebookSection{
+				{NotebookId: "test-story", SectionTitles: []string{"Chapter One"}},
+			},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetFlashcards(), 1)
+	assert.Equal(t, "preposterous", resp.Msg.GetFlashcards()[0].GetEntry())
+}
+
+func TestQuizHandler_StartQuiz_RequiresNotebookSelection(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	handler, _ := newTestHandlerWithFixtures(t, mock_inference.NewMockClient(ctrl))
+
+	_, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{}),
+	)
+	require.Error(t, err)
+	connectErr, ok := err.(*connect.Error)
+	require.True(t, ok)
+	assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 }
 
 func TestQuizHandler_StartQuiz_WithFlashcardNotebook(t *testing.T) {
@@ -1227,12 +1276,10 @@ func TestValidateRequest(t *testing.T) {
 			msg:     &apiv1.StartQuizRequest{NotebookIds: []string{"nb-1"}},
 			wantErr: false,
 		},
-		{
-			name:          "empty notebook_ids returns error with detail",
-			msg:           &apiv1.StartQuizRequest{},
-			wantErr:       true,
-			wantDetailLen: 1,
-		},
+		// Empty notebook_ids is now caught by resolveNotebookSections in
+		// each Start* handler (the proto-level min_items rule was removed
+		// to allow notebook_sections as an alternative). See
+		// TestQuizHandler_StartQuiz_RequiresNotebookSelection.
 		{
 			name:    "valid SubmitAnswerRequest passes",
 			msg:     &apiv1.SubmitAnswerRequest{NoteId: 1, Answer: "hello"},
@@ -1374,7 +1421,8 @@ func TestQuizHandler_SkipWord_FromSession(t *testing.T) {
 	resp, err := handler.SkipWord(
 		context.Background(),
 		connect.NewRequest(&apiv1.SkipWordRequest{
-			NoteId: noteID,
+			NoteId:    noteID,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
 		}),
 	)
 	require.NoError(t, err)
@@ -1394,7 +1442,8 @@ func TestQuizHandler_SkipWord_ValidationError(t *testing.T) {
 	resp, err := handler.SkipWord(
 		context.Background(),
 		connect.NewRequest(&apiv1.SkipWordRequest{
-			NoteId: 0,
+			NoteId:    0,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
 		}),
 	)
 	require.Error(t, err)
@@ -1412,7 +1461,8 @@ func TestQuizHandler_SkipWord_NotFound(t *testing.T) {
 	resp, err := handler.SkipWord(
 		context.Background(),
 		connect.NewRequest(&apiv1.SkipWordRequest{
-			NoteId: 999,
+			NoteId:    999,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
 		}),
 	)
 	require.Error(t, err)
@@ -1420,6 +1470,145 @@ func TestQuizHandler_SkipWord_NotFound(t *testing.T) {
 	connectErr, ok := err.(*connect.Error)
 	require.True(t, ok)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
+}
+
+// TestQuizHandler_SkipWord_BatchPersistsAllTypes pins the batched SkipWord
+// API. The "All" toggle on the notebook detail page sends every quiz mode
+// in one request; the previous per-type RPC raced when the UI fanned the
+// calls out concurrently and dropped some of the skips. With the batched
+// shape, a single read-modify-write applies them atomically.
+func TestQuizHandler_SkipWord_BatchPersistsAllTypes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, learningDir := newTestHandlerWithFixtures(t, mockClient)
+
+	// Start a quiz so the in-memory note store has a noteID we can call SkipWord with.
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	_, err = handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId: noteID,
+			QuizTypes: []apiv1.QuizType{
+				apiv1.QuizType_QUIZ_TYPE_STANDARD,
+				apiv1.QuizType_QUIZ_TYPE_REVERSE,
+				apiv1.QuizType_QUIZ_TYPE_FREEFORM,
+			},
+		}),
+	)
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "test-vocab.yml"))
+	require.NoError(t, err)
+	var got []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Expressions, 1)
+
+	skipped := got[0].Expressions[0].SkippedAt
+	assert.Contains(t, skipped, "notebook", "standard skip must persist")
+	assert.Contains(t, skipped, "reverse", "reverse skip must persist")
+	assert.Contains(t, skipped, "freeform", "freeform skip must persist")
+}
+
+// TestQuizHandler_ResumeWord_BatchClearsAllTypes mirrors the SkipWord batch
+// test for the resume side: a single request must clear every listed
+// quiz-type slot in one read-modify-write.
+func TestQuizHandler_ResumeWord_BatchClearsAllTypes(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, learningDir := newTestHandlerWithFixtures(t, mockClient)
+
+	startResp, err := handler.StartQuiz(
+		context.Background(),
+		connect.NewRequest(&apiv1.StartQuizRequest{
+			NotebookIds:      []string{"test-vocab"},
+			IncludeUnstudied: true,
+		}),
+	)
+	require.NoError(t, err)
+	noteID := startResp.Msg.GetFlashcards()[0].GetNoteId()
+
+	allTypes := []apiv1.QuizType{
+		apiv1.QuizType_QUIZ_TYPE_STANDARD,
+		apiv1.QuizType_QUIZ_TYPE_REVERSE,
+		apiv1.QuizType_QUIZ_TYPE_FREEFORM,
+	}
+	_, err = handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{NoteId: noteID, QuizTypes: allTypes}),
+	)
+	require.NoError(t, err)
+
+	_, err = handler.ResumeWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.ResumeWordRequest{NoteId: noteID, QuizTypes: allTypes}),
+	)
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "test-vocab.yml"))
+	require.NoError(t, err)
+	var got []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Expressions, 1)
+	assert.Empty(t, got[0].Expressions[0].SkippedAt, "every listed slot should be cleared")
+}
+
+// SkipWord must succeed when called from outside an active quiz session
+// (e.g. the notebook detail page's per-type skip checkboxes), as long as
+// the note repository is wired. Without SetNoteRepository wiring in
+// main.go, resolveCardInfo falls through to "no database configured"
+// even though the DB is available — exactly the bug that 18:24 produced.
+func TestQuizHandler_SkipWord_FromNotebookDetailPage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, _ := newTestHandlerWithFixtures(t, mockClient)
+
+	const noteID int64 = 3450014
+
+	// First call without noteRepository wired — emulates the bug.
+	_, err := handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId:    noteID,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
+		}),
+	)
+	require.Error(t, err)
+	connectErr, ok := err.(*connect.Error)
+	require.True(t, ok)
+	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
+	assert.Contains(t, err.Error(), "no database configured")
+
+	// Now wire the repository (what main.go must do) and retry.
+	mockRepo := mock_notebook.NewMockNoteRepository(ctrl)
+	handler.SetNoteRepository(mockRepo)
+	mockRepo.EXPECT().FindByID(gomock.Any(), noteID).Return(&notebook.NoteRecord{
+		ID:    noteID,
+		Usage: "egoist",
+		Entry: "egoist",
+		NotebookNotes: []notebook.NotebookNote{
+			{NotebookID: "word-power-made-easy", Group: "Roots", Subgroup: "ego (self)"},
+		},
+	}, nil)
+
+	_, err = handler.SkipWord(
+		context.Background(),
+		connect.NewRequest(&apiv1.SkipWordRequest{
+			NoteId:    noteID,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
+		}),
+	)
+	require.NoError(t, err)
 }
 
 func TestQuizHandler_ResumeWord_FromSession(t *testing.T) {
@@ -1466,7 +1655,8 @@ func TestQuizHandler_ResumeWord_FromSession(t *testing.T) {
 	_, err = handler.SkipWord(
 		context.Background(),
 		connect.NewRequest(&apiv1.SkipWordRequest{
-			NoteId: noteID,
+			NoteId:    noteID,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
 		}),
 	)
 	require.NoError(t, err)
@@ -1475,7 +1665,8 @@ func TestQuizHandler_ResumeWord_FromSession(t *testing.T) {
 	resp, err := handler.ResumeWord(
 		context.Background(),
 		connect.NewRequest(&apiv1.ResumeWordRequest{
-			NoteId: noteID,
+			NoteId:    noteID,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
 		}),
 	)
 	require.NoError(t, err)
@@ -1728,6 +1919,7 @@ func TestQuizHandler_SkipWord_WithCustomDate(t *testing.T) {
 		context.Background(),
 		connect.NewRequest(&apiv1.SkipWordRequest{
 			NoteId:    noteID,
+			QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_STANDARD},
 			SkipUntil: "2027-01-01",
 		}),
 	)

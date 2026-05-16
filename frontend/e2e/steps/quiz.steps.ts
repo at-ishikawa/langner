@@ -329,3 +329,21 @@ Then(
     ).toBeVisible();
   },
 );
+
+// QuizResultCard renders a "your answer · "<text>"" chip when the result has
+// a userAnswer set. The etymology branch previously gated this on incorrect
+// answers only, so correct etymology cards hid what the user typed. The
+// chip's outer <Text> contains both the label and the answer text, so a
+// single regex pins them as one element — avoids matching the meaning
+// "(writing)" rendered elsewhere on the same card.
+Then(
+  "I see my answer {string} on the card for {string}",
+  async ({ page }, answer: string, entry: string) => {
+    const escaped = answer.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    await expect(
+      cardSection(page, entry).getByText(
+        new RegExp(`your answer.*${escaped}`, "i"),
+      ),
+    ).toBeVisible();
+  },
+);

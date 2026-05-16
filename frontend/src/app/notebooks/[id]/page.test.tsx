@@ -9,6 +9,20 @@ vi.mock("@/lib/client", () => ({
     getNotebookDetail: vi.fn(),
     exportNotebookPDF: vi.fn(),
   },
+  quizClient: {
+    skipWord: vi.fn(),
+    resumeWord: vi.fn(),
+    getQuizOptions: vi.fn().mockResolvedValue({ notebooks: [] }),
+  },
+  QuizType: {
+    UNSPECIFIED: 0,
+    STANDARD: 1,
+    REVERSE: 2,
+    FREEFORM: 3,
+    ETYMOLOGY_STANDARD: 4,
+    ETYMOLOGY_REVERSE: 5,
+    ETYMOLOGY_FREEFORM: 6,
+  },
 }));
 
 vi.mock("next/navigation", () => ({

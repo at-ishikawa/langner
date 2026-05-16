@@ -95,6 +95,10 @@ export interface FreeformResult {
   wordDetail?: WordDetail;
   nextReviewDate?: string;
   learnedAt?: string;
+  // noteId is required for per-result override/undo/skip on the
+  // complete page and on the batch feedback that freeform now uses.
+  // The freeform RPC returns it when the typed word matches a card.
+  noteId?: bigint;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
@@ -105,9 +109,18 @@ export interface EtymologyOriginResult {
   noteId?: bigint;
   cardId?: bigint;
   origin: string;
+  // meaning is the origin's English gloss. Always populated so the
+  // result card can show both the origin and its meaning regardless of
+  // which side of the pair was the question. For standard quiz the
+  // user was shown `origin` and typed `meaning`; for reverse they were
+  // shown `meaning` and typed `origin`. Without this field, the
+  // reverse quiz's review card was missing what was actually asked.
+  meaning: string;
   answer: string;
   correct: boolean;
   reason: string;
+  // correctAnswer is what the user *should have typed* — the meaning
+  // for standard, the origin for reverse. Used for comparison display.
   correctAnswer: string;
   type: string;
   language: string;

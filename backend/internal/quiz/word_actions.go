@@ -1,13 +1,30 @@
 package quiz
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
+
+// loadSingleLearningHistory reads only the YAML for the requested notebook
+// instead of walking the entire learning_notes directory. The previous
+// implementation called NewLearningHistories on every Skip/Resume RPC,
+// re-parsing every notebook's YAML; toggling the "All" master in the UI
+// fires 3 parallel RPCs, tripling the cost. Returns an empty slice if the
+// notebook's history file doesn't exist yet (a freshly-imported word).
+func loadSingleLearningHistory(dir, notebookName string) ([]notebook.LearningHistory, error) {
+	path := filepath.Join(dir, notebookName+".yml")
+	hist, err := notebook.ReadLearningHistoryFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	return hist, err
+}
 
 // CardInfo holds the minimal information needed to identify a word
 // in the learning history for skip/resume/override operations.
@@ -48,32 +65,40 @@ func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 	}
 }
 
-// SkipWord excludes a word from the given quiz type. The skip is recorded
-// as a per-(expression, quiz_type) timestamp on SkippedAt; quiz card loaders
-// filter against that field. The skipUntil parameter is accepted for RPC
-// compatibility but is not currently honored — exclusion is permanent until
-// ResumeWord clears the slot.
+// SkipWord excludes a word from each of the given quiz types in a single
+// read-modify-write of the notebook's learning history YAML. Batching avoids
+// the race that bit the per-type API: when the UI's "All" toggle issued one
+// RPC per type concurrently, every handler read the same pre-update file
+// and the last writer overwrote the others, dropping skips.
+//
+// The skip is recorded as a per-(expression, quiz_type) timestamp on
+// SkippedAt; quiz card loaders filter against that field. The skipUntil
+// parameter is accepted for RPC compatibility but is not honored —
+// exclusion is permanent until ResumeWord clears the slot.
 //
 // If the expression has no learning history yet, SkipWord seeds an entry so
-// the skip has somewhere to live, then writes the skip onto it.
-func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.QuizType) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+// the skip has somewhere to live, then writes the skips onto it.
+func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook.QuizType) error {
+	if len(quizTypes) == 0 {
+		return fmt.Errorf("at least one quiz type is required to skip a word")
+	}
+	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
+		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
+	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
 
-	if !findExpressionForSkip(updater, info) {
-		// Seed an expression entry so SetSkippedAt has something to mark.
-		// The seeded record uses quality 5 ("usable") to avoid polluting
-		// the SR schedule — the skip itself is what excludes it from quizzes.
-		seedSkippedExpression(updater, info, quizType)
-	}
+	// Create a learned-log-free stub if the expression has no history yet —
+	// SetSkippedAt needs an entry to attach to, but we must not invent a
+	// fake "quality 5" review log just because the user skipped the word.
+	updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, info.Expression)
 
 	skippedAt := time.Now().Format(time.RFC3339)
-	if !updater.SetSkippedAt(info.Expression, quizType, skippedAt) {
-		return fmt.Errorf("failed to record skip for expression %q in notebook %q", info.Expression, info.NotebookName)
+	for _, qt := range quizTypes {
+		if !updater.SetSkippedAt(info.Expression, qt, skippedAt) {
+			return fmt.Errorf("failed to record skip for expression %q (%s) in notebook %q", info.Expression, qt, info.NotebookName)
+		}
 	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
@@ -83,66 +108,24 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizType notebook.Qu
 	return nil
 }
 
-// findExpressionForSkip returns true if the expression already exists in any
-// scene of the learning history for the given notebook + story title. The
-// quiz_type isn't part of the lookup because the SkippedAt map lives on the
-// expression record itself.
-func findExpressionForSkip(updater *notebook.LearningHistoryUpdater, info CardInfo) bool {
-	for _, h := range updater.GetHistory() {
-		if h.Metadata.Title != info.StoryTitle {
-			continue
-		}
-		for _, expr := range h.Expressions {
-			if strings.EqualFold(expr.Expression, info.Expression) {
-				return true
-			}
-		}
-		for _, scene := range h.Scenes {
-			for _, expr := range scene.Expressions {
-				if strings.EqualFold(expr.Expression, info.Expression) {
-					return true
-				}
-			}
-		}
+// ResumeWord clears skips for each of the given quiz types so the word
+// reappears in those modes. Other quiz types' skips are left intact, so a
+// word excluded from multiple modes only resumes the ones the caller lists.
+// Batched into a single read-modify-write for the same race-free reason as
+// SkipWord.
+func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error {
+	if len(quizTypes) == 0 {
+		return fmt.Errorf("at least one quiz type is required to resume a word")
 	}
-	return false
-}
-
-// seedSkippedExpression creates a learning history entry so SetSkippedAt
-// has somewhere to attach the skip. Uses quality 5 ("usable") with
-// responseTimeMs=0 so the SR schedule treats this as a no-op review.
-func seedSkippedExpression(updater *notebook.LearningHistoryUpdater, info CardInfo, quizType notebook.QuizType) {
-	switch quizType {
-	case notebook.QuizTypeReverse:
-		updater.UpdateOrCreateExpressionWithQualityForReverse(
-			info.NotebookName, info.StoryTitle, info.SceneTitle,
-			info.Expression, info.Expression, true, true, 5, 0, quizType,
-		)
-	case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse, notebook.QuizTypeEtymologyFreeform:
-		updater.UpdateOrCreateExpressionWithQualityForEtymology(
-			info.NotebookName, info.StoryTitle, info.SceneTitle,
-			info.Expression, info.Expression, true, true, 5, 0, quizType,
-		)
-	default:
-		updater.UpdateOrCreateExpressionWithQuality(
-			info.NotebookName, info.StoryTitle, info.SceneTitle,
-			info.Expression, info.Expression, true, true, 5, 0, quizType,
-		)
-	}
-}
-
-// ResumeWord clears the skip for the given quiz type so the word reappears
-// in that quiz mode. Other quiz types' skips are left intact, so a word
-// excluded from both `reverse` and `etymology_freeform` only resumes the
-// type the caller specifies.
-func (s *Service) ResumeWord(info CardInfo, quizType notebook.QuizType) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
+		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
 	}
 
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
-	updater.ClearSkippedAt(info.Expression, quizType)
+	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
+	for _, qt := range quizTypes {
+		updater.ClearSkippedAt(info.Expression, qt)
+	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
