@@ -33,3 +33,15 @@ Feature: Browse a vocabulary notebook
     And I filter by the "Understood" status
     Then I see the word "break the ice"
     And I see the word "lose one's temper"
+
+  # The per-quiz-type skip checkboxes route Skip/Resume RPCs from the notebook
+  # detail page. Toggle once, assert, then untoggle so the word stays
+  # available to later quiz scenarios.
+  Scenario: Toggle a per-quiz-type skip on a word card
+    Given I am on the "Idioms" notebook detail page
+    When I open the "Common Idioms" story
+    And I open the "break the ice" word card
+    And I check the "Standard" skip for "break the ice"
+    Then the "Standard" skip for "break the ice" is checked
+    When I uncheck the "Standard" skip for "break the ice"
+    Then the "Standard" skip for "break the ice" is not checked

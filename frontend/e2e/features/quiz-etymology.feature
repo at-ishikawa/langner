@@ -64,7 +64,11 @@ Feature: Etymology quiz modes
     When I type the answer "distant"
     And I submit my answer
 
-    # BatchFeedback now visible: "graph"=incorrect, "tele"=correct.
+    # BatchFeedback now visible: "graph"=incorrect, "tele"=correct. Etymology
+    # cards used to hide the typed-answer chip on correct results — pin it on
+    # "tele" so the regression cannot return silently.
+    Then I see my answer "distant" on the card for "tele"
+
     When I mark "graph" as correct
     And I undo the override for "graph"
     And I mark "tele" as incorrect
@@ -119,7 +123,11 @@ Feature: Etymology quiz modes
     When I type the answer "tele"
     And I submit my answer
 
-    # BatchFeedback now visible: "graph"=incorrect, "tele"=correct.
+    # BatchFeedback now visible: "graph"=incorrect, "tele"=correct. Pin the
+    # typed-answer chip on "tele" — etymology Reverse used to drop it on
+    # correct results.
+    Then I see my answer "tele" on the card for "tele"
+
     When I mark "graph" as correct
     And I undo the override for "graph"
     And I mark "tele" as incorrect
@@ -147,8 +155,12 @@ Feature: Etymology quiz modes
     When I type the origin "graph"
     And I type the meaning "writing"
     And I submit my answer
-    # FeedbackActions now visible — answer was correct.
-    And I mark "graph" as incorrect
+    # FeedbackActions now visible — answer was correct. Etymology Freeform
+    # previously dropped the typed meaning between submit and feedback; pin
+    # the chip with the typed text.
+    Then I see my answer "writing" on the card for "graph"
+
+    When I mark "graph" as incorrect
     And I undo the override for "graph"
     And I exclude "graph"
     And I finish the quiz
