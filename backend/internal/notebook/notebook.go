@@ -207,9 +207,14 @@ type Reference struct {
 }
 
 // OriginPartRef references an etymology origin by origin name and language.
+// FromForm optionally pins this reference to a specific inflectional form
+// declared on the referenced origin (e.g., the supine `missum` of `mittere`).
+// The validator emits a warning if FromForm doesn't match any form on the
+// referenced origin in the same session.
 type OriginPartRef struct {
 	Origin   string `yaml:"origin"`
 	Language string `yaml:"language,omitempty"`
+	FromForm string `yaml:"from_form,omitempty"`
 }
 
 type Phrase struct {

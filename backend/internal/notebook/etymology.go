@@ -16,6 +16,11 @@ type EtymologyOrigin struct {
 	Language string `yaml:"language"` // Latin, Greek, etc.
 	Meaning  string `yaml:"meaning"`
 
+	// Forms records inflectional / morphological variants of this origin
+	// (Latin principal parts, French gender, Greek noun stems, …). See
+	// notebooks/etymology/SCHEMA.md in the langner-data repo for usage.
+	Forms []EtymologyOriginForm `yaml:"forms,omitempty"`
+
 	// SessionTitle is the parent session's title. Set at read time from
 	// the surrounding event/metadata block; not serialised.
 	SessionTitle string `yaml:"-"`
@@ -117,6 +122,8 @@ type etymologySessionFile struct {
 	Metadata    EtymologySessionMetadata   `yaml:"metadata"`
 	Origins     []EtymologyOrigin          `yaml:"origins"`
 	Definitions []EtymologyDefinitionEntry `yaml:"definitions"`
+	Concepts    []Concept                  `yaml:"concepts,omitempty"`
+	Relations   []Relation                 `yaml:"relations,omitempty"`
 	Date        time.Time                  `yaml:"date,omitempty"`
 }
 

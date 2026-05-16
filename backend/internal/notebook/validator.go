@@ -127,6 +127,12 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 	// Validate definitions from separate definitions files appear in conversations
 	v.validateSeparateDefinitionsInConversations(storyNotebooks, result)
 
+	// Validate the new etymology extensions (forms, concepts, relations).
+	// Failures are warn-only while the schema matures so existing notebooks
+	// (which don't carry these fields) keep validating cleanly.
+	v.validateEtymologyExtensions(result)
+	v.validateFromForm(result)
+
 	return result, nil
 }
 
