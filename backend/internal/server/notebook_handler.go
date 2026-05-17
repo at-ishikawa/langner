@@ -788,6 +788,16 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		}
 	}
 
+	// Load book-scoped semantic concepts and relations directly from YAML
+	// (the same source ingestion uses). Concepts with the same concept_key
+	// across sessions merge into one entry, with members unioned. Relations
+	// reference concept keys; the response carries them as keys so the
+	// frontend doesn't need to map IDs.
+	concepts, conceptKeysByOrigin, err := h.loadEtymologyConcepts(ctx, reader, notebookID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load semantic concepts: %w", err))
+	}
+
 	// Build proto origins with per-sense word counts
 	var protoOrigins []*apiv1.EtymologyOriginPart
 	for _, o := range origins {
@@ -799,13 +809,20 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 				Note: f.Note,
 			})
 		}
+		// Concept membership for this origin sense — empty when the origin
+		// participates in no concept on this notebook.
+		var conceptKeys []string
+		if keys, ok := conceptKeysByOrigin[originKey(o.Origin, o.SessionTitle)]; ok {
+			conceptKeys = keys
+		}
 		protoOrigins = append(protoOrigins, &apiv1.EtymologyOriginPart{
-			Origin:    o.Origin,
-			Type:      o.Type,
-			Language:  o.Language,
-			Meaning:   o.Meaning,
-			WordCount: int32(originWordCounts[originKey(o.Origin, o.SessionTitle)]),
-			Forms:     forms,
+			Origin:      o.Origin,
+			Type:        o.Type,
+			Language:    o.Language,
+			Meaning:     o.Meaning,
+			WordCount:   int32(originWordCounts[originKey(o.Origin, o.SessionTitle)]),
+			Forms:       forms,
+			ConceptKeys: conceptKeys,
 		})
 	}
 
@@ -834,7 +851,127 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		MeaningGroups:   meaningGroups,
 		OriginCount:     int32(len(origins)),
 		DefinitionCount: int32(len(definitions)),
+		Concepts:        concepts,
 	}), nil
+}
+
+// loadEtymologyConcepts merges per-session concept declarations into one
+// proto entry per (notebook_id, concept_key) and attaches each concept's
+// outgoing relations. Returns the proto list plus a map keyed by the same
+// (origin, sessionTitle) tuple GetEtymologyNotebook uses for word counts,
+// containing the concept keys whose membership includes that origin sense.
+//
+// Members are still session-scoped at the YAML layer (per the schema), but
+// across sessions of the same book they fold into one concept whose
+// members[] is the union. session_title on each member preserves
+// provenance for the frontend to bucket "this session vs other" rendering.
+func (h *NotebookHandler) loadEtymologyConcepts(
+	ctx context.Context,
+	reader *notebook.Reader,
+	notebookID string,
+) ([]*apiv1.SemanticConcept, map[string][]string, error) {
+	conceptSrc := notebook.NewYAMLSemanticConceptSource(reader)
+	conceptRows, err := conceptSrc.FindAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	relSrc := notebook.NewYAMLConceptRelationSource(reader)
+	relRows, err := relSrc.FindAll(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	type conceptAcc struct {
+		proto   *apiv1.SemanticConcept
+		members map[string]bool // (origin, language, sessionTitle) dedupe key
+	}
+	concepts := make(map[string]*conceptAcc)
+	var order []string
+	originKey := func(origin, sessionTitle string) string {
+		return strings.ToLower(strings.TrimSpace(origin)) + "\x00" + sessionTitle
+	}
+	conceptKeysByOrigin := make(map[string][]string)
+	seenOriginConcept := make(map[string]bool) // (originKey, conceptKey) -> already tagged
+
+	for _, row := range conceptRows {
+		if row.NotebookID != notebookID {
+			continue
+		}
+		acc, ok := concepts[row.Key]
+		if !ok {
+			acc = &conceptAcc{
+				proto: &apiv1.SemanticConcept{
+					NotebookId: row.NotebookID,
+					ConceptKey: row.Key,
+					Meaning:    row.Meaning,
+					Note:       row.Note,
+				},
+				members: make(map[string]bool),
+			}
+			concepts[row.Key] = acc
+			order = append(order, row.Key)
+		}
+		for _, m := range row.Members {
+			dedup := strings.ToLower(strings.TrimSpace(m.Origin)) + "|" + m.Language + "|" + row.SessionTitle
+			if acc.members[dedup] {
+				continue
+			}
+			acc.members[dedup] = true
+			acc.proto.Members = append(acc.proto.Members, &apiv1.SemanticConceptMember{
+				Origin: &apiv1.EtymologyOriginPart{
+					Origin:   m.Origin,
+					Language: m.Language,
+				},
+				SessionTitle: row.SessionTitle,
+			})
+			// Tag this origin sense with the concept key so the per-
+			// origin response can render its concept memberships.
+			tagKey := originKey(m.Origin, row.SessionTitle) + "\x01" + row.Key
+			if !seenOriginConcept[tagKey] {
+				seenOriginConcept[tagKey] = true
+				ok := originKey(m.Origin, row.SessionTitle)
+				conceptKeysByOrigin[ok] = append(conceptKeysByOrigin[ok], row.Key)
+			}
+		}
+	}
+
+	for _, rel := range relRows {
+		if rel.NotebookID != notebookID {
+			continue
+		}
+		acc, ok := concepts[rel.FromKey]
+		if !ok {
+			// Endpoint not declared in this book — skip rather than emit
+			// a half-built concept; the validator already warned.
+			continue
+		}
+		acc.proto.OutgoingRelations = append(acc.proto.OutgoingRelations, &apiv1.ConceptRelation{
+			Type:           rel.Type,
+			IsDirected:     rel.IsDirected,
+			FromConceptKey: rel.FromKey,
+			ToConceptKey:   rel.ToKey,
+		})
+		// Materialise the reverse direction for symmetric relations so
+		// either endpoint's outgoing_relations carries the edge — frontend
+		// then doesn't need to scan every concept to find inbound links.
+		if !rel.IsDirected {
+			revAcc, ok := concepts[rel.ToKey]
+			if ok {
+				revAcc.proto.OutgoingRelations = append(revAcc.proto.OutgoingRelations, &apiv1.ConceptRelation{
+					Type:           rel.Type,
+					IsDirected:     false,
+					FromConceptKey: rel.ToKey,
+					ToConceptKey:   rel.FromKey,
+				})
+			}
+		}
+	}
+
+	out := make([]*apiv1.SemanticConcept, 0, len(order))
+	for _, k := range order {
+		out = append(out, concepts[k].proto)
+	}
+	return out, conceptKeysByOrigin, nil
 }
 
 // RegisterDefinition adds a definition via the repository.
