@@ -306,7 +306,7 @@ func (v *Validator) validateBookConcepts(view *etymologyBookView, result *Valida
 		for _, d := range decls {
 			origins := view.originsBySession[d.concept.SessionTitle]
 			for _, m := range d.concept.Members {
-				k := conceptMemberKey{Origin: m.Origin, Language: m.Language}
+				k := conceptMemberKey(m)
 				if !origins[k] {
 					result.AddWarning(ValidationError{
 						File:     d.path,
