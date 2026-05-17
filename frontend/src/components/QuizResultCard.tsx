@@ -3,6 +3,7 @@
 import { Box, Button, Text } from "@chakra-ui/react";
 import type { WordDetail } from "@/store/quizStore";
 import { WordDetailView } from "./WordDetailView";
+import { RelationGraph } from "./RelationGraph";
 
 export interface OriginPartDisplay {
   origin: string;
@@ -33,6 +34,11 @@ export interface ResultItem {
    * are rendered via originBreakdown — the wordDetail passed to
    * WordDetailView has its originParts stripped to avoid duplication. */
   wordDetail?: WordDetail;
+  /** graphContext, when set, renders the cluster / antonym pair / form
+   * branch graph the standard-mode quiz returns as elaborative scaffold
+   * after the user has answered. Uses the same RelationGraph component
+   * as the reverse-mode prompt — but with no blank node. */
+  graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
 }
 
 function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
@@ -323,6 +329,22 @@ export function QuizResultCard({
       {item.wordDetail && (
         <Box mb={3}>
           <WordDetailView wordDetail={{ ...item.wordDetail, originParts: undefined }} />
+        </Box>
+      )}
+
+      {/* Graph context (cluster / antonym pair / form branch) shown as
+          elaborative scaffold after standard-mode etymology answers. The
+          card's origin appears filled-in (no blank). Read-only — we pass
+          a noop value/onValueChange because RelationGraph renders the
+          static structure when blankNodeId is empty. */}
+      {item.graphContext && (
+        <Box mb={3}>
+          <RelationGraph
+            prompt={item.graphContext}
+            value=""
+            onValueChange={() => {}}
+            disabled
+          />
         </Box>
       )}
 

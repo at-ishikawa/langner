@@ -110,6 +110,31 @@ func conceptsContaining(card quiz.EtymologyOriginCard, concepts map[string]*grap
 	return matches
 }
 
+// buildGraphContextForCard returns the same graph shape buildGraphPromptForCard
+// would, but with the blank filled in — used as elaborative scaffold in
+// the standard-mode feedback card after the user has already answered.
+// The card's origin appears as a normal labelled node rather than a
+// blank input; the frontend highlights it for the learner's eye.
+func buildGraphContextForCard(
+	ctx context.Context,
+	reader *notebook.Reader,
+	card quiz.EtymologyOriginCard,
+	concepts map[string]*graphConceptInfo,
+) *apiv1.GraphPrompt {
+	prompt := buildGraphPromptForCard(ctx, reader, card, concepts)
+	if prompt == nil || prompt.BlankNodeId == "" {
+		return prompt
+	}
+	for _, n := range prompt.Nodes {
+		if n.Id == prompt.BlankNodeId {
+			n.Label = card.Origin
+			n.Hint = ""
+		}
+	}
+	prompt.BlankNodeId = ""
+	return prompt
+}
+
 // buildGraphPromptForCard picks the richest applicable graph shape for
 // the card and returns its GraphPrompt, or nil if none applies.
 // Preference: ANTONYM_PAIR > CLUSTER > FORM_BRANCH — antonym pairs

@@ -446,6 +446,13 @@ message SubmitEtymologyStandardAnswerResponse {
   string next_review_date = 4;
   string learned_at = 5;
   int64 note_id = 6;
+  // graph_context, when set, is the same kind of GraphPrompt the reverse
+  // quiz uses as a prompt — but with no blank, served after a standard
+  // answer as elaborative scaffolding. It lets the learner see the
+  // origin in its concept / antonym / form-branch context at the
+  // moment of greatest engagement (right after they tried to retrieve
+  // its meaning). Frontend highlights the card's origin in the graph.
+  GraphPrompt graph_context = 7;
 }
 
 message BatchSubmitEtymologyStandardAnswersRequest {

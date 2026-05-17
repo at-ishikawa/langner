@@ -170,6 +170,23 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
 	}
 
+	// Load the graph context once per notebook for the elaborative scaffold
+	// the feedback card renders. Failures here are non-fatal — feedback
+	// stays usable without the graph.
+	var graphReader *notebook.Reader
+	conceptsByNotebook := make(map[string]map[string]*graphConceptInfo)
+	if r, err := h.svc.NewReader(); err == nil {
+		graphReader = r
+		seen := make(map[string]bool)
+		for _, c := range cards {
+			if seen[c.NotebookName] {
+				continue
+			}
+			seen[c.NotebookName] = true
+			conceptsByNotebook[c.NotebookName] = loadBookConcepts(ctx, r, c.NotebookName)
+		}
+	}
+
 	responses := make([]*apiv1.SubmitEtymologyStandardAnswerResponse, len(answers))
 	for i := range answers {
 		if err := h.svc.SaveEtymologyOriginResult(cards[i], grades[i].Quality, grades[i].Correct, answers[i].GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
@@ -181,6 +198,10 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 		h.nextID++
 		h.etymologyOriginStore[noteID] = cards[i]
 		h.mu.Unlock()
+		var graphContext *apiv1.GraphPrompt
+		if graphReader != nil {
+			graphContext = buildGraphContextForCard(ctx, graphReader, cards[i], conceptsByNotebook[cards[i].NotebookName])
+		}
 		responses[i] = &apiv1.SubmitEtymologyStandardAnswerResponse{
 			Correct:        grades[i].Correct,
 			Reason:         grades[i].Reason,
@@ -188,6 +209,7 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 			NextReviewDate: nextReviewDate,
 			LearnedAt:      learnedAt,
 			NoteId:         noteID,
+			GraphContext:   graphContext,
 		}
 	}
 

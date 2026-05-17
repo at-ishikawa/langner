@@ -399,7 +399,15 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 	}
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyStandard)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
-	return connect.NewResponse(&apiv1.SubmitEtymologyStandardAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: card.Meaning, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID}), nil
+	// Build a graph context for the feedback card — same builder the
+	// reverse mode uses, but with the blank filled in so the just-answered
+	// origin is visible. Failures here don't block the answer response.
+	var graphContext *apiv1.GraphPrompt
+	if r, err := h.svc.NewReader(); err == nil {
+		concepts := loadBookConcepts(ctx, r, card.NotebookName)
+		graphContext = buildGraphContextForCard(ctx, r, card, concepts)
+	}
+	return connect.NewResponse(&apiv1.SubmitEtymologyStandardAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: card.Meaning, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, GraphContext: graphContext}), nil
 }
 
 func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyReverseAnswerResponse], error) {

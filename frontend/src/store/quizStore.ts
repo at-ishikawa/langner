@@ -143,6 +143,11 @@ export interface EtymologyOriginResult {
   notebookName?: string;
   nextReviewDate?: string;
   learnedAt?: string;
+  // graphContext, when set, is a filled-in (no-blank) graph the standard-
+  // quiz feedback card renders as elaborative scaffolding right after the
+  // user has answered. Same shape vocabulary as the reverse-mode prompt
+  // graph; reuses the RelationGraph component.
+  graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
