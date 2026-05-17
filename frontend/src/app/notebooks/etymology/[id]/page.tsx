@@ -17,6 +17,7 @@ import {
   type EtymologyDefinition,
   type EtymologyMeaningGroup,
 } from "@/lib/client";
+import { FormsTable } from "@/components/FormsTable";
 
 type Tab = "origins" | "meanings";
 
@@ -178,6 +179,9 @@ function OriginDetailView({
               <LanguageBadge language={originData.language} />
             </Box>
             <Text color="gray.600" _dark={{ color: "gray.400" }}>{originData.meaning}</Text>
+            {originData.forms && originData.forms.length > 0 && (
+              <FormsTable forms={originData.forms} />
+            )}
             <Link href={`/notebooks/etymology/${notebookId}/mindmap?origin=${encodeURIComponent(selectedOrigin)}`}>
               <Box
                 mt={3}
