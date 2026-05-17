@@ -248,9 +248,17 @@ func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *d
 		notebook.NewYAMLEtymologyOriginSource(reader),
 		notebook.NewYAMLEtymologyDefinitionSource(reader),
 	)
-	return imp.WithEtymologyForms(
+	imp = imp.WithEtymologyForms(
 		notebook.NewDBEtymologyOriginFormRepository(db),
 		notebook.NewYAMLEtymologyOriginFormSource(reader),
+	)
+	imp = imp.WithSemanticConcepts(
+		notebook.NewDBSemanticConceptRepository(db),
+		notebook.NewYAMLSemanticConceptSource(reader),
+	)
+	return imp.WithConceptRelations(
+		notebook.NewDBConceptRelationRepository(db),
+		notebook.NewYAMLConceptRelationSource(reader),
 	)
 }
 

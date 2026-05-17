@@ -128,6 +128,18 @@ type EtymologyOriginFormSource interface {
 	FindAll(ctx context.Context) ([]notebook.EtymologyOriginFormForImport, error)
 }
 
+// SemanticConceptSource emits one entry per concept declaration across all
+// etymology sessions in the user's data.
+type SemanticConceptSource interface {
+	FindAll(ctx context.Context) ([]notebook.SemanticConceptForImport, error)
+}
+
+// ConceptRelationSource emits one entry per relation declaration across all
+// etymology sessions in the user's data.
+type ConceptRelationSource interface {
+	FindAll(ctx context.Context) ([]notebook.ConceptRelationForImport, error)
+}
+
 // ImportNotesResult tracks counts for note import.
 type ImportNotesResult struct {
 	NotesNew, NotesSkipped, NotesUpdated int
@@ -164,6 +176,17 @@ type ImportEtymologyResult struct {
 	FormsUpdated   int
 	FormsSkipped   int
 	FormsDeleted   int
+	// Concept and relation counts populated by ImportSemanticConcepts /
+	// ImportConceptRelations. Skipped covers members whose origin couldn't be
+	// resolved in the same session.
+	ConceptsNew         int
+	ConceptsUpdated     int
+	ConceptsDeleted     int
+	ConceptMembersNew   int
+	ConceptMembersSkipped int
+	ConceptMembersDeleted int
+	RelationsNew     int
+	RelationsDeleted int
 }
 
 // ImportOptions controls import behavior.
@@ -186,6 +209,10 @@ type Importer struct {
 	etymologyDefSrc         EtymologyDefinitionSource
 	etymologyOriginFormRepo notebook.EtymologyOriginFormRepository
 	etymologyOriginFormSrc  EtymologyOriginFormSource
+	semanticConceptRepo     notebook.SemanticConceptRepository
+	semanticConceptSrc      SemanticConceptSource
+	conceptRelationRepo     notebook.ConceptRelationRepository
+	conceptRelationSrc      ConceptRelationSource
 	writer              io.Writer
 
 	// touchedNoteIDs collects every DB note ID that ImportNotes or
@@ -242,6 +269,28 @@ func (imp *Importer) WithEtymologyForms(
 ) *Importer {
 	imp.etymologyOriginFormRepo = formRepo
 	imp.etymologyOriginFormSrc = formSrc
+	return imp
+}
+
+// WithSemanticConcepts configures the concepts import dependencies. When
+// either is nil, ImportAll skips the concept and relation phases.
+func (imp *Importer) WithSemanticConcepts(
+	conceptRepo notebook.SemanticConceptRepository,
+	conceptSrc SemanticConceptSource,
+) *Importer {
+	imp.semanticConceptRepo = conceptRepo
+	imp.semanticConceptSrc = conceptSrc
+	return imp
+}
+
+// WithConceptRelations configures the concept relations import dependencies.
+// When either is nil, ImportAll skips the relations phase.
+func (imp *Importer) WithConceptRelations(
+	relationRepo notebook.ConceptRelationRepository,
+	relationSrc ConceptRelationSource,
+) *Importer {
+	imp.conceptRelationRepo = relationRepo
+	imp.conceptRelationSrc = relationSrc
 	return imp
 }
 
@@ -1078,6 +1127,363 @@ func (imp *Importer) ImportNoteOriginParts(ctx context.Context, opts ImportOptio
 	return nil
 }
 
+// bookConceptMemberKey identifies one (concept, origin) membership claim
+// from the YAML, keyed by concept_key + origin_id so a member that survives
+// origin resolution can be looked up by the eventual concept_id.
+type bookConceptMemberKey struct {
+	ConceptKey string
+	OriginID   int64
+}
+
+// bookConceptData aggregates the YAML-side state for one book during
+// concept ingestion: which concepts the book declares (and the first
+// declaration of each, which wins for meaning/note), and the set of
+// resolved (concept, origin) memberships with their declaring session.
+type bookConceptData struct {
+	declOrder []string
+	firstDecl map[string]notebook.SemanticConceptForImport
+	memberSet map[bookConceptMemberKey]string
+}
+
+// ImportSemanticConcepts reconciles semantic_concepts and
+// semantic_concept_members against the YAML source. Within a book the first
+// declaration of a concept_key sets meaning/note; subsequent declarations
+// contribute only members. Members whose (origin, language) doesn't resolve
+// to an etymology_origins row in the declaring session emit a warning and
+// are skipped. Reconcile drops concepts/members the YAML no longer claims.
+func (imp *Importer) ImportSemanticConcepts(ctx context.Context, opts ImportOptions, result *ImportEtymologyResult) error {
+	if imp.semanticConceptRepo == nil || imp.semanticConceptSrc == nil || imp.etymologyOriginRepo == nil {
+		return nil
+	}
+
+	source, err := imp.semanticConceptSrc.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("read source semantic concepts: %w", err)
+	}
+
+	allOrigins, err := imp.etymologyOriginRepo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("load origins for concept member binding: %w", err)
+	}
+	originIDByKey := make(map[string]int64, len(allOrigins))
+	for _, o := range allOrigins {
+		originIDByKey[etymologyOriginCompositeKey(o.NotebookID, o.SessionTitle, o.Origin, o.Language)] = o.ID
+	}
+
+	byBook := make(map[string]*bookConceptData)
+	for _, src := range source {
+		b, ok := byBook[src.NotebookID]
+		if !ok {
+			b = &bookConceptData{
+				firstDecl: make(map[string]notebook.SemanticConceptForImport),
+				memberSet: make(map[bookConceptMemberKey]string),
+			}
+			byBook[src.NotebookID] = b
+		}
+		first, seen := b.firstDecl[src.Key]
+		if !seen {
+			b.firstDecl[src.Key] = src
+			b.declOrder = append(b.declOrder, src.Key)
+		} else if first.Meaning != src.Meaning || first.Note != src.Note {
+			_, _ = fmt.Fprintf(imp.writer,
+				"  [WARN] concept %q in book %q redeclared with different meaning/note (keeping first)\n",
+				src.Key, src.NotebookID)
+		}
+		// Resolve each member against the declaring session's origins.
+		for _, m := range src.Members {
+			key := etymologyOriginCompositeKey(src.NotebookID, src.SessionTitle, m.Origin, m.Language)
+			originID, ok := originIDByKey[key]
+			if !ok {
+				_, _ = fmt.Fprintf(imp.writer,
+					"  [WARN] concept %q member %q (%s) not found in session %q of book %q\n",
+					src.Key, m.Origin, m.Language, src.SessionTitle, src.NotebookID)
+				result.ConceptMembersSkipped++
+				continue
+			}
+			b.memberSet[bookConceptMemberKey{ConceptKey: src.Key, OriginID: originID}] = src.SessionTitle
+		}
+	}
+
+	for notebookID, b := range byBook {
+		if err := imp.reconcileBookConcepts(ctx, opts, notebookID, b, result); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reconcileBookConcepts upserts concepts and members for one book. Returns
+// after writing each phase so callers see partial progress in --dry-run.
+func (imp *Importer) reconcileBookConcepts(
+	ctx context.Context,
+	opts ImportOptions,
+	notebookID string,
+	b *bookConceptData,
+	result *ImportEtymologyResult,
+) error {
+	existingConcepts, err := imp.semanticConceptRepo.ListSemanticConceptsByNotebook(ctx, notebookID)
+	if err != nil {
+		return fmt.Errorf("load existing concepts for %s: %w", notebookID, err)
+	}
+	conceptIDByKey := make(map[string]int64, len(existingConcepts))
+	conceptRecByKey := make(map[string]*SemanticConceptRecordAlias, len(existingConcepts))
+	for i := range existingConcepts {
+		row := &existingConcepts[i]
+		conceptIDByKey[row.ConceptKey] = row.ID
+		conceptRecByKey[row.ConceptKey] = (*SemanticConceptRecordAlias)(row)
+	}
+
+	var newConcepts []*notebook.SemanticConceptRecord
+	var updateConcepts []*notebook.SemanticConceptRecord
+	claimedConceptKeys := make(map[string]bool, len(b.declOrder))
+	for _, key := range b.declOrder {
+		decl := b.firstDecl[key]
+		claimedConceptKeys[key] = true
+		if existing, ok := conceptRecByKey[key]; ok {
+			if existing.Meaning != decl.Meaning || existing.Note != decl.Note {
+				existing.Meaning = decl.Meaning
+				existing.Note = decl.Note
+				updateConcepts = append(updateConcepts, (*notebook.SemanticConceptRecord)(existing))
+				result.ConceptsUpdated++
+			}
+			continue
+		}
+		rec := &notebook.SemanticConceptRecord{
+			NotebookID: notebookID,
+			ConceptKey: key,
+			Meaning:    decl.Meaning,
+			Note:       decl.Note,
+		}
+		newConcepts = append(newConcepts, rec)
+		result.ConceptsNew++
+	}
+
+	if !opts.DryRun && len(newConcepts) > 0 {
+		if err := imp.semanticConceptRepo.BatchCreateConcepts(ctx, newConcepts); err != nil {
+			return fmt.Errorf("batch create semantic_concepts: %w", err)
+		}
+		for _, rec := range newConcepts {
+			conceptIDByKey[rec.ConceptKey] = rec.ID
+		}
+	}
+	if !opts.DryRun && len(updateConcepts) > 0 {
+		if err := imp.semanticConceptRepo.BatchUpdateConcepts(ctx, updateConcepts); err != nil {
+			return fmt.Errorf("batch update semantic_concepts: %w", err)
+		}
+	}
+
+	// Member reconcile: existing members keyed by (concept_id, origin_id);
+	// drop those the YAML no longer claims, insert the rest.
+	ids := make([]int64, 0, len(conceptIDByKey))
+	for _, id := range conceptIDByKey {
+		ids = append(ids, id)
+	}
+	existingMembers, err := imp.semanticConceptRepo.ListSemanticConceptMembersByConceptIDs(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("load existing concept members for %s: %w", notebookID, err)
+	}
+	type memberDBKey struct {
+		ConceptID int64
+		OriginID  int64
+	}
+	existingMemberID := make(map[memberDBKey]int64, len(existingMembers))
+	for _, m := range existingMembers {
+		existingMemberID[memberDBKey{m.ConceptID, m.OriginID}] = m.ID
+	}
+
+	var newMembers []*notebook.SemanticConceptMemberRecord
+	claimedMemberKeys := make(map[memberDBKey]bool, len(b.memberSet))
+	for memberKey, sessionTitle := range b.memberSet {
+		conceptID, ok := conceptIDByKey[memberKey.ConceptKey]
+		if !ok {
+			// First-pass dry-run path: concept not yet in DB.
+			continue
+		}
+		dbKey := memberDBKey{conceptID, memberKey.OriginID}
+		claimedMemberKeys[dbKey] = true
+		if _, exists := existingMemberID[dbKey]; exists {
+			continue
+		}
+		newMembers = append(newMembers, &notebook.SemanticConceptMemberRecord{
+			ConceptID:    conceptID,
+			OriginID:     memberKey.OriginID,
+			SessionTitle: sessionTitle,
+		})
+		result.ConceptMembersNew++
+	}
+	if !opts.DryRun && len(newMembers) > 0 {
+		if err := imp.semanticConceptRepo.BatchCreateMembers(ctx, newMembers); err != nil {
+			return fmt.Errorf("batch create semantic_concept_members: %w", err)
+		}
+	}
+
+	// Reconcile: delete DB-only members on still-claimed concepts.
+	var staleMemberIDs []int64
+	for dbKey, id := range existingMemberID {
+		if !claimedMemberKeys[dbKey] && claimedConceptKeyForID(conceptIDByKey, dbKey.ConceptID, claimedConceptKeys) {
+			staleMemberIDs = append(staleMemberIDs, id)
+		}
+	}
+	if len(staleMemberIDs) > 0 {
+		_, _ = fmt.Fprintf(imp.writer, "  [RECONCILE] removing %d stale semantic_concept_member(s) in %s\n", len(staleMemberIDs), notebookID)
+		if !opts.DryRun {
+			if err := imp.semanticConceptRepo.BatchDeleteMembers(ctx, staleMemberIDs); err != nil {
+				return fmt.Errorf("delete stale semantic_concept_members: %w", err)
+			}
+		}
+		result.ConceptMembersDeleted += len(staleMemberIDs)
+	}
+
+	// Reconcile: delete entire concepts the YAML no longer claims (cascade
+	// drops their members and relations).
+	var staleConceptIDs []int64
+	for _, row := range existingConcepts {
+		if !claimedConceptKeys[row.ConceptKey] {
+			staleConceptIDs = append(staleConceptIDs, row.ID)
+		}
+	}
+	if len(staleConceptIDs) > 0 {
+		_, _ = fmt.Fprintf(imp.writer, "  [RECONCILE] removing %d stale semantic_concept(s) in %s\n", len(staleConceptIDs), notebookID)
+		if !opts.DryRun {
+			if err := imp.semanticConceptRepo.BatchDeleteConcepts(ctx, staleConceptIDs); err != nil {
+				return fmt.Errorf("delete stale semantic_concepts: %w", err)
+			}
+		}
+		result.ConceptsDeleted += len(staleConceptIDs)
+	}
+	return nil
+}
+
+// SemanticConceptRecordAlias is a local alias used during reconcile so we
+// can mutate the existing DB row in place without exposing internal types.
+type SemanticConceptRecordAlias notebook.SemanticConceptRecord
+
+// claimedConceptKeyForID returns true when the concept ID still belongs to
+// a YAML-claimed concept. Used so we don't try to delete members of a
+// concept that's about to be cascade-deleted anyway.
+func claimedConceptKeyForID(conceptIDByKey map[string]int64, conceptID int64, claimedKeys map[string]bool) bool {
+	for key, id := range conceptIDByKey {
+		if id == conceptID {
+			return claimedKeys[key]
+		}
+	}
+	return false
+}
+
+// ImportConceptRelations reconciles concept_relations against the YAML source.
+// Symmetric relations expand to two directed rows (A->B and B->A) with
+// is_directed=false; directed relations write one row with is_directed=true.
+// Endpoints that don't resolve to a concept in the book are skipped.
+// Reconcile drops rows the YAML no longer claims.
+func (imp *Importer) ImportConceptRelations(ctx context.Context, opts ImportOptions, result *ImportEtymologyResult) error {
+	if imp.conceptRelationRepo == nil || imp.conceptRelationSrc == nil || imp.semanticConceptRepo == nil {
+		return nil
+	}
+
+	source, err := imp.conceptRelationSrc.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("read source concept relations: %w", err)
+	}
+
+	type relationDBKey struct {
+		NotebookID    string
+		Type          string
+		FromConceptID int64
+		ToConceptID   int64
+	}
+
+	// Group source by book so we can resolve keys against per-book concepts.
+	byBook := make(map[string][]notebook.ConceptRelationForImport)
+	for _, src := range source {
+		byBook[src.NotebookID] = append(byBook[src.NotebookID], src)
+	}
+
+	for notebookID, rels := range byBook {
+		concepts, err := imp.semanticConceptRepo.ListSemanticConceptsByNotebook(ctx, notebookID)
+		if err != nil {
+			return fmt.Errorf("load concepts for relation binding in %s: %w", notebookID, err)
+		}
+		idByKey := make(map[string]int64, len(concepts))
+		for _, c := range concepts {
+			idByKey[c.ConceptKey] = c.ID
+		}
+
+		claimed := make(map[relationDBKey]bool)
+		var toCreate []*notebook.ConceptRelationRecord
+		for _, r := range rels {
+			fromID, fromOK := idByKey[r.FromKey]
+			toID, toOK := idByKey[r.ToKey]
+			if !fromOK || !toOK {
+				continue
+			}
+			pairs := []relationDBKey{{notebookID, r.Type, fromID, toID}}
+			if !r.IsDirected {
+				pairs = append(pairs, relationDBKey{notebookID, r.Type, toID, fromID})
+			}
+			for _, p := range pairs {
+				if claimed[p] {
+					continue
+				}
+				claimed[p] = true
+				toCreate = append(toCreate, &notebook.ConceptRelationRecord{
+					NotebookID:    p.NotebookID,
+					Type:          p.Type,
+					FromConceptID: p.FromConceptID,
+					ToConceptID:   p.ToConceptID,
+					IsDirected:    r.IsDirected,
+				})
+			}
+		}
+
+		existing, err := imp.conceptRelationRepo.ListConceptRelationsByNotebook(ctx, notebookID)
+		if err != nil {
+			return fmt.Errorf("load existing relations for %s: %w", notebookID, err)
+		}
+		existingByKey := make(map[relationDBKey]int64, len(existing))
+		for _, row := range existing {
+			existingByKey[relationDBKey{row.NotebookID, row.Type, row.FromConceptID, row.ToConceptID}] = row.ID
+		}
+
+		var newRelations []*notebook.ConceptRelationRecord
+		for _, rec := range toCreate {
+			k := relationDBKey{rec.NotebookID, rec.Type, rec.FromConceptID, rec.ToConceptID}
+			if _, ok := existingByKey[k]; ok {
+				continue
+			}
+			newRelations = append(newRelations, rec)
+			result.RelationsNew++
+		}
+		if !opts.DryRun && len(newRelations) > 0 {
+			if err := imp.conceptRelationRepo.BatchCreateRelations(ctx, newRelations); err != nil {
+				return fmt.Errorf("batch create concept_relations: %w", err)
+			}
+		}
+
+		var staleIDs []int64
+		for k, id := range existingByKey {
+			if !claimed[k] {
+				staleIDs = append(staleIDs, id)
+			}
+		}
+		if len(staleIDs) > 0 {
+			_, _ = fmt.Fprintf(imp.writer, "  [RECONCILE] removing %d stale concept_relation(s) in %s\n", len(staleIDs), notebookID)
+			if !opts.DryRun {
+				if err := imp.conceptRelationRepo.BatchDeleteRelations(ctx, staleIDs); err != nil {
+					return fmt.Errorf("delete stale concept_relations: %w", err)
+				}
+			}
+			result.RelationsDeleted += len(staleIDs)
+		}
+	}
+	return nil
+}
+
+// etymologyOriginCompositeKey builds the lookup key used across ingestion
+// to match a YAML origin reference to its DB row.
+func etymologyOriginCompositeKey(notebookID, sessionTitle, origin, language string) string {
+	return strings.Join([]string{notebookID, sessionTitle, origin, language}, "\x00")
+}
+
 // reconcileNotes deletes DB rows the YAML source no longer claims. Two
 // passes: stale notebook_notes (per-notebook drift) and stale notes (DB
 // rows neither ImportNotes nor ImportLearningLogs touched). Run last in
@@ -1154,6 +1560,12 @@ func (imp *Importer) ImportAll(ctx context.Context, opts ImportOptions) (*Import
 	}
 	if err := imp.ImportNoteOriginParts(ctx, opts, etymResult); err != nil {
 		return nil, fmt.Errorf("import note origin parts: %w", err)
+	}
+	if err := imp.ImportSemanticConcepts(ctx, opts, etymResult); err != nil {
+		return nil, fmt.Errorf("import semantic concepts: %w", err)
+	}
+	if err := imp.ImportConceptRelations(ctx, opts, etymResult); err != nil {
+		return nil, fmt.Errorf("import concept relations: %w", err)
 	}
 
 	learningResult, err := imp.ImportLearningLogs(ctx, opts)

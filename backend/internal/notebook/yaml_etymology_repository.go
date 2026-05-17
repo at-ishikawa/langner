@@ -165,6 +165,135 @@ type EtymologyDefinitionForImport struct {
 	OriginParts  []OriginPartRef // ordered origin references
 }
 
+// SemanticConceptForImport is one concept declaration parsed from a session
+// file. ConceptKey is the book-level identity; multiple declarations of the
+// same key across sessions in a book merge to a single DB row.
+type SemanticConceptForImport struct {
+	NotebookID   string
+	SessionTitle string
+	Key          string
+	Meaning      string
+	Note         string
+	Members      []ConceptMember
+}
+
+// YAMLSemanticConceptSource enumerates every concept block across every
+// etymology session file. Order follows the etymology indexes' iteration,
+// with sessions read in NotebookPaths order — ingestion uses the first
+// declaration of a (notebook, concept_key) pair as authoritative.
+type YAMLSemanticConceptSource struct {
+	reader *Reader
+}
+
+// NewYAMLSemanticConceptSource constructs the source.
+func NewYAMLSemanticConceptSource(reader *Reader) *YAMLSemanticConceptSource {
+	return &YAMLSemanticConceptSource{reader: reader}
+}
+
+// FindAll walks every etymology session file and emits one entry per
+// concept declaration with its session title attached.
+func (s *YAMLSemanticConceptSource) FindAll(_ context.Context) ([]SemanticConceptForImport, error) {
+	indexes := s.reader.GetEtymologyIndexes()
+	var rows []SemanticConceptForImport
+
+	for nbID, idx := range indexes {
+		for _, nbPath := range idx.NotebookPaths {
+			path := filepath.Join(idx.Path, nbPath)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+			}
+			var sf etymologySessionFile
+			if err := yaml.Unmarshal(data, &sf); err != nil {
+				return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
+			}
+			title := strings.TrimSpace(sf.Metadata.Title)
+			if title == "" {
+				continue
+			}
+			for _, c := range sf.Concepts {
+				if strings.TrimSpace(c.Key) == "" {
+					continue
+				}
+				rows = append(rows, SemanticConceptForImport{
+					NotebookID:   nbID,
+					SessionTitle: title,
+					Key:          c.Key,
+					Meaning:      c.Meaning,
+					Note:         c.Note,
+					Members:      c.Members,
+				})
+			}
+		}
+	}
+	return rows, nil
+}
+
+// ConceptRelationForImport is one relation declaration parsed from a session
+// file, normalised for ingestion. Symmetric relations keep both endpoints
+// in (FromKey, ToKey); the ingestion layer expands them to two DB rows.
+type ConceptRelationForImport struct {
+	NotebookID   string
+	SessionTitle string
+	Type         string
+	FromKey      string
+	ToKey        string
+	IsDirected   bool
+}
+
+// YAMLConceptRelationSource enumerates every relation across every
+// etymology session file in the book. Malformed relations are skipped
+// (the validator already warned about them).
+type YAMLConceptRelationSource struct {
+	reader *Reader
+}
+
+// NewYAMLConceptRelationSource constructs the source.
+func NewYAMLConceptRelationSource(reader *Reader) *YAMLConceptRelationSource {
+	return &YAMLConceptRelationSource{reader: reader}
+}
+
+// FindAll walks every etymology session file and emits one entry per well-
+// formed relation. The Type plus endpoints determine identity at the YAML
+// layer; the importer resolves keys to concept IDs.
+func (s *YAMLConceptRelationSource) FindAll(_ context.Context) ([]ConceptRelationForImport, error) {
+	indexes := s.reader.GetEtymologyIndexes()
+	var rows []ConceptRelationForImport
+
+	for nbID, idx := range indexes {
+		for _, nbPath := range idx.NotebookPaths {
+			path := filepath.Join(idx.Path, nbPath)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+			}
+			var sf etymologySessionFile
+			if err := yaml.Unmarshal(data, &sf); err != nil {
+				return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
+			}
+			title := strings.TrimSpace(sf.Metadata.Title)
+			for _, r := range sf.Relations {
+				if strings.TrimSpace(r.Type) == "" {
+					continue
+				}
+				a, b := r.Endpoints()
+				if a == "" || b == "" {
+					continue
+				}
+				rows = append(rows, ConceptRelationForImport{
+					NotebookID:   nbID,
+					SessionTitle: title,
+					Type:         r.Type,
+					FromKey:      a,
+					ToKey:        b,
+					IsDirected:   r.IsDirected(),
+				})
+			}
+		}
+	}
+	return rows, nil
+}
+
 // FindAll returns every definition in the user's data that carries
 // origin_parts. SessionTitle is filled from the parent metadata.title;
 // rows without it are skipped because they can't be sense-bound.
