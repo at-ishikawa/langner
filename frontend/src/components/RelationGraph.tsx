@@ -7,19 +7,34 @@ import { GraphPrompt_Shape, GraphNode_Kind } from "@/gen-protos/api/v1/quiz_pb";
 
 interface RelationGraphProps {
   prompt: GraphPrompt;
-  // value is what the user has typed into the blank.
   value: string;
   onValueChange: (next: string) => void;
-  // disabled disables the input (used while submitting).
   disabled?: boolean;
 }
 
-// RelationGraph renders one of the supported graph-quiz shapes (CLUSTER
-// for v1) with a single blank node the user fills. Layout is deterministic
-// per shape — radial for CLUSTER, where the concept sits in the centre
-// and members fan out evenly. v1 uses plain Chakra primitives (no
-// reactflow) since the shapes are small and fixed.
+// RelationGraph renders the graph-quiz shape carried by `prompt` with a
+// single blank node the user fills. Layout is deterministic per shape: a
+// radial cluster for CLUSTER (one concept at the centre, members below),
+// two side-by-side concept columns for ANTONYM_PAIR. v1 uses plain
+// Chakra primitives (no reactflow) since the shapes are small and fixed.
 export function RelationGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
+  switch (prompt.shape) {
+    case GraphPrompt_Shape.CLUSTER:
+      return <ClusterGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
+    case GraphPrompt_Shape.ANTONYM_PAIR:
+      return <AntonymPairGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
+    default:
+      return (
+        <Box p={3} borderWidth="1px" borderRadius="md" bg="gray.50" _dark={{ bg: "gray.800" }}>
+          <Text fontSize="xs" color="fg.muted">
+            (graph prompt shape not yet supported)
+          </Text>
+        </Box>
+      );
+  }
+}
+
+function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
   const members = useMemo(
     () => prompt.nodes.filter((n) => n.kind === GraphNode_Kind.ORIGIN),
     [prompt.nodes],
@@ -28,19 +43,7 @@ export function RelationGraph({ prompt, value, onValueChange, disabled }: Relati
     () => prompt.nodes.find((n) => n.kind === GraphNode_Kind.CONCEPT),
     [prompt.nodes],
   );
-
-  if (prompt.shape !== GraphPrompt_Shape.CLUSTER || !concept) {
-    // v1 only supports CLUSTER; other shapes will be added in follow-up
-    // PRs. Until then we render a minimal placeholder so the page doesn't
-    // break if the backend ever emits another shape.
-    return (
-      <Box p={3} borderWidth="1px" borderRadius="md" bg="gray.50" _dark={{ bg: "gray.800" }}>
-        <Text fontSize="xs" color="fg.muted">
-          (graph prompt shape not yet supported)
-        </Text>
-      </Box>
-    );
-  }
+  if (!concept) return null;
 
   return (
     <Box>
@@ -54,29 +57,9 @@ export function RelationGraph({ prompt, value, onValueChange, disabled }: Relati
         bg="white"
         _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         borderColor="gray.200"
+        textAlign="center"
       >
-        <Box
-          mx="auto"
-          mb={3}
-          px={3}
-          py={1.5}
-          borderRadius="full"
-          bg="purple.100"
-          _dark={{ bg: "purple.900" }}
-          display="inline-flex"
-          alignItems="baseline"
-          gap={2}
-          textAlign="center"
-        >
-          <Text fontSize="sm" color="purple.800" _dark={{ color: "purple.200" }} fontWeight="semibold">
-            {concept.label}
-          </Text>
-          {concept.hint && (
-            <Text fontSize="xs" color="purple.700" _dark={{ color: "purple.300" }} fontFamily="mono">
-              ({concept.hint})
-            </Text>
-          )}
-        </Box>
+        <ConceptChip node={concept} />
         <Box
           display="grid"
           gridTemplateColumns={`repeat(${Math.min(members.length, 3)}, minmax(0, 1fr))`}
@@ -95,6 +78,109 @@ export function RelationGraph({ prompt, value, onValueChange, disabled }: Relati
           ))}
         </Box>
       </Box>
+    </Box>
+  );
+}
+
+function AntonymPairGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
+  // Edges of type `member_of` identify which concept each member belongs to.
+  // The single `antonym` edge tells us which two concepts to render. Concept
+  // node ids are stable ("concept_a" and "concept_b") so we look them up
+  // directly. Member node ids are prefixed "a<n>" or "b<n>" to identify
+  // which side they belong to.
+  const conceptA = useMemo(() => prompt.nodes.find((n) => n.id === "concept_a"), [prompt.nodes]);
+  const conceptB = useMemo(() => prompt.nodes.find((n) => n.id === "concept_b"), [prompt.nodes]);
+  const membersA = useMemo(
+    () => prompt.nodes.filter((n) =>
+      n.kind === GraphNode_Kind.ORIGIN && n.id.startsWith("a"),
+    ),
+    [prompt.nodes],
+  );
+  const membersB = useMemo(
+    () => prompt.nodes.filter((n) =>
+      n.kind === GraphNode_Kind.ORIGIN && n.id.startsWith("b"),
+    ),
+    [prompt.nodes],
+  );
+  if (!conceptA || !conceptB) return null;
+
+  return (
+    <Box>
+      <Text fontSize="xs" color="fg.muted" mb={2}>
+        Fill in the blank in this antonym pair:
+      </Text>
+      <Box
+        p={4}
+        borderWidth="1px"
+        borderRadius="lg"
+        bg="white"
+        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+        borderColor="gray.200"
+      >
+        <Box display="grid" gridTemplateColumns="1fr auto 1fr" gap={3} alignItems="start">
+          <Box textAlign="center">
+            <ConceptChip node={conceptA} />
+            <Box mt={2} display="grid" gridTemplateColumns="1fr" gap={1}>
+              {membersA.map((n) => (
+                <MemberNode
+                  key={n.id}
+                  node={n}
+                  isBlank={n.id === prompt.blankNodeId}
+                  value={value}
+                  onValueChange={onValueChange}
+                  disabled={disabled}
+                />
+              ))}
+            </Box>
+          </Box>
+          <Box display="flex" alignItems="center" pt={2}>
+            <Box px={2} py={0.5} borderRadius="full" bg="red.100" _dark={{ bg: "red.900" }}>
+              <Text fontSize="xs" color="red.800" _dark={{ color: "red.200" }} fontWeight="medium">
+                ⇄ antonym
+              </Text>
+            </Box>
+          </Box>
+          <Box textAlign="center">
+            <ConceptChip node={conceptB} />
+            <Box mt={2} display="grid" gridTemplateColumns="1fr" gap={1}>
+              {membersB.map((n) => (
+                <MemberNode
+                  key={n.id}
+                  node={n}
+                  isBlank={n.id === prompt.blankNodeId}
+                  value={value}
+                  onValueChange={onValueChange}
+                  disabled={disabled}
+                />
+              ))}
+            </Box>
+          </Box>
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+function ConceptChip({ node }: { node: GraphNode }) {
+  return (
+    <Box
+      display="inline-flex"
+      alignItems="baseline"
+      gap={2}
+      px={3}
+      py={1.5}
+      borderRadius="full"
+      bg="purple.100"
+      _dark={{ bg: "purple.900" }}
+    >
+      <Text fontSize="sm" color="purple.800" _dark={{ color: "purple.200" }} fontWeight="semibold">
+        {node.label}
+      </Text>
+      {node.hint && (
+        <Text fontSize="xs" color="purple.700" _dark={{ color: "purple.300" }} fontFamily="mono">
+          ({node.hint})
+        </Text>
+      )}
     </Box>
   );
 }
