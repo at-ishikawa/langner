@@ -349,16 +349,31 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	examples, err := h.svc.LoadEtymologyExampleWords(cards)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err)) }
+	// Build a reader once for graph-prompt construction so each reverse
+	// card can reuse the same in-memory YAML scan instead of reopening
+	// session files per card.
+	var graphReader *notebook.Reader
+	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
+		if r, err := h.svc.NewReader(); err == nil {
+			graphReader = r
+		}
+	}
+
 	localStore := make(map[int64]quiz.EtymologyOriginCard); var nextID int64 = 1
 	var protoCards []*apiv1.EtymologyQuizCard
 	for _, card := range cards {
 		cardID := nextID; nextID++; localStore[cardID] = card
 		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle
+		var graphPrompt *apiv1.GraphPrompt
+		if graphReader != nil {
+			graphPrompt = buildClusterGraphPromptForCard(ctx, graphReader, card)
+		}
 		protoCards = append(protoCards, &apiv1.EtymologyQuizCard{
 			CardId: cardID, Origin: card.Origin, Type: card.Type,
 			Language: card.Language, Meaning: card.Meaning,
 			NotebookName: card.NotebookName, SessionTitle: card.SessionTitle,
 			ExampleWords: examples[exampleKey],
+			GraphPrompt:  graphPrompt,
 		})
 	}
 	h.mu.Lock(); h.etymologyOriginStore = localStore; h.etymologyQuizMode = req.Msg.GetMode(); h.nextID = nextID; h.mu.Unlock()

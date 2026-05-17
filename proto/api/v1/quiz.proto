@@ -361,6 +361,57 @@ message EtymologyQuizCard {
   // shows these alongside the origin so the user can recognise which sense
   // is being asked about.
   repeated string example_words = 8;
+  // graph_prompt, when non-nil, replaces the plain prompt for reverse-mode
+  // quiz cards: the frontend renders the small subgraph and the user types
+  // into the single blank node. Standard mode ignores this field.
+  GraphPrompt graph_prompt = 9;
+}
+
+// GraphPrompt is a small subgraph rendered as the prompt for a reverse
+// quiz card, with one node replaced by a blank the user fills in. The
+// answer matches the EtymologyQuizCard's `origin` (the citation form for
+// the card's sense).
+message GraphPrompt {
+  enum Shape {
+    SHAPE_UNSPECIFIED = 0;
+    CLUSTER = 1;       // concept with N members, one slot blank
+    ANTONYM_PAIR = 2;  // two antonym-linked concepts, one slot blank on one side
+    FORM_BRANCH = 3;   // origin with forms, one form/English-word slot blank
+  }
+  Shape shape = 1;
+  repeated GraphNode nodes = 2;
+  repeated GraphEdge edges = 3;
+  // blank_node_id is the id of the GraphNode whose answer the user types.
+  // Always populated; v1 supports exactly one blank.
+  string blank_node_id = 4;
+}
+
+message GraphNode {
+  string id = 1;
+  enum Kind {
+    KIND_UNSPECIFIED = 0;
+    CONCEPT = 1;       // a semantic concept's meaning label
+    ORIGIN = 2;        // a source-language origin
+    FORM = 3;          // an inflectional form of an origin
+    ENGLISH_WORD = 4;  // an English derivative
+  }
+  Kind kind = 2;
+  // label is the visible text. Empty when this node is the blank.
+  string label = 3;
+  // language and hint augment the label for cues the learner needs to
+  // narrow the blank: language is shown next to ORIGIN nodes (e.g.
+  // "French"); hint is free text shown on the blank node (e.g. the
+  // meaning of the missing English word so the user can guess uniquely).
+  string language = 4;
+  string hint = 5;
+}
+
+message GraphEdge {
+  string from = 1;
+  string to = 2;
+  // type is a free string ("member_of", "antonym", "has_form",
+  // "derives", ...) so the renderer can colour and label the edge.
+  string type = 3;
 }
 
 message StartEtymologyQuizRequest {

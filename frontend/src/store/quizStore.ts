@@ -49,6 +49,10 @@ export interface EtymologyOriginCard {
   notebookName: string;
   sessionTitle: string;
   exampleWords: string[];
+  // graphPrompt, when set, replaces the plain meaning prompt with a graph
+  // the user completes. Only populated by the server for reverse-mode
+  // cards whose origin participates in a usable concept cluster.
+  graphPrompt?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
 }
 
 export interface OriginalValues {

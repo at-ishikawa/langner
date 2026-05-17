@@ -350,6 +350,7 @@ export default function QuizHubPage() {
               language: c.language, meaning: c.meaning,
               notebookName: c.notebookName, sessionTitle: c.sessionTitle,
               exampleWords: c.exampleWords ?? [],
+              graphPrompt: c.graphPrompt,
             })),
           );
           router.push(selectedEtyMode === "standard" ? "/quiz/etymology-standard" : "/quiz/etymology-reverse");

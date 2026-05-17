@@ -7,6 +7,7 @@ import { quizClient } from "@/lib/client";
 import { useQuizStore, type EtymologyOriginCard } from "@/store/quizStore";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
+import { RelationGraph } from "@/components/RelationGraph";
 import { etymologyResultToItem } from "@/lib/quizResultItems";
 import { useQuizResultActions } from "@/lib/useQuizResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
@@ -188,21 +189,41 @@ export default function EtymologyReversePage() {
         </Box>
       ) : (
         <VStack align="stretch" gap={4}>
-          <Box p={4} borderWidth="1px" borderRadius="lg" textAlign="center" bg="white" _dark={{ bg: "gray.800" }}>
-            <Heading size="lg" color="blue.700" _dark={{ color: "blue.300" }}>{card.meaning}</Heading>
-            <Text fontSize="sm" color="fg.muted" mt={1}>What origin has this meaning?</Text>
-          </Box>
-          <AnswerInput
-            ref={inputRef}
-            label="Origin"
-            value={answer}
-            onChange={setAnswer}
-            onKeyDown={handleKeyDown}
-            onSubmit={handleSubmit}
-            onSkip={handleSkip}
-            placeholder="type the origin..."
-            stickySubmit
-          />
+          {card.graphPrompt ? (
+            <RelationGraph
+              prompt={card.graphPrompt}
+              value={answer}
+              onValueChange={setAnswer}
+            />
+          ) : (
+            <Box p={4} borderWidth="1px" borderRadius="lg" textAlign="center" bg="white" _dark={{ bg: "gray.800" }}>
+              <Heading size="lg" color="blue.700" _dark={{ color: "blue.300" }}>{card.meaning}</Heading>
+              <Text fontSize="sm" color="fg.muted" mt={1}>What origin has this meaning?</Text>
+            </Box>
+          )}
+          {!card.graphPrompt && (
+            <AnswerInput
+              ref={inputRef}
+              label="Origin"
+              value={answer}
+              onChange={setAnswer}
+              onKeyDown={handleKeyDown}
+              onSubmit={handleSubmit}
+              onSkip={handleSkip}
+              placeholder="type the origin..."
+              stickySubmit
+            />
+          )}
+          {card.graphPrompt && (
+            <Button
+              w="full"
+              colorPalette="blue"
+              onClick={handleSubmit}
+              disabled={!answer.trim()}
+            >
+              Submit
+            </Button>
+          )}
           {error && (
             <VStack align="stretch" gap={2}>
               <Text color="red.500">{error}</Text>
