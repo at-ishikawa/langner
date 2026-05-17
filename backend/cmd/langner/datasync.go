@@ -242,11 +242,15 @@ func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *d
 	jsonDictRepo := rapidapi.NewJSONDictionaryRepository(cfg.Dictionaries.RapidAPI.CacheDirectory)
 
 	imp := datasync.NewImporter(noteRepo, learningRepo, yamlRepo, yamlLearningRepo, jsonDictRepo, dictRepo, writer)
-	return imp.WithEtymology(
+	imp = imp.WithEtymology(
 		notebook.NewDBEtymologyOriginRepository(db),
 		notebook.NewDBNoteOriginPartRepository(db),
 		notebook.NewYAMLEtymologyOriginSource(reader),
 		notebook.NewYAMLEtymologyDefinitionSource(reader),
+	)
+	return imp.WithEtymologyForms(
+		notebook.NewDBEtymologyOriginFormRepository(db),
+		notebook.NewYAMLEtymologyOriginFormSource(reader),
 	)
 }
 

@@ -69,6 +69,81 @@ func (s *YAMLEtymologyOriginSource) FindAll(_ context.Context) ([]EtymologyOrigi
 	return rows, nil
 }
 
+// EtymologyOriginFormForImport is one form declared on an origin in the
+// YAML source. The (NotebookID, SessionTitle, Origin, Language) tuple
+// resolves to an etymology_origins row at import time; that origin's ID
+// becomes OriginID before insert.
+type EtymologyOriginFormForImport struct {
+	NotebookID   string
+	SessionTitle string
+	Origin       string
+	Language     string
+	Form         string
+	Role         string
+	Note         string
+	SortOrder    int
+}
+
+// YAMLEtymologyOriginFormSource enumerates every form declared on every
+// origin across every etymology session. Output is ordered by appearance
+// in the YAML — callers can use the index as SortOrder.
+type YAMLEtymologyOriginFormSource struct {
+	reader *Reader
+}
+
+// NewYAMLEtymologyOriginFormSource constructs the source.
+func NewYAMLEtymologyOriginFormSource(reader *Reader) *YAMLEtymologyOriginFormSource {
+	return &YAMLEtymologyOriginFormSource{reader: reader}
+}
+
+// FindAll walks every etymology session file and emits one form row per
+// (notebook_id, session_title, origin, language, role, form). Within an
+// origin, duplicate (role, form) pairs are collapsed to mirror the DB's
+// unique constraint.
+func (s *YAMLEtymologyOriginFormSource) FindAll(_ context.Context) ([]EtymologyOriginFormForImport, error) {
+	indexes := s.reader.GetEtymologyIndexes()
+	var rows []EtymologyOriginFormForImport
+	seen := make(map[string]struct{})
+
+	for nbID, idx := range indexes {
+		for _, nbPath := range idx.NotebookPaths {
+			path := filepath.Join(idx.Path, nbPath)
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+			}
+			var sf etymologySessionFile
+			if err := yaml.Unmarshal(data, &sf); err != nil {
+				return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
+			}
+			title := strings.TrimSpace(sf.Metadata.Title)
+			if title == "" {
+				continue
+			}
+			for _, o := range sf.Origins {
+				for i, f := range o.Forms {
+					key := nbID + "\x00" + title + "\x00" + o.Origin + "\x00" + o.Language + "\x00" + f.Role + "\x00" + f.Form
+					if _, ok := seen[key]; ok {
+						continue
+					}
+					seen[key] = struct{}{}
+					rows = append(rows, EtymologyOriginFormForImport{
+						NotebookID:   nbID,
+						SessionTitle: title,
+						Origin:       o.Origin,
+						Language:     o.Language,
+						Form:         f.Form,
+						Role:         f.Role,
+						Note:         f.Note,
+						SortOrder:    i,
+					})
+				}
+			}
+		}
+	}
+	return rows, nil
+}
+
 // YAMLEtymologyDefinitionSource emits every etymology-bearing definition
 // (story, flashcard, definitions-only, and etymology-session-embedded)
 // with its parent session title attached for origin-part binding.

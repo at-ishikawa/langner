@@ -121,6 +121,13 @@ type EtymologyDefinitionSource interface {
 	FindAll(ctx context.Context) ([]notebook.EtymologyDefinitionForImport, error)
 }
 
+// EtymologyOriginFormSource emits the YAML-declared forms for every origin
+// across every etymology session. The importer uses these to populate
+// etymology_origin_forms.
+type EtymologyOriginFormSource interface {
+	FindAll(ctx context.Context) ([]notebook.EtymologyOriginFormForImport, error)
+}
+
 // ImportNotesResult tracks counts for note import.
 type ImportNotesResult struct {
 	NotesNew, NotesSkipped, NotesUpdated int
@@ -153,6 +160,10 @@ type ImportEtymologyResult struct {
 	OriginsSkipped int
 	PartsNew       int
 	PartsSkipped   int
+	FormsNew       int
+	FormsUpdated   int
+	FormsSkipped   int
+	FormsDeleted   int
 }
 
 // ImportOptions controls import behavior.
@@ -169,10 +180,12 @@ type Importer struct {
 	learningSource      LearningSource
 	dictionarySource    DictionarySource
 	dictionaryRepo      dictionary.DictionaryRepository
-	etymologyOriginRepo notebook.EtymologyOriginRepository
-	noteOriginPartRepo  notebook.NoteOriginPartRepository
-	etymologyOriginSrc  EtymologyOriginSource
-	etymologyDefSrc     EtymologyDefinitionSource
+	etymologyOriginRepo     notebook.EtymologyOriginRepository
+	noteOriginPartRepo      notebook.NoteOriginPartRepository
+	etymologyOriginSrc      EtymologyOriginSource
+	etymologyDefSrc         EtymologyDefinitionSource
+	etymologyOriginFormRepo notebook.EtymologyOriginFormRepository
+	etymologyOriginFormSrc  EtymologyOriginFormSource
 	writer              io.Writer
 
 	// touchedNoteIDs collects every DB note ID that ImportNotes or
@@ -206,6 +219,7 @@ func NewImporter(noteRepo notebook.NoteRepository, learningRepo learning.Learnin
 
 // WithEtymology configures the etymology import dependencies. Optional —
 // when any of the four are nil, ImportAll skips the etymology phase.
+// Forms are configured separately via WithEtymologyForms.
 func (imp *Importer) WithEtymology(
 	originRepo notebook.EtymologyOriginRepository,
 	partRepo notebook.NoteOriginPartRepository,
@@ -216,6 +230,18 @@ func (imp *Importer) WithEtymology(
 	imp.noteOriginPartRepo = partRepo
 	imp.etymologyOriginSrc = originSrc
 	imp.etymologyDefSrc = defSrc
+	return imp
+}
+
+// WithEtymologyForms configures the etymology origin forms import
+// dependencies. When either is nil, ImportAll skips the forms phase and
+// note_origin_parts.origin_form_id is left unpopulated.
+func (imp *Importer) WithEtymologyForms(
+	formRepo notebook.EtymologyOriginFormRepository,
+	formSrc EtymologyOriginFormSource,
+) *Importer {
+	imp.etymologyOriginFormRepo = formRepo
+	imp.etymologyOriginFormSrc = formSrc
 	return imp
 }
 
@@ -801,11 +827,135 @@ func (imp *Importer) ImportEtymologyOrigins(ctx context.Context, opts ImportOpti
 	return result, nil
 }
 
+// ImportEtymologyOriginForms reads form entries declared on each origin in
+// YAML and reconciles them against etymology_origin_forms. YAML is the
+// source of truth: rows the YAML still declares are inserted or updated,
+// rows the YAML no longer claims (scoped to origins the YAML still owns)
+// are deleted. Origins that aren't in the DB cause their forms to be
+// silently skipped — origins must be imported first.
+func (imp *Importer) ImportEtymologyOriginForms(ctx context.Context, opts ImportOptions, result *ImportEtymologyResult) error {
+	if imp.etymologyOriginFormRepo == nil || imp.etymologyOriginFormSrc == nil || imp.etymologyOriginRepo == nil {
+		return nil
+	}
+
+	sourceForms, err := imp.etymologyOriginFormSrc.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("read source etymology origin forms: %w", err)
+	}
+
+	allOrigins, err := imp.etymologyOriginRepo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("load origins for form binding: %w", err)
+	}
+	originIDByKey := make(map[string]int64, len(allOrigins))
+	for _, o := range allOrigins {
+		originIDByKey[strings.Join([]string{o.NotebookID, o.SessionTitle, o.Origin, o.Language}, "\x00")] = o.ID
+	}
+
+	existing, err := imp.etymologyOriginFormRepo.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("load existing etymology_origin_forms: %w", err)
+	}
+	existingByKey := make(map[string]*notebook.EtymologyOriginFormRecord, len(existing))
+	for i := range existing {
+		row := &existing[i]
+		existingByKey[etymologyOriginFormCompositeKey(row.OriginID, row.Role, row.Form)] = row
+	}
+
+	// Track which origin IDs the YAML claims forms for. The reconcile pass
+	// only deletes rows that belong to those origins — origins missing from
+	// the YAML are handled by ImportEtymologyOrigins' own reconcile.
+	claimedOrigins := make(map[int64]bool)
+	claimedKeys := make(map[string]bool)
+
+	var toInsert []*notebook.EtymologyOriginFormRecord
+	var toUpdate []*notebook.EtymologyOriginFormRecord
+	for _, src := range sourceForms {
+		originID, ok := originIDByKey[strings.Join([]string{src.NotebookID, src.SessionTitle, src.Origin, src.Language}, "\x00")]
+		if !ok {
+			result.FormsSkipped++
+			continue
+		}
+		claimedOrigins[originID] = true
+		key := etymologyOriginFormCompositeKey(originID, src.Role, src.Form)
+		claimedKeys[key] = true
+		if row, ok := existingByKey[key]; ok {
+			if row.Note != src.Note || row.SortOrder != src.SortOrder {
+				row.Note = src.Note
+				row.SortOrder = src.SortOrder
+				toUpdate = append(toUpdate, row)
+				result.FormsUpdated++
+			} else {
+				result.FormsSkipped++
+			}
+			continue
+		}
+		rec := &notebook.EtymologyOriginFormRecord{
+			OriginID:  originID,
+			Form:      src.Form,
+			Role:      src.Role,
+			Note:      src.Note,
+			SortOrder: src.SortOrder,
+		}
+		toInsert = append(toInsert, rec)
+		// Track in the map so subsequent passes (note_origin_parts
+		// FromForm binding) can resolve the form to its ID after BatchCreate.
+		existingByKey[key] = rec
+		result.FormsNew++
+	}
+
+	if !opts.DryRun && len(toInsert) > 0 {
+		if err := imp.etymologyOriginFormRepo.BatchCreate(ctx, toInsert); err != nil {
+			return fmt.Errorf("batch create etymology_origin_forms: %w", err)
+		}
+	}
+	if !opts.DryRun && len(toUpdate) > 0 {
+		if err := imp.etymologyOriginFormRepo.BatchUpdate(ctx, toUpdate); err != nil {
+			return fmt.Errorf("batch update etymology_origin_forms: %w", err)
+		}
+	}
+
+	// Reconcile: drop rows on YAML-claimed origins that the YAML no longer
+	// declares. Rows on origins the YAML doesn't claim at all are deleted
+	// transitively by ImportEtymologyOrigins' future reconcile (today it
+	// doesn't delete origins either, so unclaimed origin forms persist).
+	var staleIDs []int64
+	for _, row := range existing {
+		if !claimedOrigins[row.OriginID] {
+			continue
+		}
+		key := etymologyOriginFormCompositeKey(row.OriginID, row.Role, row.Form)
+		if claimedKeys[key] {
+			continue
+		}
+		staleIDs = append(staleIDs, row.ID)
+	}
+	if len(staleIDs) > 0 {
+		_, _ = fmt.Fprintf(imp.writer, "  [RECONCILE] removing %d stale etymology_origin_form(s)\n", len(staleIDs))
+		if !opts.DryRun {
+			if err := imp.etymologyOriginFormRepo.BatchDelete(ctx, staleIDs); err != nil {
+				return fmt.Errorf("delete stale etymology_origin_forms: %w", err)
+			}
+		}
+		result.FormsDeleted = len(staleIDs)
+	}
+	return nil
+}
+
+func etymologyOriginFormCompositeKey(originID int64, role, form string) string {
+	return fmt.Sprintf("%d\x00%s\x00%s", originID, role, form)
+}
+
 // ImportNoteOriginParts reads each definition's origin_parts list and
 // inserts the corresponding rows into note_origin_parts. A part is bound
 // when (notebook_id, session_title, origin, language) resolves to an
 // etymology_origins row AND (usage, entry) resolves to a notes row.
 // Unbound parts are silently skipped (printed at debug level).
+//
+// When a definition's origin_part has a from_form, the part is also bound
+// to the matching etymology_origin_forms row (case-insensitive on the
+// form string). A missing form is logged as a warning but doesn't block
+// the insert — origin_form_id stays NULL.
 //
 // Existing junction rows are detected by (note_id, sort_order) — any new
 // definition that shifts ordering will produce a unique-key conflict, so
@@ -850,6 +1000,23 @@ func (imp *Importer) ImportNoteOriginParts(ctx context.Context, opts ImportOptio
 		}
 	}
 
+	// Form lookup keyed by (origin_id, lower(form)). Multiple roles can
+	// share a form string; we pick the first row and let the validator
+	// flag ambiguity at the YAML layer.
+	formIDByKey := make(map[string]int64)
+	if imp.etymologyOriginFormRepo != nil {
+		allForms, err := imp.etymologyOriginFormRepo.FindAll(ctx)
+		if err != nil {
+			return fmt.Errorf("load forms for origin-part binding: %w", err)
+		}
+		for _, f := range allForms {
+			key := fmt.Sprintf("%d\x00%s", f.OriginID, strings.ToLower(f.Form))
+			if _, ok := formIDByKey[key]; !ok {
+				formIDByKey[key] = f.ID
+			}
+		}
+	}
+
 	existing, err := imp.noteOriginPartRepo.FindAll(ctx)
 	if err != nil {
 		return fmt.Errorf("load existing note_origin_parts: %w", err)
@@ -881,10 +1048,23 @@ func (imp *Importer) ImportNoteOriginParts(ctx context.Context, opts ImportOptio
 				continue
 			}
 			existingByKey[key] = true
+
+			var formID *int64
+			if ref.FromForm != "" {
+				if id, ok := formIDByKey[fmt.Sprintf("%d\x00%s", originID, strings.ToLower(ref.FromForm))]; ok {
+					id := id
+					formID = &id
+				} else {
+					_, _ = fmt.Fprintf(imp.writer, "  [WARN] note_origin_part for %q has from_form %q with no matching form on origin %q\n",
+						d.Expression, ref.FromForm, ref.Origin)
+				}
+			}
+
 			toInsert = append(toInsert, &notebook.NoteOriginPartRecord{
-				NoteID:    noteID,
-				OriginID:  originID,
-				SortOrder: sortOrder,
+				NoteID:       noteID,
+				OriginID:     originID,
+				OriginFormID: formID,
+				SortOrder:    sortOrder,
 			})
 			originResult.PartsNew++
 		}
@@ -968,6 +1148,9 @@ func (imp *Importer) ImportAll(ctx context.Context, opts ImportOptions) (*Import
 	etymResult, err := imp.ImportEtymologyOrigins(ctx, opts)
 	if err != nil {
 		return nil, fmt.Errorf("import etymology origins: %w", err)
+	}
+	if err := imp.ImportEtymologyOriginForms(ctx, opts, etymResult); err != nil {
+		return nil, fmt.Errorf("import etymology origin forms: %w", err)
 	}
 	if err := imp.ImportNoteOriginParts(ctx, opts, etymResult); err != nil {
 		return nil, fmt.Errorf("import note origin parts: %w", err)

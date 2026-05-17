@@ -145,12 +145,31 @@ message DeleteDefinitionRequest {
 message DeleteDefinitionResponse {}
 
 // Etymology Notebook
+
+// EtymologyOriginForm is one inflectional / morphological variant of a
+// source-language origin. (form, role) is the identity within an origin;
+// note is free-text commentary on this specific form.
+message EtymologyOriginForm {
+  string form = 1;
+  string role = 2;
+  string note = 3;
+}
+
 message EtymologyOriginPart {
   string origin = 1;
   string type = 2;
   string language = 3;
   string meaning = 4;
   int32 word_count = 5;
+  // forms records the inflectional / morphological variants of this origin
+  // (Latin principal parts, Greek noun stems, …). Empty when the source
+  // doesn't declare any.
+  repeated EtymologyOriginForm forms = 6;
+  // from_form, when non-empty, is the specific form string this origin
+  // reference pins to (e.g. the supine `missum` of `mittere`). Populated
+  // on parts emitted as part of an EtymologyDefinition; empty on the
+  // top-level origins listing.
+  string from_form = 7;
 }
 
 message EtymologyDefinition {

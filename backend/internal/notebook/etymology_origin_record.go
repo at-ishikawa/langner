@@ -25,13 +25,16 @@ type EtymologyOriginRecord struct {
 }
 
 // NoteOriginPartRecord mirrors a row of the note_origin_parts junction table.
+// OriginFormID, when non-nil, pins this reference to a specific inflectional
+// form on the referenced origin (the form's row in etymology_origin_forms).
 type NoteOriginPartRecord struct {
-	ID        int64     `db:"id"`
-	NoteID    int64     `db:"note_id"`
-	OriginID  int64     `db:"origin_id"`
-	SortOrder int       `db:"sort_order"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID           int64     `db:"id"`
+	NoteID       int64     `db:"note_id"`
+	OriginID     int64     `db:"origin_id"`
+	OriginFormID *int64    `db:"origin_form_id"`
+	SortOrder    int       `db:"sort_order"`
+	CreatedAt    time.Time `db:"created_at"`
+	UpdatedAt    time.Time `db:"updated_at"`
 }
 
 // EtymologyOriginRepository is the storage interface for etymology origins.
@@ -121,7 +124,7 @@ func NewDBNoteOriginPartRepository(db *sqlx.DB) *DBNoteOriginPartRepository {
 // FindAll returns every note↔origin junction row.
 func (r *DBNoteOriginPartRepository) FindAll(ctx context.Context) ([]NoteOriginPartRecord, error) {
 	var rows []NoteOriginPartRecord
-	if err := r.db.SelectContext(ctx, &rows, `SELECT id, note_id, origin_id, sort_order, created_at, updated_at FROM note_origin_parts`); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, `SELECT id, note_id, origin_id, origin_form_id, sort_order, created_at, updated_at FROM note_origin_parts`); err != nil {
 		return nil, fmt.Errorf("select note_origin_parts: %w", err)
 	}
 	return rows, nil
@@ -134,11 +137,11 @@ func (r *DBNoteOriginPartRepository) BatchCreate(ctx context.Context, records []
 		return nil
 	}
 	query := database.BuildMultiRowInsert("note_origin_parts",
-		[]string{"note_id", "origin_id", "sort_order"},
+		[]string{"note_id", "origin_id", "origin_form_id", "sort_order"},
 		len(records))
-	args := make([]any, 0, len(records)*3)
+	args := make([]any, 0, len(records)*4)
 	for _, rec := range records {
-		args = append(args, rec.NoteID, rec.OriginID, rec.SortOrder)
+		args = append(args, rec.NoteID, rec.OriginID, rec.OriginFormID, rec.SortOrder)
 	}
 	if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
 		return fmt.Errorf("insert note_origin_parts: %w", err)

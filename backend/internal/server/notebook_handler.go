@@ -644,8 +644,13 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 
 	originWordCounts := make(map[string]int)
 	originSet := make(map[string]bool)
+	originFormsByKey := make(map[string][]notebook.EtymologyOriginForm)
 	for _, o := range origins {
-		originSet[originKey(o.Origin, o.SessionTitle)] = true
+		k := originKey(o.Origin, o.SessionTitle)
+		originSet[k] = true
+		if len(o.Forms) > 0 {
+			originFormsByKey[k] = o.Forms
+		}
 	}
 
 	// addDefinition deduplicates and appends a definition. sessionTitle is
@@ -675,12 +680,23 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		}
 		var parts []*apiv1.EtymologyOriginPart
 		for _, ref := range originParts {
+			k := originKey(ref.Origin, sessionTitle)
+			var forms []*apiv1.EtymologyOriginForm
+			for _, f := range originFormsByKey[k] {
+				forms = append(forms, &apiv1.EtymologyOriginForm{
+					Form: f.Form,
+					Role: f.Role,
+					Note: f.Note,
+				})
+			}
 			parts = append(parts, &apiv1.EtymologyOriginPart{
 				Origin:   ref.Origin,
 				Language: ref.Language,
+				FromForm: ref.FromForm,
+				Forms:    forms,
 			})
-			if originSet[originKey(ref.Origin, sessionTitle)] {
-				originWordCounts[originKey(ref.Origin, sessionTitle)]++
+			if originSet[k] {
+				originWordCounts[k]++
 			}
 		}
 		definitions = append(definitions, &apiv1.EtymologyDefinition{
@@ -775,12 +791,21 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 	// Build proto origins with per-sense word counts
 	var protoOrigins []*apiv1.EtymologyOriginPart
 	for _, o := range origins {
+		var forms []*apiv1.EtymologyOriginForm
+		for _, f := range o.Forms {
+			forms = append(forms, &apiv1.EtymologyOriginForm{
+				Form: f.Form,
+				Role: f.Role,
+				Note: f.Note,
+			})
+		}
 		protoOrigins = append(protoOrigins, &apiv1.EtymologyOriginPart{
 			Origin:    o.Origin,
 			Type:      o.Type,
 			Language:  o.Language,
 			Meaning:   o.Meaning,
 			WordCount: int32(originWordCounts[originKey(o.Origin, o.SessionTitle)]),
+			Forms:     forms,
 		})
 	}
 
