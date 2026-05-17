@@ -363,7 +363,7 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 	var protoCards []*apiv1.EtymologyQuizCard
 	for _, card := range cards {
 		cardID := nextID; nextID++; localStore[cardID] = card
-		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle
+		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle + "\x00" + card.Sense
 		var graphPrompt *apiv1.GraphPrompt
 		if graphReader != nil {
 			graphPrompt = buildClusterGraphPromptForCard(ctx, graphReader, card)
@@ -372,6 +372,7 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 			CardId: cardID, Origin: card.Origin, Type: card.Type,
 			Language: card.Language, Meaning: card.Meaning,
 			NotebookName: card.NotebookName, SessionTitle: card.SessionTitle,
+			Sense:        card.Sense,
 			ExampleWords: examples[exampleKey],
 			GraphPrompt:  graphPrompt,
 		})

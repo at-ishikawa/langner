@@ -207,13 +207,16 @@ type Reference struct {
 }
 
 // OriginPartRef references an etymology origin by origin name and language.
-// FromForm optionally pins this reference to a specific inflectional form
-// declared on the referenced origin (e.g., the supine `missum` of `mittere`).
-// The validator emits a warning if FromForm doesn't match any form on the
-// referenced origin in the same session.
+// Sense optionally disambiguates among same-session multi-sense origins
+// (e.g. pinning osteopath's `pathos` reference to the "disease" sense rather
+// than the "feeling" sense). FromForm optionally pins this reference to a
+// specific inflectional form declared on the referenced origin (e.g., the
+// supine `missum` of `mittere`). The validator emits a warning if either
+// field doesn't resolve on the referenced origin in the same session.
 type OriginPartRef struct {
 	Origin   string `yaml:"origin"`
 	Language string `yaml:"language,omitempty"`
+	Sense    string `yaml:"sense,omitempty"`
 	FromForm string `yaml:"from_form,omitempty"`
 }
 

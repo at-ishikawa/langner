@@ -20,6 +20,7 @@ origins:
     language: ...
     meaning: ...
     type: prefix | suffix          # optional
+    sense: ...                     # optional, see "Same-session multi-sense"
     forms: [...]                   # optional, see "Forms"
 
 concepts:                          # optional, see "Concepts"
@@ -32,6 +33,47 @@ relations:                         # optional, see "Relations"
   - { type: ..., between: [A, B] } # undirected
   - { type: ..., from: A, to: B }  # directed
 ```
+
+## Same-session multi-sense origins
+
+Most origins have one sense per session and need no `sense:` field. The
+field exists for the rare case where a session declares the same origin
+twice with different meanings — e.g. Greek `pathos` is "feeling" in some
+derivations (sympathy, empathy, apathy) and "disease, suffering" in others
+(osteopath, psychopath). Each sense needs its own row so the right card
+is shown for the right English derivation:
+
+```yaml
+origins:
+  - origin: pathos
+    language: Greek
+    sense: feeling                # NEW
+    meaning: "feeling"
+  - origin: pathos
+    language: Greek
+    sense: disease                # NEW
+    meaning: "disease, suffering"
+```
+
+Definitions then pin their `origin_parts` reference with the same `sense:`
+token so each derived English word lines up with the right meaning:
+
+```yaml
+# osteopath uses the "disease" sense
+- expression: osteopath
+  origin_parts:
+    - origin: osteon
+      language: Greek
+    - origin: pathos
+      language: Greek
+      sense: disease
+```
+
+A reference without `sense:` against a multi-sense origin still resolves
+(picks the first declared sense) and emits a validator warning prompting
+you to pin it. The DB unique key is
+`(notebook_id, session_title, sense, origin, language)`, so single-sense
+origins keep `sense=""` and their DB rows are unchanged from before.
 
 ## Forms
 

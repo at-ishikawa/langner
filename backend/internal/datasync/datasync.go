@@ -848,14 +848,14 @@ func (imp *Importer) ImportEtymologyOrigins(ctx context.Context, opts ImportOpti
 	existingByKey := make(map[string]*notebook.EtymologyOriginRecord, len(existing))
 	for i := range existing {
 		row := &existing[i]
-		key := strings.Join([]string{row.NotebookID, row.SessionTitle, row.Origin, row.Language}, "\x00")
+		key := etymologyOriginCompositeKey(row.NotebookID, row.SessionTitle, row.Sense, row.Origin, row.Language)
 		existingByKey[key] = row
 	}
 
 	var toInsert []*notebook.EtymologyOriginRecord
 	for i := range source {
 		src := source[i]
-		key := strings.Join([]string{src.NotebookID, src.SessionTitle, src.Origin, src.Language}, "\x00")
+		key := etymologyOriginCompositeKey(src.NotebookID, src.SessionTitle, src.Sense, src.Origin, src.Language)
 		if _, ok := existingByKey[key]; ok {
 			result.OriginsSkipped++
 			continue
@@ -898,7 +898,7 @@ func (imp *Importer) ImportEtymologyOriginForms(ctx context.Context, opts Import
 	}
 	originIDByKey := make(map[string]int64, len(allOrigins))
 	for _, o := range allOrigins {
-		originIDByKey[strings.Join([]string{o.NotebookID, o.SessionTitle, o.Origin, o.Language}, "\x00")] = o.ID
+		originIDByKey[etymologyOriginCompositeKey(o.NotebookID, o.SessionTitle, o.Sense, o.Origin, o.Language)] = o.ID
 	}
 
 	existing, err := imp.etymologyOriginFormRepo.FindAll(ctx)
@@ -920,7 +920,7 @@ func (imp *Importer) ImportEtymologyOriginForms(ctx context.Context, opts Import
 	var toInsert []*notebook.EtymologyOriginFormRecord
 	var toUpdate []*notebook.EtymologyOriginFormRecord
 	for _, src := range sourceForms {
-		originID, ok := originIDByKey[strings.Join([]string{src.NotebookID, src.SessionTitle, src.Origin, src.Language}, "\x00")]
+		originID, ok := originIDByKey[etymologyOriginCompositeKey(src.NotebookID, src.SessionTitle, src.Sense, src.Origin, src.Language)]
 		if !ok {
 			result.FormsSkipped++
 			continue
@@ -1033,19 +1033,26 @@ func (imp *Importer) ImportNoteOriginParts(ctx context.Context, opts ImportOptio
 	if err != nil {
 		return fmt.Errorf("load origins for origin-part binding: %w", err)
 	}
-	originIDByKey := make(map[string]int64, len(allOrigins))
-	// Index by (notebook_id, session_title, origin, language) AND by
-	// (notebook_id, session_title, origin, "") so language-less refs in
-	// definitions still resolve to the language-scoped origin.
+	// Three lookup tiers. Most specific to least:
+	//   1. (notebook, session, sense, origin, language) — exact match when
+	//      a ref pins a sense (e.g. osteopath's pathos with sense:disease).
+	//   2. (notebook, session, origin, language) — fallback for refs that
+	//      don't pin a sense. Picks the first matching origin row.
+	//   3. (origin, language) — cross-notebook fallback for refs that
+	//      omit notebook/session entirely.
+	originIDByFullKey := make(map[string]int64, len(allOrigins))
+	originIDByBaseKey := make(map[string]int64, len(allOrigins))
+	originIDByNameOnly := make(map[string]int64, len(allOrigins))
 	for _, o := range allOrigins {
-		full := strings.Join([]string{o.NotebookID, o.SessionTitle, strings.ToLower(o.Origin), o.Language}, "\x00")
-		originIDByKey[full] = o.ID
-		// Cross-notebook fallback: definitions referencing an origin
-		// from a different notebook (rare but possible) should still
-		// resolve when the origin is unique by name.
+		full := etymologyOriginCompositeKey(o.NotebookID, o.SessionTitle, o.Sense, strings.ToLower(o.Origin), o.Language)
+		originIDByFullKey[full] = o.ID
+		base := etymologyOriginBaseKey(o.NotebookID, o.SessionTitle, strings.ToLower(o.Origin), o.Language)
+		if _, ok := originIDByBaseKey[base]; !ok {
+			originIDByBaseKey[base] = o.ID
+		}
 		nameOnly := strings.Join([]string{strings.ToLower(o.Origin), o.Language}, "\x00")
-		if _, ok := originIDByKey[nameOnly]; !ok {
-			originIDByKey[nameOnly] = o.ID
+		if _, ok := originIDByNameOnly[nameOnly]; !ok {
+			originIDByNameOnly[nameOnly] = o.ID
 		}
 	}
 
@@ -1082,11 +1089,19 @@ func (imp *Importer) ImportNoteOriginParts(ctx context.Context, opts ImportOptio
 			continue // expression not in notes — was filtered earlier or DB stale
 		}
 		for sortOrder, ref := range d.OriginParts {
-			full := strings.Join([]string{d.NotebookID, d.SessionTitle, strings.ToLower(ref.Origin), ref.Language}, "\x00")
-			originID, ok := originIDByKey[full]
+			full := etymologyOriginCompositeKey(d.NotebookID, d.SessionTitle, ref.Sense, strings.ToLower(ref.Origin), ref.Language)
+			originID, ok := originIDByFullKey[full]
+			if !ok {
+				base := etymologyOriginBaseKey(d.NotebookID, d.SessionTitle, strings.ToLower(ref.Origin), ref.Language)
+				originID, ok = originIDByBaseKey[base]
+				if ok && ref.Sense == "" {
+					_, _ = fmt.Fprintf(imp.writer, "  [WARN] note_origin_part for %q references %q (%s) without `sense:` — falling back to first declared sense; pin a sense if this origin is multi-sense in session %q\n",
+						d.Expression, ref.Origin, ref.Language, d.SessionTitle)
+				}
+			}
 			if !ok {
 				nameOnly := strings.Join([]string{strings.ToLower(ref.Origin), ref.Language}, "\x00")
-				originID, ok = originIDByKey[nameOnly]
+				originID, ok = originIDByNameOnly[nameOnly]
 			}
 			if !ok {
 				continue // origin not in DB; skip this part
@@ -1165,9 +1180,17 @@ func (imp *Importer) ImportSemanticConcepts(ctx context.Context, opts ImportOpti
 	if err != nil {
 		return fmt.Errorf("load origins for concept member binding: %w", err)
 	}
-	originIDByKey := make(map[string]int64, len(allOrigins))
+	// Concept members are matched sense-agnostically: a member references
+	// (origin, language) within a session; if the origin is multi-sense in
+	// that session, the first sense wins. (Same trade-off as un-pinned
+	// origin_parts above. Could be refined by adding `sense:` to
+	// ConceptMember later.)
+	originIDByBase := make(map[string]int64, len(allOrigins))
 	for _, o := range allOrigins {
-		originIDByKey[etymologyOriginCompositeKey(o.NotebookID, o.SessionTitle, o.Origin, o.Language)] = o.ID
+		base := etymologyOriginBaseKey(o.NotebookID, o.SessionTitle, o.Origin, o.Language)
+		if _, ok := originIDByBase[base]; !ok {
+			originIDByBase[base] = o.ID
+		}
 	}
 
 	byBook := make(map[string]*bookConceptData)
@@ -1191,8 +1214,8 @@ func (imp *Importer) ImportSemanticConcepts(ctx context.Context, opts ImportOpti
 		}
 		// Resolve each member against the declaring session's origins.
 		for _, m := range src.Members {
-			key := etymologyOriginCompositeKey(src.NotebookID, src.SessionTitle, m.Origin, m.Language)
-			originID, ok := originIDByKey[key]
+			key := etymologyOriginBaseKey(src.NotebookID, src.SessionTitle, m.Origin, m.Language)
+			originID, ok := originIDByBase[key]
 			if !ok {
 				_, _ = fmt.Fprintf(imp.writer,
 					"  [WARN] concept %q member %q (%s) not found in session %q of book %q\n",
@@ -1479,8 +1502,21 @@ func (imp *Importer) ImportConceptRelations(ctx context.Context, opts ImportOpti
 }
 
 // etymologyOriginCompositeKey builds the lookup key used across ingestion
-// to match a YAML origin reference to its DB row.
-func etymologyOriginCompositeKey(notebookID, sessionTitle, origin, language string) string {
+// to match a YAML origin reference to its DB row. Sense is included since
+// migration 011: multi-sense origins are distinct rows keyed by
+// (notebook, session, origin, language, sense), and a reference that
+// doesn't supply sense falls back via etymologyOriginBaseKey.
+func etymologyOriginCompositeKey(notebookID, sessionTitle, sense, origin, language string) string {
+	return strings.Join([]string{notebookID, sessionTitle, sense, origin, language}, "\x00")
+}
+
+// etymologyOriginBaseKey is the sense-agnostic fallback key. When an origin
+// reference (in definitions or in a concept members list) doesn't specify
+// a sense, the importer first tries the sense-specific key with sense=""
+// and then this base key, picking the first record that matches the
+// (notebook, session, origin, language) tuple. The base key is used to
+// keep un-backfilled references resolving against multi-sense origins.
+func etymologyOriginBaseKey(notebookID, sessionTitle, origin, language string) string {
 	return strings.Join([]string{notebookID, sessionTitle, origin, language}, "\x00")
 }
 

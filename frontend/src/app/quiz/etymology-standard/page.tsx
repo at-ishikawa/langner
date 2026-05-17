@@ -186,9 +186,10 @@ export default function EtymologyStandardPage() {
         <VStack align="stretch" gap={4}>
           <Box p={4} borderWidth="1px" borderRadius="lg" textAlign="center" bg="white" _dark={{ bg: "gray.800" }}>
             <Heading size="xl">{card.origin}</Heading>
-            <Box display="flex" gap={2} justifyContent="center" mt={2}>
+            <Box display="flex" gap={2} justifyContent="center" mt={2} flexWrap="wrap">
               {card.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{card.type}</Text></Box>}
               {card.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{card.language}</Text></Box>}
+              {card.sense && <Box px={2} py={0.5} borderRadius="full" bg="purple.100" _dark={{ bg: "purple.900" }}><Text fontSize="xs" color="purple.800" _dark={{ color: "purple.200" }}>sense: {card.sense}</Text></Box>}
             </Box>
             {card.exampleWords && card.exampleWords.length > 0 && (
               <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} mt={3}>

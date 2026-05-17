@@ -50,7 +50,7 @@ func (s *YAMLEtymologyOriginSource) FindAll(_ context.Context) ([]EtymologyOrigi
 				return nil, fmt.Errorf("etymology session %s missing required metadata.title", path)
 			}
 			for _, o := range sf.Origins {
-				key := etymologyOriginKey(nbID, title, o.Origin, o.Language)
+				key := etymologyOriginKey(nbID, title, o.Sense, o.Origin, o.Language)
 				if _, ok := seen[key]; ok {
 					continue
 				}
@@ -58,6 +58,7 @@ func (s *YAMLEtymologyOriginSource) FindAll(_ context.Context) ([]EtymologyOrigi
 				rows = append(rows, EtymologyOriginRecord{
 					NotebookID:   nbID,
 					SessionTitle: title,
+					Sense:        o.Sense,
 					Origin:       o.Origin,
 					Type:         o.Type,
 					Language:     o.Language,
@@ -70,12 +71,14 @@ func (s *YAMLEtymologyOriginSource) FindAll(_ context.Context) ([]EtymologyOrigi
 }
 
 // EtymologyOriginFormForImport is one form declared on an origin in the
-// YAML source. The (NotebookID, SessionTitle, Origin, Language) tuple
-// resolves to an etymology_origins row at import time; that origin's ID
-// becomes OriginID before insert.
+// YAML source. The (NotebookID, SessionTitle, Sense, Origin, Language)
+// tuple resolves to an etymology_origins row at import time; that origin's
+// ID becomes OriginID before insert. Sense matches the parent origin's
+// Sense (empty for single-sense origins).
 type EtymologyOriginFormForImport struct {
 	NotebookID   string
 	SessionTitle string
+	Sense        string
 	Origin       string
 	Language     string
 	Form         string
@@ -122,7 +125,7 @@ func (s *YAMLEtymologyOriginFormSource) FindAll(_ context.Context) ([]EtymologyO
 			}
 			for _, o := range sf.Origins {
 				for i, f := range o.Forms {
-					key := nbID + "\x00" + title + "\x00" + o.Origin + "\x00" + o.Language + "\x00" + f.Role + "\x00" + f.Form
+					key := nbID + "\x00" + title + "\x00" + o.Sense + "\x00" + o.Origin + "\x00" + o.Language + "\x00" + f.Role + "\x00" + f.Form
 					if _, ok := seen[key]; ok {
 						continue
 					}
@@ -130,6 +133,7 @@ func (s *YAMLEtymologyOriginFormSource) FindAll(_ context.Context) ([]EtymologyO
 					rows = append(rows, EtymologyOriginFormForImport{
 						NotebookID:   nbID,
 						SessionTitle: title,
+						Sense:        o.Sense,
 						Origin:       o.Origin,
 						Language:     o.Language,
 						Form:         f.Form,

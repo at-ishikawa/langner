@@ -2464,14 +2464,20 @@ type EtymologyQuizCard struct {
 	// Session 16) so this field disambiguates them.
 	SessionTitle string `protobuf:"bytes,7,opt,name=session_title,json=sessionTitle,proto3" json:"session_title,omitempty"`
 	// example_words are expressions from the consolidated definitions notebook
-	// that reference this exact (origin, session_title) pair. Standard quiz
-	// shows these alongside the origin so the user can recognise which sense
-	// is being asked about.
+	// that reference this exact (origin, session_title, sense) tuple. Standard
+	// quiz shows these alongside the origin so the user can recognise which
+	// sense is being asked about.
 	ExampleWords []string `protobuf:"bytes,8,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
 	// graph_prompt, when non-nil, replaces the plain prompt for reverse-mode
 	// quiz cards: the frontend renders the small subgraph and the user types
 	// into the single blank node. Standard mode ignores this field.
-	GraphPrompt   *GraphPrompt `protobuf:"bytes,9,opt,name=graph_prompt,json=graphPrompt,proto3" json:"graph_prompt,omitempty"`
+	GraphPrompt *GraphPrompt `protobuf:"bytes,9,opt,name=graph_prompt,json=graphPrompt,proto3" json:"graph_prompt,omitempty"`
+	// sense disambiguates same-session multi-sense origins. For pathos in
+	// Session 9 of a Greek roots notebook the user has two distinct cards
+	// with sense="feeling" and sense="disease" respectively; the frontend
+	// surfaces this on the prompt so the learner knows which sense is
+	// being asked about. Empty for single-sense origins.
+	Sense         string `protobuf:"bytes,10,opt,name=sense,proto3" json:"sense,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2567,6 +2573,13 @@ func (x *EtymologyQuizCard) GetGraphPrompt() *GraphPrompt {
 		return x.GraphPrompt
 	}
 	return nil
+}
+
+func (x *EtymologyQuizCard) GetSense() string {
+	if x != nil {
+		return x.Sense
+	}
+	return ""
 }
 
 // GraphPrompt is a small subgraph rendered as the prompt for a reverse
@@ -3910,7 +3923,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x129\n" +
 	"\n" +
 	"quiz_types\x18\x03 \x03(\x0e2\x10.api.v1.QuizTypeB\b\xbaH\x05\x92\x01\x02\b\x01R\tquizTypesJ\x04\b\x02\x10\x03R\tquiz_type\"\x14\n" +
-	"\x12ResumeWordResponse\"\xb5\x02\n" +
+	"\x12ResumeWordResponse\"\xcb\x02\n" +
 	"\x11EtymologyQuizCard\x12\x17\n" +
 	"\acard_id\x18\x01 \x01(\x03R\x06cardId\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x12\n" +
@@ -3920,7 +3933,9 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\x12#\n" +
 	"\rsession_title\x18\a \x01(\tR\fsessionTitle\x12#\n" +
 	"\rexample_words\x18\b \x03(\tR\fexampleWords\x126\n" +
-	"\fgraph_prompt\x18\t \x01(\v2\x13.api.v1.GraphPromptR\vgraphPrompt\"\x84\x02\n" +
+	"\fgraph_prompt\x18\t \x01(\v2\x13.api.v1.GraphPromptR\vgraphPrompt\x12\x14\n" +
+	"\x05sense\x18\n" +
+	" \x01(\tR\x05sense\"\x84\x02\n" +
 	"\vGraphPrompt\x12/\n" +
 	"\x05shape\x18\x01 \x01(\x0e2\x19.api.v1.GraphPrompt.ShapeR\x05shape\x12'\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x11.api.v1.GraphNodeR\x05nodes\x12'\n" +

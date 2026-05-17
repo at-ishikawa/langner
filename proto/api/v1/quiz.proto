@@ -357,14 +357,20 @@ message EtymologyQuizCard {
   // Session 16) so this field disambiguates them.
   string session_title = 7;
   // example_words are expressions from the consolidated definitions notebook
-  // that reference this exact (origin, session_title) pair. Standard quiz
-  // shows these alongside the origin so the user can recognise which sense
-  // is being asked about.
+  // that reference this exact (origin, session_title, sense) tuple. Standard
+  // quiz shows these alongside the origin so the user can recognise which
+  // sense is being asked about.
   repeated string example_words = 8;
   // graph_prompt, when non-nil, replaces the plain prompt for reverse-mode
   // quiz cards: the frontend renders the small subgraph and the user types
   // into the single blank node. Standard mode ignores this field.
   GraphPrompt graph_prompt = 9;
+  // sense disambiguates same-session multi-sense origins. For pathos in
+  // Session 9 of a Greek roots notebook the user has two distinct cards
+  // with sense="feeling" and sense="disease" respectively; the frontend
+  // surfaces this on the prompt so the learner knows which sense is
+  // being asked about. Empty for single-sense origins.
+  string sense = 10;
 }
 
 // GraphPrompt is a small subgraph rendered as the prompt for a reverse

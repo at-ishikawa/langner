@@ -349,6 +349,7 @@ export default function QuizHubPage() {
               cardId: c.cardId, origin: c.origin, type: c.type,
               language: c.language, meaning: c.meaning,
               notebookName: c.notebookName, sessionTitle: c.sessionTitle,
+              sense: c.sense,
               exampleWords: c.exampleWords ?? [],
               graphPrompt: c.graphPrompt,
             })),

@@ -48,6 +48,11 @@ export interface EtymologyOriginCard {
   meaning: string;
   notebookName: string;
   sessionTitle: string;
+  // sense disambiguates same-session multi-sense origins. Empty for the
+  // vast majority of cards; "feeling" vs "disease" for pathos in Session
+  // 9 of a Greek roots notebook. The prompt UI shows it next to the
+  // origin so the learner knows which sense is being asked about.
+  sense: string;
   exampleWords: string[];
   // graphPrompt, when set, replaces the plain meaning prompt with a graph
   // the user completes. Only populated by the server for reverse-mode
