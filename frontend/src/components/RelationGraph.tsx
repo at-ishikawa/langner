@@ -23,6 +23,8 @@ export function RelationGraph({ prompt, value, onValueChange, disabled }: Relati
       return <ClusterGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
     case GraphPrompt_Shape.ANTONYM_PAIR:
       return <AntonymPairGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
+    case GraphPrompt_Shape.FORM_BRANCH:
+      return <FormBranchGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
     default:
       return (
         <Box p={3} borderWidth="1px" borderRadius="md" bg="gray.50" _dark={{ bg: "gray.800" }}>
@@ -32,6 +34,96 @@ export function RelationGraph({ prompt, value, onValueChange, disabled }: Relati
         </Box>
       );
   }
+}
+
+function FormBranchGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
+  // Layout: ORIGIN node (the blank, with meaning as hint) at the top,
+  // FORM nodes in a row below, ENGLISH_WORD nodes under each form. The
+  // backend always blanks the origin; the user types the headword given
+  // the form tree and English derivations as context.
+  const origin = useMemo(
+    () => prompt.nodes.find((n) => n.kind === GraphNode_Kind.ORIGIN),
+    [prompt.nodes],
+  );
+  const forms = useMemo(
+    () => prompt.nodes.filter((n) => n.kind === GraphNode_Kind.FORM),
+    [prompt.nodes],
+  );
+  // english by form: prompt edges of type "derives" go from FORM → ENGLISH_WORD.
+  const englishByFormId = useMemo(() => {
+    const map = new Map<string, GraphNode[]>();
+    for (const f of forms) map.set(f.id, []);
+    for (const e of prompt.edges) {
+      if (e.type !== "derives") continue;
+      const target = prompt.nodes.find((n) => n.id === e.to);
+      if (!target || target.kind !== GraphNode_Kind.ENGLISH_WORD) continue;
+      const list = map.get(e.from);
+      if (list) list.push(target);
+    }
+    return map;
+  }, [prompt.edges, prompt.nodes, forms]);
+  if (!origin) return null;
+
+  return (
+    <Box>
+      <Text fontSize="xs" color="fg.muted" mb={2}>
+        Fill in the source-language headword that produced these forms and English words:
+      </Text>
+      <Box
+        p={4}
+        borderWidth="1px"
+        borderRadius="lg"
+        bg="white"
+        _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+        borderColor="gray.200"
+        textAlign="center"
+      >
+        <MemberNode
+          node={origin}
+          isBlank={origin.id === prompt.blankNodeId}
+          value={value}
+          onValueChange={onValueChange}
+          disabled={disabled}
+        />
+        <Box
+          display="grid"
+          gridTemplateColumns={`repeat(${Math.min(forms.length, 3)}, minmax(0, 1fr))`}
+          gap={2}
+          mt={3}
+        >
+          {forms.map((f) => (
+            <Box key={f.id} textAlign="center">
+              <Box
+                px={2}
+                py={1}
+                borderRadius="md"
+                bg="green.50"
+                _dark={{ bg: "green.900", borderColor: "gray.600" }}
+                borderWidth="1px"
+                borderColor="gray.300"
+              >
+                <Text fontFamily="mono" fontSize="sm" fontWeight="medium">
+                  {f.label}
+                </Text>
+                {f.hint && (
+                  <Text fontSize="2xs" color="fg.muted">
+                    {f.hint}
+                  </Text>
+                )}
+              </Box>
+              <Box mt={1} display="flex" flexDirection="column" gap={1}>
+                {(englishByFormId.get(f.id) ?? []).map((eng) => (
+                  <Text key={eng.id} fontSize="xs" color="fg.muted">
+                    → {eng.label}
+                  </Text>
+                ))}
+              </Box>
+            </Box>
+          ))}
+        </Box>
+      </Box>
+    </Box>
+  );
 }
 
 function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {

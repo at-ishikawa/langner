@@ -112,9 +112,13 @@ func conceptsContaining(card quiz.EtymologyOriginCard, concepts map[string]*grap
 
 // buildGraphPromptForCard picks the richest applicable graph shape for
 // the card and returns its GraphPrompt, or nil if none applies.
-// Preference: ANTONYM_PAIR > CLUSTER. (FORM_BRANCH is selected separately
-// by buildFormBranchGraphPromptForCard when concepts don't apply.)
+// Preference: ANTONYM_PAIR > CLUSTER > FORM_BRANCH — antonym pairs
+// reinforce cross-concept contrast (highest learning value), clusters
+// reinforce membership in one concept, form branches teach the Latin →
+// English derivation pipeline (useful when no concept membership exists).
 func buildGraphPromptForCard(
+	ctx context.Context,
+	reader *notebook.Reader,
 	card quiz.EtymologyOriginCard,
 	concepts map[string]*graphConceptInfo,
 ) *apiv1.GraphPrompt {
@@ -122,6 +126,9 @@ func buildGraphPromptForCard(
 		return p
 	}
 	if p := buildClusterGraphPromptForCard(card, concepts); p != nil {
+		return p
+	}
+	if p := buildFormBranchGraphPromptForCard(ctx, reader, card); p != nil {
 		return p
 	}
 	return nil
@@ -290,5 +297,152 @@ func antonymPairPrompt(card quiz.EtymologyOriginCard, this, other *graphConceptI
 	}
 	return &apiv1.GraphPrompt{
 		Shape: apiv1.GraphPrompt_ANTONYM_PAIR, Nodes: nodes, Edges: edges, BlankNodeId: blankID,
+	}
+}
+
+// buildFormBranchGraphPromptForCard returns a FORM_BRANCH shape when the
+// card's origin has at least one form with at least one English
+// derivation. The origin headword is the blank; the user types the
+// origin given the form tree and the English words it produces as
+// context. This teaches "which Latin word produced these English
+// derivations?" — the inverse of "which form produced this English word?"
+func buildFormBranchGraphPromptForCard(
+	ctx context.Context,
+	reader *notebook.Reader,
+	card quiz.EtymologyOriginCard,
+) *apiv1.GraphPrompt {
+	originSrc := notebook.NewYAMLEtymologyOriginSource(reader)
+	originRows, err := originSrc.FindAll(ctx)
+	if err != nil {
+		return nil
+	}
+	// Find the card's origin record so we can read its forms.
+	lowerOrigin := strings.ToLower(strings.TrimSpace(card.Origin))
+	var cardForms []notebook.EtymologyOriginForm
+	for _, r := range originRows {
+		if r.NotebookID != card.NotebookName {
+			continue
+		}
+		if r.SessionTitle != card.SessionTitle {
+			continue
+		}
+		if r.Sense != card.Sense {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(r.Origin)) != lowerOrigin {
+			continue
+		}
+		if r.Language != card.Language {
+			continue
+		}
+		// Re-read the YAML to pick up Forms (the source struct drops them).
+		// Cheaper alternative: have the source emit Forms; for v1 fetch from
+		// the per-origin reader. The forms data lives on EtymologyOrigin in
+		// the reader's parsed view.
+		break
+	}
+	// Forms come from the parsed origins (the source struct above doesn't
+	// carry them). Read them from the reader directly.
+	origins, err := reader.ReadEtymologyNotebook(card.NotebookName)
+	if err != nil {
+		return nil
+	}
+	for _, o := range origins {
+		if o.SessionTitle == card.SessionTitle &&
+			strings.ToLower(strings.TrimSpace(o.Origin)) == lowerOrigin &&
+			o.Language == card.Language && o.Sense == card.Sense {
+			cardForms = o.Forms
+			break
+		}
+	}
+	if len(cardForms) == 0 {
+		return nil
+	}
+
+	// Collect English derivations for each form by scanning definitions
+	// whose origin_parts pin a from_form on this origin.
+	englishByForm := make(map[string][]string)
+	bookIDs := reader.GetDefinitionsBookIDs()
+	for _, bookID := range bookIDs {
+		if bookID != card.NotebookName {
+			continue
+		}
+		defs, ok := reader.GetDefinitionsNotes(bookID)
+		if !ok {
+			continue
+		}
+		for sessionTitle, sceneDefs := range defs {
+			if sessionTitle != card.SessionTitle {
+				continue
+			}
+			for _, notes := range sceneDefs {
+				for _, note := range notes {
+					for _, ref := range note.OriginParts {
+						if strings.ToLower(strings.TrimSpace(ref.Origin)) != lowerOrigin {
+							continue
+						}
+						if ref.Language != card.Language {
+							continue
+						}
+						if ref.FromForm == "" {
+							continue
+						}
+						expr := note.Expression
+						if expr == "" {
+							expr = note.Definition
+						}
+						if expr == "" {
+							continue
+						}
+						englishByForm[ref.FromForm] = append(englishByForm[ref.FromForm], expr)
+					}
+				}
+			}
+		}
+	}
+	// Require at least one form with at least one English derivation.
+	hasAny := false
+	for _, ws := range englishByForm {
+		if len(ws) > 0 {
+			hasAny = true
+			break
+		}
+	}
+	if !hasAny {
+		return nil
+	}
+
+	// Build the graph: origin (blank) → forms → English words.
+	originNodeID := "origin"
+	nodes := []*apiv1.GraphNode{
+		{
+			Id: originNodeID, Kind: apiv1.GraphNode_ORIGIN,
+			Label: "", Language: card.Language, Hint: card.Meaning,
+		},
+	}
+	edges := []*apiv1.GraphEdge{}
+	// Cap English derivations per form to keep the prompt readable.
+	const maxEnglishPerForm = 3
+	for i, f := range cardForms {
+		formNodeID := fmt.Sprintf("form%d", i)
+		nodes = append(nodes, &apiv1.GraphNode{
+			Id: formNodeID, Kind: apiv1.GraphNode_FORM,
+			Label: f.Form, Hint: f.Role,
+		})
+		edges = append(edges, &apiv1.GraphEdge{From: originNodeID, To: formNodeID, Type: "has_form"})
+		english := englishByForm[f.Form]
+		if len(english) > maxEnglishPerForm {
+			english = english[:maxEnglishPerForm]
+		}
+		for j, expr := range english {
+			engNodeID := fmt.Sprintf("eng%d_%d", i, j)
+			nodes = append(nodes, &apiv1.GraphNode{
+				Id: engNodeID, Kind: apiv1.GraphNode_ENGLISH_WORD, Label: expr,
+			})
+			edges = append(edges, &apiv1.GraphEdge{From: formNodeID, To: engNodeID, Type: "derives"})
+		}
+	}
+	return &apiv1.GraphPrompt{
+		Shape: apiv1.GraphPrompt_FORM_BRANCH, Nodes: nodes, Edges: edges, BlankNodeId: originNodeID,
 	}
 }

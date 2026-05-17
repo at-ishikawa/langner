@@ -351,10 +351,13 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err)) }
 	// Build the per-notebook concept map once for graph-prompt construction
 	// so each reverse card reuses the same in-memory YAML scan instead of
-	// re-reading session files per card.
+	// re-reading session files per card. The reader itself is reused too so
+	// FORM_BRANCH can read forms + definitions without re-opening files.
 	conceptsByNotebook := make(map[string]map[string]*graphConceptInfo)
+	var graphReader *notebook.Reader
 	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
 		if r, err := h.svc.NewReader(); err == nil {
+			graphReader = r
 			for _, nbID := range notebookIDs {
 				conceptsByNotebook[nbID] = loadBookConcepts(ctx, r, nbID)
 			}
@@ -367,8 +370,9 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 		cardID := nextID; nextID++; localStore[cardID] = card
 		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle + "\x00" + card.Sense
 		var graphPrompt *apiv1.GraphPrompt
-		if concepts, ok := conceptsByNotebook[card.NotebookName]; ok && concepts != nil {
-			graphPrompt = buildGraphPromptForCard(card, concepts)
+		if graphReader != nil {
+			concepts := conceptsByNotebook[card.NotebookName]
+			graphPrompt = buildGraphPromptForCard(ctx, graphReader, card, concepts)
 		}
 		protoCards = append(protoCards, &apiv1.EtymologyQuizCard{
 			CardId: cardID, Origin: card.Origin, Type: card.Type,
