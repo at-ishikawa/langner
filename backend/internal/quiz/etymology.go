@@ -135,8 +135,16 @@ func (s *Service) LoadEtymologyOriginCards(
 			// Reads the log set matching the active quiz mode — fixes a
 			// bug where reverse mode used the standard track and showed
 			// origins the user had just answered correctly in reverse.
+			// Freeform uses the cross-mode check so a word answered
+			// today in standard/reverse doesn't reappear in freeform.
 			if !includeUnstudied {
-				if !needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType) {
+				var isDue bool
+				if skipQuizType == notebook.QuizTypeEtymologyFreeform {
+					isDue = needsFreeformReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin)
+				} else {
+					isDue = needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType)
+				}
+				if !isDue {
 					continue
 				}
 			}
@@ -747,4 +755,38 @@ func needsOriginReview(
 		return false
 	}
 	return expr.NeedsEtymologyReview(quizType)
+}
+
+// needsFreeformReview is the cross-mode SR check used to decide whether the
+// freeform etymology quiz should ask about an origin. Returns true only
+// when every etymology mode (freeform, standard, reverse) considers the
+// origin due — i.e. the learner hasn't recently answered it in ANY mode.
+//
+// Per-mode needsOriginReview alone isn't enough for freeform: if a user
+// answered a word correctly today in standard mode (interval_days=30 on
+// the breakdown log), freeform would otherwise still ask it the same day
+// because the freeform log set is empty. Freeform is the entry point —
+// once the word has moved past first contact in any mode, freeform
+// shouldn't redrill it.
+//
+// Origins with no learning history at all (no expr) get true so first
+// encounters still appear.
+func needsFreeformReview(
+	histories []notebook.LearningHistory,
+	notebookTitle, sessionTitle, origin string,
+) bool {
+	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
+	if expr == nil {
+		return true
+	}
+	for _, qt := range []notebook.QuizType{
+		notebook.QuizTypeEtymologyFreeform,
+		notebook.QuizTypeEtymologyStandard,
+		notebook.QuizTypeEtymologyReverse,
+	} {
+		if !expr.NeedsEtymologyReview(qt) {
+			return false
+		}
+	}
+	return true
 }

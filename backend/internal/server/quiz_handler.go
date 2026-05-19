@@ -439,7 +439,13 @@ func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *conne
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), nil)
 	if err != nil { return nil, err }
-	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, true, true, notebook.QuizTypeEtymologyFreeform, sectionTitles)
+	// Freeform passes includeUnstudied=false so the cross-mode SR check
+	// (needsFreeformReview) applies: words answered today in standard or
+	// reverse mode won't reappear in freeform the same day. Eligibility
+	// is still bypassed (true) because freeform is the entry point where
+	// origins get their first encounter — without that, no origin would
+	// have logs and the quiz would be empty.
+	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, false, true, notebook.QuizTypeEtymologyFreeform, sectionTitles)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	nextReviewDates, err := h.svc.GetEtymologyOriginNextReviewDates(cards)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err)) }

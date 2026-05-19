@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -415,4 +416,91 @@ origins:
 	require.Len(t, summaries, 1)
 	assert.Equal(t, 1, summaries[0].EtymologyReviewCount,
 		"the due count shown on the start page must equal the number of cards in the quiz")
+}
+
+// TestService_LoadEtymologyOriginCards_FreeformRespectsCrossModeReview pins
+// the behaviour the StartEtymologyFreeformQuiz handler now relies on: when
+// includeUnstudied=false (which the handler sends), an origin recently
+// answered in standard or reverse mode (interval 30) must not appear in
+// freeform the same day, even though it has no freeform-mode log. Per-mode
+// needsOriginReview alone would let it through.
+func TestService_LoadEtymologyOriginCards_FreeformRespectsCrossModeReview(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "cross-mode")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: cross-mode
+kind: Etymology
+name: Cross Mode
+notebooks:
+  - ./origins.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "Cross Mode Lesson"
+origins:
+  - origin: "root-x"
+    type: root
+    language: Latin
+    meaning: drilled standard today
+  - origin: "root-y"
+    type: root
+    language: Latin
+    meaning: drilled reverse today
+  - origin: "root-z"
+    type: root
+    language: Latin
+    meaning: never touched
+`), 0644))
+
+	// root-x: today's etymology_breakdown log, interval=30 → freeform should skip.
+	// root-y: today's etymology_assembly log, interval=30 → freeform should skip.
+	// root-z: no logs anywhere → freeform should include (first encounter).
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	today := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "cross-mode.yml"), []byte(fmt.Sprintf(`- metadata:
+    notebook_id: cross-mode
+    title: Cross Mode
+  scenes:
+    - metadata:
+        title: "Cross Mode Lesson"
+      expressions:
+        - expression: root-x
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: %q
+              quiz_type: etymology_breakdown
+              interval_days: 30
+        - expression: root-y
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: %q
+              quiz_type: etymology_assembly
+              interval_days: 30
+`, today, today)), 0644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{},
+	)
+	svc.disableShuffle = true
+
+	// Freeform with includeUnstudied=false (the production path): only
+	// root-z should show up. root-x and root-y were just answered in
+	// other modes and shouldn't reappear in freeform the same day.
+	cards, err := svc.LoadEtymologyOriginCards(
+		[]string{"cross-mode"}, false, true,
+		notebook.QuizTypeEtymologyFreeform, nil,
+	)
+	require.NoError(t, err)
+	got := make([]string, 0, len(cards))
+	for _, c := range cards {
+		got = append(got, c.Origin)
+	}
+	assert.Equal(t, []string{"root-z"}, got,
+		"freeform must skip origins recently answered in any etymology mode; "+
+			"only the never-touched root-z should appear")
 }
