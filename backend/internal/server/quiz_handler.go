@@ -275,7 +275,17 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 	if fcard, ok := h.freeformStore[noteID]; ok { h.mu.Unlock(); info := quiz.CardInfoFromFreeformCard(fcard); return &info, nil }
 	if ecard, found := h.etymologyOriginStore[noteID]; found {
 		h.mu.Unlock()
-		info := quiz.CardInfo{NotebookName: ecard.NotebookName, StoryTitle: ecard.NotebookTitle, Expression: ecard.Origin}
+		// Learning histories are keyed by SessionTitle at the top level
+		// (e.g. "Session 13") and SceneTitle inside each session
+		// (e.g. "tome (a cutting)"); NotebookTitle ("Word Power Made
+		// Easy") never appears in the YAML. Without these, OverrideAnswer's
+		// toggleLastAnswer found no match and silently no-op'd.
+		info := quiz.CardInfo{
+			NotebookName: ecard.NotebookName,
+			StoryTitle:   ecard.SessionTitle,
+			SceneTitle:   ecard.SceneTitle,
+			Expression:   ecard.Origin,
+		}
 		return &info, nil
 	}
 	h.mu.Unlock()

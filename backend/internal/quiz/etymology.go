@@ -164,12 +164,19 @@ func (s *Service) LoadEtymologyOriginCards(
 }
 
 // GradeEtymologyStandardAnswer grades a standard answer (origin -> meaning) using ValidateWordForm.
+// Exact case-insensitive matches short-circuit OpenAI: the validator is
+// occasionally flaky on trivial cases (e.g. answering "tome" when the
+// expected meaning literally contains "tome"), and there's no honest way
+// for the same string to be wrong.
 func (s *Service) GradeEtymologyStandardAnswer(
 	ctx context.Context,
 	card EtymologyOriginCard,
 	answer string,
 	responseTimeMs int64,
 ) (GradeResult, error) {
+	if isExactMatch(answer, card.Meaning) {
+		return exactMatchResult(responseTimeMs), nil
+	}
 	validation, err := s.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
 		Expected:       card.Meaning,
 		UserAnswer:     answer,
@@ -181,32 +188,40 @@ func (s *Service) GradeEtymologyStandardAnswer(
 	}
 
 	isCorrect := validation.Classification != inference.ClassificationWrong
-	quality := 1
-	if isCorrect {
-		if responseTimeMs < 3000 {
-			quality = 5
-		} else if responseTimeMs < 10000 {
-			quality = 4
-		} else {
-			quality = 3
-		}
-	}
-
 	return GradeResult{
 		Correct:        isCorrect,
 		Reason:         validation.Reason,
-		Quality:        quality,
+		Quality:        qualityFromResponseTime(isCorrect, responseTimeMs),
 		Classification: string(validation.Classification),
 	}, nil
 }
 
-// GradeEtymologyReverseAnswer grades a reverse answer (meaning -> origin) using ValidateWordForm.
+// GradeEtymologyReverseAnswer grades a reverse answer (meaning -> origin)
+// using ValidateWordForm. Two fast-paths bypass OpenAI:
+//  1. Exact case-insensitive match against card.Origin.
+//  2. The answer matches another origin in the same notebook + language
+//     with the same meaning. The prompt is "give the origin for THIS
+//     meaning (in THIS language)"; if two origins share that key (e.g.
+//     Latin `par` and `aequus` both mean "equal"), either is a correct
+//     answer and we shouldn't penalise the learner for picking the one
+//     the card didn't happen to be drawn from.
 func (s *Service) GradeEtymologyReverseAnswer(
 	ctx context.Context,
 	card EtymologyOriginCard,
 	answer string,
 	responseTimeMs int64,
 ) (GradeResult, error) {
+	if isExactMatch(answer, card.Origin) {
+		return exactMatchResult(responseTimeMs), nil
+	}
+	if s.isSameMeaningOrigin(card, answer) {
+		return GradeResult{
+			Correct:        true,
+			Reason:         fmt.Sprintf("Accepted: %q is a synonymous origin in %s with the same meaning.", strings.TrimSpace(answer), card.Language),
+			Quality:        qualityFromResponseTime(true, responseTimeMs),
+			Classification: string(inference.ClassificationSynonym),
+		}, nil
+	}
 	validation, err := s.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
 		Expected:       card.Origin,
 		UserAnswer:     answer,
@@ -218,23 +233,79 @@ func (s *Service) GradeEtymologyReverseAnswer(
 	}
 
 	isCorrect := validation.Classification != inference.ClassificationWrong
-	quality := 1
-	if isCorrect {
-		if responseTimeMs < 3000 {
-			quality = 5
-		} else if responseTimeMs < 10000 {
-			quality = 4
-		} else {
-			quality = 3
-		}
-	}
-
 	return GradeResult{
 		Correct:        isCorrect,
 		Reason:         validation.Reason,
-		Quality:        quality,
+		Quality:        qualityFromResponseTime(isCorrect, responseTimeMs),
 		Classification: string(validation.Classification),
 	}, nil
+}
+
+// isExactMatch reports whether two strings are equal after trimming
+// surrounding whitespace and case-folding.
+func isExactMatch(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+}
+
+// exactMatchResult builds a GradeResult for the trivial "answer equals
+// expected" case: correct, with quality scaled by response time.
+func exactMatchResult(responseTimeMs int64) GradeResult {
+	return GradeResult{
+		Correct:        true,
+		Reason:         "Exact match.",
+		Quality:        qualityFromResponseTime(true, responseTimeMs),
+		Classification: string(inference.ClassificationSameWord),
+	}
+}
+
+// qualityFromResponseTime maps a wall-clock response time into the SM-2
+// quality scale. Correct answers earn 3–5 depending on speed; wrong
+// answers always earn 1.
+func qualityFromResponseTime(correct bool, responseTimeMs int64) int {
+	if !correct {
+		return 1
+	}
+	switch {
+	case responseTimeMs < 3000:
+		return 5
+	case responseTimeMs < 10000:
+		return 4
+	default:
+		return 3
+	}
+}
+
+// isSameMeaningOrigin reports whether `answer` matches a different origin
+// in the same notebook + language + meaning as the card. Used in reverse
+// mode to accept synonymous-origin answers (e.g. "aequus" when the card
+// was drawn for "par"). Failures here (reader, YAML) silently return
+// false; the caller falls back to OpenAI.
+func (s *Service) isSameMeaningOrigin(card EtymologyOriginCard, answer string) bool {
+	want := strings.ToLower(strings.TrimSpace(answer))
+	if want == "" {
+		return false
+	}
+	reader, err := s.newReader()
+	if err != nil {
+		return false
+	}
+	origins, err := reader.ReadEtymologyNotebook(card.NotebookName)
+	if err != nil {
+		return false
+	}
+	cardMeaning := strings.ToLower(strings.TrimSpace(card.Meaning))
+	for _, o := range origins {
+		if o.Language != card.Language {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(o.Meaning)) != cardMeaning {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(o.Origin)) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // SaveEtymologyOriginResult updates the learning history for an etymology origin quiz answer.
