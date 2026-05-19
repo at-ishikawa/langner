@@ -190,7 +190,13 @@ export default function EtymologyStandardPage() {
             <Box display="flex" gap={2} justifyContent="center" mt={2} flexWrap="wrap">
               {card.type && <Box px={2} py={0.5} borderRadius="full" bg="blue.100" _dark={{ bg: "blue.900" }}><Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }}>{card.type}</Text></Box>}
               {card.language && <Box px={2} py={0.5} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}><Text fontSize="xs" color="gray.600" _dark={{ color: "gray.300" }}>{card.language}</Text></Box>}
-              {card.sense && <Box px={2} py={0.5} borderRadius="full" bg="purple.100" _dark={{ bg: "purple.900" }}><Text fontSize="xs" color="purple.800" _dark={{ color: "purple.200" }}>sense: {card.sense}</Text></Box>}
+              {/* sense intentionally not shown on the prompt: in standard mode the
+                  meaning IS the answer the user is being asked to produce, and a
+                  chip like "sense: feeling" would leak it. Sense disambiguation in
+                  the prompt is left to example_words (sympathy/empathy hint at the
+                  feeling sense; osteopath/psychopath hint at the disease sense).
+                  The feedback card after the answer still shows which sense was
+                  tested. */}
             </Box>
             {card.exampleWords && card.exampleWords.length > 0 && (
               <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }} mt={3}>
