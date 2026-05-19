@@ -249,36 +249,42 @@ func (note *Note) needsToLearn() bool {
 }
 
 // needsToLearnInNotebook returns true if the note should be shown in notebook
-// output / PDF. A word is included if ANY quiz track needs attention:
-//   - Forward track: no correct answers yet, or latest is misunderstood
-//   - Reverse track: latest is misunderstood (when ReverseLogs are populated)
+// output / PDF. A word is "known" once EITHER direction has a recent correct
+// answer within its SR interval — once you can produce it in standard OR
+// reverse, the PDF doesn't need to keep listing it until the interval
+// elapses. Previously only LearnedLogs counted as evidence of knowledge,
+// so words learned exclusively in reverse mode reappeared every export.
 func (note *Note) needsToLearnInNotebook() bool {
-	// Forward track check
-	forwardNeedsLearn := false
-	if !note.hasAnyCorrectAnswer() {
-		forwardNeedsLearn = true
-	} else if len(note.LearnedLogs) > 0 {
-		sort.Slice(note.LearnedLogs, func(i, j int) bool {
-			return note.LearnedLogs[i].LearnedAt.After(note.LearnedLogs[j].LearnedAt.Time)
-		})
-		forwardNeedsLearn = note.LearnedLogs[0].Status == LearnedStatusMisunderstood
+	fallback := note.getNextLearningThresholdDays()
+	if hasRecentCorrectLog(note.LearnedLogs, fallback) {
+		return false
 	}
-
-	if forwardNeedsLearn {
-		return true
+	if hasRecentCorrectLog(note.ReverseLogs, fallback) {
+		return false
 	}
+	return true
+}
 
-	// Reverse track check (only when logs are populated by the caller)
-	if len(note.ReverseLogs) > 0 {
-		sort.Slice(note.ReverseLogs, func(i, j int) bool {
-			return note.ReverseLogs[i].LearnedAt.After(note.ReverseLogs[j].LearnedAt.Time)
-		})
-		if note.ReverseLogs[0].Status == LearnedStatusMisunderstood {
-			return true
-		}
+// hasRecentCorrectLog reports whether the most recent log in `logs` is a
+// non-misunderstood answer that is still within its SR interval. Used by
+// the PDF/markdown export filter to decide whether a word has been
+// "recently learned" in a given direction.
+func hasRecentCorrectLog(logs []LearningRecord, fallbackThreshold int) bool {
+	if len(logs) == 0 {
+		return false
 	}
-
-	return false
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
+	})
+	latest := logs[0]
+	if latest.Status == LearnedStatusMisunderstood {
+		return false
+	}
+	threshold := latest.IntervalDays
+	if threshold == 0 {
+		threshold = fallbackThreshold
+	}
+	return time.Now().Before(latest.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
 }
 
 func (note Note) hasAnyCorrectAnswer() bool {

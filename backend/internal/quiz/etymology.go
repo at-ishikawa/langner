@@ -135,16 +135,12 @@ func (s *Service) LoadEtymologyOriginCards(
 			// Reads the log set matching the active quiz mode — fixes a
 			// bug where reverse mode used the standard track and showed
 			// origins the user had just answered correctly in reverse.
-			// Freeform uses the cross-mode check so a word answered
-			// today in standard/reverse doesn't reappear in freeform.
+			// Freeform's cross-mode dedup happens at the
+			// originNextReviewDate level (the frontend gates re-drilling
+			// via the "Not until $date" banner); freeform itself loads
+			// every origin so the typed-input lookup can find them.
 			if !includeUnstudied {
-				var isDue bool
-				if skipQuizType == notebook.QuizTypeEtymologyFreeform {
-					isDue = needsFreeformReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin)
-				} else {
-					isDue = needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType)
-				}
-				if !isDue {
+				if !needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType) {
 					continue
 				}
 			}
@@ -535,6 +531,20 @@ func (s *Service) GetEtymologyOriginNextReviewDates(cards []EtymologyOriginCard)
 	return result, nil
 }
 
+// originNextReviewDate returns the soonest future review date this origin
+// is scheduled for across every etymology log set (breakdown, assembly,
+// freeform). Returns empty when no logs are scheduled for the future —
+// either because the origin has never been answered, or because every
+// logged mode is currently past its interval. Reading only breakdown was
+// a bug: a word answered in reverse (assembly logs) or freeform with
+// interval_days=30 would still read as "due now" in freeform and
+// reappear the same day.
+//
+// Picks the soonest future date because the user wanting to drill the
+// word again should wait at least until SOME mode says it's due again.
+// If they recently answered in standard with a 30-day interval, freeform
+// shouldn't unlock just because the freeform log set happens to be
+// empty.
 func originNextReviewDate(histories []notebook.LearningHistory, card EtymologyOriginCard) string {
 	for _, hist := range histories {
 		if hist.Metadata.Title != card.NotebookTitle {
@@ -545,9 +555,26 @@ func originNextReviewDate(histories []notebook.LearningHistory, card EtymologyOr
 				continue
 			}
 			for _, expr := range scene.Expressions {
-				if strings.EqualFold(expr.Expression, card.Origin) {
-					return computeNextReviewDate(expr.EtymologyBreakdownLogs)
+				if !strings.EqualFold(expr.Expression, card.Origin) {
+					continue
 				}
+				// Freeform writes into both BreakdownLogs and
+				// AssemblyLogs (see SetLogsForQuizType), so the two
+				// fields cover all three etymology modes.
+				var soonest string
+				for _, logs := range [][]notebook.LearningRecord{
+					expr.EtymologyBreakdownLogs,
+					expr.EtymologyAssemblyLogs,
+				} {
+					next := computeNextReviewDate(logs)
+					if next == "" {
+						continue
+					}
+					if soonest == "" || next < soonest {
+						soonest = next
+					}
+				}
+				return soonest
 			}
 		}
 	}
@@ -716,8 +743,17 @@ func findOriginExpression(
 
 // isOriginEligible is the hard gate that must always pass for an origin to
 // appear in etymology standard or reverse quizzes. The user must have
-// attempted the origin in etymology freeform mode at least once AND
-// answered at least one etymology question about it correctly.
+// answered at least one etymology question about the origin correctly
+// (in any etymology mode — breakdown OR assembly).
+//
+// Previously this also required at least one etymology_freeform answer.
+// That was a "warm-up before drill" ladder that broke for users who
+// learned origins directly through standard/reverse: their words
+// (ego, mania, …) carried breakdown/assembly logs with correct answers
+// but never a freeform stamp, and the start page silently hid every
+// notebook because no origin passed the gate. A correct answer in any
+// mode is itself proof the user has engaged with the origin; freeform
+// is no longer required.
 func isOriginEligible(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
@@ -726,7 +762,7 @@ func isOriginEligible(
 	if expr == nil {
 		return false
 	}
-	return expr.HasEtymologyFreeformAnswer() && expr.HasCorrectEtymologyAnswer()
+	return expr.HasCorrectEtymologyAnswer()
 }
 
 // isOriginSkipped returns true when the origin's per-(notebook, session)
@@ -757,36 +793,3 @@ func needsOriginReview(
 	return expr.NeedsEtymologyReview(quizType)
 }
 
-// needsFreeformReview is the cross-mode SR check used to decide whether the
-// freeform etymology quiz should ask about an origin. Returns true only
-// when every etymology mode (freeform, standard, reverse) considers the
-// origin due — i.e. the learner hasn't recently answered it in ANY mode.
-//
-// Per-mode needsOriginReview alone isn't enough for freeform: if a user
-// answered a word correctly today in standard mode (interval_days=30 on
-// the breakdown log), freeform would otherwise still ask it the same day
-// because the freeform log set is empty. Freeform is the entry point —
-// once the word has moved past first contact in any mode, freeform
-// shouldn't redrill it.
-//
-// Origins with no learning history at all (no expr) get true so first
-// encounters still appear.
-func needsFreeformReview(
-	histories []notebook.LearningHistory,
-	notebookTitle, sessionTitle, origin string,
-) bool {
-	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
-	if expr == nil {
-		return true
-	}
-	for _, qt := range []notebook.QuizType{
-		notebook.QuizTypeEtymologyFreeform,
-		notebook.QuizTypeEtymologyStandard,
-		notebook.QuizTypeEtymologyReverse,
-	} {
-		if !expr.NeedsEtymologyReview(qt) {
-			return false
-		}
-	}
-	return true
-}
