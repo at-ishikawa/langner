@@ -463,9 +463,15 @@ origins:
 	learningDir := filepath.Join(tmpDir, "learning")
 	require.NoError(t, os.MkdirAll(learningDir, 0755))
 	today := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	// Post-migration shape: history.metadata.title is the SESSION
+	// title (matches the etymology source's metadata.title above),
+	// not the book name. SceneTitle is the session title too because
+	// the etymology source uses the flat (legacy) origin shape without
+	// scene structure and there's no definitions notebook here, so the
+	// reader's pickBestSceneForOrigin falls back to the session title.
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "cross-mode.yml"), []byte(fmt.Sprintf(`- metadata:
     notebook_id: cross-mode
-    title: Cross Mode
+    title: "Cross Mode Lesson"
   scenes:
     - metadata:
         title: "Cross Mode Lesson"

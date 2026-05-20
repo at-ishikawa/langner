@@ -425,13 +425,17 @@ notebooks:
 
 	// Learning history: mastered-root has a recent correct answer with a long
 	// interval (next review far in the future). open-root has no etymology
-	// history at all. The history is keyed by the session's metadata.title
-	// so the writer's per-session lookup can find it.
+	// history at all. POST-MIGRATION shape — top-level title is the SESSION
+	// title ("Session 1"), per-origin scene titles are the SceneTitle the
+	// reader projects ("mastered-root (well-known)"). The earlier version
+	// of this fixture used the legacy shape (Title: "Test Roots") and
+	// silently aligned with the buggy originNeedsStudy comparison; with
+	// the comparison fixed, the fixture has to match real data shape too.
 	learningHistories := map[string][]LearningHistory{
 		"test-roots": {{
-			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Test Roots"},
+			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Session 1"},
 			Scenes: []LearningScene{{
-				Metadata: LearningSceneMetadata{Title: "Session 1"},
+				Metadata: LearningSceneMetadata{Title: "mastered-root (well-known)"},
 				Expressions: []LearningHistoryExpression{{
 					Expression: "mastered-root",
 					EtymologyBreakdownLogs: []LearningRecord{{

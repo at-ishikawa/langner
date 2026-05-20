@@ -276,20 +276,31 @@ func (writer EtymologyNotebookWriter) findDefinitionsDir(etymIndex EtymologyInde
 // sessionTitle is the etymology session's metadata.title — origins are looked
 // up under the matching scene so multi-sense origins (same string, different
 // senses) are tracked independently.
-func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, nbTitle, sessionTitle, origin string) bool {
+func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, _ /*nbTitle: unused after the migration*/, sessionTitle, origin string) bool {
 	histories := writer.learningHistories[etymID]
 	if len(histories) == 0 {
 		return true // no history → include
 	}
 
+	// Post-migration etymology learning history is keyed by SessionTitle
+	// at the top level (history.metadata.title = "Session 2") with
+	// per-origin scenes underneath. The legacy code compared the
+	// top-level title against the book name and the scene title against
+	// the session title — both one level off, so the lookup never
+	// matched and every origin defaulted to "needs study", which is why
+	// the etymology PDF kept listing words the user had already learned.
+	// See Validator.migrateEtymologyShape for the schema move.
+	//
+	// originNeedsStudy doesn't receive the per-origin SceneTitle from
+	// callers, so we scan every scene's expressions under the matching
+	// session and find the expression by name. Multi-sense origins (same
+	// origin string, different sense) within a session share a
+	// learning-history entry today, so a single match suffices.
 	for _, h := range histories {
-		if h.Metadata.Title != nbTitle {
+		if h.Metadata.Title != sessionTitle {
 			continue
 		}
 		for _, scene := range h.Scenes {
-			if scene.Metadata.Title != sessionTitle {
-				continue
-			}
 			for _, expr := range scene.Expressions {
 				if !strings.EqualFold(expr.Expression, origin) {
 					continue

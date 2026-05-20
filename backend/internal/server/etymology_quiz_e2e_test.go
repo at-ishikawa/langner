@@ -29,10 +29,21 @@ import (
 // service business logic, RPC handler) runs production code.
 func newEtymologyTestHandler(t *testing.T, openai inference.Client, etymologyDir, learningDir string) *QuizHandler {
 	t.Helper()
-	svc := quiz.NewService(config.NotebooksConfig{
+	return newEtymologyTestHandlerWithDefinitions(t, openai, etymologyDir, learningDir, "")
+}
+
+// newEtymologyTestHandlerWithDefinitions is the variant used by tests that
+// need a definitions notebook for the reader's SceneTitle projection.
+func newEtymologyTestHandlerWithDefinitions(t *testing.T, openai inference.Client, etymologyDir, learningDir, definitionsDir string) *QuizHandler {
+	t.Helper()
+	cfg := config.NotebooksConfig{
 		EtymologyDirectories:   []string{etymologyDir},
 		LearningNotesDirectory: learningDir,
-	}, openai, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}
+	if definitionsDir != "" {
+		cfg.DefinitionsDirectories = []string{definitionsDir}
+	}
+	svc := quiz.NewService(cfg, openai, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	return NewQuizHandler(svc)
 }
 
@@ -276,6 +287,167 @@ origins:
 	require.NoError(t, err)
 	assert.Empty(t, reverseResp.Msg.GetCards(),
 		"reverse track was answered today with interval=30 — quiz must NOT surface the card again")
+}
+
+// TestEtymologyFreeform_NextReviewDateAcrossModes reproduces the user-
+// reported "Origin not found in notebooks" / "Found in notebooks +
+// drillable" symptom for origins answered recently in any etymology mode.
+//
+// The trigger was a learning-history shape mismatch the post-migration
+// data (history.metadata.title = SESSION title, e.g. "Session 2") didn't
+// match the assumption baked into originNextReviewDate and
+// originNeedsStudy (they compared against card.NotebookTitle = the BOOK
+// name, e.g. "Word Power Made Easy"). When the comparison never matched,
+// the function returned "" → frontend interpreted "no scheduled review"
+// → showed "Found in notebooks" → user could redrill.
+//
+// Earlier server-level tests in this file seeded the LEGACY shape
+// (history.metadata.title = book name + type: etymology) and happened to
+// work because that shape coincidentally matched the buggy code's
+// expectation. This test uses the POST-migration shape so the real bug
+// path is exercised.
+//
+// Uses neutral Latin roots (none of which appear verbatim in any real
+// user notebook).
+func TestEtymologyFreeform_NextReviewDateAcrossModes(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymologyDir := filepath.Join(tmpDir, "etymology")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+
+	nbDir := filepath.Join(etymologyDir, "demo-roots")
+	require.NoError(t, os.MkdirAll(nbDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(`id: demo-roots
+kind: Etymology
+name: "Demo Roots"
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Session whose metadata.title is "Session 1" (matches real-world
+	// post-migration shape). Three origins:
+	//   - alter-fake: drilled today in breakdown, interval=30 (NOT due)
+	//   - other-fake: drilled today in assembly, interval=30 (NOT due)
+	//   - third-fake: never touched (truly due)
+	// Legacy flat-origin shape — same as the user's etymology source
+	// files. SceneTitle gets populated by the reader's
+	// pickBestSceneForOrigin from the definitions notebook below.
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: alter-fake
+    type: root
+    language: Latin
+    meaning: other
+  - origin: other-fake
+    type: root
+    language: Latin
+    meaning: change
+  - origin: third-fake
+    type: root
+    language: Latin
+    meaning: third
+`), 0o644))
+
+	// Definitions notebook with scenes whose titles match the learning
+	// history scenes below. The reader uses these to project SceneTitle
+	// onto the legacy etymology origins.
+	defDir := filepath.Join(tmpDir, "definitions", "demo-roots")
+	require.NoError(t, os.MkdirAll(defDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(`id: demo-roots
+name: "Demo Roots"
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "alter-fake (other)"
+      expressions:
+        - expression: "demo-alter-word"
+          meaning: "uses alter-fake"
+          origin_parts:
+            - origin: alter-fake
+              language: Latin
+    - metadata:
+        title: "other-fake (change)"
+      expressions:
+        - expression: "demo-other-word"
+          meaning: "uses other-fake"
+          origin_parts:
+            - origin: other-fake
+              language: Latin
+    - metadata:
+        title: "third-fake (third)"
+      expressions:
+        - expression: "demo-third-word"
+          meaning: "uses third-fake"
+          origin_parts:
+            - origin: third-fake
+              language: Latin
+`), 0o644))
+
+	now := time.Now().UTC()
+	today := now.Format(time.RFC3339)
+	// CRITICAL: post-migration shape — top-level title is the SESSION
+	// title, NOT the book name. Real user data looks exactly like this.
+	historyYAML := `- metadata:
+    id: demo-roots
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "alter-fake (other)"
+      expressions:
+        - expression: alter-fake
+          type: origin
+          etymology_breakdown_logs:
+            - status: usable
+              learned_at: "` + today + `"
+              quality: 4
+              quiz_type: etymology_breakdown
+              interval_days: 30
+    - metadata:
+        title: "other-fake (change)"
+      expressions:
+        - expression: other-fake
+          type: origin
+          etymology_assembly_logs:
+            - status: usable
+              learned_at: "` + today + `"
+              quality: 4
+              quiz_type: etymology_assembly
+              interval_days: 30
+`
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-roots.yml"), []byte(historyYAML), 0o644))
+
+	ctrl := gomock.NewController(t)
+	openai := mock_inference.NewMockClient(ctrl)
+	handler := newEtymologyTestHandlerWithDefinitions(t, openai, etymologyDir, learningDir, filepath.Join(tmpDir, "definitions"))
+	ctx := context.Background()
+
+	resp, err := handler.StartEtymologyFreeformQuiz(ctx, connect.NewRequest(&apiv1.StartEtymologyFreeformQuizRequest{
+		EtymologyNotebookIds: []string{"demo-roots"},
+	}))
+	require.NoError(t, err)
+
+	// All three origins are in the suggestion list (freeform doesn't filter).
+	assert.ElementsMatch(t, []string{"alter-fake", "other-fake", "third-fake"}, resp.Msg.GetOrigins(),
+		"freeform must list every origin so typed input resolves")
+
+	// alter-fake and other-fake were both answered today with interval=30
+	// in different modes. Both must report a future next-review date so
+	// the frontend renders "Not until $date" and disables Submit.
+	dates := resp.Msg.GetNextReviewDates()
+	if assert.NotEmpty(t, dates["alter-fake"], "alter-fake answered today in breakdown — must have a future review date") {
+		assert.True(t, dates["alter-fake"] > now.Format("2006-01-02"),
+			"alter-fake's next review must be in the future; got %q", dates["alter-fake"])
+	}
+	if assert.NotEmpty(t, dates["other-fake"], "other-fake answered today in assembly — must have a future review date") {
+		assert.True(t, dates["other-fake"] > now.Format("2006-01-02"),
+			"other-fake's next review must be in the future; got %q", dates["other-fake"])
+	}
+	assert.Empty(t, dates["third-fake"],
+		"third-fake has no logs — it's freely drillable, no nextReviewDate should be reported")
 }
 
 // countNewBreakdownLogs reads a learning-history YAML and returns the number

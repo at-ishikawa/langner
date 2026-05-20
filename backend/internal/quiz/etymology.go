@@ -546,12 +546,18 @@ func (s *Service) GetEtymologyOriginNextReviewDates(cards []EtymologyOriginCard)
 // shouldn't unlock just because the freeform log set happens to be
 // empty.
 func originNextReviewDate(histories []notebook.LearningHistory, card EtymologyOriginCard) string {
+	// Post-migration etymology learning history is keyed:
+	//   history.metadata.title = SessionTitle   (e.g. "Session 2")
+	//   scene.metadata.title   = SceneTitle     (e.g. "alter (other)")
+	// Earlier callers compared against NotebookTitle / SessionTitle one
+	// level off, so this loop never matched real data; see the migration
+	// note in Validator.migrateEtymologyShape for the schema move.
 	for _, hist := range histories {
-		if hist.Metadata.Title != card.NotebookTitle {
+		if hist.Metadata.Title != card.SessionTitle {
 			continue
 		}
 		for _, scene := range hist.Scenes {
-			if scene.Metadata.Title != card.SessionTitle {
+			if scene.Metadata.Title != card.SceneTitle {
 				continue
 			}
 			for _, expr := range scene.Expressions {
