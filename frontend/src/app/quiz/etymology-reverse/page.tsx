@@ -215,14 +215,26 @@ export default function EtymologyReversePage() {
             />
           )}
           {card.graphPrompt && (
-            <Button
-              w="full"
-              colorPalette="blue"
-              onClick={handleSubmit}
-              disabled={!answer.trim()}
-            >
-              Submit
-            </Button>
+            // Graph quiz has its own typed input INSIDE the RelationGraph
+            // (the blank node), so we skip AnswerInput's Input but still
+            // need the same Submit + Don't Know button row that every
+            // other quiz page renders via AnswerInput. Matches that
+            // styling exactly (flex layout, sizes, colorPalette) so the
+            // graph variant doesn't look like a different app.
+            <Box display="flex" gap={2} position="sticky" bottom={4}>
+              <Button
+                flex="1"
+                colorPalette="blue"
+                onClick={handleSubmit}
+                disabled={!answer.trim()}
+                size="lg"
+              >
+                Submit
+              </Button>
+              <Button flex="1" variant="outline" onClick={handleSkip} size="lg">
+                Don&apos;t Know
+              </Button>
+            </Box>
           )}
           {error && (
             <VStack align="stretch" gap={2}>
