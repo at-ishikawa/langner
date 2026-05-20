@@ -138,7 +138,10 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		needsStudy := func(origin string) bool {
 			return writer.originNeedsStudy(etymIndex.ID, etymIndex.Name, sessionTitle, origin)
 		}
-		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy)
+		wordHasBeenLearned := func(expression string) bool {
+			return writer.expressionRecentlyLearned(etymIndex.ID, sessionTitle, expression)
+		}
+		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned)
 
 		if len(defChapters) > 0 {
 			filteredChapters := make([]assets.EtymologyChapter, 0, len(defChapters))
@@ -328,6 +331,48 @@ func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, _ /*nbTitle: unus
 	return true // not found in history → include
 }
 
+// expressionRecentlyLearned returns true when the given derived word (an
+// expression from a definitions notebook, e.g. "egomaniac") has a recent
+// non-misunderstood log in EITHER LearnedLogs or ReverseLogs that is
+// still within its SR interval. The etymology PDF uses this to suppress
+// words the user has already mastered — re-reading a known word's
+// definition adds noise to a study output that exists for the user to
+// drill the underlying origins.
+//
+// sessionTitle matches the learning-history top-level title (the
+// post-migration shape — see Validator.migrateEtymologyShape). The
+// scene structure under the session is scanned in full because the
+// caller doesn't know which scene a given expression lives in, and
+// definitions-side scene titles don't necessarily mirror learning-
+// history scene titles (notebook-side scenes are user-defined, e.g.
+// "__index_0").
+func (writer EtymologyNotebookWriter) expressionRecentlyLearned(etymID, sessionTitle, expression string) bool {
+	histories := writer.learningHistories[etymID]
+	if len(histories) == 0 {
+		return false
+	}
+	for _, h := range histories {
+		if h.Metadata.Title != sessionTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			for _, expr := range scene.Expressions {
+				if !strings.EqualFold(expr.Expression, expression) {
+					continue
+				}
+				if hasRecentCorrectLog(expr.LearnedLogs, GetThresholdDaysFromCount(correctStreakCount(expr.LearnedLogs))) {
+					return true
+				}
+				if hasRecentCorrectLog(expr.ReverseLogs, GetThresholdDaysFromCount(correctStreakCount(expr.ReverseLogs))) {
+					return true
+				}
+				return false
+			}
+		}
+	}
+	return false
+}
+
 // latestEtymologyLog returns the single most-recent log across both etymology
 // tracks (breakdown for standard/freeform, assembly for reverse). The bool
 // is false when neither slice has any entries.
@@ -380,7 +425,7 @@ func filterOriginsForChapter(allOrigins []assets.EtymologyOriginEntry, chapter a
 // every origin it references reports false (i.e. fully mastered). Sections
 // with no surviving words are dropped along with their header so the user
 // doesn't see "## verto (to turn)" headings for origins they've finished.
-func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string, needsStudy func(origin string) bool) []assets.EtymologyChapter {
+func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string, needsStudy func(origin string) bool, wordHasBeenLearned func(expression string) bool) []assets.EtymologyChapter {
 	if defDir == "" {
 		return nil
 	}
@@ -409,6 +454,17 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 			var sceneWords []assets.EtymologyWordEntry
 			for _, note := range scene.Expressions {
 				if !wordNeedsStudy(note.OriginParts, needsStudy) {
+					continue
+				}
+				// Also skip words the user already knows. Even when
+				// the word's origins still need work, re-reading a
+				// known word's definition doesn't help drill the
+				// origin; the origins block at the top of the chapter
+				// covers that on its own. Mirrors the vocabulary
+				// PDF's needsToLearnInNotebook semantic: "known" iff
+				// either direction has a recent non-misunderstood log
+				// within its SR interval.
+				if wordHasBeenLearned != nil && wordHasBeenLearned(note.Expression) {
 					continue
 				}
 				word := assets.EtymologyWordEntry{

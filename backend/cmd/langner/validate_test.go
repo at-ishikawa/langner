@@ -2,11 +2,15 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -246,4 +250,116 @@ func TestNewValidateCommand_RunE(t *testing.T) {
 			assert.NoError(t, err)
 		})
 	}
+}
+
+// TestNewValidateCommand_FixPreservesSkippedBookExpression pins the
+// current behaviour for the user-reported "I skipped introvert/extrovert
+// from my notebooks, confirmed they were recorded, but they were
+// deleted" symptom. The deletion path was the fixConsistency orphan
+// sweep without a SkippedAt carve-out; the carve-out (`hasSkip` check at
+// validator.go's `Only keep expressions that either:` block) is in
+// place now, and this test locks it in so a future regression that
+// drops the check immediately surfaces.
+//
+// I could NOT reproduce the user's deletion with the current binary, so
+// this test is a regression guard rather than a failing repro. If the
+// user can still see introvert/extrovert disappear on a fresh skip + fix
+// cycle, the bug lives elsewhere and we need a different scenario.
+func TestNewValidateCommand_FixPreservesSkippedBookExpression(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	for _, d := range []string{
+		"stories", "learning_notes", "flashcards", "dictionaries",
+		"output_stories", "output_flashcards", "books", "definitions",
+		"ebooks", "etymology",
+	} {
+		require.NoError(t, os.MkdirAll(filepath.Join(tmpDir, d), 0o755))
+	}
+
+	// Definitions book (NOT story) with two expressions. Book-side
+	// existsInStory check inside fixConsistency only consults story
+	// files, so a book expression that only has SkippedAt set must
+	// still survive on the strength of hasSkip alone.
+	defDir := filepath.Join(tmpDir, "definitions", "books", "demo-book")
+	require.NoError(t, os.MkdirAll(defDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(`id: demo-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "demo-scene"
+      expressions:
+        - expression: skipword
+          meaning: "the word the user has skipped"
+        - expression: keepword
+          meaning: "the word the user is still learning"
+`), 0o644))
+
+	today := time.Now().UTC().Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "learning_notes", "demo-book.yml"),
+		[]byte(fmt.Sprintf(`- metadata:
+    id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "demo-scene"
+      expressions:
+        - expression: skipword
+          learned_logs: []
+          skipped_at:
+            notebook: %q
+`, today)), 0o644))
+
+	cfgPath := filepath.Join(tmpDir, "config.yml")
+	require.NoError(t, os.WriteFile(cfgPath, []byte(fmt.Sprintf(`notebooks:
+  stories_directories:
+    - %s
+  learning_notes_directory: %s
+  flashcards_directories:
+    - %s
+  books_directories:
+    - %s
+  definitions_directories:
+    - %s
+  etymology_directories:
+    - %s
+dictionaries:
+  rapidapi:
+    cache_directory: %s
+outputs:
+  story_directory: %s
+  flashcard_directory: %s
+books:
+  repo_directory: %s
+  repositories_file: %s
+`,
+		filepath.Join(tmpDir, "stories"),
+		filepath.Join(tmpDir, "learning_notes"),
+		filepath.Join(tmpDir, "flashcards"),
+		filepath.Join(tmpDir, "books"),
+		filepath.Join(tmpDir, "definitions"),
+		filepath.Join(tmpDir, "etymology"),
+		filepath.Join(tmpDir, "dictionaries"),
+		filepath.Join(tmpDir, "output_stories"),
+		filepath.Join(tmpDir, "output_flashcards"),
+		filepath.Join(tmpDir, "ebooks"),
+		filepath.Join(tmpDir, "repos.yml"),
+	)), 0o644))
+	setConfigFile(t, cfgPath)
+
+	cmd := newValidateCommand()
+	cmd.SetArgs([]string{"--fix"})
+	_ = cmd.Execute() // --fix may exit non-zero if other validations fail; the assertion is on the skip-only entry
+
+	after, err := os.ReadFile(filepath.Join(tmpDir, "learning_notes", "demo-book.yml"))
+	require.NoError(t, err)
+	out := string(after)
+	assert.Contains(t, out, "skipword",
+		"a book expression with SkippedAt set but no learned_logs must survive validate --fix; "+
+			"the skip is a deliberate user signal, not an orphan to clean up")
+	assert.Contains(t, out, "skipped_at",
+		"the skipped_at map itself must round-trip through validate --fix")
 }

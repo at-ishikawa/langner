@@ -332,17 +332,24 @@ func GetThresholdDaysFromCount(count int) int {
 }
 
 func (note Note) getNextLearningThresholdDays() int {
-	learnedLogs := note.LearnedLogs
+	return GetThresholdDaysFromCount(correctStreakCount(note.LearnedLogs))
+}
 
+// correctStreakCount counts log entries whose Status is not Learning or
+// Misunderstood — i.e., the rough "this counts as a correct answer"
+// signal used by SR threshold lookups when a per-log IntervalDays is
+// missing. Extracted so the same loop isn't duplicated in
+// Note.getNextLearningThresholdDays, etymology_writer's
+// expressionRecentlyLearned, and the legacy paths in learning_history.go.
+func correctStreakCount(logs []LearningRecord) int {
 	count := 0
-	for _, learnedLog := range learnedLogs {
-		if learnedLog.Status == LearnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
+	for _, log := range logs {
+		if log.Status == LearnedStatusLearning || log.Status == LearnedStatusMisunderstood {
 			continue
 		}
 		count++
 	}
-
-	return GetThresholdDaysFromCount(count)
+	return count
 }
 
 type Template struct {
