@@ -450,6 +450,124 @@ notebooks:
 		"third-fake has no logs — it's freely drillable, no nextReviewDate should be reported")
 }
 
+// TestSubmitEtymologyStandardAnswer_PreservesSkippedSiblings drives the user's
+// suspected reproduction: in the SAME scene as the etymology origin being
+// answered, two vocab-side stubs already exist with skipped_at set but no
+// logs (the shape the notebook UI's per-type skip checkboxes leave behind).
+// Submitting an etymology answer for the origin must NOT touch the
+// SkippedAt of the sibling stubs, and must NOT delete the stubs.
+//
+// Reported symptom: "I skipped introvert and extrovert from my notebooks
+// in the past and confirmed they were recorded appropriately, but they
+// were deleted. When I checked the commit when skipped was deleted, it
+// was just a normal update for vocabulary quiz or etymology's quiz's
+// updates." This test exercises the etymology-side hypothesis end-to-end
+// through the real SubmitEtymologyStandardAnswer RPC.
+func TestSubmitEtymologyStandardAnswer_PreservesSkippedSiblings(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymologyDir := filepath.Join(tmpDir, "etymology")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+
+	nbDir := filepath.Join(etymologyDir, "siblings")
+	require.NoError(t, os.MkdirAll(nbDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(`id: siblings
+kind: Etymology
+name: Siblings
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: turn-root
+    language: Latin
+    meaning: to turn
+`), 0o644))
+
+	// Learning history: Session 1 > "turn-root (to turn)" scene already
+	// contains two SKIP-ONLY stubs ("inside-word" and "outside-word") plus
+	// the etymology origin "turn-root" we're about to answer. Mirrors the
+	// real scenario where the user skipped derived vocab words via the
+	// notebook UI and the next quiz answer writes back to the same file.
+	today := time.Now().UTC().Format(time.RFC3339)
+	historyYAML := `- metadata:
+    id: siblings
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "turn-root (to turn)"
+      expressions:
+        - expression: inside-word
+          learned_logs: []
+          skipped_at:
+            notebook: "` + today + `"
+        - expression: outside-word
+          learned_logs: []
+          skipped_at:
+            notebook: "` + today + `"
+            reverse: "` + today + `"
+        - expression: turn-root
+          type: origin
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-01T10:00:00Z"
+              quiz_type: etymology_freeform
+              interval_days: 1
+`
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "siblings.yml"), []byte(historyYAML), 0o644))
+
+	ctrl := gomock.NewController(t)
+	openai := mock_inference.NewMockClient(ctrl)
+	handler := newEtymologyTestHandler(t, openai, etymologyDir, learningDir)
+	ctx := context.Background()
+
+	startResp, err := handler.StartEtymologyQuiz(ctx, connect.NewRequest(&apiv1.StartEtymologyQuizRequest{
+		EtymologyNotebookIds: []string{"siblings"},
+		Mode:                 apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_STANDARD,
+		IncludeUnstudied:     true,
+	}))
+	require.NoError(t, err)
+	require.Len(t, startResp.Msg.GetCards(), 1, "turn-root must surface as a standard-mode card")
+	cardID := startResp.Msg.GetCards()[0].GetCardId()
+
+	// Submit a correct answer for the origin — exact-match short-circuits OpenAI.
+	_, err = handler.SubmitEtymologyStandardAnswer(ctx, connect.NewRequest(&apiv1.SubmitEtymologyStandardAnswerRequest{
+		CardId:         cardID,
+		Answer:         "to turn",
+		ResponseTimeMs: 1234,
+	}))
+	require.NoError(t, err)
+
+	// Read the file back and verify the sibling stubs still carry their skipped_at.
+	raw, err := os.ReadFile(filepath.Join(learningDir, "siblings.yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+
+	var insideExpr, outsideExpr *notebook.LearningHistoryExpression
+	for hi := range histories {
+		for si := range histories[hi].Scenes {
+			for ei := range histories[hi].Scenes[si].Expressions {
+				e := &histories[hi].Scenes[si].Expressions[ei]
+				switch e.Expression {
+				case "inside-word":
+					insideExpr = e
+				case "outside-word":
+					outsideExpr = e
+				}
+			}
+		}
+	}
+
+	require.NotNil(t, insideExpr, "inside-word must still exist after the etymology answer write")
+	require.NotNil(t, outsideExpr, "outside-word must still exist after the etymology answer write")
+	assert.True(t, insideExpr.SkippedAt.IsSkippedAny(),
+		"inside-word's skipped_at must round-trip through the quiz save")
+	assert.True(t, outsideExpr.SkippedAt.IsSkippedAny(),
+		"outside-word's skipped_at must round-trip through the quiz save")
+}
+
 // countNewBreakdownLogs reads a learning-history YAML and returns the number
 // of breakdown log entries with quiz_type=etymology_breakdown (i.e. saves
 // from a standard quiz, not the seed freeform entries). The new etymology

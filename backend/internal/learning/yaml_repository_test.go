@@ -547,3 +547,72 @@ func readYAMLHelper(t *testing.T, path string, dest interface{}) {
 	require.NoError(t, err, "read file %s", path)
 	require.NoError(t, yaml.Unmarshal(data, dest), "unmarshal %s", path)
 }
+
+// TestYAMLLearningRepository_Create_PreservesSkippedSiblings reproduces the
+// user-reported scenario where a vocab quiz answer commit appears to
+// delete a previously-skipped sibling word. Sets up a learning_notes file
+// with two entries in the same scene: a skip-only stub (mirrors the
+// "introvert" / "extrovert" stubs left behind by per-type skip checks on
+// the notebook UI) and a sibling to be answered. Calls Create for the
+// sibling and verifies the stub plus its SkippedAt round-trip.
+func TestYAMLLearningRepository_Create_PreservesSkippedSiblings(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "demo-book.yml"), []byte(`- metadata:
+    id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "demo-scene"
+      expressions:
+        - expression: skipped-stub
+          learned_logs: []
+          skipped_at:
+            notebook: "2026-05-10T08:00:00Z"
+            reverse: "2026-05-10T08:00:00Z"
+        - expression: sibling-word
+          learned_logs: []
+`), 0o644))
+
+	repo := NewYAMLLearningRepository(dir, nil)
+	err := repo.Create(t.Context(), &LearningLog{
+		Status:           "understood",
+		LearnedAt:        time.Now(),
+		Quality:          4,
+		ResponseTimeMs:   2000,
+		QuizType:         string(notebook.QuizTypeNotebook),
+		SourceNotebookID: "demo-book",
+		NotebookName:     "demo-book",
+		StoryTitle:       "Session 1",
+		SceneTitle:       "demo-scene",
+		Expression:       "sibling-word",
+		IsCorrect:        true,
+		LearningNotesDir: dir,
+	})
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(dir, "demo-book.yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+	require.Len(t, histories, 1)
+	require.Len(t, histories[0].Scenes, 1)
+	scene := histories[0].Scenes[0]
+
+	var stub, sibling *notebook.LearningHistoryExpression
+	for i := range scene.Expressions {
+		e := &scene.Expressions[i]
+		switch e.Expression {
+		case "skipped-stub":
+			stub = e
+		case "sibling-word":
+			sibling = e
+		}
+	}
+	require.NotNil(t, stub, "skipped-stub must survive the sibling's vocab quiz save")
+	require.NotNil(t, sibling, "sibling-word must still exist after its own save")
+	assert.True(t, stub.SkippedAt.IsSkippedAny(),
+		"skipped-stub's SkippedAt must round-trip through Create — quiz writes "+
+			"must not erase sibling-stub skips")
+	assert.NotEmpty(t, sibling.LearnedLogs,
+		"sibling-word must have its new learned log persisted")
+}
