@@ -72,8 +72,9 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 	nnSeen := make(map[noteKey]map[nnKey]bool)
 	var order []noteKey
 
-	addNote := func(note Note, notebookType, notebookID, group, subgroup string) {
+	addNote := func(note Note, notebookType, notebookID, group, subgroup, conceptKey string) {
 		rec := convertNoteToRecord(note, notebookType, notebookID, group, subgroup)
+		rec.ConceptKey = conceptKey
 		key := noteKey{rec.Usage, rec.Entry}
 
 		existing, ok := noteMap[key]
@@ -105,6 +106,12 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 			seen[k] = true
 			existing.NotebookNotes = append(existing.NotebookNotes, nn)
 		}
+		// An expression can be visited from a story walk (no concept) and
+		// later from a definitions-book walk (where the concept is
+		// declared). Adopt the first non-empty concept_key seen.
+		if existing.ConceptKey == "" && rec.ConceptKey != "" {
+			existing.ConceptKey = rec.ConceptKey
+		}
 	}
 
 	// Sort story index keys for deterministic ordering
@@ -126,7 +133,7 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 			for _, sn := range storyNotebooks {
 				for _, scene := range sn.Scenes {
 					for _, def := range scene.Definitions {
-						addNote(def, notebookType, indexID, sn.Event, scene.Title)
+						addNote(def, notebookType, indexID, sn.Event, scene.Title, "")
 					}
 				}
 			}
@@ -145,7 +152,7 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		flashcardIndex := flashcardIndexes[flashcardID]
 		for _, fn := range flashcardIndex.Notebooks {
 			for _, card := range fn.Cards {
-				addNote(card, "flashcard", flashcardID, fn.Title, "")
+				addNote(card, "flashcard", flashcardID, fn.Title, "", "")
 			}
 		}
 	}
@@ -174,6 +181,7 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		if !ok {
 			continue
 		}
+		conceptByExpression := r.reader.GetDefinitionsBookConcepts(bookID)
 		for _, book := range books {
 			group := book.Metadata.Title
 			if group == "" {
@@ -181,7 +189,11 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 			}
 			for _, scene := range book.Scenes {
 				for _, expr := range scene.Expressions {
-					addNote(expr, "book", bookID, group, scene.Metadata.Title)
+					conceptKey := conceptByExpression[expr.Expression]
+					if conceptKey == "" && expr.Definition != "" {
+						conceptKey = conceptByExpression[expr.Definition]
+					}
+					addNote(expr, "book", bookID, group, scene.Metadata.Title, conceptKey)
 				}
 			}
 		}

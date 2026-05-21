@@ -184,7 +184,7 @@ func TestDBNoteRepository_Create(t *testing.T) {
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("break the ice", "break the ice", "to initiate conversation", "", 0).
+					WithArgs("break the ice", "break the ice", "to initiate conversation", "", 0, "").
 					WillReturnResult(sqlmock.NewResult(42, 1))
 				mock.ExpectExec("INSERT INTO notebook_notes").
 					WithArgs(int64(42), "book", "test-book", "chapter1", "").
@@ -203,7 +203,7 @@ func TestDBNoteRepository_Create(t *testing.T) {
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WithArgs("give up", "give up", "to stop trying", "", 0).
+					WithArgs("give up", "give up", "to stop trying", "", 0, "").
 					WillReturnResult(sqlmock.NewResult(43, 1))
 				mock.ExpectCommit()
 			},
@@ -391,11 +391,11 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\)").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1).
+				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1, "").
 					WillReturnResult(sqlmock.NewResult(10, 1))
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\)").
-					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2).
+				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "").
 					WillReturnResult(sqlmock.NewResult(11, 1))
 				mock.ExpectExec("INSERT INTO note_images \\(note_id, url, sort_order\\) VALUES \\(\\?, \\?, \\?\\)").
 					WithArgs(int64(10), "https://example.com/img.png", 0).
@@ -564,10 +564,10 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("UPDATE notes SET").
-					WithArgs("idiom", "break the ice", "updated meaning", "B2", 1, int64(1)).
+					WithArgs("idiom", "break the ice", "updated meaning", "B2", 1, "", int64(1)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec("UPDATE notes SET").
-					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, int64(2)).
+					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "", int64(2)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec("INSERT INTO notebook_notes \\(note_id, notebook_type, notebook_id, `group`, subgroup\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?\\)").
 					WithArgs(int64(1), "story", "book-2", "ch1", "",
@@ -591,10 +591,10 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("UPDATE notes SET").
-					WithArgs("idiom", "break the ice", "updated", "B2", 1, int64(1)).
+					WithArgs("idiom", "break the ice", "updated", "B2", 1, "", int64(1)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectExec("UPDATE notes SET").
-					WithArgs("phrasal_verb", "give up", "to stop", "A2", 2, int64(2)).
+					WithArgs("phrasal_verb", "give up", "to stop", "A2", 2, "", int64(2)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectCommit()
 			},

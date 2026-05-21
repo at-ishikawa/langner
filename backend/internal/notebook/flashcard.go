@@ -137,6 +137,39 @@ func (r Reader) GetDefinitionsBook(bookID string) ([]Definitions, bool) {
 	return defs, ok && len(defs) > 0
 }
 
+// GetDefinitionsBookConcepts returns a member-expression -> head map for
+// the given book ID, derived from every concepts: block declared in any
+// session of the book. Used by the ingestion layer to stamp each note's
+// concept_key column at import time. Returns an empty (non-nil) map when
+// the book has no concepts.
+func (r Reader) GetDefinitionsBookConcepts(bookID string) map[string]string {
+	result := make(map[string]string)
+	defs, ok := r.definitionsRaw[bookID]
+	if !ok {
+		return result
+	}
+	for _, def := range defs {
+		for _, c := range def.Concepts {
+			head := c.Head
+			if head == "" {
+				continue
+			}
+			for _, expr := range c.Expressions {
+				if expr == "" {
+					continue
+				}
+				// First-writer-wins on collisions; the validator emits a
+				// warning when an expression is claimed by two concepts.
+				if _, already := result[expr]; already {
+					continue
+				}
+				result[expr] = head
+			}
+		}
+	}
+	return result
+}
+
 func (f Reader) ReadAllStoryNotebooks() (map[string]Index, error) {
 	for _, index := range f.indexes {
 		_, err := f.ReadStoryNotebooks(index.ID)

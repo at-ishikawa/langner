@@ -10,6 +10,11 @@ type NoteRecord struct {
 	Meaning          string          `db:"meaning"`
 	Level            string          `db:"level"`
 	DictionaryNumber int             `db:"dictionary_number"`
+	// ConceptKey is the head expression of the definitions concept this
+	// note belongs to, or "" when it doesn't belong to a concept. Set at
+	// ingestion time from the parsed concepts: block; populated only for
+	// definitions-side notes.
+	ConceptKey       string          `db:"concept_key"`
 	CreatedAt        time.Time       `db:"created_at"`
 	UpdatedAt        time.Time       `db:"updated_at"`
 	SkippedAt        *time.Time      `db:"skipped_at"`

@@ -72,8 +72,8 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 		// innodb_autoinc_lock_mode=2 (MySQL 8.0+ default) with concurrent inserts.
 		for _, n := range notes {
 			result, err := tx.ExecContext(ctx,
-				"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number) VALUES (?, ?, ?, ?, ?)",
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber)
+				"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number, concept_key) VALUES (?, ?, ?, ?, ?, ?)",
+				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey)
 			if err != nil {
 				return fmt.Errorf("insert note: %w", err)
 			}
@@ -144,8 +144,8 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		result, err := tx.ExecContext(ctx,
-			"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number) VALUES (?, ?, ?, ?, ?)",
-			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber)
+			"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number, concept_key) VALUES (?, ?, ?, ?, ?, ?)",
+			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ConceptKey)
 		if err != nil {
 			return fmt.Errorf("insert note: %w", err)
 		}
@@ -226,8 +226,8 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for _, n := range notes {
 			_, err := tx.ExecContext(ctx,
-				"UPDATE notes SET `usage` = ?, entry = ?, meaning = ?, level = ?, dictionary_number = ? WHERE id = ?",
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ID)
+				"UPDATE notes SET `usage` = ?, entry = ?, meaning = ?, level = ?, dictionary_number = ?, concept_key = ? WHERE id = ?",
+				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.ID)
 			if err != nil {
 				return fmt.Errorf("update note: %w", err)
 			}
