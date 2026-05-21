@@ -16,7 +16,10 @@ import {
   type EtymologyOriginPart,
   type EtymologyDefinition,
   type EtymologyMeaningGroup,
+  type SemanticConcept,
 } from "@/lib/client";
+import { FormsTable } from "@/components/FormsTable";
+import { ConceptCard } from "@/components/ConceptCard";
 
 type Tab = "origins" | "meanings";
 
@@ -113,6 +116,24 @@ function OriginCard({
       <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
         {origin.meaning}
       </Text>
+      {origin.conceptKeys && origin.conceptKeys.length > 0 && (
+        <Box display="flex" gap={1} flexWrap="wrap" mt={1}>
+          {origin.conceptKeys.map((key) => (
+            <Box
+              key={key}
+              px={1.5}
+              py={0}
+              borderRadius="full"
+              bg="purple.100"
+              _dark={{ bg: "purple.900" }}
+            >
+              <Text fontSize="2xs" color="purple.800" _dark={{ color: "purple.200" }}>
+                {key}
+              </Text>
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   );
 }
@@ -178,6 +199,9 @@ function OriginDetailView({
               <LanguageBadge language={originData.language} />
             </Box>
             <Text color="gray.600" _dark={{ color: "gray.400" }}>{originData.meaning}</Text>
+            {originData.forms && originData.forms.length > 0 && (
+              <FormsTable forms={originData.forms} />
+            )}
             <Link href={`/notebooks/etymology/${notebookId}/mindmap?origin=${encodeURIComponent(selectedOrigin)}`}>
               <Box
                 mt={3}
@@ -403,6 +427,7 @@ function EtymologyNotebookPage() {
   const [meaningGroups, setMeaningGroups] = useState<EtymologyMeaningGroup[]>(
     [],
   );
+  const [concepts, setConcepts] = useState<SemanticConcept[]>([]);
   const [originCount, setOriginCount] = useState(0);
   const [definitionCount, setDefinitionCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -428,6 +453,7 @@ function EtymologyNotebookPage() {
         setOrigins(res.origins ?? []);
         setDefinitions(res.definitions ?? []);
         setMeaningGroups(res.meaningGroups ?? []);
+        setConcepts(res.concepts ?? []);
         setOriginCount(res.originCount);
         setDefinitionCount(res.definitionCount);
       })
@@ -509,6 +535,30 @@ function EtymologyNotebookPage() {
           _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         />
       </Box>
+
+      {/* Concepts section */}
+      {concepts.length > 0 && (
+        <Box px={4} pt={3}>
+          <Text fontSize="xs" fontWeight="medium" color="fg.muted" mb={2}>
+            Concepts ({concepts.length})
+          </Text>
+          <VStack align="stretch" gap={2}>
+            {concepts.map((c) => {
+              const meaningsByKey: Record<string, string> = {};
+              for (const other of concepts) {
+                meaningsByKey[other.conceptKey] = other.meaning || other.conceptKey;
+              }
+              return (
+                <ConceptCard
+                  key={c.conceptKey}
+                  concept={c}
+                  meaningsByKey={meaningsByKey}
+                />
+              );
+            })}
+          </VStack>
+        </Box>
+      )}
 
       {/* Tabs */}
       <Box

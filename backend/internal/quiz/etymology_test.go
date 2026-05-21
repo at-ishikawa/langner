@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -122,12 +124,13 @@ func TestService_LoadEtymologyOriginCards(t *testing.T) {
 	assert.Equal(t, "prefix", preCard.Type)
 }
 
-// TestService_LoadEtymologyOriginCards_FreeformFirstGate verifies that the
-// hard eligibility gate is ALWAYS enforced, even when includeUnstudied=true.
-// Origins must have been attempted in etymology freeform mode AND have at
-// least one correct etymology answer before they show up in standard or
-// reverse quizzes.
-func TestService_LoadEtymologyOriginCards_FreeformFirstGate(t *testing.T) {
+// TestService_LoadEtymologyOriginCards_EligibilityGate verifies the hard
+// eligibility gate for standard/reverse: an origin must carry at least
+// one correct answer in any etymology mode (breakdown or assembly) before
+// it shows up. The previous freeform-first requirement is gone — users
+// who learn origins directly through standard/reverse no longer get an
+// empty start page just because no freeform stamp exists.
+func TestService_LoadEtymologyOriginCards_EligibilityGate(t *testing.T) {
 	tmpDir := t.TempDir()
 	etymDir := filepath.Join(tmpDir, "etymology", "sample-roots")
 	require.NoError(t, os.MkdirAll(etymDir, 0755))
@@ -160,9 +163,10 @@ origins:
 
 	learningDir := filepath.Join(tmpDir, "learning")
 	require.NoError(t, os.MkdirAll(learningDir, 0755))
-	// root-a: freeformed but never answered correctly → NOT eligible.
+	// root-a: only misunderstood logs → no correct answer → NOT eligible.
 	// root-b: freeformed and answered correctly → eligible.
-	// root-c: answered correctly in etymology standard (not freeform) → NOT eligible (freeform-first).
+	// root-c: answered correctly in etymology standard → eligible (gate no
+	//         longer requires a prior freeform stamp).
 	// root-d: no history at all → NOT eligible.
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "sample-roots.yml"), []byte(`- metadata:
     notebook_id: sample-roots
@@ -197,11 +201,16 @@ origins:
 		config.QuizConfig{},
 	)
 
-	// When skipEligibility is false, only root-b should be eligible (standard/reverse gate).
+	// When skipEligibility is false, root-b and root-c should be eligible:
+	// both have at least one correct etymology answer regardless of which
+	// mode produced it. root-a (only misunderstood) and root-d (no logs)
+	// remain blocked.
 	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, false, notebook.QuizTypeEtymologyStandard, nil)
 	require.NoError(t, err)
-	require.Len(t, cards, 1, "only origins that were freeformed AND answered correctly should be eligible")
-	assert.Equal(t, "root-b", cards[0].Origin)
+	require.Len(t, cards, 2, "any origin with a correct etymology answer in any mode should be eligible")
+	gotOrigins := []string{cards[0].Origin, cards[1].Origin}
+	sort.Strings(gotOrigins)
+	assert.Equal(t, []string{"root-b", "root-c"}, gotOrigins)
 
 	// When skipEligibility is true (freeform mode), ALL origins are returned.
 	freeformCards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, true, notebook.QuizTypeEtymologyFreeform, nil)
@@ -415,4 +424,95 @@ origins:
 	require.Len(t, summaries, 1)
 	assert.Equal(t, 1, summaries[0].EtymologyReviewCount,
 		"the due count shown on the start page must equal the number of cards in the quiz")
+}
+
+// TestService_GetEtymologyOriginNextReviewDates_CoversAllModes pins the
+// fix for the freeform "Origin not found in notebooks" symptom on words
+// recently answered in standard or reverse. originNextReviewDate must
+// consult both EtymologyBreakdownLogs and EtymologyAssemblyLogs (freeform
+// writes to both, so two fields cover all three modes); reading only
+// breakdown let assembly-only answers slip through and the freeform
+// frontend rendered them as "Found in notebooks" / drillable.
+func TestService_GetEtymologyOriginNextReviewDates_CoversAllModes(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "cross-mode")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: cross-mode
+kind: Etymology
+name: Cross Mode
+notebooks:
+  - ./origins.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "Cross Mode Lesson"
+origins:
+  - origin: "root-x"
+    type: root
+    language: Latin
+    meaning: drilled standard today
+  - origin: "root-y"
+    type: root
+    language: Latin
+    meaning: drilled reverse today
+  - origin: "root-z"
+    type: root
+    language: Latin
+    meaning: never touched
+`), 0644))
+
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	today := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	// Post-migration shape: history.metadata.title is the SESSION
+	// title (matches the etymology source's metadata.title above),
+	// not the book name. SceneTitle is the session title too because
+	// the etymology source uses the flat (legacy) origin shape without
+	// scene structure and there's no definitions notebook here, so the
+	// reader's pickBestSceneForOrigin falls back to the session title.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "cross-mode.yml"), []byte(fmt.Sprintf(`- metadata:
+    notebook_id: cross-mode
+    title: "Cross Mode Lesson"
+  scenes:
+    - metadata:
+        title: "Cross Mode Lesson"
+      expressions:
+        - expression: root-x
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: %q
+              quiz_type: etymology_breakdown
+              interval_days: 30
+        - expression: root-y
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: %q
+              quiz_type: etymology_assembly
+              interval_days: 30
+`, today, today)), 0644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{},
+	)
+
+	cards, err := svc.LoadEtymologyOriginCards(
+		[]string{"cross-mode"}, true, true,
+		notebook.QuizTypeEtymologyFreeform, nil,
+	)
+	require.NoError(t, err)
+	require.Len(t, cards, 3, "freeform card list should include every origin")
+
+	dates, err := svc.GetEtymologyOriginNextReviewDates(cards)
+	require.NoError(t, err)
+
+	_, xFuture := dates["root-x"]
+	_, yFuture := dates["root-y"]
+	_, zFuture := dates["root-z"]
+	assert.True(t, xFuture, "root-x answered today in breakdown should be reported as not-due")
+	assert.True(t, yFuture, "root-y answered today in assembly should be reported as not-due")
+	assert.False(t, zFuture, "root-z has no logs and should remain freely drillable")
 }

@@ -9,7 +9,14 @@ export interface WordDetail {
   synonyms?: string[];
   antonyms?: string[];
   memo?: string;
-  originParts?: { origin: string; type: string; language: string; meaning: string }[];
+  originParts?: {
+    origin: string;
+    type: string;
+    language: string;
+    meaning: string;
+    forms?: { form: string; role: string; note?: string }[];
+    fromForm?: string;
+  }[];
 }
 
 interface Example {
@@ -41,7 +48,16 @@ export interface EtymologyOriginCard {
   meaning: string;
   notebookName: string;
   sessionTitle: string;
+  // sense disambiguates same-session multi-sense origins. Empty for the
+  // vast majority of cards; "feeling" vs "disease" for pathos in Session
+  // 9 of a Greek roots notebook. The prompt UI shows it next to the
+  // origin so the learner knows which sense is being asked about.
+  sense: string;
   exampleWords: string[];
+  // graphPrompt, when set, replaces the plain meaning prompt with a graph
+  // the user completes. Only populated by the server for reverse-mode
+  // cards whose origin participates in a usable concept cluster.
+  graphPrompt?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
 }
 
 export interface OriginalValues {
@@ -127,6 +143,11 @@ export interface EtymologyOriginResult {
   notebookName?: string;
   nextReviewDate?: string;
   learnedAt?: string;
+  // graphContext, when set, is a filled-in (no-blank) graph the standard-
+  // quiz feedback card renders as elaborative scaffolding right after the
+  // user has answered. Same shape vocabulary as the reverse-mode prompt
+  // graph; reuses the RelationGraph component.
+  graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;

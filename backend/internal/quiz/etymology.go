@@ -13,13 +13,16 @@ import (
 
 // EtymologyOriginCard represents a single origin for the origin-based etymology quiz.
 //
-// SessionTitle disambiguates multi-sense origins: the same origin string can
-// appear in multiple sessions with different meanings, so the card key is
-// (NotebookName, SessionTitle, Origin) rather than Origin alone.
+// SessionTitle disambiguates cross-session multi-sense origins (e.g.
+// "ana" = "up" in Session 13 vs "ana" = "negative" in Session 16). Sense
+// disambiguates same-session multi-sense origins (e.g. "pathos" = "feeling"
+// AND "pathos" = "disease, suffering" both in Session 9). The full card
+// key is (NotebookName, SessionTitle, Sense, Origin).
 type EtymologyOriginCard struct {
 	NotebookName  string
 	NotebookTitle string
 	SessionTitle  string
+	Sense         string
 	// SceneTitle is the canonical scene the origin belongs to, mirroring
 	// the matching definitions file's scene of the same name. Populated
 	// at read time by the reader's origin → scene projection (legacy
@@ -100,12 +103,14 @@ func (s *Service) LoadEtymologyOriginCards(
 			if !inSectionFilter(sessionFilter, o.SessionTitle) {
 				continue
 			}
-			// Per-session dedup: an origin appearing twice within the
-			// same session (e.g. with inconsistent language metadata)
-			// collapses to one card, but the same origin in another
-			// session survives — that's how multi-sense origins (ana =
-			// "up" vs ana = "negative") stay as separate drills.
-			key := etymID + "\x00" + o.SessionTitle + "\x00" + originDedupKey(o.Origin)
+			// Per-session, per-sense dedup: an origin appearing twice
+			// within the same session with inconsistent language metadata
+			// collapses to one card, but distinct senses (e.g. pathos =
+			// feeling vs pathos = disease, both in Session 9) stay as
+			// separate drills. Cross-session multi-sense origins (ana =
+			// "up" in Session 13 vs ana = "negative" in Session 16) are
+			// handled by the SessionTitle component of the key.
+			key := etymID + "\x00" + o.SessionTitle + "\x00" + o.Sense + "\x00" + originDedupKey(o.Origin)
 			if seen[key] {
 				continue
 			}
@@ -130,6 +135,10 @@ func (s *Service) LoadEtymologyOriginCards(
 			// Reads the log set matching the active quiz mode — fixes a
 			// bug where reverse mode used the standard track and showed
 			// origins the user had just answered correctly in reverse.
+			// Freeform's cross-mode dedup happens at the
+			// originNextReviewDate level (the frontend gates re-drilling
+			// via the "Not until $date" banner); freeform itself loads
+			// every origin so the typed-input lookup can find them.
 			if !includeUnstudied {
 				if !needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType) {
 					continue
@@ -140,6 +149,7 @@ func (s *Service) LoadEtymologyOriginCards(
 				NotebookName:  etymID,
 				NotebookTitle: nbTitle,
 				SessionTitle:  o.SessionTitle,
+				Sense:         o.Sense,
 				SceneTitle:    o.SceneTitle,
 				Origin:        o.Origin,
 				Type:          o.Type,
@@ -158,12 +168,19 @@ func (s *Service) LoadEtymologyOriginCards(
 }
 
 // GradeEtymologyStandardAnswer grades a standard answer (origin -> meaning) using ValidateWordForm.
+// Exact case-insensitive matches short-circuit OpenAI: the validator is
+// occasionally flaky on trivial cases (e.g. answering "tome" when the
+// expected meaning literally contains "tome"), and there's no honest way
+// for the same string to be wrong.
 func (s *Service) GradeEtymologyStandardAnswer(
 	ctx context.Context,
 	card EtymologyOriginCard,
 	answer string,
 	responseTimeMs int64,
 ) (GradeResult, error) {
+	if isExactMatch(answer, card.Meaning) {
+		return exactMatchResult(responseTimeMs), nil
+	}
 	validation, err := s.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
 		Expected:       card.Meaning,
 		UserAnswer:     answer,
@@ -175,32 +192,40 @@ func (s *Service) GradeEtymologyStandardAnswer(
 	}
 
 	isCorrect := validation.Classification != inference.ClassificationWrong
-	quality := 1
-	if isCorrect {
-		if responseTimeMs < 3000 {
-			quality = 5
-		} else if responseTimeMs < 10000 {
-			quality = 4
-		} else {
-			quality = 3
-		}
-	}
-
 	return GradeResult{
 		Correct:        isCorrect,
 		Reason:         validation.Reason,
-		Quality:        quality,
+		Quality:        qualityFromResponseTime(isCorrect, responseTimeMs),
 		Classification: string(validation.Classification),
 	}, nil
 }
 
-// GradeEtymologyReverseAnswer grades a reverse answer (meaning -> origin) using ValidateWordForm.
+// GradeEtymologyReverseAnswer grades a reverse answer (meaning -> origin)
+// using ValidateWordForm. Two fast-paths bypass OpenAI:
+//  1. Exact case-insensitive match against card.Origin.
+//  2. The answer matches another origin in the same notebook + language
+//     with the same meaning. The prompt is "give the origin for THIS
+//     meaning (in THIS language)"; if two origins share that key (e.g.
+//     Latin `par` and `aequus` both mean "equal"), either is a correct
+//     answer and we shouldn't penalise the learner for picking the one
+//     the card didn't happen to be drawn from.
 func (s *Service) GradeEtymologyReverseAnswer(
 	ctx context.Context,
 	card EtymologyOriginCard,
 	answer string,
 	responseTimeMs int64,
 ) (GradeResult, error) {
+	if isExactMatch(answer, card.Origin) {
+		return exactMatchResult(responseTimeMs), nil
+	}
+	if s.isSameMeaningOrigin(card, answer) {
+		return GradeResult{
+			Correct:        true,
+			Reason:         fmt.Sprintf("Accepted: %q is a synonymous origin in %s with the same meaning.", strings.TrimSpace(answer), card.Language),
+			Quality:        qualityFromResponseTime(true, responseTimeMs),
+			Classification: string(inference.ClassificationSynonym),
+		}, nil
+	}
 	validation, err := s.openaiClient.ValidateWordForm(ctx, inference.ValidateWordFormRequest{
 		Expected:       card.Origin,
 		UserAnswer:     answer,
@@ -212,23 +237,79 @@ func (s *Service) GradeEtymologyReverseAnswer(
 	}
 
 	isCorrect := validation.Classification != inference.ClassificationWrong
-	quality := 1
-	if isCorrect {
-		if responseTimeMs < 3000 {
-			quality = 5
-		} else if responseTimeMs < 10000 {
-			quality = 4
-		} else {
-			quality = 3
-		}
-	}
-
 	return GradeResult{
 		Correct:        isCorrect,
 		Reason:         validation.Reason,
-		Quality:        quality,
+		Quality:        qualityFromResponseTime(isCorrect, responseTimeMs),
 		Classification: string(validation.Classification),
 	}, nil
+}
+
+// isExactMatch reports whether two strings are equal after trimming
+// surrounding whitespace and case-folding.
+func isExactMatch(a, b string) bool {
+	return strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b))
+}
+
+// exactMatchResult builds a GradeResult for the trivial "answer equals
+// expected" case: correct, with quality scaled by response time.
+func exactMatchResult(responseTimeMs int64) GradeResult {
+	return GradeResult{
+		Correct:        true,
+		Reason:         "Exact match.",
+		Quality:        qualityFromResponseTime(true, responseTimeMs),
+		Classification: string(inference.ClassificationSameWord),
+	}
+}
+
+// qualityFromResponseTime maps a wall-clock response time into the SM-2
+// quality scale. Correct answers earn 3–5 depending on speed; wrong
+// answers always earn 1.
+func qualityFromResponseTime(correct bool, responseTimeMs int64) int {
+	if !correct {
+		return 1
+	}
+	switch {
+	case responseTimeMs < 3000:
+		return 5
+	case responseTimeMs < 10000:
+		return 4
+	default:
+		return 3
+	}
+}
+
+// isSameMeaningOrigin reports whether `answer` matches a different origin
+// in the same notebook + language + meaning as the card. Used in reverse
+// mode to accept synonymous-origin answers (e.g. "aequus" when the card
+// was drawn for "par"). Failures here (reader, YAML) silently return
+// false; the caller falls back to OpenAI.
+func (s *Service) isSameMeaningOrigin(card EtymologyOriginCard, answer string) bool {
+	want := strings.ToLower(strings.TrimSpace(answer))
+	if want == "" {
+		return false
+	}
+	reader, err := s.newReader()
+	if err != nil {
+		return false
+	}
+	origins, err := reader.ReadEtymologyNotebook(card.NotebookName)
+	if err != nil {
+		return false
+	}
+	cardMeaning := strings.ToLower(strings.TrimSpace(card.Meaning))
+	for _, o := range origins {
+		if o.Language != card.Language {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(o.Meaning)) != cardMeaning {
+			continue
+		}
+		if strings.ToLower(strings.TrimSpace(o.Origin)) == want {
+			return true
+		}
+	}
+	return false
 }
 
 // SaveEtymologyOriginResult updates the learning history for an etymology origin quiz answer.
@@ -278,11 +359,14 @@ func (s *Service) SaveEtymologyOriginResult(
 }
 
 // LoadEtymologyExampleWords returns example expressions for each card,
-// keyed by lower(origin)\x00sessionTitle. Examples come from the
+// keyed by lower(origin)\x00sessionTitle\x00sense. Examples come from the
 // consolidated definitions notebook (same notebook ID as the etymology
-// notebook), narrowed by the parent session's metadata.title — so the
-// "ana" card from Session 13 gets words that use the Session 13 sense
-// of "ana", not Session 16's.
+// notebook), narrowed by both the parent session's metadata.title and the
+// card's Sense. So the pathos=feeling card in Session 9 gets sympathy and
+// empathy; the pathos=disease card in the same session gets osteopath and
+// psychopath. A definition's origin_parts ref pins a sense via Sense; refs
+// that omit Sense match every sense of that origin (back-compat for
+// definitions written before the sense field existed).
 func (s *Service) LoadEtymologyExampleWords(cards []EtymologyOriginCard) (map[string][]string, error) {
 	if len(cards) == 0 {
 		return nil, nil
@@ -292,23 +376,24 @@ func (s *Service) LoadEtymologyExampleWords(cards []EtymologyOriginCard) (map[st
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	type key struct {
+	// Build a lookup of which senses each (notebook, session, origin) has
+	// so an un-pinned ref can fan out to all of them, while a pinned ref
+	// resolves to exactly the matching sense.
+	type baseKey struct {
 		notebookID, sessionTitle, origin string
 	}
-	wanted := make(map[key]struct{})
+	sensesByBase := make(map[baseKey][]string)
 	for _, c := range cards {
-		k := key{c.NotebookName, c.SessionTitle, strings.ToLower(strings.TrimSpace(c.Origin))}
-		wanted[k] = struct{}{}
+		bk := baseKey{c.NotebookName, c.SessionTitle, strings.ToLower(strings.TrimSpace(c.Origin))}
+		sensesByBase[bk] = append(sensesByBase[bk], c.Sense)
 	}
 
 	result := make(map[string][]string)
 	bookIDs := reader.GetDefinitionsBookIDs()
 	for _, bookID := range bookIDs {
-		// Examples come from the consolidated definitions notebook (Phase 2:
-		// same ID as the etymology notebook).
 		hasMatch := false
-		for k := range wanted {
-			if k.notebookID == bookID {
+		for bk := range sensesByBase {
+			if bk.notebookID == bookID {
 				hasMatch = true
 				break
 			}
@@ -324,11 +409,11 @@ func (s *Service) LoadEtymologyExampleWords(cards []EtymologyOriginCard) (map[st
 			for _, notes := range sceneDefs {
 				for _, note := range notes {
 					for _, ref := range note.OriginParts {
-						k := key{bookID, sessionTitle, strings.ToLower(strings.TrimSpace(ref.Origin))}
-						if _, ok := wanted[k]; !ok {
+						bk := baseKey{bookID, sessionTitle, strings.ToLower(strings.TrimSpace(ref.Origin))}
+						senses, ok := sensesByBase[bk]
+						if !ok {
 							continue
 						}
-						resultKey := strings.ToLower(strings.TrimSpace(ref.Origin)) + "\x00" + sessionTitle
 						expr := note.Expression
 						if expr == "" {
 							expr = note.Definition
@@ -336,7 +421,27 @@ func (s *Service) LoadEtymologyExampleWords(cards []EtymologyOriginCard) (map[st
 						if expr == "" {
 							continue
 						}
-						result[resultKey] = append(result[resultKey], expr)
+						// Sense-aware fan-out:
+						//   - ref.Sense == "" with a matching sense="" card  → attach to that card.
+						//   - ref.Sense == "" with NO sense="" card but multiple sensed cards → attach to all (legacy/un-backfilled behavior).
+						//   - ref.Sense != "" → attach only to the matching sense.
+						hasEmptySense := false
+						for _, s := range senses {
+							if s == "" {
+								hasEmptySense = true
+								break
+							}
+						}
+						for _, s := range senses {
+							if ref.Sense != "" && s != ref.Sense {
+								continue
+							}
+							if ref.Sense == "" && hasEmptySense && s != "" {
+								continue
+							}
+							resultKey := strings.ToLower(strings.TrimSpace(ref.Origin)) + "\x00" + sessionTitle + "\x00" + s
+							result[resultKey] = append(result[resultKey], expr)
+						}
 					}
 				}
 			}
@@ -426,19 +531,56 @@ func (s *Service) GetEtymologyOriginNextReviewDates(cards []EtymologyOriginCard)
 	return result, nil
 }
 
+// originNextReviewDate returns the soonest future review date this origin
+// is scheduled for across every etymology log set (breakdown, assembly,
+// freeform). Returns empty when no logs are scheduled for the future —
+// either because the origin has never been answered, or because every
+// logged mode is currently past its interval. Reading only breakdown was
+// a bug: a word answered in reverse (assembly logs) or freeform with
+// interval_days=30 would still read as "due now" in freeform and
+// reappear the same day.
+//
+// Picks the soonest future date because the user wanting to drill the
+// word again should wait at least until SOME mode says it's due again.
+// If they recently answered in standard with a 30-day interval, freeform
+// shouldn't unlock just because the freeform log set happens to be
+// empty.
 func originNextReviewDate(histories []notebook.LearningHistory, card EtymologyOriginCard) string {
+	// Post-migration etymology learning history is keyed:
+	//   history.metadata.title = SessionTitle   (e.g. "Session 2")
+	//   scene.metadata.title   = SceneTitle     (e.g. "alter (other)")
+	// Earlier callers compared against NotebookTitle / SessionTitle one
+	// level off, so this loop never matched real data; see the migration
+	// note in Validator.migrateEtymologyShape for the schema move.
 	for _, hist := range histories {
-		if hist.Metadata.Title != card.NotebookTitle {
+		if hist.Metadata.Title != card.SessionTitle {
 			continue
 		}
 		for _, scene := range hist.Scenes {
-			if scene.Metadata.Title != card.SessionTitle {
+			if scene.Metadata.Title != card.SceneTitle {
 				continue
 			}
 			for _, expr := range scene.Expressions {
-				if strings.EqualFold(expr.Expression, card.Origin) {
-					return computeNextReviewDate(expr.EtymologyBreakdownLogs)
+				if !strings.EqualFold(expr.Expression, card.Origin) {
+					continue
 				}
+				// Freeform writes into both BreakdownLogs and
+				// AssemblyLogs (see SetLogsForQuizType), so the two
+				// fields cover all three etymology modes.
+				var soonest string
+				for _, logs := range [][]notebook.LearningRecord{
+					expr.EtymologyBreakdownLogs,
+					expr.EtymologyAssemblyLogs,
+				} {
+					next := computeNextReviewDate(logs)
+					if next == "" {
+						continue
+					}
+					if soonest == "" || next < soonest {
+						soonest = next
+					}
+				}
+				return soonest
 			}
 		}
 	}
@@ -607,8 +749,17 @@ func findOriginExpression(
 
 // isOriginEligible is the hard gate that must always pass for an origin to
 // appear in etymology standard or reverse quizzes. The user must have
-// attempted the origin in etymology freeform mode at least once AND
-// answered at least one etymology question about it correctly.
+// answered at least one etymology question about the origin correctly
+// (in any etymology mode — breakdown OR assembly).
+//
+// Previously this also required at least one etymology_freeform answer.
+// That was a "warm-up before drill" ladder that broke for users who
+// learned origins directly through standard/reverse: their words
+// (ego, mania, …) carried breakdown/assembly logs with correct answers
+// but never a freeform stamp, and the start page silently hid every
+// notebook because no origin passed the gate. A correct answer in any
+// mode is itself proof the user has engaged with the origin; freeform
+// is no longer required.
 func isOriginEligible(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
@@ -617,7 +768,7 @@ func isOriginEligible(
 	if expr == nil {
 		return false
 	}
-	return expr.HasEtymologyFreeformAnswer() && expr.HasCorrectEtymologyAnswer()
+	return expr.HasCorrectEtymologyAnswer()
 }
 
 // isOriginSkipped returns true when the origin's per-(notebook, session)
@@ -647,3 +798,4 @@ func needsOriginReview(
 	}
 	return expr.NeedsEtymologyReview(quizType)
 }
+

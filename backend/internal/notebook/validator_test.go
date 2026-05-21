@@ -2368,90 +2368,23 @@ func TestValidator_Fix_PreservesSkippedOnlyOnDisk(t *testing.T) {
 	assert.Contains(t, expr.SkippedAt, "reverse")
 }
 
-// TestValidator_Fix_RecomputesClampedIntervals walks a Validator.Fix run
-// end-to-end against a YAML that already has the corrupted state the
-// previous duration.Hours()/24 truncation produced: a misunderstood log
-// the previous evening followed by a correct log the next morning, with
-// the correct log's interval frozen at 1 (what the buggy guard wrote
-// on a prior --fix pass).
+// Note: TestValidator_Fix_RecomputesClampedIntervals lived here. It
+// pinned a "final pass" in fixLearningNotesStructure that recalculated
+// every expression's interval_days at the end of every --fix run, on
+// the theory it would repair logs the old calendar-day-truncation bug
+// had clamped to 1.
 //
-// After Fix, the correct log's IntervalDays must advance past 1 and the
-// YAML on disk must reflect that change. If this test passes but the
-// user still sees stale intervals, the binary they ran is older than
-// the calendar-day fix.
-func TestValidator_Fix_RecomputesClampedIntervals(t *testing.T) {
-	learningDir := t.TempDir()
-	storyDir := t.TempDir()
-
-	// One story scene matching the learning history so fixConsistency
-	// keeps the expression. Source structure mirrors a real notebook.
-	notebookDir := filepath.Join(storyDir, "fixture")
-	require.NoError(t, os.MkdirAll(notebookDir, 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(notebookDir, "index.yml"), []byte(`id: fixture
-name: Fixture
-notebooks:
-  - ./episode.yml
-`), 0644))
-	require.NoError(t, os.WriteFile(filepath.Join(notebookDir, "episode.yml"), []byte(`- event: "Episode 1"
-  date: 2026-05-09T00:00:00Z
-  scenes:
-    - scene: "Scene A"
-      conversations:
-        - speaker: "A"
-          quote: "Be careful not to lose your temper."
-      definitions:
-        - expression: "lose temper"
-          meaning: "to become very angry"
-`), 0644))
-
-	// learning_notes carrying the corrupted shape: correct log at Day 2
-	// 09:00 has interval=1, which the buggy validator clamped from 7.
-	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "fixture.yml"), []byte(`- metadata:
-    id: fixture
-    title: "Episode 1"
-  scenes:
-    - metadata:
-        title: "Scene A"
-      expressions:
-        - expression: "lose temper"
-          learned_logs:
-            - status: understood
-              learned_at: "2026-05-10T09:00:00Z"
-              quality: 4
-              quiz_type: notebook
-              interval_days: 1
-            - status: misunderstood
-              learned_at: "2026-05-09T18:00:00Z"
-              quality: 1
-              quiz_type: notebook
-              interval_days: 1
-`), 0644))
-
-	v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "",
-		&FixedLevelCalculator{Intervals: DefaultFixedIntervals})
-	_, err := v.Fix()
-	require.NoError(t, err)
-
-	raw, err := os.ReadFile(filepath.Join(learningDir, "fixture.yml"))
-	require.NoError(t, err)
-	var got []LearningHistory
-	require.NoError(t, yaml.Unmarshal(raw, &got))
-	require.Len(t, got, 1)
-	require.Len(t, got[0].Scenes, 1)
-	require.Len(t, got[0].Scenes[0].Expressions, 1)
-	logs := got[0].Scenes[0].Expressions[0].LearnedLogs
-	require.Len(t, logs, 2, "both logs must survive Fix")
-
-	// logs[0] is newest-first by validator's contract → the Day-2 correct.
-	assert.Equal(t, "2026-05-10", logs[0].LearnedAt.Format("2006-01-02"))
-	assert.Greater(t, logs[0].IntervalDays, 1,
-		"validate --fix must advance the corrupted interval=1 to the next "+
-			"fixed level (7); if this fires, the calendar-day guard isn't "+
-			"flowing through Validator.Fix end-to-end",
-	)
-	assert.Equal(t, 7, logs[0].IntervalDays,
-		"FixedLevelCalculator should land on 7 (level 1)")
-}
+// The pass was removed because it also rewrote historically-correct
+// values: a hard-earned 30-day interval got flattened to 7 just because
+// the current algorithm with the early-review guard would compute 7
+// during a replay. Once the rewrite was a regular --fix outcome, every
+// run silently degraded the user's spaced-repetition history. The
+// invariant the user wants is "logs are immutable history; only the
+// next interval is recomputed at quiz time," and the only way to honour
+// that is to not recompute existing logs at all in --fix. If anyone
+// later needs a one-time repair for the pre-calendar-day-guard
+// clamping, it should ship as a dedicated migration CLI rather than
+// hide in every --fix run.
 
 func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {
 	tmpDir := t.TempDir()

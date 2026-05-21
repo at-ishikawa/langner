@@ -127,6 +127,12 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 	// Validate definitions from separate definitions files appear in conversations
 	v.validateSeparateDefinitionsInConversations(storyNotebooks, result)
 
+	// Validate the new etymology extensions (forms, concepts, relations).
+	// Failures are warn-only while the schema matures so existing notebooks
+	// (which don't carry these fields) keep validating cleanly.
+	v.validateEtymologyExtensions(result)
+	v.validateFromForm(result)
+
 	return result, nil
 }
 
@@ -697,61 +703,18 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 		}
 	}
 
-	// Final pass: recalculate intervals for ALL expressions to fix early-review
-	// inflation. This catches cases where interval_days advanced even though
-	// the review happened before the previous interval elapsed.
-	for _, file := range files {
-		for histIdx := range file.contents {
-			for sceneIdx := range file.contents[histIdx].Scenes {
-				scene := &file.contents[histIdx].Scenes[sceneIdx]
-				for exprIdx := range scene.Expressions {
-					expr := &scene.Expressions[exprIdx]
-					for _, logField := range []struct {
-						name string
-						logs *[]LearningRecord
-					}{
-						{"learned_logs", &expr.LearnedLogs},
-						{"reverse_logs", &expr.ReverseLogs},
-						{"etymology_breakdown_logs", &expr.EtymologyBreakdownLogs},
-						{"etymology_assembly_logs", &expr.EtymologyAssemblyLogs},
-					} {
-						if len(*logField.logs) > 1 {
-							_, newLogs, changed := recalculateLearningLogs(*logField.logs, v.calculator)
-							if changed {
-								*logField.logs = newLogs
-								result.AddWarning(ValidationError{
-									File:    file.path,
-									Message: fmt.Sprintf("Recalculated %s for %q in %s", logField.name, expr.Expression, file.contents[histIdx].Metadata.Title),
-								})
-							}
-						}
-					}
-				}
-			}
-			// Also handle flat expressions (flashcard-type histories)
-			for exprIdx := range file.contents[histIdx].Expressions {
-				expr := &file.contents[histIdx].Expressions[exprIdx]
-				for _, logField := range []struct {
-					name string
-					logs *[]LearningRecord
-				}{
-					{"learned_logs", &expr.LearnedLogs},
-					{"reverse_logs", &expr.ReverseLogs},
-				} {
-					if len(*logField.logs) > 1 {
-						_, newLogs, changed := recalculateLearningLogs(*logField.logs, v.calculator)
-						if changed {
-							*logField.logs = newLogs
-							result.AddWarning(ValidationError{
-								File:    file.path,
-								Message: fmt.Sprintf("Recalculated %s for %q in %s", logField.name, expr.Expression, file.contents[histIdx].Metadata.Title),
-							})
-						}
-					}
-				}
-			}
-		}
-	}
+	// Note: there used to be a "final pass" here that recalculated
+	// interval_days for every expression's logs to retroactively apply
+	// the early-review guard. That over-reached — it overwrote
+	// interval_days that were historically correct under the SR
+	// algorithm in use at the time, e.g., flattening a hard-earned
+	// 30-day interval back to 7 days because the current algorithm
+	// with the early-review guard would produce 7. Logs are the
+	// historical record of what the user actually saw and reacted to;
+	// future intervals are computed live by the quiz. The merge-time
+	// recompute above is still required because merging duplicates
+	// rewrites the log sequence — that's an actual structural change.
+	// The bulk pass is not.
 
 	return files
 }
@@ -1837,37 +1800,46 @@ func (v *Validator) migrateLegacySkipIntervals(files []learningHistoryFile, resu
 	return files
 }
 
-// recalculateLearningLogs replays the configured algorithm to recompute interval_days.
-// Returns the new easiness factor, updated logs, and whether any values changed.
-func recalculateLearningLogs(logs []LearningRecord, calculator IntervalCalculator) (float64, []LearningRecord, bool) {
-	if calculator == nil {
-		calculator = &SM2Calculator{}
-	}
-	oldIntervals := make([]int, len(logs))
+// recalculateLearningLogs normalises a learning-log list after a structural
+// change (merging duplicates, etc.). It fixes the misunderstood+quality≥3
+// inconsistency, sorts newest-first to match storage convention, and
+// preserves every log's existing interval_days. Returning the calculator's
+// idea of "the right interval for this point in time" is intentionally NOT
+// done here: logs are historical record, and overwriting interval_days from
+// a replay flattens hard-earned intervals (e.g., a 30-day correct answer
+// becoming 7 because the current algorithm with the early-review guard
+// would compute 7) every time --fix runs. The next interval the user will
+// see is computed live by the quiz from the latest log; that's the only
+// place a calculated interval should be written.
+//
+// The first return value is unused by current callers but kept for ABI
+// compatibility; it returns DefaultEasinessFactor as a stable placeholder.
+func recalculateLearningLogs(logs []LearningRecord, _ IntervalCalculator) (float64, []LearningRecord, bool) {
 	oldQualities := make([]int, len(logs))
 	for i, log := range logs {
-		oldIntervals[i] = log.IntervalDays
 		oldQualities[i] = log.Quality
 	}
 
-	// Fix inconsistency: misunderstood status must have quality < 3
+	// Fix inconsistency: misunderstood status must have quality < 3.
 	for i := range logs {
 		if logs[i].Status == LearnedStatusMisunderstood && logs[i].Quality >= 3 {
 			logs[i].Quality = 2
 		}
 	}
 
-	ef, newLogs := calculator.RecalculateAll(logs)
+	// Storage convention: newest-first.
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
+	})
 
 	changed := false
-	for i := range newLogs {
-		if newLogs[i].IntervalDays != oldIntervals[i] || newLogs[i].Quality != oldQualities[i] {
+	for i := range logs {
+		if logs[i].Quality != oldQualities[i] {
 			changed = true
 			break
 		}
 	}
-
-	return ef, newLogs, changed
+	return DefaultEasinessFactor, logs, changed
 }
 
 // validateFlashcardNotebooks validates all flashcard notebook files

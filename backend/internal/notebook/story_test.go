@@ -595,7 +595,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			wantErrMsg:              "definition.SetDetails()",
 		},
 		{
-			name: "useSpacedRepetition=false, usable status - word NOT included",
+			name: "useSpacedRepetition=false, usable status within interval - word NOT included",
 			storyNotebooks: []StoryNotebook{
 				{
 					Event: "Story 1",
@@ -626,7 +626,10 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "test",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour)), QuizType: string(QuizTypeFreeform)},
+										// Recent correct answer well within
+										// its IntervalDays — export must
+										// skip this word.
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * time.Hour)), IntervalDays: 30, QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -914,7 +917,7 @@ func TestFilterStoryNotebooks(t *testing.T) {
 								{
 									Expression: "break someone's ice",
 									LearnedLogs: []LearningRecord{
-										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-60 * 24 * time.Hour)), QuizType: string(QuizTypeFreeform)},
+										{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-1 * time.Hour)), IntervalDays: 30, QuizType: string(QuizTypeFreeform)},
 									},
 								},
 							},
@@ -979,6 +982,76 @@ func TestFilterStoryNotebooks(t *testing.T) {
 			assert.Equal(t, tt.expectedWords, words, "Expected words %v, got %v", tt.expectedWords, words)
 		})
 	}
+}
+
+// TestFilterStoryNotebooks_ExcludesReverseLearnedWords reproduces the PDF
+// export bug a user reported: words answered correctly in reverse mode
+// (with a recent ReverseLogs entry and future IntervalDays) were still
+// included in the exported markdown / PDF because needsToLearnInNotebook
+// only treated LearnedLogs as evidence of "user knows this word." For
+// learners who drill predominantly in reverse, that meant every
+// reverse-learned word kept showing up in study output.
+//
+// useSpacedRepetition=false is the path that OutputStoryNotebooks (the
+// markdown / PDF CLI) takes, so this test exercises the exact filter
+// flag combination the export uses.
+//
+// Uses neutral idioms ("break the ice", "lose temper") instead of any
+// user-specific vocabulary to keep the fixture portable.
+func TestFilterStoryNotebooks_ExcludesReverseLearnedWords(t *testing.T) {
+	now := time.Now()
+
+	storyNotebooks := []StoryNotebook{{
+		Event: "Episode 1",
+		Scenes: []StoryScene{{
+			Title:         "Scene A",
+			Conversations: []Conversation{{Speaker: "A", Quote: "let's break the ice and not lose temper"}},
+			Definitions: []Note{
+				{Expression: "break the ice", Meaning: "make the social situation more relaxed"},
+				{Expression: "lose temper", Meaning: "become very angry"},
+			},
+		}},
+	}}
+
+	// break the ice: only a recent correct ReverseLogs entry (interval
+	// not yet elapsed). No LearnedLogs at all. PDF should EXCLUDE.
+	// lose temper: no logs anywhere. PDF should INCLUDE.
+	learningHistory := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{Title: "Episode 1"},
+		Scenes: []LearningScene{{
+			Metadata: LearningSceneMetadata{Title: "Scene A"},
+			Expressions: []LearningHistoryExpression{{
+				Expression: "break the ice",
+				ReverseLogs: []LearningRecord{{
+					Status:       LearnedStatusUnderstood,
+					LearnedAt:    NewDate(now.Add(-1 * time.Hour)),
+					Quality:      4,
+					QuizType:     string(QuizTypeReverse),
+					IntervalDays: 30,
+				}},
+			}},
+		}},
+	}}
+
+	filtered, err := FilterStoryNotebooks(
+		storyNotebooks, learningHistory, nil,
+		false /*sortDesc*/, true /*includeNoCorrectAnswers*/, false /*useSpacedRepetition*/, true /*preserveOrder*/,
+		QuizTypeNotebook,
+	)
+	require.NoError(t, err)
+
+	var got []string
+	for _, nb := range filtered {
+		for _, scene := range nb.Scenes {
+			for _, def := range scene.Definitions {
+				got = append(got, def.Expression)
+			}
+		}
+	}
+	assert.Equal(t, []string{"lose temper"}, got,
+		"export must exclude words with a recent correct ReverseLogs entry; "+
+			"break the ice was answered today in reverse mode and should not "+
+			"reappear in the study PDF until its 30-day interval elapses")
 }
 
 func TestReader_ReadAllStoryNotebooksMap(t *testing.T) {

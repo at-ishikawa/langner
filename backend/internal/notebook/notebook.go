@@ -207,9 +207,17 @@ type Reference struct {
 }
 
 // OriginPartRef references an etymology origin by origin name and language.
+// Sense optionally disambiguates among same-session multi-sense origins
+// (e.g. pinning osteopath's `pathos` reference to the "disease" sense rather
+// than the "feeling" sense). FromForm optionally pins this reference to a
+// specific inflectional form declared on the referenced origin (e.g., the
+// supine `missum` of `mittere`). The validator emits a warning if either
+// field doesn't resolve on the referenced origin in the same session.
 type OriginPartRef struct {
 	Origin   string `yaml:"origin"`
 	Language string `yaml:"language,omitempty"`
+	Sense    string `yaml:"sense,omitempty"`
+	FromForm string `yaml:"from_form,omitempty"`
 }
 
 type Phrase struct {
@@ -241,36 +249,42 @@ func (note *Note) needsToLearn() bool {
 }
 
 // needsToLearnInNotebook returns true if the note should be shown in notebook
-// output / PDF. A word is included if ANY quiz track needs attention:
-//   - Forward track: no correct answers yet, or latest is misunderstood
-//   - Reverse track: latest is misunderstood (when ReverseLogs are populated)
+// output / PDF. A word is "known" once EITHER direction has a recent correct
+// answer within its SR interval — once you can produce it in standard OR
+// reverse, the PDF doesn't need to keep listing it until the interval
+// elapses. Previously only LearnedLogs counted as evidence of knowledge,
+// so words learned exclusively in reverse mode reappeared every export.
 func (note *Note) needsToLearnInNotebook() bool {
-	// Forward track check
-	forwardNeedsLearn := false
-	if !note.hasAnyCorrectAnswer() {
-		forwardNeedsLearn = true
-	} else if len(note.LearnedLogs) > 0 {
-		sort.Slice(note.LearnedLogs, func(i, j int) bool {
-			return note.LearnedLogs[i].LearnedAt.After(note.LearnedLogs[j].LearnedAt.Time)
-		})
-		forwardNeedsLearn = note.LearnedLogs[0].Status == LearnedStatusMisunderstood
+	fallback := note.getNextLearningThresholdDays()
+	if hasRecentCorrectLog(note.LearnedLogs, fallback) {
+		return false
 	}
-
-	if forwardNeedsLearn {
-		return true
+	if hasRecentCorrectLog(note.ReverseLogs, fallback) {
+		return false
 	}
+	return true
+}
 
-	// Reverse track check (only when logs are populated by the caller)
-	if len(note.ReverseLogs) > 0 {
-		sort.Slice(note.ReverseLogs, func(i, j int) bool {
-			return note.ReverseLogs[i].LearnedAt.After(note.ReverseLogs[j].LearnedAt.Time)
-		})
-		if note.ReverseLogs[0].Status == LearnedStatusMisunderstood {
-			return true
-		}
+// hasRecentCorrectLog reports whether the most recent log in `logs` is a
+// non-misunderstood answer that is still within its SR interval. Used by
+// the PDF/markdown export filter to decide whether a word has been
+// "recently learned" in a given direction.
+func hasRecentCorrectLog(logs []LearningRecord, fallbackThreshold int) bool {
+	if len(logs) == 0 {
+		return false
 	}
-
-	return false
+	sort.Slice(logs, func(i, j int) bool {
+		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
+	})
+	latest := logs[0]
+	if latest.Status == LearnedStatusMisunderstood {
+		return false
+	}
+	threshold := latest.IntervalDays
+	if threshold == 0 {
+		threshold = fallbackThreshold
+	}
+	return time.Now().Before(latest.LearnedAt.Add(time.Duration(threshold) * time.Hour * 24))
 }
 
 func (note Note) hasAnyCorrectAnswer() bool {
@@ -318,17 +332,24 @@ func GetThresholdDaysFromCount(count int) int {
 }
 
 func (note Note) getNextLearningThresholdDays() int {
-	learnedLogs := note.LearnedLogs
+	return GetThresholdDaysFromCount(correctStreakCount(note.LearnedLogs))
+}
 
+// correctStreakCount counts log entries whose Status is not Learning or
+// Misunderstood — i.e., the rough "this counts as a correct answer"
+// signal used by SR threshold lookups when a per-log IntervalDays is
+// missing. Extracted so the same loop isn't duplicated in
+// Note.getNextLearningThresholdDays, etymology_writer's
+// expressionRecentlyLearned, and the legacy paths in learning_history.go.
+func correctStreakCount(logs []LearningRecord) int {
 	count := 0
-	for _, learnedLog := range learnedLogs {
-		if learnedLog.Status == LearnedStatusLearning || learnedLog.Status == LearnedStatusMisunderstood {
+	for _, log := range logs {
+		if log.Status == LearnedStatusLearning || log.Status == LearnedStatusMisunderstood {
 			continue
 		}
 		count++
 	}
-
-	return GetThresholdDaysFromCount(count)
+	return count
 }
 
 type Template struct {

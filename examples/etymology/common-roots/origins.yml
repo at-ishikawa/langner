@@ -13,10 +13,20 @@ origins:
     type: root
     language: Latin
     meaning: to say, to speak
+    forms:
+      - { form: dico,    role: present_active_indicative }
+      - { form: dicere,  role: present_active_infinitive }
+      - { form: dixi,    role: perfect_active }
+      - { form: dictum,  role: supine, note: "produces nominal English derivations (diction, dictionary)" }
   - origin: scrib
     type: root
     language: Latin
     meaning: to write
+    forms:
+      - { form: scribo,    role: present_active_indicative }
+      - { form: scribere,  role: present_active_infinitive }
+      - { form: scripsi,   role: perfect_active }
+      - { form: scriptum,  role: supine, note: "produces script, scripture, prescription" }
   - origin: pre
     type: prefix
     language: Latin
@@ -33,3 +43,34 @@ origins:
     type: suffix
     language: Latin
     meaning: capable of
+
+concepts:
+  - key: goodness
+    meaning: good
+    note: positive evaluative root
+    members:
+      - { origin: bene, language: Latin }
+  - key: badness
+    meaning: bad
+    note: negative evaluative root
+    members:
+      - { origin: mal, language: Latin }
+  - key: saying
+    meaning: act of saying
+    members:
+      - { origin: dict, language: Latin }
+  - key: writing
+    meaning: act of writing
+    members:
+      - { origin: scrib, language: Latin }
+  - key: communication-acts
+    meaning: acts of communication
+    note: broader category covering both saying and writing
+    members:
+      - { origin: dict, language: Latin }
+      - { origin: scrib, language: Latin }
+
+relations:
+  - { type: antonym, between: [goodness, badness] }
+  - { type: hyponym, from: saying,  to: communication-acts }
+  - { type: hyponym, from: writing, to: communication-acts }

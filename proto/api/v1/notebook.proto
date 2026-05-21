@@ -145,12 +145,36 @@ message DeleteDefinitionRequest {
 message DeleteDefinitionResponse {}
 
 // Etymology Notebook
+
+// EtymologyOriginForm is one inflectional / morphological variant of a
+// source-language origin. (form, role) is the identity within an origin;
+// note is free-text commentary on this specific form.
+message EtymologyOriginForm {
+  string form = 1;
+  string role = 2;
+  string note = 3;
+}
+
 message EtymologyOriginPart {
   string origin = 1;
   string type = 2;
   string language = 3;
   string meaning = 4;
   int32 word_count = 5;
+  // forms records the inflectional / morphological variants of this origin
+  // (Latin principal parts, Greek noun stems, …). Empty when the source
+  // doesn't declare any.
+  repeated EtymologyOriginForm forms = 6;
+  // from_form, when non-empty, is the specific form string this origin
+  // reference pins to (e.g. the supine `missum` of `mittere`). Populated
+  // on parts emitted as part of an EtymologyDefinition; empty on the
+  // top-level origins listing.
+  string from_form = 7;
+  // concept_keys lists every semantic concept this origin participates in
+  // within the same book. Empty when the origin isn't a member of any
+  // declared concept. Populated on the top-level origins listing so chips
+  // can render concept membership without an extra round-trip.
+  repeated string concept_keys = 8;
 }
 
 message EtymologyDefinition {
@@ -175,10 +199,39 @@ message GetEtymologyNotebookRequest {
   ];
 }
 
+// SemanticConceptMember is one member of a semantic concept. The origin
+// carries the resolved type/meaning/etc. populated by the server.
+message SemanticConceptMember {
+  EtymologyOriginPart origin = 1;
+  string session_title = 2;
+}
+
+// ConceptRelation is a typed edge from this concept to another in the same
+// book. is_directed=false means the edge is symmetric and the YAML
+// declaration produced this row plus the inverse on the other concept.
+message ConceptRelation {
+  string type = 1;
+  bool is_directed = 2;
+  string from_concept_key = 3;
+  string to_concept_key = 4;
+}
+
+// SemanticConcept groups origins that share an underlying meaning within a
+// book. outgoing_relations are edges where this concept is the from-side.
+message SemanticConcept {
+  string notebook_id = 1;
+  string concept_key = 2;
+  string meaning = 3;
+  string note = 4;
+  repeated SemanticConceptMember members = 5;
+  repeated ConceptRelation outgoing_relations = 6;
+}
+
 message GetEtymologyNotebookResponse {
   repeated EtymologyOriginPart origins = 1;
   repeated EtymologyDefinition definitions = 2;
   repeated EtymologyMeaningGroup meaning_groups = 3;
   int32 origin_count = 4;
   int32 definition_count = 5;
+  repeated SemanticConcept concepts = 6;
 }

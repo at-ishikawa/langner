@@ -16,6 +16,19 @@ type EtymologyOrigin struct {
 	Language string `yaml:"language"` // Latin, Greek, etc.
 	Meaning  string `yaml:"meaning"`
 
+	// Sense optionally disambiguates same-session multi-sense origins. When a
+	// session declares the same (origin, language) twice with different
+	// meanings (e.g. pathos = feeling vs. pathos = disease, both in Session 9),
+	// each entry needs its own Sense token so the unique key
+	// (notebook_id, session_title, origin, language, sense) keeps them apart.
+	// Single-sense origins leave Sense empty and behave exactly as before.
+	Sense string `yaml:"sense,omitempty"`
+
+	// Forms records inflectional / morphological variants of this origin
+	// (Latin principal parts, French gender, Greek noun stems, …). See
+	// examples/etymology/SCHEMA.md for usage.
+	Forms []EtymologyOriginForm `yaml:"forms,omitempty"`
+
 	// SessionTitle is the parent session's title. Set at read time from
 	// the surrounding event/metadata block; not serialised.
 	SessionTitle string `yaml:"-"`
@@ -117,6 +130,8 @@ type etymologySessionFile struct {
 	Metadata    EtymologySessionMetadata   `yaml:"metadata"`
 	Origins     []EtymologyOrigin          `yaml:"origins"`
 	Definitions []EtymologyDefinitionEntry `yaml:"definitions"`
+	Concepts    []Concept                  `yaml:"concepts,omitempty"`
+	Relations   []Relation                 `yaml:"relations,omitempty"`
 	Date        time.Time                  `yaml:"date,omitempty"`
 }
 

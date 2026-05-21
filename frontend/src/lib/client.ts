@@ -71,8 +71,12 @@ export type {
   DeleteDefinitionRequest,
   DeleteDefinitionResponse,
   EtymologyOriginPart,
+  EtymologyOriginForm,
   EtymologyDefinition,
   EtymologyMeaningGroup,
   GetEtymologyNotebookRequest,
   GetEtymologyNotebookResponse,
+  SemanticConcept,
+  SemanticConceptMember,
+  ConceptRelation,
 } from "@/gen-protos/api/v1/notebook_pb";

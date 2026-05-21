@@ -620,7 +620,8 @@ func TestNote_hasAnyCorrectAnswer(t *testing.T) {
 }
 
 func TestNote_needsToLearnInNotebook(t *testing.T) {
-	baseTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	now := time.Now()
+	recent := func(d time.Duration) Date { return NewDate(now.Add(-d)) }
 
 	tests := []struct {
 		name     string
@@ -641,7 +642,7 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime)},
+					{Status: LearnedStatusMisunderstood, LearnedAt: recent(1 * time.Hour)},
 				},
 			},
 			expected: true,
@@ -652,42 +653,55 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(baseTime)},
-					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-24 * time.Hour))},
+					{Status: LearnedStatusMisunderstood, LearnedAt: recent(1 * time.Hour)},
+					{Status: LearnedStatusUnderstood, LearnedAt: recent(25 * time.Hour), IntervalDays: 7},
 				},
 			},
 			expected: true,
 		},
 		{
-			name: "latest is correct - doesn't need learning (no spaced repetition)",
+			name: "recent correct in forward, within interval - doesn't need learning",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(baseTime)},
+					{Status: LearnedStatusUnderstood, LearnedAt: recent(1 * time.Hour), IntervalDays: 7},
 				},
 			},
 			expected: false,
 		},
 		{
-			name: "multiple correct answers, latest is correct - doesn't need learning",
+			name: "recent correct in reverse, within interval - doesn't need learning",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
-				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(baseTime)},
-					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-24 * time.Hour))},
+				ReverseLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: recent(1 * time.Hour), IntervalDays: 30},
 				},
 			},
 			expected: false,
 		},
 		{
-			name: "correct answer from long ago - doesn't need learning (notebook ignores time threshold)",
+			name: "correct answer past its interval - needs learning",
 			note: Note{
 				Expression: "hello",
 				Definition: "greeting",
 				LearnedLogs: []LearningRecord{
-					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(baseTime.Add(-365 * 24 * time.Hour))},
+					{Status: LearnedStatusUnderstood, LearnedAt: recent(365 * 24 * time.Hour), IntervalDays: 7},
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "correct in both directions, latest reverse within interval - doesn't need learning",
+			note: Note{
+				Expression: "hello",
+				Definition: "greeting",
+				LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: recent(40 * 24 * time.Hour), IntervalDays: 7},
+				},
+				ReverseLogs: []LearningRecord{
+					{Status: LearnedStatusCanBeUsed, LearnedAt: recent(1 * time.Hour), IntervalDays: 14},
 				},
 			},
 			expected: false,

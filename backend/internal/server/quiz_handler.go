@@ -275,7 +275,17 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 	if fcard, ok := h.freeformStore[noteID]; ok { h.mu.Unlock(); info := quiz.CardInfoFromFreeformCard(fcard); return &info, nil }
 	if ecard, found := h.etymologyOriginStore[noteID]; found {
 		h.mu.Unlock()
-		info := quiz.CardInfo{NotebookName: ecard.NotebookName, StoryTitle: ecard.NotebookTitle, Expression: ecard.Origin}
+		// Learning histories are keyed by SessionTitle at the top level
+		// (e.g. "Session 13") and SceneTitle inside each session
+		// (e.g. "tome (a cutting)"); NotebookTitle ("Word Power Made
+		// Easy") never appears in the YAML. Without these, OverrideAnswer's
+		// toggleLastAnswer found no match and silently no-op'd.
+		info := quiz.CardInfo{
+			NotebookName: ecard.NotebookName,
+			StoryTitle:   ecard.SessionTitle,
+			SceneTitle:   ecard.SceneTitle,
+			Expression:   ecard.Origin,
+		}
 		return &info, nil
 	}
 	h.mu.Unlock()
@@ -349,16 +359,38 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	examples, err := h.svc.LoadEtymologyExampleWords(cards)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err)) }
+	// Build the per-notebook concept map once for graph-prompt construction
+	// so each reverse card reuses the same in-memory YAML scan instead of
+	// re-reading session files per card. The reader itself is reused too so
+	// FORM_BRANCH can read forms + definitions without re-opening files.
+	conceptsByNotebook := make(map[string]map[string]*graphConceptInfo)
+	var graphReader *notebook.Reader
+	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
+		if r, err := h.svc.NewReader(); err == nil {
+			graphReader = r
+			for _, nbID := range notebookIDs {
+				conceptsByNotebook[nbID] = loadBookConcepts(ctx, r, nbID)
+			}
+		}
+	}
+
 	localStore := make(map[int64]quiz.EtymologyOriginCard); var nextID int64 = 1
 	var protoCards []*apiv1.EtymologyQuizCard
 	for _, card := range cards {
 		cardID := nextID; nextID++; localStore[cardID] = card
-		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle
+		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle + "\x00" + card.Sense
+		var graphPrompt *apiv1.GraphPrompt
+		if graphReader != nil {
+			concepts := conceptsByNotebook[card.NotebookName]
+			graphPrompt = buildGraphPromptForCard(ctx, graphReader, card, concepts)
+		}
 		protoCards = append(protoCards, &apiv1.EtymologyQuizCard{
 			CardId: cardID, Origin: card.Origin, Type: card.Type,
 			Language: card.Language, Meaning: card.Meaning,
 			NotebookName: card.NotebookName, SessionTitle: card.SessionTitle,
+			Sense:        card.Sense,
 			ExampleWords: examples[exampleKey],
+			GraphPrompt:  graphPrompt,
 		})
 	}
 	h.mu.Lock(); h.etymologyOriginStore = localStore; h.etymologyQuizMode = req.Msg.GetMode(); h.nextID = nextID; h.mu.Unlock()
@@ -377,7 +409,15 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 	}
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyStandard)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
-	return connect.NewResponse(&apiv1.SubmitEtymologyStandardAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: card.Meaning, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID}), nil
+	// Build a graph context for the feedback card — same builder the
+	// reverse mode uses, but with the blank filled in so the just-answered
+	// origin is visible. Failures here don't block the answer response.
+	var graphContext *apiv1.GraphPrompt
+	if r, err := h.svc.NewReader(); err == nil {
+		concepts := loadBookConcepts(ctx, r, card.NotebookName)
+		graphContext = buildGraphContextForCard(ctx, r, card, concepts)
+	}
+	return connect.NewResponse(&apiv1.SubmitEtymologyStandardAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: card.Meaning, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, GraphContext: graphContext}), nil
 }
 
 func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyReverseAnswerResponse], error) {
@@ -399,6 +439,11 @@ func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *conne
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), nil)
 	if err != nil { return nil, err }
+	// Freeform pulls EVERY origin into the cards list, not just due
+	// ones. The frontend gates redrilling via the "Not until $date"
+	// banner driven by NextReviewDates (computed below); filtering the
+	// cards list here would break that UX by making typed origins read
+	// as "Origin not found in notebooks" instead of "Not until $date".
 	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, true, true, notebook.QuizTypeEtymologyFreeform, sectionTitles)
 	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
 	nextReviewDates, err := h.svc.GetEtymologyOriginNextReviewDates(cards)

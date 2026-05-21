@@ -136,6 +136,201 @@ func (mr *MockDictionarySourceMockRecorder) ReadAll() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadAll", reflect.TypeOf((*MockDictionarySource)(nil).ReadAll))
 }
 
+// MockEtymologyOriginSource is a mock of EtymologyOriginSource interface.
+type MockEtymologyOriginSource struct {
+	ctrl     *gomock.Controller
+	recorder *MockEtymologyOriginSourceMockRecorder
+	isgomock struct{}
+}
+
+// MockEtymologyOriginSourceMockRecorder is the mock recorder for MockEtymologyOriginSource.
+type MockEtymologyOriginSourceMockRecorder struct {
+	mock *MockEtymologyOriginSource
+}
+
+// NewMockEtymologyOriginSource creates a new mock instance.
+func NewMockEtymologyOriginSource(ctrl *gomock.Controller) *MockEtymologyOriginSource {
+	mock := &MockEtymologyOriginSource{ctrl: ctrl}
+	mock.recorder = &MockEtymologyOriginSourceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEtymologyOriginSource) EXPECT() *MockEtymologyOriginSourceMockRecorder {
+	return m.recorder
+}
+
+// FindAll mocks base method.
+func (m *MockEtymologyOriginSource) FindAll(ctx context.Context) ([]notebook.EtymologyOriginRecord, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAll", ctx)
+	ret0, _ := ret[0].([]notebook.EtymologyOriginRecord)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAll indicates an expected call of FindAll.
+func (mr *MockEtymologyOriginSourceMockRecorder) FindAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockEtymologyOriginSource)(nil).FindAll), ctx)
+}
+
+// MockEtymologyDefinitionSource is a mock of EtymologyDefinitionSource interface.
+type MockEtymologyDefinitionSource struct {
+	ctrl     *gomock.Controller
+	recorder *MockEtymologyDefinitionSourceMockRecorder
+	isgomock struct{}
+}
+
+// MockEtymologyDefinitionSourceMockRecorder is the mock recorder for MockEtymologyDefinitionSource.
+type MockEtymologyDefinitionSourceMockRecorder struct {
+	mock *MockEtymologyDefinitionSource
+}
+
+// NewMockEtymologyDefinitionSource creates a new mock instance.
+func NewMockEtymologyDefinitionSource(ctrl *gomock.Controller) *MockEtymologyDefinitionSource {
+	mock := &MockEtymologyDefinitionSource{ctrl: ctrl}
+	mock.recorder = &MockEtymologyDefinitionSourceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEtymologyDefinitionSource) EXPECT() *MockEtymologyDefinitionSourceMockRecorder {
+	return m.recorder
+}
+
+// FindAll mocks base method.
+func (m *MockEtymologyDefinitionSource) FindAll(ctx context.Context) ([]notebook.EtymologyDefinitionForImport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAll", ctx)
+	ret0, _ := ret[0].([]notebook.EtymologyDefinitionForImport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAll indicates an expected call of FindAll.
+func (mr *MockEtymologyDefinitionSourceMockRecorder) FindAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockEtymologyDefinitionSource)(nil).FindAll), ctx)
+}
+
+// MockEtymologyOriginFormSource is a mock of EtymologyOriginFormSource interface.
+type MockEtymologyOriginFormSource struct {
+	ctrl     *gomock.Controller
+	recorder *MockEtymologyOriginFormSourceMockRecorder
+	isgomock struct{}
+}
+
+// MockEtymologyOriginFormSourceMockRecorder is the mock recorder for MockEtymologyOriginFormSource.
+type MockEtymologyOriginFormSourceMockRecorder struct {
+	mock *MockEtymologyOriginFormSource
+}
+
+// NewMockEtymologyOriginFormSource creates a new mock instance.
+func NewMockEtymologyOriginFormSource(ctrl *gomock.Controller) *MockEtymologyOriginFormSource {
+	mock := &MockEtymologyOriginFormSource{ctrl: ctrl}
+	mock.recorder = &MockEtymologyOriginFormSourceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEtymologyOriginFormSource) EXPECT() *MockEtymologyOriginFormSourceMockRecorder {
+	return m.recorder
+}
+
+// FindAll mocks base method.
+func (m *MockEtymologyOriginFormSource) FindAll(ctx context.Context) ([]notebook.EtymologyOriginFormForImport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAll", ctx)
+	ret0, _ := ret[0].([]notebook.EtymologyOriginFormForImport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAll indicates an expected call of FindAll.
+func (mr *MockEtymologyOriginFormSourceMockRecorder) FindAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockEtymologyOriginFormSource)(nil).FindAll), ctx)
+}
+
+// MockSemanticConceptSource is a mock of SemanticConceptSource interface.
+type MockSemanticConceptSource struct {
+	ctrl     *gomock.Controller
+	recorder *MockSemanticConceptSourceMockRecorder
+	isgomock struct{}
+}
+
+// MockSemanticConceptSourceMockRecorder is the mock recorder for MockSemanticConceptSource.
+type MockSemanticConceptSourceMockRecorder struct {
+	mock *MockSemanticConceptSource
+}
+
+// NewMockSemanticConceptSource creates a new mock instance.
+func NewMockSemanticConceptSource(ctrl *gomock.Controller) *MockSemanticConceptSource {
+	mock := &MockSemanticConceptSource{ctrl: ctrl}
+	mock.recorder = &MockSemanticConceptSourceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockSemanticConceptSource) EXPECT() *MockSemanticConceptSourceMockRecorder {
+	return m.recorder
+}
+
+// FindAll mocks base method.
+func (m *MockSemanticConceptSource) FindAll(ctx context.Context) ([]notebook.SemanticConceptForImport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAll", ctx)
+	ret0, _ := ret[0].([]notebook.SemanticConceptForImport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAll indicates an expected call of FindAll.
+func (mr *MockSemanticConceptSourceMockRecorder) FindAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockSemanticConceptSource)(nil).FindAll), ctx)
+}
+
+// MockConceptRelationSource is a mock of ConceptRelationSource interface.
+type MockConceptRelationSource struct {
+	ctrl     *gomock.Controller
+	recorder *MockConceptRelationSourceMockRecorder
+	isgomock struct{}
+}
+
+// MockConceptRelationSourceMockRecorder is the mock recorder for MockConceptRelationSource.
+type MockConceptRelationSourceMockRecorder struct {
+	mock *MockConceptRelationSource
+}
+
+// NewMockConceptRelationSource creates a new mock instance.
+func NewMockConceptRelationSource(ctrl *gomock.Controller) *MockConceptRelationSource {
+	mock := &MockConceptRelationSource{ctrl: ctrl}
+	mock.recorder = &MockConceptRelationSourceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockConceptRelationSource) EXPECT() *MockConceptRelationSourceMockRecorder {
+	return m.recorder
+}
+
+// FindAll mocks base method.
+func (m *MockConceptRelationSource) FindAll(ctx context.Context) ([]notebook.ConceptRelationForImport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAll", ctx)
+	ret0, _ := ret[0].([]notebook.ConceptRelationForImport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAll indicates an expected call of FindAll.
+func (mr *MockConceptRelationSourceMockRecorder) FindAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockConceptRelationSource)(nil).FindAll), ctx)
+}
+
 // MockNoteSink is a mock of NoteSink interface.
 type MockNoteSink struct {
 	ctrl     *gomock.Controller

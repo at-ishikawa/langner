@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Text, VStack } from "@chakra-ui/react";
+import { FormsTable } from "@/components/FormsTable";
 import type { WordDetail } from "@/store/quizStore";
 
 interface WordDetailViewProps {
@@ -85,6 +86,23 @@ export function WordDetailView({ wordDetail }: WordDetailViewProps) {
               </Box>
             ))}
           </Box>
+          {originParts.some((p) => p.forms && p.forms.length > 0) && (
+            <VStack align="stretch" gap={2} mt={2}>
+              {originParts.map((p, i) =>
+                p.forms && p.forms.length > 0 ? (
+                  <Box key={`forms-${i}`}>
+                    <Text fontSize="xs" color="fg.muted">
+                      <Text as="span" fontFamily="mono">
+                        {p.origin}
+                      </Text>{" "}
+                      ({p.language}) — forms:
+                    </Text>
+                    <FormsTable forms={p.forms} highlightForm={p.fromForm} />
+                  </Box>
+                ) : null,
+              )}
+            </VStack>
+          )}
         </Box>
       )}
 

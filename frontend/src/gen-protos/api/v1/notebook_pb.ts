@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/notebook.proto.
  */
 export const file_api_v1_notebook: GenFile = /*@__PURE__*/
-  fileDesc("ChVhcGkvdjEvbm90ZWJvb2sucHJvdG8SBmFwaS52MSI4ChhHZXROb3RlYm9va0RldGFpbFJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEifQoZR2V0Tm90ZWJvb2tEZXRhaWxSZXNwb25zZRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEiMKB3N0b3JpZXMYAyADKAsyEi5hcGkudjEuU3RvcnlFbnRyeRIYChB0b3RhbF93b3JkX2NvdW50GAQgASgFInYKClN0b3J5RW50cnkSDQoFZXZlbnQYASABKAkSJwoIbWV0YWRhdGEYAiABKAsyFS5hcGkudjEuU3RvcnlNZXRhZGF0YRIMCgRkYXRlGAMgASgJEiIKBnNjZW5lcxgEIAMoCzISLmFwaS52MS5TdG9yeVNjZW5lIkAKDVN0b3J5TWV0YWRhdGESDgoGc2VyaWVzGAEgASgJEg4KBnNlYXNvbhgCIAEoBRIPCgdlcGlzb2RlGAMgASgFIocBCgpTdG9yeVNjZW5lEg0KBXRpdGxlGAEgASgJEisKDWNvbnZlcnNhdGlvbnMYAiADKAsyFC5hcGkudjEuQ29udmVyc2F0aW9uEikKC2RlZmluaXRpb25zGAMgAygLMhQuYXBpLnYxLk5vdGVib29rV29yZBISCgpzdGF0ZW1lbnRzGAUgAygJIi4KDENvbnZlcnNhdGlvbhIPCgdzcGVha2VyGAEgASgJEg0KBXF1b3RlGAIgASgJIuYCCgxOb3RlYm9va1dvcmQSEgoKZXhwcmVzc2lvbhgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEg8KB21lYW5pbmcYAyABKAkSFgoOcGFydF9vZl9zcGVlY2gYBCABKAkSFQoNcHJvbnVuY2lhdGlvbhgFIAEoCRIQCghleGFtcGxlcxgGIAMoCRIQCghzeW5vbnltcxgHIAMoCRIQCghhbnRvbnltcxgIIAMoCRIXCg9sZWFybmluZ19zdGF0dXMYCSABKAkSLgoMbGVhcm5lZF9sb2dzGAogAygLMhguYXBpLnYxLkxlYXJuaW5nTG9nRW50cnkSGAoQbmV4dF9yZXZpZXdfZGF0ZRgMIAEoCRIOCgZvcmlnaW4YDSABKAkSEgoKaXNfc2tpcHBlZBgOIAEoCBIaChJza2lwcGVkX3F1aXpfdHlwZXMYDyADKAkSDwoHbm90ZV9pZBgQIAEoA0oECAsQDCKLAQoQTGVhcm5pbmdMb2dFbnRyeRIOCgZzdGF0dXMYASABKAkSEgoKbGVhcm5lZF9hdBgCIAEoCRIPCgdxdWFsaXR5GAMgASgFEhgKEHJlc3BvbnNlX3RpbWVfbXMYBCABKAMSEQoJcXVpel90eXBlGAUgASgJEhUKDWludGVydmFsX2RheXMYBiABKAUiOAoYRXhwb3J0Tm90ZWJvb2tQREZSZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABIkIKGUV4cG9ydE5vdGVib29rUERGUmVzcG9uc2USEwoLcGRmX2NvbnRlbnQYASABKAwSEAoIZmlsZW5hbWUYAiABKAkiUAoRTG9va3VwV29yZFJlcXVlc3QSFQoEd29yZBgBIAEoCUIHukgEcgIQARITCgtub3RlYm9va19pZBgCIAEoCRIPCgdjb250ZXh0GAMgASgJIpkBCg5Xb3JkRGVmaW5pdGlvbhIWCg5wYXJ0X29mX3NwZWVjaBgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEhAKCGV4YW1wbGVzGAMgAygJEhAKCHN5bm9ueW1zGAQgAygJEhUKDXByb251bmNpYXRpb24YBSABKAkSEAoIYW50b255bXMYBiADKAkSDgoGb3JpZ2luGAcgASgJIl8KEkxvb2t1cFdvcmRSZXNwb25zZRIMCgR3b3JkGAEgASgJEisKC2RlZmluaXRpb25zGAIgAygLMhYuYXBpLnYxLldvcmREZWZpbml0aW9uEg4KBnNvdXJjZRgDIAEoCSLGAQoZUmVnaXN0ZXJEZWZpbml0aW9uUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQARIVCg1ub3RlYm9va19maWxlGAIgASgJEhMKC3NjZW5lX2luZGV4GAMgASgFEhsKCmV4cHJlc3Npb24YBCABKAlCB7pIBHICEAESGAoHbWVhbmluZxgFIAEoCUIHukgEcgIQARIWCg5wYXJ0X29mX3NwZWVjaBgGIAEoCRIQCghleGFtcGxlcxgHIAMoCSIcChpSZWdpc3RlckRlZmluaXRpb25SZXNwb25zZSKAAQoXRGVsZXRlRGVmaW5pdGlvblJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAESFQoNbm90ZWJvb2tfZmlsZRgCIAEoCRITCgtzY2VuZV9pbmRleBgDIAEoBRIbCgpleHByZXNzaW9uGAQgASgJQge6SARyAhABIhoKGERlbGV0ZURlZmluaXRpb25SZXNwb25zZSJqChNFdHltb2xvZ3lPcmlnaW5QYXJ0Eg4KBm9yaWdpbhgBIAEoCRIMCgR0eXBlGAIgASgJEhAKCGxhbmd1YWdlGAMgASgJEg8KB21lYW5pbmcYBCABKAkSEgoKd29yZF9jb3VudBgFIAEoBSLOAQoTRXR5bW9sb2d5RGVmaW5pdGlvbhISCgpleHByZXNzaW9uGAEgASgJEg8KB21lYW5pbmcYAiABKAkSFgoOcGFydF9vZl9zcGVlY2gYAyABKAkSDAoEbm90ZRgEIAEoCRIxCgxvcmlnaW5fcGFydHMYBSADKAsyGy5hcGkudjEuRXR5bW9sb2d5T3JpZ2luUGFydBIVCg1ub3RlYm9va19uYW1lGAYgASgJEhAKCGV4YW1wbGVzGAcgAygJEhAKCGNvbnRleHRzGAggAygJIlYKFUV0eW1vbG9neU1lYW5pbmdHcm91cBIPCgdtZWFuaW5nGAEgASgJEiwKB29yaWdpbnMYAiADKAsyGy5hcGkudjEuRXR5bW9sb2d5T3JpZ2luUGFydCI7ChtHZXRFdHltb2xvZ3lOb3RlYm9va1JlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEi5QEKHEdldEV0eW1vbG9neU5vdGVib29rUmVzcG9uc2USLAoHb3JpZ2lucxgBIAMoCzIbLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5QYXJ0EjAKC2RlZmluaXRpb25zGAIgAygLMhsuYXBpLnYxLkV0eW1vbG9neURlZmluaXRpb24SNQoObWVhbmluZ19ncm91cHMYAyADKAsyHS5hcGkudjEuRXR5bW9sb2d5TWVhbmluZ0dyb3VwEhQKDG9yaWdpbl9jb3VudBgEIAEoBRIYChBkZWZpbml0aW9uX2NvdW50GAUgASgFMqEECg9Ob3RlYm9va1NlcnZpY2USWAoRR2V0Tm90ZWJvb2tEZXRhaWwSIC5hcGkudjEuR2V0Tm90ZWJvb2tEZXRhaWxSZXF1ZXN0GiEuYXBpLnYxLkdldE5vdGVib29rRGV0YWlsUmVzcG9uc2USWAoRRXhwb3J0Tm90ZWJvb2tQREYSIC5hcGkudjEuRXhwb3J0Tm90ZWJvb2tQREZSZXF1ZXN0GiEuYXBpLnYxLkV4cG9ydE5vdGVib29rUERGUmVzcG9uc2USQwoKTG9va3VwV29yZBIZLmFwaS52MS5Mb29rdXBXb3JkUmVxdWVzdBoaLmFwaS52MS5Mb29rdXBXb3JkUmVzcG9uc2USWwoSUmVnaXN0ZXJEZWZpbml0aW9uEiEuYXBpLnYxLlJlZ2lzdGVyRGVmaW5pdGlvblJlcXVlc3QaIi5hcGkudjEuUmVnaXN0ZXJEZWZpbml0aW9uUmVzcG9uc2USVQoQRGVsZXRlRGVmaW5pdGlvbhIfLmFwaS52MS5EZWxldGVEZWZpbml0aW9uUmVxdWVzdBogLmFwaS52MS5EZWxldGVEZWZpbml0aW9uUmVzcG9uc2USYQoUR2V0RXR5bW9sb2d5Tm90ZWJvb2sSIy5hcGkudjEuR2V0RXR5bW9sb2d5Tm90ZWJvb2tSZXF1ZXN0GiQuYXBpLnYxLkdldEV0eW1vbG9neU5vdGVib29rUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
+  fileDesc("ChVhcGkvdjEvbm90ZWJvb2sucHJvdG8SBmFwaS52MSI4ChhHZXROb3RlYm9va0RldGFpbFJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAEifQoZR2V0Tm90ZWJvb2tEZXRhaWxSZXNwb25zZRITCgtub3RlYm9va19pZBgBIAEoCRIMCgRuYW1lGAIgASgJEiMKB3N0b3JpZXMYAyADKAsyEi5hcGkudjEuU3RvcnlFbnRyeRIYChB0b3RhbF93b3JkX2NvdW50GAQgASgFInYKClN0b3J5RW50cnkSDQoFZXZlbnQYASABKAkSJwoIbWV0YWRhdGEYAiABKAsyFS5hcGkudjEuU3RvcnlNZXRhZGF0YRIMCgRkYXRlGAMgASgJEiIKBnNjZW5lcxgEIAMoCzISLmFwaS52MS5TdG9yeVNjZW5lIkAKDVN0b3J5TWV0YWRhdGESDgoGc2VyaWVzGAEgASgJEg4KBnNlYXNvbhgCIAEoBRIPCgdlcGlzb2RlGAMgASgFIocBCgpTdG9yeVNjZW5lEg0KBXRpdGxlGAEgASgJEisKDWNvbnZlcnNhdGlvbnMYAiADKAsyFC5hcGkudjEuQ29udmVyc2F0aW9uEikKC2RlZmluaXRpb25zGAMgAygLMhQuYXBpLnYxLk5vdGVib29rV29yZBISCgpzdGF0ZW1lbnRzGAUgAygJIi4KDENvbnZlcnNhdGlvbhIPCgdzcGVha2VyGAEgASgJEg0KBXF1b3RlGAIgASgJIuYCCgxOb3RlYm9va1dvcmQSEgoKZXhwcmVzc2lvbhgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEg8KB21lYW5pbmcYAyABKAkSFgoOcGFydF9vZl9zcGVlY2gYBCABKAkSFQoNcHJvbnVuY2lhdGlvbhgFIAEoCRIQCghleGFtcGxlcxgGIAMoCRIQCghzeW5vbnltcxgHIAMoCRIQCghhbnRvbnltcxgIIAMoCRIXCg9sZWFybmluZ19zdGF0dXMYCSABKAkSLgoMbGVhcm5lZF9sb2dzGAogAygLMhguYXBpLnYxLkxlYXJuaW5nTG9nRW50cnkSGAoQbmV4dF9yZXZpZXdfZGF0ZRgMIAEoCRIOCgZvcmlnaW4YDSABKAkSEgoKaXNfc2tpcHBlZBgOIAEoCBIaChJza2lwcGVkX3F1aXpfdHlwZXMYDyADKAkSDwoHbm90ZV9pZBgQIAEoA0oECAsQDCKLAQoQTGVhcm5pbmdMb2dFbnRyeRIOCgZzdGF0dXMYASABKAkSEgoKbGVhcm5lZF9hdBgCIAEoCRIPCgdxdWFsaXR5GAMgASgFEhgKEHJlc3BvbnNlX3RpbWVfbXMYBCABKAMSEQoJcXVpel90eXBlGAUgASgJEhUKDWludGVydmFsX2RheXMYBiABKAUiOAoYRXhwb3J0Tm90ZWJvb2tQREZSZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABIkIKGUV4cG9ydE5vdGVib29rUERGUmVzcG9uc2USEwoLcGRmX2NvbnRlbnQYASABKAwSEAoIZmlsZW5hbWUYAiABKAkiUAoRTG9va3VwV29yZFJlcXVlc3QSFQoEd29yZBgBIAEoCUIHukgEcgIQARITCgtub3RlYm9va19pZBgCIAEoCRIPCgdjb250ZXh0GAMgASgJIpkBCg5Xb3JkRGVmaW5pdGlvbhIWCg5wYXJ0X29mX3NwZWVjaBgBIAEoCRISCgpkZWZpbml0aW9uGAIgASgJEhAKCGV4YW1wbGVzGAMgAygJEhAKCHN5bm9ueW1zGAQgAygJEhUKDXByb251bmNpYXRpb24YBSABKAkSEAoIYW50b255bXMYBiADKAkSDgoGb3JpZ2luGAcgASgJIl8KEkxvb2t1cFdvcmRSZXNwb25zZRIMCgR3b3JkGAEgASgJEisKC2RlZmluaXRpb25zGAIgAygLMhYuYXBpLnYxLldvcmREZWZpbml0aW9uEg4KBnNvdXJjZRgDIAEoCSLGAQoZUmVnaXN0ZXJEZWZpbml0aW9uUmVxdWVzdBIcCgtub3RlYm9va19pZBgBIAEoCUIHukgEcgIQARIVCg1ub3RlYm9va19maWxlGAIgASgJEhMKC3NjZW5lX2luZGV4GAMgASgFEhsKCmV4cHJlc3Npb24YBCABKAlCB7pIBHICEAESGAoHbWVhbmluZxgFIAEoCUIHukgEcgIQARIWCg5wYXJ0X29mX3NwZWVjaBgGIAEoCRIQCghleGFtcGxlcxgHIAMoCSIcChpSZWdpc3RlckRlZmluaXRpb25SZXNwb25zZSKAAQoXRGVsZXRlRGVmaW5pdGlvblJlcXVlc3QSHAoLbm90ZWJvb2tfaWQYASABKAlCB7pIBHICEAESFQoNbm90ZWJvb2tfZmlsZRgCIAEoCRITCgtzY2VuZV9pbmRleBgDIAEoBRIbCgpleHByZXNzaW9uGAQgASgJQge6SARyAhABIhoKGERlbGV0ZURlZmluaXRpb25SZXNwb25zZSI/ChNFdHltb2xvZ3lPcmlnaW5Gb3JtEgwKBGZvcm0YASABKAkSDAoEcm9sZRgCIAEoCRIMCgRub3RlGAMgASgJIr8BChNFdHltb2xvZ3lPcmlnaW5QYXJ0Eg4KBm9yaWdpbhgBIAEoCRIMCgR0eXBlGAIgASgJEhAKCGxhbmd1YWdlGAMgASgJEg8KB21lYW5pbmcYBCABKAkSEgoKd29yZF9jb3VudBgFIAEoBRIqCgVmb3JtcxgGIAMoCzIbLmFwaS52MS5FdHltb2xvZ3lPcmlnaW5Gb3JtEhEKCWZyb21fZm9ybRgHIAEoCRIUCgxjb25jZXB0X2tleXMYCCADKAkizgEKE0V0eW1vbG9neURlZmluaXRpb24SEgoKZXhwcmVzc2lvbhgBIAEoCRIPCgdtZWFuaW5nGAIgASgJEhYKDnBhcnRfb2Zfc3BlZWNoGAMgASgJEgwKBG5vdGUYBCABKAkSMQoMb3JpZ2luX3BhcnRzGAUgAygLMhsuYXBpLnYxLkV0eW1vbG9neU9yaWdpblBhcnQSFQoNbm90ZWJvb2tfbmFtZRgGIAEoCRIQCghleGFtcGxlcxgHIAMoCRIQCghjb250ZXh0cxgIIAMoCSJWChVFdHltb2xvZ3lNZWFuaW5nR3JvdXASDwoHbWVhbmluZxgBIAEoCRIsCgdvcmlnaW5zGAIgAygLMhsuYXBpLnYxLkV0eW1vbG9neU9yaWdpblBhcnQiOwobR2V0RXR5bW9sb2d5Tm90ZWJvb2tSZXF1ZXN0EhwKC25vdGVib29rX2lkGAEgASgJQge6SARyAhABIlsKFVNlbWFudGljQ29uY2VwdE1lbWJlchIrCgZvcmlnaW4YASABKAsyGy5hcGkudjEuRXR5bW9sb2d5T3JpZ2luUGFydBIVCg1zZXNzaW9uX3RpdGxlGAIgASgJImYKD0NvbmNlcHRSZWxhdGlvbhIMCgR0eXBlGAEgASgJEhMKC2lzX2RpcmVjdGVkGAIgASgIEhgKEGZyb21fY29uY2VwdF9rZXkYAyABKAkSFgoOdG9fY29uY2VwdF9rZXkYBCABKAkivwEKD1NlbWFudGljQ29uY2VwdBITCgtub3RlYm9va19pZBgBIAEoCRITCgtjb25jZXB0X2tleRgCIAEoCRIPCgdtZWFuaW5nGAMgASgJEgwKBG5vdGUYBCABKAkSLgoHbWVtYmVycxgFIAMoCzIdLmFwaS52MS5TZW1hbnRpY0NvbmNlcHRNZW1iZXISMwoSb3V0Z29pbmdfcmVsYXRpb25zGAYgAygLMhcuYXBpLnYxLkNvbmNlcHRSZWxhdGlvbiKQAgocR2V0RXR5bW9sb2d5Tm90ZWJvb2tSZXNwb25zZRIsCgdvcmlnaW5zGAEgAygLMhsuYXBpLnYxLkV0eW1vbG9neU9yaWdpblBhcnQSMAoLZGVmaW5pdGlvbnMYAiADKAsyGy5hcGkudjEuRXR5bW9sb2d5RGVmaW5pdGlvbhI1Cg5tZWFuaW5nX2dyb3VwcxgDIAMoCzIdLmFwaS52MS5FdHltb2xvZ3lNZWFuaW5nR3JvdXASFAoMb3JpZ2luX2NvdW50GAQgASgFEhgKEGRlZmluaXRpb25fY291bnQYBSABKAUSKQoIY29uY2VwdHMYBiADKAsyFy5hcGkudjEuU2VtYW50aWNDb25jZXB0MqEECg9Ob3RlYm9va1NlcnZpY2USWAoRR2V0Tm90ZWJvb2tEZXRhaWwSIC5hcGkudjEuR2V0Tm90ZWJvb2tEZXRhaWxSZXF1ZXN0GiEuYXBpLnYxLkdldE5vdGVib29rRGV0YWlsUmVzcG9uc2USWAoRRXhwb3J0Tm90ZWJvb2tQREYSIC5hcGkudjEuRXhwb3J0Tm90ZWJvb2tQREZSZXF1ZXN0GiEuYXBpLnYxLkV4cG9ydE5vdGVib29rUERGUmVzcG9uc2USQwoKTG9va3VwV29yZBIZLmFwaS52MS5Mb29rdXBXb3JkUmVxdWVzdBoaLmFwaS52MS5Mb29rdXBXb3JkUmVzcG9uc2USWwoSUmVnaXN0ZXJEZWZpbml0aW9uEiEuYXBpLnYxLlJlZ2lzdGVyRGVmaW5pdGlvblJlcXVlc3QaIi5hcGkudjEuUmVnaXN0ZXJEZWZpbml0aW9uUmVzcG9uc2USVQoQRGVsZXRlRGVmaW5pdGlvbhIfLmFwaS52MS5EZWxldGVEZWZpbml0aW9uUmVxdWVzdBogLmFwaS52MS5EZWxldGVEZWZpbml0aW9uUmVzcG9uc2USYQoUR2V0RXR5bW9sb2d5Tm90ZWJvb2sSIy5hcGkudjEuR2V0RXR5bW9sb2d5Tm90ZWJvb2tSZXF1ZXN0GiQuYXBpLnYxLkdldEV0eW1vbG9neU5vdGVib29rUmVzcG9uc2VCOFo2Z2l0aHViLmNvbS9hdC1pc2hpa2F3YS9sYW5nbmVyL2dlbi1wcm90b3MvYXBpL3YxO2FwaXYxYgZwcm90bzM", [file_buf_validate_validate]);
 
 /**
  * @generated from message api.v1.GetNotebookDetailRequest
@@ -562,8 +562,37 @@ export const DeleteDefinitionResponseSchema: GenMessage<DeleteDefinitionResponse
   messageDesc(file_api_v1_notebook, 16);
 
 /**
- * Etymology Notebook
+ * EtymologyOriginForm is one inflectional / morphological variant of a
+ * source-language origin. (form, role) is the identity within an origin;
+ * note is free-text commentary on this specific form.
  *
+ * @generated from message api.v1.EtymologyOriginForm
+ */
+export type EtymologyOriginForm = Message<"api.v1.EtymologyOriginForm"> & {
+  /**
+   * @generated from field: string form = 1;
+   */
+  form: string;
+
+  /**
+   * @generated from field: string role = 2;
+   */
+  role: string;
+
+  /**
+   * @generated from field: string note = 3;
+   */
+  note: string;
+};
+
+/**
+ * Describes the message api.v1.EtymologyOriginForm.
+ * Use `create(EtymologyOriginFormSchema)` to create a new message.
+ */
+export const EtymologyOriginFormSchema: GenMessage<EtymologyOriginForm> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 17);
+
+/**
  * @generated from message api.v1.EtymologyOriginPart
  */
 export type EtymologyOriginPart = Message<"api.v1.EtymologyOriginPart"> & {
@@ -591,6 +620,35 @@ export type EtymologyOriginPart = Message<"api.v1.EtymologyOriginPart"> & {
    * @generated from field: int32 word_count = 5;
    */
   wordCount: number;
+
+  /**
+   * forms records the inflectional / morphological variants of this origin
+   * (Latin principal parts, Greek noun stems, …). Empty when the source
+   * doesn't declare any.
+   *
+   * @generated from field: repeated api.v1.EtymologyOriginForm forms = 6;
+   */
+  forms: EtymologyOriginForm[];
+
+  /**
+   * from_form, when non-empty, is the specific form string this origin
+   * reference pins to (e.g. the supine `missum` of `mittere`). Populated
+   * on parts emitted as part of an EtymologyDefinition; empty on the
+   * top-level origins listing.
+   *
+   * @generated from field: string from_form = 7;
+   */
+  fromForm: string;
+
+  /**
+   * concept_keys lists every semantic concept this origin participates in
+   * within the same book. Empty when the origin isn't a member of any
+   * declared concept. Populated on the top-level origins listing so chips
+   * can render concept membership without an extra round-trip.
+   *
+   * @generated from field: repeated string concept_keys = 8;
+   */
+  conceptKeys: string[];
 };
 
 /**
@@ -598,7 +656,7 @@ export type EtymologyOriginPart = Message<"api.v1.EtymologyOriginPart"> & {
  * Use `create(EtymologyOriginPartSchema)` to create a new message.
  */
 export const EtymologyOriginPartSchema: GenMessage<EtymologyOriginPart> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 17);
+  messageDesc(file_api_v1_notebook, 18);
 
 /**
  * @generated from message api.v1.EtymologyDefinition
@@ -652,7 +710,7 @@ export type EtymologyDefinition = Message<"api.v1.EtymologyDefinition"> & {
  * Use `create(EtymologyDefinitionSchema)` to create a new message.
  */
 export const EtymologyDefinitionSchema: GenMessage<EtymologyDefinition> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 18);
+  messageDesc(file_api_v1_notebook, 19);
 
 /**
  * @generated from message api.v1.EtymologyMeaningGroup
@@ -674,7 +732,7 @@ export type EtymologyMeaningGroup = Message<"api.v1.EtymologyMeaningGroup"> & {
  * Use `create(EtymologyMeaningGroupSchema)` to create a new message.
  */
 export const EtymologyMeaningGroupSchema: GenMessage<EtymologyMeaningGroup> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 19);
+  messageDesc(file_api_v1_notebook, 20);
 
 /**
  * @generated from message api.v1.GetEtymologyNotebookRequest
@@ -691,7 +749,113 @@ export type GetEtymologyNotebookRequest = Message<"api.v1.GetEtymologyNotebookRe
  * Use `create(GetEtymologyNotebookRequestSchema)` to create a new message.
  */
 export const GetEtymologyNotebookRequestSchema: GenMessage<GetEtymologyNotebookRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 20);
+  messageDesc(file_api_v1_notebook, 21);
+
+/**
+ * SemanticConceptMember is one member of a semantic concept. The origin
+ * carries the resolved type/meaning/etc. populated by the server.
+ *
+ * @generated from message api.v1.SemanticConceptMember
+ */
+export type SemanticConceptMember = Message<"api.v1.SemanticConceptMember"> & {
+  /**
+   * @generated from field: api.v1.EtymologyOriginPart origin = 1;
+   */
+  origin?: EtymologyOriginPart;
+
+  /**
+   * @generated from field: string session_title = 2;
+   */
+  sessionTitle: string;
+};
+
+/**
+ * Describes the message api.v1.SemanticConceptMember.
+ * Use `create(SemanticConceptMemberSchema)` to create a new message.
+ */
+export const SemanticConceptMemberSchema: GenMessage<SemanticConceptMember> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 22);
+
+/**
+ * ConceptRelation is a typed edge from this concept to another in the same
+ * book. is_directed=false means the edge is symmetric and the YAML
+ * declaration produced this row plus the inverse on the other concept.
+ *
+ * @generated from message api.v1.ConceptRelation
+ */
+export type ConceptRelation = Message<"api.v1.ConceptRelation"> & {
+  /**
+   * @generated from field: string type = 1;
+   */
+  type: string;
+
+  /**
+   * @generated from field: bool is_directed = 2;
+   */
+  isDirected: boolean;
+
+  /**
+   * @generated from field: string from_concept_key = 3;
+   */
+  fromConceptKey: string;
+
+  /**
+   * @generated from field: string to_concept_key = 4;
+   */
+  toConceptKey: string;
+};
+
+/**
+ * Describes the message api.v1.ConceptRelation.
+ * Use `create(ConceptRelationSchema)` to create a new message.
+ */
+export const ConceptRelationSchema: GenMessage<ConceptRelation> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 23);
+
+/**
+ * SemanticConcept groups origins that share an underlying meaning within a
+ * book. outgoing_relations are edges where this concept is the from-side.
+ *
+ * @generated from message api.v1.SemanticConcept
+ */
+export type SemanticConcept = Message<"api.v1.SemanticConcept"> & {
+  /**
+   * @generated from field: string notebook_id = 1;
+   */
+  notebookId: string;
+
+  /**
+   * @generated from field: string concept_key = 2;
+   */
+  conceptKey: string;
+
+  /**
+   * @generated from field: string meaning = 3;
+   */
+  meaning: string;
+
+  /**
+   * @generated from field: string note = 4;
+   */
+  note: string;
+
+  /**
+   * @generated from field: repeated api.v1.SemanticConceptMember members = 5;
+   */
+  members: SemanticConceptMember[];
+
+  /**
+   * @generated from field: repeated api.v1.ConceptRelation outgoing_relations = 6;
+   */
+  outgoingRelations: ConceptRelation[];
+};
+
+/**
+ * Describes the message api.v1.SemanticConcept.
+ * Use `create(SemanticConceptSchema)` to create a new message.
+ */
+export const SemanticConceptSchema: GenMessage<SemanticConcept> = /*@__PURE__*/
+  messageDesc(file_api_v1_notebook, 24);
 
 /**
  * @generated from message api.v1.GetEtymologyNotebookResponse
@@ -721,6 +885,11 @@ export type GetEtymologyNotebookResponse = Message<"api.v1.GetEtymologyNotebookR
    * @generated from field: int32 definition_count = 5;
    */
   definitionCount: number;
+
+  /**
+   * @generated from field: repeated api.v1.SemanticConcept concepts = 6;
+   */
+  concepts: SemanticConcept[];
 };
 
 /**
@@ -728,7 +897,7 @@ export type GetEtymologyNotebookResponse = Message<"api.v1.GetEtymologyNotebookR
  * Use `create(GetEtymologyNotebookResponseSchema)` to create a new message.
  */
 export const GetEtymologyNotebookResponseSchema: GenMessage<GetEtymologyNotebookResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_notebook, 21);
+  messageDesc(file_api_v1_notebook, 25);
 
 /**
  * @generated from service api.v1.NotebookService

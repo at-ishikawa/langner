@@ -425,13 +425,17 @@ notebooks:
 
 	// Learning history: mastered-root has a recent correct answer with a long
 	// interval (next review far in the future). open-root has no etymology
-	// history at all. The history is keyed by the session's metadata.title
-	// so the writer's per-session lookup can find it.
+	// history at all. POST-MIGRATION shape — top-level title is the SESSION
+	// title ("Session 1"), per-origin scene titles are the SceneTitle the
+	// reader projects ("mastered-root (well-known)"). The earlier version
+	// of this fixture used the legacy shape (Title: "Test Roots") and
+	// silently aligned with the buggy originNeedsStudy comparison; with
+	// the comparison fixed, the fixture has to match real data shape too.
 	learningHistories := map[string][]LearningHistory{
 		"test-roots": {{
-			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Test Roots"},
+			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Session 1"},
 			Scenes: []LearningScene{{
-				Metadata: LearningSceneMetadata{Title: "Session 1"},
+				Metadata: LearningSceneMetadata{Title: "mastered-root (well-known)"},
 				Expressions: []LearningHistoryExpression{{
 					Expression: "mastered-root",
 					EtymologyBreakdownLogs: []LearningRecord{{
@@ -477,4 +481,109 @@ func TestEtymologyNotebookWriter_buildOriginMap(t *testing.T) {
 	assert.Equal(t, "to write", got["graph"])
 	assert.Equal(t, "word or study", got["logos"])
 	assert.Equal(t, "", got["nonexistent"])
+}
+
+// TestEtymologyNotebookWriter_HidesWordsTheUserHasLearned reproduces the
+// reported bug: a derived English word the user already knows
+// (e.g. egomaniac: recent correct learned_logs AND reverse_logs, both
+// interval 30) still appeared in the etymology PDF because the chapter
+// filter only consulted the WORD'S ORIGIN PARTS, not the word's own
+// learning state. If the origins still need work, the word was kept as
+// "context" — but re-reading a known word's definition doesn't help drill
+// its origins.
+//
+// Fixture uses neutral example data ("braveword" composed of two
+// origins the user hasn't mastered yet) — no user-specific content.
+func TestEtymologyNotebookWriter_HidesWordsTheUserHasLearned(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-vocab")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-vocab
+kind: Etymology
+name: Demo Vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: brave-root
+    language: Latin
+    meaning: brave
+  - origin: word-root
+    language: Latin
+    meaning: word
+`), 0o644))
+
+	// Definitions notebook with two derived words that share the same
+	// origins. "braveword" the user has mastered (recent learned+reverse
+	// logs, interval 30). "wordless" the user has never touched.
+	defDir := filepath.Join(tmpDir, "definitions", "books", "demo-vocab")
+	require.NoError(t, os.MkdirAll(defDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(`id: demo-vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "brave-root (brave)"
+      expressions:
+        - expression: braveword
+          meaning: "uses brave-root and word-root"
+          origin_parts:
+            - origin: brave-root
+            - origin: word-root
+        - expression: wordless
+          meaning: "uses word-root, never seen before"
+          origin_parts:
+            - origin: word-root
+`), 0o644))
+
+	// Learning history: origins are stale (need review) so the origin
+	// filter wants the chapter kept. braveword has recent
+	// learned_logs+reverse_logs (interval 30) — user knows the word
+	// itself. wordless has no logs at all.
+	now := time.Now()
+	learningHistories := map[string][]LearningHistory{
+		"demo-vocab": {{
+			Metadata: LearningHistoryMetadata{NotebookID: "demo-vocab", Title: "Session 1"},
+			Scenes: []LearningScene{{
+				Metadata: LearningSceneMetadata{Title: "__index_0"},
+				Expressions: []LearningHistoryExpression{{
+					// The English word the user has learned.
+					Expression: "braveword",
+					LearnedLogs: []LearningRecord{{
+						Status: LearnedStatusUnderstood, LearnedAt: Date{Time: now.Add(-1 * time.Hour)},
+						Quality: 4, QuizType: string(QuizTypeNotebook), IntervalDays: 30,
+					}},
+					ReverseLogs: []LearningRecord{{
+						Status: LearnedStatusUnderstood, LearnedAt: Date{Time: now.Add(-1 * time.Hour)},
+						Quality: 4, QuizType: string(QuizTypeReverse), IntervalDays: 30,
+					}},
+				}},
+			}},
+		}},
+	}
+
+	outputDir := filepath.Join(tmpDir, "output")
+	reader, err := NewReader(nil, nil, nil,
+		[]string{filepath.Join(tmpDir, "definitions")},
+		[]string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.NoError(t, err)
+	writer := NewEtymologyNotebookWriter(reader, "",
+		[]string{filepath.Join(tmpDir, "definitions")}, learningHistories)
+	require.NoError(t, writer.OutputEtymologyNotebook("demo-vocab", outputDir, false))
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "demo-vocab.md"))
+	require.NoError(t, err)
+	out := string(content)
+
+	assert.NotContains(t, out, "braveword",
+		"the word the user has already mastered (recent correct in both directions, interval 30) "+
+			"must not appear in the etymology PDF, even though its origins still need review")
+	assert.Contains(t, out, "wordless",
+		"a word the user has never touched must remain so the user can still drill its origins in context")
 }
