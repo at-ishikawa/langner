@@ -37,6 +37,15 @@ type Card struct {
 	Contexts      []inference.Context
 	WordDetail    WordDetail
 	Images        []string
+
+	// ConceptHead names the head expression of the definitions concept this
+	// card belongs to, or "" when the card isn't a concept member. When set,
+	// ConceptMembers lists all member expressions (head included) in YAML
+	// declaration order, and ConceptMeaning carries the concept's umbrella
+	// meaning — used as the grader target in standard quizzes.
+	ConceptHead    string
+	ConceptMembers []string
+	ConceptMeaning string
 }
 
 // Example is a usage sentence for a card.

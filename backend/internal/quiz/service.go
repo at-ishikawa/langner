@@ -291,6 +291,11 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, section
 	}
 
 	cards = deduplicateCards(cards)
+	// Collapse multi-member concept cards into a single representative
+	// card per concept (with members listed). Run AFTER deduplicate so a
+	// concept whose head happens to appear in multiple notebooks isn't
+	// split. Run BEFORE shuffle so the concept-key index stays stable.
+	cards = collapseConceptCards(cards, buildAllConceptIndexes(reader, notebookIDs))
 	if !s.disableShuffle {
 		rand.Shuffle(len(cards), func(i, j int) {
 			cards[i], cards[j] = cards[j], cards[i]
@@ -750,6 +755,14 @@ type ReverseCard struct {
 	AltForm      string // alternate inflected form (Note.Definition when set), used for masking
 	WordDetail   WordDetail
 	Images       []string
+
+	// ConceptHead, ConceptMembers, ConceptMeaning carry concept context when
+	// this card represents a definitions-side concept (see Card for details).
+	// Reverse quizzes prompt with ConceptMeaning and accept ANY member as a
+	// correct answer.
+	ConceptHead    string
+	ConceptMembers []string
+	ConceptMeaning string
 }
 
 // ReverseContext represents a context sentence with masking info.
@@ -812,6 +825,9 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 	}
 
 	cards = deduplicateReverseCards(cards)
+	// Collapse member rows into one concept card per concept, mirroring
+	// LoadCards. Run before shuffle so concept ordering is stable.
+	cards = collapseConceptReverseCards(cards, buildAllConceptIndexes(reader, notebookIDs))
 	if !s.disableShuffle {
 		rand.Shuffle(len(cards), func(i, j int) {
 			cards[i], cards[j] = cards[j], cards[i]
