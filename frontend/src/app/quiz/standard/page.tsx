@@ -228,6 +228,17 @@ export default function QuizCardPage() {
             {card.entry}
           </Heading>
 
+          {card.conceptHead && card.conceptMembers && card.conceptMembers.length > 1 && (
+            <Text
+              fontSize="sm"
+              color="fg.muted"
+              textAlign="center"
+              data-testid="concept-family-chip"
+            >
+              Family: {card.conceptMembers.join(", ")}
+            </Text>
+          )}
+
           {card.examples.length > 0 && (
             <VStack align="stretch" gap={2}>
               {card.examples.map((ex, i) => (

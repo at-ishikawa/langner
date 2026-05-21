@@ -665,8 +665,15 @@ type Flashcard struct {
 	// (e.g., "racked up"), while entry is the canonical/dictionary form
 	// (e.g., "rack up"). Used for highlighting the expression in context.
 	OriginalEntry string `protobuf:"bytes,4,opt,name=original_entry,json=originalEntry,proto3" json:"original_entry,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// concept_head names the head expression of the definitions concept this
+	// flashcard belongs to (empty when not a concept). When set, the UI may
+	// render a "Family" chip listing concept_members and surface
+	// concept_meaning as the umbrella prompt.
+	ConceptHead    string   `protobuf:"bytes,5,opt,name=concept_head,json=conceptHead,proto3" json:"concept_head,omitempty"`
+	ConceptMembers []string `protobuf:"bytes,6,rep,name=concept_members,json=conceptMembers,proto3" json:"concept_members,omitempty"`
+	ConceptMeaning string   `protobuf:"bytes,7,opt,name=concept_meaning,json=conceptMeaning,proto3" json:"concept_meaning,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Flashcard) Reset() {
@@ -723,6 +730,27 @@ func (x *Flashcard) GetExamples() []*Example {
 func (x *Flashcard) GetOriginalEntry() string {
 	if x != nil {
 		return x.OriginalEntry
+	}
+	return ""
+}
+
+func (x *Flashcard) GetConceptHead() string {
+	if x != nil {
+		return x.ConceptHead
+	}
+	return ""
+}
+
+func (x *Flashcard) GetConceptMembers() []string {
+	if x != nil {
+		return x.ConceptMembers
+	}
+	return nil
+}
+
+func (x *Flashcard) GetConceptMeaning() string {
+	if x != nil {
+		return x.ConceptMeaning
 	}
 	return ""
 }
@@ -1286,15 +1314,21 @@ func (x *StartReverseQuizResponse) GetFlashcards() []*ReverseFlashcard {
 }
 
 type ReverseFlashcard struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	Meaning       string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	Contexts      []*ContextSentence     `protobuf:"bytes,3,rep,name=contexts,proto3" json:"contexts,omitempty"`
-	NotebookName  string                 `protobuf:"bytes,4,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
-	StoryTitle    string                 `protobuf:"bytes,5,opt,name=story_title,json=storyTitle,proto3" json:"story_title,omitempty"`
-	SceneTitle    string                 `protobuf:"bytes,6,opt,name=scene_title,json=sceneTitle,proto3" json:"scene_title,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	NoteId       int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Meaning      string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Contexts     []*ContextSentence     `protobuf:"bytes,3,rep,name=contexts,proto3" json:"contexts,omitempty"`
+	NotebookName string                 `protobuf:"bytes,4,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	StoryTitle   string                 `protobuf:"bytes,5,opt,name=story_title,json=storyTitle,proto3" json:"story_title,omitempty"`
+	SceneTitle   string                 `protobuf:"bytes,6,opt,name=scene_title,json=sceneTitle,proto3" json:"scene_title,omitempty"`
+	// concept_head/members/meaning carry the same concept context as on
+	// Flashcard; reverse quizzes accept any concept_member as a correct
+	// answer when concept_head is set.
+	ConceptHead    string   `protobuf:"bytes,7,opt,name=concept_head,json=conceptHead,proto3" json:"concept_head,omitempty"`
+	ConceptMembers []string `protobuf:"bytes,8,rep,name=concept_members,json=conceptMembers,proto3" json:"concept_members,omitempty"`
+	ConceptMeaning string   `protobuf:"bytes,9,opt,name=concept_meaning,json=conceptMeaning,proto3" json:"concept_meaning,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ReverseFlashcard) Reset() {
@@ -1365,6 +1399,27 @@ func (x *ReverseFlashcard) GetStoryTitle() string {
 func (x *ReverseFlashcard) GetSceneTitle() string {
 	if x != nil {
 		return x.SceneTitle
+	}
+	return ""
+}
+
+func (x *ReverseFlashcard) GetConceptHead() string {
+	if x != nil {
+		return x.ConceptHead
+	}
+	return ""
+}
+
+func (x *ReverseFlashcard) GetConceptMembers() []string {
+	if x != nil {
+		return x.ConceptMembers
+	}
+	return nil
+}
+
+func (x *ReverseFlashcard) GetConceptMeaning() string {
+	if x != nil {
+		return x.ConceptMeaning
 	}
 	return ""
 }
@@ -3785,12 +3840,15 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11StartQuizResponse\x121\n" +
 	"\n" +
 	"flashcards\x18\x01 \x03(\v2\x11.api.v1.FlashcardR\n" +
-	"flashcards\"\x8e\x01\n" +
+	"flashcards\"\x83\x02\n" +
 	"\tFlashcard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
 	"\x05entry\x18\x02 \x01(\tR\x05entry\x12+\n" +
 	"\bexamples\x18\x03 \x03(\v2\x0f.api.v1.ExampleR\bexamples\x12%\n" +
-	"\x0eoriginal_entry\x18\x04 \x01(\tR\roriginalEntry\"7\n" +
+	"\x0eoriginal_entry\x18\x04 \x01(\tR\roriginalEntry\x12!\n" +
+	"\fconcept_head\x18\x05 \x01(\tR\vconceptHead\x12'\n" +
+	"\x0fconcept_members\x18\x06 \x03(\tR\x0econceptMembers\x12'\n" +
+	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\"7\n" +
 	"\aExample\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x18\n" +
 	"\aspeaker\x18\x02 \x01(\tR\aspeaker\"\xf7\x01\n" +
@@ -3833,7 +3891,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x18StartReverseQuizResponse\x128\n" +
 	"\n" +
 	"flashcards\x18\x01 \x03(\v2\x18.api.v1.ReverseFlashcardR\n" +
-	"flashcards\"\xe1\x01\n" +
+	"flashcards\"\xd6\x02\n" +
 	"\x10ReverseFlashcard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x123\n" +
@@ -3842,7 +3900,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\vstory_title\x18\x05 \x01(\tR\n" +
 	"storyTitle\x12\x1f\n" +
 	"\vscene_title\x18\x06 \x01(\tR\n" +
-	"sceneTitle\"R\n" +
+	"sceneTitle\x12!\n" +
+	"\fconcept_head\x18\a \x01(\tR\vconceptHead\x12'\n" +
+	"\x0fconcept_members\x18\b \x03(\tR\x0econceptMembers\x12'\n" +
+	"\x0fconcept_meaning\x18\t \x01(\tR\x0econceptMeaning\"R\n" +
 	"\x0fContextSentence\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12%\n" +
 	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xc8\x01\n" +

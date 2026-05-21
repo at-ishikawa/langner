@@ -297,6 +297,7 @@ export default function QuizHubPage() {
           setFlashcards(
             (res.flashcards ?? []).map((f) => ({
               noteId: f.noteId, entry: f.entry, originalEntry: f.originalEntry, examples: f.examples,
+              conceptHead: f.conceptHead, conceptMembers: f.conceptMembers, conceptMeaning: f.conceptMeaning,
             })),
           );
           router.push("/quiz/standard");
@@ -310,6 +311,7 @@ export default function QuizHubPage() {
             (res.flashcards ?? []).map((f) => ({
               noteId: f.noteId, meaning: f.meaning, contexts: f.contexts,
               notebookName: f.notebookName, storyTitle: f.storyTitle, sceneTitle: f.sceneTitle,
+              conceptHead: f.conceptHead, conceptMembers: f.conceptMembers, conceptMeaning: f.conceptMeaning,
             })),
           );
           router.push("/quiz/reverse");

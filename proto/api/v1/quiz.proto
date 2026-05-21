@@ -107,6 +107,14 @@ message Flashcard {
   // (e.g., "racked up"), while entry is the canonical/dictionary form
   // (e.g., "rack up"). Used for highlighting the expression in context.
   string original_entry = 4;
+
+  // concept_head names the head expression of the definitions concept this
+  // flashcard belongs to (empty when not a concept). When set, the UI may
+  // render a "Family" chip listing concept_members and surface
+  // concept_meaning as the umbrella prompt.
+  string concept_head = 5;
+  repeated string concept_members = 6;
+  string concept_meaning = 7;
 }
 
 message Example {
@@ -183,6 +191,13 @@ message ReverseFlashcard {
   string notebook_name = 4;
   string story_title = 5;
   string scene_title = 6;
+
+  // concept_head/members/meaning carry the same concept context as on
+  // Flashcard; reverse quizzes accept any concept_member as a correct
+  // answer when concept_head is set.
+  string concept_head = 7;
+  repeated string concept_members = 8;
+  string concept_meaning = 9;
 }
 
 message ContextSentence {

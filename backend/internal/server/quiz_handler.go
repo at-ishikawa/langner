@@ -103,7 +103,10 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		noteID := nextID; nextID++; localStore[noteID] = card
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples { examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker}) }
-		flashcards = append(flashcards, &apiv1.Flashcard{NoteId: noteID, Entry: card.Entry, Examples: examples, OriginalEntry: card.OriginalEntry})
+		flashcards = append(flashcards, &apiv1.Flashcard{
+			NoteId: noteID, Entry: card.Entry, Examples: examples, OriginalEntry: card.OriginalEntry,
+			ConceptHead: card.ConceptHead, ConceptMembers: card.ConceptMembers, ConceptMeaning: card.ConceptMeaning,
+		})
 	}
 	h.mu.Lock(); h.noteStore = localStore; h.nextID = nextID; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartQuizResponse{Flashcards: flashcards}), nil
@@ -200,7 +203,11 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 		noteID := nextID; nextID++; localStore[noteID] = card
 		var contexts []*apiv1.ContextSentence
 		for _, c := range card.Contexts { contexts = append(contexts, &apiv1.ContextSentence{Context: c.Context, MaskedContext: c.MaskedContext}) }
-		flashcards = append(flashcards, &apiv1.ReverseFlashcard{NoteId: noteID, Meaning: card.Meaning, Contexts: contexts, NotebookName: card.NotebookName, StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle})
+		flashcards = append(flashcards, &apiv1.ReverseFlashcard{
+			NoteId: noteID, Meaning: card.Meaning, Contexts: contexts,
+			NotebookName: card.NotebookName, StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
+			ConceptHead: card.ConceptHead, ConceptMembers: card.ConceptMembers, ConceptMeaning: card.ConceptMeaning,
+		})
 	}
 	h.mu.Lock(); h.reverseStore = localStore; h.nextID = nextID; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartReverseQuizResponse{Flashcards: flashcards}), nil

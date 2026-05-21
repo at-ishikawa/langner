@@ -29,6 +29,13 @@ export interface Flashcard {
   entry: string;
   originalEntry: string;
   examples: Example[];
+  // Definitions-concept context. Empty conceptHead means the card is a
+  // standalone vocabulary entry; non-empty means it represents a multi-
+  // member concept whose member list is conceptMembers and umbrella
+  // meaning is conceptMeaning.
+  conceptHead?: string;
+  conceptMembers?: string[];
+  conceptMeaning?: string;
 }
 
 export interface ReverseFlashcard {
@@ -38,6 +45,9 @@ export interface ReverseFlashcard {
   notebookName: string;
   storyTitle: string;
   sceneTitle: string;
+  conceptHead?: string;
+  conceptMembers?: string[];
+  conceptMeaning?: string;
 }
 
 export interface EtymologyOriginCard {
