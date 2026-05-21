@@ -133,6 +133,11 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 	v.validateEtymologyExtensions(result)
 	v.validateFromForm(result)
 
+	// Validate the new definitions-side concepts: block. Warn-only for the
+	// same reason as the etymology extensions — existing books without
+	// concepts must keep validating cleanly while the feature lands.
+	v.validateDefinitionConcepts(result)
+
 	return result, nil
 }
 

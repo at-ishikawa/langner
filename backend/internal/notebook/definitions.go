@@ -16,6 +16,7 @@ import (
 type Definitions struct {
 	Metadata DefinitionsMetadata  `yaml:"metadata"`
 	Scenes   []DefinitionsScene   `yaml:"scenes"`
+	Concepts []DefinitionConcept  `yaml:"concepts,omitempty"`
 }
 
 // DefinitionsMetadata contains metadata about which notebook the definitions apply to
@@ -45,6 +46,26 @@ func (m DefinitionsSceneMetadata) GetIndex() int {
 		return *m.Scene
 	}
 	return m.Index
+}
+
+// DefinitionConcept groups related vocabulary expressions in a definitions
+// book under one umbrella meaning. Members are expression strings declared
+// in the same book (across any session); the head doubles as the canonical
+// display anchor and the database key. The same head may be declared in
+// multiple sessions of the same book — the validator unifies them and
+// enforces meaning agreement.
+//
+// Used downstream for quiz card collapse (one card per concept), learning
+// log merging (logs flow to the head's entry), and skip propagation (a
+// skip on any member applies to the whole concept).
+type DefinitionConcept struct {
+	Head        string   `yaml:"head"`
+	Meaning     string   `yaml:"meaning"`
+	Expressions []string `yaml:"expressions"`
+
+	// SessionTitle records which session declared this concept block; set
+	// at read time from the parent Definitions.Metadata. Not serialised.
+	SessionTitle string `yaml:"-"`
 }
 
 // ReadDefinitionsFromBytes parses a YAML byte slice into a slice of Definitions.
