@@ -20,7 +20,15 @@ CREATE TABLE etymology_origin_forms (
 
 -- note_origin_parts.origin_form_id pins the part reference to a specific
 -- form on the referenced origin. NULL means the reference is generic.
+--
+-- TiDB compatibility note: the column ADD and FK ADD have to be separate
+-- ALTER TABLE statements. Combined, TiDB evaluates the FK constraint
+-- before the new column is fully visible in the same ALTER and rejects
+-- the FK with "Error 1072: Key column 'origin_form_id' doesn't exist in
+-- table". MySQL handles the combined form fine; TiDB does not.
 ALTER TABLE note_origin_parts
-    ADD COLUMN origin_form_id BIGINT NULL AFTER origin_id,
+    ADD COLUMN origin_form_id BIGINT NULL AFTER origin_id;
+
+ALTER TABLE note_origin_parts
     ADD CONSTRAINT fk_note_origin_parts_origin_form_id
         FOREIGN KEY (origin_form_id) REFERENCES etymology_origin_forms(id) ON DELETE SET NULL;
