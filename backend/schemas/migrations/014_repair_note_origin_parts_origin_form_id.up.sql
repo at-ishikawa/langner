@@ -3,20 +3,35 @@
 -- ALTER TABLE failed mid-way (Error 1072 from the FK check running
 -- before the column was visible). The partial run left
 -- etymology_origin_forms created but note_origin_parts.origin_form_id
--- missing. PR's split-009 fix unblocks fresh installs, but golang-migrate
+-- missing. The split-009 fix unblocks fresh installs, but golang-migrate
 -- does not replay an already-applied version when its file changes —
--- so existing instances still miss the column. This migration adds it
--- forward-only, idempotent against installations where 009 succeeded
--- normally (e.g. local MySQL).
+-- so existing TiDB instances still miss the column. This migration adds
+-- it forward-only, idempotent against installations where 009 succeeded
+-- normally (e.g. CI's MySQL).
+--
+-- Idempotency strategy: precheck INFORMATION_SCHEMA via session
+-- variables + PREPARE/EXECUTE. The column-existence check + conditional
+-- ALTER works on both MySQL (no ADD COLUMN IF NOT EXISTS support) and
+-- TiDB. `DO 0` is the no-op branch.
 --
 -- The foreign key constraint is intentionally not recreated here:
--- MySQL doesn't accept "ADD CONSTRAINT IF NOT EXISTS", and the
--- application correctness path doesn't depend on the FK (the ingestion
--- layer manages referential integrity via the reconcile pass). The
--- only behaviour we'd lose is ON DELETE SET NULL when an
--- etymology_origin_form is removed; in practice this codepath isn't
--- exercised after a re-import (origins are recreated by ImportEtymology,
--- and origin_form_id values are repopulated then).
+-- referential integrity is managed by the ingestion reconcile pass at
+-- the application layer; the only behaviour we'd lose is ON DELETE SET
+-- NULL when an etymology_origin_form is removed, which isn't a code
+-- path the application exercises after a re-import.
 
-ALTER TABLE note_origin_parts
-    ADD COLUMN IF NOT EXISTS origin_form_id BIGINT NULL AFTER origin_id;
+SET @col_exists := (
+    SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'note_origin_parts'
+      AND COLUMN_NAME = 'origin_form_id'
+);
+
+SET @stmt := IF(@col_exists = 0,
+    'ALTER TABLE note_origin_parts ADD COLUMN origin_form_id BIGINT NULL AFTER origin_id',
+    'DO 0'
+);
+
+PREPARE repair_014 FROM @stmt;
+EXECUTE repair_014;
+DEALLOCATE PREPARE repair_014;
