@@ -256,9 +256,13 @@ func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *d
 		notebook.NewDBSemanticConceptRepository(db),
 		notebook.NewYAMLSemanticConceptSource(reader),
 	)
-	return imp.WithConceptRelations(
+	imp = imp.WithConceptRelations(
 		notebook.NewDBConceptRelationRepository(db),
 		notebook.NewYAMLConceptRelationSource(reader),
+	)
+	return imp.WithDefinitionConcepts(
+		notebook.NewDBDefinitionConceptRepository(db),
+		notebook.NewYAMLDefinitionConceptSource(reader),
 	)
 }
 
@@ -270,7 +274,11 @@ func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, wr
 	learningSink := learning.NewYAMLLearningRepositoryWriter(outputDir)
 	dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(outputDir)
 
-	return datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, writer)
+	exp := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, writer)
+	return exp.WithDefinitionConcepts(
+		notebook.NewDBDefinitionConceptRepository(db),
+		notebook.NewYAMLDefinitionsBookSink(outputDir),
+	)
 }
 
 func readNotesFromDirs(ctx context.Context, storyDirs, flashcardDirs, bookDirs, definitionDirs []string) ([]notebook.NoteRecord, error) {

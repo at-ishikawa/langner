@@ -331,6 +331,45 @@ func (mr *MockConceptRelationSourceMockRecorder) FindAll(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockConceptRelationSource)(nil).FindAll), ctx)
 }
 
+// MockDefinitionConceptSource is a mock of DefinitionConceptSource interface.
+type MockDefinitionConceptSource struct {
+	ctrl     *gomock.Controller
+	recorder *MockDefinitionConceptSourceMockRecorder
+	isgomock struct{}
+}
+
+// MockDefinitionConceptSourceMockRecorder is the mock recorder for MockDefinitionConceptSource.
+type MockDefinitionConceptSourceMockRecorder struct {
+	mock *MockDefinitionConceptSource
+}
+
+// NewMockDefinitionConceptSource creates a new mock instance.
+func NewMockDefinitionConceptSource(ctrl *gomock.Controller) *MockDefinitionConceptSource {
+	mock := &MockDefinitionConceptSource{ctrl: ctrl}
+	mock.recorder = &MockDefinitionConceptSourceMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDefinitionConceptSource) EXPECT() *MockDefinitionConceptSourceMockRecorder {
+	return m.recorder
+}
+
+// FindAll mocks base method.
+func (m *MockDefinitionConceptSource) FindAll(ctx context.Context) ([]notebook.DefinitionConceptForImport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FindAll", ctx)
+	ret0, _ := ret[0].([]notebook.DefinitionConceptForImport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FindAll indicates an expected call of FindAll.
+func (mr *MockDefinitionConceptSourceMockRecorder) FindAll(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockDefinitionConceptSource)(nil).FindAll), ctx)
+}
+
 // MockNoteSink is a mock of NoteSink interface.
 type MockNoteSink struct {
 	ctrl     *gomock.Controller
@@ -443,4 +482,42 @@ func (m *MockDictionarySink) WriteAll(entries []rapidapi.DictionaryExportEntry) 
 func (mr *MockDictionarySinkMockRecorder) WriteAll(entries any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockDictionarySink)(nil).WriteAll), entries)
+}
+
+// MockDefinitionsBookSink is a mock of DefinitionsBookSink interface.
+type MockDefinitionsBookSink struct {
+	ctrl     *gomock.Controller
+	recorder *MockDefinitionsBookSinkMockRecorder
+	isgomock struct{}
+}
+
+// MockDefinitionsBookSinkMockRecorder is the mock recorder for MockDefinitionsBookSink.
+type MockDefinitionsBookSinkMockRecorder struct {
+	mock *MockDefinitionsBookSink
+}
+
+// NewMockDefinitionsBookSink creates a new mock instance.
+func NewMockDefinitionsBookSink(ctrl *gomock.Controller) *MockDefinitionsBookSink {
+	mock := &MockDefinitionsBookSink{ctrl: ctrl}
+	mock.recorder = &MockDefinitionsBookSinkMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDefinitionsBookSink) EXPECT() *MockDefinitionsBookSinkMockRecorder {
+	return m.recorder
+}
+
+// WriteConcepts mocks base method.
+func (m *MockDefinitionsBookSink) WriteConcepts(perBook map[string]map[string][]notebook.DefinitionConcept) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "WriteConcepts", perBook)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// WriteConcepts indicates an expected call of WriteConcepts.
+func (mr *MockDefinitionsBookSinkMockRecorder) WriteConcepts(perBook any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteConcepts", reflect.TypeOf((*MockDefinitionsBookSink)(nil).WriteConcepts), perBook)
 }
