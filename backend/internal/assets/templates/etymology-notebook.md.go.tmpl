@@ -17,7 +17,14 @@
 
 {{ range $word := $section.Words -}}
 {{ $display := $word.Expression }}{{ if $word.Definition }}{{ $display = $word.Definition }}{{ end -}}
+{{ if $word.ConceptHead -}}
+- **{{ $word.ConceptHead }}** — {{ $word.ConceptMeaning }}
+{{- range $member := $word.ConceptMembers }}
+    - **{{ $member.Name }}**{{ if $member.PartOfSpeech }} [{{ $member.PartOfSpeech }}]{{ end }}{{ if $member.Meaning }}: {{ $member.Meaning }}{{ end }}
+{{- end }}
+{{- else -}}
 - **{{ $display }}**{{ if $word.Pronunciation }} /{{ $word.Pronunciation }}/{{ end }}{{ if $word.PartOfSpeech }} [{{ $word.PartOfSpeech }}]{{ end }}{{ if $word.Meaning }}: {{ $word.Meaning }}{{ end }}
+{{- end }}
 {{- if $word.OriginParts }}
     - Origins: {{ range $i, $ref := $word.OriginParts }}{{ if $i }} + {{ end }}*{{ $ref.Origin }}*{{ if $ref.Meaning }} ({{ $ref.Meaning }}){{ end }}{{ end }}
 {{- end }}

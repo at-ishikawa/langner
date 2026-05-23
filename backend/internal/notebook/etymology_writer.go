@@ -93,6 +93,12 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 	// Find the definitions directory that has matching session files
 	defDir := writer.findDefinitionsDir(etymIndex)
 
+	// Concept lookup for the paired definitions book. When non-empty,
+	// readDefinitionsFileChapters collapses member entries into one row
+	// per concept the same way the definitions-book writer does, so the
+	// etymology PDF / markdown groups by family too.
+	conceptByExpression, conceptByHead := writer.reader.GetDefinitionsBookConceptInfo(etymIndex.ID)
+
 	var chapters []assets.EtymologyChapter
 
 	for _, nbPath := range etymIndex.NotebookPaths {
@@ -141,7 +147,7 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		wordHasBeenLearned := func(expression string) bool {
 			return writer.expressionRecentlyLearned(etymIndex.ID, sessionTitle, expression)
 		}
-		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned)
+		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned, conceptByExpression, conceptByHead)
 
 		if len(defChapters) > 0 {
 			filteredChapters := make([]assets.EtymologyChapter, 0, len(defChapters))
@@ -425,7 +431,14 @@ func filterOriginsForChapter(allOrigins []assets.EtymologyOriginEntry, chapter a
 // every origin it references reports false (i.e. fully mastered). Sections
 // with no surviving words are dropped along with their header so the user
 // doesn't see "## verto (to turn)" headings for origins they've finished.
-func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string, needsStudy func(origin string) bool, wordHasBeenLearned func(expression string) bool) []assets.EtymologyChapter {
+func readDefinitionsFileChapters(
+	defDir, sessionFilename string,
+	originMap map[string]string,
+	needsStudy func(origin string) bool,
+	wordHasBeenLearned func(expression string) bool,
+	conceptByExpression map[string]string,
+	conceptByHead map[string]DefinitionConceptInfo,
+) []assets.EtymologyChapter {
 	if defDir == "" {
 		return nil
 	}
@@ -451,6 +464,8 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 		var allWords []assets.EtymologyWordEntry
 		var sections []assets.EtymologySection
 		for _, scene := range def.Scenes {
+			memberDetails := buildConceptMemberDetails(scene.Expressions, conceptByExpression, conceptByHead)
+			seenConceptHead := make(map[string]int) // head -> index in sceneWords
 			var sceneWords []assets.EtymologyWordEntry
 			for _, note := range scene.Expressions {
 				if !wordNeedsStudy(note.OriginParts, needsStudy) {
@@ -484,6 +499,30 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 					word.OriginParts = append(word.OriginParts, ref)
 				}
 
+				// Concept collapse: when this note is a concept member,
+				// fold it into one EtymologyWordEntry per concept (the
+				// head's row when seen, otherwise the first encountered
+				// member; upgraded if the head shows up later).
+				head, isMember := "", false
+				if conceptByExpression != nil {
+					head, isMember = conceptByExpression[note.Expression]
+					if !isMember && note.Definition != "" {
+						head, isMember = conceptByExpression[note.Definition]
+					}
+				}
+				if isMember {
+					info := conceptByHead[head]
+					word.ConceptHead = head
+					word.ConceptMeaning = info.Meaning
+					word.ConceptMembers = memberDetails[head]
+					if existingIdx, already := seenConceptHead[head]; already {
+						if note.Expression == head || note.Definition == head {
+							sceneWords[existingIdx] = word
+						}
+						continue
+					}
+					seenConceptHead[head] = len(sceneWords)
+				}
 				sceneWords = append(sceneWords, word)
 			}
 			if len(sceneWords) == 0 {

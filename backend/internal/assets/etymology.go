@@ -45,6 +45,15 @@ type EtymologyWordEntry struct {
 	PartOfSpeech  string
 	Note          string
 	OriginParts   []EtymologyOriginRef
+
+	// Concept context, populated by the etymology writer when this entry
+	// represents a multi-member definitions concept after the group-by-
+	// concept_key pass. When ConceptHead is non-empty, templates may
+	// render an umbrella row + nested per-member rows (each member's
+	// part-of-speech and meaning) instead of one row per word.
+	ConceptHead    string
+	ConceptMembers []ConceptMember
+	ConceptMeaning string
 }
 
 // EtymologyOriginRef references an origin with its resolved meaning
