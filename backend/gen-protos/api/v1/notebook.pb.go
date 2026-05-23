@@ -407,9 +407,18 @@ type NotebookWord struct {
 	// note_id is the DB primary key of this expression's note row. Used by
 	// the notebook detail page to call SkipWord/ResumeWord directly. Zero
 	// when the DB hasn't been populated (no langner migrate import-db run).
-	NoteId        int64 `protobuf:"varint,16,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	NoteId int64 `protobuf:"varint,16,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	// concept_head names the head expression of the definitions concept this
+	// word belongs to (empty when not a concept member). When set, the
+	// notebook detail UI groups all members of the same concept under one
+	// card with shared skip controls — a skip on any member propagates to
+	// the entire concept on the backend side, so the UI shows a single
+	// skip control per concept rather than per-member.
+	ConceptHead    string   `protobuf:"bytes,17,opt,name=concept_head,json=conceptHead,proto3" json:"concept_head,omitempty"`
+	ConceptMembers []string `protobuf:"bytes,18,rep,name=concept_members,json=conceptMembers,proto3" json:"concept_members,omitempty"`
+	ConceptMeaning string   `protobuf:"bytes,19,opt,name=concept_meaning,json=conceptMeaning,proto3" json:"concept_meaning,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *NotebookWord) Reset() {
@@ -545,6 +554,27 @@ func (x *NotebookWord) GetNoteId() int64 {
 		return x.NoteId
 	}
 	return 0
+}
+
+func (x *NotebookWord) GetConceptHead() string {
+	if x != nil {
+		return x.ConceptHead
+	}
+	return ""
+}
+
+func (x *NotebookWord) GetConceptMembers() []string {
+	if x != nil {
+		return x.ConceptMembers
+	}
+	return nil
+}
+
+func (x *NotebookWord) GetConceptMeaning() string {
+	if x != nil {
+		return x.ConceptMeaning
+	}
+	return ""
 }
 
 type LearningLogEntry struct {
@@ -1870,7 +1900,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"statements\">\n" +
 	"\fConversation\x12\x18\n" +
 	"\aspeaker\x18\x01 \x01(\tR\aspeaker\x12\x14\n" +
-	"\x05quote\x18\x02 \x01(\tR\x05quote\"\x9c\x04\n" +
+	"\x05quote\x18\x02 \x01(\tR\x05quote\"\x91\x05\n" +
 	"\fNotebookWord\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -1892,7 +1922,10 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\n" +
 	"is_skipped\x18\x0e \x01(\bR\tisSkipped\x12,\n" +
 	"\x12skipped_quiz_types\x18\x0f \x03(\tR\x10skippedQuizTypes\x12\x17\n" +
-	"\anote_id\x18\x10 \x01(\x03R\x06noteIdJ\x04\b\v\x10\f\"\xcf\x01\n" +
+	"\anote_id\x18\x10 \x01(\x03R\x06noteId\x12!\n" +
+	"\fconcept_head\x18\x11 \x01(\tR\vconceptHead\x12'\n" +
+	"\x0fconcept_members\x18\x12 \x03(\tR\x0econceptMembers\x12'\n" +
+	"\x0fconcept_meaning\x18\x13 \x01(\tR\x0econceptMeaningJ\x04\b\v\x10\f\"\xcf\x01\n" +
 	"\x10LearningLogEntry\x12\x16\n" +
 	"\x06status\x18\x01 \x01(\tR\x06status\x12\x1d\n" +
 	"\n" +

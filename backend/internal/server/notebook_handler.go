@@ -118,6 +118,12 @@ func (h *NotebookHandler) GetNotebookDetail(
 		indexName = idx.Name
 	}
 
+	// Concept lookup for this notebook: empty when the book has no
+	// concepts: declarations. byExpression maps each member to its head;
+	// byHead carries the umbrella meaning + ordered member list so the
+	// frontend can render one card per concept with shared skip controls.
+	conceptByExpression, conceptByHead := reader.GetDefinitionsBookConceptInfo(notebookID)
+
 	var totalWordCount int32
 	var stories []*apiv1.StoryEntry
 	for _, nb := range storyNotebooks {
@@ -136,6 +142,8 @@ func (h *NotebookHandler) GetNotebookDetail(
 				info := h.findLearningInfoFull(learningHistory, nb.Event, scene.Title, def)
 				info.noteID = noteIDForDef(noteIDByExpr, def)
 
+				conceptHead, conceptMembers, conceptMeaning := lookupConceptForWord(def, conceptByExpression, conceptByHead)
+
 				definitions = append(definitions, &apiv1.NotebookWord{
 					Expression:     def.Expression,
 					Definition:     def.Definition,
@@ -152,6 +160,9 @@ func (h *NotebookHandler) GetNotebookDetail(
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
 					NoteId:           info.noteID,
+					ConceptHead:    conceptHead,
+					ConceptMembers: conceptMembers,
+					ConceptMeaning: conceptMeaning,
 				})
 				totalWordCount++
 			}
@@ -285,6 +296,8 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notebook %s not found", notebookID))
 	}
 
+	conceptByExpression, conceptByHead := reader.GetDefinitionsBookConceptInfo(notebookID)
+
 	var totalWordCount int32
 	var stories []*apiv1.StoryEntry
 	for _, def := range bookDefs {
@@ -312,6 +325,8 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 					}
 				}
 
+				conceptHead, conceptMembers, conceptMeaning := lookupConceptForWord(note, conceptByExpression, conceptByHead)
+
 				definitions = append(definitions, &apiv1.NotebookWord{
 					Expression:     note.Expression,
 					Definition:     note.Definition,
@@ -328,6 +343,9 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
 					NoteId:           info.noteID,
+					ConceptHead:    conceptHead,
+					ConceptMembers: conceptMembers,
+					ConceptMeaning: conceptMeaning,
 				})
 				totalWordCount++
 			}
@@ -413,6 +431,30 @@ func noteIDForDef(byExpr map[string]int64, def notebook.Note) int64 {
 		return id
 	}
 	return 0
+}
+
+// lookupConceptForWord returns the concept context for a definition, or
+// empty values when the word isn't a concept member. byExpression maps each
+// member expression to its head; byHead carries the umbrella meaning + the
+// ordered member list. Falls back to Definition when Expression doesn't
+// match (some entries use the dictionary form as the canonical name).
+func lookupConceptForWord(
+	def notebook.Note,
+	byExpression map[string]string,
+	byHead map[string]notebook.DefinitionConceptInfo,
+) (head string, members []string, meaning string) {
+	if len(byExpression) == 0 {
+		return "", nil, ""
+	}
+	h, ok := byExpression[def.Expression]
+	if !ok && def.Definition != "" {
+		h, ok = byExpression[def.Definition]
+	}
+	if !ok {
+		return "", nil, ""
+	}
+	info := byHead[h]
+	return h, append([]string(nil), info.Members...), info.Meaning
 }
 
 // findLearningInfoFull returns full learning info including skip status.
