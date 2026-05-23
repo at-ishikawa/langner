@@ -151,6 +151,48 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 		},
 		{
+			name: "existing note's concept_key is backfilled when UpdateExisting is true",
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:      "brighten",
+					Entry:      "brighten",
+					Meaning:    "to make or become bright",
+					ConceptKey: "bright",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "book", NotebookID: "demo", Group: "Brightness", Subgroup: ""},
+					},
+				},
+			},
+			opts: ImportOptions{UpdateExisting: true},
+			setup: func(noteSource *mock_datasync.MockNoteSource, noteRepo *mock_notebook.MockNoteRepository) {
+				noteSource.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{
+						Usage:      "brighten",
+						Entry:      "brighten",
+						Meaning:    "to make or become bright",
+						ConceptKey: "bright",
+						NotebookNotes: []notebook.NotebookNote{
+							{NotebookType: "book", NotebookID: "demo", Group: "Brightness", Subgroup: ""},
+						},
+					},
+				}, nil)
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 42, Usage: "brighten", Entry: "brighten", ConceptKey: ""}, // pre-existing row with no concept_key
+				}, nil)
+				noteRepo.EXPECT().BatchUpdate(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord, newNNs []notebook.NotebookNote) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "bright", notes[0].ConceptKey,
+							"UpdateExisting must propagate ConceptKey from source onto existing row")
+						return nil
+					})
+			},
+			want: &ImportNotesResult{
+				NotesUpdated: 1,
+				NotebookNew:  1,
+			},
+		},
+		{
 			name: "skipped note with new notebook_note only inserts notebook_note",
 			sourceNotes: []notebook.NoteRecord{
 				{

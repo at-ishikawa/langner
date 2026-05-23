@@ -416,6 +416,7 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 		existing.Meaning = src.Meaning
 		existing.Level = src.Level
 		existing.DictionaryNumber = src.DictionaryNumber
+		existing.ConceptKey = src.ConceptKey
 		if _, alreadyCounted := state.updateNotes[key]; !alreadyCounted {
 			state.result.NotesUpdated++
 		}
