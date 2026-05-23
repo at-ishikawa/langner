@@ -818,8 +818,19 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 		return errors
 	}
 
-	// Check for duplicate expressions across different scenes in the same episode
-	episodeExpressions := make(map[string][]string) // expression -> list of scene titles
+	// Check for duplicate expressions across different scenes in the same
+	// episode. Key by (name, type) so a vocab entry and an etymology-origin
+	// entry that share a name (e.g. vocab "peer" + Latin root "peer") are
+	// allowed to coexist; the rest of the codebase already treats them as
+	// distinct via the same composite key.
+	type exprKey struct{ name, typ string }
+	normaliseType := func(t string) string {
+		if t == LearningExpressionTypeVocabulary {
+			return ""
+		}
+		return t
+	}
+	episodeExpressions := make(map[exprKey][]string) // (name, typ) -> list of scene titles
 	for _, scene := range h.Scenes {
 		sceneTitle := strings.TrimSpace(scene.Metadata.Title)
 		for _, expr := range scene.Expressions {
@@ -827,16 +838,18 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 			if expression == "" {
 				continue
 			}
-			episodeExpressions[expression] = append(episodeExpressions[expression], sceneTitle)
+			episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}] = append(
+				episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}], sceneTitle,
+			)
 		}
 	}
 
 	// Report duplicates across scenes
-	for expression, scenes := range episodeExpressions {
+	for key, scenes := range episodeExpressions {
 		if len(scenes) > 1 {
 			errors = append(errors, ValidationError{
 				Location: location,
-				Message:  fmt.Sprintf("expression %q appears in multiple scenes: %v", expression, scenes),
+				Message:  fmt.Sprintf("expression %q appears in multiple scenes: %v", key.name, scenes),
 				Suggestions: []string{
 					"run validate --fix to merge duplicate expressions",
 				},
