@@ -59,6 +59,16 @@ type StoryNote struct {
 	Synonyms      []string
 	Antonyms      []string
 	Images        []string
+
+	// Concept context. When this note represents a multi-member
+	// definitions concept (after the writer's group-by-concept_key pass),
+	// ConceptHead is the head expression, ConceptMembers lists every
+	// member in YAML declaration order, and ConceptMeaning is the
+	// umbrella meaning. Templates may render a "Family: …" line when
+	// ConceptHead is non-empty; standalone notes leave it empty.
+	ConceptHead    string
+	ConceptMembers []string
+	ConceptMeaning string
 }
 
 func WriteStoryNotebook(output io.Writer, templatePath string, templateData StoryTemplate) error {

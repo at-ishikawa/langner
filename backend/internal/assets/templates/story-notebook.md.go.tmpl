@@ -30,7 +30,13 @@
 {{ $def = $definition.Expression }}
 {{- end -}}
 
-- **{{ $def }}**{{ if $definition.Pronunciation }} /{{ $definition.Pronunciation }}/{{ end }}{{ if $definition.PartOfSpeech }} [{{ $definition.PartOfSpeech }}]{{ end }}: {{ $definition.Meaning -}}
+- **{{ $def }}**{{ if $definition.Pronunciation }} /{{ $definition.Pronunciation }}/{{ end }}{{ if $definition.PartOfSpeech }} [{{ $definition.PartOfSpeech }}]{{ end }}: {{ if $definition.ConceptMeaning }}{{ $definition.ConceptMeaning }}{{ else }}{{ $definition.Meaning }}{{ end -}}
+{{- if and $definition.ConceptHead $definition.ConceptMembers }}
+    - Family: {{ join $definition.ConceptMembers ", " }}
+{{- end -}}
+{{- if and $definition.ConceptMeaning $definition.Meaning }}
+    - {{ $definition.Expression }}: {{ $definition.Meaning }}
+{{- end -}}
 {{- if $definition.Note }}
     - Note: {{ $definition.Note }}
 {{- end -}}

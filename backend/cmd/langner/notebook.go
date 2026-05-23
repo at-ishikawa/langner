@@ -164,5 +164,31 @@ func newNotebookCommand() *cobra.Command {
 
 	notebookCommands.AddCommand(etymologyCmd)
 
+	var definitionsGeneratePDF bool
+	definitionsCmd := &cobra.Command{
+		Use:   "definitions <book id>",
+		Short: "Generate markdown/PDF output from a definitions-only book (e.g. Word Power Made Easy), with concept members grouped into one row per concept",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			bookID := args[0]
+			reader, err := notebook.NewReader(nil, nil, nil, cfg.Notebooks.DefinitionsDirectories, nil, nil)
+			if err != nil {
+				return fmt.Errorf("notebook.NewReader() > %w", err)
+			}
+			writer := notebook.NewDefinitionsBookWriter(reader, cfg.Templates.StoryNotebookTemplate)
+			outDir := cfg.Outputs.StoryDirectory
+			if err := writer.OutputDefinitionsBook(bookID, outDir, definitionsGeneratePDF); err != nil {
+				return fmt.Errorf("writer.OutputDefinitionsBook > %w", err)
+			}
+			return nil
+		},
+	}
+	definitionsCmd.Flags().BoolVar(&definitionsGeneratePDF, "pdf", false, "Generate PDF output in addition to markdown")
+	notebookCommands.AddCommand(definitionsCmd)
+
 	return notebookCommands
 }

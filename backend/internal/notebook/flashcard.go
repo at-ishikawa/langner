@@ -170,6 +170,53 @@ func (r Reader) GetDefinitionsBookConcepts(bookID string) map[string]string {
 	return result
 }
 
+// DefinitionConceptInfo captures the full per-concept metadata a writer
+// needs to group member entries into one row in markdown / PDF output.
+// Head is the canonical display anchor, Members lists every member in
+// YAML declaration order (head included), and Meaning is the umbrella
+// label shared by all members.
+type DefinitionConceptInfo struct {
+	Head    string
+	Meaning string
+	Members []string
+}
+
+// GetDefinitionsBookConceptInfo returns the per-book concept lookup used
+// by writers (markdown/PDF) and the export-db layer. byExpression maps
+// each member expression to its head; byHead maps each head to the full
+// concept declaration.
+func (r Reader) GetDefinitionsBookConceptInfo(bookID string) (byExpression map[string]string, byHead map[string]DefinitionConceptInfo) {
+	byExpression = make(map[string]string)
+	byHead = make(map[string]DefinitionConceptInfo)
+	defs, ok := r.definitionsRaw[bookID]
+	if !ok {
+		return
+	}
+	for _, def := range defs {
+		for _, c := range def.Concepts {
+			if c.Head == "" || len(c.Expressions) == 0 {
+				continue
+			}
+			members := make([]string, 0, len(c.Expressions))
+			for _, e := range c.Expressions {
+				if e == "" {
+					continue
+				}
+				members = append(members, e)
+			}
+			if _, already := byHead[c.Head]; !already {
+				byHead[c.Head] = DefinitionConceptInfo{Head: c.Head, Meaning: c.Meaning, Members: members}
+			}
+			for _, e := range members {
+				if _, exists := byExpression[e]; !exists {
+					byExpression[e] = c.Head
+				}
+			}
+		}
+	}
+	return
+}
+
 func (f Reader) ReadAllStoryNotebooks() (map[string]Index, error) {
 	for _, index := range f.indexes {
 		_, err := f.ReadStoryNotebooks(index.ID)

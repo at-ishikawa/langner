@@ -437,8 +437,14 @@ func (writer StoryNotebookWriter) OutputStoryNotebooks(
 		_ = output.Close()
 	}()
 
-	// Convert notebooks to assets format with marker conversion for markdown output
+	// Convert notebooks to assets format with marker conversion for
+	// markdown output. When the underlying book declares concepts:, group
+	// member entries into one row per concept so the markdown / PDF
+	// output reads as one block per family instead of one row per word.
+	byExpr, byHead := writer.reader.GetDefinitionsBookConceptInfo(storyID)
 	converter := newAssetsStoryConverter()
+	converter.conceptByExpression = byExpr
+	converter.conceptByHead = byHead
 	templateData := converter.convertToAssetsStoryTemplate(notebooks)
 	if err := assets.WriteStoryNotebook(output, writer.templatePath, templateData); err != nil {
 		return fmt.Errorf("assets.WriteStoryNotebook(%s, %s, ) > %w", outputFilename, writer.templatePath, err)
@@ -536,7 +542,25 @@ func ConvertToAssetsStoryTemplate(notebooks []StoryNotebook) assets.StoryTemplat
 	return newAssetsStoryConverter().convertToAssetsStoryTemplate(notebooks)
 }
 
+// ConvertToAssetsStoryTemplateWithConcepts converts notebooks while
+// collapsing definitions-side concept member entries into one row per
+// concept. byExpression maps each member expression to its head; byHead
+// carries the full concept declaration (head, members, umbrella meaning).
+// When both maps are empty/nil, behaviour matches ConvertToAssetsStoryTemplate.
+func ConvertToAssetsStoryTemplateWithConcepts(
+	notebooks []StoryNotebook,
+	byExpression map[string]string,
+	byHead map[string]DefinitionConceptInfo,
+) assets.StoryTemplate {
+	c := newAssetsStoryConverter()
+	c.conceptByExpression = byExpression
+	c.conceptByHead = byHead
+	return c.convertToAssetsStoryTemplate(notebooks)
+}
+
 type assetsStoryConverter struct {
+	conceptByExpression map[string]string
+	conceptByHead       map[string]DefinitionConceptInfo
 }
 
 func newAssetsStoryConverter() *assetsStoryConverter {
@@ -591,9 +615,15 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 		assetsStatements[i] = HighlightDefinitionsInText(converted, scene.Definitions, ConversionStyleMarkdown)
 	}
 
-	assetsNotes := make([]assets.StoryNote, len(scene.Definitions))
-	for i, note := range scene.Definitions {
-		assetsNotes[i] = assets.StoryNote{
+	// Group member notes by concept head. When a concept index is
+	// configured, every cluster collapses to a single StoryNote (preferring
+	// the head's row); non-concept notes pass through unchanged. The
+	// converter only operates within one scene at a time, which matches
+	// the way the original markdown reads — one definition list per scene.
+	seenConceptHead := make(map[string]int) // head -> index in assetsNotes
+	assetsNotes := make([]assets.StoryNote, 0, len(scene.Definitions))
+	for _, note := range scene.Definitions {
+		entry := assets.StoryNote{
 			Definition:    note.Definition,
 			Expression:    note.Expression,
 			Meaning:       note.Meaning,
@@ -606,6 +636,31 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 			Antonyms:      note.Antonyms,
 			Images:        note.Images,
 		}
+		head, isMember := "", false
+		if converter.conceptByExpression != nil {
+			head, isMember = converter.conceptByExpression[note.Expression]
+			if !isMember && note.Definition != "" {
+				head, isMember = converter.conceptByExpression[note.Definition]
+			}
+		}
+		if !isMember {
+			assetsNotes = append(assetsNotes, entry)
+			continue
+		}
+		info := converter.conceptByHead[head]
+		entry.ConceptHead = head
+		entry.ConceptMembers = info.Members
+		entry.ConceptMeaning = info.Meaning
+		if existingIdx, already := seenConceptHead[head]; already {
+			// Already emitted a member; upgrade if this row IS the head
+			// (more accurate display data).
+			if note.Expression == head || note.Definition == head {
+				assetsNotes[existingIdx] = entry
+			}
+			continue
+		}
+		seenConceptHead[head] = len(assetsNotes)
+		assetsNotes = append(assetsNotes, entry)
 	}
 
 	return assets.StoryScene{
