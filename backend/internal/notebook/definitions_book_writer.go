@@ -114,6 +114,7 @@ func collapseDefinitionConceptsForExport(
 ) []assets.StoryNote {
 	out := make([]assets.StoryNote, 0, len(notes))
 	seenHead := make(map[string]int) // head -> index in out
+	memberDetails := buildConceptMemberDetails(notes, byExpression, byHead)
 
 	for _, note := range notes {
 		entry := assets.StoryNote{
@@ -139,7 +140,7 @@ func collapseDefinitionConceptsForExport(
 		}
 		info := byHead[head]
 		entry.ConceptHead = head
-		entry.ConceptMembers = info.Members
+		entry.ConceptMembers = memberDetails[head]
 		entry.ConceptMeaning = info.Meaning
 		if existingIdx, already := seenHead[head]; already {
 			// Already emitted a member; upgrade to the head's row when

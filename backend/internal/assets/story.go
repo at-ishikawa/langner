@@ -63,12 +63,23 @@ type StoryNote struct {
 	// Concept context. When this note represents a multi-member
 	// definitions concept (after the writer's group-by-concept_key pass),
 	// ConceptHead is the head expression, ConceptMembers lists every
-	// member in YAML declaration order, and ConceptMeaning is the
-	// umbrella meaning. Templates may render a "Family: …" line when
-	// ConceptHead is non-empty; standalone notes leave it empty.
+	// member in YAML declaration order with per-member display data
+	// (part of speech + per-member meaning), and ConceptMeaning is the
+	// shared umbrella meaning. Templates may render a per-member block
+	// when ConceptHead is non-empty; standalone notes leave it empty.
 	ConceptHead    string
-	ConceptMembers []string
+	ConceptMembers []ConceptMember
 	ConceptMeaning string
+}
+
+// ConceptMember is one entry in a StoryNote's concept member list. Carries
+// the per-member display fields the markdown / PDF template needs to render
+// each member's part of speech and specific meaning alongside the family
+// umbrella. Members are ordered in YAML declaration order.
+type ConceptMember struct {
+	Name         string
+	PartOfSpeech string
+	Meaning      string
 }
 
 func WriteStoryNotebook(output io.Writer, templatePath string, templateData StoryTemplate) error {

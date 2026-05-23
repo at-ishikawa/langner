@@ -5,6 +5,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/assets"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCollapseDefinitionConceptsForExport_GroupsByHeadAndPrefersHead(t *testing.T) {
@@ -39,7 +40,14 @@ func TestCollapseDefinitionConceptsForExport_GroupsByHeadAndPrefersHead(t *testi
 	assert.Equal(t, "bright", conceptEntry.Expression, "head's row survives (upgraded from initial brighten)")
 	assert.Equal(t, "emitting much light", conceptEntry.Meaning, "head's per-expression meaning preserved")
 	assert.Equal(t, "the quality of being bright", conceptEntry.ConceptMeaning, "umbrella meaning attached")
-	assert.ElementsMatch(t, []string{"bright", "brighten", "brightness"}, conceptEntry.ConceptMembers)
+	require.Len(t, conceptEntry.ConceptMembers, 3, "all three members listed in declaration order")
+	assert.Equal(t, "bright", conceptEntry.ConceptMembers[0].Name)
+	assert.Equal(t, "adjective", conceptEntry.ConceptMembers[0].PartOfSpeech)
+	assert.Equal(t, "emitting much light", conceptEntry.ConceptMembers[0].Meaning)
+	assert.Equal(t, "brighten", conceptEntry.ConceptMembers[1].Name)
+	assert.Equal(t, "verb", conceptEntry.ConceptMembers[1].PartOfSpeech)
+	assert.Equal(t, "brightness", conceptEntry.ConceptMembers[2].Name)
+	assert.Equal(t, "noun", conceptEntry.ConceptMembers[2].PartOfSpeech)
 	assert.Equal(t, "unrelated", loneEntry.Expression)
 	assert.Empty(t, loneEntry.ConceptHead)
 }

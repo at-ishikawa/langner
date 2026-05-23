@@ -537,6 +537,50 @@ func (notebook *StoryNotebook) Validate(location string) []ValidationError {
 	return errors
 }
 
+// buildConceptMemberDetails returns, per concept head, the ordered list
+// of member display rows (name + part-of-speech + per-member meaning).
+// Members are ordered by the concept declaration's YAML order so the
+// markdown / PDF output reads in a stable, author-controlled sequence
+// rather than however the underlying notes happen to be discovered.
+//
+// Members whose Note isn't present in the supplied slice (e.g. filtered
+// out by the SR pass) appear in the list with empty PartOfSpeech and
+// Meaning — the template can still render the name. Returns nil when
+// the concept index is empty so callers can short-circuit.
+func buildConceptMemberDetails(
+	notes []Note,
+	byExpression map[string]string,
+	byHead map[string]DefinitionConceptInfo,
+) map[string][]assets.ConceptMember {
+	if len(byExpression) == 0 || len(byHead) == 0 {
+		return nil
+	}
+	type meta struct{ pos, meaning string }
+	notesByName := make(map[string]meta, len(notes))
+	for _, n := range notes {
+		notesByName[n.Expression] = meta{pos: n.PartOfSpeech, meaning: n.Meaning}
+		if n.Definition != "" {
+			if _, exists := notesByName[n.Definition]; !exists {
+				notesByName[n.Definition] = meta{pos: n.PartOfSpeech, meaning: n.Meaning}
+			}
+		}
+	}
+	result := make(map[string][]assets.ConceptMember, len(byHead))
+	for head, info := range byHead {
+		rows := make([]assets.ConceptMember, 0, len(info.Members))
+		for _, name := range info.Members {
+			m := notesByName[name]
+			rows = append(rows, assets.ConceptMember{
+				Name:         name,
+				PartOfSpeech: m.pos,
+				Meaning:      m.meaning,
+			})
+		}
+		result[head] = rows
+	}
+	return result
+}
+
 // ConvertToAssetsStoryTemplate converts notebook types to assets.StoryTemplate for template rendering.
 func ConvertToAssetsStoryTemplate(notebooks []StoryNotebook) assets.StoryTemplate {
 	return newAssetsStoryConverter().convertToAssetsStoryTemplate(notebooks)
@@ -620,6 +664,7 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 	// the head's row); non-concept notes pass through unchanged. The
 	// converter only operates within one scene at a time, which matches
 	// the way the original markdown reads — one definition list per scene.
+	memberDetails := buildConceptMemberDetails(scene.Definitions, converter.conceptByExpression, converter.conceptByHead)
 	seenConceptHead := make(map[string]int) // head -> index in assetsNotes
 	assetsNotes := make([]assets.StoryNote, 0, len(scene.Definitions))
 	for _, note := range scene.Definitions {
@@ -649,7 +694,7 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 		}
 		info := converter.conceptByHead[head]
 		entry.ConceptHead = head
-		entry.ConceptMembers = info.Members
+		entry.ConceptMembers = memberDetails[head]
 		entry.ConceptMeaning = info.Meaning
 		if existingIdx, already := seenConceptHead[head]; already {
 			// Already emitted a member; upgrade if this row IS the head
