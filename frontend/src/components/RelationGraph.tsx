@@ -64,13 +64,19 @@ function FormBranchGraph({ prompt, value, onValueChange, disabled }: RelationGra
   }, [prompt.edges, prompt.nodes, forms]);
   if (!origin) return null;
 
+  // Forms grid: single column on phones (<480px), then up to three
+  // columns on sm+ to keep the original tree shape on tablets/desktop.
+  // Three 110px-wide form tiles on a 375px phone wrap or overflow when
+  // labels are full Latin headwords like "missum" / "mittere" plus the
+  // derived English words underneath.
+  const formCols = `repeat(${Math.min(forms.length, 3)}, minmax(0, 1fr))`;
   return (
     <Box>
       <Text fontSize="xs" color="fg.muted" mb={2}>
         Fill in the source-language headword that produced these forms and English words:
       </Text>
       <Box
-        p={4}
+        p={{ base: 3, sm: 4 }}
         borderWidth="1px"
         borderRadius="lg"
         bg="white"
@@ -87,7 +93,7 @@ function FormBranchGraph({ prompt, value, onValueChange, disabled }: RelationGra
         />
         <Box
           display="grid"
-          gridTemplateColumns={`repeat(${Math.min(forms.length, 3)}, minmax(0, 1fr))`}
+          gridTemplateColumns={{ base: "1fr", sm: formCols }}
           gap={2}
           mt={3}
         >
@@ -137,13 +143,18 @@ function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphP
   );
   if (!concept) return null;
 
+  // Member grid is a single column on phones (<480px), then up to three
+  // columns on sm+ to preserve the radial-cluster visual on tablets and
+  // desktop. A 3-column grid on a 375px phone leaves ~110px per tile —
+  // not enough for Latin/Greek labels like "philanthropy".
+  const desktopCols = `repeat(${Math.min(members.length, 3)}, minmax(0, 1fr))`;
   return (
     <Box>
       <Text fontSize="xs" color="fg.muted" mb={2}>
         Fill in the blank to complete this concept:
       </Text>
       <Box
-        p={4}
+        p={{ base: 3, sm: 4 }}
         borderWidth="1px"
         borderRadius="lg"
         bg="white"
@@ -154,7 +165,7 @@ function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphP
         <ConceptChip node={concept} />
         <Box
           display="grid"
-          gridTemplateColumns={`repeat(${Math.min(members.length, 3)}, minmax(0, 1fr))`}
+          gridTemplateColumns={{ base: "1fr", sm: desktopCols }}
           gap={2}
           mt={3}
         >
@@ -180,6 +191,11 @@ function AntonymPairGraph({ prompt, value, onValueChange, disabled }: RelationGr
   // node ids are stable ("concept_a" and "concept_b") so we look them up
   // directly. Member node ids are prefixed "a<n>" or "b<n>" to identify
   // which side they belong to.
+  //
+  // Layout: a 3-column grid (concept A | arrow | concept B) on screens
+  // >= 480px (sm breakpoint), and a single-column vertical stack below
+  // that — the antonym arrow rotates ⇄ → ⇅ to match the new direction.
+  // Avoids cramped 130px columns and overflowing labels on phones.
   const conceptA = useMemo(() => prompt.nodes.find((n) => n.id === "concept_a"), [prompt.nodes]);
   const conceptB = useMemo(() => prompt.nodes.find((n) => n.id === "concept_b"), [prompt.nodes]);
   const membersA = useMemo(
@@ -202,14 +218,19 @@ function AntonymPairGraph({ prompt, value, onValueChange, disabled }: RelationGr
         Fill in the blank in this antonym pair:
       </Text>
       <Box
-        p={4}
+        p={{ base: 3, sm: 4 }}
         borderWidth="1px"
         borderRadius="lg"
         bg="white"
         _dark={{ bg: "gray.800", borderColor: "gray.600" }}
         borderColor="gray.200"
       >
-        <Box display="grid" gridTemplateColumns="1fr auto 1fr" gap={3} alignItems="start">
+        <Box
+          display="grid"
+          gridTemplateColumns={{ base: "1fr", sm: "1fr auto 1fr" }}
+          gap={3}
+          alignItems={{ base: "stretch", sm: "start" }}
+        >
           <Box textAlign="center">
             <ConceptChip node={conceptA} />
             <Box mt={2} display="grid" gridTemplateColumns="1fr" gap={1}>
@@ -225,10 +246,16 @@ function AntonymPairGraph({ prompt, value, onValueChange, disabled }: RelationGr
               ))}
             </Box>
           </Box>
-          <Box display="flex" alignItems="center" pt={2}>
+          <Box
+            display="flex"
+            alignItems="center"
+            justifyContent="center"
+            pt={{ base: 0, sm: 2 }}
+          >
             <Box px={2} py={0.5} borderRadius="full" bg="red.100" _dark={{ bg: "red.900" }}>
               <Text fontSize="xs" color="red.800" _dark={{ color: "red.200" }} fontWeight="medium">
-                ⇄ antonym
+                <Text as="span" display={{ base: "none", sm: "inline" }}>⇄ antonym</Text>
+                <Text as="span" display={{ base: "inline", sm: "none" }}>⇅ antonym</Text>
               </Text>
             </Box>
           </Box>
@@ -288,7 +315,8 @@ interface MemberNodeProps {
 function MemberNode({ node, isBlank, value, onValueChange, disabled }: MemberNodeProps) {
   return (
     <Box
-      p={2}
+      p={{ base: 3, sm: 2 }}
+      minH={{ base: "44px", sm: "auto" }}
       borderWidth={isBlank ? "2px" : "1px"}
       borderRadius="md"
       borderColor={isBlank ? "yellow.500" : "gray.300"}
@@ -305,10 +333,16 @@ function MemberNode({ node, isBlank, value, onValueChange, disabled }: MemberNod
             value={value}
             onChange={(e) => onValueChange(e.target.value)}
             disabled={disabled}
-            size="sm"
+            size="md"
             placeholder="???"
             textAlign="center"
             fontFamily="mono"
+            // 16px+ font-size prevents iOS Safari from auto-zooming the
+            // viewport on focus, which would break the carefully sized
+            // grid layout. Chakra's "md" size already lands at 16px;
+            // pinning the inline style here makes the rule explicit and
+            // survives future theme changes that might shrink size="md".
+            fontSize="16px"
             bg="white"
             _dark={{ bg: "gray.800" }}
             autoFocus
