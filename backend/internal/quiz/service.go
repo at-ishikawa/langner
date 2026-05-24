@@ -1284,6 +1284,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	}
 
 	// Also load from definitions-only books
+	learningHistories, _ := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
 		if _, isStory := storyIndexes[nbID]; isStory {
 			continue
@@ -1291,7 +1292,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
 			continue
 		}
-		defWords := loadDefinitionWords(reader, nbID, originMap)
+		defWords := loadDefinitionWords(reader, nbID, originMap, learningHistories)
 		cards = append(cards, defWords...)
 	}
 
@@ -1686,6 +1687,9 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				if note.Meaning == "" {
 					continue
 				}
+				if isExpressionSkippedInHistory(learningHistories[bookID], storyTitle, sceneTitle, &note, notebook.QuizTypeNotebook) {
+					continue
+				}
 				if !needsDefinitionReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
 					continue
 				}
@@ -1728,6 +1732,9 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				if note.Meaning == "" {
 					continue
 				}
+				if isExpressionSkippedInHistory(learningHistories[bookID], storyTitle, sceneTitle, &note, notebook.QuizTypeReverse) {
+					continue
+				}
 				if !needsDefinitionReverseReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
 					continue
 				}
@@ -1753,17 +1760,23 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 }
 
 // loadDefinitionWords loads freeform cards from definitions-only books.
-func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[string]notebook.EtymologyOrigin) []FreeformCard {
+// Words skipped from freeform mode are excluded; the gate matches the
+// story-side path's behaviour at line 1317.
+func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[string]notebook.EtymologyOrigin, learningHistories map[string][]notebook.LearningHistory) []FreeformCard {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
 	}
 
+	histories := learningHistories[bookID]
 	var cards []FreeformCard
 	for storyTitle, sceneDefs := range defs {
 		for sceneTitle, notes := range sceneDefs {
 			for _, note := range notes {
 				if note.Meaning == "" {
+					continue
+				}
+				if isExpressionSkippedInHistory(histories, storyTitle, sceneTitle, &note, notebook.QuizTypeFreeform) {
 					continue
 				}
 				expression := note.Expression
