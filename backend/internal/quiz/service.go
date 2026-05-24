@@ -798,9 +798,14 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		sectionFilter := sectionTitlesByID[notebookID]
 
 		if !isStory && !isFlashcard {
-			// Try definitions-only book as fallback
-			defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap, sectionFilter)
-			if len(defCards) > 0 {
+			// Try definitions-only book as fallback. Mirror LoadCards
+			// behaviour: a notebook that exists in the definitions index
+			// must return whatever cards qualify (possibly zero — e.g.
+			// every word is skipped or unstudied) instead of NotFound,
+			// which would otherwise abort the entire multi-notebook
+			// session over an empty book.
+			if _, ok := reader.GetDefinitionsNotes(notebookID); ok {
+				defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap, sectionFilter)
 				cards = append(cards, defCards...)
 				continue
 			}

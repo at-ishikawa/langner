@@ -428,6 +428,122 @@ notebooks:
 	assert.Empty(t, cards, "definitions-only word with only freeform-failed history must not appear when includeUnstudied=false")
 }
 
+// makeDefinitionsBookSkipFixture writes a definitions-only book with
+// one expression "break the ice" plus a learning_history that marks
+// the expression skipped from one or more quiz types. The eligibility
+// gates (HasFreeformAnswer, HasAnyCorrectAnswer) are satisfied by a
+// `usable` freeform log so we can be sure the skip check is what
+// filters the word out, not the eligibility prerequisites.
+func makeDefinitionsBookSkipFixture(t *testing.T, skippedAt string) (defsDir, learningDir string) {
+	t.Helper()
+	defsDir = t.TempDir()
+	learningDir = t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "skip-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: skip-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+`), 0o644))
+
+	// The learning-history scene title MUST match the indexed scene key
+	// the loader uses (NewDefinitionsMap keys scenes by "__index_N"
+	// regardless of the scene's human-readable title). Production
+	// learning_notes for definitions books store the indexed key; the
+	// loader iterates the indexed map, so this is the only spelling the
+	// skip / due-check lookups will resolve.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "skip-defs.yml"), []byte(`- metadata:
+    notebook_id: skip-defs
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "__index_0"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "usable"
+              learned_at: "2025-01-14T10:00:00Z"
+              quality: 4
+              interval_days: 7
+              quiz_type: "freeform"
+          reverse_logs:
+            - status: "understood"
+              learned_at: "2025-01-15T10:00:00Z"
+              quality: 4
+              interval_days: 1
+              quiz_type: "reverse"
+          skipped_at:
+`+skippedAt), 0o644))
+	return defsDir, learningDir
+}
+
+// TestService_LoadCards_DefinitionsBook_RespectsNotebookSkip pins the
+// behaviour that motivated the loadDefinitionCards skip-gate fix. A
+// word skipped from the `notebook` quiz type must not appear in
+// LoadCards results for a definitions-only book — the gate was missing
+// before, so a user-skipped word kept reappearing in standard quizzes.
+func TestService_LoadCards_DefinitionsBook_RespectsNotebookSkip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir, learningDir := makeDefinitionsBookSkipFixture(t,
+		`            notebook: "2025-01-20T10:00:00Z"`+"\n")
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"skip-defs"}, true, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "definitions-only word with notebook skip must not appear in LoadCards")
+}
+
+// TestService_LoadReverseCards_DefinitionsBook_RespectsReverseSkip is
+// the regression test for the bug user-reported on 2026-05-24: "verb"
+// skipped from reverse, yet the reverse quiz still served it. The
+// loadDefinitionReverseCards function used to ignore SkippedAt entirely.
+func TestService_LoadReverseCards_DefinitionsBook_RespectsReverseSkip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir, learningDir := makeDefinitionsBookSkipFixture(t,
+		`            reverse: "2025-01-20T10:00:00Z"`+"\n")
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "definitions-only word with reverse skip must not appear in LoadReverseCards")
+}
+
+// TestService_LoadDefinitionWords_RespectsFreeformSkip exercises the
+// freeform side of the same fix. The free-form loader received no
+// learning histories and never consulted SkippedAt before this PR.
+func TestService_LoadDefinitionWords_RespectsFreeformSkip(t *testing.T) {
+	defsDir, learningDir := makeDefinitionsBookSkipFixture(t,
+		`            freeform: "2025-01-20T10:00:00Z"`+"\n")
+
+	reader, err := notebook.NewReader(nil, nil, nil, []string{defsDir}, nil, nil)
+	require.NoError(t, err)
+	histories, err := notebook.NewLearningHistories(learningDir)
+	require.NoError(t, err)
+
+	cards := loadDefinitionWords(reader, "skip-defs", nil, histories)
+	assert.Empty(t, cards, "definitions-only word with freeform skip must not appear in freeform cards")
+}
+
 func TestService_LoadCards_MultipleNotebooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc, _ := newTestServiceWithFixtures(t, mock_inference.NewMockClient(ctrl))
