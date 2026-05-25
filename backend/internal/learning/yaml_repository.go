@@ -338,32 +338,48 @@ func buildExpression(
 	entry string,
 	logs []LearningLog,
 ) notebook.LearningHistoryExpression {
-	var learnedLogs, reverseLogs []LearningLog
+	// Route each log into the matching slot on LearningHistoryExpression.
+	// The original implementation lumped everything that wasn't reverse
+	// into learned_logs, which destroyed quiz_type information on
+	// round-trip: a word with etymology_breakdown_logs / etymology_
+	// assembly_logs in the source YAML came back with all of them merged
+	// into learned_logs (e.g. gauche with 1 source learned log + 7
+	// etymology logs exported as 8 learned logs). Match each YAML slot
+	// to the quiz_type values that get stored there at import time.
+	var learnedLogs, reverseLogs, breakdownLogs, assemblyLogs []LearningLog
 	for _, log := range logs {
-		if log.QuizType == "reverse" {
+		switch log.QuizType {
+		case string(notebook.QuizTypeReverse):
 			reverseLogs = append(reverseLogs, log)
-		} else {
+		case string(notebook.QuizTypeEtymologyStandard): // stored as "etymology_breakdown"
+			breakdownLogs = append(breakdownLogs, log)
+		case string(notebook.QuizTypeEtymologyReverse): // stored as "etymology_assembly"
+			assemblyLogs = append(assemblyLogs, log)
+		default:
+			// notebook (standard), freeform, etymology_freeform — all
+			// land in learned_logs in the YAML convention.
 			learnedLogs = append(learnedLogs, log)
 		}
 	}
 
-	// Sort both descending by LearnedAt (newest first)
-	sort.Slice(learnedLogs, func(i, j int) bool {
-		return learnedLogs[i].LearnedAt.After(learnedLogs[j].LearnedAt)
-	})
-	sort.Slice(reverseLogs, func(i, j int) bool {
-		return reverseLogs[i].LearnedAt.After(reverseLogs[j].LearnedAt)
-	})
-
-	expr := notebook.LearningHistoryExpression{
-		Expression: entry,
+	// Sort each slot descending by LearnedAt (newest first).
+	sortDescByLearnedAt := func(s []LearningLog) {
+		sort.Slice(s, func(i, j int) bool {
+			return s[i].LearnedAt.After(s[j].LearnedAt)
+		})
 	}
+	sortDescByLearnedAt(learnedLogs)
+	sortDescByLearnedAt(reverseLogs)
+	sortDescByLearnedAt(breakdownLogs)
+	sortDescByLearnedAt(assemblyLogs)
 
-	// Convert to LearningRecord
-	expr.LearnedLogs = convertToRecords(learnedLogs)
-	expr.ReverseLogs = convertToRecords(reverseLogs)
-
-	return expr
+	return notebook.LearningHistoryExpression{
+		Expression:             entry,
+		LearnedLogs:            convertToRecords(learnedLogs),
+		ReverseLogs:            convertToRecords(reverseLogs),
+		EtymologyBreakdownLogs: convertToRecords(breakdownLogs),
+		EtymologyAssemblyLogs:  convertToRecords(assemblyLogs),
+	}
 }
 
 func convertToRecords(logs []LearningLog) []notebook.LearningRecord {
