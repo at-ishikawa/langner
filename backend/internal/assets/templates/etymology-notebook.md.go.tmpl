@@ -3,6 +3,23 @@
 {{ range $chapter := .Chapters }}
 ## {{ $chapter.Title }}
 
+{{ if $chapter.Concepts -}}
+### Concepts
+
+{{ range $c := $chapter.Concepts -}}
+- **{{ $c.Key }}** — {{ $c.Meaning }}
+{{- range $m := $c.Members }}
+    - *{{ $m.Origin }}*{{ if $m.Language }} [{{ $m.Language }}]{{ end }}
+{{- end }}
+{{- if $c.Note }}
+    - Note: {{ $c.Note }}
+{{- end }}
+{{- range $r := $c.Relations }}
+    - {{ $r.Type }}: {{ $r.Other }}
+{{- end }}
+{{ end }}
+{{ end -}}
+
 {{ if $chapter.Origins -}}
 ### Origins
 

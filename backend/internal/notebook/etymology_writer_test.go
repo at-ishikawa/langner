@@ -587,3 +587,150 @@ notebooks:
 	assert.Contains(t, out, "wordless",
 		"a word the user has never touched must remain so the user can still drill its origins in context")
 }
+
+// TestEtymologyNotebookWriter_HidesSkippedWords pins the bug-fix for
+// the writer not consulting SkippedAt before the previous commit: a
+// word with skipped_at on any vocabulary quiz type kept appearing in
+// the etymology PDF / markdown, contradicting the user's "stop studying
+// this" intent. Removing the wordIsSkipped gate in the writer must
+// fail this test.
+func TestEtymologyNotebookWriter_HidesSkippedWords(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-vocab")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-vocab
+kind: Etymology
+name: Demo Vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: turn-root
+    language: Latin
+    meaning: turn
+`), 0o644))
+
+	defDir := filepath.Join(tmpDir, "definitions", "books", "demo-vocab")
+	require.NoError(t, os.MkdirAll(defDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(`id: demo-vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "turn-root (turn)"
+      expressions:
+        - expression: turnword
+          meaning: "uses turn-root, user explicitly skipped"
+          origin_parts:
+            - origin: turn-root
+        - expression: turnable
+          meaning: "uses turn-root, never seen by the user"
+          origin_parts:
+            - origin: turn-root
+`), 0o644))
+
+	skippedAt := SkippedAtMap{
+		string(QuizTypeNotebook): "2025-01-20T10:00:00Z",
+		string(QuizTypeReverse):  "2025-01-20T10:00:00Z",
+		string(QuizTypeFreeform): "2025-01-20T10:00:00Z",
+	}
+	learningHistories := map[string][]LearningHistory{
+		"demo-vocab": {{
+			Metadata: LearningHistoryMetadata{NotebookID: "demo-vocab", Title: "Session 1"},
+			Scenes: []LearningScene{{
+				Metadata: LearningSceneMetadata{Title: "__index_0"},
+				Expressions: []LearningHistoryExpression{{
+					Expression: "turnword",
+					LearnedLogs: nil,
+					SkippedAt:  skippedAt,
+				}},
+			}},
+		}},
+	}
+
+	outputDir := filepath.Join(tmpDir, "output")
+	reader, err := NewReader(nil, nil, nil,
+		[]string{filepath.Join(tmpDir, "definitions")},
+		[]string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.NoError(t, err)
+	writer := NewEtymologyNotebookWriter(reader, "",
+		[]string{filepath.Join(tmpDir, "definitions")}, learningHistories)
+	require.NoError(t, writer.OutputEtymologyNotebook("demo-vocab", outputDir, false))
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "demo-vocab.md"))
+	require.NoError(t, err)
+	out := string(content)
+
+	assert.NotContains(t, out, "turnword",
+		"a word the user has explicitly skipped (skipped_at set on all "+
+			"vocabulary quiz types) must not appear in the etymology PDF")
+	assert.Contains(t, out, "turnable",
+		"unskipped sibling words remain so the user keeps the etymology context they expect")
+}
+
+// TestEtymologyNotebookWriter_RendersConcepts pins the concept section
+// addition: gauche / sinister grouped under "leftness" with the
+// antonym relation to "rightness" must appear in the markdown export,
+// not just the flat origin list. Removing the Concepts block from the
+// template must fail this test.
+func TestEtymologyNotebookWriter_RendersConcepts(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-pair")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-pair
+kind: Etymology
+name: Demo Pair
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: sinister
+    language: Latin
+    meaning: left
+  - origin: dexter
+    language: Latin
+    meaning: right
+concepts:
+  - key: leftness
+    meaning: left
+    members:
+      - { origin: sinister, language: Latin }
+  - key: rightness
+    meaning: right
+    members:
+      - { origin: dexter, language: Latin }
+relations:
+  - { type: antonym, between: [leftness, rightness] }
+`), 0o644))
+
+	outputDir := filepath.Join(tmpDir, "output")
+	reader, err := NewReader(nil, nil, nil, nil,
+		[]string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.NoError(t, err)
+	writer := NewEtymologyNotebookWriter(reader, "", nil, nil)
+	require.NoError(t, writer.OutputEtymologyNotebook("demo-pair", outputDir, false))
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "demo-pair.md"))
+	require.NoError(t, err)
+	out := string(content)
+
+	assert.Contains(t, out, "### Concepts",
+		"concept section must be rendered when the session declares concepts:")
+	assert.Contains(t, out, "**leftness** — left",
+		"each concept's umbrella meaning must appear next to the concept key")
+	assert.Regexp(t, `(?s)\*\*leftness\*\*.*\*sinister\* \[Latin\]`, out,
+		"member origins must be listed under their concept")
+	assert.Contains(t, out, "antonym: rightness",
+		"relations between concepts must be surfaced so the antonym pairing is visible")
+	assert.Contains(t, out, "antonym: leftness",
+		"symmetric relations render in both directions so each concept block carries the back-link")
+}

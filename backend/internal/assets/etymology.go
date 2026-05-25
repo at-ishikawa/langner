@@ -21,6 +21,37 @@ type EtymologyChapter struct {
 	Origins  []EtymologyOriginEntry
 	Words    []EtymologyWordEntry
 	Sections []EtymologySection
+
+	// Concepts lists the etymology-side concepts: declarations that
+	// apply to this chapter, with members + relations resolved so the
+	// template can render a Concepts section grouping origins like
+	// sinister/gauche under "leftness" and showing antonym pairs to
+	// related concepts. Empty when the session declares no concepts.
+	Concepts []EtymologyConcept
+}
+
+// EtymologyConcept is one concept declaration for the chapter, with its
+// member origins and any relations to other concepts.
+type EtymologyConcept struct {
+	Key       string                   // e.g. "leftness"
+	Meaning   string                   // umbrella meaning shared by members
+	Note      string                   // optional commentary (may be empty)
+	Members   []EtymologyConceptMember // origins in declaration order
+	Relations []EtymologyConceptRelation
+}
+
+// EtymologyConceptMember is one origin belonging to a concept.
+type EtymologyConceptMember struct {
+	Origin   string
+	Language string
+}
+
+// EtymologyConceptRelation captures a relation to another concept (e.g.
+// "antonym: rightness"). Type matches the YAML's relation `type` field;
+// Other is the related concept's key.
+type EtymologyConceptRelation struct {
+	Type  string
+	Other string
 }
 
 // EtymologySection represents a named group of words within a chapter (e.g., an origin topic)
