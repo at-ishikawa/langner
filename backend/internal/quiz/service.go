@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 	"unicode"
@@ -57,7 +58,14 @@ func (s *Service) NewReader() (*notebook.Reader, error) {
 }
 
 // LoadNotebookSummaries returns all available notebooks with their review counts.
-func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
+//
+// includeUnstudied, when true, makes ReviewCount and ReverseReviewCount
+// (per notebook and per section) reflect what the actual quiz will load
+// when "Include unstudied words" is on — never-seen words AND words
+// still within their SR interval. When false (default), counts are
+// due-only, matching the conservative default the quiz uses without
+// the toggle.
+func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
@@ -78,7 +86,7 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 
 		filtered, err := notebook.FilterStoryNotebooks(
 			stories, learningHistories[id], s.dictionaryMap,
-			false, false, true, false, notebook.QuizTypeNotebook,
+			false, includeUnstudied, true, false, notebook.QuizTypeNotebook,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter story notebook %q: %w", id, err)
@@ -93,15 +101,15 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 		reverseCount := countReverseStoryDefinitions(stories, learningHistories[id])
 		etymCount := countStoryEtymologyDefinitions(stories)
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:            id,
-			Name:                  index.Name,
-			ReviewCount:           countStoryDefinitions(filtered),
-			ReverseReviewCount:    reverseCount,
-			EtymologyReviewCount:  etymCount,
-			LatestDate:            latestDate,
-			Kind:                  kindFromIndex(index),
-			HasContent:            storyHasContent(stories),
-			Sections:              storySectionSummaries(stories, filtered, learningHistories[id]),
+			NotebookID:           id,
+			Name:                 index.Name,
+			ReviewCount:          countStoryDefinitions(filtered),
+			ReverseReviewCount:   reverseCount,
+			EtymologyReviewCount: etymCount,
+			LatestDate:           latestDate,
+			Kind:                 kindFromIndex(index),
+			HasContent:           storyHasContent(stories),
+			Sections:             storySectionSummaries(stories, filtered, learningHistories[id]),
 		})
 	}
 
@@ -111,11 +119,13 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", id, err)
 		}
 
-		// Summary counts use includeNoCorrectAnswers=false so the "due"
-		// number on the quiz start page matches what a standard quiz
-		// (without "Include unstudied") will actually load.
+		// Summary counts pass `includeUnstudied` through to the filter so
+		// the "due" number on the quiz start page matches what the
+		// standard quiz will load when the user has the "Include
+		// unstudied words" toggle on. The frontend re-fetches with
+		// includeUnstudied=true when the toggle flips.
 		filtered, err := notebook.FilterFlashcardNotebooks(
-			notebooks, learningHistories[id], s.dictionaryMap, false, false, notebook.QuizTypeNotebook,
+			notebooks, learningHistories[id], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
@@ -166,11 +176,12 @@ func (s *Service) LoadNotebookSummaries() ([]NotebookSummary, error) {
 			ReverseReviewCount: reverseCount,
 			Kind:               "Books",
 			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
+			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID]),
 		})
 	}
 
 	// Add etymology notebooks
-	etymSummaries, err := s.LoadEtymologyNotebookSummaries()
+	etymSummaries, err := s.LoadEtymologyNotebookSummaries(includeUnstudied)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load etymology notebook summaries: %w", err)
 	}
@@ -1648,6 +1659,71 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 // given quiz type. Per-type skipping replaced the global skip flag.
 func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note, quizType notebook.QuizType) bool {
 	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition, quizType)
+}
+
+// definitionsSectionSummaries returns per-session counts for a
+// definitions-only book (e.g. Word Power Made Easy). Without this, the
+// vocabulary quiz options page showed the book as a single un-expandable
+// row even though etymology mode listed every session of the same book.
+// Sessions are ordered by the trailing integer in their title
+// ("Session 1", "Session 10", "Session 2" → 1, 2, 10) so users see them
+// in document order; titles without a trailing integer fall back to
+// alphabetical ordering after numbered ones.
+func definitionsSectionSummaries(
+	defs map[string]map[string][]notebook.Note,
+	histories []notebook.LearningHistory,
+) []NotebookSectionSummary {
+	if len(defs) == 0 {
+		return nil
+	}
+	titles := make([]string, 0, len(defs))
+	for title := range defs {
+		titles = append(titles, title)
+	}
+	sort.Slice(titles, func(i, j int) bool {
+		ni, oki := trailingInt(titles[i])
+		nj, okj := trailingInt(titles[j])
+		if oki && okj {
+			if ni != nj {
+				return ni < nj
+			}
+		} else if oki != okj {
+			return oki
+		}
+		return titles[i] < titles[j]
+	})
+	var sections []NotebookSectionSummary
+	for _, title := range titles {
+		one := map[string]map[string][]notebook.Note{title: defs[title]}
+		sections = append(sections, NotebookSectionSummary{
+			Title:              title,
+			ReviewCount:        countDefinitionNotes(one, histories, false),
+			ReverseReviewCount: countDefinitionNotes(one, histories, true),
+		})
+	}
+	return sections
+}
+
+// trailingInt extracts a trailing integer from s. "Session 12" → (12,
+// true); "intro" → (0, false). Used by definitionsSectionSummaries to
+// order session titles numerically rather than lexically.
+func trailingInt(s string) (int, bool) {
+	i := len(s)
+	for i > 0 {
+		c := s[i-1]
+		if c < '0' || c > '9' {
+			break
+		}
+		i--
+	}
+	if i == len(s) {
+		return 0, false
+	}
+	n := 0
+	for _, c := range s[i:] {
+		n = n*10 + int(c-'0')
+	}
+	return n, true
 }
 
 // countDefinitionNotes counts notes in definitions-only books that need review.

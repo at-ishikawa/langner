@@ -600,7 +600,12 @@ func originNextReviewDate(histories []notebook.LearningHistory, card EtymologyOr
 }
 
 // LoadEtymologyNotebookSummaries returns etymology notebook summaries with due origin counts.
-func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
+// LoadEtymologyNotebookSummaries returns per-notebook etymology counts.
+// includeUnstudied, when true, counts every eligible non-skipped origin
+// (matching what an etymology quiz with "Include unstudied" loads);
+// when false, the count is gated by needsOriginReview so only origins
+// whose SR interval has elapsed contribute.
+func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
@@ -651,10 +656,14 @@ func (s *Service) LoadEtymologyNotebookSummaries() ([]NotebookSummary, error) {
 			if !isOriginEligible(learningHistories[id], index.Name, o.SessionTitle, o.Origin) {
 				continue
 			}
-			if needsOriginReview(learningHistories[id], index.Name, o.SessionTitle, o.Origin, notebook.QuizTypeEtymologyStandard) {
-				dueCount++
-				sectionDue[o.SessionTitle]++
+			// Without "Include unstudied", gate by SR — only count
+			// origins whose interval has elapsed. With it, count every
+			// eligible non-skipped origin, matching the actual quiz load.
+			if !includeUnstudied && !needsOriginReview(learningHistories[id], index.Name, o.SessionTitle, o.Origin, notebook.QuizTypeEtymologyStandard) {
+				continue
 			}
+			dueCount++
+			sectionDue[o.SessionTitle]++
 		}
 
 		var sections []NotebookSectionSummary

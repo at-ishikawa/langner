@@ -530,7 +530,7 @@ origins:
 	require.Len(t, cards, 1, "the same origin must collapse to one card regardless of language/whitespace differences")
 	assert.Equal(t, "spect", cards[0].Origin)
 
-	summaries, err := svc.LoadEtymologyNotebookSummaries()
+	summaries, err := svc.LoadEtymologyNotebookSummaries(false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 	assert.Equal(t, 1, summaries[0].EtymologyReviewCount,

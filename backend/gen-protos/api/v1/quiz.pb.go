@@ -240,9 +240,15 @@ func (GraphNode_Kind) EnumDescriptor() ([]byte, []int) {
 }
 
 type GetQuizOptionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// include_unstudied, when true, makes review counts on every
+	// notebook and section reflect the "Include unstudied words" toggle
+	// on the quiz start page: never-seen words and words still within
+	// their SR interval are added to the due count, matching what the
+	// actual quiz will load. Defaults to false (due-only counts).
+	IncludeUnstudied bool `protobuf:"varint,1,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetQuizOptionsRequest) Reset() {
@@ -273,6 +279,13 @@ func (x *GetQuizOptionsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetQuizOptionsRequest.ProtoReflect.Descriptor instead.
 func (*GetQuizOptionsRequest) Descriptor() ([]byte, []int) {
 	return file_api_v1_quiz_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GetQuizOptionsRequest) GetIncludeUnstudied() bool {
+	if x != nil {
+		return x.IncludeUnstudied
+	}
+	return false
 }
 
 type GetQuizOptionsResponse struct {
@@ -3840,8 +3853,9 @@ var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
-	"\x11api/v1/quiz.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"\x17\n" +
-	"\x15GetQuizOptionsRequest\"O\n" +
+	"\x11api/v1/quiz.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"D\n" +
+	"\x15GetQuizOptionsRequest\x12+\n" +
+	"\x11include_unstudied\x18\x01 \x01(\bR\x10includeUnstudied\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
 	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xc2\x02\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +

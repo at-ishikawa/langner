@@ -45,7 +45,14 @@ service QuizService {
   rpc SubmitEtymologyFreeformAnswer(SubmitEtymologyFreeformAnswerRequest) returns (SubmitEtymologyFreeformAnswerResponse);
 }
 
-message GetQuizOptionsRequest {}
+message GetQuizOptionsRequest {
+  // include_unstudied, when true, makes review counts on every
+  // notebook and section reflect the "Include unstudied words" toggle
+  // on the quiz start page: never-seen words and words still within
+  // their SR interval are added to the due count, matching what the
+  // actual quiz will load. Defaults to false (due-only counts).
+  bool include_unstudied = 1;
+}
 
 message GetQuizOptionsResponse {
   repeated NotebookSummary notebooks = 1;

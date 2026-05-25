@@ -116,7 +116,7 @@ func TestService_LoadNotebookSummaries_Empty(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := newTestService(t, mock_inference.NewMockClient(ctrl))
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 	assert.Empty(t, summaries)
 }
@@ -125,7 +125,7 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc, _ := newTestServiceWithFixtures(t, mock_inference.NewMockClient(ctrl))
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)
 
@@ -242,7 +242,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 
 	summaryMap := make(map[string]NotebookSummary)
@@ -271,7 +271,7 @@ func TestService_LoadNotebookSummaries_LearningHistoryError(t *testing.T) {
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	_, err := svc.LoadNotebookSummaries()
+	_, err := svc.LoadNotebookSummaries(false)
 	require.Error(t, err)
 }
 
@@ -689,7 +689,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 	require.Len(t, summaries[0].Sections, 2)
@@ -1570,4 +1570,31 @@ func TestMaskWord(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// TestDefinitionsSectionSummaries_NaturalSessionOrdering pins the
+// ordering rule that drove this helper's addition: session titles with
+// a trailing integer ("Session 2", "Session 10") sort numerically, not
+// lexically. Without this, the per-session list on the vocabulary quiz
+// start page would put "Session 10" before "Session 2" — visible
+// regression vs how etymology orders the same book.
+//
+// Per-section ReviewCount semantics are owned by countDefinitionNotes
+// (notes without a history don't "need review" yet) and tested
+// elsewhere; this test stays focused on ordering.
+func TestDefinitionsSectionSummaries_NaturalSessionOrdering(t *testing.T) {
+	defs := map[string]map[string][]notebook.Note{
+		"Session 10": {"__index_0": {{Expression: "hesitate", Meaning: "to pause"}}},
+		"Session 2":  {"__index_0": {{Expression: "stall", Meaning: "to delay"}}},
+		"Intro":      {"__index_0": {{Expression: "warm up", Meaning: "to ease in"}}},
+	}
+
+	got := definitionsSectionSummaries(defs, nil)
+
+	require.Len(t, got, 3)
+	// Numbered sessions sort numerically before non-numbered ones; among
+	// non-numbered, alphabetical. So: Session 2, Session 10, Intro.
+	assert.Equal(t, "Session 2", got[0].Title)
+	assert.Equal(t, "Session 10", got[1].Title)
+	assert.Equal(t, "Intro", got[2].Title)
 }

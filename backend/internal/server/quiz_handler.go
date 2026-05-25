@@ -55,7 +55,7 @@ func (h *QuizHandler) SetNoteRepository(repo notebook.NoteRepository) {
 }
 
 func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[apiv1.GetQuizOptionsRequest]) (*connect.Response[apiv1.GetQuizOptionsResponse], error) {
-	summaries, err := h.svc.LoadNotebookSummaries()
+	summaries, err := h.svc.LoadNotebookSummaries(req.Msg.GetIncludeUnstudied())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load notebook summaries: %w", err))
 	}
