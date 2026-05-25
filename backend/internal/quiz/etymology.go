@@ -122,25 +122,37 @@ func (s *Service) LoadEtymologyOriginCards(
 				continue
 			}
 
-			// Hard eligibility gate for standard/reverse quizzes:
-			// origins must have at least one etymology_freeform entry
-			// AND at least one correct etymology answer. Skipped for
-			// freeform mode, which is the entry point where new origins
-			// are first encountered.
-			if !skipEligibility && !isOriginEligible(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin) {
-				continue
-			}
-			// Soft SR check: skipped when includeUnstudied is true so
-			// the user can still drill origins that are not due yet.
-			// Reads the log set matching the active quiz mode — fixes a
-			// bug where reverse mode used the standard track and showed
-			// origins the user had just answered correctly in reverse.
-			// Freeform's cross-mode dedup happens at the
-			// originNextReviewDate level (the frontend gates re-drilling
-			// via the "Not until $date" banner); freeform itself loads
-			// every origin so the typed-input lookup can find them.
-			if !includeUnstudied {
-				if !needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType) {
+			// Branch on whether the origin has any learning history at all
+			// vs. has been studied (= has at least one correct answer in
+			// any mode).
+			//
+			//   never-seen      → no logs in any track
+			//   studied         → at least one correct etymology answer
+			//   tried-and-failed → has logs but only misunderstood
+			//
+			// Freeform mode (skipEligibility=true) always returns every
+			// origin so the typed-input lookup can find them; the
+			// frontend gates re-drilling via the "Not until $date" banner.
+			//
+			// For standard / reverse:
+			//   - never-seen    → include iff includeUnstudied=true.
+			//   - studied       → include iff still due per SR. The
+			//     previous code bypassed the SR check when
+			//     includeUnstudied=true, which served origins the user
+			//     had just answered correctly (e.g. fero re-asked the
+			//     same day a 90-day interval was scheduled).
+			//   - tried-and-failed → always filtered out (the
+			//     eligibility gate); the user should freeform-drill it
+			//     to a first correct answer before standard/reverse.
+			if !skipEligibility {
+				neverSeen := findOriginExpression(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin) == nil
+				if neverSeen {
+					if !includeUnstudied {
+						continue
+					}
+				} else if !isOriginEligible(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin) {
+					continue
+				} else if !needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType) {
 					continue
 				}
 			}
