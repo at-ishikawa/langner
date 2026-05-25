@@ -10,6 +10,14 @@ interface RelationGraphProps {
   value: string;
   onValueChange: (next: string) => void;
   disabled?: boolean;
+  /** compact forces a single-column layout regardless of viewport width.
+   * Use when the graph is rendered inside a narrow container (e.g. the
+   * QuizResultCard feedback row, which lives inside a maxW="sm" page).
+   * Without this, Chakra's sm: rules fire based on viewport — not the
+   * surrounding container — so the multi-column desktop layout activates
+   * even when the parent card is only ~480px wide, overflowing the card
+   * border. Single-column is the safer default in nested contexts. */
+  compact?: boolean;
 }
 
 // RelationGraph renders the graph-quiz shape carried by `prompt` with a
@@ -17,14 +25,14 @@ interface RelationGraphProps {
 // radial cluster for CLUSTER (one concept at the centre, members below),
 // two side-by-side concept columns for ANTONYM_PAIR. v1 uses plain
 // Chakra primitives (no reactflow) since the shapes are small and fixed.
-export function RelationGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
+export function RelationGraph({ prompt, value, onValueChange, disabled, compact }: RelationGraphProps) {
   switch (prompt.shape) {
     case GraphPrompt_Shape.CLUSTER:
-      return <ClusterGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
+      return <ClusterGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} compact={compact} />;
     case GraphPrompt_Shape.ANTONYM_PAIR:
-      return <AntonymPairGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
+      return <AntonymPairGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} compact={compact} />;
     case GraphPrompt_Shape.FORM_BRANCH:
-      return <FormBranchGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} />;
+      return <FormBranchGraph prompt={prompt} value={value} onValueChange={onValueChange} disabled={disabled} compact={compact} />;
     default:
       return (
         <Box p={3} borderWidth="1px" borderRadius="md" bg="gray.50" _dark={{ bg: "gray.800" }}>
@@ -36,7 +44,7 @@ export function RelationGraph({ prompt, value, onValueChange, disabled }: Relati
   }
 }
 
-function FormBranchGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
+function FormBranchGraph({ prompt, value, onValueChange, disabled, compact }: RelationGraphProps) {
   // Layout: ORIGIN node (the blank, with meaning as hint) at the top,
   // FORM nodes in a row below, ENGLISH_WORD nodes under each form. The
   // backend always blanks the origin; the user types the headword given
@@ -68,8 +76,10 @@ function FormBranchGraph({ prompt, value, onValueChange, disabled }: RelationGra
   // columns on sm+ to keep the original tree shape on tablets/desktop.
   // Three 110px-wide form tiles on a 375px phone wrap or overflow when
   // labels are full Latin headwords like "missum" / "mittere" plus the
-  // derived English words underneath.
+  // derived English words underneath. Compact mode (nested inside a
+  // narrow card) stays single-column regardless of viewport.
   const formCols = `repeat(${Math.min(forms.length, 3)}, minmax(0, 1fr))`;
+  const formColsResponsive = compact ? { base: "1fr" } : { base: "1fr", sm: formCols };
   return (
     <Box>
       <Text fontSize="xs" color="fg.muted" mb={2}>
@@ -93,7 +103,7 @@ function FormBranchGraph({ prompt, value, onValueChange, disabled }: RelationGra
         />
         <Box
           display="grid"
-          gridTemplateColumns={{ base: "1fr", sm: formCols }}
+          gridTemplateColumns={formColsResponsive}
           gap={2}
           mt={3}
         >
@@ -132,7 +142,7 @@ function FormBranchGraph({ prompt, value, onValueChange, disabled }: RelationGra
   );
 }
 
-function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
+function ClusterGraph({ prompt, value, onValueChange, disabled, compact }: RelationGraphProps) {
   const members = useMemo(
     () => prompt.nodes.filter((n) => n.kind === GraphNode_Kind.ORIGIN),
     [prompt.nodes],
@@ -146,8 +156,11 @@ function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphP
   // Member grid is a single column on phones (<480px), then up to three
   // columns on sm+ to preserve the radial-cluster visual on tablets and
   // desktop. A 3-column grid on a 375px phone leaves ~110px per tile —
-  // not enough for Latin/Greek labels like "philanthropy".
+  // not enough for Latin/Greek labels like "philanthropy". Compact mode
+  // (nested inside a narrow feedback card) stays single-column on every
+  // viewport so the graph cannot overflow the parent card border.
   const desktopCols = `repeat(${Math.min(members.length, 3)}, minmax(0, 1fr))`;
+  const memberColsResponsive = compact ? { base: "1fr" } : { base: "1fr", sm: desktopCols };
   return (
     <Box>
       <Text fontSize="xs" color="fg.muted" mb={2}>
@@ -165,7 +178,7 @@ function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphP
         <ConceptChip node={concept} />
         <Box
           display="grid"
-          gridTemplateColumns={{ base: "1fr", sm: desktopCols }}
+          gridTemplateColumns={memberColsResponsive}
           gap={2}
           mt={3}
         >
@@ -185,7 +198,7 @@ function ClusterGraph({ prompt, value, onValueChange, disabled }: RelationGraphP
   );
 }
 
-function AntonymPairGraph({ prompt, value, onValueChange, disabled }: RelationGraphProps) {
+function AntonymPairGraph({ prompt, value, onValueChange, disabled, compact }: RelationGraphProps) {
   // Edges of type `member_of` identify which concept each member belongs to.
   // The single `antonym` edge tells us which two concepts to render. Concept
   // node ids are stable ("concept_a" and "concept_b") so we look them up
@@ -227,9 +240,9 @@ function AntonymPairGraph({ prompt, value, onValueChange, disabled }: RelationGr
       >
         <Box
           display="grid"
-          gridTemplateColumns={{ base: "1fr", sm: "1fr auto 1fr" }}
+          gridTemplateColumns={compact ? { base: "1fr" } : { base: "1fr", sm: "1fr auto 1fr" }}
           gap={3}
-          alignItems={{ base: "stretch", sm: "start" }}
+          alignItems={compact ? "stretch" : { base: "stretch", sm: "start" }}
         >
           <Box textAlign="center">
             <ConceptChip node={conceptA} />
@@ -254,8 +267,8 @@ function AntonymPairGraph({ prompt, value, onValueChange, disabled }: RelationGr
           >
             <Box px={2} py={0.5} borderRadius="full" bg="red.100" _dark={{ bg: "red.900" }}>
               <Text fontSize="xs" color="red.800" _dark={{ color: "red.200" }} fontWeight="medium">
-                <Text as="span" display={{ base: "none", sm: "inline" }}>⇄ antonym</Text>
-                <Text as="span" display={{ base: "inline", sm: "none" }}>⇅ antonym</Text>
+                <Text as="span" display={compact ? "none" : { base: "none", sm: "inline" }}>⇄ antonym</Text>
+                <Text as="span" display={compact ? "inline" : { base: "inline", sm: "none" }}>⇅ antonym</Text>
               </Text>
             </Box>
           </Box>

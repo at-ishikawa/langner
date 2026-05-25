@@ -378,6 +378,7 @@ export function QuizResultCard({
             value=""
             onValueChange={() => {}}
             disabled
+            compact
           />
         </Box>
       )}
