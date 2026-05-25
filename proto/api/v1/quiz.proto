@@ -468,6 +468,12 @@ message SubmitEtymologyStandardAnswerResponse {
   // moment of greatest engagement (right after they tried to retrieve
   // its meaning). Frontend highlights the card's origin in the graph.
   GraphPrompt graph_context = 7;
+  // example_words lists up to a handful of English vocabulary entries
+  // that derive from this origin (collected from the definitions whose
+  // origin_parts reference this origin). Helps the learner anchor an
+  // abstract origin to concrete vocabulary they already know. Capped at
+  // 5 server-side so the feedback card stays compact.
+  repeated string example_words = 8;
 }
 
 message BatchSubmitEtymologyStandardAnswersRequest {
@@ -495,6 +501,8 @@ message SubmitEtymologyReverseAnswerResponse {
   string next_review_date = 6;
   string learned_at = 7;
   int64 note_id = 8;
+  // example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+  repeated string example_words = 9;
 }
 
 message BatchSubmitEtymologyReverseAnswersRequest {
@@ -543,4 +551,6 @@ message SubmitEtymologyFreeformAnswerResponse {
   // grader accepts any sense's meaning as correct; this field surfaces the
   // alternatives so the user is reminded that multi-sense origins exist.
   repeated EtymologyOriginSense all_senses = 10;
+  // example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+  repeated string example_words = 11;
 }

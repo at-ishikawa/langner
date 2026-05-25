@@ -404,6 +404,19 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(&apiv1.StartEtymologyQuizResponse{Cards: protoCards}), nil
 }
 
+// loadCardExampleWords reuses LoadEtymologyExampleWords on a single-card
+// slice so the feedback responses can ship the same English-derivation
+// list that StartEtymologyQuiz already attaches to cards. Failures and
+// missing data resolve to nil — the feedback UI just renders nothing.
+func (h *QuizHandler) loadCardExampleWords(card quiz.EtymologyOriginCard) []string {
+	examples, err := h.svc.LoadEtymologyExampleWords([]quiz.EtymologyOriginCard{card})
+	if err != nil {
+		return nil
+	}
+	key := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle + "\x00" + card.Sense
+	return examples[key]
+}
+
 func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyStandardAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyStandardAnswerResponse], error) {
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
 	cardID := req.Msg.GetCardId()
@@ -424,7 +437,7 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 		concepts := loadBookConcepts(ctx, r, card.NotebookName)
 		graphContext = buildGraphContextForCard(ctx, r, card, concepts)
 	}
-	return connect.NewResponse(&apiv1.SubmitEtymologyStandardAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: card.Meaning, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, GraphContext: graphContext}), nil
+	return connect.NewResponse(&apiv1.SubmitEtymologyStandardAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: card.Meaning, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, GraphContext: graphContext, ExampleWords: h.loadCardExampleWords(card)}), nil
 }
 
 func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyReverseAnswerResponse], error) {
@@ -439,7 +452,7 @@ func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *con
 	}
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyReverse)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
-	return connect.NewResponse(&apiv1.SubmitEtymologyReverseAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectOrigin: card.Origin, Type: card.Type, Language: card.Language, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID}), nil
+	return connect.NewResponse(&apiv1.SubmitEtymologyReverseAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectOrigin: card.Origin, Type: card.Type, Language: card.Language, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, ExampleWords: h.loadCardExampleWords(card)}), nil
 }
 
 func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest]) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
@@ -523,7 +536,8 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *co
 		Correct: bestGrade.Correct, Reason: bestGrade.Reason, CorrectMeaning: resultSense.Meaning,
 		Type: resultSense.Type, Language: resultSense.Language, NotebookName: resultSense.NotebookName,
 		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID,
-		AllSenses: allSenses,
+		AllSenses:    allSenses,
+		ExampleWords: h.loadCardExampleWords(*resultSense),
 	}), nil
 }
 

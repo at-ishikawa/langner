@@ -158,6 +158,11 @@ export interface EtymologyOriginResult {
   // user has answered. Same shape vocabulary as the reverse-mode prompt
   // graph; reuses the RelationGraph component.
   graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
+  // exampleWords is a short list of English vocabulary entries that
+  // derive from this origin — anchors the abstract Latin/Greek root to
+  // words the learner already knows. Capped server-side; render as a
+  // small chip row under the breakdown in the feedback card.
+  exampleWords?: string[];
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;

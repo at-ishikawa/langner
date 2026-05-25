@@ -3042,7 +3042,13 @@ type SubmitEtymologyStandardAnswerResponse struct {
 	// origin in its concept / antonym / form-branch context at the
 	// moment of greatest engagement (right after they tried to retrieve
 	// its meaning). Frontend highlights the card's origin in the graph.
-	GraphContext  *GraphPrompt `protobuf:"bytes,7,opt,name=graph_context,json=graphContext,proto3" json:"graph_context,omitempty"`
+	GraphContext *GraphPrompt `protobuf:"bytes,7,opt,name=graph_context,json=graphContext,proto3" json:"graph_context,omitempty"`
+	// example_words lists up to a handful of English vocabulary entries
+	// that derive from this origin (collected from the definitions whose
+	// origin_parts reference this origin). Helps the learner anchor an
+	// abstract origin to concrete vocabulary they already know. Capped at
+	// 5 server-side so the feedback card stays compact.
+	ExampleWords  []string `protobuf:"bytes,8,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3122,6 +3128,13 @@ func (x *SubmitEtymologyStandardAnswerResponse) GetNoteId() int64 {
 func (x *SubmitEtymologyStandardAnswerResponse) GetGraphContext() *GraphPrompt {
 	if x != nil {
 		return x.GraphContext
+	}
+	return nil
+}
+
+func (x *SubmitEtymologyStandardAnswerResponse) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
 	}
 	return nil
 }
@@ -3284,8 +3297,10 @@ type SubmitEtymologyReverseAnswerResponse struct {
 	NextReviewDate string                 `protobuf:"bytes,6,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,7,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	NoteId         int64                  `protobuf:"varint,8,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+	ExampleWords  []string `protobuf:"bytes,9,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitEtymologyReverseAnswerResponse) Reset() {
@@ -3372,6 +3387,13 @@ func (x *SubmitEtymologyReverseAnswerResponse) GetNoteId() int64 {
 		return x.NoteId
 	}
 	return 0
+}
+
+func (x *SubmitEtymologyReverseAnswerResponse) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
+	}
+	return nil
 }
 
 type BatchSubmitEtymologyReverseAnswersRequest struct {
@@ -3700,7 +3722,9 @@ type SubmitEtymologyFreeformAnswerResponse struct {
 	// all_senses lists every recorded sense of the typed origin. The freeform
 	// grader accepts any sense's meaning as correct; this field surfaces the
 	// alternatives so the user is reminded that multi-sense origins exist.
-	AllSenses     []*EtymologyOriginSense `protobuf:"bytes,10,rep,name=all_senses,json=allSenses,proto3" json:"all_senses,omitempty"`
+	AllSenses []*EtymologyOriginSense `protobuf:"bytes,10,rep,name=all_senses,json=allSenses,proto3" json:"all_senses,omitempty"`
+	// example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+	ExampleWords  []string `protobuf:"bytes,11,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3801,6 +3825,13 @@ func (x *SubmitEtymologyFreeformAnswerResponse) GetNoteId() int64 {
 func (x *SubmitEtymologyFreeformAnswerResponse) GetAllSenses() []*EtymologyOriginSense {
 	if x != nil {
 		return x.AllSenses
+	}
+	return nil
+}
+
+func (x *SubmitEtymologyFreeformAnswerResponse) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
 	}
 	return nil
 }
@@ -4048,7 +4079,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"$SubmitEtymologyStandardAnswerRequest\x12 \n" +
 	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x9e\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xc3\x02\n" +
 	"%SubmitEtymologyStandardAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12'\n" +
@@ -4057,7 +4088,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
 	"learned_at\x18\x05 \x01(\tR\tlearnedAt\x12\x17\n" +
 	"\anote_id\x18\x06 \x01(\x03R\x06noteId\x128\n" +
-	"\rgraph_context\x18\a \x01(\v2\x13.api.v1.GraphPromptR\fgraphContext\"~\n" +
+	"\rgraph_context\x18\a \x01(\v2\x13.api.v1.GraphPromptR\fgraphContext\x12#\n" +
+	"\rexample_words\x18\b \x03(\tR\fexampleWords\"~\n" +
 	"*BatchSubmitEtymologyStandardAnswersRequest\x12P\n" +
 	"\aanswers\x18\x01 \x03(\v2,.api.v1.SubmitEtymologyStandardAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"z\n" +
 	"+BatchSubmitEtymologyStandardAnswersResponse\x12K\n" +
@@ -4065,7 +4097,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"#SubmitEtymologyReverseAnswerRequest\x12 \n" +
 	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12#\n" +
 	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x91\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xb6\x02\n" +
 	"$SubmitEtymologyReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12%\n" +
@@ -4075,7 +4107,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10next_review_date\x18\x06 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
 	"learned_at\x18\a \x01(\tR\tlearnedAt\x12\x17\n" +
-	"\anote_id\x18\b \x01(\x03R\x06noteId\"|\n" +
+	"\anote_id\x18\b \x01(\x03R\x06noteId\x12#\n" +
+	"\rexample_words\x18\t \x03(\tR\fexampleWords\"|\n" +
 	")BatchSubmitEtymologyReverseAnswersRequest\x12O\n" +
 	"\aanswers\x18\x01 \x03(\v2+.api.v1.SubmitEtymologyReverseAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"x\n" +
 	"*BatchSubmitEtymologyReverseAnswersResponse\x12J\n" +
@@ -4096,7 +4129,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\ameaning\x18\x01 \x01(\tR\ameaning\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x03 \x01(\tR\blanguage\x12#\n" +
-	"\rsession_title\x18\x04 \x01(\tR\fsessionTitle\"\xf6\x02\n" +
+	"\rsession_title\x18\x04 \x01(\tR\fsessionTitle\"\x9b\x03\n" +
 	"%SubmitEtymologyFreeformAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12'\n" +
@@ -4110,7 +4143,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\anote_id\x18\t \x01(\x03R\x06noteId\x12;\n" +
 	"\n" +
 	"all_senses\x18\n" +
-	" \x03(\v2\x1c.api.v1.EtymologyOriginSenseR\tallSenses*\xd1\x01\n" +
+	" \x03(\v2\x1c.api.v1.EtymologyOriginSenseR\tallSenses\x12#\n" +
+	"\rexample_words\x18\v \x03(\tR\fexampleWords*\xd1\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +

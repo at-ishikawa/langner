@@ -101,6 +101,7 @@ export default function EtymologyReversePage() {
           type: r.type,
           language: r.language,
           learnedAt: r.learnedAt || undefined,
+          exampleWords: r.exampleWords,
         });
       });
       bufferRef.current = [];

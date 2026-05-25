@@ -97,6 +97,7 @@ export default function EtymologyStandardPage() {
           language: b.card.language,
           learnedAt: r.learnedAt || undefined,
           graphContext: r.graphContext,
+          exampleWords: r.exampleWords,
         });
       });
       bufferRef.current = [];
