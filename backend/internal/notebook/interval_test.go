@@ -447,3 +447,67 @@ func TestFixedLevelCalculator_RecalculateAll(t *testing.T) {
 		})
 	}
 }
+
+// TestNextIntervalForWrite_AgreesWithRecalculateAll pins the contract
+// that drove the helper's introduction: a sequence of live-quiz writes
+// (each calling NextIntervalForWrite) must yield the same interval_days
+// as a single RecalculateAll over the same chain. Otherwise `validate
+// --fix` would always produce diffs against freshly-written data — the
+// "live vs recalc" drift this PR set out to remove.
+func TestNextIntervalForWrite_AgreesWithRecalculateAll(t *testing.T) {
+	calculators := map[string]IntervalCalculator{
+		"sm2":   &SM2Calculator{},
+		"fixed": &FixedLevelCalculator{Intervals: DefaultFixedIntervals},
+	}
+
+	day := func(n int) Date { return NewDate(time.Date(2026, 1, 1+n, 10, 0, 0, 0, time.UTC)) }
+
+	// A mixed chain: correct → correct (early review) → wrong → correct.
+	// The early-review and lapse steps are exactly where the two paths
+	// used to disagree before unification.
+	tentatives := []LearningRecord{
+		{Status: LearnedStatusUnderstood, LearnedAt: day(0), Quality: 4},
+		{Status: LearnedStatusUnderstood, LearnedAt: day(2), Quality: 4},
+		{Status: LearnedStatusMisunderstood, LearnedAt: day(10), Quality: 1},
+		{Status: LearnedStatusUnderstood, LearnedAt: day(11), Quality: 4},
+	}
+
+	for name, calc := range calculators {
+		t.Run(name, func(t *testing.T) {
+			// Simulate live-quiz writes: each call sees the previous
+			// writes as the existing chain, computes its own interval,
+			// and prepends itself newest-first.
+			liveLogs := []LearningRecord{}
+			for _, tent := range tentatives {
+				tent.IntervalDays, _ = calc.NextIntervalForWrite(liveLogs, tent)
+				liveLogs = append([]LearningRecord{tent}, liveLogs...)
+			}
+
+			// Run RecalculateAll over the same set of (timestamp,
+			// quality, status) values, with zero stored intervals,
+			// so the chain is forced to derive everything from scratch.
+			fresh := make([]LearningRecord, len(tentatives))
+			for i, tent := range tentatives {
+				fresh[i] = LearningRecord{
+					Status:    tent.Status,
+					LearnedAt: tent.LearnedAt,
+					Quality:   tent.Quality,
+				}
+			}
+			_, recalced := calc.RecalculateAll(fresh)
+
+			byTs := make(map[time.Time]int, len(recalced))
+			for _, log := range recalced {
+				byTs[log.LearnedAt.Time] = log.IntervalDays
+			}
+
+			for _, live := range liveLogs {
+				recalcInterval, ok := byTs[live.LearnedAt.Time]
+				require.True(t, ok, "recalc result missing log at %s", live.LearnedAt.Time)
+				assert.Equal(t, recalcInterval, live.IntervalDays,
+					"live-write interval at %s should equal recalc interval",
+					live.LearnedAt.Time.Format("2006-01-02"))
+			}
+		})
+	}
+}

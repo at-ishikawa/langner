@@ -245,13 +245,13 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, quizType notebook.Quiz
 		log.Quality = 1
 	}
 
-	// Derive EF from logs before this entry and recalculate interval
+	// Replay the older-log chain with this flipped entry appended so the
+	// recomputed interval matches what `validate --fix` would produce.
 	var previousLogs []notebook.LearningRecord
 	if len(logs) > 1 {
 		previousLogs = logs[1:]
 	}
-	derivedEF := calculator.DeriveEF(previousLogs)
-	newInterval, _ := calculator.CalculateInterval(previousLogs, log.Quality, derivedEF)
+	newInterval, _ := calculator.NextIntervalForWrite(previousLogs, *log)
 	log.IntervalDays = newInterval
 
 	expr.SetLogsForQuizType(quizType, logs)

@@ -433,20 +433,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 		}
 	}
 
-	currentEF := calculator.DeriveEF(exp.ReverseLogs)
-
-	nextInterval, _ := calculator.CalculateInterval(exp.ReverseLogs, quality, currentEF)
-
-	newRecord := LearningRecord{
+	tentative := LearningRecord{
 		Status:         status,
 		LearnedAt:      NewDate(),
 		Quality:        quality,
 		ResponseTimeMs: responseTimeMs,
 		QuizType:       string(quizType),
-		IntervalDays:   nextInterval,
 	}
+	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.ReverseLogs, tentative)
 
-	exp.ReverseLogs = append([]LearningRecord{newRecord}, exp.ReverseLogs...)
+	exp.ReverseLogs = append([]LearningRecord{tentative}, exp.ReverseLogs...)
 }
 
 // AddRecordWithQualityForEtymology adds a new learning record for etymology quiz with SM-2 quality data
@@ -467,17 +463,15 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	}
 
 	addRecord := func(logs []LearningRecord) []LearningRecord {
-		currentEF := calculator.DeriveEF(logs)
-		nextInterval, _ := calculator.CalculateInterval(logs, quality, currentEF)
-		newRecord := LearningRecord{
+		tentative := LearningRecord{
 			Status:         status,
 			LearnedAt:      NewDate(),
 			Quality:        quality,
 			ResponseTimeMs: responseTimeMs,
 			QuizType:       string(quizType),
-			IntervalDays:   nextInterval,
 		}
-		return append([]LearningRecord{newRecord}, logs...)
+		tentative.IntervalDays, _ = calculator.NextIntervalForWrite(logs, tentative)
+		return append([]LearningRecord{tentative}, logs...)
 	}
 
 	switch quizType {
@@ -640,20 +634,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 		}
 	}
 
-	currentEF := calculator.DeriveEF(exp.LearnedLogs)
-
-	nextInterval, _ := calculator.CalculateInterval(exp.LearnedLogs, quality, currentEF)
-
-	newRecord := LearningRecord{
+	tentative := LearningRecord{
 		Status:         status,
 		LearnedAt:      NewDate(),
 		Quality:        quality,
 		ResponseTimeMs: responseTimeMs,
 		QuizType:       string(quizType),
-		IntervalDays:   nextInterval,
 	}
+	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.LearnedLogs, tentative)
 
-	exp.LearnedLogs = append([]LearningRecord{newRecord}, exp.LearnedLogs...)
+	exp.LearnedLogs = append([]LearningRecord{tentative}, exp.LearnedLogs...)
 }
 
 // IsExpressionSkipped checks whether a note is excluded from the given quiz

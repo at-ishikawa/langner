@@ -323,13 +323,14 @@ func (u *LearningHistoryUpdater) OverrideLog(
 				logs[i].Status = LearnedStatusMisunderstood
 			}
 
-			// Derive EF from logs before this entry
+			// Replay the chain of older logs with this entry appended so
+			// the recomputed interval matches what `validate --fix` would
+			// produce: same chain logic, same early-review guard.
 			var previousLogs []LearningRecord
 			if i+1 < len(logs) {
 				previousLogs = logs[i+1:]
 			}
-			derivedEF := u.calculator.DeriveEF(previousLogs)
-			newInterval, _ := u.calculator.CalculateInterval(previousLogs, logs[i].Quality, derivedEF)
+			newInterval, _ := u.calculator.NextIntervalForWrite(previousLogs, logs[i])
 			logs[i].IntervalDays = newInterval
 		}
 

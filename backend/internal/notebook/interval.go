@@ -31,7 +31,21 @@ var DefaultFixedIntervals = []int{1, 7, 30, 90, 365, 1095, 1825}
 type IntervalCalculator interface {
 	// CalculateInterval returns the next interval and new easiness factor
 	// given existing logs, the current quality grade, and current EF.
+	//
+	// Prefer NextIntervalForWrite for live-quiz writes. CalculateInterval
+	// does NOT apply the early-review guard, so a chain that's been
+	// written via this path and later replayed through RecalculateAll
+	// (e.g. by `validate --fix`) may produce different intervals.
 	CalculateInterval(logs []LearningRecord, currentQuality int, currentEF float64) (intervalDays int, newEF float64)
+
+	// NextIntervalForWrite is the canonical way to compute the
+	// interval_days for a new log that the live quiz is about to write.
+	// It appends `tentative` to `existingLogs` and replays the chain
+	// through RecalculateAll, so the value returned is identical to
+	// what `validate --fix` would compute for the same log later.
+	// Returns the tentative log's interval and the chain's final EF
+	// (used by SM-2; FixedLevelCalculator returns 0).
+	NextIntervalForWrite(existingLogs []LearningRecord, tentative LearningRecord) (intervalDays int, newEF float64)
 
 	// RecalculateAll replays logs oldest-to-newest and recomputes EF and intervals.
 	// Returns the final EF and updated logs (sorted newest-first).
@@ -41,8 +55,35 @@ type IntervalCalculator interface {
 	DeriveEF(logs []LearningRecord) float64
 }
 
+// nextIntervalForWrite is the shared implementation: append the tentative
+// log, run RecalculateAll, and return the tentative log's resulting
+// interval. Used by both SM2Calculator and FixedLevelCalculator so the
+// "live write" rule is identical regardless of algorithm.
+func nextIntervalForWrite(c IntervalCalculator, existingLogs []LearningRecord, tentative LearningRecord) (int, float64) {
+	chain := make([]LearningRecord, 0, len(existingLogs)+1)
+	chain = append(chain, tentative)
+	chain = append(chain, existingLogs...)
+	ef, replayed := c.RecalculateAll(chain)
+	for _, log := range replayed {
+		if log.LearnedAt.Time.Equal(tentative.LearnedAt.Time) {
+			return log.IntervalDays, ef
+		}
+	}
+	// Fallback: RecalculateAll sorts newest-first and the tentative log
+	// was just stamped with the current time, so it should be [0].
+	if len(replayed) > 0 {
+		return replayed[0].IntervalDays, ef
+	}
+	return 0, ef
+}
+
 // SM2Calculator implements the modified SM-2 algorithm.
 type SM2Calculator struct{}
+
+// NextIntervalForWrite delegates to the shared helper.
+func (c *SM2Calculator) NextIntervalForWrite(existingLogs []LearningRecord, tentative LearningRecord) (int, float64) {
+	return nextIntervalForWrite(c, existingLogs, tentative)
+}
 
 // CalculateInterval computes the next interval using modified SM-2.
 func (c *SM2Calculator) CalculateInterval(logs []LearningRecord, currentQuality int, currentEF float64) (int, float64) {
@@ -214,6 +255,11 @@ func (c *FixedLevelCalculator) levelFromInterval(lastInterval int) int {
 // DeriveEF returns 0 for fixed level calculator since it does not use EF.
 func (c *FixedLevelCalculator) DeriveEF(_ []LearningRecord) float64 {
 	return 0
+}
+
+// NextIntervalForWrite delegates to the shared helper.
+func (c *FixedLevelCalculator) NextIntervalForWrite(existingLogs []LearningRecord, tentative LearningRecord) (int, float64) {
+	return nextIntervalForWrite(c, existingLogs, tentative)
 }
 
 // CalculateInterval computes the next interval using fixed levels.
