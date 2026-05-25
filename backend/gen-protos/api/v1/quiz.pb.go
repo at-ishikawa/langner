@@ -2734,8 +2734,17 @@ type GraphNode struct {
 	// narrow the blank: language is shown next to ORIGIN nodes (e.g.
 	// "French"); hint is free text shown on the blank node (e.g. the
 	// meaning of the missing English word so the user can guess uniquely).
-	Language      string `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
-	Hint          string `protobuf:"bytes,5,opt,name=hint,proto3" json:"hint,omitempty"`
+	Language string `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	Hint     string `protobuf:"bytes,5,opt,name=hint,proto3" json:"hint,omitempty"`
+	// meaning is the origin's English gloss as recorded in the etymology
+	// YAML (e.g. "written (past participle of scribo)"). Rendered under
+	// each ORIGIN node in CLUSTER / ANTONYM_PAIR shapes so the learner
+	// can see how members of the same concept relate to each other —
+	// not just one specific derivation rule but whatever the YAML
+	// prose says ("form of con- before b, m, p", "adverb form of bonus",
+	// "uncle on the mother's side", etc.). Empty on blank nodes (no leak
+	// of the answer) and on CONCEPT / FORM / ENGLISH_WORD nodes.
+	Meaning       string `protobuf:"bytes,6,opt,name=meaning,proto3" json:"meaning,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2801,6 +2810,13 @@ func (x *GraphNode) GetLanguage() string {
 func (x *GraphNode) GetHint() string {
 	if x != nil {
 		return x.Hint
+	}
+	return ""
+}
+
+func (x *GraphNode) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
 	}
 	return ""
 }
@@ -4065,13 +4081,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11SHAPE_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aCLUSTER\x10\x01\x12\x10\n" +
 	"\fANTONYM_PAIR\x10\x02\x12\x0f\n" +
-	"\vFORM_BRANCH\x10\x03\"\xe0\x01\n" +
+	"\vFORM_BRANCH\x10\x03\"\xfa\x01\n" +
 	"\tGraphNode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.api.v1.GraphNode.KindR\x04kind\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1a\n" +
 	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x12\n" +
-	"\x04hint\x18\x05 \x01(\tR\x04hint\"Q\n" +
+	"\x04hint\x18\x05 \x01(\tR\x04hint\x12\x18\n" +
+	"\ameaning\x18\x06 \x01(\tR\ameaning\"Q\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aCONCEPT\x10\x01\x12\n" +

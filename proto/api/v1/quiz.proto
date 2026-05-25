@@ -432,6 +432,15 @@ message GraphNode {
   // meaning of the missing English word so the user can guess uniquely).
   string language = 4;
   string hint = 5;
+  // meaning is the origin's English gloss as recorded in the etymology
+  // YAML (e.g. "written (past participle of scribo)"). Rendered under
+  // each ORIGIN node in CLUSTER / ANTONYM_PAIR shapes so the learner
+  // can see how members of the same concept relate to each other —
+  // not just one specific derivation rule but whatever the YAML
+  // prose says ("form of con- before b, m, p", "adverb form of bonus",
+  // "uncle on the mother's side", etc.). Empty on blank nodes (no leak
+  // of the answer) and on CONCEPT / FORM / ENGLISH_WORD nodes.
+  string meaning = 6;
 }
 
 message GraphEdge {

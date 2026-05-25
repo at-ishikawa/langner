@@ -372,6 +372,17 @@ function MemberNode({ node, isBlank, value, onValueChange, disabled }: MemberNod
           <Text fontSize="2xs" color="fg.muted">
             {node.language}
           </Text>
+          {node.meaning && (
+            // Meaning prose under each origin (cluster / antonym pair).
+            // Communicates inter-member relationships that the YAML
+            // already records in the meaning text — "(past participle
+            // of scribo)" makes the scriptus → scribo relationship
+            // visible without a new graph shape or schema field.
+            // Italic + slightly muted to read as annotation, not label.
+            <Text fontSize="2xs" color="fg.subtle" fontStyle="italic" lineHeight="1.2" mt={0.5}>
+              {node.meaning}
+            </Text>
+          )}
         </>
       )}
     </Box>
