@@ -2904,3 +2904,134 @@ func TestValidator_backfillQuizType(t *testing.T) {
 		})
 	}
 }
+
+// TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots pins the rule
+// the user asked for: --fix replays each log series through the SR
+// calculator (RecalculateAll) so interval_days reflects the prior-state
+// chain. It touches all four slots (learned/reverse/etymology_breakdown/
+// etymology_assembly), not just vocabulary; etymology had been writing
+// intervals without consulting prior state under a since-fixed bug, and
+// --fix is the path that corrects that stored data.
+//
+// The fixture seeds an interval value (999) that the fixed-interval
+// algorithm would never produce. After --fix it should be replaced with
+// a value the calculator actually computes for the chain.
+func TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots(t *testing.T) {
+	dir := t.TempDir()
+	learningNotesDir := filepath.Join(dir, "learning_notes")
+	storiesDir := filepath.Join(dir, "stories")
+	require.NoError(t, os.MkdirAll(learningNotesDir, 0o755))
+	require.NoError(t, os.MkdirAll(storiesDir, 0o755))
+
+	t0 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	t1 := t0.AddDate(0, 0, 3) // 3 days later — well under any seeded interval
+	corruptInterval := 999    // not in DefaultFixedIntervals
+
+	require.NoError(t, WriteYamlFile(filepath.Join(storiesDir, "demo.yml"), []StoryNotebook{
+		{
+			Event: "Demo Episode",
+			Metadata: Metadata{Series: "Demo", Season: 1, Episode: 1},
+			Scenes: []StoryScene{
+				{
+					Title: "Scene 1",
+					Definitions: []Note{
+						{Expression: "demo-word"},
+					},
+				},
+			},
+		},
+	}))
+
+	makeLogs := func() []LearningRecord {
+		return []LearningRecord{
+			{
+				Status:       LearnedStatusUnderstood,
+				LearnedAt:    NewDate(t1),
+				Quality:      4,
+				IntervalDays: corruptInterval,
+			},
+			{
+				Status:       LearnedStatusUnderstood,
+				LearnedAt:    NewDate(t0),
+				Quality:      4,
+				IntervalDays: corruptInterval,
+			},
+		}
+	}
+
+	require.NoError(t, WriteYamlFile(filepath.Join(learningNotesDir, "demo.yml"), []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{NotebookID: "demo", Title: "Demo Episode"},
+			Scenes: []LearningScene{
+				{
+					Metadata: LearningSceneMetadata{Title: "Scene 1"},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:             "demo-word",
+							LearnedLogs:            makeLogs(),
+							ReverseLogs:            makeLogs(),
+							EtymologyBreakdownLogs: makeLogs(),
+							EtymologyAssemblyLogs:  makeLogs(),
+						},
+					},
+				},
+			},
+		},
+	}))
+
+	calc := NewIntervalCalculator("fixed", nil) // DefaultFixedIntervals
+	v := NewValidator(learningNotesDir, []string{storiesDir}, nil, nil, nil, "", calc)
+	result, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningNotesDir, "demo.yml"), &histories)
+	require.Len(t, histories, 1)
+	require.Len(t, histories[0].Scenes, 1)
+	require.Len(t, histories[0].Scenes[0].Expressions, 1)
+	expr := histories[0].Scenes[0].Expressions[0]
+
+	// All four slots must lose the corrupt 999 — the calculator output
+	// is in DefaultFixedIntervals so 999 cannot survive.
+	for _, slot := range []struct {
+		name string
+		logs []LearningRecord
+	}{
+		{"learned_logs", expr.LearnedLogs},
+		{"reverse_logs", expr.ReverseLogs},
+		{"etymology_breakdown_logs", expr.EtymologyBreakdownLogs},
+		{"etymology_assembly_logs", expr.EtymologyAssemblyLogs},
+	} {
+		require.Len(t, slot.logs, 2, slot.name)
+		for _, log := range slot.logs {
+			assert.NotEqual(t, corruptInterval, log.IntervalDays,
+				"%s still carries the bogus interval — recalc pass didn't run on this slot", slot.name)
+		}
+	}
+
+	// The pass must emit one warning per recalculated log so audits show
+	// what changed. 4 slots × 2 logs each = 8 expected warnings (at minimum).
+	recalcCount := 0
+	for _, w := range result.Warnings {
+		if strings.Contains(w.Message, "Recalculated interval_days") {
+			recalcCount++
+		}
+	}
+	assert.GreaterOrEqual(t, recalcCount, 8,
+		"expected at least one warning per recalculated log across all four slots")
+}
+
+// readYAMLForTest is a tiny helper used by the recalc test so it does
+// not depend on the package-private readYAMLHelper in the learning
+// package.
+func readYAMLForTest(t *testing.T, path string, out interface{}) {
+	t.Helper()
+	histories, err := NewLearningHistories(filepath.Dir(path))
+	require.NoError(t, err)
+	notebookID := strings.TrimSuffix(filepath.Base(path), ".yml")
+	got, ok := histories[notebookID]
+	require.True(t, ok, "notebook %s not found in loaded histories", notebookID)
+	dst, ok := out.(*[]LearningHistory)
+	require.True(t, ok, "readYAMLForTest only handles *[]LearningHistory")
+	*dst = got
+}
