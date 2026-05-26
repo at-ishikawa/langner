@@ -428,6 +428,88 @@ notebooks:
 	assert.Empty(t, cards, "definitions-only word with only freeform-failed history must not appear when includeUnstudied=false")
 }
 
+// TestService_LoadCards_DefinitionsBook_IncludeUnstudiedLoadsUnstudiedWords
+// pins the fix for the user-reported "only 30 words in Word Power Made
+// Easy even with Include unstudied on" bug. Definitions-only books
+// ignored includeUnstudied entirely: loadDefinitionCards gated every
+// word behind needsDefinitionReview, which excludes words that have no
+// history or haven't cleared the freeform/correct gate. So the standard
+// quiz only ever loaded the freeform-cleared, due subset regardless of
+// the toggle. With includeUnstudied=true, never-seen words and
+// freeform-failed words must now load.
+func TestService_LoadCards_DefinitionsBook_IncludeUnstudiedLoadsUnstudiedWords(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "mixed-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: mixed-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Two words: one never studied (no history), one freeform-failed.
+	// Neither is eligible without includeUnstudied.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+        - expression: "lose your temper"
+          meaning: "to become angry"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "mixed-defs.yml"), []byte(`- metadata:
+    notebook_id: mixed-defs
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "__index_0"
+      expressions:
+        - expression: "lose your temper"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	// Without the toggle: neither word is eligible.
+	due, err := svc.LoadCards([]string{"mixed-defs"}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, due, "no word is eligible without includeUnstudied")
+
+	// With the toggle: both the never-studied and freeform-failed word
+	// must load.
+	all, err := svc.LoadCards([]string{"mixed-defs"}, true, nil)
+	require.NoError(t, err)
+	assert.Len(t, all, 2,
+		"includeUnstudied must load both the never-seen and the freeform-failed word")
+
+	// The summary count must agree with the loaded card count so the
+	// quiz start page badge isn't misleading.
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+	var book *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "mixed-defs" {
+			book = &summaries[i]
+			break
+		}
+	}
+	require.NotNil(t, book, "mixed-defs must appear in summaries when includeUnstudied=true")
+	assert.Equal(t, 2, book.ReviewCount,
+		"summary ReviewCount with includeUnstudied must match the 2 cards LoadCards returns")
+}
+
 // makeDefinitionsBookSkipFixture writes a definitions-only book with
 // one expression "break the ice" plus a learning_history that marks
 // the expression skipped from one or more quiz types. The eligibility
@@ -1589,7 +1671,7 @@ func TestDefinitionsSectionSummaries_NaturalSessionOrdering(t *testing.T) {
 		"Intro":      {"__index_0": {{Expression: "warm up", Meaning: "to ease in"}}},
 	}
 
-	got := definitionsSectionSummaries(defs, nil)
+	got := definitionsSectionSummaries(defs, nil, false)
 
 	require.Len(t, got, 3)
 	// Numbered sessions sort numerically before non-numbered ones; among

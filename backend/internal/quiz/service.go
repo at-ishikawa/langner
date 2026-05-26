@@ -164,8 +164,8 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		if !ok {
 			continue
 		}
-		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false)
-		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true)
+		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false, includeUnstudied)
+		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true, false)
 		if reviewCount == 0 && reverseCount == 0 {
 			continue
 		}
@@ -176,7 +176,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReverseReviewCount: reverseCount,
 			Kind:               "Books",
 			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
-			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID]),
+			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID], includeUnstudied),
 		})
 	}
 
@@ -277,7 +277,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, section
 			// "Include unstudied" toggle controls visibility instead of
 			// the very existence of the notebook.
 			if _, ok := reader.GetDefinitionsNotes(notebookID); ok {
-				defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap, sectionFilter)
+				defCards := loadDefinitionCards(reader, notebookID, learningHistories, originMap, sectionFilter, includeUnstudied)
 				cards = append(cards, defCards...)
 				continue
 			}
@@ -1672,6 +1672,7 @@ func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, s
 func definitionsSectionSummaries(
 	defs map[string]map[string][]notebook.Note,
 	histories []notebook.LearningHistory,
+	includeUnstudied bool,
 ) []NotebookSectionSummary {
 	if len(defs) == 0 {
 		return nil
@@ -1697,8 +1698,8 @@ func definitionsSectionSummaries(
 		one := map[string]map[string][]notebook.Note{title: defs[title]}
 		sections = append(sections, NotebookSectionSummary{
 			Title:              title,
-			ReviewCount:        countDefinitionNotes(one, histories, false),
-			ReverseReviewCount: countDefinitionNotes(one, histories, true),
+			ReviewCount:        countDefinitionNotes(one, histories, false, includeUnstudied),
+			ReverseReviewCount: countDefinitionNotes(one, histories, true, false),
 		})
 	}
 	return sections
@@ -1726,8 +1727,12 @@ func trailingInt(s string) (int, bool) {
 	return n, true
 }
 
-// countDefinitionNotes counts notes in definitions-only books that need review.
-func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories []notebook.LearningHistory, isReverse bool) int {
+// countDefinitionNotes counts notes in definitions-only books that need
+// review. includeUnstudied is honoured only for the standard direction
+// (matching the standard quiz, which supports the toggle); the reverse
+// quiz has no includeUnstudied flag, so callers pass false for reverse
+// counts to keep the badge consistent with what the reverse quiz loads.
+func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories []notebook.LearningHistory, isReverse, includeUnstudied bool) int {
 	count := 0
 	for storyTitle, sceneDefs := range defs {
 		for sceneTitle, notes := range sceneDefs {
@@ -1741,7 +1746,7 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 						count++
 					}
 				} else {
-					if needsDefinitionReview(histories, storyTitle, sceneTitle, note) {
+					if needsDefinitionReview(histories, storyTitle, sceneTitle, note, includeUnstudied) {
 						count++
 					}
 				}
@@ -1752,7 +1757,7 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 }
 
 // loadDefinitionCards loads standard quiz cards from definitions-only books.
-func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string) []Card {
+func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []Card {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
@@ -1771,7 +1776,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				if isExpressionSkippedInHistory(learningHistories[bookID], storyTitle, sceneTitle, &note, notebook.QuizTypeNotebook) {
 					continue
 				}
-				if !needsDefinitionReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
+				if !needsDefinitionReview(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied) {
 					continue
 				}
 				entry := note.Definition
@@ -1885,10 +1890,24 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 // appears in standard quiz. Without the has-correct-answer gate, a word
 // the user only freeform-failed would still be served by the standard
 // quiz even with "Include unstudied" off.
+// needsDefinitionReview reports whether a definitions-book word should
+// appear in the standard quiz. Without includeUnstudied, a word is
+// eligible only after it's been freeform-answered, has a correct answer,
+// AND its SR interval has elapsed — never-seen words are excluded.
+//
+// includeUnstudied mirrors the story/flashcard "Include unstudied words"
+// behaviour for definitions books: never-seen words (no matching history)
+// and words that haven't cleared the freeform/correct gate are included.
+// Words that ARE studied still respect their SR interval (so the toggle
+// adds unstudied words without re-surfacing words you've recently
+// answered). Before this, definitions books ignored the toggle entirely
+// and the standard quiz only ever loaded the freeform-cleared, due
+// subset — e.g. ~30 words for a book with hundreds of unstudied entries.
 func needsDefinitionReview(
 	histories []notebook.LearningHistory,
 	storyTitle, sceneTitle string,
 	note *notebook.Note,
+	includeUnstudied bool,
 ) bool {
 	for _, h := range histories {
 		if h.Metadata.Title != storyTitle {
@@ -1904,15 +1923,18 @@ func needsDefinitionReview(
 				}
 				// Words must be answered in freeform first AND have at
 				// least one correct answer before becoming eligible for
-				// standard quiz.
+				// standard quiz — unless the user opted into unstudied
+				// words, in which case the not-yet-cleared word counts.
 				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-					return false
+					return includeUnstudied
 				}
 				return expr.NeedsForwardReview()
 			}
 		}
 	}
-	return false
+	// No history for this word at all → it's unstudied; include only when
+	// the toggle is on.
+	return includeUnstudied
 }
 
 // needsDefinitionReverseReview checks if a definition note needs reverse quiz review.
