@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -73,16 +73,23 @@ export default function QuizHubPage() {
 
   // Re-fetch the notebook summary list whenever includeUnstudied flips
   // so per-notebook + per-section counts match what the actual quiz
-  // will load. The first fetch covers the initial render; subsequent
-  // toggles re-fetch with the new flag and the UI swaps in the new
-  // counts (and may un-hide notebooks whose due-only count was 0).
+  // will load. Only the FIRST fetch shows the full-page spinner; toggle-
+  // driven refetches keep the current list visible and swap counts in
+  // place when the response arrives — toggling the switch shouldn't feel
+  // like a page reload. initialLoadRef gates that distinction.
+  const initialLoadRef = useRef(true);
   useEffect(() => {
-    setLoading(true);
+    if (initialLoadRef.current) {
+      setLoading(true);
+    }
     quizClient
       .getQuizOptions({ includeUnstudied })
       .then((res) => setNotebooks(res.notebooks ?? []))
       .catch(() => setError("Failed to load notebooks"))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        initialLoadRef.current = false;
+      });
   }, [includeUnstudied]);
 
   const selectedMode = tab === "vocabulary" ? selectedVocabMode : selectedEtyMode;
