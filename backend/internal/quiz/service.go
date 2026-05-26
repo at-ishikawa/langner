@@ -98,7 +98,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 				latestDate = s.Date
 			}
 		}
-		reverseCount := countReverseStoryDefinitions(stories, learningHistories[id])
+		reverseCount := countReverseStoryDefinitions(stories, learningHistories[id], includeUnstudied)
 		etymCount := countStoryEtymologyDefinitions(stories)
 		summaries = append(summaries, NotebookSummary{
 			NotebookID:           id,
@@ -109,7 +109,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			LatestDate:           latestDate,
 			Kind:                 kindFromIndex(index),
 			HasContent:           storyHasContent(stories),
-			Sections:             storySectionSummaries(stories, filtered, learningHistories[id]),
+			Sections:             storySectionSummaries(stories, filtered, learningHistories[id], includeUnstudied),
 		})
 	}
 
@@ -131,7 +131,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", id, err)
 		}
 
-		reverseCount := countReverseFlashcardCards(notebooks, learningHistories[id])
+		reverseCount := countReverseFlashcardCards(notebooks, learningHistories[id], includeUnstudied)
 		etymCount := countFlashcardEtymologyCards(notebooks)
 		var latestDate time.Time
 		for _, n := range notebooks {
@@ -146,7 +146,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReverseReviewCount:    reverseCount,
 			EtymologyReviewCount:  etymCount,
 			LatestDate:            latestDate,
-			Sections:              flashcardSectionSummaries(notebooks, filtered, learningHistories[id]),
+			Sections:              flashcardSectionSummaries(notebooks, filtered, learningHistories[id], includeUnstudied),
 		})
 	}
 
@@ -165,7 +165,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			continue
 		}
 		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false, includeUnstudied)
-		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true, false)
+		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true, includeUnstudied)
 		if reviewCount == 0 && reverseCount == 0 {
 			continue
 		}
@@ -519,6 +519,7 @@ func storySectionSummaries(
 	stories []notebook.StoryNotebook,
 	filtered []notebook.StoryNotebook,
 	histories []notebook.LearningHistory,
+	includeUnstudied bool,
 ) []NotebookSectionSummary {
 	filteredByEvent := make(map[string][]notebook.StoryNotebook, len(filtered))
 	for _, story := range filtered {
@@ -539,7 +540,7 @@ func storySectionSummaries(
 		sections = append(sections, NotebookSectionSummary{
 			Title:                story.Event,
 			ReviewCount:          countStoryDefinitions(filteredByEvent[story.Event]),
-			ReverseReviewCount:   countReverseStoryDefinitions(one, histories),
+			ReverseReviewCount:   countReverseStoryDefinitions(one, histories, includeUnstudied),
 			EtymologyReviewCount: countStoryEtymologyDefinitions(one),
 		})
 	}
@@ -552,6 +553,7 @@ func flashcardSectionSummaries(
 	notebooks []notebook.FlashcardNotebook,
 	filtered []notebook.FlashcardNotebook,
 	histories []notebook.LearningHistory,
+	includeUnstudied bool,
 ) []NotebookSectionSummary {
 	filteredByTitle := make(map[string][]notebook.FlashcardNotebook, len(filtered))
 	for _, nb := range filtered {
@@ -572,7 +574,7 @@ func flashcardSectionSummaries(
 		sections = append(sections, NotebookSectionSummary{
 			Title:                nb.Title,
 			ReviewCount:          countFlashcardCards(filteredByTitle[nb.Title]),
-			ReverseReviewCount:   countReverseFlashcardCards(one, histories),
+			ReverseReviewCount:   countReverseFlashcardCards(one, histories, includeUnstudied),
 			EtymologyReviewCount: countFlashcardEtymologyCards(one),
 		})
 	}
@@ -638,7 +640,7 @@ func isEligibleForReverseQuiz(note *notebook.Note) bool {
 	return note.Meaning != "" && note.Level != notebook.ExpressionLevelUnusable
 }
 
-func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []notebook.LearningHistory) int {
+func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []notebook.LearningHistory, includeUnstudied bool) int {
 	seen := make(map[string]struct{})
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
@@ -647,7 +649,7 @@ func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []
 				if !isEligibleForReverseQuiz(def) {
 					continue
 				}
-				if needsReverseReview(histories, story.Event, scene.Title, def) {
+				if needsReverseReview(histories, story.Event, scene.Title, def, includeUnstudied) {
 					expr := def.Expression
 					if def.Definition != "" {
 						expr = def.Definition
@@ -660,7 +662,7 @@ func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []
 	return len(seen)
 }
 
-func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, histories []notebook.LearningHistory) int {
+func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, histories []notebook.LearningHistory, includeUnstudied bool) int {
 	seen := make(map[string]struct{})
 	for _, nb := range notebooks {
 		for i := range nb.Cards {
@@ -668,7 +670,7 @@ func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, historie
 			if !isEligibleForReverseQuiz(card) {
 				continue
 			}
-			if needsReverseFlashcardReview(histories, nb.Title, card) {
+			if needsReverseFlashcardReview(histories, nb.Title, card, includeUnstudied) {
 				expr := card.Expression
 				if card.Definition != "" {
 					expr = card.Definition
@@ -786,7 +788,7 @@ type ReverseContext struct {
 //
 // sectionTitlesByID narrows results to the listed sections per notebook (see
 // LoadCards). A nil/empty list for a notebook means "all sections".
-func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
+func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext, includeUnstudied bool, sectionTitlesByID map[string][]string) ([]ReverseCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
@@ -816,7 +818,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 			// which would otherwise abort the entire multi-notebook
 			// session over an empty book.
 			if _, ok := reader.GetDefinitionsNotes(notebookID); ok {
-				defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap, sectionFilter)
+				defCards := loadDefinitionReverseCards(reader, notebookID, learningHistories, originMap, sectionFilter, includeUnstudied)
 				cards = append(cards, defCards...)
 				continue
 			}
@@ -824,7 +826,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 
 		if isStory {
-			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap, sectionFilter)
+			reverseCards, err := s.loadStoryReverseCards(reader, notebookID, learningHistories, listMissingContext, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load story reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -832,7 +834,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext bool
 		}
 
 		if isFlashcard {
-			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext, originMap, sectionFilter)
+			reverseCards, err := s.loadFlashcardReverseCards(reader, notebookID, learningHistories, listMissingContext, includeUnstudied, originMap, sectionFilter)
 			if err != nil {
 				return nil, fmt.Errorf("failed to load flashcard reverse cards for notebook %q: %w", notebookID, err)
 			}
@@ -905,6 +907,7 @@ func (s *Service) loadStoryReverseCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
+	includeUnstudied bool,
 	originMap map[string]notebook.EtymologyOrigin,
 	sectionFilter []string,
 ) ([]ReverseCard, error) {
@@ -943,7 +946,7 @@ func (s *Service) loadStoryReverseCards(
 						continue
 					}
 				} else {
-					needsReview := needsReverseReview(learningHistories[notebookID], story.Event, scene.Title, &definition)
+					needsReview := needsReverseReview(learningHistories[notebookID], story.Event, scene.Title, &definition, includeUnstudied)
 					if !needsReview {
 						continue
 					}
@@ -972,6 +975,7 @@ func (s *Service) loadFlashcardReverseCards(
 	notebookID string,
 	learningHistories map[string][]notebook.LearningHistory,
 	listMissingContext bool,
+	includeUnstudied bool,
 	originMap map[string]notebook.EtymologyOrigin,
 	sectionFilter []string,
 ) ([]ReverseCard, error) {
@@ -1021,7 +1025,7 @@ func (s *Service) loadFlashcardReverseCards(
 				// When disableShuffle is set (test mode), bypass the
 				// spaced-repetition due-check so every fixture card is
 				// reachable regardless of accumulated learning history.
-				needsReview := needsReverseFlashcardReview(learningHistories[notebookID], nb.Title, &card)
+				needsReview := needsReverseFlashcardReview(learningHistories[notebookID], nb.Title, &card, includeUnstudied)
 				if !needsReview {
 					continue
 				}
@@ -1133,10 +1137,16 @@ func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note)
 	return contexts
 }
 
+// needsReverseReview reports whether a story word should appear in the
+// reverse quiz. includeUnstudied mirrors the standard-quiz toggle: words
+// that haven't cleared the freeform/correct prerequisite (or have no
+// history at all) are included when it's true; studied words still
+// respect their reverse SR interval either way.
 func needsReverseReview(
 	learningHistories []notebook.LearningHistory,
 	storyTitle, sceneTitle string,
 	definition *notebook.Note,
+	includeUnstudied bool,
 ) bool {
 	for _, h := range learningHistories {
 		if h.Metadata.Title != storyTitle {
@@ -1155,9 +1165,9 @@ func needsReverseReview(
 
 				// Words must be answered in freeform first AND have at
 				// least one correct answer before becoming eligible for
-				// reverse quiz.
+				// reverse quiz — unless the user opted into unstudied words.
 				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-					continue
+					return includeUnstudied
 				}
 
 				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
@@ -1167,13 +1177,14 @@ func needsReverseReview(
 			}
 		}
 	}
-	return false
+	return includeUnstudied
 }
 
 func needsReverseFlashcardReview(
 	learningHistories []notebook.LearningHistory,
 	flashcardTitle string,
 	card *notebook.Note,
+	includeUnstudied bool,
 ) bool {
 	for _, h := range learningHistories {
 		if h.Metadata.Title != flashcardTitle {
@@ -1187,9 +1198,9 @@ func needsReverseFlashcardReview(
 
 			// Words must be answered in freeform first AND have at
 			// least one correct answer before becoming eligible for
-			// reverse quiz.
+			// reverse quiz — unless the user opted into unstudied words.
 			if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-				continue
+				return includeUnstudied
 			}
 
 			if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
@@ -1198,7 +1209,7 @@ func needsReverseFlashcardReview(
 			return true
 		}
 	}
-	return false
+	return includeUnstudied
 }
 
 // GradeReverseAnswer grades a reverse quiz answer (user guesses the word from meaning/context).
@@ -1699,7 +1710,7 @@ func definitionsSectionSummaries(
 		sections = append(sections, NotebookSectionSummary{
 			Title:              title,
 			ReviewCount:        countDefinitionNotes(one, histories, false, includeUnstudied),
-			ReverseReviewCount: countDefinitionNotes(one, histories, true, false),
+			ReverseReviewCount: countDefinitionNotes(one, histories, true, includeUnstudied),
 		})
 	}
 	return sections
@@ -1742,7 +1753,7 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 					continue
 				}
 				if isReverse {
-					if needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note) {
+					if needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note, includeUnstudied) {
 						count++
 					}
 				} else {
@@ -1802,7 +1813,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 }
 
 // loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
-func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string) []ReverseCard {
+func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []ReverseCard {
 	defs, ok := reader.GetDefinitionsNotes(bookID)
 	if !ok {
 		return nil
@@ -1821,7 +1832,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				if isExpressionSkippedInHistory(learningHistories[bookID], storyTitle, sceneTitle, &note, notebook.QuizTypeReverse) {
 					continue
 				}
-				if !needsDefinitionReverseReview(learningHistories[bookID], storyTitle, sceneTitle, &note) {
+				if !needsDefinitionReverseReview(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied) {
 					continue
 				}
 				expression := note.Expression
@@ -1942,6 +1953,7 @@ func needsDefinitionReverseReview(
 	histories []notebook.LearningHistory,
 	storyTitle, sceneTitle string,
 	note *notebook.Note,
+	includeUnstudied bool,
 ) bool {
 	for _, h := range histories {
 		if h.Metadata.Title != storyTitle {
@@ -1957,9 +1969,9 @@ func needsDefinitionReverseReview(
 				}
 				// Words must be answered in freeform first AND have at
 				// least one correct answer before becoming eligible for
-				// reverse quiz.
+				// reverse quiz — unless the user opted into unstudied words.
 				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-					continue
+					return includeUnstudied
 				}
 				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
 					return false
@@ -1968,5 +1980,5 @@ func needsDefinitionReverseReview(
 			}
 		}
 	}
-	return false
+	return includeUnstudied
 }

@@ -191,7 +191,7 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 	if err := validateRequest(req.Msg); err != nil { return nil, err }
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetNotebookIds(), req.Msg.GetNotebookSections())
 	if err != nil { return nil, err }
-	cards, err := h.svc.LoadReverseCards(notebookIDs, req.Msg.GetListMissingContext(), sectionTitles)
+	cards, err := h.svc.LoadReverseCards(notebookIDs, req.Msg.GetListMissingContext(), req.Msg.GetIncludeUnstudied(), sectionTitles)
 	if err != nil {
 		var notFoundErr *quiz.NotFoundError
 		if errors.As(err, &notFoundErr) { return nil, connect.NewError(connect.CodeNotFound, err) }

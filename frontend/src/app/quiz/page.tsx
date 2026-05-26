@@ -319,6 +319,7 @@ export default function QuizHubPage() {
           const res = await quizClient.startReverseQuiz({
             notebookSections,
             listMissingContext,
+            includeUnstudied,
           });
           setReverseFlashcards(
             (res.flashcards ?? []).map((f) => ({

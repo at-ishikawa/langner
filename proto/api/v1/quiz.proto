@@ -185,6 +185,12 @@ message StartReverseQuizRequest {
   // notebook_sections, when non-empty, replaces notebook_ids and allows the
   // caller to narrow the quiz to specific sections within each notebook.
   repeated NotebookSection notebook_sections = 3;
+  // include_unstudied mirrors the standard quiz toggle: when true, words
+  // that haven't cleared the freeform/correct prerequisite (including
+  // never-seen words) are included; studied words still respect their
+  // reverse SR interval. Ignored when list_missing_context is set (that
+  // mode lists by context presence, not review state).
+  bool include_unstudied = 4;
 }
 
 message StartReverseQuizResponse {

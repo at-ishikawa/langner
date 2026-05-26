@@ -59,7 +59,8 @@ func NewReverseQuizCLI(
 		notebookIDs = []string{notebookName}
 	}
 
-	cards, err := svc.LoadReverseCards(notebookIDs, listMissingContext, nil)
+	// CLI reverse quiz has no "include unstudied" flag; keep due-only.
+	cards, err := svc.LoadReverseCards(notebookIDs, listMissingContext, false, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load reverse cards: %w", err)
 	}

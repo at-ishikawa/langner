@@ -1227,6 +1227,12 @@ type StartReverseQuizRequest struct {
 	// notebook_sections, when non-empty, replaces notebook_ids and allows the
 	// caller to narrow the quiz to specific sections within each notebook.
 	NotebookSections []*NotebookSection `protobuf:"bytes,3,rep,name=notebook_sections,json=notebookSections,proto3" json:"notebook_sections,omitempty"`
+	// include_unstudied mirrors the standard quiz toggle: when true, words
+	// that haven't cleared the freeform/correct prerequisite (including
+	// never-seen words) are included; studied words still respect their
+	// reverse SR interval. Ignored when list_missing_context is set (that
+	// mode lists by context presence, not review state).
+	IncludeUnstudied bool `protobuf:"varint,4,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1280,6 +1286,13 @@ func (x *StartReverseQuizRequest) GetNotebookSections() []*NotebookSection {
 		return x.NotebookSections
 	}
 	return nil
+}
+
+func (x *StartReverseQuizRequest) GetIncludeUnstudied() bool {
+	if x != nil {
+		return x.IncludeUnstudied
+	}
+	return false
 }
 
 type StartReverseQuizResponse struct {
@@ -3944,11 +3957,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x19BatchSubmitAnswersRequest\x12?\n" +
 	"\aanswers\x18\x01 \x03(\v2\x1b.api.v1.SubmitAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"X\n" +
 	"\x1aBatchSubmitAnswersResponse\x12:\n" +
-	"\tresponses\x18\x01 \x03(\v2\x1c.api.v1.SubmitAnswerResponseR\tresponses\"\xb4\x01\n" +
+	"\tresponses\x18\x01 \x03(\v2\x1c.api.v1.SubmitAnswerResponseR\tresponses\"\xe1\x01\n" +
 	"\x17StartReverseQuizRequest\x12!\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tR\vnotebookIds\x120\n" +
 	"\x14list_missing_context\x18\x02 \x01(\bR\x12listMissingContext\x12D\n" +
-	"\x11notebook_sections\x18\x03 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\"T\n" +
+	"\x11notebook_sections\x18\x03 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\x12+\n" +
+	"\x11include_unstudied\x18\x04 \x01(\bR\x10includeUnstudied\"T\n" +
 	"\x18StartReverseQuizResponse\x128\n" +
 	"\n" +
 	"flashcards\x18\x01 \x03(\v2\x18.api.v1.ReverseFlashcardR\n" +

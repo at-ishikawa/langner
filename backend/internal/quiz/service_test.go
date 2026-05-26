@@ -605,9 +605,71 @@ func TestService_LoadReverseCards_DefinitionsBook_RespectsReverseSkip(t *testing
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, nil)
+	cards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "definitions-only word with reverse skip must not appear in LoadReverseCards")
+}
+
+// TestService_LoadReverseCards_DefinitionsBook_IncludeUnstudied is the
+// reverse-quiz companion to the standard-quiz fix: definitions-only
+// books ignored includeUnstudied in reverse mode too, so the reverse
+// quiz never surfaced never-studied or not-yet-freeform-cleared words
+// even with the toggle on. With includeUnstudied=true both must load;
+// a reverse-skipped word stays excluded regardless of the toggle.
+func TestService_LoadReverseCards_DefinitionsBook_IncludeUnstudied(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "mixed-rev")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: mixed-rev
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Two never-studied words (no history) — neither eligible without
+	// the toggle, both eligible with it.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+        - expression: "lose your temper"
+          meaning: "to become angry"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	due, err := svc.LoadReverseCards([]string{"mixed-rev"}, false, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, due, "no reverse card is eligible without includeUnstudied")
+
+	all, err := svc.LoadReverseCards([]string{"mixed-rev"}, false, true, nil)
+	require.NoError(t, err)
+	assert.Len(t, all, 2,
+		"includeUnstudied must load both never-studied words into the reverse quiz")
+
+	// Summary reverse count must agree with the loaded reverse-card count.
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+	var book *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "mixed-rev" {
+			book = &summaries[i]
+			break
+		}
+	}
+	require.NotNil(t, book)
+	assert.Equal(t, 2, book.ReverseReviewCount,
+		"summary ReverseReviewCount with includeUnstudied must match the 2 reverse cards loaded")
 }
 
 // TestService_LoadDefinitionWords_RespectsFreeformSkip exercises the
@@ -936,7 +998,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	filtered, err := svc.LoadReverseCards([]string{"rev-chapters"}, false, map[string][]string{
+	filtered, err := svc.LoadReverseCards([]string{"rev-chapters"}, false, false, map[string][]string{
 		"rev-chapters": {"Chapter A"},
 	})
 	require.NoError(t, err)
