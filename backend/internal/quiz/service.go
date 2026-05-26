@@ -160,7 +160,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		if _, isFlashcard := flashcardIndexes[nbID]; isFlashcard {
 			continue
 		}
-		defs, ok := reader.GetDefinitionsNotes(nbID)
+		defs, ok := reader.GetDefinitionsNotesByTitle(nbID)
 		if !ok {
 			continue
 		}
@@ -1769,7 +1769,7 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 
 // loadDefinitionCards loads standard quiz cards from definitions-only books.
 func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []Card {
-	defs, ok := reader.GetDefinitionsNotes(bookID)
+	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}
@@ -1814,7 +1814,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 
 // loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
 func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []ReverseCard {
-	defs, ok := reader.GetDefinitionsNotes(bookID)
+	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}
@@ -1860,7 +1860,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 // Words skipped from freeform mode are excluded; the gate matches the
 // story-side path's behaviour at line 1317.
 func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[string]notebook.EtymologyOrigin, learningHistories map[string][]notebook.LearningHistory) []FreeformCard {
-	defs, ok := reader.GetDefinitionsNotes(bookID)
+	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}

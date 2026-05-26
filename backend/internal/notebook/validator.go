@@ -176,6 +176,12 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// Fix expression names to match story definitions (do this before merging duplicates)
 	fixedLearning = v.fixExpressionNames(fixedLearning, storyNotebooks, result)
 
+	// Rename legacy "__index_N" definitions-book scene keys to their human
+	// scene title so the next pass (duplicate-scene merge) collapses the
+	// split scenes a word's logs and skip were spread across. Must run
+	// before fixLearningNotesStructure, which does the merge.
+	fixedLearning = v.renameDefinitionsIndexScenes(fixedLearning, result)
+
 	// Fix learning notes structure issues (including duplicate merging - do this after renaming)
 	fixedLearning = v.fixLearningNotesStructure(fixedLearning, result)
 
@@ -836,6 +842,11 @@ func (v *Validator) mergeDuplicateScenes(
 						base.Expressions[idx].EtymologyAssemblyLogs = append(base.Expressions[idx].EtymologyAssemblyLogs, e.EtymologyAssemblyLogs...)
 						_, base.Expressions[idx].EtymologyAssemblyLogs, _ = recalculateLearningLogs(base.Expressions[idx].EtymologyAssemblyLogs, v.calculator)
 					}
+					// Merge skip state: a skip recorded on either copy must
+					// survive the merge. Without this, a word skipped in the
+					// "__index_N" copy but logged in the human-title copy (or
+					// vice-versa) would silently lose its skip.
+					base.Expressions[idx].SkippedAt = mergeSkippedAt(base.Expressions[idx].SkippedAt, e.SkippedAt)
 					result.AddWarning(ValidationError{
 						File:    filePath,
 						Message: fmt.Sprintf("Merged duplicate expression %q from duplicate scene in %s", ek, storyTitle),
@@ -862,6 +873,96 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// mergeSkippedAt returns the union of two per-quiz-type skip maps,
+// keeping the later timestamp when both record a skip for the same quiz
+// type. A nil/empty input is treated as "no skips".
+func mergeSkippedAt(a, b SkippedAtMap) SkippedAtMap {
+	if len(a) == 0 && len(b) == 0 {
+		return a
+	}
+	out := make(SkippedAtMap, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		if existing, ok := out[k]; !ok || v > existing {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// renameDefinitionsIndexScenes rewrites learning-history scene titles
+// that use the legacy "__index_N" key to the human scene title the quiz
+// now reads (via Reader.GetDefinitionsNotesByTitle). Definitions-book
+// learning history was historically written under two conventions for
+// the same scene — "__index_N" (old quiz path) and the human title
+// (detail page / skip path) — which split a word's logs and skip across
+// two scene entries. This pass resolves "__index_N" to its human title
+// using the definitions source, then leaves the now-duplicate titles for
+// mergeDuplicateScenes (run later in fixLearningNotesStructure) to
+// collapse, unioning logs and skip state.
+//
+// Only learning files whose notebook ID is a definitions book are
+// touched; story/flashcard histories keep their titles. Scenes whose
+// index can't be resolved to a human title are left as-is.
+func (v *Validator) renameDefinitionsIndexScenes(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	if len(v.definitionsDirs) == 0 {
+		return files
+	}
+	_, defsRaw, _, err := NewDefinitionsMap(v.definitionsDirs)
+	if err != nil {
+		return files
+	}
+
+	// Build (bookID, session, index) -> human scene title.
+	type key struct {
+		book, session string
+		index         int
+	}
+	titleByIndex := make(map[key]string)
+	for bookID, fileDefs := range defsRaw {
+		for _, def := range fileDefs {
+			session := def.Metadata.Notebook
+			if session == "" {
+				session = def.Metadata.Title
+			}
+			for _, scene := range def.Scenes {
+				titleByIndex[key{bookID, session, scene.Metadata.GetIndex()}] = scene.Metadata.Title
+			}
+		}
+	}
+	if len(titleByIndex) == 0 {
+		return files
+	}
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		bookID := strings.TrimSuffix(filepath.Base(file.path), ".yml")
+		for histIdx := range file.contents {
+			hist := &file.contents[histIdx]
+			session := hist.Metadata.Title
+			for sceneIdx := range hist.Scenes {
+				title := hist.Scenes[sceneIdx].Metadata.Title
+				var n int
+				if _, err := fmt.Sscanf(title, "__index_%d", &n); err != nil {
+					continue
+				}
+				human, ok := titleByIndex[key{bookID, session, n}]
+				if !ok || human == "" || human == title {
+					continue
+				}
+				hist.Scenes[sceneIdx].Metadata.Title = human
+				result.AddWarning(ValidationError{
+					File:    file.path,
+					Message: fmt.Sprintf("Renamed legacy scene key %q to %q in %s", title, human, session),
+				})
+			}
+		}
+	}
+	return files
 }
 
 func (v *Validator) fixConsistency(

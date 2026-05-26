@@ -273,10 +273,48 @@ func MergeDefinitionsIntoNotebooks(
 }
 
 // GetDefinitionsNotes returns the definitions for a given book ID from the definitions map.
-// The returned map is keyed by title/notebook name, then by scene title.
+// The returned map is keyed by title/notebook name, then by scene index key (__index_N).
 func (r Reader) GetDefinitionsNotes(bookID string) (map[string]map[string][]Note, bool) {
 	defs, ok := r.definitionsMap[bookID]
 	return defs, ok
+}
+
+// GetDefinitionsNotesByTitle returns the same nested shape as
+// GetDefinitionsNotes but keyed by the HUMAN scene title
+// (scene.Metadata.Title) instead of the __index_N index key. Built from
+// the raw definitions so it matches exactly what the notebook-detail RPC
+// renders and what the skip/learning-history YAML stores.
+//
+// The quiz (loaders, counts, section summaries) reads through this so a
+// definitions word's scene title is identical across the quiz, the
+// detail page, and the learning-history file — otherwise a skip written
+// under "verto (to turn)" is invisible to a quiz that looks up
+// "__index_0", and the word's logs and skip end up split across two
+// scene entries. The __index_N map stays in place for the story-merge
+// path, which needs positional keys because story scene titles repeat.
+func (r Reader) GetDefinitionsNotesByTitle(bookID string) (map[string]map[string][]Note, bool) {
+	defs, ok := r.definitionsRaw[bookID]
+	if !ok || len(defs) == 0 {
+		return nil, false
+	}
+	result := make(map[string]map[string][]Note)
+	for _, def := range defs {
+		session := def.Metadata.Notebook
+		if session == "" {
+			session = def.Metadata.Title
+		}
+		if session == "" {
+			continue
+		}
+		if result[session] == nil {
+			result[session] = make(map[string][]Note)
+		}
+		for _, scene := range def.Scenes {
+			sceneTitle := scene.Metadata.Title
+			result[session][sceneTitle] = append(result[session][sceneTitle], scene.Expressions...)
+		}
+	}
+	return result, true
 }
 
 // GetDefinitionsBookIDs returns all book IDs that have definitions in the definitions map.

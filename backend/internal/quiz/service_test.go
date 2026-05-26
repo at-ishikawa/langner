@@ -467,7 +467,7 @@ notebooks:
     title: "Session 1"
   scenes:
     - metadata:
-        title: "__index_0"
+        title: "common idioms"
       expressions:
         - expression: "lose your temper"
           learned_logs:
@@ -538,18 +538,18 @@ notebooks:
           meaning: "to start social interaction"
 `), 0o644))
 
-	// The learning-history scene title MUST match the indexed scene key
-	// the loader uses (NewDefinitionsMap keys scenes by "__index_N"
-	// regardless of the scene's human-readable title). Production
-	// learning_notes for definitions books store the indexed key; the
-	// loader iterates the indexed map, so this is the only spelling the
-	// skip / due-check lookups will resolve.
+	// The learning-history scene title matches the HUMAN scene title
+	// ("common idioms") because the quiz now reads definitions through
+	// GetDefinitionsNotesByTitle — the same human-title keying the
+	// notebook-detail page and the skip-write path use. (Pre-fix the
+	// loader keyed by "__index_N"; that split skips and logs across two
+	// scene entries, which is the bug this convergence resolves.)
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "skip-defs.yml"), []byte(`- metadata:
     notebook_id: skip-defs
     title: "Session 1"
   scenes:
     - metadata:
-        title: "__index_0"
+        title: "common idioms"
       expressions:
         - expression: "break the ice"
           learned_logs:

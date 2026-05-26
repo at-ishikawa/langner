@@ -3035,3 +3035,105 @@ func readYAMLForTest(t *testing.T, path string, out interface{}) {
 	require.True(t, ok, "readYAMLForTest only handles *[]LearningHistory")
 	*dst = got
 }
+
+// TestValidator_Fix_MergesDefinitionsIndexScene pins the migration that
+// repairs definitions-book learning history split across two scene-key
+// conventions. The quiz now reads definitions scenes by their human
+// title (e.g. "verto (to turn)"), but older data also wrote the same
+// scene under "__index_0". A word's skip could live under the human
+// title while its quiz logs lived under "__index_0", so the quiz (now
+// human-title-keyed) saw the skip but a sibling word's logs got
+// orphaned. --fix renames "__index_N" to the human title and merges,
+// so skip + logs reunite under one scene.
+func TestValidator_Fix_MergesDefinitionsIndexScene(t *testing.T) {
+	dir := t.TempDir()
+	learningDir := filepath.Join(dir, "learning_notes")
+	defsDir := filepath.Join(dir, "definitions")
+	bookDir := filepath.Join(defsDir, "demo-book")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: demo-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Scene index 0 has human title "verto (to turn)" with two words.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "verto (to turn)"
+      expressions:
+        - expression: "extrovert"
+          meaning: "outgoing person"
+        - expression: "ambivert"
+          meaning: "balanced person"
+`), 0o644))
+
+	// Learning history split across two scene keys for the SAME scene:
+	//   - "verto (to turn)": extrovert SKIP (no logs)
+	//   - "__index_0":       extrovert + ambivert quiz logs
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-book.yml"), []byte(`- metadata:
+    notebook_id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "verto (to turn)"
+      expressions:
+        - expression: "extrovert"
+          learned_logs: []
+          skipped_at:
+            notebook: "2026-05-24T20:28:42-07:00"
+    - metadata:
+        title: "__index_0"
+      expressions:
+        - expression: "extrovert"
+          learned_logs:
+            - status: "understood"
+              learned_at: "2026-05-25T17:39:13-07:00"
+              quality: 3
+              quiz_type: "notebook"
+              interval_days: 7
+        - expression: "ambivert"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2026-05-25T17:39:15-07:00"
+              quality: 1
+              quiz_type: "notebook"
+              interval_days: 1
+`), 0o644))
+
+	v := NewValidator(learningDir, nil, nil, []string{defsDir}, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningDir, "demo-book.yml"), &histories)
+	require.Len(t, histories, 1)
+
+	// The two scenes must collapse into one titled "verto (to turn)";
+	// the "__index_0" key must be gone.
+	require.Len(t, histories[0].Scenes, 1, "the split scenes must merge into one")
+	scene := histories[0].Scenes[0]
+	assert.Equal(t, "verto (to turn)", scene.Metadata.Title)
+
+	byExpr := map[string]LearningHistoryExpression{}
+	for _, e := range scene.Expressions {
+		byExpr[e.Expression] = e
+	}
+
+	// extrovert: skip preserved AND quiz log preserved (the reunion).
+	extrovert, ok := byExpr["extrovert"]
+	require.True(t, ok, "extrovert must survive the merge")
+	assert.Contains(t, extrovert.SkippedAt, "notebook",
+		"extrovert's skip (written under the human title) must survive")
+	assert.NotEmpty(t, extrovert.LearnedLogs,
+		"extrovert's quiz log (written under __index_0) must merge in, not be orphaned")
+
+	// ambivert: its logs lived only under __index_0; they must not be lost.
+	ambivert, ok := byExpr["ambivert"]
+	require.True(t, ok, "ambivert must survive the merge")
+	assert.NotEmpty(t, ambivert.LearnedLogs,
+		"ambivert's __index_0 logs must be preserved under the human title")
+}
