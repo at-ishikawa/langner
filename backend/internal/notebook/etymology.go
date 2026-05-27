@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -263,6 +264,26 @@ func pickBestSceneForOrigin(
 ) string {
 	key := strings.ToLower(strings.TrimSpace(origin))
 	matches := candidates[key]
+
+	// Sort candidates deterministically before picking. buildOriginSceneIndex
+	// accumulates them by iterating maps (definitionsRaw, indexes), whose
+	// order Go randomizes per run — without this sort, an origin referenced
+	// from more than one scene/notebook could resolve to a DIFFERENT scene
+	// title across runs, splitting its learning history into duplicate
+	// records (the "multiple gamos" symptom). A stable (notebook, session,
+	// scene) order makes the chosen scene reproducible.
+	sorted := make([]OriginSceneCandidate, len(matches))
+	copy(sorted, matches)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].NotebookID != sorted[j].NotebookID {
+			return sorted[i].NotebookID < sorted[j].NotebookID
+		}
+		if sorted[i].SessionTitle != sorted[j].SessionTitle {
+			return sorted[i].SessionTitle < sorted[j].SessionTitle
+		}
+		return sorted[i].SceneTitle < sorted[j].SceneTitle
+	})
+	matches = sorted
 
 	var bestSameSession, bestSameNotebook, bestAny string
 	for _, c := range matches {

@@ -3137,3 +3137,121 @@ notebooks:
 	assert.NotEmpty(t, ambivert.LearnedLogs,
 		"ambivert's __index_0 logs must be preserved under the human title")
 }
+
+// TestValidator_Fix_ConsolidatesSplitEtymologyOrigin reproduces the
+// "multiple gamos records" bug: one etymology origin ends up with logs
+// under two scene titles in the same session because the derived scene
+// title drifted over time. --fix must merge them into one scene (the
+// canonically-derived one when present) with logs + skip unioned.
+//
+// Generic Greek-root data (gamos/marriage, misein/hate) — the shape, not
+// the user's exact notebook contents, is what's under test.
+func TestValidator_Fix_ConsolidatesSplitEtymologyOrigin(t *testing.T) {
+	dir := t.TempDir()
+	learningDir := filepath.Join(dir, "learning_notes")
+	etymDir := filepath.Join(dir, "etymology")
+	defsDir := filepath.Join(dir, "definitions")
+	etymBook := filepath.Join(etymDir, "demo-book")
+	defsBook := filepath.Join(defsDir, "demo-book")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.MkdirAll(etymBook, 0o755))
+	require.NoError(t, os.MkdirAll(defsBook, 0o755))
+
+	// Etymology session: gamos is a standalone origin (legacy flat shape).
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "index.yml"), []byte(`id: demo-book
+kind: Etymology
+name: Demo Book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: gamos
+    language: Greek
+    meaning: marriage
+`), 0o644))
+
+	// Definitions book: gamos is referenced ONLY from the "gamos (marriage)"
+	// scene, so the canonical derived scene is "gamos (marriage)".
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "index.yml"), []byte(`id: demo-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "gamos (marriage)"
+      expressions:
+        - expression: monogamy
+          meaning: marriage to one
+          origin_parts:
+            - origin: gamos
+              language: Greek
+`), 0o644))
+
+	// Learning history: gamos split across "misein (to hate)" (old logs)
+	// and "gamos (marriage)" (newer log).
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-book.yml"), []byte(`- metadata:
+    notebook_id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "misein (to hate)"
+      expressions:
+        - expression: gamos
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-04-25T14:21:42-07:00"
+              quality: 4
+              quiz_type: etymology_breakdown
+              interval_days: 30
+    - metadata:
+        title: "gamos (marriage)"
+      expressions:
+        - expression: gamos
+          type: origin
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-27T06:18:17-07:00"
+              quality: 5
+              quiz_type: etymology_breakdown
+              interval_days: 30
+`), 0o644))
+
+	v := NewValidator(learningDir, nil, nil, []string{defsDir}, []string{etymDir}, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningDir, "demo-book.yml"), &histories)
+	require.Len(t, histories, 1)
+
+	// gamos must appear under exactly ONE scene now — the canonical
+	// "gamos (marriage)" — with both breakdown logs merged in.
+	var gamosScenes []string
+	var gamosLogCount int
+	for _, scene := range histories[0].Scenes {
+		for _, e := range scene.Expressions {
+			if e.Expression == "gamos" {
+				gamosScenes = append(gamosScenes, scene.Metadata.Title)
+				gamosLogCount = len(e.EtymologyBreakdownLogs)
+			}
+		}
+	}
+	require.Len(t, gamosScenes, 1, "gamos must live under exactly one scene after consolidation")
+	assert.Equal(t, "gamos (marriage)", gamosScenes[0],
+		"consolidation target must be the canonically-derived scene")
+	assert.Equal(t, 2, gamosLogCount,
+		"both scenes' breakdown logs must be unioned onto the surviving entry")
+
+	// The now-empty "misein (to hate)" scene must be dropped.
+	for _, scene := range histories[0].Scenes {
+		assert.NotEqual(t, "misein (to hate)", scene.Metadata.Title,
+			"the emptied source scene must be removed")
+	}
+}

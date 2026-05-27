@@ -182,6 +182,12 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// before fixLearningNotesStructure, which does the merge.
 	fixedLearning = v.renameDefinitionsIndexScenes(fixedLearning, result)
 
+	// Consolidate an etymology origin whose logs got split across two
+	// scene titles in one session (derived-scene-title drift). Must run
+	// before fixLearningNotesStructure so any resulting same-title
+	// duplicate scenes are collapsed by the merge pass.
+	fixedLearning = v.consolidateEtymologyOriginScenes(fixedLearning, result)
+
 	// Fix learning notes structure issues (including duplicate merging - do this after renaming)
 	fixedLearning = v.fixLearningNotesStructure(fixedLearning, result)
 
@@ -960,6 +966,199 @@ func (v *Validator) renameDefinitionsIndexScenes(files []learningHistoryFile, re
 					Message: fmt.Sprintf("Renamed legacy scene key %q to %q in %s", title, human, session),
 				})
 			}
+		}
+	}
+	return files
+}
+
+// isEtymologyOriginEntry reports whether a learning-history expression is
+// an etymology origin (rather than a vocabulary word). Origins are typed
+// "origin" and/or carry etymology_*_logs; vocabulary words never have
+// etymology logs, so either signal is sufficient.
+func isEtymologyOriginEntry(e *LearningHistoryExpression) bool {
+	if e.Type == LearningExpressionTypeOrigin {
+		return true
+	}
+	return len(e.EtymologyBreakdownLogs) > 0 || len(e.EtymologyAssemblyLogs) > 0
+}
+
+// latestLogTime returns the most recent LearnedAt across all of an
+// expression's log slots (zero time if it has none). Used to pick the
+// merge target when an origin is split across scenes — the scene with
+// the freshest activity is where the live quiz currently writes.
+func latestLogTime(e *LearningHistoryExpression) time.Time {
+	var latest time.Time
+	consider := func(logs []LearningRecord) {
+		for _, l := range logs {
+			if l.LearnedAt.Time.After(latest) {
+				latest = l.LearnedAt.Time
+			}
+		}
+	}
+	consider(e.LearnedLogs)
+	consider(e.ReverseLogs)
+	consider(e.EtymologyBreakdownLogs)
+	consider(e.EtymologyAssemblyLogs)
+	return latest
+}
+
+// mergeOriginExpressionInto folds other's logs and skip state into base
+// (recalculating each log slot through the SR calculator after the
+// append, matching mergeDuplicateScenes).
+func (v *Validator) mergeOriginExpressionInto(base, other *LearningHistoryExpression) {
+	if other.Type == LearningExpressionTypeOrigin {
+		base.Type = LearningExpressionTypeOrigin
+	}
+	if len(other.LearnedLogs) > 0 {
+		base.LearnedLogs = append(base.LearnedLogs, other.LearnedLogs...)
+		_, base.LearnedLogs, _ = recalculateLearningLogs(base.LearnedLogs, v.calculator)
+	}
+	if len(other.ReverseLogs) > 0 {
+		base.ReverseLogs = append(base.ReverseLogs, other.ReverseLogs...)
+		_, base.ReverseLogs, _ = recalculateLearningLogs(base.ReverseLogs, v.calculator)
+	}
+	if len(other.EtymologyBreakdownLogs) > 0 {
+		base.EtymologyBreakdownLogs = append(base.EtymologyBreakdownLogs, other.EtymologyBreakdownLogs...)
+		_, base.EtymologyBreakdownLogs, _ = recalculateLearningLogs(base.EtymologyBreakdownLogs, v.calculator)
+	}
+	if len(other.EtymologyAssemblyLogs) > 0 {
+		base.EtymologyAssemblyLogs = append(base.EtymologyAssemblyLogs, other.EtymologyAssemblyLogs...)
+		_, base.EtymologyAssemblyLogs, _ = recalculateLearningLogs(base.EtymologyAssemblyLogs, v.calculator)
+	}
+	base.SkippedAt = mergeSkippedAt(base.SkippedAt, other.SkippedAt)
+}
+
+// consolidateEtymologyOriginScenes repairs an etymology origin whose
+// learning history is split across two scene titles within one session.
+// The etymology SceneTitle for legacy-shape origins is DERIVED from where
+// the origin is referenced in definitions (see pickBestSceneForOrigin);
+// when that derivation changes (data edits, or the pre-determinism map-
+// order flakiness), the same origin's logs get written under a new scene
+// title while the old logs linger under the previous one — the "multiple
+// gamos records" symptom.
+//
+// For each session, origins appearing under 2+ scenes are merged into a
+// single scene: the canonically-derived scene when it's among the
+// current locations, else the location with the freshest log (where the
+// live quiz writes today). Logs and skip state are unioned; the origin
+// entry is removed from the other scenes; scenes left empty are dropped.
+func (v *Validator) consolidateEtymologyOriginScenes(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	if len(v.etymologyDirs) == 0 {
+		return files
+	}
+	candidates := v.buildOriginSceneIndexForValidator()
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		notebookID := strings.TrimSuffix(filepath.Base(file.path), ".yml")
+		for histIdx := range file.contents {
+			hist := &file.contents[histIdx]
+			session := hist.Metadata.Title
+
+			// origin key -> scene indices it appears in (with expr index).
+			type loc struct{ scene, expr int }
+			locs := make(map[string][]loc)
+			for si := range hist.Scenes {
+				for ei := range hist.Scenes[si].Expressions {
+					e := &hist.Scenes[si].Expressions[ei]
+					if !isEtymologyOriginEntry(e) {
+						continue
+					}
+					key := strings.ToLower(strings.TrimSpace(e.Expression))
+					locs[key] = append(locs[key], loc{si, ei})
+				}
+			}
+
+			// removals[scene] = set of expr indices to drop after merging.
+			removals := make(map[int]map[int]bool)
+			// replacements[scene][expr] = the merged expression to write.
+			replacements := make(map[int]map[int]LearningHistoryExpression)
+			markRemove := func(s, e int) {
+				if removals[s] == nil {
+					removals[s] = make(map[int]bool)
+				}
+				removals[s][e] = true
+			}
+
+			for origin, ls := range locs {
+				// distinct scenes only — same-scene dups are handled elsewhere.
+				distinct := make(map[int]bool)
+				for _, l := range ls {
+					distinct[l.scene] = true
+				}
+				if len(distinct) < 2 {
+					continue
+				}
+
+				canonical := pickBestSceneForOrigin(candidates, origin, notebookID, session)
+
+				// Choose the target location: the one whose scene title is
+				// canonical, else the one with the freshest log.
+				targetIdx := -1
+				var targetTime time.Time
+				for i, l := range ls {
+					sceneTitle := hist.Scenes[l.scene].Metadata.Title
+					if canonical != "" && normalizeQuotes(sceneTitle) == normalizeQuotes(canonical) {
+						targetIdx = i
+						break
+					}
+					if t := latestLogTime(&hist.Scenes[l.scene].Expressions[l.expr]); targetIdx < 0 || t.After(targetTime) {
+						targetIdx = i
+						targetTime = t
+					}
+				}
+				if targetIdx < 0 {
+					continue
+				}
+				target := ls[targetIdx]
+
+				merged := hist.Scenes[target.scene].Expressions[target.expr]
+				for i, l := range ls {
+					if i == targetIdx {
+						continue
+					}
+					other := hist.Scenes[l.scene].Expressions[l.expr]
+					v.mergeOriginExpressionInto(&merged, &other)
+					markRemove(l.scene, l.expr)
+				}
+				if replacements[target.scene] == nil {
+					replacements[target.scene] = make(map[int]LearningHistoryExpression)
+				}
+				replacements[target.scene][target.expr] = merged
+				result.AddWarning(ValidationError{
+					File: file.path,
+					Message: fmt.Sprintf("Consolidated etymology origin %q split across %d scenes into %q (session %s)",
+						origin, len(distinct), hist.Scenes[target.scene].Metadata.Title, session),
+				})
+			}
+
+			if len(removals) == 0 && len(replacements) == 0 {
+				continue
+			}
+
+			// Rebuild scenes, applying replacements and removals, dropping
+			// scenes that become empty.
+			var newScenes []LearningScene
+			for si := range hist.Scenes {
+				scene := hist.Scenes[si]
+				var kept []LearningHistoryExpression
+				for ei := range scene.Expressions {
+					if removals[si] != nil && removals[si][ei] {
+						continue
+					}
+					if repl, ok := replacements[si][ei]; ok {
+						kept = append(kept, repl)
+						continue
+					}
+					kept = append(kept, scene.Expressions[ei])
+				}
+				if len(kept) == 0 {
+					continue
+				}
+				scene.Expressions = kept
+				newScenes = append(newScenes, scene)
+			}
+			hist.Scenes = newScenes
 		}
 	}
 	return files

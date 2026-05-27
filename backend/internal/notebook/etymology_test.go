@@ -251,3 +251,38 @@ notebooks:
 	assert.Contains(t, storyIndexes, "story-test")
 	assert.NotContains(t, storyIndexes, "etym-test")
 }
+
+// TestPickBestSceneForOrigin_Deterministic pins that an origin referenced
+// from multiple scenes in the same session always resolves to the SAME
+// scene title regardless of candidate order. buildOriginSceneIndex
+// accumulates candidates via map iteration (random order per run), so
+// without the sort the chosen scene could flip between runs and split an
+// origin's learning history into duplicate records (the "multiple gamos"
+// symptom). Generic Greek-root data, not the user's notebook.
+func TestPickBestSceneForOrigin_Deterministic(t *testing.T) {
+	// Same origin "gamos" referenced from two scenes in one session of one
+	// notebook, supplied in two opposite orders.
+	orderA := map[string][]OriginSceneCandidate{
+		"gamos": {
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "misein (to hate)"},
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "gamos (marriage)"},
+		},
+	}
+	orderB := map[string][]OriginSceneCandidate{
+		"gamos": {
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "gamos (marriage)"},
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "misein (to hate)"},
+		},
+	}
+
+	got := pickBestSceneForOrigin(orderA, "gamos", "book", "Session 3")
+	for i := 0; i < 20; i++ {
+		assert.Equal(t, got, pickBestSceneForOrigin(orderA, "gamos", "book", "Session 3"),
+			"same input must always pick the same scene")
+		assert.Equal(t, got, pickBestSceneForOrigin(orderB, "gamos", "book", "Session 3"),
+			"candidate order must not change the picked scene")
+	}
+	// The stable choice is the lexicographically-first scene among the
+	// same-session ties ("gamos (marriage)" < "misein (to hate)").
+	assert.Equal(t, "gamos (marriage)", got)
+}
