@@ -400,6 +400,12 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 			GraphPrompt:  graphPrompt,
 		})
 	}
+	// Hide, in each reverse card's graph, any origin that a later card
+	// will ask — otherwise a repeated concept cluster leaks the next
+	// answer (same forward-mask the vocab reverse quiz applies). No-op
+	// for standard mode (graphPrompt is nil there).
+	maskEtymologyGraphFutureAnswers(protoCards)
+
 	h.mu.Lock(); h.etymologyOriginStore = localStore; h.etymologyQuizMode = req.Msg.GetMode(); h.nextID = nextID; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartEtymologyQuizResponse{Cards: protoCards}), nil
 }

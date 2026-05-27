@@ -3,12 +3,83 @@ package server
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
+
+// graphAnswerMask is the placeholder shown in a reverse-quiz graph for a
+// sibling node (or a meaning-text mention) whose origin is the answer to
+// a LATER question in the same session. Mirrors the "[...]" marker the
+// vocab reverse quiz uses for not-yet-asked words.
+const graphAnswerMask = "[…]"
+
+// maskEtymologyGraphFutureAnswers hides, in each card's graph, any origin
+// that is the answer (blank) of a card LATER in the session — so a
+// cluster/antonym graph rendered for card i never reveals the word card
+// i+1 will ask. Already-answered (earlier) cards stay visible, matching
+// the vocab reverse quiz's forward-mask. Masks three leak channels:
+//   - a visible sibling ORIGIN node whose label IS a future answer,
+//   - a future answer mentioned inside a visible sibling's meaning prose,
+//   - a future answer mentioned inside the blank node's own prompt
+//     (e.g. "written (past participle of scribo)" when scribo is asked
+//     next) — the prompt stays usable, only the leaked origin is hidden.
+//
+// Cards must be in session order (StartEtymologyQuiz returns them that
+// way and the frontend does not reshuffle etymology cards).
+func maskEtymologyGraphFutureAnswers(cards []*apiv1.EtymologyQuizCard) {
+	for i := range cards {
+		gp := cards[i].GetGraphPrompt()
+		if gp == nil {
+			continue
+		}
+		future := make(map[string]bool)
+		for j := i + 1; j < len(cards); j++ {
+			o := strings.ToLower(strings.TrimSpace(cards[j].GetOrigin()))
+			if o != "" {
+				future[o] = true
+			}
+		}
+		if len(future) == 0 {
+			continue
+		}
+		for _, n := range gp.Nodes {
+			if n.GetKind() != apiv1.GraphNode_ORIGIN {
+				continue
+			}
+			if n.GetId() == gp.GetBlankNodeId() {
+				// Keep the prompt, but scrub any future-answer origin it names.
+				n.Hint = maskFutureOriginsInText(n.GetHint(), future)
+				continue
+			}
+			if future[strings.ToLower(strings.TrimSpace(n.GetLabel()))] {
+				n.Label = graphAnswerMask
+				n.Meaning = ""
+				continue
+			}
+			n.Meaning = maskFutureOriginsInText(n.GetMeaning(), future)
+		}
+	}
+}
+
+// maskFutureOriginsInText replaces whole-word, case-insensitive
+// occurrences of each future-answer origin in text with the answer mask.
+func maskFutureOriginsInText(text string, future map[string]bool) string {
+	if text == "" || len(future) == 0 {
+		return text
+	}
+	for origin := range future {
+		re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(origin) + `\b`)
+		if err != nil {
+			continue
+		}
+		text = re.ReplaceAllString(text, graphAnswerMask)
+	}
+	return text
+}
 
 // graphConceptInfo aggregates per-book concept data loaded from the YAML
 // source: members (with their session) and outgoing relations. Built
@@ -255,8 +326,13 @@ func clusterPrompt(card quiz.EtymologyOriginCard, c *graphConceptInfo) *apiv1.Gr
 		label, hint, meaning := m.origin, "", m.meaning
 		if isBlank {
 			label = ""
-			hint = m.language
-			meaning = "" // never leak the answer through the meaning gloss
+			// The blank shows the meaning as the prompt (the user types
+			// the origin from the meaning) — without it, a concept with
+			// many members is impossible to disambiguate. card.Meaning is
+			// the blanked origin's gloss. meaning stays empty so it isn't
+			// also rendered as the annotation line below the input.
+			hint = card.Meaning
+			meaning = ""
 			blankID = nodeID
 		}
 		nodes = append(nodes, &apiv1.GraphNode{
@@ -337,7 +413,9 @@ func antonymPairPrompt(card quiz.EtymologyOriginCard, this, other *graphConceptI
 			label, hint, meaning := m.origin, "", m.meaning
 			if isBlank {
 				label = ""
-				hint = m.language
+				// Show the blanked origin's meaning as the prompt; see
+				// clusterPrompt for the rationale.
+				hint = card.Meaning
 				meaning = ""
 				blankID = nodeID
 			}

@@ -692,42 +692,41 @@ concepts:
 	cards := startResp.Msg.GetCards()
 	require.NotEmpty(t, cards, "reverse quiz must produce at least one card")
 
-	// Find the card whose graph is a CLUSTER (the only shape that
-	// renders sibling members for this fixture — there's no antonym
-	// relation and only one origin per member key).
-	var clusterPrompt *apiv1.GraphPrompt
+	// Scan every CLUSTER graph for a non-blank ORIGIN node that carries
+	// its YAML meaning prose. The forward-mask blanks out siblings that
+	// are answers to LATER cards (label "[…]", meaning cleared), so the
+	// visible-with-meaning sibling is the one whose origin was an EARLIER
+	// card — but at least one such node must exist across the two cards,
+	// proving the meaning reaches the graph (the issue-#11 behaviour).
+	var foundNonBlankMeaning string
+	sawCluster := false
 	for _, c := range cards {
 		gp := c.GetGraphPrompt()
-		if gp != nil && gp.GetShape() == apiv1.GraphPrompt_CLUSTER {
-			clusterPrompt = gp
-			break
-		}
-	}
-	require.NotNil(t, clusterPrompt, "expected at least one CLUSTER graph prompt across the cards")
-
-	// One member is the blank (its label is empty, meaning is also
-	// empty so the answer doesn't leak). The OTHER member must carry
-	// its meaning prose.
-	var foundNonBlankMeaning string
-	for _, n := range clusterPrompt.GetNodes() {
-		if n.GetKind() != apiv1.GraphNode_ORIGIN {
+		if gp == nil || gp.GetShape() != apiv1.GraphPrompt_CLUSTER {
 			continue
 		}
-		if n.GetId() == clusterPrompt.GetBlankNodeId() {
-			assert.Empty(t, n.GetMeaning(),
-				"blank node must NOT carry meaning (would leak the answer)")
-			continue
+		sawCluster = true
+		for _, n := range gp.GetNodes() {
+			if n.GetKind() != apiv1.GraphNode_ORIGIN {
+				continue
+			}
+			if n.GetId() == gp.GetBlankNodeId() {
+				continue
+			}
+			if n.GetLabel() == graphAnswerMask {
+				// Masked future answer — meaning intentionally cleared.
+				assert.Empty(t, n.GetMeaning(),
+					"a masked future-answer node must not leak its meaning")
+				continue
+			}
+			if n.GetMeaning() != "" {
+				foundNonBlankMeaning = n.GetMeaning()
+			}
 		}
-		assert.NotEmpty(t, n.GetMeaning(),
-			"non-blank ORIGIN node must carry its YAML meaning prose")
-		foundNonBlankMeaning = n.GetMeaning()
 	}
-	// Whichever side was the blank, the meaning surfaced should be one
-	// of the two YAML glosses. The "past participle of writus" gloss is
-	// the one that proves the relationship info reaches the graph; we
-	// accept either since which side gets blanked is a card-selection
-	// choice.
-	require.NotEmpty(t, foundNonBlankMeaning)
+	require.True(t, sawCluster, "expected at least one CLUSTER graph prompt across the cards")
+	require.NotEmpty(t, foundNonBlankMeaning,
+		"a visible (non-masked) sibling must carry its YAML meaning prose")
 	assert.Contains(t,
 		[]string{"to write", "written (past participle of writus)"},
 		foundNonBlankMeaning,

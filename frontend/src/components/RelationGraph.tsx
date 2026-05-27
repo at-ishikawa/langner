@@ -360,9 +360,17 @@ function MemberNode({ node, isBlank, value, onValueChange, disabled }: MemberNod
             _dark={{ bg: "gray.800" }}
             autoFocus
           />
+          {/* hint carries the blanked origin's meaning (the prompt the
+              user types the origin from); language is shown below it so a
+              concept with several members is still disambiguable. */}
           <Text fontSize="2xs" color="fg.muted" mt={1}>
             {node.hint || node.language}
           </Text>
+          {node.hint && node.language && (
+            <Text fontSize="2xs" color="fg.subtle">
+              {node.language}
+            </Text>
+          )}
         </Box>
       ) : (
         <>
