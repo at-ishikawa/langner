@@ -3255,3 +3255,123 @@ notebooks:
 			"the emptied source scene must be removed")
 	}
 }
+
+// TestValidator_Fix_ConsolidatesMisScenedVocabWord reproduces the
+// "multiple dexterity records" bug: an old vocab path wrote a word's
+// logs under a synthetic scene named after the SESSION instead of the
+// word's real definitions scene. --fix must move each such word to its
+// definitions scene, merging when it already has an entry there
+// (duplicate) and relocating when it doesn't (mis-scened single).
+//
+// Generic idiom data, not the user's notebook.
+func TestValidator_Fix_ConsolidatesMisScenedVocabWord(t *testing.T) {
+	dir := t.TempDir()
+	learningDir := filepath.Join(dir, "learning_notes")
+	defsDir := filepath.Join(dir, "definitions")
+	defsBook := filepath.Join(defsDir, "demo-book")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.MkdirAll(defsBook, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "index.yml"), []byte(`id: demo-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Two real scenes; "break the ice" lives in scene A, "lose your temper"
+	// in scene B.
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "social cues"
+      expressions:
+        - expression: break the ice
+          meaning: to start a conversation
+    - metadata:
+        index: 1
+        title: "emotions"
+      expressions:
+        - expression: lose your temper
+          meaning: to get angry
+`), 0o644))
+
+	// Learning history: a synthetic "Session 1" scene holds both words'
+	// old logs. "break the ice" is ALSO under its real scene "social cues"
+	// (duplicate); "lose your temper" is ONLY under the synthetic scene
+	// (mis-scened single).
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-book.yml"), []byte(`- metadata:
+    notebook_id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "social cues"
+      expressions:
+        - expression: break the ice
+          learned_logs:
+            - status: understood
+              learned_at: "2026-05-20T10:00:00Z"
+              quality: 4
+              quiz_type: notebook
+              interval_days: 7
+    - metadata:
+        title: "Session 1"
+      expressions:
+        - expression: break the ice
+          learned_logs:
+            - status: understood
+              learned_at: "2026-04-06T10:00:00Z"
+              quality: 4
+              quiz_type: freeform
+              interval_days: 7
+        - expression: lose your temper
+          learned_logs:
+            - status: misunderstood
+              learned_at: "2026-04-06T10:05:00Z"
+              quality: 1
+              quiz_type: freeform
+              interval_days: 1
+`), 0o644))
+
+	v := NewValidator(learningDir, nil, nil, []string{defsDir}, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningDir, "demo-book.yml"), &histories)
+	require.Len(t, histories, 1)
+
+	scenesByTitle := map[string][]LearningHistoryExpression{}
+	for _, s := range histories[0].Scenes {
+		scenesByTitle[s.Metadata.Title] = s.Expressions
+	}
+
+	// The synthetic "Session 1" scene must be gone.
+	_, hasSynthetic := scenesByTitle["Session 1"]
+	assert.False(t, hasSynthetic, "synthetic session-named scene must be removed after consolidation")
+
+	// "break the ice": its two entries (social cues + synthetic) merge into
+	// a single entry under "social cues" carrying both logs.
+	social := scenesByTitle["social cues"]
+	var bti *LearningHistoryExpression
+	count := 0
+	for i := range social {
+		if social[i].Expression == "break the ice" {
+			bti = &social[i]
+			count++
+		}
+	}
+	require.Equal(t, 1, count, "break the ice must be a single entry under its real scene")
+	require.NotNil(t, bti)
+	assert.Len(t, bti.LearnedLogs, 2, "both the duplicate's logs must be unioned")
+
+	// "lose your temper": relocated from the synthetic scene to "emotions".
+	emotions := scenesByTitle["emotions"]
+	var found bool
+	for _, e := range emotions {
+		if e.Expression == "lose your temper" {
+			found = true
+			assert.NotEmpty(t, e.LearnedLogs, "relocated word keeps its logs")
+		}
+	}
+	assert.True(t, found, "mis-scened single must be moved to its definitions scene")
+}

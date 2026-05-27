@@ -188,6 +188,11 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// duplicate scenes are collapsed by the merge pass.
 	fixedLearning = v.consolidateEtymologyOriginScenes(fixedLearning, result)
 
+	// Move definitions-book vocabulary words mis-filed under a synthetic
+	// session-named scene (or any non-home scene) to the scene where the
+	// word is actually defined — merging logs when it's already there.
+	fixedLearning = v.consolidateDefinitionsScenes(fixedLearning, result)
+
 	// Fix learning notes structure issues (including duplicate merging - do this after renaming)
 	fixedLearning = v.fixLearningNotesStructure(fixedLearning, result)
 
@@ -1152,6 +1157,196 @@ func (v *Validator) consolidateEtymologyOriginScenes(files []learningHistoryFile
 					}
 					kept = append(kept, scene.Expressions[ei])
 				}
+				if len(kept) == 0 {
+					continue
+				}
+				scene.Expressions = kept
+				newScenes = append(newScenes, scene)
+			}
+			hist.Scenes = newScenes
+		}
+	}
+	return files
+}
+
+// consolidateDefinitionsScenes moves a definitions-book vocabulary word's
+// learning history to the scene where the word is actually defined. An
+// old vocab path wrote freeform/quiz logs under a synthetic scene named
+// after the SESSION (e.g. a scene literally titled "Session 3") instead
+// of the word's real definitions scene ("dexter (right hand)"). That left
+// words mis-scened (logs invisible to the quiz, which reads the real
+// scene) or duplicated (same word under both the synthetic scene and the
+// real one — the "multiple dexterity records" symptom).
+//
+// For each session, every vocabulary expression whose definitions scene
+// is known is merged into that canonical scene (logs + skip unioned),
+// removing it from any other scene; emptied scenes are dropped. Words
+// that can't be matched to a definitions scene, or that the book defines
+// under more than one scene in the same session (ambiguous), are left
+// untouched — the migration never guesses a home.
+//
+// Etymology origins are handled by consolidateEtymologyOriginScenes;
+// this pass deliberately skips them (isEtymologyOriginEntry).
+func (v *Validator) consolidateDefinitionsScenes(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	if len(v.definitionsDirs) == 0 {
+		return files
+	}
+	_, defsRaw, _, err := NewDefinitionsMap(v.definitionsDirs)
+	if err != nil {
+		return files
+	}
+
+	type sessKey struct{ book, session, expr string }
+	canonical := make(map[sessKey]string)
+	ambiguous := make(map[sessKey]bool)
+	recordExpr := func(book, session, raw, scene string) {
+		key := strings.ToLower(strings.TrimSpace(raw))
+		if key == "" || scene == "" {
+			return
+		}
+		k := sessKey{book, session, key}
+		if existing, ok := canonical[k]; ok {
+			if normalizeQuotes(existing) != normalizeQuotes(scene) {
+				ambiguous[k] = true
+			}
+			return
+		}
+		canonical[k] = scene
+	}
+	for book, fileDefs := range defsRaw {
+		for _, def := range fileDefs {
+			session := def.Metadata.Notebook
+			if session == "" {
+				session = def.Metadata.Title
+			}
+			for _, scene := range def.Scenes {
+				st := scene.Metadata.Title
+				for _, note := range scene.Expressions {
+					recordExpr(book, session, note.Expression, st)
+					recordExpr(book, session, note.Definition, st)
+				}
+			}
+		}
+	}
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		book := strings.TrimSuffix(filepath.Base(file.path), ".yml")
+		for histIdx := range file.contents {
+			hist := &file.contents[histIdx]
+			session := hist.Metadata.Title
+
+			type loc struct{ scene, expr int }
+			locs := make(map[string][]loc)
+			for si := range hist.Scenes {
+				for ei := range hist.Scenes[si].Expressions {
+					e := &hist.Scenes[si].Expressions[ei]
+					if isEtymologyOriginEntry(e) {
+						continue
+					}
+					key := strings.ToLower(strings.TrimSpace(e.Expression))
+					locs[key] = append(locs[key], loc{si, ei})
+				}
+			}
+
+			removals := make(map[int]map[int]bool)
+			replacements := make(map[int]map[int]LearningHistoryExpression)
+			additions := make(map[int][]LearningHistoryExpression)
+			markRemove := func(s, e int) {
+				if removals[s] == nil {
+					removals[s] = make(map[int]bool)
+				}
+				removals[s][e] = true
+			}
+			sceneIdxByTitle := make(map[string]int)
+			for si := range hist.Scenes {
+				sceneIdxByTitle[normalizeQuotes(hist.Scenes[si].Metadata.Title)] = si
+			}
+
+			for exprKey, ls := range locs {
+				k := sessKey{book, session, exprKey}
+				canonScene, ok := canonical[k]
+				if !ok || canonScene == "" || ambiguous[k] {
+					continue // unmatched or ambiguous: leave untouched
+				}
+				canonNorm := normalizeQuotes(canonScene)
+
+				// Nothing to do when the sole entry is already canonical.
+				if len(ls) == 1 && normalizeQuotes(hist.Scenes[ls[0].scene].Metadata.Title) == canonNorm {
+					continue
+				}
+
+				// Prefer an existing canonical-scene entry as the merge
+				// target so its position is preserved; otherwise the word
+				// is moved into the canonical scene wholesale.
+				targetIdx := -1
+				for i, l := range ls {
+					if normalizeQuotes(hist.Scenes[l.scene].Metadata.Title) == canonNorm {
+						targetIdx = i
+						break
+					}
+				}
+
+				if targetIdx >= 0 {
+					target := ls[targetIdx]
+					merged := hist.Scenes[target.scene].Expressions[target.expr]
+					for i, l := range ls {
+						if i == targetIdx {
+							continue
+						}
+						other := hist.Scenes[l.scene].Expressions[l.expr]
+						v.mergeOriginExpressionInto(&merged, &other)
+						markRemove(l.scene, l.expr)
+					}
+					if replacements[target.scene] == nil {
+						replacements[target.scene] = make(map[int]LearningHistoryExpression)
+					}
+					replacements[target.scene][target.expr] = merged
+				} else {
+					merged := hist.Scenes[ls[0].scene].Expressions[ls[0].expr]
+					for _, l := range ls[1:] {
+						other := hist.Scenes[l.scene].Expressions[l.expr]
+						v.mergeOriginExpressionInto(&merged, &other)
+					}
+					for _, l := range ls {
+						markRemove(l.scene, l.expr)
+					}
+					if ti, ok := sceneIdxByTitle[canonNorm]; ok {
+						additions[ti] = append(additions[ti], merged)
+					} else {
+						hist.Scenes = append(hist.Scenes, LearningScene{
+							Metadata:    LearningSceneMetadata{Title: canonScene},
+							Expressions: []LearningHistoryExpression{merged},
+						})
+						sceneIdxByTitle[canonNorm] = len(hist.Scenes) - 1
+					}
+				}
+				result.AddWarning(ValidationError{
+					File: file.path,
+					Message: fmt.Sprintf("Moved vocabulary %q to its definitions scene %q (session %s)",
+						exprKey, canonScene, session),
+				})
+			}
+
+			if len(removals) == 0 && len(replacements) == 0 && len(additions) == 0 {
+				continue
+			}
+
+			var newScenes []LearningScene
+			for si := range hist.Scenes {
+				scene := hist.Scenes[si]
+				var kept []LearningHistoryExpression
+				for ei := range scene.Expressions {
+					if removals[si] != nil && removals[si][ei] {
+						continue
+					}
+					if repl, ok := replacements[si][ei]; ok {
+						kept = append(kept, repl)
+						continue
+					}
+					kept = append(kept, scene.Expressions[ei])
+				}
+				kept = append(kept, additions[si]...)
 				if len(kept) == 0 {
 					continue
 				}
