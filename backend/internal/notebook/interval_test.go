@@ -511,3 +511,36 @@ func TestNextIntervalForWrite_AgreesWithRecalculateAll(t *testing.T) {
 		})
 	}
 }
+
+// TestRecalculateAll_StableOnEqualTimestamps pins that logs sharing the
+// same learned_at no longer reorder across repeated RecalculateAll runs.
+// sort.Slice isn't stable, so before the learningRecordBefore tiebreaker
+// two same-timestamp logs swapped on every `validate --fix`, producing a
+// spurious diff each run.
+func TestRecalculateAll_StableOnEqualTimestamps(t *testing.T) {
+	ts := NewDate(time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC))
+	calculators := map[string]IntervalCalculator{
+		"sm2":   &SM2Calculator{},
+		"fixed": &FixedLevelCalculator{Intervals: DefaultFixedIntervals},
+	}
+	for name, calc := range calculators {
+		t.Run(name, func(t *testing.T) {
+			logs := []LearningRecord{
+				{Status: LearnedStatusUnderstood, LearnedAt: ts, Quality: 4, ResponseTimeMs: 13942, QuizType: "notebook"},
+				{Status: LearnedStatusUnderstood, LearnedAt: ts, Quality: 4, ResponseTimeMs: 9037, QuizType: "notebook"},
+			}
+			_, first := calc.RecalculateAll(logs)
+			// Feed the output back in repeatedly — order must not change.
+			prev := first
+			for i := 0; i < 5; i++ {
+				_, next := calc.RecalculateAll(prev)
+				require.Len(t, next, len(prev))
+				for j := range next {
+					assert.Equal(t, prev[j].ResponseTimeMs, next[j].ResponseTimeMs,
+						"same-timestamp logs must keep a stable order across runs")
+				}
+				prev = next
+			}
+		})
+	}
+}

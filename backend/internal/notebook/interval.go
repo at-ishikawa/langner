@@ -5,6 +5,31 @@ import (
 	"time"
 )
 
+// learningRecordBefore is a total order over learning logs used by every
+// log sort below. The primary key is LearnedAt (direction via
+// `ascending`); ties break deterministically on response time, quality,
+// status, then quiz type. Without these tiebreakers, two logs sharing the
+// same learned_at timestamp would reorder on every `validate --fix` run
+// (sort.Slice is not stable), producing a spurious diff each time.
+func learningRecordBefore(a, b LearningRecord, ascending bool) bool {
+	if !a.LearnedAt.Time.Equal(b.LearnedAt.Time) {
+		if ascending {
+			return a.LearnedAt.Time.Before(b.LearnedAt.Time)
+		}
+		return a.LearnedAt.Time.After(b.LearnedAt.Time)
+	}
+	if a.ResponseTimeMs != b.ResponseTimeMs {
+		return a.ResponseTimeMs < b.ResponseTimeMs
+	}
+	if a.Quality != b.Quality {
+		return a.Quality < b.Quality
+	}
+	if a.Status != b.Status {
+		return a.Status < b.Status
+	}
+	return a.QuizType < b.QuizType
+}
+
 // calendarDaysBetween returns the number of calendar-day boundaries crossed
 // between two timestamps, evaluated in each timestamp's own location. The
 // early-review guard uses this instead of duration-based math because review
@@ -113,7 +138,7 @@ func (c *SM2Calculator) DeriveEF(logs []LearningRecord) float64 {
 	sorted := make([]LearningRecord, len(logs))
 	copy(sorted, logs)
 	sort.Slice(sorted, func(i, j int) bool {
-		return sorted[i].LearnedAt.Before(sorted[j].LearnedAt.Time)
+		return learningRecordBefore(sorted[i], sorted[j], true)
 	})
 
 	ef := DefaultEasinessFactor
@@ -153,7 +178,7 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 
 	// Sort ascending (oldest first) for replay
 	sort.Slice(newLogs, func(i, j int) bool {
-		return newLogs[i].LearnedAt.Before(newLogs[j].LearnedAt.Time)
+		return learningRecordBefore(newLogs[i], newLogs[j], true)
 	})
 
 	ef := DefaultEasinessFactor
@@ -207,7 +232,7 @@ func (c *SM2Calculator) RecalculateAll(logs []LearningRecord) (float64, []Learni
 
 	// Re-sort newest first for storage
 	sort.Slice(newLogs, func(i, j int) bool {
-		return newLogs[i].LearnedAt.After(newLogs[j].LearnedAt.Time)
+		return learningRecordBefore(newLogs[i], newLogs[j], false)
 	})
 
 	return ef, newLogs
@@ -301,7 +326,7 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 
 	// Sort ascending (oldest first) for replay
 	sort.Slice(newLogs, func(i, j int) bool {
-		return newLogs[i].LearnedAt.Before(newLogs[j].LearnedAt.Time)
+		return learningRecordBefore(newLogs[i], newLogs[j], true)
 	})
 
 	lastInterval := 0
@@ -344,7 +369,7 @@ func (c *FixedLevelCalculator) RecalculateAll(logs []LearningRecord) (float64, [
 
 	// Re-sort newest first
 	sort.Slice(newLogs, func(i, j int) bool {
-		return newLogs[i].LearnedAt.After(newLogs[j].LearnedAt.Time)
+		return learningRecordBefore(newLogs[i], newLogs[j], false)
 	})
 
 	return 0, newLogs
