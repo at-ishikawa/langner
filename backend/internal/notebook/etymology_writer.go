@@ -164,7 +164,7 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		}
 		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned, wordIsSkipped, conceptByExpression, conceptByHead)
 
-		templateConcepts := buildTemplateConcepts(sessionConcepts, sessionRelations)
+		templateConcepts := buildTemplateConcepts(sessionConcepts, sessionRelations, originMap)
 		if len(defChapters) > 0 {
 			filteredChapters := make([]assets.EtymologyChapter, 0, len(defChapters))
 			for i := range defChapters {
@@ -395,7 +395,7 @@ func readSessionConceptsAndRelations(path string) ([]Concept, []Relation) {
 // for each concept so the template can print "antonym: rightness" next
 // to "leftness" without traversing the relation list. Both directed
 // (from/to) and symmetric (between) relation shapes are handled.
-func buildTemplateConcepts(concepts []Concept, relations []Relation) []assets.EtymologyConcept {
+func buildTemplateConcepts(concepts []Concept, relations []Relation, originMeaning map[string]string) []assets.EtymologyConcept {
 	if len(concepts) == 0 {
 		return nil
 	}
@@ -427,6 +427,7 @@ func buildTemplateConcepts(concepts []Concept, relations []Relation) []assets.Et
 			members = append(members, assets.EtymologyConceptMember{
 				Origin:   m.Origin,
 				Language: m.Language,
+				Meaning:  originMeaning[m.Origin],
 			})
 		}
 		out = append(out, assets.EtymologyConcept{

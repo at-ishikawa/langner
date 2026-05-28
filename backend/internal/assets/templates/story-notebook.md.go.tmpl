@@ -31,10 +31,13 @@
 {{- end -}}
 
 {{- if $definition.ConceptHead -}}
-- **{{ $definition.ConceptHead }}** — {{ $definition.ConceptMeaning }}
-{{- range $member := $definition.ConceptMembers }}
-    - **{{ $member.Name }}**{{ if $member.PartOfSpeech }} [{{ $member.PartOfSpeech }}]{{ end }}{{ if $member.Meaning }}: {{ $member.Meaning }}{{ end }}
-{{- end -}}
+**{{ $definition.ConceptHead }} — {{ $definition.ConceptMeaning }}**
+
+| Member | Part of speech | Meaning |
+|--------|----------------|---------|
+{{ range $member := $definition.ConceptMembers -}}
+| {{ $member.Name }} | {{ if $member.PartOfSpeech }}{{ $member.PartOfSpeech }}{{ else }}—{{ end }} | {{ if $member.Meaning }}{{ $member.Meaning }}{{ else }}—{{ end }} |
+{{ end -}}
 {{- else -}}
 - **{{ $def }}**{{ if $definition.Pronunciation }} /{{ $definition.Pronunciation }}/{{ end }}{{ if $definition.PartOfSpeech }} [{{ $definition.PartOfSpeech }}]{{ end }}: {{ $definition.Meaning }}
 {{- end -}}

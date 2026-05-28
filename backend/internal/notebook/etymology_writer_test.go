@@ -725,12 +725,15 @@ relations:
 
 	assert.Contains(t, out, "### Concepts",
 		"concept section must be rendered when the session declares concepts:")
-	assert.Contains(t, out, "**leftness** — left",
-		"each concept's umbrella meaning must appear next to the concept key")
-	assert.Regexp(t, `(?s)\*\*leftness\*\*.*\*sinister\* \[Latin\]`, out,
-		"member origins must be listed under their concept")
-	assert.Contains(t, out, "antonym: rightness",
+	assert.Contains(t, out, "#### leftness — left",
+		"each concept gets a heading carrying its key and umbrella meaning")
+	// The member table lists each origin with its language and gloss.
+	assert.Contains(t, out, "| Member | Language | Meaning |",
+		"concepts render as a member table, not a bullet list")
+	assert.Regexp(t, `(?s)#### leftness — left.*\| sinister \| Latin \| left \|`, out,
+		"member origins appear as table rows with language + meaning under their concept")
+	assert.Contains(t, out, "Relations: antonym -> rightness",
 		"relations between concepts must be surfaced so the antonym pairing is visible")
-	assert.Contains(t, out, "antonym: leftness",
+	assert.Contains(t, out, "Relations: antonym -> leftness",
 		"symmetric relations render in both directions so each concept block carries the back-link")
 }

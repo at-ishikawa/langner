@@ -44,6 +44,7 @@ type EtymologyConcept struct {
 type EtymologyConceptMember struct {
 	Origin   string
 	Language string
+	Meaning  string // the origin's gloss, for the concept table's Meaning column
 }
 
 // EtymologyConceptRelation captures a relation to another concept (e.g.
