@@ -9,3 +9,13 @@ origins:
     type: prefix
     language: Greek
     meaning: distant
+  # phon is the freeform scenario's answer target. Standard/Reverse run
+  # afterwards with `Include unstudied words` on and expect to see graph
+  # and tele as their two cards — answering an origin from THAT set in
+  # freeform would push it into SR cooldown and the later scenarios would
+  # see only one card. Using a separate origin for freeform keeps each
+  # scenario self-contained without an inter-scenario data reset.
+  - origin: phon
+    type: root
+    language: Greek
+    meaning: sound

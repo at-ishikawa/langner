@@ -12,11 +12,11 @@ import (
 // same learned_at timestamp would reorder on every `validate --fix` run
 // (sort.Slice is not stable), producing a spurious diff each time.
 func learningRecordBefore(a, b LearningRecord, ascending bool) bool {
-	if !a.LearnedAt.Time.Equal(b.LearnedAt.Time) {
+	if !a.LearnedAt.Equal(b.LearnedAt.Time) {
 		if ascending {
-			return a.LearnedAt.Time.Before(b.LearnedAt.Time)
+			return a.LearnedAt.Before(b.LearnedAt.Time)
 		}
-		return a.LearnedAt.Time.After(b.LearnedAt.Time)
+		return a.LearnedAt.After(b.LearnedAt.Time)
 	}
 	if a.ResponseTimeMs != b.ResponseTimeMs {
 		return a.ResponseTimeMs < b.ResponseTimeMs

@@ -1,0 +1,5 @@
+id: word-stems
+kind: Etymology
+name: "Word Stems"
+notebooks:
+  - ./origins.yml
