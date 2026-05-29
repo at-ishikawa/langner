@@ -995,7 +995,7 @@ func latestLogTime(e *LearningHistoryExpression) time.Time {
 	var latest time.Time
 	consider := func(logs []LearningRecord) {
 		for _, l := range logs {
-			if l.LearnedAt.Time.After(latest) {
+			if l.LearnedAt.After(latest) {
 				latest = l.LearnedAt.Time
 			}
 		}
@@ -1472,7 +1472,7 @@ func (v *Validator) recalculateAllIntervals(files []learningHistoryFile, result 
 				File: file,
 				Message: fmt.Sprintf(
 					"Recalculated interval_days for %q [%s] at %s: %d → %d",
-					exprLabel, slot, log.LearnedAt.Time.Format("2006-01-02"), old, log.IntervalDays,
+					exprLabel, slot, log.LearnedAt.Format("2006-01-02"), old, log.IntervalDays,
 				),
 			})
 		}

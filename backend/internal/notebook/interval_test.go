@@ -506,7 +506,7 @@ func TestNextIntervalForWrite_AgreesWithRecalculateAll(t *testing.T) {
 				require.True(t, ok, "recalc result missing log at %s", live.LearnedAt.Time)
 				assert.Equal(t, recalcInterval, live.IntervalDays,
 					"live-write interval at %s should equal recalc interval",
-					live.LearnedAt.Time.Format("2006-01-02"))
+					live.LearnedAt.Format("2006-01-02"))
 			}
 		})
 	}

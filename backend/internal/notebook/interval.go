@@ -90,7 +90,7 @@ func nextIntervalForWrite(c IntervalCalculator, existingLogs []LearningRecord, t
 	chain = append(chain, existingLogs...)
 	ef, replayed := c.RecalculateAll(chain)
 	for _, log := range replayed {
-		if log.LearnedAt.Time.Equal(tentative.LearnedAt.Time) {
+		if log.LearnedAt.Equal(tentative.LearnedAt.Time) {
 			return log.IntervalDays, ef
 		}
 	}
