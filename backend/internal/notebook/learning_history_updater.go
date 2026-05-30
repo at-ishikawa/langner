@@ -455,10 +455,21 @@ func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
 }
 
 // UpdateOrCreateExpressionWithQualityForEtymology updates or creates an
-// origin entry. Lookup matches on (name, Type=origin) so a vocab entry
-// sharing the name doesn't get its etymology logs polluted. Legacy
-// type-empty entries with etymology logs are upgraded in place to
-// Type=origin so re-runs converge on the typed shape.
+// origin entry. Lookup matches on (session, expression, Type=origin)
+// across EVERY scene in the matching session — scene title is not part
+// of the key. This is what stops an origin's learning history from
+// splitting into two entries when the scene title pickBestSceneForOrigin
+// derives drifts over time: today's writer might be told to use
+// "derma (skin)" while the prior writer used "gyne (woman)", but if the
+// origin already lives under "gyne (woman)" we update there. Vocab
+// entries are filtered out so an etymology log can't pollute a same-
+// named word; legacy type-empty entries that already carry etymology
+// logs are upgraded in place to Type=origin so re-runs converge on the
+// typed shape.
+//
+// Only when no existing origin entry is found do we create a new one,
+// and only then does sceneTitle matter (it's the location for the new
+// entry, derived by pickBestSceneForOrigin).
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
@@ -466,18 +477,12 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 	responseTimeMs int64,
 	quizType QuizType,
 ) bool {
-	normalizedSceneTitle := normalizeQuotes(sceneTitle)
-
 	for hi, h := range u.history {
 		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
 		for si, s := range h.Scenes {
-			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
-				continue
-			}
-
 			for ei, exp := range s.Expressions {
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
