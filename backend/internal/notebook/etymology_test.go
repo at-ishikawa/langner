@@ -252,37 +252,39 @@ notebooks:
 	assert.NotContains(t, storyIndexes, "etym-test")
 }
 
-// TestPickBestSceneForOrigin_Deterministic pins that an origin referenced
-// from multiple scenes in the same session always resolves to the SAME
-// scene title regardless of candidate order. buildOriginSceneIndex
-// accumulates candidates via map iteration (random order per run), so
-// without the sort the chosen scene could flip between runs and split an
-// origin's learning history into duplicate records (the "multiple gamos"
-// symptom). Generic Greek-root data, not the user's notebook.
-func TestPickBestSceneForOrigin_Deterministic(t *testing.T) {
-	// Same origin "gamos" referenced from two scenes in one session of one
-	// notebook, supplied in two opposite orders.
-	orderA := map[string][]OriginSceneCandidate{
-		"gamos": {
-			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "misein (to hate)"},
-			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "gamos (marriage)"},
+// TestPickBestSceneForOrigin_EarliestRule pins that pickBestSceneForOrigin
+// applies the "earliest in a book" rule: when an origin is referenced from
+// multiple scenes within one session, the chosen scene is the one whose
+// SceneRank is smallest (the scene the origin first appears in, per the
+// definitions file order). Candidate slice order must NOT affect the
+// outcome — buildOriginSceneIndex accumulates candidates via map iteration
+// (random per run), so the sort + rank-based pick is what keeps the choice
+// stable. Generic Greek-root data, not the user's notebook.
+func TestPickBestSceneForOrigin_EarliestRule(t *testing.T) {
+	// Same origin "combinator" referenced from two scenes in one session.
+	// scene-0 (alpha-scene) is earlier than scene-1 (beta-scene) in the
+	// definitions file — combinator must land in alpha-scene regardless of
+	// candidate slice order.
+	earlyThenLate := map[string][]OriginSceneCandidate{
+		"combinator": {
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "alpha-scene", SessionRank: 0, SceneRank: 0, ExprRank: 1},
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "beta-scene", SessionRank: 0, SceneRank: 1, ExprRank: 0},
 		},
 	}
-	orderB := map[string][]OriginSceneCandidate{
-		"gamos": {
-			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "gamos (marriage)"},
-			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "misein (to hate)"},
+	lateThenEarly := map[string][]OriginSceneCandidate{
+		"combinator": {
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "beta-scene", SessionRank: 0, SceneRank: 1, ExprRank: 0},
+			{NotebookID: "book", SessionTitle: "Session 3", SceneTitle: "alpha-scene", SessionRank: 0, SceneRank: 0, ExprRank: 1},
 		},
 	}
 
-	got := pickBestSceneForOrigin(orderA, "gamos", "book", "Session 3")
+	got := pickBestSceneForOrigin(earlyThenLate, "combinator", "book", "Session 3")
 	for i := 0; i < 20; i++ {
-		assert.Equal(t, got, pickBestSceneForOrigin(orderA, "gamos", "book", "Session 3"),
+		assert.Equal(t, got, pickBestSceneForOrigin(earlyThenLate, "combinator", "book", "Session 3"),
 			"same input must always pick the same scene")
-		assert.Equal(t, got, pickBestSceneForOrigin(orderB, "gamos", "book", "Session 3"),
+		assert.Equal(t, got, pickBestSceneForOrigin(lateThenEarly, "combinator", "book", "Session 3"),
 			"candidate order must not change the picked scene")
 	}
-	// The stable choice is the lexicographically-first scene among the
-	// same-session ties ("gamos (marriage)" < "misein (to hate)").
-	assert.Equal(t, "gamos (marriage)", got)
+	assert.Equal(t, "alpha-scene", got,
+		"earliest scene in the book wins, regardless of alphabetical order")
 }

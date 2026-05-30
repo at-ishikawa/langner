@@ -212,11 +212,13 @@ func chapterIsEmpty(c assets.EtymologyChapter) bool {
 	return true
 }
 
-// readSessionOrigins reads the origins from an etymology session file.
-// The file must use the wrapped format with a non-empty metadata.title; the
-// returned origins are tagged with that title via SessionTitle.
+// readSessionOrigins reads the origins from an etymology session file in
+// either the new event/scenes/origins shape or the legacy
+// metadata+flat-origins shape. The file must declare a non-empty
+// session title; returned origins are tagged with that title via
+// SessionTitle.
 func readSessionOrigins(path string) ([]EtymologyOrigin, error) {
-	wrapped, err := readYamlFile[etymologySessionFile](path)
+	wrapped, err := loadEtymologySessionAnyShape(path)
 	if err != nil {
 		return nil, fmt.Errorf("read etymology session %s: %w", path, err)
 	}
@@ -377,11 +379,22 @@ func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, _ /*nbTitle: unus
 // history scene titles (notebook-side scenes are user-defined, e.g.
 // "__index_0").
 // readSessionConceptsAndRelations reads concepts: and relations: from a
-// single etymology session YAML file. Returns empty slices when the
-// file doesn't declare either, so callers can use len() without nil
+// single etymology session YAML file. Tries the new event/scenes/origins
+// shape first (concepts/relations live at the event level), then falls
+// back to the legacy metadata+flat-origins shape. Returns empty slices
+// when the file declares neither, so callers can use len() without nil
 // checks. Read errors are swallowed and treated as no-data: the
 // validator at load time already reports malformed session files.
 func readSessionConceptsAndRelations(path string) ([]Concept, []Relation) {
+	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil && hasNewShape(newShape) {
+		var concepts []Concept
+		var relations []Relation
+		for _, entry := range newShape {
+			concepts = append(concepts, entry.Concepts...)
+			relations = append(relations, entry.Relations...)
+		}
+		return concepts, relations
+	}
 	wrapped, err := readYamlFile[etymologySessionFile](path)
 	if err != nil {
 		return nil, nil

@@ -75,8 +75,40 @@ func newMigrateCommand() *cobra.Command {
 	migrateCmd.AddCommand(newRecalculateIntervalsCommand())
 	migrateCmd.AddCommand(newExtractDefinitionsCommand())
 	migrateCmd.AddCommand(newMigrateMergeConceptsCommand())
+	migrateCmd.AddCommand(newMigrateEtymologyToScenesCommand())
 
 	return migrateCmd
+}
+
+// newMigrateEtymologyToScenesCommand wires the `langner migrate
+// etymology-to-scenes` CLI. The migration rewrites legacy flat-shape
+// etymology session YAML files into the explicit event/scenes/origins
+// shape. Each origin lands in the earliest scene whose vocab references
+// it via origin_parts (earliest by session order in index.yml, then by
+// scene order in the definitions file). Origins not referenced by any
+// definition fall into a synthetic scene named after the origin.
+//
+// Idempotent: files already in the new shape are skipped. --dry-run
+// reports what would change without writing anything.
+func newMigrateEtymologyToScenesCommand() *cobra.Command {
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "etymology-to-scenes",
+		Short: "Rewrite legacy flat-shape etymology session files into the explicit event/scenes/origins shape",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			return cli.MigrateEtymologyToScenes(
+				cfg.Notebooks.EtymologyDirectories,
+				cfg.Notebooks.DefinitionsDirectories,
+				dryRun,
+			)
+		},
+	}
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Report planned migrations without writing files")
+	return cmd
 }
 
 func newExtractDefinitionsCommand() *cobra.Command {

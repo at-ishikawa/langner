@@ -309,7 +309,7 @@ func (v *Validator) loadEtymologyOriginExpressions() map[string]bool {
 	}
 	for _, idx := range indexMap {
 		for _, nbPath := range idx.NotebookPaths {
-			wrapped, err := readYamlFile[etymologySessionFile](filepath.Join(idx.Path, nbPath))
+			wrapped, err := loadEtymologySessionAnyShape(filepath.Join(idx.Path, nbPath))
 			if err != nil {
 				continue
 			}
@@ -2230,7 +2230,11 @@ func (v *Validator) migrateEtymologyShape(files []learningHistoryFile, result *V
 // state we don't need; instead we walk the dirs directly and reuse the
 // same per-source projection logic.
 func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginSceneCandidate {
-	add := func(out map[string][]OriginSceneCandidate, origin, notebookID, sessionTitle, sceneTitle string) {
+	add := func(
+		out map[string][]OriginSceneCandidate,
+		origin, notebookID, sessionTitle, sceneTitle string,
+		sessionRank, sceneRank, exprRank int,
+	) {
 		key := strings.ToLower(strings.TrimSpace(origin))
 		if key == "" {
 			return
@@ -2239,6 +2243,9 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 			NotebookID:   notebookID,
 			SessionTitle: sessionTitle,
 			SceneTitle:   sceneTitle,
+			SessionRank:  sessionRank,
+			SceneRank:    sceneRank,
+			ExprRank:     exprRank,
 		})
 	}
 	out := make(map[string][]OriginSceneCandidate)
@@ -2248,17 +2255,17 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 		_ = walkIndexFiles(dir, storyIndexes, false)
 	}
 	for storyID, idx := range storyIndexes {
-		for _, nbPath := range idx.NotebookPaths {
+		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
 			notebooks, err := readYamlFile[[]StoryNotebook](path)
 			if err != nil {
 				continue
 			}
 			for _, nb := range notebooks {
-				for _, scene := range nb.Scenes {
-					for _, def := range scene.Definitions {
+				for sceneRank, scene := range nb.Scenes {
+					for exprRank, def := range scene.Definitions {
 						for _, op := range def.OriginParts {
-							add(out, op.Origin, storyID, nb.Event, scene.Title)
+							add(out, op.Origin, storyID, nb.Event, scene.Title, nbRank, sceneRank, exprRank)
 						}
 					}
 				}
@@ -2270,13 +2277,13 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 	if err == nil {
 		_ = defsMap
 		for bookID, defs := range defsRaw {
-			for _, fileDefs := range defs {
+			for sessionRank, fileDefs := range defs {
 				session := fileDefs.Metadata.Title
-				for _, scene := range fileDefs.Scenes {
+				for sceneRank, scene := range fileDefs.Scenes {
 					sceneTitle := scene.Metadata.Title
-					for _, note := range scene.Expressions {
+					for exprRank, note := range scene.Expressions {
 						for _, op := range note.OriginParts {
-							add(out, op.Origin, bookID, session, sceneTitle)
+							add(out, op.Origin, bookID, session, sceneTitle, sessionRank, sceneRank, exprRank)
 						}
 					}
 				}
@@ -2289,16 +2296,16 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 		_ = walkEtymologyIndexFiles(dir, etymIndexes)
 	}
 	for etymID, idx := range etymIndexes {
-		for _, nbPath := range idx.NotebookPaths {
+		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			wrapped, err := readYamlFile[etymologySessionFile](path)
+			wrapped, err := loadEtymologySessionAnyShape(path)
 			if err != nil {
 				continue
 			}
 			session := wrapped.Metadata.Title
-			for _, def := range wrapped.Definitions {
+			for exprRank, def := range wrapped.Definitions {
 				for _, op := range def.OriginParts {
-					add(out, op.Origin, etymID, session, session)
+					add(out, op.Origin, etymID, session, session, nbRank, 0, exprRank)
 				}
 			}
 		}

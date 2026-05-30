@@ -88,6 +88,23 @@ type definitionsIndex struct {
 	Notebooks []string `yaml:"notebooks"`
 }
 
+// DefinitionsIndex is the public view of a definitions directory's index.yml.
+// Used by tooling (migrators, validators) that need the book ID and ordered
+// notebook file list without going through the full DefinitionsMap loader.
+type DefinitionsIndex struct {
+	ID        string
+	Notebooks []string
+}
+
+// ReadDefinitionsIndex loads one definitions index.yml into a DefinitionsIndex.
+func ReadDefinitionsIndex(path string) (DefinitionsIndex, error) {
+	idx, err := readYamlFile[definitionsIndex](path)
+	if err != nil {
+		return DefinitionsIndex{}, err
+	}
+	return DefinitionsIndex{ID: idx.ID, Notebooks: idx.Notebooks}, nil
+}
+
 // loadDefinitionsFile loads a single definitions YAML file into the result map
 // and updates the dates map with the latest `date` across all definitions in
 // the file for the given bookID. raw, when non-nil, accumulates the parsed

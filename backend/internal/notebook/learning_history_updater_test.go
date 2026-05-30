@@ -947,6 +947,54 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 	}
 }
 
+// TestAssertNoDuplicateOriginsInSession_PassesAndFails verifies the
+// pre-write invariant guard used by SaveEtymologyOriginResult. The
+// happy-path returns nil; a duplicate origin across scenes (the bug
+// class this guard catches) returns an error naming the offending
+// origin and the scenes it landed in.
+func TestAssertNoDuplicateOriginsInSession_PassesAndFails(t *testing.T) {
+	clean := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{Title: "Session X"},
+		Scenes: []LearningScene{{
+			Metadata: LearningSceneMetadata{Title: "alpha (first)"},
+			Expressions: []LearningHistoryExpression{{
+				Expression: "demo-root",
+				Type:       LearningExpressionTypeOrigin,
+				EtymologyBreakdownLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Now()), Quality: 4, QuizType: "etymology_breakdown"},
+				},
+			}},
+		}},
+	}}
+	assert.NoError(t, AssertNoDuplicateOriginsInSession(clean, "demo-notebook", "Session X"),
+		"clean state must pass the guard")
+
+	dirty := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{Title: "Session X"},
+		Scenes: []LearningScene{
+			{
+				Metadata: LearningSceneMetadata{Title: "alpha (first)"},
+				Expressions: []LearningHistoryExpression{{
+					Expression: "demo-root",
+					Type:       LearningExpressionTypeOrigin,
+				}},
+			},
+			{
+				Metadata: LearningSceneMetadata{Title: "beta (drifted)"},
+				Expressions: []LearningHistoryExpression{{
+					Expression: "demo-root",
+					Type:       LearningExpressionTypeOrigin,
+				}},
+			},
+		},
+	}}
+	err := AssertNoDuplicateOriginsInSession(dirty, "demo-notebook", "Session X")
+	require.Error(t, err, "duplicate origin across scenes must trip the guard")
+	assert.Contains(t, err.Error(), "demo-root", "error must name the offending origin")
+	assert.Contains(t, err.Error(), "alpha (first)", "error must list both scenes")
+	assert.Contains(t, err.Error(), "beta (drifted)", "error must list both scenes")
+}
+
 // TestUpdateOrCreateExpressionForEtymology_WritesToExistingScene pins
 // the rule that stops "two logos sessions" from happening: when an
 // etymology origin already lives under one scene in a session, a write

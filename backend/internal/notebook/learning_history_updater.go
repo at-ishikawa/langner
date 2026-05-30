@@ -1,6 +1,7 @@
 package notebook
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -542,6 +543,46 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 		u.history[storyIndex].Scenes[sceneIndex].Expressions,
 		newExpression,
 	)
+}
+
+// AssertNoDuplicateOriginsInSession returns a non-nil error if the given
+// session block holds the same origin expression under more than one
+// scene. Used by SaveEtymologyOriginResult as a structural guard right
+// before WriteYamlFile so any write that would re-introduce the "two
+// logos sessions" class of bug fails loudly instead of silently
+// corrupting the YAML. After the etymology source migration this
+// invariant cannot fail in normal operation — the writer always
+// addresses scenes the source declares — so a trip indicates either a
+// real regression or hand-edited data that needs reconciliation.
+func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, sessionTitle string) error {
+	normalised := normalizeQuotes(sessionTitle)
+	for _, h := range history {
+		if normalizeQuotes(h.Metadata.Title) != normalised {
+			continue
+		}
+		scenesByOrigin := make(map[string][]string)
+		for _, scene := range h.Scenes {
+			for _, expr := range scene.Expressions {
+				if expr.Type != LearningExpressionTypeOrigin {
+					continue
+				}
+				name := strings.TrimSpace(expr.Expression)
+				if name == "" {
+					continue
+				}
+				scenesByOrigin[name] = append(scenesByOrigin[name], scene.Metadata.Title)
+			}
+		}
+		for origin, scenes := range scenesByOrigin {
+			if len(scenes) > 1 {
+				return fmt.Errorf(
+					"invariant violation: origin %q appears in %d scenes (%v) within notebook %q session %q — refusing to write",
+					origin, len(scenes), scenes, notebookID, sessionTitle,
+				)
+			}
+		}
+	}
+	return nil
 }
 
 // ClearSkippedAt removes the skip for the given quiz type. The expression
