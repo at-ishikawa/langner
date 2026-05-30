@@ -56,13 +56,14 @@ type Example struct {
 
 // NotebookSummary holds display info for one notebook.
 type NotebookSummary struct {
-	NotebookID            string
-	Name                  string
-	ReviewCount           int
-	ReverseReviewCount    int
-	EtymologyReviewCount  int
-	LatestDate            time.Time
-	Kind                  string
+	NotebookID                  string
+	Name                        string
+	ReviewCount                 int
+	ReverseReviewCount          int
+	EtymologyReviewCount        int
+	EtymologyReverseReviewCount int
+	LatestDate                  time.Time
+	Kind                        string
 	// HasContent is true when any scene in the notebook has statements or
 	// conversations — i.e., there is prose/dialogue to read, not just flashcards.
 	HasContent bool
@@ -76,10 +77,11 @@ type NotebookSummary struct {
 // per-mode review counts so the start screen can show counts both per
 // section and per-notebook.
 type NotebookSectionSummary struct {
-	Title                string
-	ReviewCount          int
-	ReverseReviewCount   int
-	EtymologyReviewCount int
+	Title                       string
+	ReviewCount                 int
+	ReverseReviewCount          int
+	EtymologyReviewCount        int
+	EtymologyReverseReviewCount int
 }
 
 // GradeResult holds the outcome of grading a user's answer.

@@ -73,6 +73,11 @@ message NotebookSummary {
   // and session titles for etymology notebooks. Empty for flashcard or
   // definitions-only notebooks that have no section hierarchy.
   repeated NotebookSectionSummary sections = 8;
+  // etymology_reverse_review_count is the per-notebook due count for the
+  // etymology reverse quiz. etymology_review_count is the standard count.
+  // The two can differ because the same origin can be due in one mode and
+  // not in the other (each mode tracks its own SR interval and skip flag).
+  int32 etymology_reverse_review_count = 9;
 }
 
 // NotebookSectionSummary holds the display title and per-mode review counts
@@ -82,6 +87,7 @@ message NotebookSectionSummary {
   int32 review_count = 2;
   int32 reverse_review_count = 3;
   int32 etymology_review_count = 4;
+  int32 etymology_reverse_review_count = 5;
 }
 
 // NotebookSection narrows a quiz request to specific sections within a single

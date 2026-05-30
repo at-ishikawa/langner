@@ -116,45 +116,17 @@ func (s *Service) LoadEtymologyOriginCards(
 			}
 			seen[key] = true
 
-			// Per-type skip: drop origins the user has marked as
-			// skipped from this quiz mode.
-			if isOriginSkipped(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType) {
-				continue
-			}
-
-			// Branch on whether the origin has any learning history at all
-			// vs. has been studied (= has at least one correct answer in
-			// any mode).
-			//
-			//   never-seen      → no logs in any track
-			//   studied         → at least one correct etymology answer
-			//   tried-and-failed → has logs but only misunderstood
-			//
 			// Freeform mode (skipEligibility=true) always returns every
 			// origin so the typed-input lookup can find them; the
 			// frontend gates re-drilling via the "Not until $date" banner.
-			//
-			// For standard / reverse:
-			//   - never-seen    → include iff includeUnstudied=true.
-			//   - studied       → include iff still due per SR. The
-			//     previous code bypassed the SR check when
-			//     includeUnstudied=true, which served origins the user
-			//     had just answered correctly (e.g. fero re-asked the
-			//     same day a 90-day interval was scheduled).
-			//   - tried-and-failed → always filtered out (the
-			//     eligibility gate); the user should freeform-drill it
-			//     to a first correct answer before standard/reverse.
-			if !skipEligibility {
-				neverSeen := findOriginExpression(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin) == nil
-				if neverSeen {
-					if !includeUnstudied {
-						continue
-					}
-				} else if !isOriginEligible(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin) {
-					continue
-				} else if !needsOriginReview(learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin, skipQuizType) {
-					continue
-				}
+			// Standard / reverse share their filter with the start-page
+			// summary via shouldIncludeOrigin so the two counts stay
+			// aligned.
+			if !skipEligibility && !shouldIncludeOrigin(
+				learningHistories[etymID], nbTitle, o.SessionTitle, o.Origin,
+				includeUnstudied, skipQuizType,
+			) {
+				continue
 			}
 
 			cards = append(cards, EtymologyOriginCard{
@@ -361,6 +333,14 @@ func (s *Service) SaveEtymologyOriginResult(
 		responseTimeMs,
 		quizType,
 	)
+
+	// Structural guard: after the in-memory update, refuse to persist
+	// any state where an origin lives in two scenes of the same session.
+	// Catches the "two logos sessions" class of bug at write time
+	// instead of letting it accumulate silently in the YAML.
+	if err := notebook.AssertNoDuplicateOriginsInSession(updater.GetHistory(), card.NotebookName, card.SessionTitle); err != nil {
+		return fmt.Errorf("save etymology origin %q: %w", card.Origin, err)
+	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
@@ -599,12 +579,13 @@ func originNextReviewDate(histories []notebook.LearningHistory, card EtymologyOr
 	return ""
 }
 
-// LoadEtymologyNotebookSummaries returns etymology notebook summaries with due origin counts.
-// LoadEtymologyNotebookSummaries returns per-notebook etymology counts.
-// includeUnstudied, when true, counts every eligible non-skipped origin
-// (matching what an etymology quiz with "Include unstudied" loads);
-// when false, the count is gated by needsOriginReview so only origins
-// whose SR interval has elapsed contribute.
+// LoadEtymologyNotebookSummaries returns etymology notebook summaries with
+// per-mode due origin counts.
+//
+// includeUnstudied passes through to shouldIncludeOrigin so the counts match
+// exactly what LoadEtymologyOriginCards would return for the same mode +
+// toggle combination. Both standard and reverse counts are computed because
+// the same origin can be due in one mode and not in the other.
 func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
@@ -624,14 +605,15 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 			continue
 		}
 
-		dueCount := 0
+		var standardTotal, reverseTotal int
 		seen := make(map[string]bool)
 		seenSession := make(map[string]struct{})
-		// sectionDue tallies due origins per session in the order sessions
-		// first appear in the file so the start page lists them in document
-		// order rather than map-iteration order.
+		// sectionStandard / sectionReverse tally due origins per session in
+		// the order sessions first appear in the file so the start page
+		// lists them in document order rather than map-iteration order.
 		var sessionOrder []string
-		sectionDue := make(map[string]int)
+		sectionStandard := make(map[string]int)
+		sectionReverse := make(map[string]int)
 		for _, o := range origins {
 			if o.SessionTitle != "" {
 				if _, ok := seenSession[o.SessionTitle]; !ok {
@@ -647,44 +629,72 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 				continue
 			}
 			seen[key] = true
-			// Skipped-from-standard origins shouldn't inflate the
-			// "due" badge — the start page is meant to surface
-			// drillable items.
-			if isOriginSkipped(learningHistories[id], index.Name, o.SessionTitle, o.Origin, notebook.QuizTypeEtymologyStandard) {
-				continue
+			if shouldIncludeOrigin(learningHistories[id], index.Name, o.SessionTitle, o.Origin, includeUnstudied, notebook.QuizTypeEtymologyStandard) {
+				standardTotal++
+				sectionStandard[o.SessionTitle]++
 			}
-			if !isOriginEligible(learningHistories[id], index.Name, o.SessionTitle, o.Origin) {
-				continue
+			if shouldIncludeOrigin(learningHistories[id], index.Name, o.SessionTitle, o.Origin, includeUnstudied, notebook.QuizTypeEtymologyReverse) {
+				reverseTotal++
+				sectionReverse[o.SessionTitle]++
 			}
-			// Without "Include unstudied", gate by SR — only count
-			// origins whose interval has elapsed. With it, count every
-			// eligible non-skipped origin, matching the actual quiz load.
-			if !includeUnstudied && !needsOriginReview(learningHistories[id], index.Name, o.SessionTitle, o.Origin, notebook.QuizTypeEtymologyStandard) {
-				continue
-			}
-			dueCount++
-			sectionDue[o.SessionTitle]++
 		}
 
 		var sections []NotebookSectionSummary
 		for _, title := range sessionOrder {
 			sections = append(sections, NotebookSectionSummary{
-				Title:                title,
-				EtymologyReviewCount: sectionDue[title],
+				Title:                       title,
+				EtymologyReviewCount:        sectionStandard[title],
+				EtymologyReverseReviewCount: sectionReverse[title],
 			})
 		}
 
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:           id,
-			Name:                 index.Name,
-			EtymologyReviewCount: dueCount,
-			Kind:                 "Etymology",
-			LatestDate:           index.LatestDate,
-			Sections:             sections,
+			NotebookID:                  id,
+			Name:                        index.Name,
+			EtymologyReviewCount:        standardTotal,
+			EtymologyReverseReviewCount: reverseTotal,
+			Kind:                        "Etymology",
+			LatestDate:                  index.LatestDate,
+			Sections:                    sections,
 		})
 	}
 
 	return summaries, nil
+}
+
+// shouldIncludeOrigin returns true when an origin must appear in the
+// standard or reverse etymology quiz for the given quiz type and toggle.
+// It is the single source of truth used by both LoadEtymologyOriginCards
+// (the actual quiz load) and LoadEtymologyNotebookSummaries (the start-page
+// count) so the count badge and the quiz can never disagree.
+//
+// Rules (mirroring the user-visible behaviour):
+//
+//   - per-type skip → exclude (a skip in one mode does not affect the other).
+//   - never-seen (no logs in any track) → include iff includeUnstudied.
+//   - has logs but no correct etymology answer (tried-and-failed) → exclude
+//     unconditionally; the user must freeform-drill it to a first correct
+//     answer before standard/reverse re-serves it.
+//   - eligible (≥1 correct etymology answer in any mode) → include iff the
+//     SR interval for the requested mode has elapsed. includeUnstudied does
+//     NOT bypass the SR gate for eligible origins — that would re-serve an
+//     origin the user answered correctly the same day.
+func shouldIncludeOrigin(
+	histories []notebook.LearningHistory,
+	notebookTitle, sessionTitle, origin string,
+	includeUnstudied bool,
+	quizType notebook.QuizType,
+) bool {
+	if isOriginSkipped(histories, notebookTitle, sessionTitle, origin, quizType) {
+		return false
+	}
+	if findOriginExpression(histories, notebookTitle, sessionTitle, origin) == nil {
+		return includeUnstudied
+	}
+	if !isOriginEligible(histories, notebookTitle, sessionTitle, origin) {
+		return false
+	}
+	return needsOriginReview(histories, notebookTitle, sessionTitle, origin, quizType)
 }
 
 // findOriginExpression returns the LearningHistoryExpression for an origin.

@@ -107,11 +107,15 @@ export default function QuizHubPage() {
     );
     if (includeUnstudied || isFreeformMode) return base;
     return base.filter((n) => {
-      if (tab === "etymology") return n.etymologyReviewCount > 0;
+      if (tab === "etymology") {
+        return selectedEtyMode === "reverse"
+          ? n.etymologyReverseReviewCount > 0
+          : n.etymologyReviewCount > 0;
+      }
       if (selectedVocabMode === "reverse") return n.reverseReviewCount > 0;
       return n.reviewCount > 0;
     });
-  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode]);
+  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode, selectedEtyMode]);
 
   // Drop selections that are hidden by the current filter so the user doesn't
   // accidentally start a quiz referencing notebooks they can no longer see.
@@ -226,12 +230,20 @@ export default function QuizHubPage() {
   };
 
   // pickModeCount maps a section/notebook count source to the active mode.
+  // Etymology has separate standard and reverse counts because the same
+  // origin can be due in one mode and not the other (each mode tracks its
+  // own SR interval and skip flag).
   const pickModeCount = (counts: {
     reviewCount: number;
     reverseReviewCount: number;
     etymologyReviewCount: number;
+    etymologyReverseReviewCount: number;
   }): number => {
-    if (tab === "etymology") return counts.etymologyReviewCount;
+    if (tab === "etymology") {
+      return selectedEtyMode === "reverse"
+        ? counts.etymologyReverseReviewCount
+        : counts.etymologyReviewCount;
+    }
     if (selectedVocabMode === "reverse") return counts.reverseReviewCount;
     return counts.reviewCount;
   };

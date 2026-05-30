@@ -627,3 +627,182 @@ origins:
 	assert.True(t, yFuture, "root-y answered today in assembly should be reported as not-due")
 	assert.False(t, zFuture, "root-z has no logs and should remain freely drillable")
 }
+
+// TestService_EtymologySummaryMatchesQuizLoad pins the fix for the
+// start-page-vs-quiz count mismatch: the per-notebook and per-section
+// EtymologyReviewCount on the start page must equal the number of cards
+// the quiz actually loads, for both includeUnstudied toggle states and
+// for both standard and reverse modes.
+//
+// Fixture mix per session covers the cases that previously diverged:
+//
+//	studied-due       — eligible (correct etymology log) with a lapsed SR
+//	                    interval. In BOTH summary and quiz, regardless of
+//	                    the toggle.
+//	studied-not-due   — eligible with a fresh 90-day interval. Summary
+//	                    used to count this when includeUnstudied=true even
+//	                    though the quiz loader excluded it.
+//	never-seen        — no learning history. The quiz loader includes
+//	                    these when includeUnstudied=true, but the summary
+//	                    used to exclude them via the eligibility gate.
+//	tried-failed      — has logs but only misunderstood. Excluded
+//	                    everywhere (gate behaviour unchanged).
+func TestService_EtymologySummaryMatchesQuizLoad(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-roots
+kind: Etymology
+name: Demo Roots
+notebooks:
+  - ./origins.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "Demo Lesson"
+origins:
+  - origin: studied-due
+    type: root
+    language: Latin
+    meaning: learned long ago, interval lapsed
+  - origin: studied-not-due
+    type: root
+    language: Latin
+    meaning: learned today, still inside 90-day interval
+  - origin: never-seen-1
+    type: root
+    language: Latin
+    meaning: no logs at all
+  - origin: never-seen-2
+    type: root
+    language: Latin
+    meaning: no logs at all either
+  - origin: tried-failed
+    type: root
+    language: Latin
+    meaning: tried but only misunderstood
+`), 0o644))
+
+	today := time.Now().Format("2006-01-02")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	// Both breakdown and assembly logs are present for studied-due so the
+	// fixture exercises BOTH quiz modes — needsOriginReview reads the
+	// breakdown track for standard and the assembly track for reverse.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-roots.yml"), []byte(`- metadata:
+    notebook_id: demo-roots
+    title: Demo Roots
+  scenes:
+    - metadata:
+        title: "Demo Lesson"
+      expressions:
+        - expression: studied-due
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2024-01-01"
+              quality: 4
+              interval_days: 7
+              quiz_type: etymology_breakdown
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "2024-01-01"
+              quality: 4
+              interval_days: 7
+              quiz_type: etymology_assembly
+        - expression: studied-not-due
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_breakdown
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_assembly
+        - expression: tried-failed
+          etymology_breakdown_logs:
+            - status: misunderstood
+              learned_at: "2024-01-01"
+              quiz_type: etymology_breakdown
+`), 0o644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{DisableShuffle: true},
+	)
+
+	cases := []struct {
+		name             string
+		includeUnstudied bool
+		quizType         notebook.QuizType
+		wantOrigins      []string
+	}{
+		{
+			name:             "standard, includeUnstudied=false",
+			includeUnstudied: false,
+			quizType:         notebook.QuizTypeEtymologyStandard,
+			wantOrigins:      []string{"studied-due"},
+		},
+		{
+			name:             "standard, includeUnstudied=true",
+			includeUnstudied: true,
+			quizType:         notebook.QuizTypeEtymologyStandard,
+			wantOrigins:      []string{"studied-due", "never-seen-1", "never-seen-2"},
+		},
+		{
+			name:             "reverse, includeUnstudied=false",
+			includeUnstudied: false,
+			quizType:         notebook.QuizTypeEtymologyReverse,
+			wantOrigins:      []string{"studied-due"},
+		},
+		{
+			name:             "reverse, includeUnstudied=true",
+			includeUnstudied: true,
+			quizType:         notebook.QuizTypeEtymologyReverse,
+			wantOrigins:      []string{"studied-due", "never-seen-1", "never-seen-2"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cards, err := svc.LoadEtymologyOriginCards(
+				[]string{"demo-roots"}, tc.includeUnstudied, false, tc.quizType, nil,
+			)
+			require.NoError(t, err)
+			gotOrigins := make([]string, 0, len(cards))
+			for _, c := range cards {
+				gotOrigins = append(gotOrigins, c.Origin)
+			}
+			sort.Strings(gotOrigins)
+			wantOrigins := append([]string{}, tc.wantOrigins...)
+			sort.Strings(wantOrigins)
+			assert.Equal(t, wantOrigins, gotOrigins,
+				"quiz loader should include exactly the expected set of origins")
+
+			summaries, err := svc.LoadEtymologyNotebookSummaries(tc.includeUnstudied)
+			require.NoError(t, err)
+			require.Len(t, summaries, 1)
+			summary := summaries[0]
+			gotCount := summary.EtymologyReviewCount
+			if tc.quizType == notebook.QuizTypeEtymologyReverse {
+				gotCount = summary.EtymologyReverseReviewCount
+			}
+			assert.Equal(t, len(cards), gotCount,
+				"start page count for the active mode must equal what the quiz loads")
+
+			require.Len(t, summary.Sections, 1)
+			gotSectionCount := summary.Sections[0].EtymologyReviewCount
+			if tc.quizType == notebook.QuizTypeEtymologyReverse {
+				gotSectionCount = summary.Sections[0].EtymologyReverseReviewCount
+			}
+			assert.Equal(t, len(cards), gotSectionCount,
+				"start page section count for the active mode must equal what the quiz loads")
+		})
+	}
+}

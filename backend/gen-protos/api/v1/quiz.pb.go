@@ -347,9 +347,14 @@ type NotebookSummary struct {
 	// Sections are story events (chapters/episodes) for vocabulary notebooks
 	// and session titles for etymology notebooks. Empty for flashcard or
 	// definitions-only notebooks that have no section hierarchy.
-	Sections      []*NotebookSectionSummary `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Sections []*NotebookSectionSummary `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
+	// etymology_reverse_review_count is the per-notebook due count for the
+	// etymology reverse quiz. etymology_review_count is the standard count.
+	// The two can differ because the same origin can be due in one mode and
+	// not in the other (each mode tracks its own SR interval and skip flag).
+	EtymologyReverseReviewCount int32 `protobuf:"varint,9,opt,name=etymology_reverse_review_count,json=etymologyReverseReviewCount,proto3" json:"etymology_reverse_review_count,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *NotebookSummary) Reset() {
@@ -438,16 +443,24 @@ func (x *NotebookSummary) GetSections() []*NotebookSectionSummary {
 	return nil
 }
 
+func (x *NotebookSummary) GetEtymologyReverseReviewCount() int32 {
+	if x != nil {
+		return x.EtymologyReverseReviewCount
+	}
+	return 0
+}
+
 // NotebookSectionSummary holds the display title and per-mode review counts
 // for a single section within a notebook.
 type NotebookSectionSummary struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Title                string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	ReviewCount          int32                  `protobuf:"varint,2,opt,name=review_count,json=reviewCount,proto3" json:"review_count,omitempty"`
-	ReverseReviewCount   int32                  `protobuf:"varint,3,opt,name=reverse_review_count,json=reverseReviewCount,proto3" json:"reverse_review_count,omitempty"`
-	EtymologyReviewCount int32                  `protobuf:"varint,4,opt,name=etymology_review_count,json=etymologyReviewCount,proto3" json:"etymology_review_count,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"open.v1"`
+	Title                       string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	ReviewCount                 int32                  `protobuf:"varint,2,opt,name=review_count,json=reviewCount,proto3" json:"review_count,omitempty"`
+	ReverseReviewCount          int32                  `protobuf:"varint,3,opt,name=reverse_review_count,json=reverseReviewCount,proto3" json:"reverse_review_count,omitempty"`
+	EtymologyReviewCount        int32                  `protobuf:"varint,4,opt,name=etymology_review_count,json=etymologyReviewCount,proto3" json:"etymology_review_count,omitempty"`
+	EtymologyReverseReviewCount int32                  `protobuf:"varint,5,opt,name=etymology_reverse_review_count,json=etymologyReverseReviewCount,proto3" json:"etymology_reverse_review_count,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *NotebookSectionSummary) Reset() {
@@ -504,6 +517,13 @@ func (x *NotebookSectionSummary) GetReverseReviewCount() int32 {
 func (x *NotebookSectionSummary) GetEtymologyReviewCount() int32 {
 	if x != nil {
 		return x.EtymologyReviewCount
+	}
+	return 0
+}
+
+func (x *NotebookSectionSummary) GetEtymologyReverseReviewCount() int32 {
+	if x != nil {
+		return x.EtymologyReverseReviewCount
 	}
 	return 0
 }
@@ -3886,7 +3906,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x15GetQuizOptionsRequest\x12+\n" +
 	"\x11include_unstudied\x18\x01 \x01(\bR\x10includeUnstudied\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
-	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xc2\x02\n" +
+	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\x87\x03\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
@@ -3897,12 +3917,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x16etymology_review_count\x18\x06 \x01(\x05R\x14etymologyReviewCount\x12\x1f\n" +
 	"\vhas_content\x18\a \x01(\bR\n" +
 	"hasContent\x12:\n" +
-	"\bsections\x18\b \x03(\v2\x1e.api.v1.NotebookSectionSummaryR\bsections\"\xb9\x01\n" +
+	"\bsections\x18\b \x03(\v2\x1e.api.v1.NotebookSectionSummaryR\bsections\x12C\n" +
+	"\x1eetymology_reverse_review_count\x18\t \x01(\x05R\x1betymologyReverseReviewCount\"\xfe\x01\n" +
 	"\x16NotebookSectionSummary\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12!\n" +
 	"\freview_count\x18\x02 \x01(\x05R\vreviewCount\x120\n" +
 	"\x14reverse_review_count\x18\x03 \x01(\x05R\x12reverseReviewCount\x124\n" +
-	"\x16etymology_review_count\x18\x04 \x01(\x05R\x14etymologyReviewCount\"b\n" +
+	"\x16etymology_review_count\x18\x04 \x01(\x05R\x14etymologyReviewCount\x12C\n" +
+	"\x1eetymology_reverse_review_count\x18\x05 \x01(\x05R\x1betymologyReverseReviewCount\"b\n" +
 	"\x0fNotebookSection\x12(\n" +
 	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"notebookId\x12%\n" +

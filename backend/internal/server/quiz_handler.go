@@ -69,18 +69,20 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 		var sections []*apiv1.NotebookSectionSummary
 		for _, sec := range s.Sections {
 			sections = append(sections, &apiv1.NotebookSectionSummary{
-				Title:                sec.Title,
-				ReviewCount:          int32(sec.ReviewCount),
-				ReverseReviewCount:   int32(sec.ReverseReviewCount),
-				EtymologyReviewCount: int32(sec.EtymologyReviewCount),
+				Title:                       sec.Title,
+				ReviewCount:                 int32(sec.ReviewCount),
+				ReverseReviewCount:          int32(sec.ReverseReviewCount),
+				EtymologyReviewCount:        int32(sec.EtymologyReviewCount),
+				EtymologyReverseReviewCount: int32(sec.EtymologyReverseReviewCount),
 			})
 		}
 		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{
 			NotebookId: s.NotebookID, Name: s.Name, ReviewCount: int32(s.ReviewCount),
 			Kind: s.Kind, ReverseReviewCount: int32(s.ReverseReviewCount),
-			EtymologyReviewCount: int32(s.EtymologyReviewCount),
-			HasContent:           s.HasContent,
-			Sections:             sections,
+			EtymologyReviewCount:        int32(s.EtymologyReviewCount),
+			EtymologyReverseReviewCount: int32(s.EtymologyReverseReviewCount),
+			HasContent:                  s.HasContent,
+			Sections:                    sections,
 		})
 	}
 	return connect.NewResponse(&apiv1.GetQuizOptionsResponse{Notebooks: protoSummaries}), nil
