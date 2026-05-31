@@ -304,11 +304,9 @@ func buildNewShapeEntry(
 	}
 
 	// Bucket each declared origin into its destination scene.
-	sceneOrder := make([]string, 0, len(defScenes))
 	sceneIdxByTitle := make(map[string]int, len(defScenes))
 	for si, scene := range defScenes {
 		sceneIdxByTitle[scene.title] = si
-		sceneOrder = append(sceneOrder, scene.title)
 	}
 
 	type sceneBucket struct {

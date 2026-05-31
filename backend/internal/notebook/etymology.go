@@ -300,14 +300,7 @@ func ReadLegacyEtymologySession(path string) (LegacyEtymologySession, error) {
 	if err != nil {
 		return LegacyEtymologySession{}, err
 	}
-	return LegacyEtymologySession{
-		Metadata:    wrapped.Metadata,
-		Origins:     wrapped.Origins,
-		Definitions: wrapped.Definitions,
-		Concepts:    wrapped.Concepts,
-		Relations:   wrapped.Relations,
-		Date:        wrapped.Date,
-	}, nil
+	return LegacyEtymologySession(wrapped), nil
 }
 
 // loadEtymologySessionAnyShape reads an etymology session file in either

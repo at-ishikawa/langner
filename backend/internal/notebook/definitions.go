@@ -102,7 +102,7 @@ func ReadDefinitionsIndex(path string) (DefinitionsIndex, error) {
 	if err != nil {
 		return DefinitionsIndex{}, err
 	}
-	return DefinitionsIndex{ID: idx.ID, Notebooks: idx.Notebooks}, nil
+	return DefinitionsIndex(idx), nil
 }
 
 // loadDefinitionsFile loads a single definitions YAML file into the result map
