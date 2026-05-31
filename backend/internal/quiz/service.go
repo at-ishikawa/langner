@@ -1961,19 +1961,22 @@ func needsDefinitionReview(
 				if expr.Expression != note.Expression && expr.Expression != note.Definition {
 					continue
 				}
-				// Words must be answered in freeform first AND have at
-				// least one correct answer before becoming eligible for
-				// standard quiz — unless the user opted into unstudied
-				// words, in which case the not-yet-cleared word counts.
-				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-					return includeUnstudied
+				// Once a word has any correct answer (in any direction),
+				// it counts as "studied" and the SR interval alone decides
+				// whether to show it. The includeUnstudied toggle only
+				// gates pristine words — it must NOT bypass SR for words
+				// the user has already gotten right, even when they got
+				// them right in a different mode (e.g. egotist answered
+				// correctly in standard/reverse but never in freeform).
+				if expr.HasAnyCorrectAnswerInAnyDirection() {
+					return expr.NeedsForwardReview()
 				}
-				return expr.NeedsForwardReview()
+				return includeUnstudied
 			}
 		}
 	}
-	// No history for this word at all → it's unstudied; include only when
-	// the toggle is on.
+	// No history for this word at all → pristine; include only when the
+	// toggle is on.
 	return includeUnstudied
 }
 
@@ -1996,16 +1999,13 @@ func needsDefinitionReverseReview(
 				if expr.Expression != note.Expression && expr.Expression != note.Definition {
 					continue
 				}
-				// Words must be answered in freeform first AND have at
-				// least one correct answer before becoming eligible for
-				// reverse quiz — unless the user opted into unstudied words.
-				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-					return includeUnstudied
+				// Same studied/unstudied split as needsDefinitionReview:
+				// a correct answer in ANY direction means SR governs.
+				// includeUnstudied only gates pristine words.
+				if expr.HasAnyCorrectAnswerInAnyDirection() {
+					return expr.NeedsReverseReview()
 				}
-				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
-					return false
-				}
-				return true
+				return includeUnstudied
 			}
 		}
 	}

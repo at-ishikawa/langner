@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -426,6 +427,81 @@ notebooks:
 	cards, err := svc.LoadCards([]string{"fail-defs"}, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "definitions-only word with only freeform-failed history must not appear when includeUnstudied=false")
+}
+
+// TestService_LoadCards_DefinitionsBook_StudiedWordRespectsSREvenWithoutFreeform
+// pins the egotist-style bug. A word with correct standard/reverse
+// history but no freeform answer must still be gated by its SR
+// interval, regardless of the includeUnstudied toggle. The previous
+// needsDefinitionReview gate short-circuited to includeUnstudied
+// whenever HasFreeformAnswer was false, which meant any word the user
+// had answered correctly only in standard or reverse mode was re-asked
+// on every quiz session as long as the toggle was on — bypassing SR
+// entirely. The fix: studied words (any correct answer in any
+// direction) defer to NeedsForwardReview / NeedsReverseReview; the
+// toggle only gates pristine words.
+func TestService_LoadCards_DefinitionsBook_StudiedWordRespectsSREvenWithoutFreeform(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "studied-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: studied-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+`), 0o644))
+	// Word has a correct standard-quiz answer with interval_days=7, dated
+	// just one day ago. No freeform answer, no reverse answer. SR says
+	// next review is 6 days from now — the quiz must NOT include it,
+	// even with includeUnstudied=true.
+	yesterday := time.Now().Add(-24 * time.Hour).Format("2006-01-02T15:04:05Z07:00")
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "studied-defs.yml"), []byte(`- metadata:
+    notebook_id: studied-defs
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "understood"
+              learned_at: "`+yesterday+`"
+              quality: 4
+              quiz_type: "notebook"
+              interval_days: 7
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"studied-defs"}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "studied word inside its SR interval must not appear with includeUnstudied=false")
+
+	cards, err = svc.LoadCards([]string{"studied-defs"}, true, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "includeUnstudied=true must NOT override SR for studied words — only pristine words are gated by the toggle")
+
+	reverseCards, err := svc.LoadReverseCards([]string{"studied-defs"}, false, true, nil)
+	require.NoError(t, err)
+	// Reverse quiz: ReverseLogs is empty, so the word IS due in reverse
+	// (NeedsReverseReview returns true on empty logs). Studied path
+	// applies because the standard correct answer makes it studied.
+	assert.Len(t, reverseCards, 1, "studied word with empty reverse logs is due in reverse regardless of toggle")
 }
 
 // TestService_LoadCards_DefinitionsBook_IncludeUnstudiedLoadsUnstudiedWords

@@ -528,6 +528,27 @@ func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
 	return false
 }
 
+// HasAnyCorrectAnswerInAnyDirection returns true if the expression has at
+// least one correct answer in either the forward (LearnedLogs) or the
+// reverse (ReverseLogs) track. Used by the quiz card gate to decide
+// whether a word counts as "studied" (defer to SR interval) or
+// "unstudied" (gated by the includeUnstudied toggle). A correct answer
+// in any direction is enough — the toggle is meant to gate pristine
+// words, not to bypass SR for words the user has already engaged with.
+func (exp LearningHistoryExpression) HasAnyCorrectAnswerInAnyDirection() bool {
+	if exp.HasAnyCorrectAnswer() {
+		return true
+	}
+	for _, log := range exp.ReverseLogs {
+		if log.Status == LearnedStatusUnderstood ||
+			log.Status == LearnedStatusCanBeUsed ||
+			log.Status == learnedStatusIntuitivelyUsed {
+			return true
+		}
+	}
+	return false
+}
+
 // HasFreeformAnswer returns true if the expression has at least one freeform quiz
 // answer recorded in LearnedLogs. Vocabulary words must be answered in freeform mode
 // first before becoming eligible for standard or reverse quizzes.
