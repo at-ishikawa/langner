@@ -1739,11 +1739,19 @@ func trailingInt(s string) (int, bool) {
 }
 
 // countDefinitionNotes counts notes in definitions-only books that need
-// review. includeUnstudied is honoured only for the standard direction
-// (matching the standard quiz, which supports the toggle); the reverse
-// quiz has no includeUnstudied flag, so callers pass false for reverse
-// counts to keep the badge consistent with what the reverse quiz loads.
+// review for the given direction. Both standard and reverse honour
+// includeUnstudied (the start-page toggle passes through to whichever
+// quiz the user is about to start). The count goes through
+// shouldIncludeDefinition so the badge stays in lockstep with what
+// loadDefinitionCards / loadDefinitionReverseCards actually return —
+// previously this function skipped the per-type SkippedAt gate the
+// loaders apply, so the badge over-counted any word the user had
+// excluded from that quiz mode.
 func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories []notebook.LearningHistory, isReverse, includeUnstudied bool) int {
+	quizType := notebook.QuizTypeNotebook
+	if isReverse {
+		quizType = notebook.QuizTypeReverse
+	}
 	count := 0
 	for storyTitle, sceneDefs := range defs {
 		for sceneTitle, notes := range sceneDefs {
@@ -1752,19 +1760,46 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 				if note.Meaning == "" {
 					continue
 				}
-				if isReverse {
-					if needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note, includeUnstudied) {
-						count++
-					}
-				} else {
-					if needsDefinitionReview(histories, storyTitle, sceneTitle, note, includeUnstudied) {
-						count++
-					}
+				if shouldIncludeDefinition(histories, storyTitle, sceneTitle, note, includeUnstudied, quizType) {
+					count++
 				}
 			}
 		}
 	}
 	return count
+}
+
+// shouldIncludeDefinition is the single source of truth for whether a
+// definitions-only-book note appears in the standard or reverse vocab
+// quiz (and is counted in the start-page badge). Returning true means
+// the note appears in BOTH the badge count and the corresponding
+// LoadCards / LoadReverseCards result; false means it appears in
+// neither. Freeform has its own simpler rule (no SR gate) and stays in
+// loadDefinitionWords.
+//
+// quizType picks the per-type SkippedAt slot and the SR direction:
+//
+//	QuizTypeNotebook → standard (needsDefinitionReview)
+//	QuizTypeReverse  → reverse  (needsDefinitionReverseReview)
+//
+// includeUnstudied threads through to the SR helpers exactly as the
+// loaders pass it — never-seen and not-yet-cleared words become
+// eligible when the toggle is on, but words still inside their SR
+// interval stay excluded.
+func shouldIncludeDefinition(
+	histories []notebook.LearningHistory,
+	storyTitle, sceneTitle string,
+	note *notebook.Note,
+	includeUnstudied bool,
+	quizType notebook.QuizType,
+) bool {
+	if isExpressionSkippedInHistory(histories, storyTitle, sceneTitle, note, quizType) {
+		return false
+	}
+	if quizType == notebook.QuizTypeReverse {
+		return needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note, includeUnstudied)
+	}
+	return needsDefinitionReview(histories, storyTitle, sceneTitle, note, includeUnstudied)
 }
 
 // loadDefinitionCards loads standard quiz cards from definitions-only books.
@@ -1784,10 +1819,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				if note.Meaning == "" {
 					continue
 				}
-				if isExpressionSkippedInHistory(learningHistories[bookID], storyTitle, sceneTitle, &note, notebook.QuizTypeNotebook) {
-					continue
-				}
-				if !needsDefinitionReview(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied) {
+				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeNotebook) {
 					continue
 				}
 				entry := note.Definition
@@ -1829,10 +1861,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				if note.Meaning == "" {
 					continue
 				}
-				if isExpressionSkippedInHistory(learningHistories[bookID], storyTitle, sceneTitle, &note, notebook.QuizTypeReverse) {
-					continue
-				}
-				if !needsDefinitionReverseReview(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied) {
+				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeReverse) {
 					continue
 				}
 				expression := note.Expression

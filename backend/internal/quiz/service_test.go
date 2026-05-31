@@ -1742,3 +1742,75 @@ func TestDefinitionsSectionSummaries_NaturalSessionOrdering(t *testing.T) {
 	assert.Equal(t, "Session 10", got[1].Title)
 	assert.Equal(t, "Intro", got[2].Title)
 }
+
+// TestService_DefinitionsBookSummaryMatchesLoad pins the contract that
+// the vocab start-page badge count equals what the standard/reverse
+// quiz actually loads for a definitions-only book.
+//
+// The mismatch this guards against: countDefinitionNotes used to skip
+// the per-type SkippedAt gate that loadDefinitionCards /
+// loadDefinitionReverseCards apply, so the badge over-counted any
+// note the user had excluded from that quiz mode (and per-section
+// counts diverged the same way via definitionsSectionSummaries).
+//
+// Per-direction cases — each fixture marks the single note skipped
+// from that direction's quiz and asserts both directions agree with
+// their loader.
+func TestService_DefinitionsBookSummaryMatchesLoad(t *testing.T) {
+	cases := []struct {
+		name      string
+		skippedAt string
+	}{
+		{
+			name:      "notebook skip",
+			skippedAt: `            notebook: "2025-01-20T10:00:00Z"` + "\n",
+		},
+		{
+			name:      "reverse skip",
+			skippedAt: `            reverse: "2025-01-20T10:00:00Z"` + "\n",
+		},
+		{
+			name:      "no skip",
+			skippedAt: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defsDir, learningDir := makeDefinitionsBookSkipFixture(t, tc.skippedAt)
+
+			svc := NewService(config.NotebooksConfig{
+				DefinitionsDirectories: []string{defsDir},
+				LearningNotesDirectory: learningDir,
+			}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+				learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+			summaries, err := svc.LoadNotebookSummaries(true)
+			require.NoError(t, err)
+			var book *NotebookSummary
+			for i := range summaries {
+				if summaries[i].NotebookID == "skip-defs" {
+					book = &summaries[i]
+					break
+				}
+			}
+			require.NotNil(t, book, "skip-defs must appear in summaries")
+			require.Len(t, book.Sections, 1, "fixture has exactly one session")
+
+			cards, err := svc.LoadCards([]string{"skip-defs"}, true, nil)
+			require.NoError(t, err)
+			assert.Equal(t, len(cards), book.ReviewCount,
+				"notebook ReviewCount must equal len(LoadCards)")
+			assert.Equal(t, len(cards), book.Sections[0].ReviewCount,
+				"section ReviewCount must equal len(LoadCards)")
+
+			reverseCards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, true, nil)
+			require.NoError(t, err)
+			assert.Equal(t, len(reverseCards), book.ReverseReviewCount,
+				"notebook ReverseReviewCount must equal len(LoadReverseCards)")
+			assert.Equal(t, len(reverseCards), book.Sections[0].ReverseReviewCount,
+				"section ReverseReviewCount must equal len(LoadReverseCards)")
+		})
+	}
+}
