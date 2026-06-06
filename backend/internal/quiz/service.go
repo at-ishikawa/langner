@@ -164,8 +164,9 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		if !ok {
 			continue
 		}
-		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false, includeUnstudied)
-		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true, includeUnstudied)
+		conceptHeads := definitionConceptHeads(reader, nbID)
+		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false, includeUnstudied, conceptHeads)
+		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true, includeUnstudied, conceptHeads)
 		if reviewCount == 0 && reverseCount == 0 {
 			continue
 		}
@@ -176,7 +177,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReverseReviewCount: reverseCount,
 			Kind:               "Books",
 			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
-			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID], includeUnstudied),
+			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID], includeUnstudied, conceptHeads),
 		})
 	}
 
@@ -490,15 +491,28 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer str
 }
 
 // SaveResult updates learning history via the repository.
+//
+// When the card represents a concept (card.ConceptHead != ""), the log
+// is written under the head expression so the result lands on the same
+// row MergeConcepts consolidated into. Without this, a card whose
+// surviving label happens to be a non-head member (post-collapse) would
+// be saved as a fresh per-member row — silently undoing the migration
+// every time a member-named concept card is graded.
 func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct { status = "understood" }
+	expression := card.Entry
+	originalExpression := card.OriginalEntry
+	if card.ConceptHead != "" {
+		expression = card.ConceptHead
+		originalExpression = ""
+	}
 	log := &learning.LearningLog{
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeNotebook),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: card.Entry, OriginalExpression: card.OriginalEntry,
+		Expression: expression, OriginalExpression: originalExpression,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
@@ -935,7 +949,7 @@ func (s *Service) loadStoryReverseCards(
 				}
 
 				// Skip words marked as skipped from reverse mode
-				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeReverse) {
+				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeReverse, nil) {
 					continue
 				}
 
@@ -1002,7 +1016,7 @@ func (s *Service) loadFlashcardReverseCards(
 			}
 
 			// Skip words marked as skipped from reverse mode
-			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeReverse) {
+			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeReverse, nil) {
 				continue
 			}
 
@@ -1251,15 +1265,20 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answ
 }
 
 // SaveReverseResult updates learning history via the repository.
+// Same head-redirection as SaveResult; see SaveResult for details.
 func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct { status = "understood" }
+	expression := card.Expression
+	if card.ConceptHead != "" {
+		expression = card.ConceptHead
+	}
 	log := &learning.LearningLog{
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeReverse),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: card.Expression, OriginalExpression: card.Expression,
+		Expression: expression, OriginalExpression: expression,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
@@ -1279,6 +1298,11 @@ type FreeformCard struct {
 	Contexts           []inference.Context
 	WordDetail         WordDetail
 	Images             []string
+	// ConceptHead, when non-empty, names the concept head this card maps
+	// to. SaveFreeformResult writes the log under the head so per-member
+	// freeform answers (e.g. typing "misanthropist") consolidate into
+	// the head's history row that MergeConcepts established.
+	ConceptHead string
 }
 
 // LoadAllWords loads all words from all notebooks for freeform quiz.
@@ -1342,7 +1366,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
 				// Skip words marked as skipped from freeform mode
-				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeFreeform) {
+				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeFreeform, nil) {
 					continue
 				}
 
@@ -1386,7 +1410,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
 			// Skip words marked as skipped from freeform mode
-			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeFreeform) {
+			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeFreeform, nil) {
 				continue
 			}
 
@@ -1511,15 +1535,20 @@ type FreeformGradeResult struct {
 }
 
 // SaveFreeformResult updates learning history via the repository.
+// Same head-redirection as SaveResult; see SaveResult for details.
 func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct { status = "understood" }
+	expression := card.Expression
+	if card.ConceptHead != "" {
+		expression = card.ConceptHead
+	}
 	log := &learning.LearningLog{
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeFreeform),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: card.Expression, OriginalExpression: card.Expression,
+		Expression: expression, OriginalExpression: expression,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
@@ -1668,8 +1697,14 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 
 // isExpressionSkippedInHistory checks whether a note is excluded from the
 // given quiz type. Per-type skipping replaced the global skip flag.
-func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note, quizType notebook.QuizType) bool {
-	return notebook.IsExpressionSkipped(histories, event, sceneTitle, def.Expression, def.Definition, quizType)
+// When the note is a concept member, its expression/definition are
+// resolved to the head before matching history — the migration folded
+// member skip timestamps into the head, so a direct lookup would miss
+// the skip flag and re-surface the word.
+func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note, quizType notebook.QuizType, conceptHeads map[string]string) bool {
+	expr := canonicalDefinitionExpression(def.Expression, conceptHeads)
+	defn := canonicalDefinitionExpression(def.Definition, conceptHeads)
+	return notebook.IsExpressionSkipped(histories, event, sceneTitle, expr, defn, quizType)
 }
 
 // definitionsSectionSummaries returns per-session counts for a
@@ -1684,6 +1719,7 @@ func definitionsSectionSummaries(
 	defs map[string]map[string][]notebook.Note,
 	histories []notebook.LearningHistory,
 	includeUnstudied bool,
+	conceptHeads map[string]string,
 ) []NotebookSectionSummary {
 	if len(defs) == 0 {
 		return nil
@@ -1709,8 +1745,8 @@ func definitionsSectionSummaries(
 		one := map[string]map[string][]notebook.Note{title: defs[title]}
 		sections = append(sections, NotebookSectionSummary{
 			Title:              title,
-			ReviewCount:        countDefinitionNotes(one, histories, false, includeUnstudied),
-			ReverseReviewCount: countDefinitionNotes(one, histories, true, includeUnstudied),
+			ReviewCount:        countDefinitionNotes(one, histories, false, includeUnstudied, conceptHeads),
+			ReverseReviewCount: countDefinitionNotes(one, histories, true, includeUnstudied, conceptHeads),
 		})
 	}
 	return sections
@@ -1747,12 +1783,17 @@ func trailingInt(s string) (int, bool) {
 // previously this function skipped the per-type SkippedAt gate the
 // loaders apply, so the badge over-counted any word the user had
 // excluded from that quiz mode.
-func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories []notebook.LearningHistory, isReverse, includeUnstudied bool) int {
+func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories []notebook.LearningHistory, isReverse, includeUnstudied bool, conceptHeads map[string]string) int {
 	quizType := notebook.QuizTypeNotebook
 	if isReverse {
 		quizType = notebook.QuizTypeReverse
 	}
 	count := 0
+	// Dedupe by concept so the badge reflects what the quiz actually
+	// surfaces (one card per concept) rather than counting head+members
+	// independently. The first head-or-member encountered for a concept
+	// triggers shouldIncludeDefinition; subsequent ones are skipped.
+	seenConcept := make(map[string]bool)
 	for storyTitle, sceneDefs := range defs {
 		for sceneTitle, notes := range sceneDefs {
 			for i := range notes {
@@ -1760,7 +1801,15 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 				if note.Meaning == "" {
 					continue
 				}
-				if shouldIncludeDefinition(histories, storyTitle, sceneTitle, note, includeUnstudied, quizType) {
+				if _, isConceptExpr := conceptHeads[note.Expression]; isConceptExpr {
+					canonical := canonicalDefinitionExpression(note.Expression, conceptHeads)
+					conceptKey := storyTitle + "|" + sceneTitle + "|" + canonical
+					if seenConcept[conceptKey] {
+						continue
+					}
+					seenConcept[conceptKey] = true
+				}
+				if shouldIncludeDefinition(histories, storyTitle, sceneTitle, note, includeUnstudied, quizType, conceptHeads) {
 					count++
 				}
 			}
@@ -1792,24 +1841,36 @@ func shouldIncludeDefinition(
 	note *notebook.Note,
 	includeUnstudied bool,
 	quizType notebook.QuizType,
+	conceptHeads map[string]string,
 ) bool {
-	if isExpressionSkippedInHistory(histories, storyTitle, sceneTitle, note, quizType) {
+	if isExpressionSkippedInHistory(histories, storyTitle, sceneTitle, note, quizType, conceptHeads) {
 		return false
 	}
 	if quizType == notebook.QuizTypeReverse {
-		return needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note, includeUnstudied)
+		return needsDefinitionReverseReview(histories, storyTitle, sceneTitle, note, includeUnstudied, conceptHeads)
 	}
-	return needsDefinitionReview(histories, storyTitle, sceneTitle, note, includeUnstudied)
+	return needsDefinitionReview(histories, storyTitle, sceneTitle, note, includeUnstudied, conceptHeads)
 }
 
 // loadDefinitionCards loads standard quiz cards from definitions-only books.
+//
+// For concepts, exactly one card is emitted per concept (named after the
+// head). Generating per-member cards and post-collapsing them was the
+// pre-fix path: when the head's own note evaluated as "studied" but a
+// member's eligibility check fell through to includeUnstudied=true
+// (because the migration emptied the per-member history rows), the
+// surviving collapsed card ended up named for the member, and SaveResult
+// then wrote a fresh per-member history entry — silently re-fragmenting
+// the YAML that MergeConcepts had consolidated.
 func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []Card {
 	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}
+	conceptHeads, byHead := reader.GetDefinitionsBookConceptInfo(bookID)
 
 	var cards []Card
+	seenConcept := make(map[string]bool)
 	for storyTitle, sceneDefs := range defs {
 		if !inSectionFilter(sectionFilter, storyTitle) {
 			continue
@@ -1819,7 +1880,22 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				if note.Meaning == "" {
 					continue
 				}
-				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeNotebook) {
+				canonical := canonicalDefinitionExpression(note.Expression, conceptHeads)
+				isConceptMember := canonical != "" && canonical != note.Expression
+				if isConceptMember {
+					conceptKey := bookID + "|" + canonical
+					if seenConcept[conceptKey] {
+						continue
+					}
+					seenConcept[conceptKey] = true
+				} else if _, isHead := byHead[note.Expression]; isHead {
+					conceptKey := bookID + "|" + note.Expression
+					if seenConcept[conceptKey] {
+						continue
+					}
+					seenConcept[conceptKey] = true
+				}
+				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeNotebook, conceptHeads) {
 					continue
 				}
 				entry := note.Definition
@@ -1829,7 +1905,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				} else {
 					originalEntry = note.Expression
 				}
-				cards = append(cards, Card{
+				card := Card{
 					NotebookName:  bookID,
 					StoryTitle:    storyTitle,
 					SceneTitle:    sceneTitle,
@@ -1837,7 +1913,21 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 					OriginalEntry: originalEntry,
 					Meaning:       note.Meaning,
 					WordDetail:    buildWordDetail(&note, originMap),
-				})
+				}
+				if isConceptMember {
+					if info, ok := byHead[canonical]; ok {
+						card.Entry = info.Head
+						card.OriginalEntry = ""
+						card.ConceptHead = info.Head
+						card.ConceptMeaning = info.Meaning
+						card.ConceptMembers = info.Members
+					}
+				} else if info, ok := byHead[note.Expression]; ok {
+					card.ConceptHead = info.Head
+					card.ConceptMeaning = info.Meaning
+					card.ConceptMembers = info.Members
+				}
+				cards = append(cards, card)
 			}
 		}
 	}
@@ -1845,13 +1935,17 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 }
 
 // loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
+// See loadDefinitionCards for the rationale on emitting exactly one
+// head-named card per concept.
 func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []ReverseCard {
 	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}
+	conceptHeads, byHead := reader.GetDefinitionsBookConceptInfo(bookID)
 
 	var cards []ReverseCard
+	seenConcept := make(map[string]bool)
 	for storyTitle, sceneDefs := range defs {
 		if !inSectionFilter(sectionFilter, storyTitle) {
 			continue
@@ -1861,7 +1955,22 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				if note.Meaning == "" {
 					continue
 				}
-				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeReverse) {
+				canonical := canonicalDefinitionExpression(note.Expression, conceptHeads)
+				isConceptMember := canonical != "" && canonical != note.Expression
+				if isConceptMember {
+					conceptKey := bookID + "|" + canonical
+					if seenConcept[conceptKey] {
+						continue
+					}
+					seenConcept[conceptKey] = true
+				} else if _, isHead := byHead[note.Expression]; isHead {
+					conceptKey := bookID + "|" + note.Expression
+					if seenConcept[conceptKey] {
+						continue
+					}
+					seenConcept[conceptKey] = true
+				}
+				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeReverse, conceptHeads) {
 					continue
 				}
 				expression := note.Expression
@@ -1870,7 +1979,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					expression = note.Definition
 					altForm = note.Expression
 				}
-				cards = append(cards, ReverseCard{
+				card := ReverseCard{
 					NotebookName: bookID,
 					StoryTitle:   storyTitle,
 					SceneTitle:   sceneTitle,
@@ -1878,7 +1987,21 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					Expression:   expression,
 					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&note, originMap),
-				})
+				}
+				if isConceptMember {
+					if info, ok := byHead[canonical]; ok {
+						card.Expression = info.Head
+						card.AltForm = ""
+						card.ConceptHead = info.Head
+						card.ConceptMeaning = info.Meaning
+						card.ConceptMembers = info.Members
+					}
+				} else if info, ok := byHead[note.Expression]; ok {
+					card.ConceptHead = info.Head
+					card.ConceptMeaning = info.Meaning
+					card.ConceptMembers = info.Members
+				}
+				cards = append(cards, card)
 			}
 		}
 	}
@@ -1888,11 +2011,17 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 // loadDefinitionWords loads freeform cards from definitions-only books.
 // Words skipped from freeform mode are excluded; the gate matches the
 // story-side path's behaviour at line 1317.
+//
+// Concept members keep their own card here (freeform asks the user to
+// type a specific form, so all members remain answerable), but the
+// resulting cards carry ConceptHead so SaveFreeformResult records the
+// outcome under the head.
 func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[string]notebook.EtymologyOrigin, learningHistories map[string][]notebook.LearningHistory) []FreeformCard {
 	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}
+	conceptHeads, _ := reader.GetDefinitionsBookConceptInfo(bookID)
 
 	histories := learningHistories[bookID]
 	var cards []FreeformCard
@@ -1902,14 +2031,14 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 				if note.Meaning == "" {
 					continue
 				}
-				if isExpressionSkippedInHistory(histories, storyTitle, sceneTitle, &note, notebook.QuizTypeFreeform) {
+				if isExpressionSkippedInHistory(histories, storyTitle, sceneTitle, &note, notebook.QuizTypeFreeform, conceptHeads) {
 					continue
 				}
 				expression := note.Expression
 				if note.Definition != "" {
 					expression = note.Definition
 				}
-				cards = append(cards, FreeformCard{
+				card := FreeformCard{
 					NotebookName:       bookID,
 					StoryTitle:         storyTitle,
 					SceneTitle:         sceneTitle,
@@ -1917,7 +2046,11 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					OriginalExpression: note.Expression,
 					Meaning:            note.Meaning,
 					WordDetail:         buildWordDetail(&note, originMap),
-				})
+				}
+				if head, ok := conceptHeads[note.Expression]; ok && head != "" {
+					card.ConceptHead = head
+				}
+				cards = append(cards, card)
 			}
 		}
 	}
@@ -1948,7 +2081,16 @@ func needsDefinitionReview(
 	storyTitle, sceneTitle string,
 	note *notebook.Note,
 	includeUnstudied bool,
+	conceptHeads map[string]string,
 ) bool {
+	// Resolve concept members to their head. MergeConcepts folded
+	// per-member learning history rows into the head, so a lookup keyed
+	// by the member's own expression would miss the head's row and the
+	// function would fall through to `return includeUnstudied` — making
+	// the member look pristine forever even after the head has been
+	// answered correctly.
+	primary := canonicalDefinitionExpression(note.Expression, conceptHeads)
+	secondary := canonicalDefinitionExpression(note.Definition, conceptHeads)
 	for _, h := range histories {
 		if h.Metadata.Title != storyTitle {
 			continue
@@ -1958,7 +2100,7 @@ func needsDefinitionReview(
 				continue
 			}
 			for _, expr := range scene.Expressions {
-				if expr.Expression != note.Expression && expr.Expression != note.Definition {
+				if expr.Expression != primary && (secondary == "" || expr.Expression != secondary) {
 					continue
 				}
 				// Once a word has any correct answer (in any direction),
@@ -1986,7 +2128,10 @@ func needsDefinitionReverseReview(
 	storyTitle, sceneTitle string,
 	note *notebook.Note,
 	includeUnstudied bool,
+	conceptHeads map[string]string,
 ) bool {
+	primary := canonicalDefinitionExpression(note.Expression, conceptHeads)
+	secondary := canonicalDefinitionExpression(note.Definition, conceptHeads)
 	for _, h := range histories {
 		if h.Metadata.Title != storyTitle {
 			continue
@@ -1996,7 +2141,7 @@ func needsDefinitionReverseReview(
 				continue
 			}
 			for _, expr := range scene.Expressions {
-				if expr.Expression != note.Expression && expr.Expression != note.Definition {
+				if expr.Expression != primary && (secondary == "" || expr.Expression != secondary) {
 					continue
 				}
 				// Same studied/unstudied split as needsDefinitionReview:

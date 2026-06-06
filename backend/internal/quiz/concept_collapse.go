@@ -176,3 +176,31 @@ func buildAllConceptIndexes(reader *notebook.Reader, notebookIDs []string) map[s
 	}
 	return result
 }
+
+// definitionConceptHeads returns a member-expression → head map for a
+// definitions-only book. Returns nil when the book has no concepts so
+// callers can branch cheaply (canonicalDefinitionExpression accepts nil).
+// The migration MergeConcepts folds per-member history rows into the
+// head; without this lookup, read-side gates (needsDefinitionReview,
+// countDefinitionNotes, IsExpressionSkipped) miss the head's row when
+// asked about a member and incorrectly report the member as unstudied.
+func definitionConceptHeads(reader *notebook.Reader, bookID string) map[string]string {
+	byExpression, _ := reader.GetDefinitionsBookConceptInfo(bookID)
+	if len(byExpression) == 0 {
+		return nil
+	}
+	return byExpression
+}
+
+// canonicalDefinitionExpression resolves a member expression to its
+// concept head; non-members and empty input are returned unchanged.
+// conceptHeads may be nil.
+func canonicalDefinitionExpression(expression string, conceptHeads map[string]string) string {
+	if expression == "" || len(conceptHeads) == 0 {
+		return expression
+	}
+	if head, ok := conceptHeads[expression]; ok && head != "" {
+		return head
+	}
+	return expression
+}

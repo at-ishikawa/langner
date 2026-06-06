@@ -2,6 +2,7 @@ package quiz
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1221,6 +1222,189 @@ func TestService_SaveResult_MalformedYAMLError(t *testing.T) {
 	require.Error(t, err)
 }
 
+// makeConceptBookFixture writes a definitions-only book with one
+// concept whose head ("smile" – stand-in for an actual entry) groups
+// three derived forms. The head carries a correct freeform log so its
+// SR-interval gate is the only thing controlling badge/loader output;
+// the three member rows are absent — matching the post-MergeConcepts
+// shape MergeConcepts produces in a real notebook.
+func makeConceptBookFixture(t *testing.T, recentInterval int) (defsDir, learningDir string) {
+	t.Helper()
+	defsDir = t.TempDir()
+	learningDir = t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "concept-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: concept-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+        - expression: "ice breaker"
+          meaning: "something that starts social interaction"
+        - expression: "ice-breaking"
+          meaning: "starting social interaction"
+  concepts:
+    - head: "break the ice"
+      meaning: "to start social interaction"
+      expressions:
+        - "break the ice"
+        - "ice breaker"
+        - "ice-breaking"
+`), 0o644))
+
+	tomorrow := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "concept-book.yml"), []byte(`- metadata:
+    notebook_id: concept-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "understood"
+              learned_at: "`+tomorrow+`"
+              quality: 4
+              interval_days: `+fmt.Sprint(recentInterval)+`
+              quiz_type: "notebook"
+          reverse_logs:
+            - status: "understood"
+              learned_at: "`+tomorrow+`"
+              quality: 4
+              interval_days: `+fmt.Sprint(recentInterval)+`
+              quiz_type: "reverse"
+`), 0o644))
+	return defsDir, learningDir
+}
+
+// TestService_LoadNotebookSummaries_ConceptMembersFollowHead pins the
+// post-MergeConcepts behaviour: when the head has a recent correct
+// answer that's still inside its SR interval, the badge must show 0
+// even though the source YAML still lists the two non-head members.
+// Pre-fix, needsDefinitionReview missed the head's history when asked
+// about a member's expression and returned includeUnstudied=true,
+// inflating the badge by the member count for every concept.
+func TestService_LoadNotebookSummaries_ConceptMembersFollowHead(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir, learningDir := makeConceptBookFixture(t, 30)
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+	var book *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "concept-book" {
+			book = &summaries[i]
+			break
+		}
+	}
+	require.Nil(t, book,
+		"head is studied and inside SR interval; concept must contribute 0 — book should not appear")
+}
+
+// TestService_LoadCards_DefinitionsBook_ConceptEmitsOneHeadCard pins the
+// post-MergeConcepts loader behaviour. With no history at all the
+// concept must show up as exactly one card, named for the head. Before
+// the fix, the loader produced three cards (one per member), then
+// collapseConceptCards merged them — but the surviving card was named
+// for whichever member happened to arrive first, and SaveResult wrote
+// the next log under the member's expression rather than the head.
+func TestService_LoadCards_DefinitionsBook_ConceptEmitsOneHeadCard(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "concept-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: concept-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+        - expression: "ice breaker"
+          meaning: "something that starts social interaction"
+        - expression: "ice-breaking"
+          meaning: "starting social interaction"
+  concepts:
+    - head: "break the ice"
+      meaning: "to start social interaction"
+      expressions:
+        - "break the ice"
+        - "ice breaker"
+        - "ice-breaking"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"concept-book"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1, "concept must collapse to one card at load time")
+	assert.Equal(t, "break the ice", cards[0].Entry,
+		"surviving card must be named for the head; saves under it land on the consolidated row")
+	assert.Equal(t, "break the ice", cards[0].ConceptHead,
+		"ConceptHead must be set so SaveResult redirects under the head")
+}
+
+// TestService_SaveResult_ConceptHeadRedirectsLog pins the save-side
+// fix: when a Card carries ConceptHead, the log must land under the
+// head expression in the YAML, not under card.Entry. Without this,
+// every quiz answer for a member-named card recreated the per-member
+// row that MergeConcepts purged.
+func TestService_SaveResult_ConceptHeadRedirectsLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	learningDir := t.TempDir()
+
+	svc := NewService(config.NotebooksConfig{
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	card := Card{
+		NotebookName: "concept-book",
+		StoryTitle:   "Session 1",
+		SceneTitle:   "common idioms",
+		Entry:        "ice breaker", // member name (legacy code path)
+		ConceptHead:  "break the ice",
+		Meaning:      "to start social interaction",
+	}
+	require.NoError(t, svc.SaveResult(context.Background(), card,
+		GradeResult{Correct: true, Quality: 4}, 1000))
+
+	yamlBytes, err := os.ReadFile(filepath.Join(learningDir, "concept-book.yml"))
+	require.NoError(t, err)
+	got := string(yamlBytes)
+	assert.Contains(t, got, "expression: break the ice",
+		"log must land under the concept head, not the member name")
+	assert.NotContains(t, got, "expression: ice breaker",
+		"member name must not appear as a separate row")
+}
+
 // ---------- helper functions (package-internal) ----------
 
 func TestExtractAnswerResult(t *testing.T) {
@@ -1809,7 +1993,7 @@ func TestDefinitionsSectionSummaries_NaturalSessionOrdering(t *testing.T) {
 		"Intro":      {"__index_0": {{Expression: "warm up", Meaning: "to ease in"}}},
 	}
 
-	got := definitionsSectionSummaries(defs, nil, false)
+	got := definitionsSectionSummaries(defs, nil, false, nil)
 
 	require.Len(t, got, 3)
 	// Numbered sessions sort numerically before non-numbered ones; among
