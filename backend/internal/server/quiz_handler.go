@@ -119,8 +119,14 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	noteID := req.Msg.GetNoteId()
 	h.mu.Lock(); card, ok := h.noteStore[noteID]; h.mu.Unlock()
 	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID)) }
-	grade, err := h.svc.GradeNotebookAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err)) }
+	var grade quiz.GradeResult
+	var err error
+	if req.Msg.GetIsSkipped() {
+		grade = skippedGradeResult()
+	} else {
+		grade, err = h.svc.GradeNotebookAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err)) }
+	}
 	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
@@ -220,8 +226,14 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	noteID := req.Msg.GetNoteId()
 	h.mu.Lock(); card, ok := h.reverseStore[noteID]; h.mu.Unlock()
 	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID)) }
-	grade, err := h.svc.GradeReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err)) }
+	var grade quiz.GradeResult
+	var err error
+	if req.Msg.GetIsSkipped() {
+		grade = skippedGradeResult()
+	} else {
+		grade, err = h.svc.GradeReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err)) }
+	}
 	if grade.Classification != string(inference.ClassificationSynonym) {
 		if err := h.svc.SaveReverseResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
@@ -430,8 +442,14 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 	cardID := req.Msg.GetCardId()
 	h.mu.Lock(); card, ok := h.etymologyOriginStore[cardID]; h.mu.Unlock()
 	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID)) }
-	grade, err := h.svc.GradeEtymologyStandardAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology standard: %w", err)) }
+	var grade quiz.GradeResult
+	var err error
+	if req.Msg.GetIsSkipped() {
+		grade = skippedGradeResult()
+	} else {
+		grade, err = h.svc.GradeEtymologyStandardAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology standard: %w", err)) }
+	}
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
@@ -453,8 +471,14 @@ func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *con
 	cardID := req.Msg.GetCardId()
 	h.mu.Lock(); card, ok := h.etymologyOriginStore[cardID]; h.mu.Unlock()
 	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID)) }
-	grade, err := h.svc.GradeEtymologyReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology reverse: %w", err)) }
+	var grade quiz.GradeResult
+	var err error
+	if req.Msg.GetIsSkipped() {
+		grade = skippedGradeResult()
+	} else {
+		grade, err = h.svc.GradeEtymologyReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology reverse: %w", err)) }
+	}
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}

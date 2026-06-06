@@ -1001,10 +1001,13 @@ func (x *WordOriginPart) GetMeaning() string {
 }
 
 type SubmitAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	// answer is the user's typed meaning. When is_skipped is true the field is
+	// ignored and the backend records the result as incorrect without grading.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1058,6 +1061,13 @@ func (x *SubmitAnswerRequest) GetResponseTimeMs() int64 {
 		return x.ResponseTimeMs
 	}
 	return 0
+}
+
+func (x *SubmitAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
 }
 
 type SubmitAnswerResponse struct {
@@ -1523,14 +1533,17 @@ func (x *ContextSentence) GetMaskedContext() string {
 }
 
 type SubmitReverseAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	// answer is the user's guess at the word. When is_skipped is true the field
+	// is ignored and the backend records the result as incorrect without grading.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
 	// When true, a "synonym" classification is persisted as a correct learning
 	// log entry (with reduced quality). The frontend sets this on retry batches
 	// where the user has already had a chance to provide the exact word.
 	AcceptSynonymAsCorrect bool `protobuf:"varint,4,opt,name=accept_synonym_as_correct,json=acceptSynonymAsCorrect,proto3" json:"accept_synonym_as_correct,omitempty"`
+	IsSkipped              bool `protobuf:"varint,5,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -1589,6 +1602,13 @@ func (x *SubmitReverseAnswerRequest) GetResponseTimeMs() int64 {
 func (x *SubmitReverseAnswerRequest) GetAcceptSynonymAsCorrect() bool {
 	if x != nil {
 		return x.AcceptSynonymAsCorrect
+	}
+	return false
+}
+
+func (x *SubmitReverseAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
 	}
 	return false
 }
@@ -3031,10 +3051,12 @@ func (x *StartEtymologyQuizResponse) GetCards() []*EtymologyQuizCard {
 }
 
 type SubmitEtymologyStandardAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	CardId         int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CardId int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	// answer: user's guess. Ignored when is_skipped=true.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3088,6 +3110,13 @@ func (x *SubmitEtymologyStandardAnswerRequest) GetResponseTimeMs() int64 {
 		return x.ResponseTimeMs
 	}
 	return 0
+}
+
+func (x *SubmitEtymologyStandardAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
 }
 
 type SubmitEtymologyStandardAnswerResponse struct {
@@ -3290,10 +3319,12 @@ func (x *BatchSubmitEtymologyStandardAnswersResponse) GetResponses() []*SubmitEt
 }
 
 type SubmitEtymologyReverseAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	CardId         int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CardId int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	// answer: user's guess. Ignored when is_skipped=true.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3347,6 +3378,13 @@ func (x *SubmitEtymologyReverseAnswerRequest) GetResponseTimeMs() int64 {
 		return x.ResponseTimeMs
 	}
 	return 0
+}
+
+func (x *SubmitEtymologyReverseAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
 }
 
 type SubmitEtymologyReverseAnswerResponse struct {
@@ -3961,11 +3999,13 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x06origin\x18\x01 \x01(\tR\x06origin\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x18\n" +
-	"\ameaning\x18\x04 \x01(\tR\ameaning\"\x86\x01\n" +
+	"\ameaning\x18\x04 \x01(\tR\ameaning\"\x98\x01\n" +
 	"\x13SubmitAnswerRequest\x12 \n" +
-	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xf8\x01\n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xf8\x01\n" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -4003,12 +4043,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x0fconcept_meaning\x18\t \x01(\tR\x0econceptMeaning\"R\n" +
 	"\x0fContextSentence\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12%\n" +
-	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xc8\x01\n" +
+	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xda\x01\n" +
 	"\x1aSubmitReverseAnswerRequest\x12 \n" +
-	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x129\n" +
-	"\x19accept_synonym_as_correct\x18\x04 \x01(\bR\x16acceptSynonymAsCorrect\"\xe3\x02\n" +
+	"\x19accept_synonym_as_correct\x18\x04 \x01(\bR\x16acceptSynonymAsCorrect\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x05 \x01(\bR\tisSkipped\"\xe3\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +
@@ -4142,11 +4184,13 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11include_unstudied\x18\x04 \x01(\bR\x10includeUnstudied\x12D\n" +
 	"\x11notebook_sections\x18\x05 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\"M\n" +
 	"\x1aStartEtymologyQuizResponse\x12/\n" +
-	"\x05cards\x18\x01 \x03(\v2\x19.api.v1.EtymologyQuizCardR\x05cards\"\x97\x01\n" +
+	"\x05cards\x18\x01 \x03(\v2\x19.api.v1.EtymologyQuizCardR\x05cards\"\xa9\x01\n" +
 	"$SubmitEtymologyStandardAnswerRequest\x12 \n" +
-	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xc3\x02\n" +
+	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xc3\x02\n" +
 	"%SubmitEtymologyStandardAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12'\n" +
@@ -4160,11 +4204,13 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"*BatchSubmitEtymologyStandardAnswersRequest\x12P\n" +
 	"\aanswers\x18\x01 \x03(\v2,.api.v1.SubmitEtymologyStandardAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"z\n" +
 	"+BatchSubmitEtymologyStandardAnswersResponse\x12K\n" +
-	"\tresponses\x18\x01 \x03(\v2-.api.v1.SubmitEtymologyStandardAnswerResponseR\tresponses\"\x96\x01\n" +
+	"\tresponses\x18\x01 \x03(\v2-.api.v1.SubmitEtymologyStandardAnswerResponseR\tresponses\"\xa8\x01\n" +
 	"#SubmitEtymologyReverseAnswerRequest\x12 \n" +
-	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xb6\x02\n" +
+	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xb6\x02\n" +
 	"$SubmitEtymologyReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12%\n" +

@@ -124,12 +124,14 @@ func TestService_LoadEtymologyOriginCards(t *testing.T) {
 	assert.Equal(t, "prefix", preCard.Type)
 }
 
-// TestService_LoadEtymologyOriginCards_EligibilityGate verifies the hard
-// eligibility gate for standard/reverse: an origin must carry at least
-// one correct answer in any etymology mode (breakdown or assembly) before
-// it shows up. The previous freeform-first requirement is gone — users
-// who learn origins directly through standard/reverse no longer get an
-// empty start page just because no freeform stamp exists.
+// TestService_LoadEtymologyOriginCards_EligibilityGate verifies the gate
+// for standard/reverse: any origin with a learning-history entry is driven
+// by the SR interval (a `misunderstood` last log triggers retry); origins
+// with no history fall back to the `includeUnstudied` toggle. The earlier
+// "must have a prior correct etymology answer" requirement is gone —
+// standard/reverse already show the correct answer on the feedback screen,
+// so blocking SR-due retries on tried-failed origins (e.g. algos with one
+// misunderstood assembly log) just hid them.
 func TestService_LoadEtymologyOriginCards_EligibilityGate(t *testing.T) {
 	tmpDir := t.TempDir()
 	etymDir := filepath.Join(tmpDir, "etymology", "sample-roots")
@@ -163,11 +165,10 @@ origins:
 
 	learningDir := filepath.Join(tmpDir, "learning")
 	require.NoError(t, os.MkdirAll(learningDir, 0755))
-	// root-a: only misunderstood logs → no correct answer → NOT eligible.
-	// root-b: freeformed and answered correctly → eligible.
-	// root-c: answered correctly in etymology standard → eligible (gate no
-	//         longer requires a prior freeform stamp).
-	// root-d: no history at all → NOT eligible.
+	// root-a: only misunderstood logs → SR says retry → included.
+	// root-b: freeformed and answered correctly → included when due.
+	// root-c: answered correctly in etymology standard → included when due.
+	// root-d: no history at all → only included when includeUnstudied=true.
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "sample-roots.yml"), []byte(`- metadata:
     notebook_id: sample-roots
     title: Sample Roots
@@ -202,11 +203,10 @@ origins:
 	)
 
 	// With includeUnstudied=true on standard quiz:
-	//   - root-b, root-c: eligible (have a correct etymology answer),
-	//     latest log on 2025-01-01 → way past any interval → due → included.
-	//   - root-a: has logs but only misunderstood → eligibility gate filters
-	//     it out (user must freeform-drill it to a first correct answer
-	//     before standard/reverse re-serves it).
+	//   - root-b, root-c: have logs, latest 2025-01-01 → past any interval →
+	//     SR-due → included.
+	//   - root-a: has logs but only misunderstood → SR retries → included
+	//     (the feedback screen will show the correct answer).
 	//   - root-d: never seen (no logs at all) → included because the user
 	//     opted in via "Include unstudied".
 	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, false, notebook.QuizTypeEtymologyStandard, nil)
@@ -216,10 +216,11 @@ origins:
 		gotOrigins = append(gotOrigins, c.Origin)
 	}
 	sort.Strings(gotOrigins)
-	assert.Equal(t, []string{"root-b", "root-c", "root-d"}, gotOrigins,
-		"includeUnstudied=true brings in never-seen origins (root-d) on top of due+eligible ones; root-a remains gated until it earns a correct answer in freeform")
+	assert.Equal(t, []string{"root-a", "root-b", "root-c", "root-d"}, gotOrigins,
+		"includeUnstudied=true: all studied origins are SR-driven (incl. tried-failed), plus never-seen origins")
 
-	// With includeUnstudied=false: same but never-seen origins drop out.
+	// With includeUnstudied=false: never-seen origins drop out, but
+	// tried-failed (root-a) stays because SR says retry.
 	noUnstudied, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, false, false, notebook.QuizTypeEtymologyStandard, nil)
 	require.NoError(t, err)
 	gotOrigins = gotOrigins[:0]
@@ -227,13 +228,13 @@ origins:
 		gotOrigins = append(gotOrigins, c.Origin)
 	}
 	sort.Strings(gotOrigins)
-	assert.Equal(t, []string{"root-b", "root-c"}, gotOrigins,
-		"includeUnstudied=false leaves only eligible + due origins")
+	assert.Equal(t, []string{"root-a", "root-b", "root-c"}, gotOrigins,
+		"includeUnstudied=false leaves all studied origins (SR-driven), drops only the never-seen one")
 
 	// When skipEligibility is true (freeform mode), ALL origins are returned.
 	freeformCards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, true, notebook.QuizTypeEtymologyFreeform, nil)
 	require.NoError(t, err)
-	require.Len(t, freeformCards, 4, "freeform quiz should see all origins regardless of eligibility")
+	require.Len(t, freeformCards, 4, "freeform quiz should see all origins regardless of the SR gate")
 }
 
 // TestService_LoadEtymologyOriginCards_IncludeUnstudiedDoesntBypassSR pins
@@ -634,19 +635,18 @@ origins:
 // the quiz actually loads, for both includeUnstudied toggle states and
 // for both standard and reverse modes.
 //
-// Fixture mix per session covers the cases that previously diverged:
+// Fixture mix per session:
 //
-//	studied-due       — eligible (correct etymology log) with a lapsed SR
-//	                    interval. In BOTH summary and quiz, regardless of
-//	                    the toggle.
-//	studied-not-due   — eligible with a fresh 90-day interval. Summary
-//	                    used to count this when includeUnstudied=true even
-//	                    though the quiz loader excluded it.
-//	never-seen        — no learning history. The quiz loader includes
-//	                    these when includeUnstudied=true, but the summary
-//	                    used to exclude them via the eligibility gate.
-//	tried-failed      — has logs but only misunderstood. Excluded
-//	                    everywhere (gate behaviour unchanged).
+//	studied-due       — correct etymology log with a lapsed SR interval.
+//	                    In BOTH summary and quiz, regardless of toggle.
+//	studied-not-due   — fresh 90-day interval. SR says not yet → excluded
+//	                    everywhere; includeUnstudied does NOT bypass SR.
+//	never-seen        — no learning history. Included iff includeUnstudied.
+//	tried-failed      — has logs but only misunderstood. SR retries the
+//	                    same-track misunderstood (standard reads breakdown);
+//	                    cross-track (reverse reading assembly) has no logs
+//	                    so the "never-seen in this mode" SR branch returns
+//	                    true too. Included in both modes.
 func TestService_EtymologySummaryMatchesQuizLoad(t *testing.T) {
 	tmpDir := t.TempDir()
 	etymDir := filepath.Join(tmpDir, "etymology", "demo-roots")
@@ -747,25 +747,25 @@ origins:
 			name:             "standard, includeUnstudied=false",
 			includeUnstudied: false,
 			quizType:         notebook.QuizTypeEtymologyStandard,
-			wantOrigins:      []string{"studied-due"},
+			wantOrigins:      []string{"studied-due", "tried-failed"},
 		},
 		{
 			name:             "standard, includeUnstudied=true",
 			includeUnstudied: true,
 			quizType:         notebook.QuizTypeEtymologyStandard,
-			wantOrigins:      []string{"studied-due", "never-seen-1", "never-seen-2"},
+			wantOrigins:      []string{"studied-due", "tried-failed", "never-seen-1", "never-seen-2"},
 		},
 		{
 			name:             "reverse, includeUnstudied=false",
 			includeUnstudied: false,
 			quizType:         notebook.QuizTypeEtymologyReverse,
-			wantOrigins:      []string{"studied-due"},
+			wantOrigins:      []string{"studied-due", "tried-failed"},
 		},
 		{
 			name:             "reverse, includeUnstudied=true",
 			includeUnstudied: true,
 			quizType:         notebook.QuizTypeEtymologyReverse,
-			wantOrigins:      []string{"studied-due", "never-seen-1", "never-seen-2"},
+			wantOrigins:      []string{"studied-due", "tried-failed", "never-seen-1", "never-seen-2"},
 		},
 	}
 

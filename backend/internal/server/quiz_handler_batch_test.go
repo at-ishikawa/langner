@@ -133,6 +133,46 @@ func TestQuizHandler_BatchSubmitAnswers(t *testing.T) {
 	}
 }
 
+// TestQuizHandler_BatchSubmitAnswers_Skip verifies that within a batch,
+// answers with IsSkipped=true bypass the LLM and are recorded as incorrect,
+// while non-skipped answers in the same batch still get graded normally.
+func TestQuizHandler_BatchSubmitAnswers_Skip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	// Exactly one grading call: only the non-skipped answer should reach
+	// the LLM. The skipped one must short-circuit.
+	mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Return(
+		inference.AnswerMeaningsResponse{
+			Answers: []inference.AnswerMeaning{{
+				Expression: "word2",
+				Meaning:    "meaning2",
+				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
+			}},
+		}, nil,
+	).Times(1)
+
+	handler := newTestHandler(t, mockClient)
+	handler.noteStore[1] = quiz.Card{NotebookName: "n1", Entry: "word1", Meaning: "meaning1"}
+	handler.noteStore[2] = quiz.Card{NotebookName: "n2", Entry: "word2", Meaning: "meaning2"}
+
+	resp, err := handler.BatchSubmitAnswers(
+		context.Background(),
+		connect.NewRequest(&apiv1.BatchSubmitAnswersRequest{
+			Answers: []*apiv1.SubmitAnswerRequest{
+				{NoteId: 1, Answer: "", IsSkipped: true, ResponseTimeMs: 500},
+				{NoteId: 2, Answer: "meaning2", ResponseTimeMs: 500},
+			},
+		}),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Msg.GetResponses(), 2)
+	assert.False(t, resp.Msg.GetResponses()[0].GetCorrect(), "skipped answer must be incorrect")
+	assert.Equal(t, "skipped by user", resp.Msg.GetResponses()[0].GetReason())
+	assert.True(t, resp.Msg.GetResponses()[1].GetCorrect(), "graded answer must reflect inference")
+}
+
 // TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence documents the
 // current behavior around synonym classifications in the reverse quiz and
 // then, in the `accept_synonym_as_correct=true` case, pins the fixed

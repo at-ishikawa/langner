@@ -26,6 +26,7 @@ interface BufferedAnswer {
   answer: string;
   displayAnswer: string;
   responseTimeMs: bigint;
+  isSkipped?: boolean;
 }
 
 interface RetrySlot {
@@ -94,6 +95,7 @@ export default function ReverseQuizPage() {
     noteId: b.card.noteId,
     answer: b.answer,
     responseTimeMs: b.responseTimeMs,
+    isSkipped: b.isSkipped ?? false,
   });
 
   const persistResults = () => {
@@ -230,9 +232,10 @@ export default function ReverseQuizPage() {
     if (phase !== "answering") return;
     recordAndAdvance({
       card,
-      answer: "I don't know",
+      answer: "",
       displayAnswer: "(skipped)",
       responseTimeMs: responseTimeSince(startTimeRef.current),
+      isSkipped: true,
     });
   };
 
@@ -263,13 +266,14 @@ export default function ReverseQuizPage() {
     if (phase !== "synonym-retry") return;
     const slot = retrySlotsRef.current[retryQueueIdx];
     const originalBuffered = bufferRef.current[slot.index];
-    // Sending "I don't know" makes the backend classify it as wrong on retry,
+    // is_skipped tells the backend to short-circuit to "wrong" without grading,
     // so mergeRetry replaces the initial synonym response with an incorrect one.
     recordRetryAndAdvance({
       card: originalBuffered.card,
-      answer: "I don't know",
+      answer: "",
       displayAnswer: "(skipped)",
       responseTimeMs: responseTimeSince(startTimeRef.current),
+      isSkipped: true,
     });
   };
 

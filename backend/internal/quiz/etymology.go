@@ -672,13 +672,10 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 //
 //   - per-type skip → exclude (a skip in one mode does not affect the other).
 //   - never-seen (no logs in any track) → include iff includeUnstudied.
-//   - has logs but no correct etymology answer (tried-and-failed) → exclude
-//     unconditionally; the user must freeform-drill it to a first correct
-//     answer before standard/reverse re-serves it.
-//   - eligible (≥1 correct etymology answer in any mode) → include iff the
-//     SR interval for the requested mode has elapsed. includeUnstudied does
-//     NOT bypass the SR gate for eligible origins — that would re-serve an
-//     origin the user answered correctly the same day.
+//   - has any logs → defer to the SR interval for the requested mode.
+//     A `misunderstood` log triggers retry (interval 1d, status check in
+//     NeedsEtymologyReview); standard/reverse show the correct answer on
+//     the feedback screen, so a prior correct answer is not required.
 func shouldIncludeOrigin(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
@@ -690,9 +687,6 @@ func shouldIncludeOrigin(
 	}
 	if findOriginExpression(histories, notebookTitle, sessionTitle, origin) == nil {
 		return includeUnstudied
-	}
-	if !isOriginEligible(histories, notebookTitle, sessionTitle, origin) {
-		return false
 	}
 	return needsOriginReview(histories, notebookTitle, sessionTitle, origin, quizType)
 }
@@ -776,30 +770,6 @@ func findOriginExpression(
 		}
 	}
 	return nil
-}
-
-// isOriginEligible is the hard gate that must always pass for an origin to
-// appear in etymology standard or reverse quizzes. The user must have
-// answered at least one etymology question about the origin correctly
-// (in any etymology mode — breakdown OR assembly).
-//
-// Previously this also required at least one etymology_freeform answer.
-// That was a "warm-up before drill" ladder that broke for users who
-// learned origins directly through standard/reverse: their words
-// (ego, mania, …) carried breakdown/assembly logs with correct answers
-// but never a freeform stamp, and the start page silently hid every
-// notebook because no origin passed the gate. A correct answer in any
-// mode is itself proof the user has engaged with the origin; freeform
-// is no longer required.
-func isOriginEligible(
-	histories []notebook.LearningHistory,
-	notebookTitle, sessionTitle, origin string,
-) bool {
-	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
-	if expr == nil {
-		return false
-	}
-	return expr.HasCorrectEtymologyAnswer()
 }
 
 // isOriginSkipped returns true when the origin's per-(notebook, session)

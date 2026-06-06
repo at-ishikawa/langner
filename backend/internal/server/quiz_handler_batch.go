@@ -14,6 +14,20 @@ import (
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
+// skippedGradeResult is the canonical GradeResult for a user-skipped answer.
+// Recorded as incorrect with the lowest SRS quality so the word is scheduled
+// for re-study. Classification is left as ClassificationWrong so the reverse
+// handler's synonym-retry path treats it as a normal wrong answer (saved
+// immediately, no synonym retry prompt).
+func skippedGradeResult() quiz.GradeResult {
+	return quiz.GradeResult{
+		Correct:        false,
+		Reason:         "skipped by user",
+		Quality:        1,
+		Classification: string(inference.ClassificationWrong),
+	}
+}
+
 // BatchSubmitAnswers grades a batch of standard quiz answers.
 // Grading runs in parallel (N OpenAI calls concurrently); learning history
 // writes are serialized to preserve deterministic save order.
@@ -39,6 +53,9 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeNotebookAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
@@ -94,6 +111,9 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
@@ -165,6 +185,9 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeEtymologyStandardAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
@@ -244,6 +267,9 @@ func (h *QuizHandler) BatchSubmitEtymologyReverseAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeEtymologyReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
