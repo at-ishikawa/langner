@@ -139,6 +139,25 @@ func (v *Validator) validateBookDefinitionConcepts(view *definitionBookView, res
 					Message:  "concept.expressions must list at least one member",
 				})
 			}
+			// kind=family is the only kind that triggers SR consolidation;
+			// the others (synonym/antonym/visualization) are display-only.
+			// Empty kind silently defaults to family (every pre-flag
+			// concept assumes that semantics). We only warn on truly
+			// unrecognised values so typos surface but legacy concepts
+			// don't generate validator noise.
+			switch d.concept.Kind {
+			case "", ConceptKindFamily, ConceptKindSynonym, ConceptKindAntonym, ConceptKindVisualization:
+				// known and valid (empty defaults to family)
+			default:
+				result.AddWarning(ValidationError{
+					File:     view.bookID,
+					Location: fmt.Sprintf("session %q, concept %q", d.session, head),
+					Message: fmt.Sprintf(
+						"concept.kind %q is not recognised; expected one of family, synonym, antonym, visualization",
+						d.concept.Kind,
+					),
+				})
+			}
 
 			headInMembers := false
 			for _, expr := range d.concept.Expressions {

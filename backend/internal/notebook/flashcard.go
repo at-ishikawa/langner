@@ -179,15 +179,48 @@ type DefinitionConceptInfo struct {
 	Head    string
 	Meaning string
 	Members []string
+	Kind    ConceptKind
+}
+
+// ConsolidatesSR reports whether the concept's members should share a
+// single SR row under the head. Only `family` kind consolidates; other
+// kinds exist for display/browsing only.
+func (i DefinitionConceptInfo) ConsolidatesSR() bool {
+	if i.Kind == "" {
+		return true
+	}
+	return i.Kind == ConceptKindFamily
 }
 
 // GetDefinitionsBookConceptInfo returns the per-book concept lookup used
 // by writers (markdown/PDF) and the export-db layer. byExpression maps
-// each member expression to its head; byHead maps each head to the full
-// concept declaration.
+// each member expression to its head — restricted to SR-consolidating
+// (family) concepts so non-family groupings stay invisible to read/save
+// gates. byHead maps each head to the full concept declaration for all
+// kinds, so the UI Family chip and per-concept browsing surfaces still
+// see member lists for synonym / antonym / visualization groups.
 func (r Reader) GetDefinitionsBookConceptInfo(bookID string) (byExpression map[string]string, byHead map[string]DefinitionConceptInfo) {
+	byExpression, byHead, _ = r.getDefinitionsBookConceptIndex(bookID)
+	return
+}
+
+// GetDefinitionsBookConceptByMember returns a per-member -> concept info
+// map covering ALL concept kinds (family + non-family). Use this when
+// a card loader needs to decorate a member card with ConceptMembers /
+// ConceptMeaning for the Family-chip display regardless of whether the
+// concept consolidates SR.
+func (r Reader) GetDefinitionsBookConceptByMember(bookID string) map[string]DefinitionConceptInfo {
+	_, _, byMember := r.getDefinitionsBookConceptIndex(bookID)
+	return byMember
+}
+
+// getDefinitionsBookConceptIndex computes all three concept-lookup maps
+// in one pass. byExpression is SR-consolidating (family) only;
+// byMember includes all kinds for display lookups.
+func (r Reader) getDefinitionsBookConceptIndex(bookID string) (byExpression map[string]string, byHead map[string]DefinitionConceptInfo, byMember map[string]DefinitionConceptInfo) {
 	byExpression = make(map[string]string)
 	byHead = make(map[string]DefinitionConceptInfo)
+	byMember = make(map[string]DefinitionConceptInfo)
 	defs, ok := r.definitionsRaw[bookID]
 	if !ok {
 		return
@@ -204,8 +237,23 @@ func (r Reader) GetDefinitionsBookConceptInfo(bookID string) (byExpression map[s
 				}
 				members = append(members, e)
 			}
+			kind := c.ResolvedKind()
+			info := DefinitionConceptInfo{
+				Head:    c.Head,
+				Meaning: c.Meaning,
+				Members: members,
+				Kind:    kind,
+			}
 			if _, already := byHead[c.Head]; !already {
-				byHead[c.Head] = DefinitionConceptInfo{Head: c.Head, Meaning: c.Meaning, Members: members}
+				byHead[c.Head] = info
+			}
+			for _, e := range members {
+				if _, exists := byMember[e]; !exists {
+					byMember[e] = info
+				}
+			}
+			if kind != ConceptKindFamily {
+				continue
 			}
 			for _, e := range members {
 				if _, exists := byExpression[e]; !exists {

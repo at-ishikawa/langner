@@ -1316,14 +1316,13 @@ func TestService_LoadNotebookSummaries_ConceptMembersFollowHead(t *testing.T) {
 		"head is studied and inside SR interval; concept must contribute 0 — book should not appear")
 }
 
-// TestService_LoadCards_DefinitionsBook_ConceptEmitsOneHeadCard pins the
-// post-MergeConcepts loader behaviour. With no history at all the
-// concept must show up as exactly one card, named for the head. Before
-// the fix, the loader produced three cards (one per member), then
-// collapseConceptCards merged them — but the surviving card was named
-// for whichever member happened to arrive first, and SaveResult wrote
-// the next log under the member's expression rather than the head.
-func TestService_LoadCards_DefinitionsBook_ConceptEmitsOneHeadCard(t *testing.T) {
+// TestService_LoadCards_DefinitionsBook_FamilyConceptUsesHeadRow pins the
+// kind=family loader contract: exactly one card per concept, sourced
+// from the head's OWN note row so the displayed (word, meaning) pair
+// always agrees. Pre-fix, whichever member iterated first contributed
+// its meaning while the answer was forced to the head, so the user
+// saw e.g. cardiology paired with cardiologist's meaning.
+func TestService_LoadCards_DefinitionsBook_FamilyConceptUsesHeadRow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defsDir := t.TempDir()
 	learningDir := t.TempDir()
@@ -1334,6 +1333,8 @@ func TestService_LoadCards_DefinitionsBook_ConceptEmitsOneHeadCard(t *testing.T)
 notebooks:
   - ./session1.yml
 `), 0o644))
+	// Head and members have DIFFERENT meanings so the test fails loudly
+	// if the loader picks a member's meaning instead of the head's.
 	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
     title: "Session 1"
   scenes:
@@ -1342,14 +1343,15 @@ notebooks:
         title: "common idioms"
       expressions:
         - expression: "break the ice"
-          meaning: "to start social interaction"
+          meaning: "to start a conversation in a social setting"
         - expression: "ice breaker"
-          meaning: "something that starts social interaction"
+          meaning: "a person or thing that initiates social interaction"
         - expression: "ice-breaking"
-          meaning: "starting social interaction"
+          meaning: "the act of initiating social interaction"
   concepts:
     - head: "break the ice"
-      meaning: "to start social interaction"
+      kind: family
+      meaning: "starting social interaction"
       expressions:
         - "break the ice"
         - "ice breaker"
@@ -1364,11 +1366,120 @@ notebooks:
 
 	cards, err := svc.LoadCards([]string{"concept-book"}, true, nil)
 	require.NoError(t, err)
-	require.Len(t, cards, 1, "concept must collapse to one card at load time")
+	require.Len(t, cards, 1, "family concept must collapse to one card at load time")
 	assert.Equal(t, "break the ice", cards[0].Entry,
 		"surviving card must be named for the head; saves under it land on the consolidated row")
 	assert.Equal(t, "break the ice", cards[0].ConceptHead,
 		"ConceptHead must be set so SaveResult redirects under the head")
+	assert.Equal(t, "to start a conversation in a social setting", cards[0].Meaning,
+		"Meaning must come from the head's own note row, not whichever member iterated first")
+
+	reverse, err := svc.LoadReverseCards([]string{"concept-book"}, false, true, nil)
+	require.NoError(t, err)
+	require.Len(t, reverse, 1, "family concept reverse quiz must also surface one card")
+	assert.Equal(t, "break the ice", reverse[0].Expression,
+		"reverse card answer must be the head expression")
+	assert.Equal(t, "to start a conversation in a social setting", reverse[0].Meaning,
+		"reverse prompt must be the head's own meaning so prompt and answer match")
+}
+
+// TestService_LoadCards_DefinitionsBook_SynonymConceptKeepsMembers
+// pins the kind=synonym contract: the concepts block groups expressions
+// for the Family-chip display, but each member keeps its own card with
+// its own meaning, and ConceptHead stays empty so SaveResult writes
+// under the member (independent SR row per word). Identical contract
+// applies to kind=antonym and kind=visualization.
+func TestService_LoadCards_DefinitionsBook_SynonymConceptKeepsMembers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "synonym-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: synonym-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "feelings"
+      expressions:
+        - expression: "happy"
+          meaning: "feeling pleasure or contentment"
+        - expression: "joyful"
+          meaning: "expressing great happiness"
+        - expression: "cheerful"
+          meaning: "noticeably pleasant in mood"
+  concepts:
+    - head: "happy"
+      kind: synonym
+      meaning: "shared meaning: experiencing positive emotion"
+      expressions:
+        - "happy"
+        - "joyful"
+        - "cheerful"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"synonym-book"}, true, nil)
+	require.NoError(t, err)
+	assert.Len(t, cards, 3, "synonym kind must keep one card per member, not collapse")
+	gotByEntry := map[string]Card{}
+	for _, c := range cards {
+		gotByEntry[c.Entry] = c
+	}
+	for _, name := range []string{"happy", "joyful", "cheerful"} {
+		c, ok := gotByEntry[name]
+		require.True(t, ok, "expected a card for %q", name)
+		assert.Empty(t, c.ConceptHead,
+			"synonym member must not carry ConceptHead — saves would otherwise consolidate under happy")
+		assert.Equal(t, []string{"happy", "joyful", "cheerful"}, c.ConceptMembers,
+			"ConceptMembers stays populated for the Family chip even when SR isn't consolidated")
+	}
+	assert.Equal(t, "feeling pleasure or contentment", gotByEntry["happy"].Meaning,
+		"each synonym card keeps its own row's meaning")
+	assert.Equal(t, "expressing great happiness", gotByEntry["joyful"].Meaning)
+}
+
+// TestService_SaveResult_SynonymMemberWritesUnderMember pins the
+// save-side contract for non-family concepts: ConceptHead is empty on
+// these cards, so the log lands under the member's own expression.
+func TestService_SaveResult_SynonymMemberWritesUnderMember(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	learningDir := t.TempDir()
+
+	svc := NewService(config.NotebooksConfig{
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	card := Card{
+		NotebookName: "synonym-book",
+		StoryTitle:   "Session 1",
+		SceneTitle:   "feelings",
+		Entry:        "joyful",
+		// ConceptHead deliberately unset — synonym/antonym/visualization
+		// concepts emit cards without it.
+		Meaning: "expressing great happiness",
+	}
+	require.NoError(t, svc.SaveResult(context.Background(), card,
+		GradeResult{Correct: true, Quality: 4}, 1000))
+
+	yamlBytes, err := os.ReadFile(filepath.Join(learningDir, "synonym-book.yml"))
+	require.NoError(t, err)
+	got := string(yamlBytes)
+	assert.Contains(t, got, "expression: joyful",
+		"log for a non-family-member card must land under the member itself")
+	assert.NotContains(t, got, "expression: happy",
+		"non-family concepts must not consolidate under the concept head")
 }
 
 // TestService_SaveResult_ConceptHeadRedirectsLog pins the save-side

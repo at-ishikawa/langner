@@ -63,9 +63,55 @@ type DefinitionConcept struct {
 	Meaning     string   `yaml:"meaning"`
 	Expressions []string `yaml:"expressions"`
 
+	// Kind distinguishes SR-consolidating groups from display-only groups.
+	//
+	//   family        — members share a root and differ only by part of
+	//                    speech (cardiology/cardiologist/cardiac). One
+	//                    SR row under the head; one card per concept.
+	//   synonym       — semantically equivalent words. Display group only;
+	//                    each member keeps its own SR row.
+	//   antonym       — opposite-meaning grouping. Display only.
+	//   visualization — any other browsing-only grouping. Display only.
+	//
+	// Empty defaults to family for backwards compatibility — existing
+	// data was migrated under the family assumption (see MergeConcepts).
+	Kind ConceptKind `yaml:"kind,omitempty"`
+
 	// SessionTitle records which session declared this concept block; set
 	// at read time from the parent Definitions.Metadata. Not serialised.
 	SessionTitle string `yaml:"-"`
+}
+
+// ConceptKind classifies a DefinitionConcept for SR-consolidation purposes.
+type ConceptKind string
+
+const (
+	// ConceptKindFamily is the only kind whose members share a single SR
+	// row under the head. Use for groups whose members differ only in
+	// part of speech / morphology (cardiology / cardiologist / cardiac).
+	ConceptKindFamily ConceptKind = "family"
+	// ConceptKindSynonym, ConceptKindAntonym, ConceptKindVisualization
+	// are display-only groupings. Each member keeps its own SR row;
+	// the concepts block is consulted only for member lists shown in
+	// the Family chip and similar UI surfaces.
+	ConceptKindSynonym       ConceptKind = "synonym"
+	ConceptKindAntonym       ConceptKind = "antonym"
+	ConceptKindVisualization ConceptKind = "visualization"
+)
+
+// ResolvedKind returns the effective kind for a DefinitionConcept, mapping
+// the empty default to family. Use when deciding SR behaviour.
+func (c DefinitionConcept) ResolvedKind() ConceptKind {
+	if c.Kind == "" {
+		return ConceptKindFamily
+	}
+	return c.Kind
+}
+
+// ConsolidatesSR reports whether this concept's members should share a
+// single SR row under the head expression.
+func (c DefinitionConcept) ConsolidatesSR() bool {
+	return c.ResolvedKind() == ConceptKindFamily
 }
 
 // ReadDefinitionsFromBytes parses a YAML byte slice into a slice of Definitions.

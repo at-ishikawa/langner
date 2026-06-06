@@ -1854,23 +1854,30 @@ func shouldIncludeDefinition(
 
 // loadDefinitionCards loads standard quiz cards from definitions-only books.
 //
-// For concepts, exactly one card is emitted per concept (named after the
-// head). Generating per-member cards and post-collapsing them was the
-// pre-fix path: when the head's own note evaluated as "studied" but a
-// member's eligibility check fell through to includeUnstudied=true
-// (because the migration emptied the per-member history rows), the
-// surviving collapsed card ended up named for the member, and SaveResult
-// then wrote a fresh per-member history entry — silently re-fragmenting
-// the YAML that MergeConcepts had consolidated.
+// Per-kind concept handling:
+//
+//   family       — one card per concept, sourced from the head's own
+//                  note row (head expression + head's meaning). Non-head
+//                  member notes are skipped entirely so the prompt and
+//                  the answer can never refer to different forms with
+//                  different meanings (cardiology / "the medical
+//                  specialty …" rather than the cardiologist row's
+//                  meaning slipping in).
+//   synonym /    — display-only groupings: each member's note becomes
+//   antonym /     its own card with its own meaning. ConceptMembers is
+//   visualization populated for the Family-chip UI, but ConceptHead is
+//                  left empty so SaveResult writes under the member
+//                  (no SR consolidation under the head).
 func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []Card {
 	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}
 	conceptHeads, byHead := reader.GetDefinitionsBookConceptInfo(bookID)
+	byMember := reader.GetDefinitionsBookConceptByMember(bookID)
 
 	var cards []Card
-	seenConcept := make(map[string]bool)
+	seenFamily := make(map[string]bool)
 	for storyTitle, sceneDefs := range defs {
 		if !inSectionFilter(sectionFilter, storyTitle) {
 			continue
@@ -1880,20 +1887,20 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				if note.Meaning == "" {
 					continue
 				}
-				canonical := canonicalDefinitionExpression(note.Expression, conceptHeads)
-				isConceptMember := canonical != "" && canonical != note.Expression
-				if isConceptMember {
-					conceptKey := bookID + "|" + canonical
-					if seenConcept[conceptKey] {
+				// Family member that isn't the head: skip — the head's
+				// own note carries the canonical (expression, meaning)
+				// pair this concept should surface.
+				if head, ok := conceptHeads[note.Expression]; ok && head != note.Expression {
+					continue
+				}
+				// Family head: dedupe (multiple sessions could redeclare
+				// the same head; the loader keeps the first occurrence).
+				if info, ok := byHead[note.Expression]; ok && info.ConsolidatesSR() {
+					key := bookID + "|" + note.Expression
+					if seenFamily[key] {
 						continue
 					}
-					seenConcept[conceptKey] = true
-				} else if _, isHead := byHead[note.Expression]; isHead {
-					conceptKey := bookID + "|" + note.Expression
-					if seenConcept[conceptKey] {
-						continue
-					}
-					seenConcept[conceptKey] = true
+					seenFamily[key] = true
 				}
 				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeNotebook, conceptHeads) {
 					continue
@@ -1914,18 +1921,16 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 					Meaning:       note.Meaning,
 					WordDetail:    buildWordDetail(&note, originMap),
 				}
-				if isConceptMember {
-					if info, ok := byHead[canonical]; ok {
-						card.Entry = info.Head
-						card.OriginalEntry = ""
-						card.ConceptHead = info.Head
-						card.ConceptMeaning = info.Meaning
-						card.ConceptMembers = info.Members
-					}
-				} else if info, ok := byHead[note.Expression]; ok {
-					card.ConceptHead = info.Head
+				// Decorate via byMember so non-head members of non-family
+				// concepts still get ConceptMembers / ConceptMeaning for
+				// the Family-chip display. Only family concepts set
+				// ConceptHead, which is what gates SR consolidation.
+				if info, ok := byMember[note.Expression]; ok {
 					card.ConceptMeaning = info.Meaning
 					card.ConceptMembers = info.Members
+					if info.ConsolidatesSR() {
+						card.ConceptHead = info.Head
+					}
 				}
 				cards = append(cards, card)
 			}
@@ -1935,17 +1940,22 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 }
 
 // loadDefinitionReverseCards loads reverse quiz cards from definitions-only books.
-// See loadDefinitionCards for the rationale on emitting exactly one
-// head-named card per concept.
+// Per-kind handling mirrors loadDefinitionCards: family concepts emit
+// one card sourced from the head's own note (so the prompt-meaning and
+// the expected expression always match); non-family concepts emit
+// per-member cards with the member's own meaning, ConceptMembers
+// populated for display, and ConceptHead left empty so saves stay on
+// the member.
 func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []ReverseCard {
 	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
 		return nil
 	}
 	conceptHeads, byHead := reader.GetDefinitionsBookConceptInfo(bookID)
+	byMember := reader.GetDefinitionsBookConceptByMember(bookID)
 
 	var cards []ReverseCard
-	seenConcept := make(map[string]bool)
+	seenFamily := make(map[string]bool)
 	for storyTitle, sceneDefs := range defs {
 		if !inSectionFilter(sectionFilter, storyTitle) {
 			continue
@@ -1955,20 +1965,15 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				if note.Meaning == "" {
 					continue
 				}
-				canonical := canonicalDefinitionExpression(note.Expression, conceptHeads)
-				isConceptMember := canonical != "" && canonical != note.Expression
-				if isConceptMember {
-					conceptKey := bookID + "|" + canonical
-					if seenConcept[conceptKey] {
+				if head, ok := conceptHeads[note.Expression]; ok && head != note.Expression {
+					continue
+				}
+				if info, ok := byHead[note.Expression]; ok && info.ConsolidatesSR() {
+					key := bookID + "|" + note.Expression
+					if seenFamily[key] {
 						continue
 					}
-					seenConcept[conceptKey] = true
-				} else if _, isHead := byHead[note.Expression]; isHead {
-					conceptKey := bookID + "|" + note.Expression
-					if seenConcept[conceptKey] {
-						continue
-					}
-					seenConcept[conceptKey] = true
+					seenFamily[key] = true
 				}
 				if !shouldIncludeDefinition(learningHistories[bookID], storyTitle, sceneTitle, &note, includeUnstudied, notebook.QuizTypeReverse, conceptHeads) {
 					continue
@@ -1988,18 +1993,12 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&note, originMap),
 				}
-				if isConceptMember {
-					if info, ok := byHead[canonical]; ok {
-						card.Expression = info.Head
-						card.AltForm = ""
-						card.ConceptHead = info.Head
-						card.ConceptMeaning = info.Meaning
-						card.ConceptMembers = info.Members
-					}
-				} else if info, ok := byHead[note.Expression]; ok {
-					card.ConceptHead = info.Head
+				if info, ok := byMember[note.Expression]; ok {
 					card.ConceptMeaning = info.Meaning
 					card.ConceptMembers = info.Members
+					if info.ConsolidatesSR() {
+						card.ConceptHead = info.Head
+					}
 				}
 				cards = append(cards, card)
 			}

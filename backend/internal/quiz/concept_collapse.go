@@ -12,9 +12,14 @@ type conceptInfo struct {
 }
 
 // buildConceptIndex returns a member-expression -> *conceptInfo map for a
-// single definitions book. Used by the card loaders to collapse multiple
-// member expressions into one concept card. Returns nil when the book has
-// no concepts: block, so callers can branch cheaply.
+// single definitions book, restricted to SR-consolidating concepts
+// (kind=family). collapseConceptCards uses this index; including
+// non-family concepts here would let the post-load collapse override
+// the per-member cards the kind-aware loaders intentionally emit for
+// synonym / antonym / visualization groupings.
+//
+// Returns nil when the book has no family concepts so callers can
+// branch cheaply.
 //
 // On the rare case where an expression is claimed by two concepts, the
 // first declaration in YAML order wins (the validator emits a warning at
@@ -28,6 +33,9 @@ func buildConceptIndex(reader *notebook.Reader, notebookID string) map[string]*c
 	for _, book := range books {
 		for _, c := range book.Concepts {
 			if c.Head == "" || len(c.Expressions) == 0 {
+				continue
+			}
+			if !c.ConsolidatesSR() {
 				continue
 			}
 			members := make([]string, 0, len(c.Expressions))
