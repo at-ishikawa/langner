@@ -79,6 +79,16 @@ message NotebookWord {
   // the notebook detail page to call SkipWord/ResumeWord directly. Zero
   // when the DB hasn't been populated (no langner migrate import-db run).
   int64 note_id = 16;
+
+  // concept_head names the head expression of the definitions concept this
+  // word belongs to (empty when not a concept member). When set, the
+  // notebook detail UI groups all members of the same concept under one
+  // card with shared skip controls — a skip on any member propagates to
+  // the entire concept on the backend side, so the UI shows a single
+  // skip control per concept rather than per-member.
+  string concept_head = 17;
+  repeated string concept_members = 18;
+  string concept_meaning = 19;
 }
 
 message LearningLogEntry {

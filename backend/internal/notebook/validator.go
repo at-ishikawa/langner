@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // ValidationError represents a single validation error
@@ -133,6 +134,11 @@ func (v *Validator) Validate() (*ValidationResult, error) {
 	v.validateEtymologyExtensions(result)
 	v.validateFromForm(result)
 
+	// Validate the new definitions-side concepts: block. Warn-only for the
+	// same reason as the etymology extensions — existing books without
+	// concepts must keep validating cleanly while the feature lands.
+	v.validateDefinitionConcepts(result)
+
 	return result, nil
 }
 
@@ -170,6 +176,23 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// Fix expression names to match story definitions (do this before merging duplicates)
 	fixedLearning = v.fixExpressionNames(fixedLearning, storyNotebooks, result)
 
+	// Rename legacy "__index_N" definitions-book scene keys to their human
+	// scene title so the next pass (duplicate-scene merge) collapses the
+	// split scenes a word's logs and skip were spread across. Must run
+	// before fixLearningNotesStructure, which does the merge.
+	fixedLearning = v.renameDefinitionsIndexScenes(fixedLearning, result)
+
+	// Consolidate an etymology origin whose logs got split across two
+	// scene titles in one session (derived-scene-title drift). Must run
+	// before fixLearningNotesStructure so any resulting same-title
+	// duplicate scenes are collapsed by the merge pass.
+	fixedLearning = v.consolidateEtymologyOriginScenes(fixedLearning, result)
+
+	// Move definitions-book vocabulary words mis-filed under a synthetic
+	// session-named scene (or any non-home scene) to the scene where the
+	// word is actually defined — merging logs when it's already there.
+	fixedLearning = v.consolidateDefinitionsScenes(fixedLearning, result)
+
 	// Fix learning notes structure issues (including duplicate merging - do this after renaming)
 	fixedLearning = v.fixLearningNotesStructure(fixedLearning, result)
 
@@ -181,6 +204,16 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 
 	// Create missing learning note entries
 	fixedLearning = v.createMissingLearningNotes(fixedLearning, storyNotebooks, result)
+
+	// Replay every log series through the SR calculator so interval_days
+	// reflects the actual chain of answers (each log's interval threaded
+	// into the next via RecalculateAll, with the early-review guard
+	// preventing growth on too-soon correct answers). Touches all four
+	// slots: LearnedLogs / ReverseLogs / EtymologyBreakdownLogs /
+	// EtymologyAssemblyLogs. Reports each interval drift as a warning so
+	// the run shows which logs got corrected; logs whose recalculated
+	// value matches stored stay untouched in the output.
+	fixedLearning = v.recalculateAllIntervals(fixedLearning, result)
 
 	// Fix dictionary reference issues
 	fixedStory := v.fixDictionaryReferences(storyNotebooks, result)
@@ -276,7 +309,7 @@ func (v *Validator) loadEtymologyOriginExpressions() map[string]bool {
 	}
 	for _, idx := range indexMap {
 		for _, nbPath := range idx.NotebookPaths {
-			wrapped, err := readYamlFile[etymologySessionFile](filepath.Join(idx.Path, nbPath))
+			wrapped, err := loadEtymologySessionAnyShape(filepath.Join(idx.Path, nbPath))
 			if err != nil {
 				continue
 			}
@@ -703,19 +736,6 @@ func (v *Validator) fixLearningNotesStructure(files []learningHistoryFile, resul
 		}
 	}
 
-	// Note: there used to be a "final pass" here that recalculated
-	// interval_days for every expression's logs to retroactively apply
-	// the early-review guard. That over-reached — it overwrote
-	// interval_days that were historically correct under the SR
-	// algorithm in use at the time, e.g., flattening a hard-earned
-	// 30-day interval back to 7 days because the current algorithm
-	// with the early-review guard would produce 7. Logs are the
-	// historical record of what the user actually saw and reacted to;
-	// future intervals are computed live by the quiz. The merge-time
-	// recompute above is still required because merging duplicates
-	// rewrites the log sequence — that's an actual structural change.
-	// The bulk pass is not.
-
 	return files
 }
 
@@ -833,6 +853,11 @@ func (v *Validator) mergeDuplicateScenes(
 						base.Expressions[idx].EtymologyAssemblyLogs = append(base.Expressions[idx].EtymologyAssemblyLogs, e.EtymologyAssemblyLogs...)
 						_, base.Expressions[idx].EtymologyAssemblyLogs, _ = recalculateLearningLogs(base.Expressions[idx].EtymologyAssemblyLogs, v.calculator)
 					}
+					// Merge skip state: a skip recorded on either copy must
+					// survive the merge. Without this, a word skipped in the
+					// "__index_N" copy but logged in the human-title copy (or
+					// vice-versa) would silently lose its skip.
+					base.Expressions[idx].SkippedAt = mergeSkippedAt(base.Expressions[idx].SkippedAt, e.SkippedAt)
 					result.AddWarning(ValidationError{
 						File:    filePath,
 						Message: fmt.Sprintf("Merged duplicate expression %q from duplicate scene in %s", ek, storyTitle),
@@ -859,6 +884,479 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// mergeSkippedAt returns the union of two per-quiz-type skip maps,
+// keeping the later timestamp when both record a skip for the same quiz
+// type. A nil/empty input is treated as "no skips".
+func mergeSkippedAt(a, b SkippedAtMap) SkippedAtMap {
+	if len(a) == 0 && len(b) == 0 {
+		return a
+	}
+	out := make(SkippedAtMap, len(a)+len(b))
+	for k, v := range a {
+		out[k] = v
+	}
+	for k, v := range b {
+		if existing, ok := out[k]; !ok || v > existing {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// renameDefinitionsIndexScenes rewrites learning-history scene titles
+// that use the legacy "__index_N" key to the human scene title the quiz
+// now reads (via Reader.GetDefinitionsNotesByTitle). Definitions-book
+// learning history was historically written under two conventions for
+// the same scene — "__index_N" (old quiz path) and the human title
+// (detail page / skip path) — which split a word's logs and skip across
+// two scene entries. This pass resolves "__index_N" to its human title
+// using the definitions source, then leaves the now-duplicate titles for
+// mergeDuplicateScenes (run later in fixLearningNotesStructure) to
+// collapse, unioning logs and skip state.
+//
+// Only learning files whose notebook ID is a definitions book are
+// touched; story/flashcard histories keep their titles. Scenes whose
+// index can't be resolved to a human title are left as-is.
+func (v *Validator) renameDefinitionsIndexScenes(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	if len(v.definitionsDirs) == 0 {
+		return files
+	}
+	_, defsRaw, _, err := NewDefinitionsMap(v.definitionsDirs)
+	if err != nil {
+		return files
+	}
+
+	// Build (bookID, session, index) -> human scene title.
+	type key struct {
+		book, session string
+		index         int
+	}
+	titleByIndex := make(map[key]string)
+	for bookID, fileDefs := range defsRaw {
+		for _, def := range fileDefs {
+			session := def.Metadata.Notebook
+			if session == "" {
+				session = def.Metadata.Title
+			}
+			for _, scene := range def.Scenes {
+				titleByIndex[key{bookID, session, scene.Metadata.GetIndex()}] = scene.Metadata.Title
+			}
+		}
+	}
+	if len(titleByIndex) == 0 {
+		return files
+	}
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		bookID := strings.TrimSuffix(filepath.Base(file.path), ".yml")
+		for histIdx := range file.contents {
+			hist := &file.contents[histIdx]
+			session := hist.Metadata.Title
+			for sceneIdx := range hist.Scenes {
+				title := hist.Scenes[sceneIdx].Metadata.Title
+				var n int
+				if _, err := fmt.Sscanf(title, "__index_%d", &n); err != nil {
+					continue
+				}
+				human, ok := titleByIndex[key{bookID, session, n}]
+				if !ok || human == "" || human == title {
+					continue
+				}
+				hist.Scenes[sceneIdx].Metadata.Title = human
+				result.AddWarning(ValidationError{
+					File:    file.path,
+					Message: fmt.Sprintf("Renamed legacy scene key %q to %q in %s", title, human, session),
+				})
+			}
+		}
+	}
+	return files
+}
+
+// isEtymologyOriginEntry reports whether a learning-history expression is
+// an etymology origin (rather than a vocabulary word). Origins are typed
+// "origin" and/or carry etymology_*_logs; vocabulary words never have
+// etymology logs, so either signal is sufficient.
+func isEtymologyOriginEntry(e *LearningHistoryExpression) bool {
+	if e.Type == LearningExpressionTypeOrigin {
+		return true
+	}
+	return len(e.EtymologyBreakdownLogs) > 0 || len(e.EtymologyAssemblyLogs) > 0
+}
+
+// latestLogTime returns the most recent LearnedAt across all of an
+// expression's log slots (zero time if it has none). Used to pick the
+// merge target when an origin is split across scenes — the scene with
+// the freshest activity is where the live quiz currently writes.
+func latestLogTime(e *LearningHistoryExpression) time.Time {
+	var latest time.Time
+	consider := func(logs []LearningRecord) {
+		for _, l := range logs {
+			if l.LearnedAt.After(latest) {
+				latest = l.LearnedAt.Time
+			}
+		}
+	}
+	consider(e.LearnedLogs)
+	consider(e.ReverseLogs)
+	consider(e.EtymologyBreakdownLogs)
+	consider(e.EtymologyAssemblyLogs)
+	return latest
+}
+
+// mergeOriginExpressionInto folds other's logs and skip state into base
+// (recalculating each log slot through the SR calculator after the
+// append, matching mergeDuplicateScenes).
+func (v *Validator) mergeOriginExpressionInto(base, other *LearningHistoryExpression) {
+	if other.Type == LearningExpressionTypeOrigin {
+		base.Type = LearningExpressionTypeOrigin
+	}
+	if len(other.LearnedLogs) > 0 {
+		base.LearnedLogs = append(base.LearnedLogs, other.LearnedLogs...)
+		_, base.LearnedLogs, _ = recalculateLearningLogs(base.LearnedLogs, v.calculator)
+	}
+	if len(other.ReverseLogs) > 0 {
+		base.ReverseLogs = append(base.ReverseLogs, other.ReverseLogs...)
+		_, base.ReverseLogs, _ = recalculateLearningLogs(base.ReverseLogs, v.calculator)
+	}
+	if len(other.EtymologyBreakdownLogs) > 0 {
+		base.EtymologyBreakdownLogs = append(base.EtymologyBreakdownLogs, other.EtymologyBreakdownLogs...)
+		_, base.EtymologyBreakdownLogs, _ = recalculateLearningLogs(base.EtymologyBreakdownLogs, v.calculator)
+	}
+	if len(other.EtymologyAssemblyLogs) > 0 {
+		base.EtymologyAssemblyLogs = append(base.EtymologyAssemblyLogs, other.EtymologyAssemblyLogs...)
+		_, base.EtymologyAssemblyLogs, _ = recalculateLearningLogs(base.EtymologyAssemblyLogs, v.calculator)
+	}
+	base.SkippedAt = mergeSkippedAt(base.SkippedAt, other.SkippedAt)
+}
+
+// consolidateEtymologyOriginScenes repairs an etymology origin whose
+// learning history is split across two scene titles within one session.
+// The etymology SceneTitle for legacy-shape origins is DERIVED from where
+// the origin is referenced in definitions (see pickBestSceneForOrigin);
+// when that derivation changes (data edits, or the pre-determinism map-
+// order flakiness), the same origin's logs get written under a new scene
+// title while the old logs linger under the previous one — the "multiple
+// gamos records" symptom.
+//
+// For each session, origins appearing under 2+ scenes are merged into a
+// single scene: the canonically-derived scene when it's among the
+// current locations, else the location with the freshest log (where the
+// live quiz writes today). Logs and skip state are unioned; the origin
+// entry is removed from the other scenes; scenes left empty are dropped.
+func (v *Validator) consolidateEtymologyOriginScenes(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	if len(v.etymologyDirs) == 0 {
+		return files
+	}
+	candidates := v.buildOriginSceneIndexForValidator()
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		notebookID := strings.TrimSuffix(filepath.Base(file.path), ".yml")
+		for histIdx := range file.contents {
+			hist := &file.contents[histIdx]
+			session := hist.Metadata.Title
+
+			// origin key -> scene indices it appears in (with expr index).
+			type loc struct{ scene, expr int }
+			locs := make(map[string][]loc)
+			for si := range hist.Scenes {
+				for ei := range hist.Scenes[si].Expressions {
+					e := &hist.Scenes[si].Expressions[ei]
+					if !isEtymologyOriginEntry(e) {
+						continue
+					}
+					key := strings.ToLower(strings.TrimSpace(e.Expression))
+					locs[key] = append(locs[key], loc{si, ei})
+				}
+			}
+
+			// removals[scene] = set of expr indices to drop after merging.
+			removals := make(map[int]map[int]bool)
+			// replacements[scene][expr] = the merged expression to write.
+			replacements := make(map[int]map[int]LearningHistoryExpression)
+			markRemove := func(s, e int) {
+				if removals[s] == nil {
+					removals[s] = make(map[int]bool)
+				}
+				removals[s][e] = true
+			}
+
+			for origin, ls := range locs {
+				// distinct scenes only — same-scene dups are handled elsewhere.
+				distinct := make(map[int]bool)
+				for _, l := range ls {
+					distinct[l.scene] = true
+				}
+				if len(distinct) < 2 {
+					continue
+				}
+
+				canonical := pickBestSceneForOrigin(candidates, origin, notebookID, session)
+
+				// Choose the target location: the one whose scene title is
+				// canonical, else the one with the freshest log.
+				targetIdx := -1
+				var targetTime time.Time
+				for i, l := range ls {
+					sceneTitle := hist.Scenes[l.scene].Metadata.Title
+					if canonical != "" && normalizeQuotes(sceneTitle) == normalizeQuotes(canonical) {
+						targetIdx = i
+						break
+					}
+					if t := latestLogTime(&hist.Scenes[l.scene].Expressions[l.expr]); targetIdx < 0 || t.After(targetTime) {
+						targetIdx = i
+						targetTime = t
+					}
+				}
+				if targetIdx < 0 {
+					continue
+				}
+				target := ls[targetIdx]
+
+				merged := hist.Scenes[target.scene].Expressions[target.expr]
+				for i, l := range ls {
+					if i == targetIdx {
+						continue
+					}
+					other := hist.Scenes[l.scene].Expressions[l.expr]
+					v.mergeOriginExpressionInto(&merged, &other)
+					markRemove(l.scene, l.expr)
+				}
+				if replacements[target.scene] == nil {
+					replacements[target.scene] = make(map[int]LearningHistoryExpression)
+				}
+				replacements[target.scene][target.expr] = merged
+				result.AddWarning(ValidationError{
+					File: file.path,
+					Message: fmt.Sprintf("Consolidated etymology origin %q split across %d scenes into %q (session %s)",
+						origin, len(distinct), hist.Scenes[target.scene].Metadata.Title, session),
+				})
+			}
+
+			if len(removals) == 0 && len(replacements) == 0 {
+				continue
+			}
+
+			// Rebuild scenes, applying replacements and removals, dropping
+			// scenes that become empty.
+			var newScenes []LearningScene
+			for si := range hist.Scenes {
+				scene := hist.Scenes[si]
+				var kept []LearningHistoryExpression
+				for ei := range scene.Expressions {
+					if removals[si] != nil && removals[si][ei] {
+						continue
+					}
+					if repl, ok := replacements[si][ei]; ok {
+						kept = append(kept, repl)
+						continue
+					}
+					kept = append(kept, scene.Expressions[ei])
+				}
+				if len(kept) == 0 {
+					continue
+				}
+				scene.Expressions = kept
+				newScenes = append(newScenes, scene)
+			}
+			hist.Scenes = newScenes
+		}
+	}
+	return files
+}
+
+// consolidateDefinitionsScenes moves a definitions-book vocabulary word's
+// learning history to the scene where the word is actually defined. An
+// old vocab path wrote freeform/quiz logs under a synthetic scene named
+// after the SESSION (e.g. a scene literally titled "Session 3") instead
+// of the word's real definitions scene ("dexter (right hand)"). That left
+// words mis-scened (logs invisible to the quiz, which reads the real
+// scene) or duplicated (same word under both the synthetic scene and the
+// real one — the "multiple dexterity records" symptom).
+//
+// For each session, every vocabulary expression whose definitions scene
+// is known is merged into that canonical scene (logs + skip unioned),
+// removing it from any other scene; emptied scenes are dropped. Words
+// that can't be matched to a definitions scene, or that the book defines
+// under more than one scene in the same session (ambiguous), are left
+// untouched — the migration never guesses a home.
+//
+// Etymology origins are handled by consolidateEtymologyOriginScenes;
+// this pass deliberately skips them (isEtymologyOriginEntry).
+func (v *Validator) consolidateDefinitionsScenes(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	if len(v.definitionsDirs) == 0 {
+		return files
+	}
+	_, defsRaw, _, err := NewDefinitionsMap(v.definitionsDirs)
+	if err != nil {
+		return files
+	}
+
+	type sessKey struct{ book, session, expr string }
+	canonical := make(map[sessKey]string)
+	ambiguous := make(map[sessKey]bool)
+	recordExpr := func(book, session, raw, scene string) {
+		key := strings.ToLower(strings.TrimSpace(raw))
+		if key == "" || scene == "" {
+			return
+		}
+		k := sessKey{book, session, key}
+		if existing, ok := canonical[k]; ok {
+			if normalizeQuotes(existing) != normalizeQuotes(scene) {
+				ambiguous[k] = true
+			}
+			return
+		}
+		canonical[k] = scene
+	}
+	for book, fileDefs := range defsRaw {
+		for _, def := range fileDefs {
+			session := def.Metadata.Notebook
+			if session == "" {
+				session = def.Metadata.Title
+			}
+			for _, scene := range def.Scenes {
+				st := scene.Metadata.Title
+				for _, note := range scene.Expressions {
+					recordExpr(book, session, note.Expression, st)
+					recordExpr(book, session, note.Definition, st)
+				}
+			}
+		}
+	}
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		book := strings.TrimSuffix(filepath.Base(file.path), ".yml")
+		for histIdx := range file.contents {
+			hist := &file.contents[histIdx]
+			session := hist.Metadata.Title
+
+			type loc struct{ scene, expr int }
+			locs := make(map[string][]loc)
+			for si := range hist.Scenes {
+				for ei := range hist.Scenes[si].Expressions {
+					e := &hist.Scenes[si].Expressions[ei]
+					if isEtymologyOriginEntry(e) {
+						continue
+					}
+					key := strings.ToLower(strings.TrimSpace(e.Expression))
+					locs[key] = append(locs[key], loc{si, ei})
+				}
+			}
+
+			removals := make(map[int]map[int]bool)
+			replacements := make(map[int]map[int]LearningHistoryExpression)
+			additions := make(map[int][]LearningHistoryExpression)
+			markRemove := func(s, e int) {
+				if removals[s] == nil {
+					removals[s] = make(map[int]bool)
+				}
+				removals[s][e] = true
+			}
+			sceneIdxByTitle := make(map[string]int)
+			for si := range hist.Scenes {
+				sceneIdxByTitle[normalizeQuotes(hist.Scenes[si].Metadata.Title)] = si
+			}
+
+			for exprKey, ls := range locs {
+				k := sessKey{book, session, exprKey}
+				canonScene, ok := canonical[k]
+				if !ok || canonScene == "" || ambiguous[k] {
+					continue // unmatched or ambiguous: leave untouched
+				}
+				canonNorm := normalizeQuotes(canonScene)
+
+				// Nothing to do when the sole entry is already canonical.
+				if len(ls) == 1 && normalizeQuotes(hist.Scenes[ls[0].scene].Metadata.Title) == canonNorm {
+					continue
+				}
+
+				// Prefer an existing canonical-scene entry as the merge
+				// target so its position is preserved; otherwise the word
+				// is moved into the canonical scene wholesale.
+				targetIdx := -1
+				for i, l := range ls {
+					if normalizeQuotes(hist.Scenes[l.scene].Metadata.Title) == canonNorm {
+						targetIdx = i
+						break
+					}
+				}
+
+				if targetIdx >= 0 {
+					target := ls[targetIdx]
+					merged := hist.Scenes[target.scene].Expressions[target.expr]
+					for i, l := range ls {
+						if i == targetIdx {
+							continue
+						}
+						other := hist.Scenes[l.scene].Expressions[l.expr]
+						v.mergeOriginExpressionInto(&merged, &other)
+						markRemove(l.scene, l.expr)
+					}
+					if replacements[target.scene] == nil {
+						replacements[target.scene] = make(map[int]LearningHistoryExpression)
+					}
+					replacements[target.scene][target.expr] = merged
+				} else {
+					merged := hist.Scenes[ls[0].scene].Expressions[ls[0].expr]
+					for _, l := range ls[1:] {
+						other := hist.Scenes[l.scene].Expressions[l.expr]
+						v.mergeOriginExpressionInto(&merged, &other)
+					}
+					for _, l := range ls {
+						markRemove(l.scene, l.expr)
+					}
+					if ti, ok := sceneIdxByTitle[canonNorm]; ok {
+						additions[ti] = append(additions[ti], merged)
+					} else {
+						hist.Scenes = append(hist.Scenes, LearningScene{
+							Metadata:    LearningSceneMetadata{Title: canonScene},
+							Expressions: []LearningHistoryExpression{merged},
+						})
+						sceneIdxByTitle[canonNorm] = len(hist.Scenes) - 1
+					}
+				}
+				result.AddWarning(ValidationError{
+					File: file.path,
+					Message: fmt.Sprintf("Moved vocabulary %q to its definitions scene %q (session %s)",
+						exprKey, canonScene, session),
+				})
+			}
+
+			if len(removals) == 0 && len(replacements) == 0 && len(additions) == 0 {
+				continue
+			}
+
+			var newScenes []LearningScene
+			for si := range hist.Scenes {
+				scene := hist.Scenes[si]
+				var kept []LearningHistoryExpression
+				for ei := range scene.Expressions {
+					if removals[si] != nil && removals[si][ei] {
+						continue
+					}
+					if repl, ok := replacements[si][ei]; ok {
+						kept = append(kept, repl)
+						continue
+					}
+					kept = append(kept, scene.Expressions[ei])
+				}
+				kept = append(kept, additions[si]...)
+				if len(kept) == 0 {
+					continue
+				}
+				scene.Expressions = kept
+				newScenes = append(newScenes, scene)
+			}
+			hist.Scenes = newScenes
+		}
+	}
+	return files
 }
 
 func (v *Validator) fixConsistency(
@@ -937,6 +1435,76 @@ func (v *Validator) fixConsistency(
 	}
 
 	return learningFiles
+}
+
+// recalculateAllIntervals replays every expression's log slices through
+// the configured SR calculator (RecalculateAll). The calculator threads
+// the prior log's interval into each step so the early-review guard can
+// preserve hard-earned intervals: an answer that comes before the
+// previous interval elapsed will not grow OR shrink the interval based
+// on a single short gap. This makes --fix able to correct data that was
+// written under a buggy live-quiz code path (e.g. the old etymology
+// quiz that wrote intervals without consulting prior state).
+//
+// Only logs whose interval_days actually changes get rewritten; matching
+// values stay untouched so the YAML diff stays small. Each drift is
+// reported as a warning so the user can audit what got corrected.
+func (v *Validator) recalculateAllIntervals(files []learningHistoryFile, result *ValidationResult) []learningHistoryFile {
+	if v.calculator == nil {
+		return files
+	}
+
+	recalcSlice := func(logs []LearningRecord, file, exprLabel, slot string) []LearningRecord {
+		if len(logs) == 0 {
+			return logs
+		}
+		oldByTs := make(map[time.Time]int, len(logs))
+		for _, log := range logs {
+			oldByTs[log.LearnedAt.Time] = log.IntervalDays
+		}
+		_, recalc := v.calculator.RecalculateAll(logs)
+		for _, log := range recalc {
+			old, ok := oldByTs[log.LearnedAt.Time]
+			if !ok || old == log.IntervalDays {
+				continue
+			}
+			result.AddWarning(ValidationError{
+				File: file,
+				Message: fmt.Sprintf(
+					"Recalculated interval_days for %q [%s] at %s: %d → %d",
+					exprLabel, slot, log.LearnedAt.Format("2006-01-02"), old, log.IntervalDays,
+				),
+			})
+		}
+		return recalc
+	}
+
+	for fileIdx := range files {
+		file := &files[fileIdx]
+		for histIdx := range file.contents {
+			history := &file.contents[histIdx]
+			recalcExpr := func(expr *LearningHistoryExpression) {
+				label := expr.Expression
+				expr.LearnedLogs = recalcSlice(expr.LearnedLogs, file.path, label, "learned_logs")
+				expr.ReverseLogs = recalcSlice(expr.ReverseLogs, file.path, label, "reverse_logs")
+				expr.EtymologyBreakdownLogs = recalcSlice(
+					expr.EtymologyBreakdownLogs, file.path, label, "etymology_breakdown_logs")
+				expr.EtymologyAssemblyLogs = recalcSlice(
+					expr.EtymologyAssemblyLogs, file.path, label, "etymology_assembly_logs")
+			}
+			// Flashcard shape: top-level expressions.
+			for eIdx := range history.Expressions {
+				recalcExpr(&history.Expressions[eIdx])
+			}
+			// Story shape: nested under scenes.
+			for sIdx := range history.Scenes {
+				for eIdx := range history.Scenes[sIdx].Expressions {
+					recalcExpr(&history.Scenes[sIdx].Expressions[eIdx])
+				}
+			}
+		}
+	}
+	return files
 }
 
 // backfillQuizType sets quiz_type to "freeform" on any learning log that has
@@ -1662,7 +2230,11 @@ func (v *Validator) migrateEtymologyShape(files []learningHistoryFile, result *V
 // state we don't need; instead we walk the dirs directly and reuse the
 // same per-source projection logic.
 func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginSceneCandidate {
-	add := func(out map[string][]OriginSceneCandidate, origin, notebookID, sessionTitle, sceneTitle string) {
+	add := func(
+		out map[string][]OriginSceneCandidate,
+		origin, notebookID, sessionTitle, sceneTitle string,
+		sessionRank, sceneRank, exprRank int,
+	) {
 		key := strings.ToLower(strings.TrimSpace(origin))
 		if key == "" {
 			return
@@ -1671,6 +2243,9 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 			NotebookID:   notebookID,
 			SessionTitle: sessionTitle,
 			SceneTitle:   sceneTitle,
+			SessionRank:  sessionRank,
+			SceneRank:    sceneRank,
+			ExprRank:     exprRank,
 		})
 	}
 	out := make(map[string][]OriginSceneCandidate)
@@ -1680,17 +2255,17 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 		_ = walkIndexFiles(dir, storyIndexes, false)
 	}
 	for storyID, idx := range storyIndexes {
-		for _, nbPath := range idx.NotebookPaths {
+		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
 			notebooks, err := readYamlFile[[]StoryNotebook](path)
 			if err != nil {
 				continue
 			}
 			for _, nb := range notebooks {
-				for _, scene := range nb.Scenes {
-					for _, def := range scene.Definitions {
+				for sceneRank, scene := range nb.Scenes {
+					for exprRank, def := range scene.Definitions {
 						for _, op := range def.OriginParts {
-							add(out, op.Origin, storyID, nb.Event, scene.Title)
+							add(out, op.Origin, storyID, nb.Event, scene.Title, nbRank, sceneRank, exprRank)
 						}
 					}
 				}
@@ -1702,13 +2277,13 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 	if err == nil {
 		_ = defsMap
 		for bookID, defs := range defsRaw {
-			for _, fileDefs := range defs {
+			for sessionRank, fileDefs := range defs {
 				session := fileDefs.Metadata.Title
-				for _, scene := range fileDefs.Scenes {
+				for sceneRank, scene := range fileDefs.Scenes {
 					sceneTitle := scene.Metadata.Title
-					for _, note := range scene.Expressions {
+					for exprRank, note := range scene.Expressions {
 						for _, op := range note.OriginParts {
-							add(out, op.Origin, bookID, session, sceneTitle)
+							add(out, op.Origin, bookID, session, sceneTitle, sessionRank, sceneRank, exprRank)
 						}
 					}
 				}
@@ -1721,16 +2296,16 @@ func (v *Validator) buildOriginSceneIndexForValidator() map[string][]OriginScene
 		_ = walkEtymologyIndexFiles(dir, etymIndexes)
 	}
 	for etymID, idx := range etymIndexes {
-		for _, nbPath := range idx.NotebookPaths {
+		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			wrapped, err := readYamlFile[etymologySessionFile](path)
+			wrapped, err := loadEtymologySessionAnyShape(path)
 			if err != nil {
 				continue
 			}
 			session := wrapped.Metadata.Title
-			for _, def := range wrapped.Definitions {
+			for exprRank, def := range wrapped.Definitions {
 				for _, op := range def.OriginParts {
-					add(out, op.Origin, etymID, session, session)
+					add(out, op.Origin, etymID, session, session, nbRank, 0, exprRank)
 				}
 			}
 		}
@@ -1800,46 +2375,50 @@ func (v *Validator) migrateLegacySkipIntervals(files []learningHistoryFile, resu
 	return files
 }
 
-// recalculateLearningLogs normalises a learning-log list after a structural
-// change (merging duplicates, etc.). It fixes the misunderstood+quality≥3
-// inconsistency, sorts newest-first to match storage convention, and
-// preserves every log's existing interval_days. Returning the calculator's
-// idea of "the right interval for this point in time" is intentionally NOT
-// done here: logs are historical record, and overwriting interval_days from
-// a replay flattens hard-earned intervals (e.g., a 30-day correct answer
-// becoming 7 because the current algorithm with the early-review guard
-// would compute 7) every time --fix runs. The next interval the user will
-// see is computed live by the quiz from the latest log; that's the only
-// place a calculated interval should be written.
+// recalculateLearningLogs replays a log list through the configured SR
+// calculator so interval_days reflects the prior-state chain (each log's
+// interval feeds into the next via the calculator's RecalculateAll, which
+// applies the early-review guard so a correct answer that came before the
+// previous interval elapsed doesn't shrink the interval). The function
+// also fixes the misunderstood+quality≥3 inconsistency and sorts
+// newest-first to match storage convention. `changed` reports whether
+// any interval_days or quality value differed from the input so callers
+// can emit a warning only on actual drift.
 //
 // The first return value is unused by current callers but kept for ABI
 // compatibility; it returns DefaultEasinessFactor as a stable placeholder.
-func recalculateLearningLogs(logs []LearningRecord, _ IntervalCalculator) (float64, []LearningRecord, bool) {
+func recalculateLearningLogs(logs []LearningRecord, calculator IntervalCalculator) (float64, []LearningRecord, bool) {
+	if len(logs) == 0 {
+		return DefaultEasinessFactor, logs, false
+	}
+
+	oldIntervals := make([]int, len(logs))
 	oldQualities := make([]int, len(logs))
+	oldKey := make(map[time.Time]int, len(logs))
 	for i, log := range logs {
+		oldIntervals[i] = log.IntervalDays
 		oldQualities[i] = log.Quality
+		oldKey[log.LearnedAt.Time] = i
 	}
 
-	// Fix inconsistency: misunderstood status must have quality < 3.
-	for i := range logs {
-		if logs[i].Status == LearnedStatusMisunderstood && logs[i].Quality >= 3 {
-			logs[i].Quality = 2
-		}
+	if calculator == nil {
+		calculator = &SM2Calculator{}
 	}
-
-	// Storage convention: newest-first.
-	sort.Slice(logs, func(i, j int) bool {
-		return logs[i].LearnedAt.After(logs[j].LearnedAt.Time)
-	})
+	_, recalc := calculator.RecalculateAll(logs)
 
 	changed := false
-	for i := range logs {
-		if logs[i].Quality != oldQualities[i] {
+	for _, log := range recalc {
+		oldIdx, ok := oldKey[log.LearnedAt.Time]
+		if !ok {
+			changed = true
+			continue
+		}
+		if log.IntervalDays != oldIntervals[oldIdx] || log.Quality != oldQualities[oldIdx] {
 			changed = true
 			break
 		}
 	}
-	return DefaultEasinessFactor, logs, changed
+	return DefaultEasinessFactor, recalc, changed
 }
 
 // validateFlashcardNotebooks validates all flashcard notebook files

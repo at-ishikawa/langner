@@ -240,9 +240,15 @@ func (GraphNode_Kind) EnumDescriptor() ([]byte, []int) {
 }
 
 type GetQuizOptionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// include_unstudied, when true, makes review counts on every
+	// notebook and section reflect the "Include unstudied words" toggle
+	// on the quiz start page: never-seen words and words still within
+	// their SR interval are added to the due count, matching what the
+	// actual quiz will load. Defaults to false (due-only counts).
+	IncludeUnstudied bool `protobuf:"varint,1,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetQuizOptionsRequest) Reset() {
@@ -273,6 +279,13 @@ func (x *GetQuizOptionsRequest) ProtoReflect() protoreflect.Message {
 // Deprecated: Use GetQuizOptionsRequest.ProtoReflect.Descriptor instead.
 func (*GetQuizOptionsRequest) Descriptor() ([]byte, []int) {
 	return file_api_v1_quiz_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GetQuizOptionsRequest) GetIncludeUnstudied() bool {
+	if x != nil {
+		return x.IncludeUnstudied
+	}
+	return false
 }
 
 type GetQuizOptionsResponse struct {
@@ -334,9 +347,14 @@ type NotebookSummary struct {
 	// Sections are story events (chapters/episodes) for vocabulary notebooks
 	// and session titles for etymology notebooks. Empty for flashcard or
 	// definitions-only notebooks that have no section hierarchy.
-	Sections      []*NotebookSectionSummary `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Sections []*NotebookSectionSummary `protobuf:"bytes,8,rep,name=sections,proto3" json:"sections,omitempty"`
+	// etymology_reverse_review_count is the per-notebook due count for the
+	// etymology reverse quiz. etymology_review_count is the standard count.
+	// The two can differ because the same origin can be due in one mode and
+	// not in the other (each mode tracks its own SR interval and skip flag).
+	EtymologyReverseReviewCount int32 `protobuf:"varint,9,opt,name=etymology_reverse_review_count,json=etymologyReverseReviewCount,proto3" json:"etymology_reverse_review_count,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *NotebookSummary) Reset() {
@@ -425,16 +443,24 @@ func (x *NotebookSummary) GetSections() []*NotebookSectionSummary {
 	return nil
 }
 
+func (x *NotebookSummary) GetEtymologyReverseReviewCount() int32 {
+	if x != nil {
+		return x.EtymologyReverseReviewCount
+	}
+	return 0
+}
+
 // NotebookSectionSummary holds the display title and per-mode review counts
 // for a single section within a notebook.
 type NotebookSectionSummary struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	Title                string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
-	ReviewCount          int32                  `protobuf:"varint,2,opt,name=review_count,json=reviewCount,proto3" json:"review_count,omitempty"`
-	ReverseReviewCount   int32                  `protobuf:"varint,3,opt,name=reverse_review_count,json=reverseReviewCount,proto3" json:"reverse_review_count,omitempty"`
-	EtymologyReviewCount int32                  `protobuf:"varint,4,opt,name=etymology_review_count,json=etymologyReviewCount,proto3" json:"etymology_review_count,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                       protoimpl.MessageState `protogen:"open.v1"`
+	Title                       string                 `protobuf:"bytes,1,opt,name=title,proto3" json:"title,omitempty"`
+	ReviewCount                 int32                  `protobuf:"varint,2,opt,name=review_count,json=reviewCount,proto3" json:"review_count,omitempty"`
+	ReverseReviewCount          int32                  `protobuf:"varint,3,opt,name=reverse_review_count,json=reverseReviewCount,proto3" json:"reverse_review_count,omitempty"`
+	EtymologyReviewCount        int32                  `protobuf:"varint,4,opt,name=etymology_review_count,json=etymologyReviewCount,proto3" json:"etymology_review_count,omitempty"`
+	EtymologyReverseReviewCount int32                  `protobuf:"varint,5,opt,name=etymology_reverse_review_count,json=etymologyReverseReviewCount,proto3" json:"etymology_reverse_review_count,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *NotebookSectionSummary) Reset() {
@@ -491,6 +517,13 @@ func (x *NotebookSectionSummary) GetReverseReviewCount() int32 {
 func (x *NotebookSectionSummary) GetEtymologyReviewCount() int32 {
 	if x != nil {
 		return x.EtymologyReviewCount
+	}
+	return 0
+}
+
+func (x *NotebookSectionSummary) GetEtymologyReverseReviewCount() int32 {
+	if x != nil {
+		return x.EtymologyReverseReviewCount
 	}
 	return 0
 }
@@ -665,8 +698,15 @@ type Flashcard struct {
 	// (e.g., "racked up"), while entry is the canonical/dictionary form
 	// (e.g., "rack up"). Used for highlighting the expression in context.
 	OriginalEntry string `protobuf:"bytes,4,opt,name=original_entry,json=originalEntry,proto3" json:"original_entry,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// concept_head names the head expression of the definitions concept this
+	// flashcard belongs to (empty when not a concept). When set, the UI may
+	// render a "Family" chip listing concept_members and surface
+	// concept_meaning as the umbrella prompt.
+	ConceptHead    string   `protobuf:"bytes,5,opt,name=concept_head,json=conceptHead,proto3" json:"concept_head,omitempty"`
+	ConceptMembers []string `protobuf:"bytes,6,rep,name=concept_members,json=conceptMembers,proto3" json:"concept_members,omitempty"`
+	ConceptMeaning string   `protobuf:"bytes,7,opt,name=concept_meaning,json=conceptMeaning,proto3" json:"concept_meaning,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Flashcard) Reset() {
@@ -723,6 +763,27 @@ func (x *Flashcard) GetExamples() []*Example {
 func (x *Flashcard) GetOriginalEntry() string {
 	if x != nil {
 		return x.OriginalEntry
+	}
+	return ""
+}
+
+func (x *Flashcard) GetConceptHead() string {
+	if x != nil {
+		return x.ConceptHead
+	}
+	return ""
+}
+
+func (x *Flashcard) GetConceptMembers() []string {
+	if x != nil {
+		return x.ConceptMembers
+	}
+	return nil
+}
+
+func (x *Flashcard) GetConceptMeaning() string {
+	if x != nil {
+		return x.ConceptMeaning
 	}
 	return ""
 }
@@ -940,10 +1001,13 @@ func (x *WordOriginPart) GetMeaning() string {
 }
 
 type SubmitAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	// answer is the user's typed meaning. When is_skipped is true the field is
+	// ignored and the backend records the result as incorrect without grading.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -997,6 +1061,13 @@ func (x *SubmitAnswerRequest) GetResponseTimeMs() int64 {
 		return x.ResponseTimeMs
 	}
 	return 0
+}
+
+func (x *SubmitAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
 }
 
 type SubmitAnswerResponse struct {
@@ -1186,6 +1257,12 @@ type StartReverseQuizRequest struct {
 	// notebook_sections, when non-empty, replaces notebook_ids and allows the
 	// caller to narrow the quiz to specific sections within each notebook.
 	NotebookSections []*NotebookSection `protobuf:"bytes,3,rep,name=notebook_sections,json=notebookSections,proto3" json:"notebook_sections,omitempty"`
+	// include_unstudied mirrors the standard quiz toggle: when true, words
+	// that haven't cleared the freeform/correct prerequisite (including
+	// never-seen words) are included; studied words still respect their
+	// reverse SR interval. Ignored when list_missing_context is set (that
+	// mode lists by context presence, not review state).
+	IncludeUnstudied bool `protobuf:"varint,4,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -1241,6 +1318,13 @@ func (x *StartReverseQuizRequest) GetNotebookSections() []*NotebookSection {
 	return nil
 }
 
+func (x *StartReverseQuizRequest) GetIncludeUnstudied() bool {
+	if x != nil {
+		return x.IncludeUnstudied
+	}
+	return false
+}
+
 type StartReverseQuizResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Flashcards    []*ReverseFlashcard    `protobuf:"bytes,1,rep,name=flashcards,proto3" json:"flashcards,omitempty"`
@@ -1286,15 +1370,21 @@ func (x *StartReverseQuizResponse) GetFlashcards() []*ReverseFlashcard {
 }
 
 type ReverseFlashcard struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	Meaning       string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	Contexts      []*ContextSentence     `protobuf:"bytes,3,rep,name=contexts,proto3" json:"contexts,omitempty"`
-	NotebookName  string                 `protobuf:"bytes,4,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
-	StoryTitle    string                 `protobuf:"bytes,5,opt,name=story_title,json=storyTitle,proto3" json:"story_title,omitempty"`
-	SceneTitle    string                 `protobuf:"bytes,6,opt,name=scene_title,json=sceneTitle,proto3" json:"scene_title,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	NoteId       int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Meaning      string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Contexts     []*ContextSentence     `protobuf:"bytes,3,rep,name=contexts,proto3" json:"contexts,omitempty"`
+	NotebookName string                 `protobuf:"bytes,4,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	StoryTitle   string                 `protobuf:"bytes,5,opt,name=story_title,json=storyTitle,proto3" json:"story_title,omitempty"`
+	SceneTitle   string                 `protobuf:"bytes,6,opt,name=scene_title,json=sceneTitle,proto3" json:"scene_title,omitempty"`
+	// concept_head/members/meaning carry the same concept context as on
+	// Flashcard; reverse quizzes accept any concept_member as a correct
+	// answer when concept_head is set.
+	ConceptHead    string   `protobuf:"bytes,7,opt,name=concept_head,json=conceptHead,proto3" json:"concept_head,omitempty"`
+	ConceptMembers []string `protobuf:"bytes,8,rep,name=concept_members,json=conceptMembers,proto3" json:"concept_members,omitempty"`
+	ConceptMeaning string   `protobuf:"bytes,9,opt,name=concept_meaning,json=conceptMeaning,proto3" json:"concept_meaning,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ReverseFlashcard) Reset() {
@@ -1369,6 +1459,27 @@ func (x *ReverseFlashcard) GetSceneTitle() string {
 	return ""
 }
 
+func (x *ReverseFlashcard) GetConceptHead() string {
+	if x != nil {
+		return x.ConceptHead
+	}
+	return ""
+}
+
+func (x *ReverseFlashcard) GetConceptMembers() []string {
+	if x != nil {
+		return x.ConceptMembers
+	}
+	return nil
+}
+
+func (x *ReverseFlashcard) GetConceptMeaning() string {
+	if x != nil {
+		return x.ConceptMeaning
+	}
+	return ""
+}
+
 type ContextSentence struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Context       string                 `protobuf:"bytes,1,opt,name=context,proto3" json:"context,omitempty"`
@@ -1422,14 +1533,17 @@ func (x *ContextSentence) GetMaskedContext() string {
 }
 
 type SubmitReverseAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	// answer is the user's guess at the word. When is_skipped is true the field
+	// is ignored and the backend records the result as incorrect without grading.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
 	// When true, a "synonym" classification is persisted as a correct learning
 	// log entry (with reduced quality). The frontend sets this on retry batches
 	// where the user has already had a chance to provide the exact word.
 	AcceptSynonymAsCorrect bool `protobuf:"varint,4,opt,name=accept_synonym_as_correct,json=acceptSynonymAsCorrect,proto3" json:"accept_synonym_as_correct,omitempty"`
+	IsSkipped              bool `protobuf:"varint,5,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -1488,6 +1602,13 @@ func (x *SubmitReverseAnswerRequest) GetResponseTimeMs() int64 {
 func (x *SubmitReverseAnswerRequest) GetAcceptSynonymAsCorrect() bool {
 	if x != nil {
 		return x.AcceptSynonymAsCorrect
+	}
+	return false
+}
+
+func (x *SubmitReverseAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
 	}
 	return false
 }
@@ -2666,8 +2787,17 @@ type GraphNode struct {
 	// narrow the blank: language is shown next to ORIGIN nodes (e.g.
 	// "French"); hint is free text shown on the blank node (e.g. the
 	// meaning of the missing English word so the user can guess uniquely).
-	Language      string `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
-	Hint          string `protobuf:"bytes,5,opt,name=hint,proto3" json:"hint,omitempty"`
+	Language string `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
+	Hint     string `protobuf:"bytes,5,opt,name=hint,proto3" json:"hint,omitempty"`
+	// meaning is the origin's English gloss as recorded in the etymology
+	// YAML (e.g. "written (past participle of scribo)"). Rendered under
+	// each ORIGIN node in CLUSTER / ANTONYM_PAIR shapes so the learner
+	// can see how members of the same concept relate to each other —
+	// not just one specific derivation rule but whatever the YAML
+	// prose says ("form of con- before b, m, p", "adverb form of bonus",
+	// "uncle on the mother's side", etc.). Empty on blank nodes (no leak
+	// of the answer) and on CONCEPT / FORM / ENGLISH_WORD nodes.
+	Meaning       string `protobuf:"bytes,6,opt,name=meaning,proto3" json:"meaning,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2733,6 +2863,13 @@ func (x *GraphNode) GetLanguage() string {
 func (x *GraphNode) GetHint() string {
 	if x != nil {
 		return x.Hint
+	}
+	return ""
+}
+
+func (x *GraphNode) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
 	}
 	return ""
 }
@@ -2914,10 +3051,12 @@ func (x *StartEtymologyQuizResponse) GetCards() []*EtymologyQuizCard {
 }
 
 type SubmitEtymologyStandardAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	CardId         int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CardId int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	// answer: user's guess. Ignored when is_skipped=true.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -2973,6 +3112,13 @@ func (x *SubmitEtymologyStandardAnswerRequest) GetResponseTimeMs() int64 {
 	return 0
 }
 
+func (x *SubmitEtymologyStandardAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
+}
+
 type SubmitEtymologyStandardAnswerResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Correct        bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
@@ -2987,7 +3133,13 @@ type SubmitEtymologyStandardAnswerResponse struct {
 	// origin in its concept / antonym / form-branch context at the
 	// moment of greatest engagement (right after they tried to retrieve
 	// its meaning). Frontend highlights the card's origin in the graph.
-	GraphContext  *GraphPrompt `protobuf:"bytes,7,opt,name=graph_context,json=graphContext,proto3" json:"graph_context,omitempty"`
+	GraphContext *GraphPrompt `protobuf:"bytes,7,opt,name=graph_context,json=graphContext,proto3" json:"graph_context,omitempty"`
+	// example_words lists up to a handful of English vocabulary entries
+	// that derive from this origin (collected from the definitions whose
+	// origin_parts reference this origin). Helps the learner anchor an
+	// abstract origin to concrete vocabulary they already know. Capped at
+	// 5 server-side so the feedback card stays compact.
+	ExampleWords  []string `protobuf:"bytes,8,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3067,6 +3219,13 @@ func (x *SubmitEtymologyStandardAnswerResponse) GetNoteId() int64 {
 func (x *SubmitEtymologyStandardAnswerResponse) GetGraphContext() *GraphPrompt {
 	if x != nil {
 		return x.GraphContext
+	}
+	return nil
+}
+
+func (x *SubmitEtymologyStandardAnswerResponse) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
 	}
 	return nil
 }
@@ -3160,10 +3319,12 @@ func (x *BatchSubmitEtymologyStandardAnswersResponse) GetResponses() []*SubmitEt
 }
 
 type SubmitEtymologyReverseAnswerRequest struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	CardId         int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	CardId int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	// answer: user's guess. Ignored when is_skipped=true.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -3219,6 +3380,13 @@ func (x *SubmitEtymologyReverseAnswerRequest) GetResponseTimeMs() int64 {
 	return 0
 }
 
+func (x *SubmitEtymologyReverseAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
+}
+
 type SubmitEtymologyReverseAnswerResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	Correct        bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
@@ -3229,8 +3397,10 @@ type SubmitEtymologyReverseAnswerResponse struct {
 	NextReviewDate string                 `protobuf:"bytes,6,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,7,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	NoteId         int64                  `protobuf:"varint,8,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+	ExampleWords  []string `protobuf:"bytes,9,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitEtymologyReverseAnswerResponse) Reset() {
@@ -3317,6 +3487,13 @@ func (x *SubmitEtymologyReverseAnswerResponse) GetNoteId() int64 {
 		return x.NoteId
 	}
 	return 0
+}
+
+func (x *SubmitEtymologyReverseAnswerResponse) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
+	}
+	return nil
 }
 
 type BatchSubmitEtymologyReverseAnswersRequest struct {
@@ -3645,7 +3822,9 @@ type SubmitEtymologyFreeformAnswerResponse struct {
 	// all_senses lists every recorded sense of the typed origin. The freeform
 	// grader accepts any sense's meaning as correct; this field surfaces the
 	// alternatives so the user is reminded that multi-sense origins exist.
-	AllSenses     []*EtymologyOriginSense `protobuf:"bytes,10,rep,name=all_senses,json=allSenses,proto3" json:"all_senses,omitempty"`
+	AllSenses []*EtymologyOriginSense `protobuf:"bytes,10,rep,name=all_senses,json=allSenses,proto3" json:"all_senses,omitempty"`
+	// example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+	ExampleWords  []string `protobuf:"bytes,11,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3750,14 +3929,22 @@ func (x *SubmitEtymologyFreeformAnswerResponse) GetAllSenses() []*EtymologyOrigi
 	return nil
 }
 
+func (x *SubmitEtymologyFreeformAnswerResponse) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
+	}
+	return nil
+}
+
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
-	"\x11api/v1/quiz.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"\x17\n" +
-	"\x15GetQuizOptionsRequest\"O\n" +
+	"\x11api/v1/quiz.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"D\n" +
+	"\x15GetQuizOptionsRequest\x12+\n" +
+	"\x11include_unstudied\x18\x01 \x01(\bR\x10includeUnstudied\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
-	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xc2\x02\n" +
+	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\x87\x03\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
@@ -3768,12 +3955,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x16etymology_review_count\x18\x06 \x01(\x05R\x14etymologyReviewCount\x12\x1f\n" +
 	"\vhas_content\x18\a \x01(\bR\n" +
 	"hasContent\x12:\n" +
-	"\bsections\x18\b \x03(\v2\x1e.api.v1.NotebookSectionSummaryR\bsections\"\xb9\x01\n" +
+	"\bsections\x18\b \x03(\v2\x1e.api.v1.NotebookSectionSummaryR\bsections\x12C\n" +
+	"\x1eetymology_reverse_review_count\x18\t \x01(\x05R\x1betymologyReverseReviewCount\"\xfe\x01\n" +
 	"\x16NotebookSectionSummary\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12!\n" +
 	"\freview_count\x18\x02 \x01(\x05R\vreviewCount\x120\n" +
 	"\x14reverse_review_count\x18\x03 \x01(\x05R\x12reverseReviewCount\x124\n" +
-	"\x16etymology_review_count\x18\x04 \x01(\x05R\x14etymologyReviewCount\"b\n" +
+	"\x16etymology_review_count\x18\x04 \x01(\x05R\x14etymologyReviewCount\x12C\n" +
+	"\x1eetymology_reverse_review_count\x18\x05 \x01(\x05R\x1betymologyReverseReviewCount\"b\n" +
 	"\x0fNotebookSection\x12(\n" +
 	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"notebookId\x12%\n" +
@@ -3785,12 +3974,15 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11StartQuizResponse\x121\n" +
 	"\n" +
 	"flashcards\x18\x01 \x03(\v2\x11.api.v1.FlashcardR\n" +
-	"flashcards\"\x8e\x01\n" +
+	"flashcards\"\x83\x02\n" +
 	"\tFlashcard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
 	"\x05entry\x18\x02 \x01(\tR\x05entry\x12+\n" +
 	"\bexamples\x18\x03 \x03(\v2\x0f.api.v1.ExampleR\bexamples\x12%\n" +
-	"\x0eoriginal_entry\x18\x04 \x01(\tR\roriginalEntry\"7\n" +
+	"\x0eoriginal_entry\x18\x04 \x01(\tR\roriginalEntry\x12!\n" +
+	"\fconcept_head\x18\x05 \x01(\tR\vconceptHead\x12'\n" +
+	"\x0fconcept_members\x18\x06 \x03(\tR\x0econceptMembers\x12'\n" +
+	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\"7\n" +
 	"\aExample\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x18\n" +
 	"\aspeaker\x18\x02 \x01(\tR\aspeaker\"\xf7\x01\n" +
@@ -3807,11 +3999,13 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x06origin\x18\x01 \x01(\tR\x06origin\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x03 \x01(\tR\blanguage\x12\x18\n" +
-	"\ameaning\x18\x04 \x01(\tR\ameaning\"\x86\x01\n" +
+	"\ameaning\x18\x04 \x01(\tR\ameaning\"\x98\x01\n" +
 	"\x13SubmitAnswerRequest\x12 \n" +
-	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xf8\x01\n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xf8\x01\n" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -3825,15 +4019,16 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x19BatchSubmitAnswersRequest\x12?\n" +
 	"\aanswers\x18\x01 \x03(\v2\x1b.api.v1.SubmitAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"X\n" +
 	"\x1aBatchSubmitAnswersResponse\x12:\n" +
-	"\tresponses\x18\x01 \x03(\v2\x1c.api.v1.SubmitAnswerResponseR\tresponses\"\xb4\x01\n" +
+	"\tresponses\x18\x01 \x03(\v2\x1c.api.v1.SubmitAnswerResponseR\tresponses\"\xe1\x01\n" +
 	"\x17StartReverseQuizRequest\x12!\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tR\vnotebookIds\x120\n" +
 	"\x14list_missing_context\x18\x02 \x01(\bR\x12listMissingContext\x12D\n" +
-	"\x11notebook_sections\x18\x03 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\"T\n" +
+	"\x11notebook_sections\x18\x03 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\x12+\n" +
+	"\x11include_unstudied\x18\x04 \x01(\bR\x10includeUnstudied\"T\n" +
 	"\x18StartReverseQuizResponse\x128\n" +
 	"\n" +
 	"flashcards\x18\x01 \x03(\v2\x18.api.v1.ReverseFlashcardR\n" +
-	"flashcards\"\xe1\x01\n" +
+	"flashcards\"\xd6\x02\n" +
 	"\x10ReverseFlashcard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x123\n" +
@@ -3842,15 +4037,20 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\vstory_title\x18\x05 \x01(\tR\n" +
 	"storyTitle\x12\x1f\n" +
 	"\vscene_title\x18\x06 \x01(\tR\n" +
-	"sceneTitle\"R\n" +
+	"sceneTitle\x12!\n" +
+	"\fconcept_head\x18\a \x01(\tR\vconceptHead\x12'\n" +
+	"\x0fconcept_members\x18\b \x03(\tR\x0econceptMembers\x12'\n" +
+	"\x0fconcept_meaning\x18\t \x01(\tR\x0econceptMeaning\"R\n" +
 	"\x0fContextSentence\x12\x18\n" +
 	"\acontext\x18\x01 \x01(\tR\acontext\x12%\n" +
-	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xc8\x01\n" +
+	"\x0emasked_context\x18\x02 \x01(\tR\rmaskedContext\"\xda\x01\n" +
 	"\x1aSubmitReverseAnswerRequest\x12 \n" +
-	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x129\n" +
-	"\x19accept_synonym_as_correct\x18\x04 \x01(\bR\x16acceptSynonymAsCorrect\"\xe3\x02\n" +
+	"\x19accept_synonym_as_correct\x18\x04 \x01(\bR\x16acceptSynonymAsCorrect\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x05 \x01(\bR\tisSkipped\"\xe3\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +
@@ -3959,13 +4159,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11SHAPE_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aCLUSTER\x10\x01\x12\x10\n" +
 	"\fANTONYM_PAIR\x10\x02\x12\x0f\n" +
-	"\vFORM_BRANCH\x10\x03\"\xe0\x01\n" +
+	"\vFORM_BRANCH\x10\x03\"\xfa\x01\n" +
 	"\tGraphNode\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x16.api.v1.GraphNode.KindR\x04kind\x12\x14\n" +
 	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1a\n" +
 	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x12\n" +
-	"\x04hint\x18\x05 \x01(\tR\x04hint\"Q\n" +
+	"\x04hint\x18\x05 \x01(\tR\x04hint\x12\x18\n" +
+	"\ameaning\x18\x06 \x01(\tR\ameaning\"Q\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\v\n" +
 	"\aCONCEPT\x10\x01\x12\n" +
@@ -3983,11 +4184,13 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11include_unstudied\x18\x04 \x01(\bR\x10includeUnstudied\x12D\n" +
 	"\x11notebook_sections\x18\x05 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\"M\n" +
 	"\x1aStartEtymologyQuizResponse\x12/\n" +
-	"\x05cards\x18\x01 \x03(\v2\x19.api.v1.EtymologyQuizCardR\x05cards\"\x97\x01\n" +
+	"\x05cards\x18\x01 \x03(\v2\x19.api.v1.EtymologyQuizCardR\x05cards\"\xa9\x01\n" +
 	"$SubmitEtymologyStandardAnswerRequest\x12 \n" +
-	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x9e\x02\n" +
+	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xc3\x02\n" +
 	"%SubmitEtymologyStandardAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12'\n" +
@@ -3996,15 +4199,18 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
 	"learned_at\x18\x05 \x01(\tR\tlearnedAt\x12\x17\n" +
 	"\anote_id\x18\x06 \x01(\x03R\x06noteId\x128\n" +
-	"\rgraph_context\x18\a \x01(\v2\x13.api.v1.GraphPromptR\fgraphContext\"~\n" +
+	"\rgraph_context\x18\a \x01(\v2\x13.api.v1.GraphPromptR\fgraphContext\x12#\n" +
+	"\rexample_words\x18\b \x03(\tR\fexampleWords\"~\n" +
 	"*BatchSubmitEtymologyStandardAnswersRequest\x12P\n" +
 	"\aanswers\x18\x01 \x03(\v2,.api.v1.SubmitEtymologyStandardAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"z\n" +
 	"+BatchSubmitEtymologyStandardAnswersResponse\x12K\n" +
-	"\tresponses\x18\x01 \x03(\v2-.api.v1.SubmitEtymologyStandardAnswerResponseR\tresponses\"\x96\x01\n" +
+	"\tresponses\x18\x01 \x03(\v2-.api.v1.SubmitEtymologyStandardAnswerResponseR\tresponses\"\xa8\x01\n" +
 	"#SubmitEtymologyReverseAnswerRequest\x12 \n" +
-	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12#\n" +
-	"\x06answer\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x91\x02\n" +
+	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xb6\x02\n" +
 	"$SubmitEtymologyReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12%\n" +
@@ -4014,7 +4220,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10next_review_date\x18\x06 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
 	"learned_at\x18\a \x01(\tR\tlearnedAt\x12\x17\n" +
-	"\anote_id\x18\b \x01(\x03R\x06noteId\"|\n" +
+	"\anote_id\x18\b \x01(\x03R\x06noteId\x12#\n" +
+	"\rexample_words\x18\t \x03(\tR\fexampleWords\"|\n" +
 	")BatchSubmitEtymologyReverseAnswersRequest\x12O\n" +
 	"\aanswers\x18\x01 \x03(\v2+.api.v1.SubmitEtymologyReverseAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"x\n" +
 	"*BatchSubmitEtymologyReverseAnswersResponse\x12J\n" +
@@ -4035,7 +4242,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\ameaning\x18\x01 \x01(\tR\ameaning\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
 	"\blanguage\x18\x03 \x01(\tR\blanguage\x12#\n" +
-	"\rsession_title\x18\x04 \x01(\tR\fsessionTitle\"\xf6\x02\n" +
+	"\rsession_title\x18\x04 \x01(\tR\fsessionTitle\"\x9b\x03\n" +
 	"%SubmitEtymologyFreeformAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06reason\x18\x02 \x01(\tR\x06reason\x12'\n" +
@@ -4049,7 +4256,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\anote_id\x18\t \x01(\x03R\x06noteId\x12;\n" +
 	"\n" +
 	"all_senses\x18\n" +
-	" \x03(\v2\x1c.api.v1.EtymologyOriginSenseR\tallSenses*\xd1\x01\n" +
+	" \x03(\v2\x1c.api.v1.EtymologyOriginSenseR\tallSenses\x12#\n" +
+	"\rexample_words\x18\v \x03(\tR\fexampleWords*\xd1\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +

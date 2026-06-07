@@ -3,12 +3,83 @@ package server
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
+
+// graphAnswerMask is the placeholder shown in a reverse-quiz graph for a
+// sibling node (or a meaning-text mention) whose origin is the answer to
+// a LATER question in the same session. Mirrors the "[...]" marker the
+// vocab reverse quiz uses for not-yet-asked words.
+const graphAnswerMask = "[…]"
+
+// maskEtymologyGraphFutureAnswers hides, in each card's graph, any origin
+// that is the answer (blank) of a card LATER in the session — so a
+// cluster/antonym graph rendered for card i never reveals the word card
+// i+1 will ask. Already-answered (earlier) cards stay visible, matching
+// the vocab reverse quiz's forward-mask. Masks three leak channels:
+//   - a visible sibling ORIGIN node whose label IS a future answer,
+//   - a future answer mentioned inside a visible sibling's meaning prose,
+//   - a future answer mentioned inside the blank node's own prompt
+//     (e.g. "written (past participle of scribo)" when scribo is asked
+//     next) — the prompt stays usable, only the leaked origin is hidden.
+//
+// Cards must be in session order (StartEtymologyQuiz returns them that
+// way and the frontend does not reshuffle etymology cards).
+func maskEtymologyGraphFutureAnswers(cards []*apiv1.EtymologyQuizCard) {
+	for i := range cards {
+		gp := cards[i].GetGraphPrompt()
+		if gp == nil {
+			continue
+		}
+		future := make(map[string]bool)
+		for j := i + 1; j < len(cards); j++ {
+			o := strings.ToLower(strings.TrimSpace(cards[j].GetOrigin()))
+			if o != "" {
+				future[o] = true
+			}
+		}
+		if len(future) == 0 {
+			continue
+		}
+		for _, n := range gp.Nodes {
+			if n.GetKind() != apiv1.GraphNode_ORIGIN {
+				continue
+			}
+			if n.GetId() == gp.GetBlankNodeId() {
+				// Keep the prompt, but scrub any future-answer origin it names.
+				n.Hint = maskFutureOriginsInText(n.GetHint(), future)
+				continue
+			}
+			if future[strings.ToLower(strings.TrimSpace(n.GetLabel()))] {
+				n.Label = graphAnswerMask
+				n.Meaning = ""
+				continue
+			}
+			n.Meaning = maskFutureOriginsInText(n.GetMeaning(), future)
+		}
+	}
+}
+
+// maskFutureOriginsInText replaces whole-word, case-insensitive
+// occurrences of each future-answer origin in text with the answer mask.
+func maskFutureOriginsInText(text string, future map[string]bool) string {
+	if text == "" || len(future) == 0 {
+		return text
+	}
+	for origin := range future {
+		re, err := regexp.Compile(`(?i)\b` + regexp.QuoteMeta(origin) + `\b`)
+		if err != nil {
+			continue
+		}
+		text = re.ReplaceAllString(text, graphAnswerMask)
+	}
+	return text
+}
 
 // graphConceptInfo aggregates per-book concept data loaded from the YAML
 // source: members (with their session) and outgoing relations. Built
@@ -25,6 +96,12 @@ type graphMemberInfo struct {
 	origin       string
 	language     string
 	sessionTitle string
+	// meaning is the YAML prose gloss for this origin (e.g. "written
+	// (past participle of scribo)") — populated by joining each member
+	// against the etymology origins source so the cluster / antonym-pair
+	// graph can show how members relate to each other, not just that
+	// they share a concept.
+	meaning string
 }
 
 type graphRelationInfo struct {
@@ -47,6 +124,25 @@ func loadBookConcepts(ctx context.Context, reader *notebook.Reader, notebookID s
 	relSrc := notebook.NewYAMLConceptRelationSource(reader)
 	relRows, _ := relSrc.FindAll(ctx)
 
+	// Build a lookup of (origin, language, sessionTitle) → meaning prose
+	// so members get their YAML gloss attached. Falling back to (origin,
+	// language) without session covers concepts whose members reference
+	// origins introduced in an earlier session of the same book.
+	originSrc := notebook.NewYAMLEtymologyOriginSource(reader)
+	originRows, _ := originSrc.FindAll(ctx)
+	meaningByMember := make(map[string]string)
+	for _, o := range originRows {
+		if o.NotebookID != notebookID {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(o.Origin)) + "|" + o.Language + "|" + o.SessionTitle
+		meaningByMember[key] = o.Meaning
+		fallback := strings.ToLower(strings.TrimSpace(o.Origin)) + "|" + o.Language
+		if _, ok := meaningByMember[fallback]; !ok {
+			meaningByMember[fallback] = o.Meaning
+		}
+	}
+
 	concepts := make(map[string]*graphConceptInfo)
 	for _, r := range conceptRows {
 		if r.NotebookID != notebookID {
@@ -58,10 +154,16 @@ func loadBookConcepts(ctx context.Context, reader *notebook.Reader, notebookID s
 			concepts[r.Key] = c
 		}
 		for _, m := range r.Members {
+			memberKey := strings.ToLower(strings.TrimSpace(m.Origin)) + "|" + m.Language + "|" + r.SessionTitle
+			meaning := meaningByMember[memberKey]
+			if meaning == "" {
+				meaning = meaningByMember[strings.ToLower(strings.TrimSpace(m.Origin))+"|"+m.Language]
+			}
 			c.members = append(c.members, graphMemberInfo{
 				origin:       m.Origin,
 				language:     m.Language,
 				sessionTitle: r.SessionTitle,
+				meaning:      meaning,
 			})
 		}
 	}
@@ -221,15 +323,21 @@ func clusterPrompt(card quiz.EtymologyOriginCard, c *graphConceptInfo) *apiv1.Gr
 		nodeID := fmt.Sprintf("m%d", i)
 		isBlank := strings.ToLower(strings.TrimSpace(m.origin)) == lowerOrigin &&
 			m.language == card.Language && m.sessionTitle == card.SessionTitle
-		label, hint := m.origin, ""
+		label, hint, meaning := m.origin, "", m.meaning
 		if isBlank {
 			label = ""
-			hint = m.language
+			// The blank shows the meaning as the prompt (the user types
+			// the origin from the meaning) — without it, a concept with
+			// many members is impossible to disambiguate. card.Meaning is
+			// the blanked origin's gloss. meaning stays empty so it isn't
+			// also rendered as the annotation line below the input.
+			hint = card.Meaning
+			meaning = ""
 			blankID = nodeID
 		}
 		nodes = append(nodes, &apiv1.GraphNode{
 			Id: nodeID, Kind: apiv1.GraphNode_ORIGIN,
-			Label: label, Language: m.language, Hint: hint,
+			Label: label, Language: m.language, Hint: hint, Meaning: meaning,
 		})
 		edges = append(edges, &apiv1.GraphEdge{From: nodeID, To: conceptNodeID, Type: "member_of"})
 	}
@@ -302,15 +410,18 @@ func antonymPairPrompt(card quiz.EtymologyOriginCard, this, other *graphConceptI
 			nodeID := fmt.Sprintf("%s%d", prefix, i)
 			isBlank := strings.ToLower(strings.TrimSpace(m.origin)) == lowerOrigin &&
 				m.language == card.Language && m.sessionTitle == card.SessionTitle
-			label, hint := m.origin, ""
+			label, hint, meaning := m.origin, "", m.meaning
 			if isBlank {
 				label = ""
-				hint = m.language
+				// Show the blanked origin's meaning as the prompt; see
+				// clusterPrompt for the rationale.
+				hint = card.Meaning
+				meaning = ""
 				blankID = nodeID
 			}
 			nodes = append(nodes, &apiv1.GraphNode{
 				Id: nodeID, Kind: apiv1.GraphNode_ORIGIN,
-				Label: label, Language: m.language, Hint: hint,
+				Label: label, Language: m.language, Hint: hint, Meaning: meaning,
 			})
 			edges = append(edges, &apiv1.GraphEdge{From: nodeID, To: conceptID, Type: "member_of"})
 		}

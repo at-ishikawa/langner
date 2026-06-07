@@ -85,7 +85,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			log:  &LearningLog{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1").
+					WithArgs(int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -139,10 +139,10 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\)").
 					WithArgs(
-						int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1",
-						int64(11), "misunderstood", now, 1, 3000, "freeform", 1, "nb-2",
+						int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
+						int64(11), "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
 					).
 					WillReturnResult(sqlmock.NewResult(1, 2))
 				mock.ExpectCommit()

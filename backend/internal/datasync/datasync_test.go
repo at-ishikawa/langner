@@ -151,6 +151,48 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 		},
 		{
+			name: "existing note's concept_key is backfilled when UpdateExisting is true",
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:      "brighten",
+					Entry:      "brighten",
+					Meaning:    "to make or become bright",
+					ConceptKey: "bright",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "book", NotebookID: "demo", Group: "Brightness", Subgroup: ""},
+					},
+				},
+			},
+			opts: ImportOptions{UpdateExisting: true},
+			setup: func(noteSource *mock_datasync.MockNoteSource, noteRepo *mock_notebook.MockNoteRepository) {
+				noteSource.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{
+						Usage:      "brighten",
+						Entry:      "brighten",
+						Meaning:    "to make or become bright",
+						ConceptKey: "bright",
+						NotebookNotes: []notebook.NotebookNote{
+							{NotebookType: "book", NotebookID: "demo", Group: "Brightness", Subgroup: ""},
+						},
+					},
+				}, nil)
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 42, Usage: "brighten", Entry: "brighten", ConceptKey: ""}, // pre-existing row with no concept_key
+				}, nil)
+				noteRepo.EXPECT().BatchUpdate(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord, newNNs []notebook.NotebookNote) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "bright", notes[0].ConceptKey,
+							"UpdateExisting must propagate ConceptKey from source onto existing row")
+						return nil
+					})
+			},
+			want: &ImportNotesResult{
+				NotesUpdated: 1,
+				NotebookNew:  1,
+			},
+		},
+		{
 			name: "skipped note with new notebook_note only inserts notebook_note",
 			sourceNotes: []notebook.NoteRecord{
 				{
@@ -1221,4 +1263,230 @@ func TestExporter_ExportDictionary(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+// fakeDefinitionConceptRepo is an in-memory DefinitionConceptRepository used
+// by the datasync tests. It tracks IDs assigned during BatchCreateConcepts
+// so the member-side reconcile can find them, mirroring the DB behavior.
+type fakeDefinitionConceptRepo struct {
+	concepts     []notebook.DefinitionConceptRecord
+	members      []notebook.DefinitionConceptMemberRecord
+	nextConceptID int64
+	nextMemberID  int64
+}
+
+func newFakeDefinitionConceptRepo() *fakeDefinitionConceptRepo {
+	return &fakeDefinitionConceptRepo{nextConceptID: 1, nextMemberID: 1}
+}
+
+func (f *fakeDefinitionConceptRepo) ListDefinitionConceptsByNotebook(_ context.Context, notebookID string) ([]notebook.DefinitionConceptRecord, error) {
+	var out []notebook.DefinitionConceptRecord
+	for _, c := range f.concepts {
+		if c.NotebookID == notebookID {
+			out = append(out, c)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeDefinitionConceptRepo) ListAllDefinitionConcepts(_ context.Context) ([]notebook.DefinitionConceptRecord, error) {
+	return append([]notebook.DefinitionConceptRecord(nil), f.concepts...), nil
+}
+
+func (f *fakeDefinitionConceptRepo) ListDefinitionConceptMembersByConceptIDs(_ context.Context, ids []int64) ([]notebook.DefinitionConceptMemberRecord, error) {
+	idSet := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	var out []notebook.DefinitionConceptMemberRecord
+	for _, m := range f.members {
+		if idSet[m.ConceptID] {
+			out = append(out, m)
+		}
+	}
+	return out, nil
+}
+
+func (f *fakeDefinitionConceptRepo) BatchCreateConcepts(_ context.Context, records []*notebook.DefinitionConceptRecord) error {
+	for _, r := range records {
+		r.ID = f.nextConceptID
+		f.nextConceptID++
+		f.concepts = append(f.concepts, *r)
+	}
+	return nil
+}
+
+func (f *fakeDefinitionConceptRepo) BatchUpdateConcepts(_ context.Context, records []*notebook.DefinitionConceptRecord) error {
+	for _, r := range records {
+		for i := range f.concepts {
+			if f.concepts[i].ID == r.ID {
+				f.concepts[i].Meaning = r.Meaning
+			}
+		}
+	}
+	return nil
+}
+
+func (f *fakeDefinitionConceptRepo) BatchDeleteConcepts(_ context.Context, ids []int64) error {
+	idSet := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	var keptConcepts []notebook.DefinitionConceptRecord
+	for _, c := range f.concepts {
+		if !idSet[c.ID] {
+			keptConcepts = append(keptConcepts, c)
+		}
+	}
+	f.concepts = keptConcepts
+	// Cascade-delete members of removed concepts to mirror the FK.
+	var keptMembers []notebook.DefinitionConceptMemberRecord
+	for _, m := range f.members {
+		if !idSet[m.ConceptID] {
+			keptMembers = append(keptMembers, m)
+		}
+	}
+	f.members = keptMembers
+	return nil
+}
+
+func (f *fakeDefinitionConceptRepo) BatchCreateMembers(_ context.Context, records []*notebook.DefinitionConceptMemberRecord) error {
+	for _, r := range records {
+		r.ID = f.nextMemberID
+		f.nextMemberID++
+		f.members = append(f.members, *r)
+	}
+	return nil
+}
+
+func (f *fakeDefinitionConceptRepo) BatchDeleteMembers(_ context.Context, ids []int64) error {
+	idSet := make(map[int64]bool, len(ids))
+	for _, id := range ids {
+		idSet[id] = true
+	}
+	var kept []notebook.DefinitionConceptMemberRecord
+	for _, m := range f.members {
+		if !idSet[m.ID] {
+			kept = append(kept, m)
+		}
+	}
+	f.members = kept
+	return nil
+}
+
+func TestImporter_ImportDefinitionConcepts_NewConceptsAndMembers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	src := mock_datasync.NewMockDefinitionConceptSource(ctrl)
+	src.EXPECT().FindAll(gomock.Any()).Return([]notebook.DefinitionConceptForImport{
+		{
+			NotebookID:   "wpme",
+			SessionTitle: "Chapter 1",
+			Head:         "bright",
+			Meaning:      "having or emitting much light",
+			Members:      []string{"bright", "brighten", "brightness"},
+		},
+	}, nil)
+
+	fake := newFakeDefinitionConceptRepo()
+	var buf bytes.Buffer
+	imp := NewImporter(nil, nil, nil, nil, nil, nil, &buf)
+	imp = imp.WithDefinitionConcepts(fake, src)
+
+	result := &ImportEtymologyResult{}
+	require.NoError(t, imp.ImportDefinitionConcepts(context.Background(), ImportOptions{}, result))
+
+	assert.Equal(t, 1, result.DefinitionConceptsNew)
+	assert.Equal(t, 3, result.DefinitionConceptMembersNew)
+	require.Len(t, fake.concepts, 1)
+	assert.Equal(t, "bright", fake.concepts[0].Head)
+	assert.Equal(t, "having or emitting much light", fake.concepts[0].Meaning)
+	require.Len(t, fake.members, 3)
+}
+
+func TestImporter_ImportDefinitionConcepts_ReconcileDropsStale(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	src := mock_datasync.NewMockDefinitionConceptSource(ctrl)
+	src.EXPECT().FindAll(gomock.Any()).Return([]notebook.DefinitionConceptForImport{
+		{NotebookID: "book-a", SessionTitle: "S1", Head: "alpha", Meaning: "first", Members: []string{"alpha", "alphas"}},
+	}, nil)
+
+	fake := newFakeDefinitionConceptRepo()
+	// Pre-populate: one stale concept (gamma) and one surviving concept
+	// (alpha) where one of its members ("alphae") will be removed.
+	fake.concepts = []notebook.DefinitionConceptRecord{
+		{ID: 1, NotebookID: "book-a", Head: "alpha", Meaning: "first"},
+		{ID: 2, NotebookID: "book-a", Head: "gamma", Meaning: "third"},
+	}
+	fake.nextConceptID = 3
+	fake.members = []notebook.DefinitionConceptMemberRecord{
+		{ID: 1, ConceptID: 1, Expression: "alpha"},
+		{ID: 2, ConceptID: 1, Expression: "alphae"}, // stale
+		{ID: 3, ConceptID: 2, Expression: "gamma"},  // belongs to deleted concept; cascades
+	}
+	fake.nextMemberID = 4
+
+	var buf bytes.Buffer
+	imp := NewImporter(nil, nil, nil, nil, nil, nil, &buf)
+	imp = imp.WithDefinitionConcepts(fake, src)
+
+	result := &ImportEtymologyResult{}
+	require.NoError(t, imp.ImportDefinitionConcepts(context.Background(), ImportOptions{}, result))
+
+	assert.Equal(t, 0, result.DefinitionConceptsNew)
+	assert.Equal(t, 1, result.DefinitionConceptsDeleted, "gamma is no longer claimed")
+	assert.Equal(t, 1, result.DefinitionConceptMembersDeleted, "alphae is no longer claimed on alpha")
+	assert.Equal(t, 1, result.DefinitionConceptMembersNew, "alphas is newly claimed on alpha")
+	// One concept survives, one was cascade-deleted.
+	require.Len(t, fake.concepts, 1)
+	assert.Equal(t, "alpha", fake.concepts[0].Head)
+}
+
+func TestImporter_ImportDefinitionConcepts_NoRepoIsNoOp(t *testing.T) {
+	var buf bytes.Buffer
+	imp := NewImporter(nil, nil, nil, nil, nil, nil, &buf)
+	result := &ImportEtymologyResult{}
+	require.NoError(t, imp.ImportDefinitionConcepts(context.Background(), ImportOptions{}, result))
+	assert.Equal(t, 0, result.DefinitionConceptsNew)
+}
+
+func TestExporter_ExportDefinitionConcepts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	sink := mock_datasync.NewMockDefinitionsBookSink(ctrl)
+
+	fake := newFakeDefinitionConceptRepo()
+	fake.concepts = []notebook.DefinitionConceptRecord{
+		{ID: 1, NotebookID: "book-a", Head: "bright", Meaning: "having much light"},
+	}
+	fake.members = []notebook.DefinitionConceptMemberRecord{
+		{ID: 1, ConceptID: 1, Expression: "bright", SessionTitle: "Chapter 1"},
+		{ID: 2, ConceptID: 1, Expression: "brighten", SessionTitle: "Chapter 1"},
+	}
+
+	sink.EXPECT().WriteConcepts(gomock.Any()).DoAndReturn(
+		func(perBook map[string]map[string][]notebook.DefinitionConcept) error {
+			require.Contains(t, perBook, "book-a")
+			require.Contains(t, perBook["book-a"], "Chapter 1")
+			require.Len(t, perBook["book-a"]["Chapter 1"], 1)
+			c := perBook["book-a"]["Chapter 1"][0]
+			assert.Equal(t, "bright", c.Head)
+			assert.Equal(t, "having much light", c.Meaning)
+			assert.Equal(t, []string{"bright", "brighten"}, c.Expressions)
+			return nil
+		})
+
+	var buf bytes.Buffer
+	exp := NewExporter(nil, nil, nil, nil, nil, nil, &buf)
+	exp = exp.WithDefinitionConcepts(fake, sink)
+
+	got, err := exp.ExportDefinitionConcepts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, &ExportDefinitionConceptsResult{ConceptsExported: 1}, got)
+}
+
+func TestExporter_ExportDefinitionConcepts_NoSinkIsNoOp(t *testing.T) {
+	var buf bytes.Buffer
+	exp := NewExporter(nil, nil, nil, nil, nil, nil, &buf)
+	got, err := exp.ExportDefinitionConcepts(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, &ExportDefinitionConceptsResult{}, got)
 }

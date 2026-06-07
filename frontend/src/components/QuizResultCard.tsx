@@ -39,6 +39,11 @@ export interface ResultItem {
    * after the user has answered. Uses the same RelationGraph component
    * as the reverse-mode prompt — but with no blank node. */
   graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
+  /** exampleWords lists a handful of English vocabulary entries that
+   * derive from this origin. Rendered as a chip row in the etymology
+   * feedback card so learners can anchor an abstract root to concrete
+   * words. Server-side capped. */
+  exampleWords?: string[];
 }
 
 function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
@@ -332,6 +337,35 @@ export function QuizResultCard({
         </Box>
       )}
 
+      {/* Example English vocabulary derived from this origin. Helps
+          the learner anchor an abstract Latin/Greek root to words they
+          already know. Etymology-only — vocabulary quizzes have their
+          own etymology section above. Server caps the list so we don't
+          need to slice here. */}
+      {isEtymology && item.exampleWords && item.exampleWords.length > 0 && (
+        <Box mb={2}>
+          <Text fontSize="xs" color="fg.muted" mb={1}>Example words</Text>
+          <Box display="flex" gap={1} flexWrap="wrap">
+            {item.exampleWords.map((w, i) => (
+              <Box
+                key={i}
+                px={2}
+                py={0.5}
+                borderRadius="full"
+                bg="blue.50"
+                _dark={{ bg: "blue.950", borderColor: "blue.800" }}
+                borderWidth="1px"
+                borderColor="blue.200"
+              >
+                <Text fontSize="xs" color="blue.700" _dark={{ color: "blue.200" }}>
+                  {w}
+                </Text>
+              </Box>
+            ))}
+          </Box>
+        </Box>
+      )}
+
       {/* Graph context (cluster / antonym pair / form branch) shown as
           elaborative scaffold after standard-mode etymology answers. The
           card's origin appears filled-in (no blank). Read-only — we pass
@@ -344,6 +378,7 @@ export function QuizResultCard({
             value=""
             onValueChange={() => {}}
             disabled
+            compact
           />
         </Box>
       )}

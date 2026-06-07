@@ -93,6 +93,12 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 	// Find the definitions directory that has matching session files
 	defDir := writer.findDefinitionsDir(etymIndex)
 
+	// Concept lookup for the paired definitions book. When non-empty,
+	// readDefinitionsFileChapters collapses member entries into one row
+	// per concept the same way the definitions-book writer does, so the
+	// etymology PDF / markdown groups by family too.
+	conceptByExpression, conceptByHead := writer.reader.GetDefinitionsBookConceptInfo(etymIndex.ID)
+
 	var chapters []assets.EtymologyChapter
 
 	for _, nbPath := range etymIndex.NotebookPaths {
@@ -103,6 +109,12 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		if err != nil {
 			return nil, fmt.Errorf("readSessionOrigins(%s): %w", sessionPath, err)
 		}
+
+		// Read concepts + relations from the same session file. The
+		// validator already loads this via loadEtymologyBookView for
+		// book-wide checks; here we just want the per-session view so
+		// the template can render a Concepts section.
+		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(sessionPath)
 
 		// Build origin map for resolving origin_parts meanings
 		originMap := buildOriginMap(sessionOrigins)
@@ -141,25 +153,43 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		wordHasBeenLearned := func(expression string) bool {
 			return writer.expressionRecentlyLearned(etymIndex.ID, sessionTitle, expression)
 		}
-		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned)
+		// Words the user has explicitly skipped from any vocabulary
+		// quiz mode (notebook / reverse / freeform) shouldn't show up
+		// in the printable etymology study material either — a skip is
+		// the user saying "stop studying this". Without this gate,
+		// introvert / extrovert / verb (all freshly skipped) kept
+		// appearing in the WPME PDF.
+		wordIsSkipped := func(expression string) bool {
+			return writer.expressionIsSkipped(etymIndex.ID, sessionTitle, expression)
+		}
+		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned, wordIsSkipped, conceptByExpression, conceptByHead)
 
+		templateConcepts := buildTemplateConcepts(sessionConcepts, sessionRelations, originMap)
 		if len(defChapters) > 0 {
 			filteredChapters := make([]assets.EtymologyChapter, 0, len(defChapters))
 			for i := range defChapters {
 				// Only include origins that are referenced by words in this chapter
 				defChapters[i].Origins = filterOriginsForChapter(templateOrigins, defChapters[i])
+				// Concepts are session-scoped, not chapter-scoped — attach to
+				// each chapter that survived the empty-check so the user sees
+				// the same Concepts block regardless of which definitions
+				// title produced this chapter.
+				defChapters[i].Concepts = templateConcepts
 				if chapterIsEmpty(defChapters[i]) {
 					continue
 				}
 				filteredChapters = append(filteredChapters, defChapters[i])
 			}
 			chapters = append(chapters, filteredChapters...)
-		} else if len(templateOrigins) > 0 {
+		} else if len(templateOrigins) > 0 || len(templateConcepts) > 0 {
 			// No definitions found; create a single chapter with just origins
+			// and any session-declared concepts so the user still sees the
+			// concept structure (gauche/sinister under leftness, etc.).
 			title := strings.TrimSuffix(sessionFilename, filepath.Ext(sessionFilename))
 			chapters = append(chapters, assets.EtymologyChapter{
-				Title:   title,
-				Origins: templateOrigins,
+				Title:    title,
+				Origins:  templateOrigins,
+				Concepts: templateConcepts,
 			})
 		}
 	}
@@ -182,11 +212,13 @@ func chapterIsEmpty(c assets.EtymologyChapter) bool {
 	return true
 }
 
-// readSessionOrigins reads the origins from an etymology session file.
-// The file must use the wrapped format with a non-empty metadata.title; the
-// returned origins are tagged with that title via SessionTitle.
+// readSessionOrigins reads the origins from an etymology session file in
+// either the new event/scenes/origins shape or the legacy
+// metadata+flat-origins shape. The file must declare a non-empty
+// session title; returned origins are tagged with that title via
+// SessionTitle.
 func readSessionOrigins(path string) ([]EtymologyOrigin, error) {
-	wrapped, err := readYamlFile[etymologySessionFile](path)
+	wrapped, err := loadEtymologySessionAnyShape(path)
 	if err != nil {
 		return nil, fmt.Errorf("read etymology session %s: %w", path, err)
 	}
@@ -346,6 +378,111 @@ func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, _ /*nbTitle: unus
 // definitions-side scene titles don't necessarily mirror learning-
 // history scene titles (notebook-side scenes are user-defined, e.g.
 // "__index_0").
+// readSessionConceptsAndRelations reads concepts: and relations: from a
+// single etymology session YAML file. Tries the new event/scenes/origins
+// shape first (concepts/relations live at the event level), then falls
+// back to the legacy metadata+flat-origins shape. Returns empty slices
+// when the file declares neither, so callers can use len() without nil
+// checks. Read errors are swallowed and treated as no-data: the
+// validator at load time already reports malformed session files.
+func readSessionConceptsAndRelations(path string) ([]Concept, []Relation) {
+	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil && hasNewShape(newShape) {
+		var concepts []Concept
+		var relations []Relation
+		for _, entry := range newShape {
+			concepts = append(concepts, entry.Concepts...)
+			relations = append(relations, entry.Relations...)
+		}
+		return concepts, relations
+	}
+	wrapped, err := readYamlFile[etymologySessionFile](path)
+	if err != nil {
+		return nil, nil
+	}
+	return wrapped.Concepts, wrapped.Relations
+}
+
+// buildTemplateConcepts converts session-scoped Concept / Relation
+// declarations into the template-friendly assets.EtymologyConcept slice
+// that the etymology-notebook template renders. Relations are resolved
+// for each concept so the template can print "antonym: rightness" next
+// to "leftness" without traversing the relation list. Both directed
+// (from/to) and symmetric (between) relation shapes are handled.
+func buildTemplateConcepts(concepts []Concept, relations []Relation, originMeaning map[string]string) []assets.EtymologyConcept {
+	if len(concepts) == 0 {
+		return nil
+	}
+	relationsByConcept := make(map[string][]assets.EtymologyConceptRelation, len(concepts))
+	add := func(key string, rel assets.EtymologyConceptRelation) {
+		if key == "" || rel.Other == "" || rel.Other == key {
+			return
+		}
+		relationsByConcept[key] = append(relationsByConcept[key], rel)
+	}
+	for _, r := range relations {
+		if strings.TrimSpace(r.Type) == "" {
+			continue
+		}
+		if r.IsDirected() {
+			add(r.From, assets.EtymologyConceptRelation{Type: r.Type, Other: r.To})
+			continue
+		}
+		if len(r.Between) == 2 {
+			a, b := r.Between[0], r.Between[1]
+			add(a, assets.EtymologyConceptRelation{Type: r.Type, Other: b})
+			add(b, assets.EtymologyConceptRelation{Type: r.Type, Other: a})
+		}
+	}
+	out := make([]assets.EtymologyConcept, 0, len(concepts))
+	for _, c := range concepts {
+		members := make([]assets.EtymologyConceptMember, 0, len(c.Members))
+		for _, m := range c.Members {
+			members = append(members, assets.EtymologyConceptMember{
+				Origin:   m.Origin,
+				Language: m.Language,
+				Meaning:  originMeaning[m.Origin],
+			})
+		}
+		out = append(out, assets.EtymologyConcept{
+			Key:       c.Key,
+			Meaning:   c.Meaning,
+			Note:      c.Note,
+			Members:   members,
+			Relations: relationsByConcept[c.Key],
+		})
+	}
+	return out
+}
+
+// expressionIsSkipped reports whether the user has explicitly skipped
+// the given derived word from any vocabulary quiz mode. Mirrors the
+// session-title lookup pattern in expressionRecentlyLearned (matches
+// the learning-history's session entry, then walks every scene because
+// scene titles aren't reliable identifiers across the
+// definitions/learning-history shapes). Used to gate the etymology
+// PDF / markdown so a skipped word doesn't reappear in the printable
+// study material.
+func (writer EtymologyNotebookWriter) expressionIsSkipped(etymID, sessionTitle, expression string) bool {
+	histories := writer.learningHistories[etymID]
+	if len(histories) == 0 {
+		return false
+	}
+	for _, h := range histories {
+		if h.Metadata.Title != sessionTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			for _, expr := range scene.Expressions {
+				if !strings.EqualFold(expr.Expression, expression) {
+					continue
+				}
+				return expr.SkippedAt.IsSkippedAny()
+			}
+		}
+	}
+	return false
+}
+
 func (writer EtymologyNotebookWriter) expressionRecentlyLearned(etymID, sessionTitle, expression string) bool {
 	histories := writer.learningHistories[etymID]
 	if len(histories) == 0 {
@@ -425,7 +562,15 @@ func filterOriginsForChapter(allOrigins []assets.EtymologyOriginEntry, chapter a
 // every origin it references reports false (i.e. fully mastered). Sections
 // with no surviving words are dropped along with their header so the user
 // doesn't see "## verto (to turn)" headings for origins they've finished.
-func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[string]string, needsStudy func(origin string) bool, wordHasBeenLearned func(expression string) bool) []assets.EtymologyChapter {
+func readDefinitionsFileChapters(
+	defDir, sessionFilename string,
+	originMap map[string]string,
+	needsStudy func(origin string) bool,
+	wordHasBeenLearned func(expression string) bool,
+	wordIsSkipped func(expression string) bool,
+	conceptByExpression map[string]string,
+	conceptByHead map[string]DefinitionConceptInfo,
+) []assets.EtymologyChapter {
 	if defDir == "" {
 		return nil
 	}
@@ -451,6 +596,8 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 		var allWords []assets.EtymologyWordEntry
 		var sections []assets.EtymologySection
 		for _, scene := range def.Scenes {
+			memberDetails := buildConceptMemberDetails(scene.Expressions, conceptByExpression, conceptByHead)
+			seenConceptHead := make(map[string]int) // head -> index in sceneWords
 			var sceneWords []assets.EtymologyWordEntry
 			for _, note := range scene.Expressions {
 				if !wordNeedsStudy(note.OriginParts, needsStudy) {
@@ -465,6 +612,9 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 				// either direction has a recent non-misunderstood log
 				// within its SR interval.
 				if wordHasBeenLearned != nil && wordHasBeenLearned(note.Expression) {
+					continue
+				}
+				if wordIsSkipped != nil && wordIsSkipped(note.Expression) {
 					continue
 				}
 				word := assets.EtymologyWordEntry{
@@ -484,6 +634,30 @@ func readDefinitionsFileChapters(defDir, sessionFilename string, originMap map[s
 					word.OriginParts = append(word.OriginParts, ref)
 				}
 
+				// Concept collapse: when this note is a concept member,
+				// fold it into one EtymologyWordEntry per concept (the
+				// head's row when seen, otherwise the first encountered
+				// member; upgraded if the head shows up later).
+				head, isMember := "", false
+				if conceptByExpression != nil {
+					head, isMember = conceptByExpression[note.Expression]
+					if !isMember && note.Definition != "" {
+						head, isMember = conceptByExpression[note.Definition]
+					}
+				}
+				if isMember {
+					info := conceptByHead[head]
+					word.ConceptHead = head
+					word.ConceptMeaning = info.Meaning
+					word.ConceptMembers = memberDetails[head]
+					if existingIdx, already := seenConceptHead[head]; already {
+						if note.Expression == head || note.Definition == head {
+							sceneWords[existingIdx] = word
+						}
+						continue
+					}
+					seenConceptHead[head] = len(sceneWords)
+				}
 				sceneWords = append(sceneWords, word)
 			}
 			if len(sceneWords) == 0 {

@@ -26,6 +26,7 @@ interface BufferedAnswer {
   answer: string;
   displayAnswer: string;
   responseTimeMs: bigint;
+  isSkipped?: boolean;
 }
 
 function highlightExpression(
@@ -109,6 +110,7 @@ export default function QuizCardPage() {
           noteId: b.card.noteId,
           answer: b.answer,
           responseTimeMs: b.responseTimeMs,
+          isSkipped: b.isSkipped ?? false,
         })),
       });
       toFlush.forEach((b, i) => {
@@ -163,9 +165,10 @@ export default function QuizCardPage() {
     const responseTime = responseTimeSince(startTimeRef.current);
     recordAndAdvance({
       card,
-      answer: "I don't know",
+      answer: "",
       displayAnswer: "(skipped)",
       responseTimeMs: responseTime,
+      isSkipped: true,
     });
   };
 
@@ -227,6 +230,17 @@ export default function QuizCardPage() {
           <Heading size="xl" textAlign="center">
             {card.entry}
           </Heading>
+
+          {card.conceptHead && card.conceptMembers && card.conceptMembers.length > 1 && (
+            <Text
+              fontSize="sm"
+              color="fg.muted"
+              textAlign="center"
+              data-testid="concept-family-chip"
+            >
+              Family: {card.conceptMembers.join(", ")}
+            </Text>
+          )}
 
           {card.examples.length > 0 && (
             <VStack align="stretch" gap={2}>

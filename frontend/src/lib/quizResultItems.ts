@@ -111,5 +111,6 @@ export function etymologyResultToItem(r: EtymologyOriginResult, index: number): 
     userAnswer: r.answer,
     reason: r.reason,
     graphContext: r.graphContext,
+    exampleWords: r.exampleWords,
   };
 }

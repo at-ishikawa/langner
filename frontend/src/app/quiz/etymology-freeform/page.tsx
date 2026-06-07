@@ -28,6 +28,7 @@ export default function EtymologyFreeformQuizPage() {
     type: string; language: string; notebookName?: string;
     learnedAt?: string; noteId?: bigint;
     allSenses: { meaning: string; type: string; language: string; sessionTitle: string }[];
+    exampleWords: string[];
   } | null>(null);
   const [overridden, setOverridden] = useState(false);
   const [skipped, setSkipped] = useState(false);
@@ -76,6 +77,7 @@ export default function EtymologyFreeformQuizPage() {
         allSenses: (res.allSenses ?? []).map((s) => ({
           meaning: s.meaning, type: s.type, language: s.language, sessionTitle: s.sessionTitle,
         })),
+        exampleWords: res.exampleWords ?? [],
       };
       setFeedback(fb);
       setDisplayCorrect(fb.correct);
@@ -168,6 +170,27 @@ export default function EtymologyFreeformQuizPage() {
                 </Text>
               </Box>
             </Box>
+            {feedback.exampleWords.length > 0 && (
+              <Box p={3} borderWidth="1px" borderRadius="lg" bg="white" _dark={{ bg: "gray.800" }}>
+                <Text fontSize="xs" color="fg.muted" mb={1}>Example words</Text>
+                <Box display="flex" gap={1} flexWrap="wrap">
+                  {feedback.exampleWords.map((w, i) => (
+                    <Box
+                      key={i}
+                      px={2}
+                      py={0.5}
+                      borderRadius="full"
+                      bg="blue.50"
+                      _dark={{ bg: "blue.950", borderColor: "blue.800" }}
+                      borderWidth="1px"
+                      borderColor="blue.200"
+                    >
+                      <Text fontSize="xs" color="blue.700" _dark={{ color: "blue.200" }}>{w}</Text>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+            )}
             {feedback.allSenses.length > 1 && (
               <Box p={3} borderWidth="1px" borderRadius="lg" bg="yellow.50" _dark={{ bg: "yellow.900", borderColor: "yellow.700" }}>
                 <Text fontSize="sm" fontWeight="bold" mb={2}>Other senses of {origin}</Text>

@@ -2,9 +2,11 @@ package quiz
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -116,7 +118,7 @@ func TestService_LoadNotebookSummaries_Empty(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := newTestService(t, mock_inference.NewMockClient(ctrl))
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 	assert.Empty(t, summaries)
 }
@@ -125,7 +127,7 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc, _ := newTestServiceWithFixtures(t, mock_inference.NewMockClient(ctrl))
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)
 
@@ -242,7 +244,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 
 	summaryMap := make(map[string]NotebookSummary)
@@ -271,7 +273,7 @@ func TestService_LoadNotebookSummaries_LearningHistoryError(t *testing.T) {
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	_, err := svc.LoadNotebookSummaries()
+	_, err := svc.LoadNotebookSummaries(false)
 	require.Error(t, err)
 }
 
@@ -428,6 +430,341 @@ notebooks:
 	assert.Empty(t, cards, "definitions-only word with only freeform-failed history must not appear when includeUnstudied=false")
 }
 
+// TestService_LoadCards_DefinitionsBook_StudiedWordRespectsSREvenWithoutFreeform
+// pins the egotist-style bug. A word with correct standard/reverse
+// history but no freeform answer must still be gated by its SR
+// interval, regardless of the includeUnstudied toggle. The previous
+// needsDefinitionReview gate short-circuited to includeUnstudied
+// whenever HasFreeformAnswer was false, which meant any word the user
+// had answered correctly only in standard or reverse mode was re-asked
+// on every quiz session as long as the toggle was on — bypassing SR
+// entirely. The fix: studied words (any correct answer in any
+// direction) defer to NeedsForwardReview / NeedsReverseReview; the
+// toggle only gates pristine words.
+func TestService_LoadCards_DefinitionsBook_StudiedWordRespectsSREvenWithoutFreeform(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "studied-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: studied-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+`), 0o644))
+	// Word has a correct standard-quiz answer with interval_days=7, dated
+	// just one day ago. No freeform answer, no reverse answer. SR says
+	// next review is 6 days from now — the quiz must NOT include it,
+	// even with includeUnstudied=true.
+	yesterday := time.Now().Add(-24 * time.Hour).Format("2006-01-02T15:04:05Z07:00")
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "studied-defs.yml"), []byte(`- metadata:
+    notebook_id: studied-defs
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "understood"
+              learned_at: "`+yesterday+`"
+              quality: 4
+              quiz_type: "notebook"
+              interval_days: 7
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"studied-defs"}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "studied word inside its SR interval must not appear with includeUnstudied=false")
+
+	cards, err = svc.LoadCards([]string{"studied-defs"}, true, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "includeUnstudied=true must NOT override SR for studied words — only pristine words are gated by the toggle")
+
+	reverseCards, err := svc.LoadReverseCards([]string{"studied-defs"}, false, true, nil)
+	require.NoError(t, err)
+	// Reverse quiz: ReverseLogs is empty, so the word IS due in reverse
+	// (NeedsReverseReview returns true on empty logs). Studied path
+	// applies because the standard correct answer makes it studied.
+	assert.Len(t, reverseCards, 1, "studied word with empty reverse logs is due in reverse regardless of toggle")
+}
+
+// TestService_LoadCards_DefinitionsBook_IncludeUnstudiedLoadsUnstudiedWords
+// pins the fix for the user-reported "only 30 words in Word Power Made
+// Easy even with Include unstudied on" bug. Definitions-only books
+// ignored includeUnstudied entirely: loadDefinitionCards gated every
+// word behind needsDefinitionReview, which excludes words that have no
+// history or haven't cleared the freeform/correct gate. So the standard
+// quiz only ever loaded the freeform-cleared, due subset regardless of
+// the toggle. With includeUnstudied=true, never-seen words and
+// freeform-failed words must now load.
+func TestService_LoadCards_DefinitionsBook_IncludeUnstudiedLoadsUnstudiedWords(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "mixed-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: mixed-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Two words: one never studied (no history), one freeform-failed.
+	// Neither is eligible without includeUnstudied.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+        - expression: "lose your temper"
+          meaning: "to become angry"
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "mixed-defs.yml"), []byte(`- metadata:
+    notebook_id: mixed-defs
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "common idioms"
+      expressions:
+        - expression: "lose your temper"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2025-01-14"
+              quiz_type: "freeform"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	// Without the toggle: neither word is eligible.
+	due, err := svc.LoadCards([]string{"mixed-defs"}, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, due, "no word is eligible without includeUnstudied")
+
+	// With the toggle: both the never-studied and freeform-failed word
+	// must load.
+	all, err := svc.LoadCards([]string{"mixed-defs"}, true, nil)
+	require.NoError(t, err)
+	assert.Len(t, all, 2,
+		"includeUnstudied must load both the never-seen and the freeform-failed word")
+
+	// The summary count must agree with the loaded card count so the
+	// quiz start page badge isn't misleading.
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+	var book *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "mixed-defs" {
+			book = &summaries[i]
+			break
+		}
+	}
+	require.NotNil(t, book, "mixed-defs must appear in summaries when includeUnstudied=true")
+	assert.Equal(t, 2, book.ReviewCount,
+		"summary ReviewCount with includeUnstudied must match the 2 cards LoadCards returns")
+}
+
+// makeDefinitionsBookSkipFixture writes a definitions-only book with
+// one expression "break the ice" plus a learning_history that marks
+// the expression skipped from one or more quiz types. The eligibility
+// gates (HasFreeformAnswer, HasAnyCorrectAnswer) are satisfied by a
+// `usable` freeform log so we can be sure the skip check is what
+// filters the word out, not the eligibility prerequisites.
+func makeDefinitionsBookSkipFixture(t *testing.T, skippedAt string) (defsDir, learningDir string) {
+	t.Helper()
+	defsDir = t.TempDir()
+	learningDir = t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "skip-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: skip-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+`), 0o644))
+
+	// The learning-history scene title matches the HUMAN scene title
+	// ("common idioms") because the quiz now reads definitions through
+	// GetDefinitionsNotesByTitle — the same human-title keying the
+	// notebook-detail page and the skip-write path use. (Pre-fix the
+	// loader keyed by "__index_N"; that split skips and logs across two
+	// scene entries, which is the bug this convergence resolves.)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "skip-defs.yml"), []byte(`- metadata:
+    notebook_id: skip-defs
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "usable"
+              learned_at: "2025-01-14T10:00:00Z"
+              quality: 4
+              interval_days: 7
+              quiz_type: "freeform"
+          reverse_logs:
+            - status: "understood"
+              learned_at: "2025-01-15T10:00:00Z"
+              quality: 4
+              interval_days: 1
+              quiz_type: "reverse"
+          skipped_at:
+`+skippedAt), 0o644))
+	return defsDir, learningDir
+}
+
+// TestService_LoadCards_DefinitionsBook_RespectsNotebookSkip pins the
+// behaviour that motivated the loadDefinitionCards skip-gate fix. A
+// word skipped from the `notebook` quiz type must not appear in
+// LoadCards results for a definitions-only book — the gate was missing
+// before, so a user-skipped word kept reappearing in standard quizzes.
+func TestService_LoadCards_DefinitionsBook_RespectsNotebookSkip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir, learningDir := makeDefinitionsBookSkipFixture(t,
+		`            notebook: "2025-01-20T10:00:00Z"`+"\n")
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"skip-defs"}, true, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "definitions-only word with notebook skip must not appear in LoadCards")
+}
+
+// TestService_LoadReverseCards_DefinitionsBook_RespectsReverseSkip is
+// the regression test for the bug user-reported on 2026-05-24: "verb"
+// skipped from reverse, yet the reverse quiz still served it. The
+// loadDefinitionReverseCards function used to ignore SkippedAt entirely.
+func TestService_LoadReverseCards_DefinitionsBook_RespectsReverseSkip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir, learningDir := makeDefinitionsBookSkipFixture(t,
+		`            reverse: "2025-01-20T10:00:00Z"`+"\n")
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, cards, "definitions-only word with reverse skip must not appear in LoadReverseCards")
+}
+
+// TestService_LoadReverseCards_DefinitionsBook_IncludeUnstudied is the
+// reverse-quiz companion to the standard-quiz fix: definitions-only
+// books ignored includeUnstudied in reverse mode too, so the reverse
+// quiz never surfaced never-studied or not-yet-freeform-cleared words
+// even with the toggle on. With includeUnstudied=true both must load;
+// a reverse-skipped word stays excluded regardless of the toggle.
+func TestService_LoadReverseCards_DefinitionsBook_IncludeUnstudied(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "mixed-rev")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: mixed-rev
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Two never-studied words (no history) — neither eligible without
+	// the toggle, both eligible with it.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+        - expression: "lose your temper"
+          meaning: "to become angry"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	due, err := svc.LoadReverseCards([]string{"mixed-rev"}, false, false, nil)
+	require.NoError(t, err)
+	assert.Empty(t, due, "no reverse card is eligible without includeUnstudied")
+
+	all, err := svc.LoadReverseCards([]string{"mixed-rev"}, false, true, nil)
+	require.NoError(t, err)
+	assert.Len(t, all, 2,
+		"includeUnstudied must load both never-studied words into the reverse quiz")
+
+	// Summary reverse count must agree with the loaded reverse-card count.
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+	var book *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "mixed-rev" {
+			book = &summaries[i]
+			break
+		}
+	}
+	require.NotNil(t, book)
+	assert.Equal(t, 2, book.ReverseReviewCount,
+		"summary ReverseReviewCount with includeUnstudied must match the 2 reverse cards loaded")
+}
+
+// TestService_LoadDefinitionWords_RespectsFreeformSkip exercises the
+// freeform side of the same fix. The free-form loader received no
+// learning histories and never consulted SkippedAt before this PR.
+func TestService_LoadDefinitionWords_RespectsFreeformSkip(t *testing.T) {
+	defsDir, learningDir := makeDefinitionsBookSkipFixture(t,
+		`            freeform: "2025-01-20T10:00:00Z"`+"\n")
+
+	reader, err := notebook.NewReader(nil, nil, nil, []string{defsDir}, nil, nil)
+	require.NoError(t, err)
+	histories, err := notebook.NewLearningHistories(learningDir)
+	require.NoError(t, err)
+
+	cards := loadDefinitionWords(reader, "skip-defs", nil, histories)
+	assert.Empty(t, cards, "definitions-only word with freeform skip must not appear in freeform cards")
+}
+
 func TestService_LoadCards_MultipleNotebooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc, _ := newTestServiceWithFixtures(t, mock_inference.NewMockClient(ctrl))
@@ -573,7 +910,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries()
+	summaries, err := svc.LoadNotebookSummaries(false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 	require.Len(t, summaries[0].Sections, 2)
@@ -738,7 +1075,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	filtered, err := svc.LoadReverseCards([]string{"rev-chapters"}, false, map[string][]string{
+	filtered, err := svc.LoadReverseCards([]string{"rev-chapters"}, false, false, map[string][]string{
 		"rev-chapters": {"Chapter A"},
 	})
 	require.NoError(t, err)
@@ -883,6 +1220,300 @@ func TestService_SaveResult_MalformedYAMLError(t *testing.T) {
 
 	err := svc.SaveResult(context.Background(), card, GradeResult{Correct: true, Quality: 4}, 1000)
 	require.Error(t, err)
+}
+
+// makeConceptBookFixture writes a definitions-only book with one
+// concept whose head ("smile" – stand-in for an actual entry) groups
+// three derived forms. The head carries a correct freeform log so its
+// SR-interval gate is the only thing controlling badge/loader output;
+// the three member rows are absent — matching the post-MergeConcepts
+// shape MergeConcepts produces in a real notebook.
+func makeConceptBookFixture(t *testing.T, recentInterval int) (defsDir, learningDir string) {
+	t.Helper()
+	defsDir = t.TempDir()
+	learningDir = t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "concept-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: concept-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start social interaction"
+        - expression: "ice breaker"
+          meaning: "something that starts social interaction"
+        - expression: "ice-breaking"
+          meaning: "starting social interaction"
+  concepts:
+    - head: "break the ice"
+      meaning: "to start social interaction"
+      expressions:
+        - "break the ice"
+        - "ice breaker"
+        - "ice-breaking"
+`), 0o644))
+
+	tomorrow := time.Now().UTC().Format("2006-01-02T15:04:05Z")
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "concept-book.yml"), []byte(`- metadata:
+    notebook_id: concept-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          learned_logs:
+            - status: "understood"
+              learned_at: "`+tomorrow+`"
+              quality: 4
+              interval_days: `+fmt.Sprint(recentInterval)+`
+              quiz_type: "notebook"
+          reverse_logs:
+            - status: "understood"
+              learned_at: "`+tomorrow+`"
+              quality: 4
+              interval_days: `+fmt.Sprint(recentInterval)+`
+              quiz_type: "reverse"
+`), 0o644))
+	return defsDir, learningDir
+}
+
+// TestService_LoadNotebookSummaries_ConceptMembersFollowHead pins the
+// post-MergeConcepts behaviour: when the head has a recent correct
+// answer that's still inside its SR interval, the badge must show 0
+// even though the source YAML still lists the two non-head members.
+// Pre-fix, needsDefinitionReview missed the head's history when asked
+// about a member's expression and returned includeUnstudied=true,
+// inflating the badge by the member count for every concept.
+func TestService_LoadNotebookSummaries_ConceptMembersFollowHead(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir, learningDir := makeConceptBookFixture(t, 30)
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+	var book *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "concept-book" {
+			book = &summaries[i]
+			break
+		}
+	}
+	require.Nil(t, book,
+		"head is studied and inside SR interval; concept must contribute 0 — book should not appear")
+}
+
+// TestService_LoadCards_DefinitionsBook_FamilyConceptUsesHeadRow pins the
+// kind=family loader contract: exactly one card per concept, sourced
+// from the head's OWN note row so the displayed (word, meaning) pair
+// always agrees. Pre-fix, whichever member iterated first contributed
+// its meaning while the answer was forced to the head, so the user
+// saw e.g. cardiology paired with cardiologist's meaning.
+func TestService_LoadCards_DefinitionsBook_FamilyConceptUsesHeadRow(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "concept-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: concept-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Head and members have DIFFERENT meanings so the test fails loudly
+	// if the loader picks a member's meaning instead of the head's.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "common idioms"
+      expressions:
+        - expression: "break the ice"
+          meaning: "to start a conversation in a social setting"
+        - expression: "ice breaker"
+          meaning: "a person or thing that initiates social interaction"
+        - expression: "ice-breaking"
+          meaning: "the act of initiating social interaction"
+  concepts:
+    - head: "break the ice"
+      kind: family
+      meaning: "starting social interaction"
+      expressions:
+        - "break the ice"
+        - "ice breaker"
+        - "ice-breaking"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"concept-book"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1, "family concept must collapse to one card at load time")
+	assert.Equal(t, "break the ice", cards[0].Entry,
+		"surviving card must be named for the head; saves under it land on the consolidated row")
+	assert.Equal(t, "break the ice", cards[0].ConceptHead,
+		"ConceptHead must be set so SaveResult redirects under the head")
+	assert.Equal(t, "to start a conversation in a social setting", cards[0].Meaning,
+		"Meaning must come from the head's own note row, not whichever member iterated first")
+
+	reverse, err := svc.LoadReverseCards([]string{"concept-book"}, false, true, nil)
+	require.NoError(t, err)
+	require.Len(t, reverse, 1, "family concept reverse quiz must also surface one card")
+	assert.Equal(t, "break the ice", reverse[0].Expression,
+		"reverse card answer must be the head expression")
+	assert.Equal(t, "to start a conversation in a social setting", reverse[0].Meaning,
+		"reverse prompt must be the head's own meaning so prompt and answer match")
+}
+
+// TestService_LoadCards_DefinitionsBook_SynonymConceptKeepsMembers
+// pins the kind=synonym contract: the concepts block groups expressions
+// for the Family-chip display, but each member keeps its own card with
+// its own meaning, and ConceptHead stays empty so SaveResult writes
+// under the member (independent SR row per word). Identical contract
+// applies to kind=antonym and kind=visualization.
+func TestService_LoadCards_DefinitionsBook_SynonymConceptKeepsMembers(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "synonym-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: synonym-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "feelings"
+      expressions:
+        - expression: "happy"
+          meaning: "feeling pleasure or contentment"
+        - expression: "joyful"
+          meaning: "expressing great happiness"
+        - expression: "cheerful"
+          meaning: "noticeably pleasant in mood"
+  concepts:
+    - head: "happy"
+      kind: synonym
+      meaning: "shared meaning: experiencing positive emotion"
+      expressions:
+        - "happy"
+        - "joyful"
+        - "cheerful"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"synonym-book"}, true, nil)
+	require.NoError(t, err)
+	assert.Len(t, cards, 3, "synonym kind must keep one card per member, not collapse")
+	gotByEntry := map[string]Card{}
+	for _, c := range cards {
+		gotByEntry[c.Entry] = c
+	}
+	for _, name := range []string{"happy", "joyful", "cheerful"} {
+		c, ok := gotByEntry[name]
+		require.True(t, ok, "expected a card for %q", name)
+		assert.Empty(t, c.ConceptHead,
+			"synonym member must not carry ConceptHead — saves would otherwise consolidate under happy")
+		assert.Equal(t, []string{"happy", "joyful", "cheerful"}, c.ConceptMembers,
+			"ConceptMembers stays populated for the Family chip even when SR isn't consolidated")
+	}
+	assert.Equal(t, "feeling pleasure or contentment", gotByEntry["happy"].Meaning,
+		"each synonym card keeps its own row's meaning")
+	assert.Equal(t, "expressing great happiness", gotByEntry["joyful"].Meaning)
+}
+
+// TestService_SaveResult_SynonymMemberWritesUnderMember pins the
+// save-side contract for non-family concepts: ConceptHead is empty on
+// these cards, so the log lands under the member's own expression.
+func TestService_SaveResult_SynonymMemberWritesUnderMember(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	learningDir := t.TempDir()
+
+	svc := NewService(config.NotebooksConfig{
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	card := Card{
+		NotebookName: "synonym-book",
+		StoryTitle:   "Session 1",
+		SceneTitle:   "feelings",
+		Entry:        "joyful",
+		// ConceptHead deliberately unset — synonym/antonym/visualization
+		// concepts emit cards without it.
+		Meaning: "expressing great happiness",
+	}
+	require.NoError(t, svc.SaveResult(context.Background(), card,
+		GradeResult{Correct: true, Quality: 4}, 1000))
+
+	yamlBytes, err := os.ReadFile(filepath.Join(learningDir, "synonym-book.yml"))
+	require.NoError(t, err)
+	got := string(yamlBytes)
+	assert.Contains(t, got, "expression: joyful",
+		"log for a non-family-member card must land under the member itself")
+	assert.NotContains(t, got, "expression: happy",
+		"non-family concepts must not consolidate under the concept head")
+}
+
+// TestService_SaveResult_ConceptHeadRedirectsLog pins the save-side
+// fix: when a Card carries ConceptHead, the log must land under the
+// head expression in the YAML, not under card.Entry. Without this,
+// every quiz answer for a member-named card recreated the per-member
+// row that MergeConcepts purged.
+func TestService_SaveResult_ConceptHeadRedirectsLog(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	learningDir := t.TempDir()
+
+	svc := NewService(config.NotebooksConfig{
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	card := Card{
+		NotebookName: "concept-book",
+		StoryTitle:   "Session 1",
+		SceneTitle:   "common idioms",
+		Entry:        "ice breaker", // member name (legacy code path)
+		ConceptHead:  "break the ice",
+		Meaning:      "to start social interaction",
+	}
+	require.NoError(t, svc.SaveResult(context.Background(), card,
+		GradeResult{Correct: true, Quality: 4}, 1000))
+
+	yamlBytes, err := os.ReadFile(filepath.Join(learningDir, "concept-book.yml"))
+	require.NoError(t, err)
+	got := string(yamlBytes)
+	assert.Contains(t, got, "expression: break the ice",
+		"log must land under the concept head, not the member name")
+	assert.NotContains(t, got, "expression: ice breaker",
+		"member name must not appear as a separate row")
 }
 
 // ---------- helper functions (package-internal) ----------
@@ -1452,6 +2083,105 @@ func TestMaskWord(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			got := maskWord(tt.context, tt.expression, tt.definition)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+// TestDefinitionsSectionSummaries_NaturalSessionOrdering pins the
+// ordering rule that drove this helper's addition: session titles with
+// a trailing integer ("Session 2", "Session 10") sort numerically, not
+// lexically. Without this, the per-session list on the vocabulary quiz
+// start page would put "Session 10" before "Session 2" — visible
+// regression vs how etymology orders the same book.
+//
+// Per-section ReviewCount semantics are owned by countDefinitionNotes
+// (notes without a history don't "need review" yet) and tested
+// elsewhere; this test stays focused on ordering.
+func TestDefinitionsSectionSummaries_NaturalSessionOrdering(t *testing.T) {
+	defs := map[string]map[string][]notebook.Note{
+		"Session 10": {"__index_0": {{Expression: "hesitate", Meaning: "to pause"}}},
+		"Session 2":  {"__index_0": {{Expression: "stall", Meaning: "to delay"}}},
+		"Intro":      {"__index_0": {{Expression: "warm up", Meaning: "to ease in"}}},
+	}
+
+	got := definitionsSectionSummaries(defs, nil, false, nil)
+
+	require.Len(t, got, 3)
+	// Numbered sessions sort numerically before non-numbered ones; among
+	// non-numbered, alphabetical. So: Session 2, Session 10, Intro.
+	assert.Equal(t, "Session 2", got[0].Title)
+	assert.Equal(t, "Session 10", got[1].Title)
+	assert.Equal(t, "Intro", got[2].Title)
+}
+
+// TestService_DefinitionsBookSummaryMatchesLoad pins the contract that
+// the vocab start-page badge count equals what the standard/reverse
+// quiz actually loads for a definitions-only book.
+//
+// The mismatch this guards against: countDefinitionNotes used to skip
+// the per-type SkippedAt gate that loadDefinitionCards /
+// loadDefinitionReverseCards apply, so the badge over-counted any
+// note the user had excluded from that quiz mode (and per-section
+// counts diverged the same way via definitionsSectionSummaries).
+//
+// Per-direction cases — each fixture marks the single note skipped
+// from that direction's quiz and asserts both directions agree with
+// their loader.
+func TestService_DefinitionsBookSummaryMatchesLoad(t *testing.T) {
+	cases := []struct {
+		name      string
+		skippedAt string
+	}{
+		{
+			name:      "notebook skip",
+			skippedAt: `            notebook: "2025-01-20T10:00:00Z"` + "\n",
+		},
+		{
+			name:      "reverse skip",
+			skippedAt: `            reverse: "2025-01-20T10:00:00Z"` + "\n",
+		},
+		{
+			name:      "no skip",
+			skippedAt: "",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defsDir, learningDir := makeDefinitionsBookSkipFixture(t, tc.skippedAt)
+
+			svc := NewService(config.NotebooksConfig{
+				DefinitionsDirectories: []string{defsDir},
+				LearningNotesDirectory: learningDir,
+			}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+				learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+			summaries, err := svc.LoadNotebookSummaries(true)
+			require.NoError(t, err)
+			var book *NotebookSummary
+			for i := range summaries {
+				if summaries[i].NotebookID == "skip-defs" {
+					book = &summaries[i]
+					break
+				}
+			}
+			require.NotNil(t, book, "skip-defs must appear in summaries")
+			require.Len(t, book.Sections, 1, "fixture has exactly one session")
+
+			cards, err := svc.LoadCards([]string{"skip-defs"}, true, nil)
+			require.NoError(t, err)
+			assert.Equal(t, len(cards), book.ReviewCount,
+				"notebook ReviewCount must equal len(LoadCards)")
+			assert.Equal(t, len(cards), book.Sections[0].ReviewCount,
+				"section ReviewCount must equal len(LoadCards)")
+
+			reverseCards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, true, nil)
+			require.NoError(t, err)
+			assert.Equal(t, len(reverseCards), book.ReverseReviewCount,
+				"notebook ReverseReviewCount must equal len(LoadReverseCards)")
+			assert.Equal(t, len(reverseCards), book.Sections[0].ReverseReviewCount,
+				"section ReverseReviewCount must equal len(LoadReverseCards)")
 		})
 	}
 }

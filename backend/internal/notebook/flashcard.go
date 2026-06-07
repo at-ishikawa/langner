@@ -137,6 +137,134 @@ func (r Reader) GetDefinitionsBook(bookID string) ([]Definitions, bool) {
 	return defs, ok && len(defs) > 0
 }
 
+// GetDefinitionsBookConcepts returns a member-expression -> head map for
+// the given book ID, derived from every concepts: block declared in any
+// session of the book. Used by the ingestion layer to stamp each note's
+// concept_key column at import time. Returns an empty (non-nil) map when
+// the book has no concepts.
+func (r Reader) GetDefinitionsBookConcepts(bookID string) map[string]string {
+	result := make(map[string]string)
+	defs, ok := r.definitionsRaw[bookID]
+	if !ok {
+		return result
+	}
+	for _, def := range defs {
+		for _, c := range def.Concepts {
+			head := c.Head
+			if head == "" {
+				continue
+			}
+			for _, expr := range c.Expressions {
+				if expr == "" {
+					continue
+				}
+				// First-writer-wins on collisions; the validator emits a
+				// warning when an expression is claimed by two concepts.
+				if _, already := result[expr]; already {
+					continue
+				}
+				result[expr] = head
+			}
+		}
+	}
+	return result
+}
+
+// DefinitionConceptInfo captures the full per-concept metadata a writer
+// needs to group member entries into one row in markdown / PDF output.
+// Head is the canonical display anchor, Members lists every member in
+// YAML declaration order (head included), and Meaning is the umbrella
+// label shared by all members.
+type DefinitionConceptInfo struct {
+	Head    string
+	Meaning string
+	Members []string
+	Kind    ConceptKind
+}
+
+// ConsolidatesSR reports whether the concept's members should share a
+// single SR row under the head. Only `family` kind consolidates; other
+// kinds exist for display/browsing only.
+func (i DefinitionConceptInfo) ConsolidatesSR() bool {
+	if i.Kind == "" {
+		return true
+	}
+	return i.Kind == ConceptKindFamily
+}
+
+// GetDefinitionsBookConceptInfo returns the per-book concept lookup used
+// by writers (markdown/PDF) and the export-db layer. byExpression maps
+// each member expression to its head — restricted to SR-consolidating
+// (family) concepts so non-family groupings stay invisible to read/save
+// gates. byHead maps each head to the full concept declaration for all
+// kinds, so the UI Family chip and per-concept browsing surfaces still
+// see member lists for synonym / antonym / visualization groups.
+func (r Reader) GetDefinitionsBookConceptInfo(bookID string) (byExpression map[string]string, byHead map[string]DefinitionConceptInfo) {
+	byExpression, byHead, _ = r.getDefinitionsBookConceptIndex(bookID)
+	return
+}
+
+// GetDefinitionsBookConceptByMember returns a per-member -> concept info
+// map covering ALL concept kinds (family + non-family). Use this when
+// a card loader needs to decorate a member card with ConceptMembers /
+// ConceptMeaning for the Family-chip display regardless of whether the
+// concept consolidates SR.
+func (r Reader) GetDefinitionsBookConceptByMember(bookID string) map[string]DefinitionConceptInfo {
+	_, _, byMember := r.getDefinitionsBookConceptIndex(bookID)
+	return byMember
+}
+
+// getDefinitionsBookConceptIndex computes all three concept-lookup maps
+// in one pass. byExpression is SR-consolidating (family) only;
+// byMember includes all kinds for display lookups.
+func (r Reader) getDefinitionsBookConceptIndex(bookID string) (byExpression map[string]string, byHead map[string]DefinitionConceptInfo, byMember map[string]DefinitionConceptInfo) {
+	byExpression = make(map[string]string)
+	byHead = make(map[string]DefinitionConceptInfo)
+	byMember = make(map[string]DefinitionConceptInfo)
+	defs, ok := r.definitionsRaw[bookID]
+	if !ok {
+		return
+	}
+	for _, def := range defs {
+		for _, c := range def.Concepts {
+			if c.Head == "" || len(c.Expressions) == 0 {
+				continue
+			}
+			members := make([]string, 0, len(c.Expressions))
+			for _, e := range c.Expressions {
+				if e == "" {
+					continue
+				}
+				members = append(members, e)
+			}
+			kind := c.ResolvedKind()
+			info := DefinitionConceptInfo{
+				Head:    c.Head,
+				Meaning: c.Meaning,
+				Members: members,
+				Kind:    kind,
+			}
+			if _, already := byHead[c.Head]; !already {
+				byHead[c.Head] = info
+			}
+			for _, e := range members {
+				if _, exists := byMember[e]; !exists {
+					byMember[e] = info
+				}
+			}
+			if kind != ConceptKindFamily {
+				continue
+			}
+			for _, e := range members {
+				if _, exists := byExpression[e]; !exists {
+					byExpression[e] = c.Head
+				}
+			}
+		}
+	}
+	return
+}
+
 func (f Reader) ReadAllStoryNotebooks() (map[string]Index, error) {
 	for _, index := range f.indexes {
 		_, err := f.ReadStoryNotebooks(index.ID)

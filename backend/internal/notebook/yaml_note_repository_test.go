@@ -395,6 +395,62 @@ notebooks:
 	assert.Equal(t, "shared-id", got[0].NotebookNotes[0].NotebookID)
 }
 
+// FindAll must stamp each definitions-book note with the head expression
+// of its concept (or "" if not a concept member). This is the ingestion
+// side of the word-concepts feature: the parsed concepts: block in the
+// definitions YAML becomes notes.concept_key in the DB at import time.
+func TestYAMLNoteRepository_FindAll_StampsConceptKey(t *testing.T) {
+	defsDir := t.TempDir()
+	bookDir := filepath.Join(defsDir, "vocab-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: vocab-book
+notebooks:
+  - ./brightness.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "brightness.yml"), []byte(`- metadata:
+    title: "Brightness"
+    date: 2025-01-01T00:00:00Z
+  scenes:
+    - metadata:
+        index: 0
+      expressions:
+        - expression: "bright"
+          meaning: "emitting much light"
+        - expression: "brighten"
+          meaning: "to make or become bright"
+        - expression: "brightness"
+          meaning: "the quality of being bright"
+        - expression: "unrelated"
+          meaning: "stands alone, not in any concept"
+  concepts:
+    - head: "bright"
+      meaning: "the quality or act of being bright"
+      expressions:
+        - "bright"
+        - "brighten"
+        - "brightness"
+`), 0644))
+
+	reader, err := NewReader(nil, nil, nil, []string{defsDir}, nil, nil)
+	require.NoError(t, err)
+	repo := NewYAMLNoteRepository(reader)
+	got, err := repo.FindAll(context.Background())
+	require.NoError(t, err)
+
+	byUsage := make(map[string]NoteRecord)
+	for _, n := range got {
+		byUsage[n.Usage] = n
+	}
+	require.Contains(t, byUsage, "bright")
+	require.Contains(t, byUsage, "brighten")
+	require.Contains(t, byUsage, "brightness")
+	require.Contains(t, byUsage, "unrelated")
+	assert.Equal(t, "bright", byUsage["bright"].ConceptKey, "head expression carries its own concept key")
+	assert.Equal(t, "bright", byUsage["brighten"].ConceptKey)
+	assert.Equal(t, "bright", byUsage["brightness"].ConceptKey)
+	assert.Equal(t, "", byUsage["unrelated"].ConceptKey, "expressions outside any concept get empty key")
+}
+
 // FindAll must not panic when the repository was constructed via the
 // writer-only constructors (NewYAMLNoteRepositoryWithDefsDir or
 // NewYAMLNoteRepositoryWriter), which leave the reader nil. The server

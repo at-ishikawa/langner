@@ -19,6 +19,7 @@ interface BufferedAnswer {
   answer: string;
   displayAnswer: string;
   responseTimeMs: bigint;
+  isSkipped?: boolean;
 }
 
 export default function EtymologyReversePage() {
@@ -81,6 +82,7 @@ export default function EtymologyReversePage() {
           cardId: b.card.cardId,
           answer: b.answer,
           responseTimeMs: b.responseTimeMs,
+          isSkipped: b.isSkipped ?? false,
         })),
       });
       toFlush.forEach((b, i) => {
@@ -101,6 +103,7 @@ export default function EtymologyReversePage() {
           type: r.type,
           language: r.language,
           learnedAt: r.learnedAt || undefined,
+          exampleWords: r.exampleWords,
         });
       });
       bufferRef.current = [];
@@ -140,9 +143,10 @@ export default function EtymologyReversePage() {
     const responseTime = responseTimeSince(startTimeRef.current);
     recordAndAdvance({
       card,
-      answer: "I don't know",
+      answer: "",
       displayAnswer: "(skipped)",
       responseTimeMs: responseTime,
+      isSkipped: true,
     });
   };
 

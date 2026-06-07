@@ -16,6 +16,7 @@ import (
 type Definitions struct {
 	Metadata DefinitionsMetadata  `yaml:"metadata"`
 	Scenes   []DefinitionsScene   `yaml:"scenes"`
+	Concepts []DefinitionConcept  `yaml:"concepts,omitempty"`
 }
 
 // DefinitionsMetadata contains metadata about which notebook the definitions apply to
@@ -47,6 +48,72 @@ func (m DefinitionsSceneMetadata) GetIndex() int {
 	return m.Index
 }
 
+// DefinitionConcept groups related vocabulary expressions in a definitions
+// book under one umbrella meaning. Members are expression strings declared
+// in the same book (across any session); the head doubles as the canonical
+// display anchor and the database key. The same head may be declared in
+// multiple sessions of the same book — the validator unifies them and
+// enforces meaning agreement.
+//
+// Used downstream for quiz card collapse (one card per concept), learning
+// log merging (logs flow to the head's entry), and skip propagation (a
+// skip on any member applies to the whole concept).
+type DefinitionConcept struct {
+	Head        string   `yaml:"head"`
+	Meaning     string   `yaml:"meaning"`
+	Expressions []string `yaml:"expressions"`
+
+	// Kind distinguishes SR-consolidating groups from display-only groups.
+	//
+	//   family        — members share a root and differ only by part of
+	//                    speech (cardiology/cardiologist/cardiac). One
+	//                    SR row under the head; one card per concept.
+	//   synonym       — semantically equivalent words. Display group only;
+	//                    each member keeps its own SR row.
+	//   antonym       — opposite-meaning grouping. Display only.
+	//   visualization — any other browsing-only grouping. Display only.
+	//
+	// Empty defaults to family for backwards compatibility — existing
+	// data was migrated under the family assumption (see MergeConcepts).
+	Kind ConceptKind `yaml:"kind,omitempty"`
+
+	// SessionTitle records which session declared this concept block; set
+	// at read time from the parent Definitions.Metadata. Not serialised.
+	SessionTitle string `yaml:"-"`
+}
+
+// ConceptKind classifies a DefinitionConcept for SR-consolidation purposes.
+type ConceptKind string
+
+const (
+	// ConceptKindFamily is the only kind whose members share a single SR
+	// row under the head. Use for groups whose members differ only in
+	// part of speech / morphology (cardiology / cardiologist / cardiac).
+	ConceptKindFamily ConceptKind = "family"
+	// ConceptKindSynonym, ConceptKindAntonym, ConceptKindVisualization
+	// are display-only groupings. Each member keeps its own SR row;
+	// the concepts block is consulted only for member lists shown in
+	// the Family chip and similar UI surfaces.
+	ConceptKindSynonym       ConceptKind = "synonym"
+	ConceptKindAntonym       ConceptKind = "antonym"
+	ConceptKindVisualization ConceptKind = "visualization"
+)
+
+// ResolvedKind returns the effective kind for a DefinitionConcept, mapping
+// the empty default to family. Use when deciding SR behaviour.
+func (c DefinitionConcept) ResolvedKind() ConceptKind {
+	if c.Kind == "" {
+		return ConceptKindFamily
+	}
+	return c.Kind
+}
+
+// ConsolidatesSR reports whether this concept's members should share a
+// single SR row under the head expression.
+func (c DefinitionConcept) ConsolidatesSR() bool {
+	return c.ResolvedKind() == ConceptKindFamily
+}
+
 // ReadDefinitionsFromBytes parses a YAML byte slice into a slice of Definitions.
 func ReadDefinitionsFromBytes(data []byte) ([]Definitions, error) {
 	var result []Definitions
@@ -65,6 +132,23 @@ type DefinitionsMap map[string]map[string]map[string][]Note
 type definitionsIndex struct {
 	ID        string   `yaml:"id"`
 	Notebooks []string `yaml:"notebooks"`
+}
+
+// DefinitionsIndex is the public view of a definitions directory's index.yml.
+// Used by tooling (migrators, validators) that need the book ID and ordered
+// notebook file list without going through the full DefinitionsMap loader.
+type DefinitionsIndex struct {
+	ID        string
+	Notebooks []string
+}
+
+// ReadDefinitionsIndex loads one definitions index.yml into a DefinitionsIndex.
+func ReadDefinitionsIndex(path string) (DefinitionsIndex, error) {
+	idx, err := readYamlFile[definitionsIndex](path)
+	if err != nil {
+		return DefinitionsIndex{}, err
+	}
+	return DefinitionsIndex(idx), nil
 }
 
 // loadDefinitionsFile loads a single definitions YAML file into the result map
@@ -252,10 +336,48 @@ func MergeDefinitionsIntoNotebooks(
 }
 
 // GetDefinitionsNotes returns the definitions for a given book ID from the definitions map.
-// The returned map is keyed by title/notebook name, then by scene title.
+// The returned map is keyed by title/notebook name, then by scene index key (__index_N).
 func (r Reader) GetDefinitionsNotes(bookID string) (map[string]map[string][]Note, bool) {
 	defs, ok := r.definitionsMap[bookID]
 	return defs, ok
+}
+
+// GetDefinitionsNotesByTitle returns the same nested shape as
+// GetDefinitionsNotes but keyed by the HUMAN scene title
+// (scene.Metadata.Title) instead of the __index_N index key. Built from
+// the raw definitions so it matches exactly what the notebook-detail RPC
+// renders and what the skip/learning-history YAML stores.
+//
+// The quiz (loaders, counts, section summaries) reads through this so a
+// definitions word's scene title is identical across the quiz, the
+// detail page, and the learning-history file — otherwise a skip written
+// under "verto (to turn)" is invisible to a quiz that looks up
+// "__index_0", and the word's logs and skip end up split across two
+// scene entries. The __index_N map stays in place for the story-merge
+// path, which needs positional keys because story scene titles repeat.
+func (r Reader) GetDefinitionsNotesByTitle(bookID string) (map[string]map[string][]Note, bool) {
+	defs, ok := r.definitionsRaw[bookID]
+	if !ok || len(defs) == 0 {
+		return nil, false
+	}
+	result := make(map[string]map[string][]Note)
+	for _, def := range defs {
+		session := def.Metadata.Notebook
+		if session == "" {
+			session = def.Metadata.Title
+		}
+		if session == "" {
+			continue
+		}
+		if result[session] == nil {
+			result[session] = make(map[string][]Note)
+		}
+		for _, scene := range def.Scenes {
+			sceneTitle := scene.Metadata.Title
+			result[session][sceneTitle] = append(result[session][sceneTitle], scene.Expressions...)
+		}
+	}
+	return result, true
 }
 
 // GetDefinitionsBookIDs returns all book IDs that have definitions in the definitions map.

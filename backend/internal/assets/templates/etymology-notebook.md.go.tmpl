@@ -3,6 +3,26 @@
 {{ range $chapter := .Chapters }}
 ## {{ $chapter.Title }}
 
+{{ if $chapter.Concepts -}}
+### Concepts
+
+{{ range $c := $chapter.Concepts -}}
+#### {{ $c.Key }} — {{ $c.Meaning }}
+
+| Member | Language | Meaning |
+|--------|----------|---------|
+{{ range $m := $c.Members -}}
+| {{ $m.Origin }} | {{ if $m.Language }}{{ $m.Language }}{{ else }}—{{ end }} | {{ if $m.Meaning }}{{ $m.Meaning }}{{ else }}—{{ end }} |
+{{ end }}
+{{- if $c.Relations }}
+Relations:{{ range $i, $r := $c.Relations }}{{ if $i }};{{ end }} {{ $r.Type }} -> {{ $r.Other }}{{ end }}
+{{ end -}}
+{{- if $c.Note }}
+Note: {{ $c.Note }}
+{{ end }}
+{{ end }}
+{{ end -}}
+
 {{ if $chapter.Origins -}}
 ### Origins
 
@@ -17,6 +37,21 @@
 
 {{ range $word := $section.Words -}}
 {{ $display := $word.Expression }}{{ if $word.Definition }}{{ $display = $word.Definition }}{{ end -}}
+{{ if $word.ConceptHead -}}
+**{{ $word.ConceptHead }} — {{ $word.ConceptMeaning }}**
+
+| Member | Part of speech | Meaning |
+|--------|----------------|---------|
+{{ range $member := $word.ConceptMembers -}}
+| {{ $member.Name }} | {{ if $member.PartOfSpeech }}{{ $member.PartOfSpeech }}{{ else }}—{{ end }} | {{ if $member.Meaning }}{{ $member.Meaning }}{{ else }}—{{ end }} |
+{{ end }}
+{{- if $word.OriginParts }}
+Origins: {{ range $i, $ref := $word.OriginParts }}{{ if $i }} + {{ end }}*{{ $ref.Origin }}*{{ if $ref.Meaning }} ({{ $ref.Meaning }}){{ end }}{{ end }}
+{{ end -}}
+{{- if $word.Note }}
+Note: {{ $word.Note }}
+{{ end }}
+{{- else -}}
 - **{{ $display }}**{{ if $word.Pronunciation }} /{{ $word.Pronunciation }}/{{ end }}{{ if $word.PartOfSpeech }} [{{ $word.PartOfSpeech }}]{{ end }}{{ if $word.Meaning }}: {{ $word.Meaning }}{{ end }}
 {{- if $word.OriginParts }}
     - Origins: {{ range $i, $ref := $word.OriginParts }}{{ if $i }} + {{ end }}*{{ $ref.Origin }}*{{ if $ref.Meaning }} ({{ $ref.Meaning }}){{ end }}{{ end }}
@@ -24,6 +59,7 @@
 {{- if $word.Note }}
     - Note: {{ $word.Note }}
 {{- end }}
+{{ end -}}
 {{ end }}
 {{ end -}}
 {{ else if $chapter.Words -}}

@@ -319,10 +319,10 @@ export default function NotebookDetailPage() {
         {isFlatStory(selectedStory) ? (
           // Flashcard-style: no scene level, show words directly
           <VStack align="stretch" gap={2}>
-            {selectedStory.scenes[0].definitions
-              .filter((w) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
-              .map((word, i) => (
-                <WordCard key={i} word={word} originPartsMap={originPartsMap} />
+            {groupDefinitionsByConcept(selectedStory.scenes[0].definitions)
+              .filter(({ primary: w }) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
+              .map(({ primary: word, members }, i) => (
+                <WordCard key={i} word={word} conceptMembers={members} originPartsMap={originPartsMap} />
               ))}
           </VStack>
         ) : (
@@ -517,9 +517,9 @@ function SceneRow({
             </VStack>
           )}
           <VStack align="stretch" gap={2}>
-            {scene.definitions
-              .filter((w) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
-              .map((word, i) => {
+            {groupDefinitionsByConcept(scene.definitions)
+              .filter(({ primary: w }) => filter === "all" || (filter === "skipped" ? w.isSkipped : w.learningStatus === filter && !w.isSkipped))
+              .map(({ primary: word, members }, i) => {
                 const excerpt = findProseContext(
                   scene.statements,
                   word.expression,
@@ -539,7 +539,7 @@ function SceneRow({
                         </Text>
                       </Box>
                     )}
-                    <WordCard word={word} originPartsMap={originPartsMap} />
+                    <WordCard word={word} conceptMembers={members} originPartsMap={originPartsMap} />
                   </Box>
                 );
               })}
@@ -560,13 +560,61 @@ const VOCAB_SKIP_TYPES: { key: string; label: string; quizType: QuizType }[] = [
   { key: "freeform", label: "Freeform", quizType: QuizType.FREEFORM },
 ];
 
+// groupDefinitionsByConcept collapses concept member rows into a single
+// "primary" row per concept (preferring the head's NotebookWord) so the
+// scene renders one card per family. Non-concept words pass through. The
+// returned shape carries every member's NotebookWord so the card can list
+// per-member POS + meaning underneath one shared skip control — skipping
+// the head propagates to all members on the backend side.
+type ConceptGroup = {
+  primary: NotebookWord;
+  // members is populated when primary belongs to a multi-member concept;
+  // empty/undefined for standalone words. Always includes primary itself.
+  members?: NotebookWord[];
+};
+
+function groupDefinitionsByConcept(defs: NotebookWord[]): ConceptGroup[] {
+  const out: ConceptGroup[] = [];
+  const indexByHead = new Map<string, number>();
+  for (const word of defs) {
+    const head = word.conceptHead;
+    if (!head) {
+      out.push({ primary: word });
+      continue;
+    }
+    const idx = indexByHead.get(head);
+    if (idx === undefined) {
+      indexByHead.set(head, out.length);
+      out.push({ primary: word, members: [word] });
+      continue;
+    }
+    const group = out[idx];
+    group.members?.push(word);
+    // Upgrade to the head's row when we encounter it after a non-head
+    // member — the head carries the canonical display fields.
+    if (word.expression === head && group.primary.expression !== head) {
+      group.primary = word;
+    }
+  }
+  return out;
+}
+
 function WordCard({
   word,
+  conceptMembers,
   originPartsMap,
 }: {
   word: NotebookWord;
+  // conceptMembers is set when this card represents a multi-member
+  // definitions concept. All members of the same concept (including the
+  // head shown in `word`) appear inside this card; skip controls apply
+  // to the concept as a whole — the backend propagates a skip on the
+  // head to every sibling, so the user manages the family from one
+  // place instead of touching each member individually.
+  conceptMembers?: NotebookWord[];
   originPartsMap: OriginPartsMap;
 }) {
+  const isConcept = !!word.conceptHead && (conceptMembers?.length ?? 0) > 1;
   const [open, setOpen] = useState(false);
   const [skippedTypes, setSkippedTypes] = useState<Set<string>>(
     () => new Set(word.skippedQuizTypes),
@@ -664,7 +712,7 @@ function WordCard({
           gap={2}
         >
           <Text fontWeight="semibold" flex="1">
-            {word.expression}
+            {isConcept ? word.conceptHead : word.expression}
           </Text>
           {isSkippedAnywhere ? (
             <SkippedTypeBadges types={Array.from(skippedTypes)} />
@@ -673,8 +721,24 @@ function WordCard({
           )}
         </Box>
         <Text color="fg.muted" mt={1}>
-          {word.meaning || word.definition}
+          {isConcept ? word.conceptMeaning : (word.meaning || word.definition)}
         </Text>
+        {isConcept && (
+          <Box mt={2}>
+            <Text fontSize="xs" color="fg.muted" fontStyle="italic" mb={1}>
+              Family ({conceptMembers!.length})
+            </Text>
+            <VStack align="stretch" gap={0.5} pl={2}>
+              {conceptMembers!.map((m, i) => (
+                <Text key={i} fontSize="xs">
+                  <Text as="span" fontWeight="semibold">{m.expression}</Text>
+                  {m.partOfSpeech && <Text as="span" color="fg.muted"> [{m.partOfSpeech}]</Text>}
+                  {m.meaning && <Text as="span" color="fg.muted">: {m.meaning}</Text>}
+                </Text>
+              ))}
+            </VStack>
+          </Box>
+        )}
         {etymologyData && (
           <Box mt={2}>
             <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>

@@ -603,3 +603,132 @@ func countNewBreakdownLogs(t *testing.T, path string) (tele, graph int) {
 	}
 	return tele, graph
 }
+
+// TestEtymologyReverseQuiz_ClusterGraphCarriesMemberMeaning pins the
+// behavior the user asked for: when the reverse quiz renders a CLUSTER
+// graph (two members of one concept), every non-blank ORIGIN node
+// carries its meaning prose from the etymology YAML — that's how
+// inter-member relationships like "X (past participle of Y)" surface
+// to the learner without a new graph shape or schema field.
+//
+// The fixture uses a made-up Latin verb / past-participle pair (writus /
+// scripta — not in langner's actual data) so it doesn't reference the
+// user's real notebook contents. The reverse quiz blanks one member;
+// the OTHER member's node must include its meaning text.
+func TestEtymologyReverseQuiz_ClusterGraphCarriesMemberMeaning(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymologyDir := filepath.Join(tmpDir, "etymology")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+
+	nbDir := filepath.Join(etymologyDir, "demo-roots")
+	require.NoError(t, os.MkdirAll(nbDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "index.yml"), []byte(`id: demo-roots
+kind: Etymology
+name: Demo Roots
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Two members of one concept; one carries a relationship-bearing
+	// meaning that references the other ("past participle of writus").
+	require.NoError(t, os.WriteFile(filepath.Join(nbDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: writus
+    language: Latin
+    meaning: to write
+  - origin: scripta
+    language: Latin
+    meaning: "written (past participle of writus)"
+concepts:
+  - key: writing
+    meaning: to write
+    members:
+      - { origin: writus,  language: Latin }
+      - { origin: scripta, language: Latin }
+`), 0o644))
+	// Both origins need a freeform pass + a correct answer to clear the
+	// standard-quiz eligibility gate so the reverse quiz can also pick
+	// them up.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-roots.yml"), []byte(`- metadata:
+    id: demo-roots
+    title: Demo Roots
+  scenes:
+    - metadata:
+        title: "Session 1"
+      expressions:
+        - expression: writus
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01"
+              quiz_type: etymology_freeform
+              interval_days: 7
+        - expression: scripta
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01"
+              quiz_type: etymology_freeform
+              interval_days: 7
+`), 0o644))
+
+	ctrl := gomock.NewController(t)
+	openai := mock_inference.NewMockClient(ctrl)
+	openai.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, _ inference.ValidateWordFormRequest) (inference.ValidateWordFormResponse, error) {
+			return inference.ValidateWordFormResponse{Classification: inference.ClassificationSameWord, Reason: "ok", Quality: 4}, nil
+		}).AnyTimes()
+
+	handler := newEtymologyTestHandler(t, openai, etymologyDir, learningDir)
+	ctx := context.Background()
+
+	startResp, err := handler.StartEtymologyQuiz(ctx, connect.NewRequest(&apiv1.StartEtymologyQuizRequest{
+		EtymologyNotebookIds: []string{"demo-roots"},
+		Mode:                 apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE,
+		IncludeUnstudied:     true,
+	}))
+	require.NoError(t, err)
+	cards := startResp.Msg.GetCards()
+	require.NotEmpty(t, cards, "reverse quiz must produce at least one card")
+
+	// Scan every CLUSTER graph for a non-blank ORIGIN node that carries
+	// its YAML meaning prose. The forward-mask blanks out siblings that
+	// are answers to LATER cards (label "[…]", meaning cleared), so the
+	// visible-with-meaning sibling is the one whose origin was an EARLIER
+	// card — but at least one such node must exist across the two cards,
+	// proving the meaning reaches the graph (the issue-#11 behaviour).
+	var foundNonBlankMeaning string
+	sawCluster := false
+	for _, c := range cards {
+		gp := c.GetGraphPrompt()
+		if gp == nil || gp.GetShape() != apiv1.GraphPrompt_CLUSTER {
+			continue
+		}
+		sawCluster = true
+		for _, n := range gp.GetNodes() {
+			if n.GetKind() != apiv1.GraphNode_ORIGIN {
+				continue
+			}
+			if n.GetId() == gp.GetBlankNodeId() {
+				continue
+			}
+			if n.GetLabel() == graphAnswerMask {
+				// Masked future answer — meaning intentionally cleared.
+				assert.Empty(t, n.GetMeaning(),
+					"a masked future-answer node must not leak its meaning")
+				continue
+			}
+			if n.GetMeaning() != "" {
+				foundNonBlankMeaning = n.GetMeaning()
+			}
+		}
+	}
+	require.True(t, sawCluster, "expected at least one CLUSTER graph prompt across the cards")
+	require.NotEmpty(t, foundNonBlankMeaning,
+		"a visible (non-masked) sibling must carry its YAML meaning prose")
+	assert.Contains(t,
+		[]string{"to write", "written (past participle of writus)"},
+		foundNonBlankMeaning,
+		"non-blank meaning should match one of the YAML origins' glosses")
+}

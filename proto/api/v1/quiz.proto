@@ -45,7 +45,14 @@ service QuizService {
   rpc SubmitEtymologyFreeformAnswer(SubmitEtymologyFreeformAnswerRequest) returns (SubmitEtymologyFreeformAnswerResponse);
 }
 
-message GetQuizOptionsRequest {}
+message GetQuizOptionsRequest {
+  // include_unstudied, when true, makes review counts on every
+  // notebook and section reflect the "Include unstudied words" toggle
+  // on the quiz start page: never-seen words and words still within
+  // their SR interval are added to the due count, matching what the
+  // actual quiz will load. Defaults to false (due-only counts).
+  bool include_unstudied = 1;
+}
 
 message GetQuizOptionsResponse {
   repeated NotebookSummary notebooks = 1;
@@ -66,6 +73,11 @@ message NotebookSummary {
   // and session titles for etymology notebooks. Empty for flashcard or
   // definitions-only notebooks that have no section hierarchy.
   repeated NotebookSectionSummary sections = 8;
+  // etymology_reverse_review_count is the per-notebook due count for the
+  // etymology reverse quiz. etymology_review_count is the standard count.
+  // The two can differ because the same origin can be due in one mode and
+  // not in the other (each mode tracks its own SR interval and skip flag).
+  int32 etymology_reverse_review_count = 9;
 }
 
 // NotebookSectionSummary holds the display title and per-mode review counts
@@ -75,6 +87,7 @@ message NotebookSectionSummary {
   int32 review_count = 2;
   int32 reverse_review_count = 3;
   int32 etymology_review_count = 4;
+  int32 etymology_reverse_review_count = 5;
 }
 
 // NotebookSection narrows a quiz request to specific sections within a single
@@ -107,6 +120,14 @@ message Flashcard {
   // (e.g., "racked up"), while entry is the canonical/dictionary form
   // (e.g., "rack up"). Used for highlighting the expression in context.
   string original_entry = 4;
+
+  // concept_head names the head expression of the definitions concept this
+  // flashcard belongs to (empty when not a concept). When set, the UI may
+  // render a "Family" chip listing concept_members and surface
+  // concept_meaning as the umbrella prompt.
+  string concept_head = 5;
+  repeated string concept_members = 6;
+  string concept_meaning = 7;
 }
 
 message Example {
@@ -135,13 +156,11 @@ message SubmitAnswerRequest {
   int64 note_id = 1 [
     (buf.validate.field).int64.gt = 0
   ];
-  string answer = 2 [
-    (buf.validate.field).string = {
-      min_len: 1,
-      pattern: "\\S"
-    }
-  ];
+  // answer is the user's typed meaning. When is_skipped is true the field is
+  // ignored and the backend records the result as incorrect without grading.
+  string answer = 2;
   int64 response_time_ms = 3;
+  bool is_skipped = 4;
 }
 
 message SubmitAnswerResponse {
@@ -170,6 +189,12 @@ message StartReverseQuizRequest {
   // notebook_sections, when non-empty, replaces notebook_ids and allows the
   // caller to narrow the quiz to specific sections within each notebook.
   repeated NotebookSection notebook_sections = 3;
+  // include_unstudied mirrors the standard quiz toggle: when true, words
+  // that haven't cleared the freeform/correct prerequisite (including
+  // never-seen words) are included; studied words still respect their
+  // reverse SR interval. Ignored when list_missing_context is set (that
+  // mode lists by context presence, not review state).
+  bool include_unstudied = 4;
 }
 
 message StartReverseQuizResponse {
@@ -183,6 +208,13 @@ message ReverseFlashcard {
   string notebook_name = 4;
   string story_title = 5;
   string scene_title = 6;
+
+  // concept_head/members/meaning carry the same concept context as on
+  // Flashcard; reverse quizzes accept any concept_member as a correct
+  // answer when concept_head is set.
+  string concept_head = 7;
+  repeated string concept_members = 8;
+  string concept_meaning = 9;
 }
 
 message ContextSentence {
@@ -194,17 +226,15 @@ message SubmitReverseAnswerRequest {
   int64 note_id = 1 [
     (buf.validate.field).int64.gt = 0
   ];
-  string answer = 2 [
-    (buf.validate.field).string = {
-      min_len: 1,
-      pattern: "\\S"
-    }
-  ];
+  // answer is the user's guess at the word. When is_skipped is true the field
+  // is ignored and the backend records the result as incorrect without grading.
+  string answer = 2;
   int64 response_time_ms = 3;
   // When true, a "synonym" classification is persisted as a correct learning
   // log entry (with reduced quality). The frontend sets this on retry batches
   // where the user has already had a chance to provide the exact word.
   bool accept_synonym_as_correct = 4;
+  bool is_skipped = 5;
 }
 
 message SubmitReverseAnswerResponse {
@@ -410,6 +440,15 @@ message GraphNode {
   // meaning of the missing English word so the user can guess uniquely).
   string language = 4;
   string hint = 5;
+  // meaning is the origin's English gloss as recorded in the etymology
+  // YAML (e.g. "written (past participle of scribo)"). Rendered under
+  // each ORIGIN node in CLUSTER / ANTONYM_PAIR shapes so the learner
+  // can see how members of the same concept relate to each other —
+  // not just one specific derivation rule but whatever the YAML
+  // prose says ("form of con- before b, m, p", "adverb form of bonus",
+  // "uncle on the mother's side", etc.). Empty on blank nodes (no leak
+  // of the answer) and on CONCEPT / FORM / ENGLISH_WORD nodes.
+  string meaning = 6;
 }
 
 message GraphEdge {
@@ -435,8 +474,10 @@ message StartEtymologyQuizResponse {
 
 message SubmitEtymologyStandardAnswerRequest {
   int64 card_id = 1 [(buf.validate.field).int64.gt = 0];
-  string answer = 2 [(buf.validate.field).string = {min_len: 1, pattern: "\\S"}];
+  // answer: user's guess. Ignored when is_skipped=true.
+  string answer = 2;
   int64 response_time_ms = 3;
+  bool is_skipped = 4;
 }
 
 message SubmitEtymologyStandardAnswerResponse {
@@ -453,6 +494,12 @@ message SubmitEtymologyStandardAnswerResponse {
   // moment of greatest engagement (right after they tried to retrieve
   // its meaning). Frontend highlights the card's origin in the graph.
   GraphPrompt graph_context = 7;
+  // example_words lists up to a handful of English vocabulary entries
+  // that derive from this origin (collected from the definitions whose
+  // origin_parts reference this origin). Helps the learner anchor an
+  // abstract origin to concrete vocabulary they already know. Capped at
+  // 5 server-side so the feedback card stays compact.
+  repeated string example_words = 8;
 }
 
 message BatchSubmitEtymologyStandardAnswersRequest {
@@ -467,8 +514,10 @@ message BatchSubmitEtymologyStandardAnswersResponse {
 
 message SubmitEtymologyReverseAnswerRequest {
   int64 card_id = 1 [(buf.validate.field).int64.gt = 0];
-  string answer = 2 [(buf.validate.field).string = {min_len: 1, pattern: "\\S"}];
+  // answer: user's guess. Ignored when is_skipped=true.
+  string answer = 2;
   int64 response_time_ms = 3;
+  bool is_skipped = 4;
 }
 
 message SubmitEtymologyReverseAnswerResponse {
@@ -480,6 +529,8 @@ message SubmitEtymologyReverseAnswerResponse {
   string next_review_date = 6;
   string learned_at = 7;
   int64 note_id = 8;
+  // example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+  repeated string example_words = 9;
 }
 
 message BatchSubmitEtymologyReverseAnswersRequest {
@@ -528,4 +579,6 @@ message SubmitEtymologyFreeformAnswerResponse {
   // grader accepts any sense's meaning as correct; this field surfaces the
   // alternatives so the user is reminded that multi-sense origins exist.
   repeated EtymologyOriginSense all_senses = 10;
+  // example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
+  repeated string example_words = 11;
 }

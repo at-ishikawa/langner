@@ -140,6 +140,13 @@ type ConceptRelationSource interface {
 	FindAll(ctx context.Context) ([]notebook.ConceptRelationForImport, error)
 }
 
+// DefinitionConceptSource emits one entry per concepts: block declaration
+// across all definitions books. Definition concepts group member
+// expressions (the head + its variants) under one umbrella meaning.
+type DefinitionConceptSource interface {
+	FindAll(ctx context.Context) ([]notebook.DefinitionConceptForImport, error)
+}
+
 // ImportNotesResult tracks counts for note import.
 type ImportNotesResult struct {
 	NotesNew, NotesSkipped, NotesUpdated int
@@ -187,6 +194,14 @@ type ImportEtymologyResult struct {
 	ConceptMembersDeleted int
 	RelationsNew     int
 	RelationsDeleted int
+	// Definition concept counts populated by ImportDefinitionConcepts.
+	// Mirrors the semantic-side fields but tracks the definitions-book
+	// concept tables (definition_concepts / definition_concept_members).
+	DefinitionConceptsNew         int
+	DefinitionConceptsUpdated     int
+	DefinitionConceptsDeleted     int
+	DefinitionConceptMembersNew   int
+	DefinitionConceptMembersDeleted int
 }
 
 // ImportOptions controls import behavior.
@@ -213,6 +228,8 @@ type Importer struct {
 	semanticConceptSrc      SemanticConceptSource
 	conceptRelationRepo     notebook.ConceptRelationRepository
 	conceptRelationSrc      ConceptRelationSource
+	definitionConceptRepo   notebook.DefinitionConceptRepository
+	definitionConceptSrc    DefinitionConceptSource
 	writer              io.Writer
 
 	// touchedNoteIDs collects every DB note ID that ImportNotes or
@@ -291,6 +308,19 @@ func (imp *Importer) WithConceptRelations(
 ) *Importer {
 	imp.conceptRelationRepo = relationRepo
 	imp.conceptRelationSrc = relationSrc
+	return imp
+}
+
+// WithDefinitionConcepts configures the definitions-side concept import
+// dependencies. When either is nil, ImportAll skips the definition-concept
+// phase (notes.concept_key cache survives independently — see migration
+// 012 — but the canonical declaration won't be persisted).
+func (imp *Importer) WithDefinitionConcepts(
+	conceptRepo notebook.DefinitionConceptRepository,
+	conceptSrc DefinitionConceptSource,
+) *Importer {
+	imp.definitionConceptRepo = conceptRepo
+	imp.definitionConceptSrc = conceptSrc
 	return imp
 }
 
@@ -416,6 +446,7 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 		existing.Meaning = src.Meaning
 		existing.Level = src.Level
 		existing.DictionaryNumber = src.DictionaryNumber
+		existing.ConceptKey = src.ConceptKey
 		if _, alreadyCounted := state.updateNotes[key]; !alreadyCounted {
 			state.result.NotesUpdated++
 		}
@@ -748,6 +779,15 @@ type DictionarySink interface {
 	WriteAll(entries []rapidapi.DictionaryExportEntry) error
 }
 
+// DefinitionsBookSink writes per-book definitions YAML output. Today only
+// the concepts: block is round-tripped through this sink — note bodies
+// for definitions books are written via the regular NoteSink path under
+// books/. WriteConcepts groups by (bookID -> session_title -> concepts)
+// so each session file holds the concepts declared inside it.
+type DefinitionsBookSink interface {
+	WriteConcepts(perBook map[string]map[string][]notebook.DefinitionConcept) error
+}
+
 // ExportNotesResult tracks counts for note export.
 type ExportNotesResult struct {
 	NotesExported int
@@ -763,6 +803,12 @@ type ExportDictionaryResult struct {
 	EntriesExported int
 }
 
+// ExportDefinitionConceptsResult tracks counts for definition-concept
+// export — the number of concepts written across all definitions books.
+type ExportDefinitionConceptsResult struct {
+	ConceptsExported int
+}
+
 // Exporter reads DB data and writes to YAML files.
 type Exporter struct {
 	noteRepo       notebook.NoteRepository
@@ -771,7 +817,11 @@ type Exporter struct {
 	noteSink       NoteSink
 	learningSink   LearningSink
 	dictionarySink DictionarySink
-	writer         io.Writer
+	// Optional definition-concept side. When either is nil,
+	// ExportAll skips the definition-concept phase.
+	definitionConceptRepo notebook.DefinitionConceptRepository
+	definitionsBookSink   DefinitionsBookSink
+	writer                io.Writer
 }
 
 // NewExporter creates a new Exporter.
@@ -785,6 +835,18 @@ func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.Learnin
 		dictionarySink: dictionarySink,
 		writer:         writer,
 	}
+}
+
+// WithDefinitionConcepts configures the definitions-concept export
+// dependencies. When either is nil, ExportAll skips the concepts phase
+// (note bodies still round-trip via NoteSink/books/).
+func (exp *Exporter) WithDefinitionConcepts(
+	conceptRepo notebook.DefinitionConceptRepository,
+	sink DefinitionsBookSink,
+) *Exporter {
+	exp.definitionConceptRepo = conceptRepo
+	exp.definitionsBookSink = sink
+	return exp
 }
 
 // ExportNotes reads notes from the database and writes them via the sink.
@@ -823,6 +885,82 @@ func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLog
 	_, _ = fmt.Fprintf(exp.writer, "  Exported %d learning logs\n", len(logs))
 	return &ExportLearningLogsResult{
 		LogsExported: len(logs),
+	}, nil
+}
+
+// ExportDefinitionConcepts reads definition_concepts + members from the
+// database and writes them back to the definitions YAML output via the
+// configured sink. Each concept is grouped by (notebook_id, session_title)
+// so the resulting YAML mirrors how the importer originally read them.
+// Returns nil when no sink is configured.
+func (exp *Exporter) ExportDefinitionConcepts(ctx context.Context) (*ExportDefinitionConceptsResult, error) {
+	if exp.definitionConceptRepo == nil || exp.definitionsBookSink == nil {
+		return &ExportDefinitionConceptsResult{}, nil
+	}
+
+	concepts, err := exp.definitionConceptRepo.ListAllDefinitionConcepts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load definition concepts: %w", err)
+	}
+	ids := make([]int64, 0, len(concepts))
+	for _, c := range concepts {
+		ids = append(ids, c.ID)
+	}
+	members, err := exp.definitionConceptRepo.ListDefinitionConceptMembersByConceptIDs(ctx, ids)
+	if err != nil {
+		return nil, fmt.Errorf("load definition concept members: %w", err)
+	}
+
+	// Group members by concept_id so each concept can attach its
+	// expression list. Within a concept the members are sorted for
+	// deterministic output.
+	membersByConcept := make(map[int64][]notebook.DefinitionConceptMemberRecord, len(concepts))
+	for _, m := range members {
+		membersByConcept[m.ConceptID] = append(membersByConcept[m.ConceptID], m)
+	}
+
+	// Build the per-book per-session concept slices. The session title
+	// of a concept is taken from the first member's session (members
+	// declared in the same session group together; concepts declared
+	// across multiple sessions emit under the first-seen session,
+	// which is enough for the round-trip since meaning is shared).
+	perBook := make(map[string]map[string][]notebook.DefinitionConcept)
+	conceptCount := 0
+	for _, c := range concepts {
+		ms := membersByConcept[c.ID]
+		sort.Slice(ms, func(i, j int) bool {
+			if ms[i].SessionTitle != ms[j].SessionTitle {
+				return ms[i].SessionTitle < ms[j].SessionTitle
+			}
+			return ms[i].Expression < ms[j].Expression
+		})
+		sessionTitle := ""
+		if len(ms) > 0 {
+			sessionTitle = ms[0].SessionTitle
+		}
+		expressions := make([]string, 0, len(ms))
+		for _, m := range ms {
+			expressions = append(expressions, m.Expression)
+		}
+		if perBook[c.NotebookID] == nil {
+			perBook[c.NotebookID] = make(map[string][]notebook.DefinitionConcept)
+		}
+		perBook[c.NotebookID][sessionTitle] = append(perBook[c.NotebookID][sessionTitle], notebook.DefinitionConcept{
+			Head:         c.Head,
+			Meaning:      c.Meaning,
+			Expressions:  expressions,
+			SessionTitle: sessionTitle,
+		})
+		conceptCount++
+	}
+
+	if err := exp.definitionsBookSink.WriteConcepts(perBook); err != nil {
+		return nil, fmt.Errorf("write definition concepts: %w", err)
+	}
+
+	_, _ = fmt.Fprintf(exp.writer, "  Exported %d definition concepts\n", conceptCount)
+	return &ExportDefinitionConceptsResult{
+		ConceptsExported: conceptCount,
 	}, nil
 }
 
@@ -1501,6 +1639,232 @@ func (imp *Importer) ImportConceptRelations(ctx context.Context, opts ImportOpti
 	return nil
 }
 
+// ImportDefinitionConcepts reconciles definition_concepts and
+// definition_concept_members against the YAML source. Within a book the
+// first declaration of a head sets meaning; subsequent declarations
+// contribute only members. Reconcile drops concepts/members the YAML no
+// longer claims. This mirrors ImportSemanticConcepts but for
+// definitions-side concepts: members are raw expression strings rather
+// than (origin, language) tuples, so there's no origin-resolution step.
+func (imp *Importer) ImportDefinitionConcepts(ctx context.Context, opts ImportOptions, result *ImportEtymologyResult) error {
+	if imp.definitionConceptRepo == nil || imp.definitionConceptSrc == nil {
+		return nil
+	}
+
+	source, err := imp.definitionConceptSrc.FindAll(ctx)
+	if err != nil {
+		return fmt.Errorf("read source definition concepts: %w", err)
+	}
+
+	// Per-book aggregation: first declaration wins on meaning; members
+	// accumulate with their declaring session title.
+	type bookData struct {
+		declOrder []string
+		firstDecl map[string]notebook.DefinitionConceptForImport
+		memberSet map[string]map[string]string // head -> expression -> sessionTitle
+	}
+	byBook := make(map[string]*bookData)
+	for _, src := range source {
+		b, ok := byBook[src.NotebookID]
+		if !ok {
+			b = &bookData{
+				firstDecl: make(map[string]notebook.DefinitionConceptForImport),
+				memberSet: make(map[string]map[string]string),
+			}
+			byBook[src.NotebookID] = b
+		}
+		first, seen := b.firstDecl[src.Head]
+		if !seen {
+			b.firstDecl[src.Head] = src
+			b.declOrder = append(b.declOrder, src.Head)
+		} else if first.Meaning != src.Meaning {
+			_, _ = fmt.Fprintf(imp.writer,
+				"  [WARN] definition concept %q in book %q redeclared with different meaning (keeping first)\n",
+				src.Head, src.NotebookID)
+		}
+		if b.memberSet[src.Head] == nil {
+			b.memberSet[src.Head] = make(map[string]string)
+		}
+		for _, m := range src.Members {
+			if _, exists := b.memberSet[src.Head][m]; !exists {
+				b.memberSet[src.Head][m] = src.SessionTitle
+			}
+		}
+	}
+
+	for notebookID, b := range byBook {
+		if err := imp.reconcileBookDefinitionConcepts(ctx, opts, notebookID, b.declOrder, b.firstDecl, b.memberSet, result); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reconcileBookDefinitionConcepts upserts definition concepts and members
+// for one book. Mirrors reconcileBookConcepts on the semantic side: new
+// concepts insert, changed meaning updates, vanished members/concepts are
+// deleted via ON DELETE CASCADE-aware batch deletes.
+func (imp *Importer) reconcileBookDefinitionConcepts(
+	ctx context.Context,
+	opts ImportOptions,
+	notebookID string,
+	declOrder []string,
+	firstDecl map[string]notebook.DefinitionConceptForImport,
+	memberSet map[string]map[string]string,
+	result *ImportEtymologyResult,
+) error {
+	existingConcepts, err := imp.definitionConceptRepo.ListDefinitionConceptsByNotebook(ctx, notebookID)
+	if err != nil {
+		return fmt.Errorf("load existing definition concepts for %s: %w", notebookID, err)
+	}
+	conceptIDByHead := make(map[string]int64, len(existingConcepts))
+	conceptByHead := make(map[string]*notebook.DefinitionConceptRecord, len(existingConcepts))
+	for i := range existingConcepts {
+		row := &existingConcepts[i]
+		conceptIDByHead[row.Head] = row.ID
+		conceptByHead[row.Head] = row
+	}
+
+	var newConcepts []*notebook.DefinitionConceptRecord
+	var updateConcepts []*notebook.DefinitionConceptRecord
+	claimedHeads := make(map[string]bool, len(declOrder))
+	for _, head := range declOrder {
+		decl := firstDecl[head]
+		claimedHeads[head] = true
+		if existing, ok := conceptByHead[head]; ok {
+			if existing.Meaning != decl.Meaning {
+				existing.Meaning = decl.Meaning
+				updateConcepts = append(updateConcepts, existing)
+				result.DefinitionConceptsUpdated++
+			}
+			continue
+		}
+		rec := &notebook.DefinitionConceptRecord{
+			NotebookID: notebookID,
+			Head:       head,
+			Meaning:    decl.Meaning,
+		}
+		newConcepts = append(newConcepts, rec)
+		result.DefinitionConceptsNew++
+	}
+
+	if !opts.DryRun && len(newConcepts) > 0 {
+		if err := imp.definitionConceptRepo.BatchCreateConcepts(ctx, newConcepts); err != nil {
+			return fmt.Errorf("batch create definition_concepts: %w", err)
+		}
+		for _, rec := range newConcepts {
+			conceptIDByHead[rec.Head] = rec.ID
+		}
+	}
+	if !opts.DryRun && len(updateConcepts) > 0 {
+		if err := imp.definitionConceptRepo.BatchUpdateConcepts(ctx, updateConcepts); err != nil {
+			return fmt.Errorf("batch update definition_concepts: %w", err)
+		}
+	}
+
+	// Member reconcile: load existing members and compare against the
+	// YAML-claimed (concept_id, expression) set. New tuples insert;
+	// surviving tuples no-op; vanished tuples delete.
+	ids := make([]int64, 0, len(conceptIDByHead))
+	for _, id := range conceptIDByHead {
+		ids = append(ids, id)
+	}
+	existingMembers, err := imp.definitionConceptRepo.ListDefinitionConceptMembersByConceptIDs(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("load existing definition concept members for %s: %w", notebookID, err)
+	}
+	type memberDBKey struct {
+		ConceptID  int64
+		Expression string
+	}
+	existingMemberID := make(map[memberDBKey]int64, len(existingMembers))
+	for _, m := range existingMembers {
+		existingMemberID[memberDBKey{m.ConceptID, m.Expression}] = m.ID
+	}
+
+	var newMembers []*notebook.DefinitionConceptMemberRecord
+	claimedMemberKeys := make(map[memberDBKey]bool)
+	for head, exprs := range memberSet {
+		conceptID, ok := conceptIDByHead[head]
+		if !ok {
+			// First-pass dry-run: concept not yet in DB.
+			continue
+		}
+		for expr, sessionTitle := range exprs {
+			dbKey := memberDBKey{conceptID, expr}
+			claimedMemberKeys[dbKey] = true
+			if _, exists := existingMemberID[dbKey]; exists {
+				continue
+			}
+			newMembers = append(newMembers, &notebook.DefinitionConceptMemberRecord{
+				ConceptID:    conceptID,
+				Expression:   expr,
+				SessionTitle: sessionTitle,
+			})
+			result.DefinitionConceptMembersNew++
+		}
+	}
+	if !opts.DryRun && len(newMembers) > 0 {
+		if err := imp.definitionConceptRepo.BatchCreateMembers(ctx, newMembers); err != nil {
+			return fmt.Errorf("batch create definition_concept_members: %w", err)
+		}
+	}
+
+	// Reconcile: drop members on still-claimed concepts that the YAML no
+	// longer declares. Members on concepts the YAML drops entirely will be
+	// cascade-deleted with the concept itself below.
+	var staleMemberIDs []int64
+	for dbKey, id := range existingMemberID {
+		if claimedMemberKeys[dbKey] {
+			continue
+		}
+		if claimedDefinitionConceptHeadForID(conceptIDByHead, dbKey.ConceptID, claimedHeads) {
+			staleMemberIDs = append(staleMemberIDs, id)
+		}
+	}
+	if len(staleMemberIDs) > 0 {
+		_, _ = fmt.Fprintf(imp.writer, "  [RECONCILE] removing %d stale definition_concept_member(s) in %s\n", len(staleMemberIDs), notebookID)
+		if !opts.DryRun {
+			if err := imp.definitionConceptRepo.BatchDeleteMembers(ctx, staleMemberIDs); err != nil {
+				return fmt.Errorf("delete stale definition_concept_members: %w", err)
+			}
+		}
+		result.DefinitionConceptMembersDeleted += len(staleMemberIDs)
+	}
+
+	// Reconcile: delete concepts the YAML no longer claims (cascade drops
+	// dependent members).
+	var staleConceptIDs []int64
+	for _, row := range existingConcepts {
+		if !claimedHeads[row.Head] {
+			staleConceptIDs = append(staleConceptIDs, row.ID)
+		}
+	}
+	if len(staleConceptIDs) > 0 {
+		_, _ = fmt.Fprintf(imp.writer, "  [RECONCILE] removing %d stale definition_concept(s) in %s\n", len(staleConceptIDs), notebookID)
+		if !opts.DryRun {
+			if err := imp.definitionConceptRepo.BatchDeleteConcepts(ctx, staleConceptIDs); err != nil {
+				return fmt.Errorf("delete stale definition_concepts: %w", err)
+			}
+		}
+		result.DefinitionConceptsDeleted += len(staleConceptIDs)
+	}
+	return nil
+}
+
+// claimedDefinitionConceptHeadForID returns true when the concept ID still
+// belongs to a YAML-claimed head — used so the member-reconcile loop
+// doesn't try to delete members of a concept that's about to be
+// cascade-deleted anyway.
+func claimedDefinitionConceptHeadForID(conceptIDByHead map[string]int64, conceptID int64, claimedHeads map[string]bool) bool {
+	for head, id := range conceptIDByHead {
+		if id == conceptID {
+			return claimedHeads[head]
+		}
+	}
+	return false
+}
+
 // etymologyOriginCompositeKey builds the lookup key used across ingestion
 // to match a YAML origin reference to its DB row. Sense is included since
 // migration 011: multi-sense origins are distinct rows keyed by
@@ -1603,6 +1967,9 @@ func (imp *Importer) ImportAll(ctx context.Context, opts ImportOptions) (*Import
 	if err := imp.ImportConceptRelations(ctx, opts, etymResult); err != nil {
 		return nil, fmt.Errorf("import concept relations: %w", err)
 	}
+	if err := imp.ImportDefinitionConcepts(ctx, opts, etymResult); err != nil {
+		return nil, fmt.Errorf("import definition concepts: %w", err)
+	}
 
 	learningResult, err := imp.ImportLearningLogs(ctx, opts)
 	if err != nil {
@@ -1629,12 +1996,14 @@ func (imp *Importer) ImportAll(ctx context.Context, opts ImportOptions) (*Import
 
 // ExportAllResult holds combined results from exporting all data types.
 type ExportAllResult struct {
-	Notes      *ExportNotesResult
-	Learning   *ExportLearningLogsResult
-	Dictionary *ExportDictionaryResult
+	Notes              *ExportNotesResult
+	Learning           *ExportLearningLogsResult
+	Dictionary         *ExportDictionaryResult
+	DefinitionConcepts *ExportDefinitionConceptsResult
 }
 
-// ExportAll runs all export steps: notes, learning logs, and dictionary.
+// ExportAll runs all export steps: notes, learning logs, dictionary, and
+// definition concepts (when configured).
 func (exp *Exporter) ExportAll(ctx context.Context) (*ExportAllResult, error) {
 	noteResult, err := exp.ExportNotes(ctx)
 	if err != nil {
@@ -1651,10 +2020,16 @@ func (exp *Exporter) ExportAll(ctx context.Context) (*ExportAllResult, error) {
 		return nil, fmt.Errorf("export dictionary: %w", err)
 	}
 
+	defConceptResult, err := exp.ExportDefinitionConcepts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("export definition concepts: %w", err)
+	}
+
 	return &ExportAllResult{
-		Notes:      noteResult,
-		Learning:   learningResult,
-		Dictionary: dictResult,
+		Notes:              noteResult,
+		Learning:           learningResult,
+		Dictionary:         dictResult,
+		DefinitionConcepts: defConceptResult,
 	}, nil
 }
 

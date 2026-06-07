@@ -1,0 +1,20 @@
+# Dedicated notebook for the etymology BatchFeedback action scenarios.
+# Word Roots' graph + tele go into SR cooldown after the "both correct"
+# Standard scenario answers them today, so the next Standard scenario
+# (the BatchFeedback actions) would see 0 cards. Word Stems provides a
+# fresh pair of never-studied origins so each multi-card scenario has
+# its own 2 cards without an inter-scenario data reset. Reverse mode
+# tracks Assembly logs separately from Standard's Breakdown writes, so
+# this notebook's origins remain due for the Reverse BatchFeedback
+# scenario even after Standard has answered them.
+metadata:
+  title: "Word Stems"
+origins:
+  - origin: scribo
+    type: root
+    language: Latin
+    meaning: write
+  - origin: dico
+    type: root
+    language: Latin
+    meaning: say

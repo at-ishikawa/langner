@@ -805,20 +805,11 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 			wantCode: connect.CodeInvalidArgument,
 			wantErr:  true,
 		},
-		{
-			name:     "returns INVALID_ARGUMENT when answer is empty",
-			noteID:   1,
-			answer:   "",
-			wantCode: connect.CodeInvalidArgument,
-			wantErr:  true,
-		},
-		{
-			name:     "returns INVALID_ARGUMENT when answer is whitespace only",
-			noteID:   1,
-			answer:   "   ",
-			wantCode: connect.CodeInvalidArgument,
-			wantErr:  true,
-		},
+		// The min_len:1 / pattern:"\\S" constraint on `answer` was removed
+		// when is_skipped was added: an empty answer is now legitimate when
+		// is_skipped=true (the backend records the answer as incorrect
+		// without grading). The empty-answer rejection assertions that
+		// used to live here are obsolete.
 		{
 			name:     "returns NOT_FOUND when note does not exist in session",
 			noteID:   999,
@@ -976,6 +967,40 @@ func TestQuizHandler_SubmitAnswer(t *testing.T) {
 			assert.Equal(t, tt.wantReason, resp.Msg.GetReason())
 		})
 	}
+}
+
+// TestQuizHandler_SubmitAnswer_Skip verifies the is_skipped contract: when
+// the client sets IsSkipped=true the backend records the answer as incorrect
+// without calling the inference client. Regression for the bug where the
+// frontend sent "I don't know" as a sentinel string and the LLM occasionally
+// graded that as Correct=true (e.g. for "inoculate").
+func TestQuizHandler_SubmitAnswer_Skip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	// No AnswerMeanings expectation: the skip path must bypass the LLM.
+	handler := newTestHandler(t, mockClient)
+	handler.noteStore[1] = quiz.Card{
+		NotebookName: "test-notebook",
+		StoryTitle:   "flashcards",
+		Entry:        "comprehend",
+		Meaning:      "to understand completely",
+	}
+
+	resp, err := handler.SubmitAnswer(
+		context.Background(),
+		connect.NewRequest(&apiv1.SubmitAnswerRequest{
+			NoteId:         1,
+			Answer:         "",
+			IsSkipped:      true,
+			ResponseTimeMs: 1000,
+		}),
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.False(t, resp.Msg.GetCorrect(), "skipped answer must be recorded as incorrect")
+	assert.Equal(t, "skipped by user", resp.Msg.GetReason())
+	assert.Equal(t, "to understand completely", resp.Msg.GetMeaning())
 }
 
 // TestQuizHandler_SubmitAnswer_WordDetail exercises the full RPC pipeline
@@ -1291,21 +1316,12 @@ func TestValidateRequest(t *testing.T) {
 			wantErr:       true,
 			wantDetailLen: 1,
 		},
-		{
-			name:          "empty answer returns error with detail",
-			msg:           &apiv1.SubmitAnswerRequest{NoteId: 1, Answer: ""},
-			wantErr:       true,
-			wantDetailLen: 1,
-		},
-		{
-			name:          "whitespace-only answer returns error with detail",
-			msg:           &apiv1.SubmitAnswerRequest{NoteId: 1, Answer: "   "},
-			wantErr:       true,
-			wantDetailLen: 1,
-		},
+		// Empty / whitespace answers used to be rejected at validate time;
+		// the constraint was removed alongside is_skipped (skipping always
+		// sends an empty answer). Only the note_id rule remains.
 		{
 			name:          "multiple violations returns error with detail",
-			msg:           &apiv1.SubmitAnswerRequest{NoteId: 0, Answer: ""},
+			msg:           &apiv1.SubmitAnswerRequest{NoteId: 0, Answer: "hello"},
 			wantErr:       true,
 			wantDetailLen: 1,
 		},

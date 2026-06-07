@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -12,6 +13,20 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
+
+// skippedGradeResult is the canonical GradeResult for a user-skipped answer.
+// Recorded as incorrect with the lowest SRS quality so the word is scheduled
+// for re-study. Classification is left as ClassificationWrong so the reverse
+// handler's synonym-retry path treats it as a normal wrong answer (saved
+// immediately, no synonym retry prompt).
+func skippedGradeResult() quiz.GradeResult {
+	return quiz.GradeResult{
+		Correct:        false,
+		Reason:         "skipped by user",
+		Quality:        1,
+		Classification: string(inference.ClassificationWrong),
+	}
+}
 
 // BatchSubmitAnswers grades a batch of standard quiz answers.
 // Grading runs in parallel (N OpenAI calls concurrently); learning history
@@ -38,6 +53,9 @@ func (h *QuizHandler) BatchSubmitAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeNotebookAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
@@ -93,6 +111,9 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
@@ -164,6 +185,9 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeEtymologyStandardAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
@@ -187,6 +211,8 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 		}
 	}
 
+	examplesByKey, _ := h.svc.LoadEtymologyExampleWords(cards)
+
 	responses := make([]*apiv1.SubmitEtymologyStandardAnswerResponse, len(answers))
 	for i := range answers {
 		if err := h.svc.SaveEtymologyOriginResult(cards[i], grades[i].Quality, grades[i].Correct, answers[i].GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
@@ -202,6 +228,7 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 		if graphReader != nil {
 			graphContext = buildGraphContextForCard(ctx, graphReader, cards[i], conceptsByNotebook[cards[i].NotebookName])
 		}
+		exampleKey := strings.ToLower(strings.TrimSpace(cards[i].Origin)) + "\x00" + cards[i].SessionTitle + "\x00" + cards[i].Sense
 		responses[i] = &apiv1.SubmitEtymologyStandardAnswerResponse{
 			Correct:        grades[i].Correct,
 			Reason:         grades[i].Reason,
@@ -210,6 +237,7 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 			LearnedAt:      learnedAt,
 			NoteId:         noteID,
 			GraphContext:   graphContext,
+			ExampleWords:   examplesByKey[exampleKey],
 		}
 	}
 
@@ -239,11 +267,19 @@ func (h *QuizHandler) BatchSubmitEtymologyReverseAnswers(
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
+		if answers[i].GetIsSkipped() {
+			return skippedGradeResult(), nil
+		}
 		return h.svc.GradeEtymologyReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
 	}
+
+	// One scan of definitions for the whole batch — LoadEtymologyExampleWords
+	// is O(definitions) regardless of card count, so doing it once and indexing
+	// by (origin, session, sense) beats per-card calls inside the loop.
+	examplesByKey, _ := h.svc.LoadEtymologyExampleWords(cards)
 
 	responses := make([]*apiv1.SubmitEtymologyReverseAnswerResponse, len(answers))
 	for i := range answers {
@@ -256,6 +292,7 @@ func (h *QuizHandler) BatchSubmitEtymologyReverseAnswers(
 		h.nextID++
 		h.etymologyOriginStore[noteID] = cards[i]
 		h.mu.Unlock()
+		exampleKey := strings.ToLower(strings.TrimSpace(cards[i].Origin)) + "\x00" + cards[i].SessionTitle + "\x00" + cards[i].Sense
 		responses[i] = &apiv1.SubmitEtymologyReverseAnswerResponse{
 			Correct:        grades[i].Correct,
 			Reason:         grades[i].Reason,
@@ -265,6 +302,7 @@ func (h *QuizHandler) BatchSubmitEtymologyReverseAnswers(
 			NextReviewDate: nextReviewDate,
 			LearnedAt:      learnedAt,
 			NoteId:         noteID,
+			ExampleWords:   examplesByKey[exampleKey],
 		}
 	}
 

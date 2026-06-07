@@ -14,8 +14,12 @@ Feature: Etymology quiz modes
     And I start the quiz
     Then I see an etymology prompt
 
-    When I type the origin "graph"
-    And I type the meaning "writing"
+    # Use the "phon" origin so Standard/Reverse (run afterwards) can still
+    # show graph + tele as their two cards. Answering graph or tele here
+    # would push that origin into SR cooldown and the later scenarios
+    # would only see one card.
+    When I type the origin "phon"
+    And I type the meaning "sound"
     And I submit my answer
     And I finish the quiz
     Then I should be on the Quiz Complete page
@@ -47,34 +51,37 @@ Feature: Etymology quiz modes
 
   # Exercise every per-card action on the Etymology Standard BatchFeedback
   # view: Mark as Correct, Mark as Incorrect, Undo override, Exclude.
+  # Uses the Word Stems notebook (fresh scribo + dico) because the
+  # previous Standard scenario put Word Roots' graph + tele into SR
+  # cooldown for the etymology Standard track.
   Scenario: All per-card actions on the Etymology Standard BatchFeedback view
     Given I am on the Quiz page
     When I switch to the "Etymology" tab
     And I choose the "Standard" quiz mode
     And I include unstudied words
-    And I select the "Word Roots" notebook
+    And I select the "Word Stems" notebook
     And I start the quiz
 
-    Then I see the heading "graph"
+    Then I see the heading "scribo"
     When I type the answer "wrong on purpose"
     And I submit my answer
     And I continue to the next card
 
-    Then I see the heading "tele"
-    When I type the answer "distant"
+    Then I see the heading "dico"
+    When I type the answer "say"
     And I submit my answer
 
-    # BatchFeedback now visible: "graph"=incorrect, "tele"=correct. Etymology
-    # cards used to hide the typed-answer chip on correct results — pin it on
-    # "tele" so the regression cannot return silently.
-    Then I see my answer "distant" on the card for "tele"
+    # BatchFeedback now visible: "scribo"=incorrect, "dico"=correct.
+    # Etymology cards used to hide the typed-answer chip on correct
+    # results — pin it on "dico" so the regression cannot return silently.
+    Then I see my answer "say" on the card for "dico"
 
-    When I mark "graph" as correct
-    And I undo the override for "graph"
-    And I mark "tele" as incorrect
-    And I exclude "graph"
+    When I mark "scribo" as correct
+    And I undo the override for "scribo"
+    And I mark "dico" as incorrect
+    And I exclude "scribo"
     # Resume the excluded card so later scenarios still see it.
-    And I resume "graph"
+    And I resume "scribo"
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
@@ -106,34 +113,39 @@ Feature: Etymology quiz modes
     And the summary shows 1 incorrect answers
 
   # Exercise every per-card action on the Etymology Reverse BatchFeedback.
+  # Uses the Word Stems notebook (scribo + dico) because the previous
+  # Reverse scenario put Word Roots' graph + tele into SR cooldown for
+  # the etymology Reverse track. Word Stems' assembly logs are still
+  # empty at this point — the Standard scenario on Word Stems wrote only
+  # breakdown logs — so the origins remain due here.
   Scenario: All per-card actions on the Etymology Reverse BatchFeedback view
     Given I am on the Quiz page
     When I switch to the "Etymology" tab
     And I choose the "Reverse" quiz mode
     And I include unstudied words
-    And I select the "Word Roots" notebook
+    And I select the "Word Stems" notebook
     And I start the quiz
 
-    Then I see the heading "writing"
+    Then I see the heading "write"
     When I type the answer "wrong"
     And I submit my answer
     And I continue to the next card
 
-    Then I see the heading "distant"
-    When I type the answer "tele"
+    Then I see the heading "say"
+    When I type the answer "dico"
     And I submit my answer
 
-    # BatchFeedback now visible: "graph"=incorrect, "tele"=correct. Pin the
-    # typed-answer chip on "tele" — etymology Reverse used to drop it on
-    # correct results.
-    Then I see my answer "tele" on the card for "tele"
+    # BatchFeedback now visible: "scribo"=incorrect, "dico"=correct.
+    # Pin the typed-answer chip on "dico" — etymology Reverse used to
+    # drop it on correct results.
+    Then I see my answer "dico" on the card for "dico"
 
-    When I mark "graph" as correct
-    And I undo the override for "graph"
-    And I mark "tele" as incorrect
-    And I exclude "graph"
+    When I mark "scribo" as correct
+    And I undo the override for "scribo"
+    And I mark "dico" as incorrect
+    And I exclude "scribo"
     # Resume the excluded card so later scenarios still see it.
-    And I resume "graph"
+    And I resume "scribo"
     And I continue to the next card
 
     Then I should be on the Quiz Complete page

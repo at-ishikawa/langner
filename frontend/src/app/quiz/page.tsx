@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -71,13 +71,26 @@ export default function QuizHubPage() {
     feedbackInterval.toString(),
   );
 
+  // Re-fetch the notebook summary list whenever includeUnstudied flips
+  // so per-notebook + per-section counts match what the actual quiz
+  // will load. Only the FIRST fetch shows the full-page spinner; toggle-
+  // driven refetches keep the current list visible and swap counts in
+  // place when the response arrives — toggling the switch shouldn't feel
+  // like a page reload. initialLoadRef gates that distinction.
+  const initialLoadRef = useRef(true);
   useEffect(() => {
+    if (initialLoadRef.current) {
+      setLoading(true);
+    }
     quizClient
-      .getQuizOptions({})
+      .getQuizOptions({ includeUnstudied })
       .then((res) => setNotebooks(res.notebooks ?? []))
       .catch(() => setError("Failed to load notebooks"))
-      .finally(() => setLoading(false));
-  }, []);
+      .finally(() => {
+        setLoading(false);
+        initialLoadRef.current = false;
+      });
+  }, [includeUnstudied]);
 
   const selectedMode = tab === "vocabulary" ? selectedVocabMode : selectedEtyMode;
 
@@ -94,11 +107,15 @@ export default function QuizHubPage() {
     );
     if (includeUnstudied || isFreeformMode) return base;
     return base.filter((n) => {
-      if (tab === "etymology") return n.etymologyReviewCount > 0;
+      if (tab === "etymology") {
+        return selectedEtyMode === "reverse"
+          ? n.etymologyReverseReviewCount > 0
+          : n.etymologyReviewCount > 0;
+      }
       if (selectedVocabMode === "reverse") return n.reverseReviewCount > 0;
       return n.reviewCount > 0;
     });
-  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode]);
+  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode, selectedEtyMode]);
 
   // Drop selections that are hidden by the current filter so the user doesn't
   // accidentally start a quiz referencing notebooks they can no longer see.
@@ -213,12 +230,20 @@ export default function QuizHubPage() {
   };
 
   // pickModeCount maps a section/notebook count source to the active mode.
+  // Etymology has separate standard and reverse counts because the same
+  // origin can be due in one mode and not the other (each mode tracks its
+  // own SR interval and skip flag).
   const pickModeCount = (counts: {
     reviewCount: number;
     reverseReviewCount: number;
     etymologyReviewCount: number;
+    etymologyReverseReviewCount: number;
   }): number => {
-    if (tab === "etymology") return counts.etymologyReviewCount;
+    if (tab === "etymology") {
+      return selectedEtyMode === "reverse"
+        ? counts.etymologyReverseReviewCount
+        : counts.etymologyReviewCount;
+    }
     if (selectedVocabMode === "reverse") return counts.reverseReviewCount;
     return counts.reviewCount;
   };
@@ -297,6 +322,7 @@ export default function QuizHubPage() {
           setFlashcards(
             (res.flashcards ?? []).map((f) => ({
               noteId: f.noteId, entry: f.entry, originalEntry: f.originalEntry, examples: f.examples,
+              conceptHead: f.conceptHead, conceptMembers: f.conceptMembers, conceptMeaning: f.conceptMeaning,
             })),
           );
           router.push("/quiz/standard");
@@ -305,11 +331,13 @@ export default function QuizHubPage() {
           const res = await quizClient.startReverseQuiz({
             notebookSections,
             listMissingContext,
+            includeUnstudied,
           });
           setReverseFlashcards(
             (res.flashcards ?? []).map((f) => ({
               noteId: f.noteId, meaning: f.meaning, contexts: f.contexts,
               notebookName: f.notebookName, storyTitle: f.storyTitle, sceneTitle: f.sceneTitle,
+              conceptHead: f.conceptHead, conceptMembers: f.conceptMembers, conceptMeaning: f.conceptMeaning,
             })),
           );
           router.push("/quiz/reverse");

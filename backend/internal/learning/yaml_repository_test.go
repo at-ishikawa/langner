@@ -616,3 +616,59 @@ func TestYAMLLearningRepository_Create_PreservesSkippedSiblings(t *testing.T) {
 	assert.NotEmpty(t, sibling.LearnedLogs,
 		"sibling-word must have its new learned log persisted")
 }
+
+// TestYAMLLearningRepository_WriteAll_RoutesQuizTypesToCorrectSlots pins
+// the round-trip behaviour that validate-db relies on: logs in the DB
+// carry a quiz_type column, and the YAML round-trip must land them in
+// the matching YAML slot (LearnedLogs / ReverseLogs / EtymologyBreakdownLogs
+// / EtymologyAssemblyLogs).
+//
+// The previous buildExpression sent ANYTHING not equal to "reverse" into
+// LearnedLogs, so a word with etymology_breakdown_logs / etymology_
+// assembly_logs in source YAML came back with all its etymology logs
+// merged into LearnedLogs on round-trip. User-reported as 10 mismatches
+// from `langner migrate validate-db` (e.g. gauche source=1 / exported=8,
+// peer source=3 / exported=13).
+func TestYAMLLearningRepository_WriteAll_RoutesQuizTypesToCorrectSlots(t *testing.T) {
+	baseTime := time.Date(2025, 1, 15, 10, 0, 0, 0, time.UTC)
+
+	notes := []notebook.NoteRecord{{
+		ID:    1,
+		Entry: "demo-origin",
+		NotebookNotes: []notebook.NotebookNote{
+			{NotebookType: "story", NotebookID: "demo", Group: "Lesson 1", Subgroup: "Scene 1"},
+		},
+	}}
+	// One log per quiz_type that has an unambiguous YAML slot.
+	// (etymology_freeform is intentionally omitted — in source YAML it
+	// appears in BOTH etymology_breakdown_logs and etymology_assembly_logs
+	// slots simultaneously, so its round-trip routing is its own problem
+	// separate from this fix.)
+	logs := []LearningLog{
+		{NoteID: 1, Status: "understood", LearnedAt: baseTime, QuizType: "notebook", SourceNotebookID: "demo"},
+		{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(time.Hour), QuizType: "freeform", SourceNotebookID: "demo"},
+		{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(2 * time.Hour), QuizType: "reverse", SourceNotebookID: "demo"},
+		{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(3 * time.Hour), QuizType: "etymology_breakdown", SourceNotebookID: "demo"},
+		{NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(4 * time.Hour), QuizType: "etymology_assembly", SourceNotebookID: "demo"},
+	}
+
+	outputDir := t.TempDir()
+	repo := NewYAMLLearningRepositoryWriter(outputDir)
+	require.NoError(t, repo.WriteAll(notes, logs))
+
+	var histories []notebook.LearningHistory
+	readYAMLHelper(t, filepath.Join(outputDir, "learning_notes", "demo.yml"), &histories)
+	require.Len(t, histories, 1)
+	require.Len(t, histories[0].Scenes, 1)
+	require.Len(t, histories[0].Scenes[0].Expressions, 1)
+	expr := histories[0].Scenes[0].Expressions[0]
+
+	assert.Len(t, expr.LearnedLogs, 2,
+		"LearnedLogs carries the notebook (standard) AND freeform quiz_types — "+
+			"etymology logs must NOT end up here")
+	assert.Len(t, expr.ReverseLogs, 1, "reverse quiz_type → ReverseLogs")
+	assert.Len(t, expr.EtymologyBreakdownLogs, 1,
+		"etymology_breakdown quiz_type → EtymologyBreakdownLogs")
+	assert.Len(t, expr.EtymologyAssemblyLogs, 1,
+		"etymology_assembly quiz_type → EtymologyAssemblyLogs")
+}

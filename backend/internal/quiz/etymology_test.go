@@ -124,12 +124,14 @@ func TestService_LoadEtymologyOriginCards(t *testing.T) {
 	assert.Equal(t, "prefix", preCard.Type)
 }
 
-// TestService_LoadEtymologyOriginCards_EligibilityGate verifies the hard
-// eligibility gate for standard/reverse: an origin must carry at least
-// one correct answer in any etymology mode (breakdown or assembly) before
-// it shows up. The previous freeform-first requirement is gone — users
-// who learn origins directly through standard/reverse no longer get an
-// empty start page just because no freeform stamp exists.
+// TestService_LoadEtymologyOriginCards_EligibilityGate verifies the gate
+// for standard/reverse: any origin with a learning-history entry is driven
+// by the SR interval (a `misunderstood` last log triggers retry); origins
+// with no history fall back to the `includeUnstudied` toggle. The earlier
+// "must have a prior correct etymology answer" requirement is gone —
+// standard/reverse already show the correct answer on the feedback screen,
+// so blocking SR-due retries on tried-failed origins (e.g. algos with one
+// misunderstood assembly log) just hid them.
 func TestService_LoadEtymologyOriginCards_EligibilityGate(t *testing.T) {
 	tmpDir := t.TempDir()
 	etymDir := filepath.Join(tmpDir, "etymology", "sample-roots")
@@ -163,11 +165,10 @@ origins:
 
 	learningDir := filepath.Join(tmpDir, "learning")
 	require.NoError(t, os.MkdirAll(learningDir, 0755))
-	// root-a: only misunderstood logs → no correct answer → NOT eligible.
-	// root-b: freeformed and answered correctly → eligible.
-	// root-c: answered correctly in etymology standard → eligible (gate no
-	//         longer requires a prior freeform stamp).
-	// root-d: no history at all → NOT eligible.
+	// root-a: only misunderstood logs → SR says retry → included.
+	// root-b: freeformed and answered correctly → included when due.
+	// root-c: answered correctly in etymology standard → included when due.
+	// root-d: no history at all → only included when includeUnstudied=true.
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "sample-roots.yml"), []byte(`- metadata:
     notebook_id: sample-roots
     title: Sample Roots
@@ -201,21 +202,132 @@ origins:
 		config.QuizConfig{},
 	)
 
-	// When skipEligibility is false, root-b and root-c should be eligible:
-	// both have at least one correct etymology answer regardless of which
-	// mode produced it. root-a (only misunderstood) and root-d (no logs)
-	// remain blocked.
+	// With includeUnstudied=true on standard quiz:
+	//   - root-b, root-c: have logs, latest 2025-01-01 → past any interval →
+	//     SR-due → included.
+	//   - root-a: has logs but only misunderstood → SR retries → included
+	//     (the feedback screen will show the correct answer).
+	//   - root-d: never seen (no logs at all) → included because the user
+	//     opted in via "Include unstudied".
 	cards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, false, notebook.QuizTypeEtymologyStandard, nil)
 	require.NoError(t, err)
-	require.Len(t, cards, 2, "any origin with a correct etymology answer in any mode should be eligible")
-	gotOrigins := []string{cards[0].Origin, cards[1].Origin}
+	gotOrigins := make([]string, 0, len(cards))
+	for _, c := range cards {
+		gotOrigins = append(gotOrigins, c.Origin)
+	}
 	sort.Strings(gotOrigins)
-	assert.Equal(t, []string{"root-b", "root-c"}, gotOrigins)
+	assert.Equal(t, []string{"root-a", "root-b", "root-c", "root-d"}, gotOrigins,
+		"includeUnstudied=true: all studied origins are SR-driven (incl. tried-failed), plus never-seen origins")
+
+	// With includeUnstudied=false: never-seen origins drop out, but
+	// tried-failed (root-a) stays because SR says retry.
+	noUnstudied, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, false, false, notebook.QuizTypeEtymologyStandard, nil)
+	require.NoError(t, err)
+	gotOrigins = gotOrigins[:0]
+	for _, c := range noUnstudied {
+		gotOrigins = append(gotOrigins, c.Origin)
+	}
+	sort.Strings(gotOrigins)
+	assert.Equal(t, []string{"root-a", "root-b", "root-c"}, gotOrigins,
+		"includeUnstudied=false leaves all studied origins (SR-driven), drops only the never-seen one")
 
 	// When skipEligibility is true (freeform mode), ALL origins are returned.
 	freeformCards, err := svc.LoadEtymologyOriginCards([]string{"sample-roots"}, true, true, notebook.QuizTypeEtymologyFreeform, nil)
 	require.NoError(t, err)
-	require.Len(t, freeformCards, 4, "freeform quiz should see all origins regardless of eligibility")
+	require.Len(t, freeformCards, 4, "freeform quiz should see all origins regardless of the SR gate")
+}
+
+// TestService_LoadEtymologyOriginCards_IncludeUnstudiedDoesntBypassSR pins
+// the bug fix for the user-reported case: a studied origin (latest etymology
+// log understood, interval 90) was re-asked the same day the schedule
+// pushed it 90 days out, just because the user toggled "Include unstudied".
+// includeUnstudied must NOT bypass the SR gate for origins that already
+// have a correct answer.
+func TestService_LoadEtymologyOriginCards_IncludeUnstudiedDoesntBypassSR(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "sr-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: sr-roots
+kind: Etymology
+name: SR Roots
+notebooks:
+  - ./origins.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "SR Lesson"
+origins:
+  - origin: just-scheduled
+    type: root
+    language: Latin
+    meaning: studied today on a 90-day interval
+  - origin: never-seen
+    type: root
+    language: Latin
+    meaning: no learning history at all
+`), 0o644))
+
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	// just-scheduled: latest etymology_breakdown_log is "understood" today
+	// with interval_days 90. needsOriginReview should return false. Even
+	// with includeUnstudied=true, the SR gate must keep it out.
+	today := time.Now().Format("2006-01-02")
+	// just-scheduled has fresh correct logs in BOTH the breakdown and
+	// assembly tracks with interval_days=90. needsOriginReview consults
+	// the track that matches the active quiz type — standard reads
+	// breakdown, reverse reads assembly — so the test covers both
+	// directions.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "sr-roots.yml"), []byte(`- metadata:
+    notebook_id: sr-roots
+    title: SR Roots
+  scenes:
+    - metadata:
+        title: "SR Lesson"
+      expressions:
+        - expression: just-scheduled
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_breakdown
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_assembly
+`), 0o644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{},
+	)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{"sr-roots"}, true, false, notebook.QuizTypeEtymologyStandard, nil)
+	require.NoError(t, err)
+	gotOrigins := make([]string, 0, len(cards))
+	for _, c := range cards {
+		gotOrigins = append(gotOrigins, c.Origin)
+	}
+	sort.Strings(gotOrigins)
+	assert.Equal(t, []string{"never-seen"}, gotOrigins,
+		"includeUnstudied=true must surface never-seen origins but never re-serve a studied origin still within its SR interval")
+
+	// Same assertion for reverse — the symmetric branch in LoadEtymologyOriginCards.
+	reverseCards, err := svc.LoadEtymologyOriginCards([]string{"sr-roots"}, true, false, notebook.QuizTypeEtymologyReverse, nil)
+	require.NoError(t, err)
+	gotOrigins = gotOrigins[:0]
+	for _, c := range reverseCards {
+		gotOrigins = append(gotOrigins, c.Origin)
+	}
+	sort.Strings(gotOrigins)
+	assert.Equal(t, []string{"never-seen"}, gotOrigins,
+		"the SR gate applies equally to etymology reverse — includeUnstudied=true must not re-ask a studied origin still within interval")
 }
 
 func TestService_LoadEtymologyOriginCards_Deduplicates(t *testing.T) {
@@ -419,7 +531,7 @@ origins:
 	require.Len(t, cards, 1, "the same origin must collapse to one card regardless of language/whitespace differences")
 	assert.Equal(t, "spect", cards[0].Origin)
 
-	summaries, err := svc.LoadEtymologyNotebookSummaries()
+	summaries, err := svc.LoadEtymologyNotebookSummaries(false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 	assert.Equal(t, 1, summaries[0].EtymologyReviewCount,
@@ -515,4 +627,182 @@ origins:
 	assert.True(t, xFuture, "root-x answered today in breakdown should be reported as not-due")
 	assert.True(t, yFuture, "root-y answered today in assembly should be reported as not-due")
 	assert.False(t, zFuture, "root-z has no logs and should remain freely drillable")
+}
+
+// TestService_EtymologySummaryMatchesQuizLoad pins the fix for the
+// start-page-vs-quiz count mismatch: the per-notebook and per-section
+// EtymologyReviewCount on the start page must equal the number of cards
+// the quiz actually loads, for both includeUnstudied toggle states and
+// for both standard and reverse modes.
+//
+// Fixture mix per session:
+//
+//	studied-due       — correct etymology log with a lapsed SR interval.
+//	                    In BOTH summary and quiz, regardless of toggle.
+//	studied-not-due   — fresh 90-day interval. SR says not yet → excluded
+//	                    everywhere; includeUnstudied does NOT bypass SR.
+//	never-seen        — no learning history. Included iff includeUnstudied.
+//	tried-failed      — has logs but only misunderstood. SR retries the
+//	                    same-track misunderstood (standard reads breakdown);
+//	                    cross-track (reverse reading assembly) has no logs
+//	                    so the "never-seen in this mode" SR branch returns
+//	                    true too. Included in both modes.
+func TestService_EtymologySummaryMatchesQuizLoad(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-roots
+kind: Etymology
+name: Demo Roots
+notebooks:
+  - ./origins.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "Demo Lesson"
+origins:
+  - origin: studied-due
+    type: root
+    language: Latin
+    meaning: learned long ago, interval lapsed
+  - origin: studied-not-due
+    type: root
+    language: Latin
+    meaning: learned today, still inside 90-day interval
+  - origin: never-seen-1
+    type: root
+    language: Latin
+    meaning: no logs at all
+  - origin: never-seen-2
+    type: root
+    language: Latin
+    meaning: no logs at all either
+  - origin: tried-failed
+    type: root
+    language: Latin
+    meaning: tried but only misunderstood
+`), 0o644))
+
+	today := time.Now().Format("2006-01-02")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	// Both breakdown and assembly logs are present for studied-due so the
+	// fixture exercises BOTH quiz modes — needsOriginReview reads the
+	// breakdown track for standard and the assembly track for reverse.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-roots.yml"), []byte(`- metadata:
+    notebook_id: demo-roots
+    title: Demo Roots
+  scenes:
+    - metadata:
+        title: "Demo Lesson"
+      expressions:
+        - expression: studied-due
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2024-01-01"
+              quality: 4
+              interval_days: 7
+              quiz_type: etymology_breakdown
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "2024-01-01"
+              quality: 4
+              interval_days: 7
+              quiz_type: etymology_assembly
+        - expression: studied-not-due
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_breakdown
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_assembly
+        - expression: tried-failed
+          etymology_breakdown_logs:
+            - status: misunderstood
+              learned_at: "2024-01-01"
+              quiz_type: etymology_breakdown
+`), 0o644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{DisableShuffle: true},
+	)
+
+	cases := []struct {
+		name             string
+		includeUnstudied bool
+		quizType         notebook.QuizType
+		wantOrigins      []string
+	}{
+		{
+			name:             "standard, includeUnstudied=false",
+			includeUnstudied: false,
+			quizType:         notebook.QuizTypeEtymologyStandard,
+			wantOrigins:      []string{"studied-due", "tried-failed"},
+		},
+		{
+			name:             "standard, includeUnstudied=true",
+			includeUnstudied: true,
+			quizType:         notebook.QuizTypeEtymologyStandard,
+			wantOrigins:      []string{"studied-due", "tried-failed", "never-seen-1", "never-seen-2"},
+		},
+		{
+			name:             "reverse, includeUnstudied=false",
+			includeUnstudied: false,
+			quizType:         notebook.QuizTypeEtymologyReverse,
+			wantOrigins:      []string{"studied-due", "tried-failed"},
+		},
+		{
+			name:             "reverse, includeUnstudied=true",
+			includeUnstudied: true,
+			quizType:         notebook.QuizTypeEtymologyReverse,
+			wantOrigins:      []string{"studied-due", "tried-failed", "never-seen-1", "never-seen-2"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cards, err := svc.LoadEtymologyOriginCards(
+				[]string{"demo-roots"}, tc.includeUnstudied, false, tc.quizType, nil,
+			)
+			require.NoError(t, err)
+			gotOrigins := make([]string, 0, len(cards))
+			for _, c := range cards {
+				gotOrigins = append(gotOrigins, c.Origin)
+			}
+			sort.Strings(gotOrigins)
+			wantOrigins := append([]string{}, tc.wantOrigins...)
+			sort.Strings(wantOrigins)
+			assert.Equal(t, wantOrigins, gotOrigins,
+				"quiz loader should include exactly the expected set of origins")
+
+			summaries, err := svc.LoadEtymologyNotebookSummaries(tc.includeUnstudied)
+			require.NoError(t, err)
+			require.Len(t, summaries, 1)
+			summary := summaries[0]
+			gotCount := summary.EtymologyReviewCount
+			if tc.quizType == notebook.QuizTypeEtymologyReverse {
+				gotCount = summary.EtymologyReverseReviewCount
+			}
+			assert.Equal(t, len(cards), gotCount,
+				"start page count for the active mode must equal what the quiz loads")
+
+			require.Len(t, summary.Sections, 1)
+			gotSectionCount := summary.Sections[0].EtymologyReviewCount
+			if tc.quizType == notebook.QuizTypeEtymologyReverse {
+				gotSectionCount = summary.Sections[0].EtymologyReverseReviewCount
+			}
+			assert.Equal(t, len(cards), gotSectionCount,
+				"start page section count for the active mode must equal what the quiz loads")
+		})
+	}
 }

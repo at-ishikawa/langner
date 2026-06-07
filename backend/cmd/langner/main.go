@@ -74,8 +74,41 @@ func newMigrateCommand() *cobra.Command {
 	migrateCmd.AddCommand(newValidateDBCommand())
 	migrateCmd.AddCommand(newRecalculateIntervalsCommand())
 	migrateCmd.AddCommand(newExtractDefinitionsCommand())
+	migrateCmd.AddCommand(newMigrateMergeConceptsCommand())
+	migrateCmd.AddCommand(newMigrateEtymologyToScenesCommand())
 
 	return migrateCmd
+}
+
+// newMigrateEtymologyToScenesCommand wires the `langner migrate
+// etymology-to-scenes` CLI. The migration rewrites legacy flat-shape
+// etymology session YAML files into the explicit event/scenes/origins
+// shape. Each origin lands in the earliest scene whose vocab references
+// it via origin_parts (earliest by session order in index.yml, then by
+// scene order in the definitions file). Origins not referenced by any
+// definition fall into a synthetic scene named after the origin.
+//
+// Idempotent: files already in the new shape are skipped. --dry-run
+// reports what would change without writing anything.
+func newMigrateEtymologyToScenesCommand() *cobra.Command {
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "etymology-to-scenes",
+		Short: "Rewrite legacy flat-shape etymology session files into the explicit event/scenes/origins shape",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			return cli.MigrateEtymologyToScenes(
+				cfg.Notebooks.EtymologyDirectories,
+				cfg.Notebooks.DefinitionsDirectories,
+				dryRun,
+			)
+		},
+	}
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Report planned migrations without writing files")
+	return cmd
 }
 
 func newExtractDefinitionsCommand() *cobra.Command {
@@ -117,6 +150,44 @@ func newMigrateLearningHistoryCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().BoolVar(&recalculate, "recalculate", false, "Force recalculation of intervals for all learning history entries using the configured algorithm")
+	return cmd
+}
+
+// newMigrateMergeConceptsCommand wires the `langner migrate merge-concepts`
+// CLI. The operation is destructive and one-way: every non-head member of a
+// definitions concept has its learning history entry folded into the head
+// and is then dropped from the YAML.
+//
+// Users must commit langner-data state before running so they can revert.
+// --dry-run reports planned changes without writing files.
+func newMigrateMergeConceptsCommand() *cobra.Command {
+	var dryRun bool
+	cmd := &cobra.Command{
+		Use:   "merge-concepts",
+		Short: "Merge concept member learning histories into the head expression (DESTRUCTIVE, one-way)",
+		Long: `Destructively folds per-member learning history entries into the head
+expression of each definitions concept. Members' logs are merged
+chronologically into the head; skip timestamps union; the head's newest
+log interval_days is rewritten to min across all members. Non-head
+member entries are then removed.
+
+This operation is ONE-WAY. Commit your learning_notes directory to
+version control before running so you can revert if needed.
+
+Use --dry-run to preview the changes without writing any files.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			return cli.MergeConcepts(
+				cfg.Notebooks.LearningNotesDirectory,
+				cfg.Notebooks.DefinitionsDirectories,
+				dryRun,
+			)
+		},
+	}
+	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Report planned merges without writing files")
 	return cmd
 }
 

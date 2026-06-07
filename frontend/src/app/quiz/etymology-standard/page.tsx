@@ -18,6 +18,7 @@ interface BufferedAnswer {
   answer: string;
   displayAnswer: string;
   responseTimeMs: bigint;
+  isSkipped?: boolean;
 }
 
 export default function EtymologyStandardPage() {
@@ -80,6 +81,7 @@ export default function EtymologyStandardPage() {
           cardId: b.card.cardId,
           answer: b.answer,
           responseTimeMs: b.responseTimeMs,
+          isSkipped: b.isSkipped ?? false,
         })),
       });
       toFlush.forEach((b, i) => {
@@ -97,6 +99,7 @@ export default function EtymologyStandardPage() {
           language: b.card.language,
           learnedAt: r.learnedAt || undefined,
           graphContext: r.graphContext,
+          exampleWords: r.exampleWords,
         });
       });
       bufferRef.current = [];
@@ -136,9 +139,10 @@ export default function EtymologyStandardPage() {
     const responseTime = responseTimeSince(startTimeRef.current);
     recordAndAdvance({
       card,
-      answer: "I don't know",
+      answer: "",
       displayAnswer: "(skipped)",
       responseTimeMs: responseTime,
+      isSkipped: true,
     });
   };
 

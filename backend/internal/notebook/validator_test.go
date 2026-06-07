@@ -2904,3 +2904,474 @@ func TestValidator_backfillQuizType(t *testing.T) {
 		})
 	}
 }
+
+// TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots pins the rule
+// the user asked for: --fix replays each log series through the SR
+// calculator (RecalculateAll) so interval_days reflects the prior-state
+// chain. It touches all four slots (learned/reverse/etymology_breakdown/
+// etymology_assembly), not just vocabulary; etymology had been writing
+// intervals without consulting prior state under a since-fixed bug, and
+// --fix is the path that corrects that stored data.
+//
+// The fixture seeds an interval value (999) that the fixed-interval
+// algorithm would never produce. After --fix it should be replaced with
+// a value the calculator actually computes for the chain.
+func TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots(t *testing.T) {
+	dir := t.TempDir()
+	learningNotesDir := filepath.Join(dir, "learning_notes")
+	storiesDir := filepath.Join(dir, "stories")
+	require.NoError(t, os.MkdirAll(learningNotesDir, 0o755))
+	require.NoError(t, os.MkdirAll(storiesDir, 0o755))
+
+	t0 := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	t1 := t0.AddDate(0, 0, 3) // 3 days later — well under any seeded interval
+	corruptInterval := 999    // not in DefaultFixedIntervals
+
+	require.NoError(t, WriteYamlFile(filepath.Join(storiesDir, "demo.yml"), []StoryNotebook{
+		{
+			Event: "Demo Episode",
+			Metadata: Metadata{Series: "Demo", Season: 1, Episode: 1},
+			Scenes: []StoryScene{
+				{
+					Title: "Scene 1",
+					Definitions: []Note{
+						{Expression: "demo-word"},
+					},
+				},
+			},
+		},
+	}))
+
+	makeLogs := func() []LearningRecord {
+		return []LearningRecord{
+			{
+				Status:       LearnedStatusUnderstood,
+				LearnedAt:    NewDate(t1),
+				Quality:      4,
+				IntervalDays: corruptInterval,
+			},
+			{
+				Status:       LearnedStatusUnderstood,
+				LearnedAt:    NewDate(t0),
+				Quality:      4,
+				IntervalDays: corruptInterval,
+			},
+		}
+	}
+
+	require.NoError(t, WriteYamlFile(filepath.Join(learningNotesDir, "demo.yml"), []LearningHistory{
+		{
+			Metadata: LearningHistoryMetadata{NotebookID: "demo", Title: "Demo Episode"},
+			Scenes: []LearningScene{
+				{
+					Metadata: LearningSceneMetadata{Title: "Scene 1"},
+					Expressions: []LearningHistoryExpression{
+						{
+							Expression:             "demo-word",
+							LearnedLogs:            makeLogs(),
+							ReverseLogs:            makeLogs(),
+							EtymologyBreakdownLogs: makeLogs(),
+							EtymologyAssemblyLogs:  makeLogs(),
+						},
+					},
+				},
+			},
+		},
+	}))
+
+	calc := NewIntervalCalculator("fixed", nil) // DefaultFixedIntervals
+	v := NewValidator(learningNotesDir, []string{storiesDir}, nil, nil, nil, "", calc)
+	result, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningNotesDir, "demo.yml"), &histories)
+	require.Len(t, histories, 1)
+	require.Len(t, histories[0].Scenes, 1)
+	require.Len(t, histories[0].Scenes[0].Expressions, 1)
+	expr := histories[0].Scenes[0].Expressions[0]
+
+	// All four slots must lose the corrupt 999 — the calculator output
+	// is in DefaultFixedIntervals so 999 cannot survive.
+	for _, slot := range []struct {
+		name string
+		logs []LearningRecord
+	}{
+		{"learned_logs", expr.LearnedLogs},
+		{"reverse_logs", expr.ReverseLogs},
+		{"etymology_breakdown_logs", expr.EtymologyBreakdownLogs},
+		{"etymology_assembly_logs", expr.EtymologyAssemblyLogs},
+	} {
+		require.Len(t, slot.logs, 2, slot.name)
+		for _, log := range slot.logs {
+			assert.NotEqual(t, corruptInterval, log.IntervalDays,
+				"%s still carries the bogus interval — recalc pass didn't run on this slot", slot.name)
+		}
+	}
+
+	// The pass must emit one warning per recalculated log so audits show
+	// what changed. 4 slots × 2 logs each = 8 expected warnings (at minimum).
+	recalcCount := 0
+	for _, w := range result.Warnings {
+		if strings.Contains(w.Message, "Recalculated interval_days") {
+			recalcCount++
+		}
+	}
+	assert.GreaterOrEqual(t, recalcCount, 8,
+		"expected at least one warning per recalculated log across all four slots")
+}
+
+// readYAMLForTest is a tiny helper used by the recalc test so it does
+// not depend on the package-private readYAMLHelper in the learning
+// package.
+func readYAMLForTest(t *testing.T, path string, out interface{}) {
+	t.Helper()
+	histories, err := NewLearningHistories(filepath.Dir(path))
+	require.NoError(t, err)
+	notebookID := strings.TrimSuffix(filepath.Base(path), ".yml")
+	got, ok := histories[notebookID]
+	require.True(t, ok, "notebook %s not found in loaded histories", notebookID)
+	dst, ok := out.(*[]LearningHistory)
+	require.True(t, ok, "readYAMLForTest only handles *[]LearningHistory")
+	*dst = got
+}
+
+// TestValidator_Fix_MergesDefinitionsIndexScene pins the migration that
+// repairs definitions-book learning history split across two scene-key
+// conventions. The quiz now reads definitions scenes by their human
+// title (e.g. "verto (to turn)"), but older data also wrote the same
+// scene under "__index_0". A word's skip could live under the human
+// title while its quiz logs lived under "__index_0", so the quiz (now
+// human-title-keyed) saw the skip but a sibling word's logs got
+// orphaned. --fix renames "__index_N" to the human title and merges,
+// so skip + logs reunite under one scene.
+func TestValidator_Fix_MergesDefinitionsIndexScene(t *testing.T) {
+	dir := t.TempDir()
+	learningDir := filepath.Join(dir, "learning_notes")
+	defsDir := filepath.Join(dir, "definitions")
+	bookDir := filepath.Join(defsDir, "demo-book")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: demo-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Scene index 0 has human title "verto (to turn)" with two words.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "verto (to turn)"
+      expressions:
+        - expression: "extrovert"
+          meaning: "outgoing person"
+        - expression: "ambivert"
+          meaning: "balanced person"
+`), 0o644))
+
+	// Learning history split across two scene keys for the SAME scene:
+	//   - "verto (to turn)": extrovert SKIP (no logs)
+	//   - "__index_0":       extrovert + ambivert quiz logs
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-book.yml"), []byte(`- metadata:
+    notebook_id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "verto (to turn)"
+      expressions:
+        - expression: "extrovert"
+          learned_logs: []
+          skipped_at:
+            notebook: "2026-05-24T20:28:42-07:00"
+    - metadata:
+        title: "__index_0"
+      expressions:
+        - expression: "extrovert"
+          learned_logs:
+            - status: "understood"
+              learned_at: "2026-05-25T17:39:13-07:00"
+              quality: 3
+              quiz_type: "notebook"
+              interval_days: 7
+        - expression: "ambivert"
+          learned_logs:
+            - status: "misunderstood"
+              learned_at: "2026-05-25T17:39:15-07:00"
+              quality: 1
+              quiz_type: "notebook"
+              interval_days: 1
+`), 0o644))
+
+	v := NewValidator(learningDir, nil, nil, []string{defsDir}, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningDir, "demo-book.yml"), &histories)
+	require.Len(t, histories, 1)
+
+	// The two scenes must collapse into one titled "verto (to turn)";
+	// the "__index_0" key must be gone.
+	require.Len(t, histories[0].Scenes, 1, "the split scenes must merge into one")
+	scene := histories[0].Scenes[0]
+	assert.Equal(t, "verto (to turn)", scene.Metadata.Title)
+
+	byExpr := map[string]LearningHistoryExpression{}
+	for _, e := range scene.Expressions {
+		byExpr[e.Expression] = e
+	}
+
+	// extrovert: skip preserved AND quiz log preserved (the reunion).
+	extrovert, ok := byExpr["extrovert"]
+	require.True(t, ok, "extrovert must survive the merge")
+	assert.Contains(t, extrovert.SkippedAt, "notebook",
+		"extrovert's skip (written under the human title) must survive")
+	assert.NotEmpty(t, extrovert.LearnedLogs,
+		"extrovert's quiz log (written under __index_0) must merge in, not be orphaned")
+
+	// ambivert: its logs lived only under __index_0; they must not be lost.
+	ambivert, ok := byExpr["ambivert"]
+	require.True(t, ok, "ambivert must survive the merge")
+	assert.NotEmpty(t, ambivert.LearnedLogs,
+		"ambivert's __index_0 logs must be preserved under the human title")
+}
+
+// TestValidator_Fix_ConsolidatesSplitEtymologyOrigin reproduces the
+// "multiple gamos records" bug: one etymology origin ends up with logs
+// under two scene titles in the same session because the derived scene
+// title drifted over time. --fix must merge them into one scene (the
+// canonically-derived one when present) with logs + skip unioned.
+//
+// Generic Greek-root data (gamos/marriage, misein/hate) — the shape, not
+// the user's exact notebook contents, is what's under test.
+func TestValidator_Fix_ConsolidatesSplitEtymologyOrigin(t *testing.T) {
+	dir := t.TempDir()
+	learningDir := filepath.Join(dir, "learning_notes")
+	etymDir := filepath.Join(dir, "etymology")
+	defsDir := filepath.Join(dir, "definitions")
+	etymBook := filepath.Join(etymDir, "demo-book")
+	defsBook := filepath.Join(defsDir, "demo-book")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.MkdirAll(etymBook, 0o755))
+	require.NoError(t, os.MkdirAll(defsBook, 0o755))
+
+	// Etymology session: gamos is a standalone origin (legacy flat shape).
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "index.yml"), []byte(`id: demo-book
+kind: Etymology
+name: Demo Book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: gamos
+    language: Greek
+    meaning: marriage
+`), 0o644))
+
+	// Definitions book: gamos is referenced ONLY from the "gamos (marriage)"
+	// scene, so the canonical derived scene is "gamos (marriage)".
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "index.yml"), []byte(`id: demo-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "gamos (marriage)"
+      expressions:
+        - expression: monogamy
+          meaning: marriage to one
+          origin_parts:
+            - origin: gamos
+              language: Greek
+`), 0o644))
+
+	// Learning history: gamos split across "misein (to hate)" (old logs)
+	// and "gamos (marriage)" (newer log).
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-book.yml"), []byte(`- metadata:
+    notebook_id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "misein (to hate)"
+      expressions:
+        - expression: gamos
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-04-25T14:21:42-07:00"
+              quality: 4
+              quiz_type: etymology_breakdown
+              interval_days: 30
+    - metadata:
+        title: "gamos (marriage)"
+      expressions:
+        - expression: gamos
+          type: origin
+          learned_logs: []
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2026-05-27T06:18:17-07:00"
+              quality: 5
+              quiz_type: etymology_breakdown
+              interval_days: 30
+`), 0o644))
+
+	v := NewValidator(learningDir, nil, nil, []string{defsDir}, []string{etymDir}, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningDir, "demo-book.yml"), &histories)
+	require.Len(t, histories, 1)
+
+	// gamos must appear under exactly ONE scene now — the canonical
+	// "gamos (marriage)" — with both breakdown logs merged in.
+	var gamosScenes []string
+	var gamosLogCount int
+	for _, scene := range histories[0].Scenes {
+		for _, e := range scene.Expressions {
+			if e.Expression == "gamos" {
+				gamosScenes = append(gamosScenes, scene.Metadata.Title)
+				gamosLogCount = len(e.EtymologyBreakdownLogs)
+			}
+		}
+	}
+	require.Len(t, gamosScenes, 1, "gamos must live under exactly one scene after consolidation")
+	assert.Equal(t, "gamos (marriage)", gamosScenes[0],
+		"consolidation target must be the canonically-derived scene")
+	assert.Equal(t, 2, gamosLogCount,
+		"both scenes' breakdown logs must be unioned onto the surviving entry")
+
+	// The now-empty "misein (to hate)" scene must be dropped.
+	for _, scene := range histories[0].Scenes {
+		assert.NotEqual(t, "misein (to hate)", scene.Metadata.Title,
+			"the emptied source scene must be removed")
+	}
+}
+
+// TestValidator_Fix_ConsolidatesMisScenedVocabWord reproduces the
+// "multiple dexterity records" bug: an old vocab path wrote a word's
+// logs under a synthetic scene named after the SESSION instead of the
+// word's real definitions scene. --fix must move each such word to its
+// definitions scene, merging when it already has an entry there
+// (duplicate) and relocating when it doesn't (mis-scened single).
+//
+// Generic idiom data, not the user's notebook.
+func TestValidator_Fix_ConsolidatesMisScenedVocabWord(t *testing.T) {
+	dir := t.TempDir()
+	learningDir := filepath.Join(dir, "learning_notes")
+	defsDir := filepath.Join(dir, "definitions")
+	defsBook := filepath.Join(defsDir, "demo-book")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.MkdirAll(defsBook, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "index.yml"), []byte(`id: demo-book
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	// Two real scenes; "break the ice" lives in scene A, "lose your temper"
+	// in scene B.
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "social cues"
+      expressions:
+        - expression: break the ice
+          meaning: to start a conversation
+    - metadata:
+        index: 1
+        title: "emotions"
+      expressions:
+        - expression: lose your temper
+          meaning: to get angry
+`), 0o644))
+
+	// Learning history: a synthetic "Session 1" scene holds both words'
+	// old logs. "break the ice" is ALSO under its real scene "social cues"
+	// (duplicate); "lose your temper" is ONLY under the synthetic scene
+	// (mis-scened single).
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-book.yml"), []byte(`- metadata:
+    notebook_id: demo-book
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "social cues"
+      expressions:
+        - expression: break the ice
+          learned_logs:
+            - status: understood
+              learned_at: "2026-05-20T10:00:00Z"
+              quality: 4
+              quiz_type: notebook
+              interval_days: 7
+    - metadata:
+        title: "Session 1"
+      expressions:
+        - expression: break the ice
+          learned_logs:
+            - status: understood
+              learned_at: "2026-04-06T10:00:00Z"
+              quality: 4
+              quiz_type: freeform
+              interval_days: 7
+        - expression: lose your temper
+          learned_logs:
+            - status: misunderstood
+              learned_at: "2026-04-06T10:05:00Z"
+              quality: 1
+              quiz_type: freeform
+              interval_days: 1
+`), 0o644))
+
+	v := NewValidator(learningDir, nil, nil, []string{defsDir}, nil, "", nil)
+	_, err := v.Fix()
+	require.NoError(t, err)
+
+	var histories []LearningHistory
+	readYAMLForTest(t, filepath.Join(learningDir, "demo-book.yml"), &histories)
+	require.Len(t, histories, 1)
+
+	scenesByTitle := map[string][]LearningHistoryExpression{}
+	for _, s := range histories[0].Scenes {
+		scenesByTitle[s.Metadata.Title] = s.Expressions
+	}
+
+	// The synthetic "Session 1" scene must be gone.
+	_, hasSynthetic := scenesByTitle["Session 1"]
+	assert.False(t, hasSynthetic, "synthetic session-named scene must be removed after consolidation")
+
+	// "break the ice": its two entries (social cues + synthetic) merge into
+	// a single entry under "social cues" carrying both logs.
+	social := scenesByTitle["social cues"]
+	var bti *LearningHistoryExpression
+	count := 0
+	for i := range social {
+		if social[i].Expression == "break the ice" {
+			bti = &social[i]
+			count++
+		}
+	}
+	require.Equal(t, 1, count, "break the ice must be a single entry under its real scene")
+	require.NotNil(t, bti)
+	assert.Len(t, bti.LearnedLogs, 2, "both the duplicate's logs must be unioned")
+
+	// "lose your temper": relocated from the synthetic scene to "emotions".
+	emotions := scenesByTitle["emotions"]
+	var found bool
+	for _, e := range emotions {
+		if e.Expression == "lose your temper" {
+			found = true
+			assert.NotEmpty(t, e.LearnedLogs, "relocated word keeps its logs")
+		}
+	}
+	assert.True(t, found, "mis-scened single must be moved to its definitions scene")
+}

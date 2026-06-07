@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // EtymologyOrigin represents a single etymology origin (root, prefix, or suffix).
 type EtymologyOrigin struct {
 	Origin   string `yaml:"origin"`
-	Type     string `yaml:"type"`     // prefix, suffix, root
-	Language string `yaml:"language"` // Latin, Greek, etc.
+	Type     string `yaml:"type,omitempty"` // prefix, suffix, root ("" means root)
+	Language string `yaml:"language"`       // Latin, Greek, etc.
 	Meaning  string `yaml:"meaning"`
 
 	// Sense optionally disambiguates same-session multi-sense origins. When a
@@ -45,11 +48,15 @@ type EtymologyOrigin struct {
 // EtymologyNotebookEntry mirrors the story/definitions notebook structure.
 // Each entry is one session containing scenes; each scene holds origins.
 // The schema parallels DefinitionsScene so etymology source files share
-// the same outer hierarchy as definitions notebooks.
+// the same outer hierarchy as definitions notebooks. Concepts and
+// Relations remain session-scoped (not scene-scoped) — they describe
+// groupings across the whole session, mirroring the legacy flat shape.
 type EtymologyNotebookEntry struct {
-	Event  string                  `yaml:"event"`
-	Date   time.Time               `yaml:"date,omitempty"`
-	Scenes []EtymologyNotebookScene `yaml:"scenes"`
+	Event     string                   `yaml:"event"`
+	Date      time.Time                `yaml:"date,omitempty"`
+	Scenes    []EtymologyNotebookScene `yaml:"scenes"`
+	Concepts  []Concept                `yaml:"concepts,omitempty"`
+	Relations []Relation               `yaml:"relations,omitempty"`
 }
 
 // EtymologyNotebookScene is one scene within a session, holding origins.
@@ -136,13 +143,20 @@ type etymologySessionFile struct {
 }
 
 // OriginSceneCandidate records one (notebookID, session, scene) location
-// where a definition's origin_parts referenced a particular origin.
-// Used by the legacy-shape projection to pick the best scene title for
-// each origin: same-notebook+session > same-notebook > any.
+// where a definition's origin_parts referenced a particular origin. The
+// rank fields capture book/source position so pickBestSceneForOrigin
+// can apply the "earliest in a book" canonical-scene rule: SessionRank
+// is the position of the session file in the book's index.yml; SceneRank
+// is the position of the scene within the session's definitions file;
+// ExprRank is the position of the first expression in the scene whose
+// origin_parts references this origin.
 type OriginSceneCandidate struct {
 	NotebookID   string
 	SessionTitle string
 	SceneTitle   string
+	SessionRank  int
+	SceneRank    int
+	ExprRank     int
 }
 
 // ReadEtymologyNotebook reads the origins from an etymology notebook,
@@ -251,18 +265,134 @@ func hasNewShape(entries []EtymologyNotebookEntry) bool {
 	return false
 }
 
-// pickBestSceneForOrigin selects the most contextually-appropriate scene
-// title for an origin, given the candidates discovered across all
-// notebooks. Preference: same-notebook+session > same-notebook >
-// any-notebook > synthetic (session title). Empty string is returned
-// only when fallbackSession is empty, which a caller treats as
-// "leave SceneTitle empty".
+// IsNewShapeEtymologyFile reports whether an etymology session YAML at
+// the given path already uses the new event/scenes/origins shape. Used
+// by the one-time migrator to skip already-converted files. A parse
+// failure against the new-shape struct (legacy files parse as a map,
+// not a list) is treated as "not new shape" so the migrator can proceed
+// to read the file as legacy.
+func IsNewShapeEtymologyFile(path string) (bool, error) {
+	entries, err := readYamlFile[[]EtymologyNotebookEntry](path)
+	if err != nil {
+		return false, nil
+	}
+	return hasNewShape(entries), nil
+}
+
+// LegacyEtymologySession is the public view of an etymology session YAML
+// in the legacy metadata+flat-origins shape. Exported for tooling
+// (migrators, validators) that need raw access without going through the
+// Reader's scene-projection pipeline.
+type LegacyEtymologySession struct {
+	Metadata    EtymologySessionMetadata
+	Origins     []EtymologyOrigin
+	Definitions []EtymologyDefinitionEntry
+	Concepts    []Concept
+	Relations   []Relation
+	Date        time.Time
+}
+
+// ReadLegacyEtymologySession reads one legacy-shape etymology session
+// file. Callers that handle both shapes should use the Reader instead;
+// this is for tooling that explicitly needs the unprocessed legacy view.
+func ReadLegacyEtymologySession(path string) (LegacyEtymologySession, error) {
+	wrapped, err := readYamlFile[etymologySessionFile](path)
+	if err != nil {
+		return LegacyEtymologySession{}, err
+	}
+	return LegacyEtymologySession(wrapped), nil
+}
+
+// loadEtymologySessionAnyShape reads an etymology session file in either
+// the new event/scenes/origins shape or the legacy metadata+flat-origins
+// shape, and projects the result into the legacy etymologySessionFile
+// struct so existing callers don't need to know which shape the file
+// uses. SceneTitle on origins is intentionally dropped — callers that
+// need it should go through Reader.ReadEtymologyNotebook.
+func loadEtymologySessionAnyShape(path string) (etymologySessionFile, error) {
+	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil && hasNewShape(newShape) {
+		var out etymologySessionFile
+		for _, entry := range newShape {
+			if out.Metadata.Title == "" {
+				out.Metadata.Title = entry.Event
+			}
+			if !entry.Date.IsZero() && out.Date.IsZero() {
+				out.Date = entry.Date
+			}
+			for _, scene := range entry.Scenes {
+				out.Origins = append(out.Origins, scene.Origins...)
+			}
+			out.Concepts = append(out.Concepts, entry.Concepts...)
+			out.Relations = append(out.Relations, entry.Relations...)
+		}
+		return out, nil
+	}
+	return readYamlFile[etymologySessionFile](path)
+}
+
+// ReadEtymologyIndex loads an etymology directory's index.yml.
+func ReadEtymologyIndex(path string) (EtymologyIndex, error) {
+	idx, err := readYamlFile[EtymologyIndex](path)
+	if err != nil {
+		return EtymologyIndex{}, err
+	}
+	idx.Path = filepath.Dir(path)
+	return idx, nil
+}
+
+// ReadEtymologyFromBytes parses YAML bytes as a new-shape etymology
+// session file ([]EtymologyNotebookEntry). Used by tests and tooling
+// that inspect migrator output without going through the Reader.
+func ReadEtymologyFromBytes(data []byte) ([]EtymologyNotebookEntry, error) {
+	var entries []EtymologyNotebookEntry
+	if err := yaml.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("yaml.Unmarshal: %w", err)
+	}
+	return entries, nil
+}
+
+// pickBestSceneForOrigin selects the canonical scene title for an
+// origin, applying the earliest-rule: within a book, the chosen scene
+// is the one where the origin first appears (earliest session in the
+// book's index.yml, then earliest scene within that session's
+// definitions file, then earliest expression within that scene). This
+// matches where a user would naturally place an origin's learning
+// history — at its introduction point in the book — and stops the
+// "two logos sessions" drift that alphabetical sorting caused when a
+// combinator origin like logos is referenced from multiple scenes.
+//
+// Preference order: same-notebook+session (earliest scene/expr) >
+// same-notebook (earliest session, then scene, then expr) > any
+// notebook (earliest by notebook id, then session/scene/expr) >
+// synthetic fallback = the origin's session title.
 func pickBestSceneForOrigin(
 	candidates map[string][]OriginSceneCandidate,
 	origin, originNotebookID, originSessionTitle string,
 ) string {
 	key := strings.ToLower(strings.TrimSpace(origin))
 	matches := candidates[key]
+
+	// Sort by (NotebookID, SessionRank, SceneRank, ExprRank). NotebookID
+	// is alphabetical (books don't have a globally-ordered list); the
+	// rank fields capture position-within-the-book and break ties by
+	// "first introduction". The candidate accumulator (buildOriginSceneIndex)
+	// records ranks during the walk so the sort is deterministic across
+	// runs regardless of Go's map iteration order.
+	sorted := make([]OriginSceneCandidate, len(matches))
+	copy(sorted, matches)
+	sort.Slice(sorted, func(i, j int) bool {
+		if sorted[i].NotebookID != sorted[j].NotebookID {
+			return sorted[i].NotebookID < sorted[j].NotebookID
+		}
+		if sorted[i].SessionRank != sorted[j].SessionRank {
+			return sorted[i].SessionRank < sorted[j].SessionRank
+		}
+		if sorted[i].SceneRank != sorted[j].SceneRank {
+			return sorted[i].SceneRank < sorted[j].SceneRank
+		}
+		return sorted[i].ExprRank < sorted[j].ExprRank
+	})
+	matches = sorted
 
 	var bestSameSession, bestSameNotebook, bestAny string
 	for _, c := range matches {
@@ -307,7 +437,11 @@ func pickBestSceneForOrigin(
 // candidates so pickBestSceneForOrigin can apply the contextual
 // preference order.
 func (r *Reader) buildOriginSceneIndex() map[string][]OriginSceneCandidate {
-	add := func(out map[string][]OriginSceneCandidate, origin, notebookID, sessionTitle, sceneTitle string) {
+	add := func(
+		out map[string][]OriginSceneCandidate,
+		origin, notebookID, sessionTitle, sceneTitle string,
+		sessionRank, sceneRank, exprRank int,
+	) {
 		key := strings.ToLower(strings.TrimSpace(origin))
 		if key == "" {
 			return
@@ -316,24 +450,29 @@ func (r *Reader) buildOriginSceneIndex() map[string][]OriginSceneCandidate {
 			NotebookID:   notebookID,
 			SessionTitle: sessionTitle,
 			SceneTitle:   sceneTitle,
+			SessionRank:  sessionRank,
+			SceneRank:    sceneRank,
+			ExprRank:     exprRank,
 		})
 	}
 	out := make(map[string][]OriginSceneCandidate)
 
 	// Story notebooks: each event has scenes with definitions carrying
-	// origin_parts. The "session title" is the event name.
+	// origin_parts. The "session title" is the event name. Rank is taken
+	// from the file's traversal order so the earliest-rule picks the
+	// first introduction.
 	for storyID, idx := range r.indexes {
-		for _, nbPath := range idx.NotebookPaths {
+		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
 			notebooks, err := readYamlFile[[]StoryNotebook](path)
 			if err != nil {
 				continue
 			}
 			for _, nb := range notebooks {
-				for _, scene := range nb.Scenes {
-					for _, def := range scene.Definitions {
+				for sceneRank, scene := range nb.Scenes {
+					for exprRank, def := range scene.Definitions {
 						for _, op := range def.OriginParts {
-							add(out, op.Origin, storyID, nb.Event, scene.Title)
+							add(out, op.Origin, storyID, nb.Event, scene.Title, nbRank, sceneRank, exprRank)
 						}
 					}
 				}
@@ -342,16 +481,17 @@ func (r *Reader) buildOriginSceneIndex() map[string][]OriginSceneCandidate {
 	}
 
 	// Definitions notebooks: per-book per-session scenes with
-	// expressions. The raw form preserves session and scene titles
-	// (the index-keyed map loses scene titles to dedup duplicates).
+	// expressions. SessionRank is the position of the session file in
+	// the book's definitions index.yml — definitionsRaw[bookID] is
+	// populated in index.yml order, so the slice index IS the rank.
 	for bookID, defs := range r.definitionsRaw {
-		for _, fileDefs := range defs {
+		for sessionRank, fileDefs := range defs {
 			session := fileDefs.Metadata.Title
-			for _, scene := range fileDefs.Scenes {
+			for sceneRank, scene := range fileDefs.Scenes {
 				sceneTitle := scene.Metadata.Title
-				for _, note := range scene.Expressions {
+				for exprRank, note := range scene.Expressions {
 					for _, op := range note.OriginParts {
-						add(out, op.Origin, bookID, session, sceneTitle)
+						add(out, op.Origin, bookID, session, sceneTitle, sessionRank, sceneRank, exprRank)
 					}
 				}
 			}
@@ -365,16 +505,16 @@ func (r *Reader) buildOriginSceneIndex() map[string][]OriginSceneCandidate {
 	// a synthetic scene = session title so they sort behind real
 	// scene matches.
 	for etymID, idx := range r.etymologyIndexes {
-		for _, nbPath := range idx.NotebookPaths {
+		for nbRank, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			wrapped, err := readYamlFile[etymologySessionFile](path)
+			wrapped, err := loadEtymologySessionAnyShape(path)
 			if err != nil {
 				continue
 			}
 			session := wrapped.Metadata.Title
-			for _, def := range wrapped.Definitions {
+			for exprRank, def := range wrapped.Definitions {
 				for _, op := range def.OriginParts {
-					add(out, op.Origin, etymID, session, session)
+					add(out, op.Origin, etymID, session, session, nbRank, 0, exprRank)
 				}
 			}
 		}
@@ -508,7 +648,7 @@ func walkEtymologyIndexFiles(rootDir string, indexMap map[string]EtymologyIndex)
 		// time when origins disappear from the deduplicated set.
 		for _, nbPath := range index.NotebookPaths {
 			sessionPath := filepath.Join(dir, nbPath)
-			wrapped, err := readYamlFile[etymologySessionFile](sessionPath)
+			wrapped, err := loadEtymologySessionAnyShape(sessionPath)
 			if err != nil {
 				return fmt.Errorf("read etymology session %s: %w", sessionPath, err)
 			}

@@ -433,20 +433,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 		}
 	}
 
-	currentEF := calculator.DeriveEF(exp.ReverseLogs)
-
-	nextInterval, _ := calculator.CalculateInterval(exp.ReverseLogs, quality, currentEF)
-
-	newRecord := LearningRecord{
+	tentative := LearningRecord{
 		Status:         status,
 		LearnedAt:      NewDate(),
 		Quality:        quality,
 		ResponseTimeMs: responseTimeMs,
 		QuizType:       string(quizType),
-		IntervalDays:   nextInterval,
 	}
+	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.ReverseLogs, tentative)
 
-	exp.ReverseLogs = append([]LearningRecord{newRecord}, exp.ReverseLogs...)
+	exp.ReverseLogs = append([]LearningRecord{tentative}, exp.ReverseLogs...)
 }
 
 // AddRecordWithQualityForEtymology adds a new learning record for etymology quiz with SM-2 quality data
@@ -467,17 +463,15 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	}
 
 	addRecord := func(logs []LearningRecord) []LearningRecord {
-		currentEF := calculator.DeriveEF(logs)
-		nextInterval, _ := calculator.CalculateInterval(logs, quality, currentEF)
-		newRecord := LearningRecord{
+		tentative := LearningRecord{
 			Status:         status,
 			LearnedAt:      NewDate(),
 			Quality:        quality,
 			ResponseTimeMs: responseTimeMs,
 			QuizType:       string(quizType),
-			IntervalDays:   nextInterval,
 		}
-		return append([]LearningRecord{newRecord}, logs...)
+		tentative.IntervalDays, _ = calculator.NextIntervalForWrite(logs, tentative)
+		return append([]LearningRecord{tentative}, logs...)
 	}
 
 	switch quizType {
@@ -525,6 +519,27 @@ func (exp LearningHistoryExpression) NeedsEtymologyReview(quizType QuizType) boo
 // for reverse quiz - words should be learned in forward direction first.
 func (exp LearningHistoryExpression) HasAnyCorrectAnswer() bool {
 	for _, log := range exp.LearnedLogs {
+		if log.Status == LearnedStatusUnderstood ||
+			log.Status == LearnedStatusCanBeUsed ||
+			log.Status == learnedStatusIntuitivelyUsed {
+			return true
+		}
+	}
+	return false
+}
+
+// HasAnyCorrectAnswerInAnyDirection returns true if the expression has at
+// least one correct answer in either the forward (LearnedLogs) or the
+// reverse (ReverseLogs) track. Used by the quiz card gate to decide
+// whether a word counts as "studied" (defer to SR interval) or
+// "unstudied" (gated by the includeUnstudied toggle). A correct answer
+// in any direction is enough — the toggle is meant to gate pristine
+// words, not to bypass SR for words the user has already engaged with.
+func (exp LearningHistoryExpression) HasAnyCorrectAnswerInAnyDirection() bool {
+	if exp.HasAnyCorrectAnswer() {
+		return true
+	}
+	for _, log := range exp.ReverseLogs {
 		if log.Status == LearnedStatusUnderstood ||
 			log.Status == LearnedStatusCanBeUsed ||
 			log.Status == learnedStatusIntuitivelyUsed {
@@ -640,20 +655,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 		}
 	}
 
-	currentEF := calculator.DeriveEF(exp.LearnedLogs)
-
-	nextInterval, _ := calculator.CalculateInterval(exp.LearnedLogs, quality, currentEF)
-
-	newRecord := LearningRecord{
+	tentative := LearningRecord{
 		Status:         status,
 		LearnedAt:      NewDate(),
 		Quality:        quality,
 		ResponseTimeMs: responseTimeMs,
 		QuizType:       string(quizType),
-		IntervalDays:   nextInterval,
 	}
+	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.LearnedLogs, tentative)
 
-	exp.LearnedLogs = append([]LearningRecord{newRecord}, exp.LearnedLogs...)
+	exp.LearnedLogs = append([]LearningRecord{tentative}, exp.LearnedLogs...)
 }
 
 // IsExpressionSkipped checks whether a note is excluded from the given quiz
@@ -818,8 +829,19 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 		return errors
 	}
 
-	// Check for duplicate expressions across different scenes in the same episode
-	episodeExpressions := make(map[string][]string) // expression -> list of scene titles
+	// Check for duplicate expressions across different scenes in the same
+	// episode. Key by (name, type) so a vocab entry and an etymology-origin
+	// entry that share a name (e.g. vocab "peer" + Latin root "peer") are
+	// allowed to coexist; the rest of the codebase already treats them as
+	// distinct via the same composite key.
+	type exprKey struct{ name, typ string }
+	normaliseType := func(t string) string {
+		if t == LearningExpressionTypeVocabulary {
+			return ""
+		}
+		return t
+	}
+	episodeExpressions := make(map[exprKey][]string) // (name, typ) -> list of scene titles
 	for _, scene := range h.Scenes {
 		sceneTitle := strings.TrimSpace(scene.Metadata.Title)
 		for _, expr := range scene.Expressions {
@@ -827,16 +849,18 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 			if expression == "" {
 				continue
 			}
-			episodeExpressions[expression] = append(episodeExpressions[expression], sceneTitle)
+			episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}] = append(
+				episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}], sceneTitle,
+			)
 		}
 	}
 
 	// Report duplicates across scenes
-	for expression, scenes := range episodeExpressions {
+	for key, scenes := range episodeExpressions {
 		if len(scenes) > 1 {
 			errors = append(errors, ValidationError{
 				Location: location,
-				Message:  fmt.Sprintf("expression %q appears in multiple scenes: %v", expression, scenes),
+				Message:  fmt.Sprintf("expression %q appears in multiple scenes: %v", key.name, scenes),
 				Suggestions: []string{
 					"run validate --fix to merge duplicate expressions",
 				},

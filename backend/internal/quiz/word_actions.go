@@ -78,6 +78,13 @@ func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 //
 // If the expression has no learning history yet, SkipWord seeds an entry so
 // the skip has somewhere to live, then writes the skips onto it.
+//
+// When the expression belongs to a definitions concept (see Card.ConceptHead),
+// the skip propagates to every sibling member of the concept in the same
+// notebook — that's the "skip union" guarantee the read-side collapse
+// relies on. Until migration moves logs to the head, the simplest way to
+// keep both reads-from-head and reads-from-members consistent is to write
+// the skip on each member entry.
 func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook.QuizType) error {
 	if len(quizTypes) == 0 {
 		return fmt.Errorf("at least one quiz type is required to skip a word")
@@ -89,15 +96,22 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook
 
 	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
 
-	// Create a learned-log-free stub if the expression has no history yet —
-	// SetSkippedAt needs an entry to attach to, but we must not invent a
-	// fake "quality 5" review log just because the user skipped the word.
-	updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, info.Expression)
+	expressions := s.conceptMembersOrSelf(info.NotebookName, info.Expression)
+
+	// Create a learned-log-free stub for each member if the expression has
+	// no history yet — SetSkippedAt needs an entry to attach to, but we
+	// must not invent a fake "quality 5" review log just because the user
+	// skipped the word.
+	for _, expr := range expressions {
+		updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, expr)
+	}
 
 	skippedAt := time.Now().Format(time.RFC3339)
-	for _, qt := range quizTypes {
-		if !updater.SetSkippedAt(info.Expression, qt, skippedAt) {
-			return fmt.Errorf("failed to record skip for expression %q (%s) in notebook %q", info.Expression, qt, info.NotebookName)
+	for _, expr := range expressions {
+		for _, qt := range quizTypes {
+			if !updater.SetSkippedAt(expr, qt, skippedAt) {
+				return fmt.Errorf("failed to record skip for expression %q (%s) in notebook %q", expr, qt, info.NotebookName)
+			}
 		}
 	}
 
@@ -106,6 +120,24 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook
 		return fmt.Errorf("failed to save learning history for %q: %w", info.NotebookName, err)
 	}
 	return nil
+}
+
+// conceptMembersOrSelf returns the list of concept-sibling expressions for
+// expression in the given notebook, including expression itself. When the
+// expression doesn't belong to any concept (or the reader fails to load),
+// it returns [expression]. Used by SkipWord/ResumeWord to propagate skips
+// across all members of the same concept.
+func (s *Service) conceptMembersOrSelf(notebookName, expression string) []string {
+	reader, err := s.newReader()
+	if err != nil {
+		return []string{expression}
+	}
+	index := buildConceptIndex(reader, notebookName)
+	info, ok := index[expression]
+	if !ok || info == nil {
+		return []string{expression}
+	}
+	return append([]string(nil), info.Members...)
 }
 
 // ResumeWord clears skips for each of the given quiz types so the word
@@ -123,8 +155,10 @@ func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
-	for _, qt := range quizTypes {
-		updater.ClearSkippedAt(info.Expression, qt)
+	for _, expr := range s.conceptMembersOrSelf(info.NotebookName, info.Expression) {
+		for _, qt := range quizTypes {
+			updater.ClearSkippedAt(expr, qt)
+		}
 	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
@@ -211,13 +245,13 @@ func toggleLogs(expr *notebook.LearningHistoryExpression, quizType notebook.Quiz
 		log.Quality = 1
 	}
 
-	// Derive EF from logs before this entry and recalculate interval
+	// Replay the older-log chain with this flipped entry appended so the
+	// recomputed interval matches what `validate --fix` would produce.
 	var previousLogs []notebook.LearningRecord
 	if len(logs) > 1 {
 		previousLogs = logs[1:]
 	}
-	derivedEF := calculator.DeriveEF(previousLogs)
-	newInterval, _ := calculator.CalculateInterval(previousLogs, log.Quality, derivedEF)
+	newInterval, _ := calculator.NextIntervalForWrite(previousLogs, *log)
 	log.IntervalDays = newInterval
 
 	expr.SetLogsForQuizType(quizType, logs)

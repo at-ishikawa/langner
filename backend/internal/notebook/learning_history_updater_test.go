@@ -946,3 +946,99 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 		})
 	}
 }
+
+// TestAssertNoDuplicateOriginsInSession_PassesAndFails verifies the
+// pre-write invariant guard used by SaveEtymologyOriginResult. The
+// happy-path returns nil; a duplicate origin across scenes (the bug
+// class this guard catches) returns an error naming the offending
+// origin and the scenes it landed in.
+func TestAssertNoDuplicateOriginsInSession_PassesAndFails(t *testing.T) {
+	clean := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{Title: "Session X"},
+		Scenes: []LearningScene{{
+			Metadata: LearningSceneMetadata{Title: "alpha (first)"},
+			Expressions: []LearningHistoryExpression{{
+				Expression: "demo-root",
+				Type:       LearningExpressionTypeOrigin,
+				EtymologyBreakdownLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Now()), Quality: 4, QuizType: "etymology_breakdown"},
+				},
+			}},
+		}},
+	}}
+	assert.NoError(t, AssertNoDuplicateOriginsInSession(clean, "demo-notebook", "Session X"),
+		"clean state must pass the guard")
+
+	dirty := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{Title: "Session X"},
+		Scenes: []LearningScene{
+			{
+				Metadata: LearningSceneMetadata{Title: "alpha (first)"},
+				Expressions: []LearningHistoryExpression{{
+					Expression: "demo-root",
+					Type:       LearningExpressionTypeOrigin,
+				}},
+			},
+			{
+				Metadata: LearningSceneMetadata{Title: "beta (drifted)"},
+				Expressions: []LearningHistoryExpression{{
+					Expression: "demo-root",
+					Type:       LearningExpressionTypeOrigin,
+				}},
+			},
+		},
+	}}
+	err := AssertNoDuplicateOriginsInSession(dirty, "demo-notebook", "Session X")
+	require.Error(t, err, "duplicate origin across scenes must trip the guard")
+	assert.Contains(t, err.Error(), "demo-root", "error must name the offending origin")
+	assert.Contains(t, err.Error(), "alpha (first)", "error must list both scenes")
+	assert.Contains(t, err.Error(), "beta (drifted)", "error must list both scenes")
+}
+
+// TestUpdateOrCreateExpressionForEtymology_WritesToExistingScene pins
+// the rule that stops "two logos sessions" from happening: when an
+// etymology origin already lives under one scene in a session, a write
+// arriving with a DIFFERENT scene title must update the existing entry
+// in place (not create a duplicate under the new scene). Without this,
+// any shift in pickBestSceneForOrigin's output — from a definitions
+// edit, the determinism fix, or anything else that changes the
+// candidate list — splits the origin's learning history.
+func TestUpdateOrCreateExpressionForEtymology_WritesToExistingScene(t *testing.T) {
+	// Generic Greek-root pair, not from the user's data.
+	history := []LearningHistory{{
+		Metadata: LearningHistoryMetadata{Title: "Session X"},
+		Scenes: []LearningScene{{
+			Metadata: LearningSceneMetadata{Title: "alpha (first)"},
+			Expressions: []LearningHistoryExpression{{
+				Expression: "demo-root",
+				Type:       LearningExpressionTypeOrigin,
+				EtymologyBreakdownLogs: []LearningRecord{
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-24 * time.Hour)), Quality: 4, QuizType: "etymology_freeform"},
+				},
+			}},
+		}},
+	}}
+
+	updater := NewLearningHistoryUpdater(history, nil)
+	// Write arrives addressed to a DIFFERENT scene title — what
+	// pickBestSceneForOrigin would now produce after a candidate-set
+	// drift. The lookup must still find the existing entry under
+	// "alpha (first)" and update it there.
+	found := updater.UpdateOrCreateExpressionWithQualityForEtymology(
+		"demo-notebook", "Session X", "beta (drifted)",
+		"demo-root", "", true, true, 5, 2000,
+		QuizTypeEtymologyStandard,
+	)
+	assert.True(t, found, "must find the existing origin under its current scene, not create a duplicate")
+
+	got := updater.GetHistory()
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Scenes, 1, "no new scene must be created on a same-session origin write")
+	assert.Equal(t, "alpha (first)", got[0].Scenes[0].Metadata.Title,
+		"the existing entry must stay under its original scene title")
+	require.Len(t, got[0].Scenes[0].Expressions, 1)
+	exp := got[0].Scenes[0].Expressions[0]
+	assert.Equal(t, "demo-root", exp.Expression)
+	assert.Len(t, exp.EtymologyBreakdownLogs, 2,
+		"the new log must be appended onto the existing entry's logs")
+}

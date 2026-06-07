@@ -1,0 +1,39 @@
+# Pre-seed Word Stems' origins with a freeform pass + a stale
+# misunderstood Standard log so they are ELIGIBLE for the etymology
+# Standard and Reverse quizzes (isOriginEligible requires a freeform
+# answer plus at least one correct answer in any etymology track).
+# Without this, the BatchFeedback scenarios on Word Stems would see 0
+# cards because LoadEtymologyOriginCards excludes touched-but-not-
+# freeform-eligible origins regardless of includeUnstudied.
+# Mirrors learning_notes/word-roots.yml's shape.
+- metadata:
+    id: word-stems
+    title: "Word Stems"
+  scenes:
+    - metadata:
+        title: "Word Stems"
+      expressions:
+        - expression: scribo
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01T00:00:00Z"
+              quality: 4
+              quiz_type: etymology_freeform
+              interval_days: 0
+            - status: misunderstood
+              learned_at: "2025-01-02T00:00:00Z"
+              quality: 1
+              quiz_type: etymology_standard
+              interval_days: 1
+        - expression: dico
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-01-01T00:00:00Z"
+              quality: 4
+              quiz_type: etymology_freeform
+              interval_days: 0
+            - status: misunderstood
+              learned_at: "2025-01-02T00:00:00Z"
+              quality: 1
+              quiz_type: etymology_standard
+              interval_days: 1

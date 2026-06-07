@@ -1,6 +1,7 @@
 package notebook
 
 import (
+	"fmt"
 	"strings"
 	"time"
 )
@@ -323,13 +324,14 @@ func (u *LearningHistoryUpdater) OverrideLog(
 				logs[i].Status = LearnedStatusMisunderstood
 			}
 
-			// Derive EF from logs before this entry
+			// Replay the chain of older logs with this entry appended so
+			// the recomputed interval matches what `validate --fix` would
+			// produce: same chain logic, same early-review guard.
 			var previousLogs []LearningRecord
 			if i+1 < len(logs) {
 				previousLogs = logs[i+1:]
 			}
-			derivedEF := u.calculator.DeriveEF(previousLogs)
-			newInterval, _ := u.calculator.CalculateInterval(previousLogs, logs[i].Quality, derivedEF)
+			newInterval, _ := u.calculator.NextIntervalForWrite(previousLogs, logs[i])
 			logs[i].IntervalDays = newInterval
 		}
 
@@ -454,10 +456,21 @@ func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
 }
 
 // UpdateOrCreateExpressionWithQualityForEtymology updates or creates an
-// origin entry. Lookup matches on (name, Type=origin) so a vocab entry
-// sharing the name doesn't get its etymology logs polluted. Legacy
-// type-empty entries with etymology logs are upgraded in place to
-// Type=origin so re-runs converge on the typed shape.
+// origin entry. Lookup matches on (session, expression, Type=origin)
+// across EVERY scene in the matching session — scene title is not part
+// of the key. This is what stops an origin's learning history from
+// splitting into two entries when the scene title pickBestSceneForOrigin
+// derives drifts over time: today's writer might be told to use
+// "derma (skin)" while the prior writer used "gyne (woman)", but if the
+// origin already lives under "gyne (woman)" we update there. Vocab
+// entries are filtered out so an etymology log can't pollute a same-
+// named word; legacy type-empty entries that already carry etymology
+// logs are upgraded in place to Type=origin so re-runs converge on the
+// typed shape.
+//
+// Only when no existing origin entry is found do we create a new one,
+// and only then does sceneTitle matter (it's the location for the new
+// entry, derived by pickBestSceneForOrigin).
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
 	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
 	isCorrect, isKnownWord bool,
@@ -465,18 +478,12 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 	responseTimeMs int64,
 	quizType QuizType,
 ) bool {
-	normalizedSceneTitle := normalizeQuotes(sceneTitle)
-
 	for hi, h := range u.history {
 		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
 			continue
 		}
 
 		for si, s := range h.Scenes {
-			if normalizeQuotes(s.Metadata.Title) != normalizedSceneTitle {
-				continue
-			}
-
 			for ei, exp := range s.Expressions {
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
@@ -536,6 +543,46 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
 		u.history[storyIndex].Scenes[sceneIndex].Expressions,
 		newExpression,
 	)
+}
+
+// AssertNoDuplicateOriginsInSession returns a non-nil error if the given
+// session block holds the same origin expression under more than one
+// scene. Used by SaveEtymologyOriginResult as a structural guard right
+// before WriteYamlFile so any write that would re-introduce the "two
+// logos sessions" class of bug fails loudly instead of silently
+// corrupting the YAML. After the etymology source migration this
+// invariant cannot fail in normal operation — the writer always
+// addresses scenes the source declares — so a trip indicates either a
+// real regression or hand-edited data that needs reconciliation.
+func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, sessionTitle string) error {
+	normalised := normalizeQuotes(sessionTitle)
+	for _, h := range history {
+		if normalizeQuotes(h.Metadata.Title) != normalised {
+			continue
+		}
+		scenesByOrigin := make(map[string][]string)
+		for _, scene := range h.Scenes {
+			for _, expr := range scene.Expressions {
+				if expr.Type != LearningExpressionTypeOrigin {
+					continue
+				}
+				name := strings.TrimSpace(expr.Expression)
+				if name == "" {
+					continue
+				}
+				scenesByOrigin[name] = append(scenesByOrigin[name], scene.Metadata.Title)
+			}
+		}
+		for origin, scenes := range scenesByOrigin {
+			if len(scenes) > 1 {
+				return fmt.Errorf(
+					"invariant violation: origin %q appears in %d scenes (%v) within notebook %q session %q — refusing to write",
+					origin, len(scenes), scenes, notebookID, sessionTitle,
+				)
+			}
+		}
+	}
+	return nil
 }
 
 // ClearSkippedAt removes the skip for the given quiz type. The expression
