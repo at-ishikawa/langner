@@ -1,5 +1,6 @@
 ---
 title: "Web Frontend UI"
+date: 2026-02-17
 weight: 3
 bookCollapseSection: true
 ---
