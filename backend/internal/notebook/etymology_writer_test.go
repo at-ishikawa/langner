@@ -588,6 +588,128 @@ notebooks:
 		"a word the user has never touched must remain so the user can still drill its origins in context")
 }
 
+// TestEtymologyNotebookWriter_KeepsWordsWithPendingMisunderstanding pins
+// the regression where derived English words the user was actively
+// failing in the vocabulary quiz (latest learned_logs entry =
+// misunderstood) disappeared from the etymology export the moment every
+// underlying origin reached its next-review date. The origin-mastery
+// gate has to yield to the word's own learning state — otherwise the
+// study material drops exactly the vocabularies the user needs to drill.
+//
+// Fixture mirrors the real reproduction: two origins both fully mastered
+// (recent correct etymology answers with long SR intervals) and one
+// derived word whose latest vocabulary log is misunderstood.
+func TestEtymologyNotebookWriter_KeepsWordsWithPendingMisunderstanding(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-vocab")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-vocab
+kind: Etymology
+name: Demo Vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: alpha-root
+    language: Latin
+    meaning: alpha
+  - origin: beta-root
+    language: Latin
+    meaning: beta
+`), 0o644))
+
+	defDir := filepath.Join(tmpDir, "definitions", "books", "demo-vocab")
+	require.NoError(t, os.MkdirAll(defDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "index.yml"), []byte(`id: demo-vocab
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        title: "alpha-root (alpha)"
+      expressions:
+        - expression: failing-word
+          meaning: "user keeps getting this wrong in the vocab quiz"
+          origin_parts:
+            - origin: alpha-root
+            - origin: beta-root
+        - expression: silent-word
+          meaning: "user never touched this word"
+          origin_parts:
+            - origin: alpha-root
+            - origin: beta-root
+`), 0o644))
+
+	// Both origins are mastered: recent correct breakdown answer with a
+	// long interval. Without the pending-misunderstanding bypass the
+	// origin-mastery gate would drop the entire scene.
+	now := time.Now()
+	learningHistories := map[string][]LearningHistory{
+		"demo-vocab": {{
+			Metadata: LearningHistoryMetadata{NotebookID: "demo-vocab", Title: "Session 1"},
+			Scenes: []LearningScene{{
+				Metadata: LearningSceneMetadata{Title: "alpha-root (alpha)"},
+				Expressions: []LearningHistoryExpression{
+					{
+						Expression: "alpha-root",
+						EtymologyBreakdownLogs: []LearningRecord{{
+							Status:       LearnedStatusUnderstood,
+							LearnedAt:    Date{Time: now.Add(-24 * time.Hour)},
+							Quality:      5,
+							QuizType:     string(QuizTypeEtymologyStandard),
+							IntervalDays: 365,
+						}},
+					},
+					{
+						Expression: "beta-root",
+						EtymologyBreakdownLogs: []LearningRecord{{
+							Status:       LearnedStatusUnderstood,
+							LearnedAt:    Date{Time: now.Add(-24 * time.Hour)},
+							Quality:      5,
+							QuizType:     string(QuizTypeEtymologyStandard),
+							IntervalDays: 365,
+						}},
+					},
+					{
+						Expression: "failing-word",
+						LearnedLogs: []LearningRecord{{
+							Status:       LearnedStatusMisunderstood,
+							LearnedAt:    Date{Time: now.Add(-2 * time.Hour)},
+							Quality:      1,
+							QuizType:     string(QuizTypeNotebook),
+							IntervalDays: 1,
+						}},
+					},
+				},
+			}},
+		}},
+	}
+
+	outputDir := filepath.Join(tmpDir, "output")
+	reader, err := NewReader(nil, nil, nil,
+		[]string{filepath.Join(tmpDir, "definitions")},
+		[]string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.NoError(t, err)
+	writer := NewEtymologyNotebookWriter(reader, "",
+		[]string{filepath.Join(tmpDir, "definitions")}, learningHistories)
+	require.NoError(t, writer.OutputEtymologyNotebook("demo-vocab", outputDir, false))
+
+	content, err := os.ReadFile(filepath.Join(outputDir, "demo-vocab.md"))
+	require.NoError(t, err)
+	out := string(content)
+
+	assert.Contains(t, out, "failing-word",
+		"a word whose latest vocabulary log is misunderstood must remain in the export "+
+			"even when every underlying origin has been mastered")
+	assert.NotContains(t, out, "silent-word",
+		"a word the user has never touched whose origins are all mastered must still be omitted")
+}
+
 // TestEtymologyNotebookWriter_HidesSkippedWords pins the bug-fix for
 // the writer not consulting SkippedAt before the previous commit: a
 // word with skipped_at on any vocabulary quiz type kept appearing in
