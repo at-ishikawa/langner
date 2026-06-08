@@ -115,25 +115,29 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 		return DayDetail{}, err
 	}
 
-	// Wrong attempts on the day.
+	// Wrong attempts on the day. The scene title is fetched via a correlated
+	// subquery rather than a LEFT JOIN so MySQL's only_full_group_by mode
+	// doesn't reject the SELECT (and so a note belonging to multiple notebook
+	// rows doesn't fan out into duplicate cards).
 	wrongQuery := `
 		SELECT
 			ll.note_id,
 			n.usage AS expression,
-			COALESCE(nn.notebook_id, ll.source_notebook_id, '') AS notebook_id,
-			COALESCE(nn.notebook_id, ll.source_notebook_id, '') AS notebook_title,
-			COALESCE(nn.subgroup, '') AS scene_title,
+			COALESCE(ll.source_notebook_id, '') AS notebook_id,
+			COALESCE(ll.source_notebook_id, '') AS notebook_title,
+			COALESCE((
+				SELECT nn.subgroup FROM notebook_notes nn
+				WHERE nn.note_id = ll.note_id
+					AND (ll.source_notebook_id = '' OR nn.notebook_id = ll.source_notebook_id)
+				LIMIT 1
+			), '') AS scene_title,
 			ll.quiz_type,
 			ll.learned_at,
 			ll.status
 		FROM learning_logs ll
 		JOIN notes n ON n.id = ll.note_id
-		LEFT JOIN notebook_notes nn
-			ON nn.note_id = ll.note_id
-			AND (ll.source_notebook_id = '' OR nn.notebook_id = ll.source_notebook_id)
 		` + whereDay + `
 			AND ll.status = 'misunderstood'
-		GROUP BY ll.note_id, ll.quiz_type, ll.learned_at, ll.status, n.usage, nn.notebook_id, nn.subgroup
 		ORDER BY n.usage
 	`
 	var wrongs []wrongRow
