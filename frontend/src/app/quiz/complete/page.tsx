@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
 import { useQuizStore } from "@/store/quizStore";
@@ -93,6 +94,18 @@ export default function SessionCompletePage() {
         <Button w="full" colorPalette="blue" onClick={handleBackToStart}>
           Back to Start
         </Button>
+        {incorrectCount > 0 && (
+          <Box mt={2} textAlign="center">
+            <Link
+              href={`/analytics/${new Date().toISOString().slice(0, 10)}`}
+              data-testid="review-wrong-link"
+            >
+              <Text fontSize="sm" color="blue.500">
+                Review what you got wrong today →
+              </Text>
+            </Link>
+          </Box>
+        )}
       </Box>
     </Box>
   );

@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
+	"github.com/at-ishikawa/langner/internal/analytics"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
@@ -98,6 +99,11 @@ func run(ctx context.Context) error {
 	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
 	noteRepo = yamlNoteRepo
 
+	// Analytics defaults to the YAML repo and is overridden with the DB repo
+	// when MySQL is configured. YAML stays the fallback when the DB is
+	// unreachable so the UI still works in YAML-only setups.
+	var analyticsRepo analytics.Repository = analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
+
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		db, err := database.Open(cfg.Database)
 		if err != nil {
@@ -110,6 +116,7 @@ func run(ctx context.Context) error {
 			dbNoteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
 			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
+			analyticsRepo = analytics.NewDBRepository(db)
 			slog.Info("database connected, dual storage enabled")
 		}
 	}
@@ -125,12 +132,15 @@ func run(ctx context.Context) error {
 
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
+	analyticsHandler := server.NewAnalyticsHandler(analyticsRepo)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
+	analyticsPath, analyticsH := apiv1connect.NewAnalyticsServiceHandler(analyticsHandler, errorLogger)
 
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
 	mux.Handle(notebookPath, notebookH)
+	mux.Handle(analyticsPath, analyticsH)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
