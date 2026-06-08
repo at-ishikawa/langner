@@ -16,3 +16,12 @@ Feature: Quiz Analytics
     Then I should be on the Analytics Day Detail page
     And the Day Detail page is not in an error state
     And I see the word "break the ice"
+
+  # The Day Detail must include etymology quiz failures even when MySQL is
+  # configured. Etymology results are only persisted to YAML today, so a
+  # DB-only analytics path silently drops them.
+  Scenario: Day Detail surfaces etymology results, not just vocabulary
+    Given I open the Analytics Day Detail for "2025-01-02"
+    Then I should be on the Analytics Day Detail page
+    And the Day Detail page is not in an error state
+    And I see the word "scribo"

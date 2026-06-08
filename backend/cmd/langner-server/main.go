@@ -99,10 +99,13 @@ func run(ctx context.Context) error {
 	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
 	noteRepo = yamlNoteRepo
 
-	// Analytics defaults to the YAML repo and is overridden with the DB repo
-	// when MySQL is configured. YAML stays the fallback when the DB is
-	// unreachable so the UI still works in YAML-only setups.
-	var analyticsRepo analytics.Repository = analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
+	// Analytics always reads from YAML: the on-disk learning history files are
+	// the only place etymology quiz results are persisted today —
+	// SaveEtymologyOriginResult writes YAML directly and does not go through
+	// the learning repository, so the DB's learning_logs has only vocab rows.
+	// Once etymology gets first-class DB storage we can swap this for a
+	// hybrid that pulls vocab from DB and etymology from YAML.
+	analyticsRepo := analytics.Repository(analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory))
 
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		db, err := database.Open(cfg.Database)
@@ -116,7 +119,6 @@ func run(ctx context.Context) error {
 			dbNoteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
 			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
-			analyticsRepo = analytics.NewDBRepository(db)
 			slog.Info("database connected, dual storage enabled")
 		}
 	}
