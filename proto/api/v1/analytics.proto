@@ -101,6 +101,18 @@ message WrongWord {
   int32 previous_correct_streak = 9;
   // current_status is the learning status after the attempt on this day.
   string current_status = 10;
+  // meaning is the canonical definition the learner was supposed to recall.
+  // For reverse quizzes this is the prompt the learner saw — reading it on
+  // the analytics card reproduces the original cognitive task. For
+  // etymology origins this is the origin's meaning.
+  string meaning = 11;
+  // example_sentence is one illustrative usage of the expression, when
+  // available. Empty when the source notebook has no examples for the
+  // word (typical for etymology origins).
+  string example_sentence = 12;
+  // notebook_kind is "story", "flashcard", or "etymology". The frontend
+  // uses it to decide which Learn route to deep-link to.
+  string notebook_kind = 13;
 }
 
 message GetWordHistoryRequest {

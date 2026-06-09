@@ -70,7 +70,38 @@ type WrongWord struct {
 	CurrentWrongStreak    int
 	PreviousCorrectStreak int
 	CurrentStatus         string
+	// LearnedAt is the timestamp of the wrong attempt on the requested day.
+	// Used to sort cards reverse-chronologically — newest failure on top.
+	LearnedAt time.Time
+	// Meaning is the canonical definition of the expression. Empty when
+	// the metadata resolver could not match the expression in any source
+	// notebook (typical for legacy entries with stale notebook IDs).
+	Meaning string
+	// ExampleSentence is one illustrative usage. Empty for etymology
+	// origins and for entries whose source notebook has no examples.
+	ExampleSentence string
+	// NotebookKind is "story", "flashcard", or "etymology". The frontend
+	// uses this to pick the right Learn-page route for the deep link.
+	NotebookKind string
 }
+
+// WordMetadata is what a MetadataResolver returns for a single
+// (notebookID, expression, expressionType) lookup.
+type WordMetadata struct {
+	Meaning         string
+	ExampleSentence string
+	NotebookKind    string
+}
+
+// expressionType is the LearningHistoryExpression.Type value carried into
+// the resolver: "" or "vocabulary" for a vocab note, "origin" for an
+// etymology origin. Defined here so callers don't have to import the
+// notebook package just to construct lookups.
+const (
+	ExpressionTypeVocabulary = ""
+	ExpressionTypeOrigin     = "origin"
+)
+
 
 // WordHistory is the payload returned by GetWordHistory.
 type WordHistory struct {

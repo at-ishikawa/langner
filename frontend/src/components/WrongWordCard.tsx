@@ -30,11 +30,38 @@ function attemptStreakLabel(a: AttemptEntry): string {
   return "(first attempt)";
 }
 
+// learnHrefFor builds the deep link from a wrong word to its source page
+// in the Learn section. The destination depends on the notebook kind:
+// etymology origins go to the etymology hub keyed by ?origin=…, flashcards
+// to the flashcard detail page keyed by ?word=…, and stories to the story
+// reader keyed by ?word=…&scene=…. Unknown kinds fall back to the bare
+// notebook page so the link never produces a 404.
+function learnHrefFor(w: WrongWord): string {
+  const id = encodeURIComponent(w.notebookId);
+  const expr = encodeURIComponent(w.expression);
+  switch (w.notebookKind) {
+    case "etymology":
+      return `/notebooks/etymology/${id}?origin=${expr}`;
+    case "flashcard":
+      return `/notebooks/${id}?word=${expr}`;
+    case "story": {
+      const scene = w.sceneTitle ? `&scene=${encodeURIComponent(w.sceneTitle)}` : "";
+      return `/learn/${id}?word=${expr}${scene}`;
+    }
+    default:
+      return `/learn/${id}`;
+  }
+}
+
 export function WrongWordCard({ word }: { word: WrongWord }) {
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [attempts, setAttempts] = useState<AttemptEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Reverse and freeform quizzes prompt with the meaning; rendering the
+  // meaning as the headline reproduces the original cognitive task.
+  const meaningIsPrompt = word.quizType === "reverse" || word.quizType === "etymology_assembly" || word.quizType.endsWith("_freeform");
 
   async function toggle() {
     if (expanded) {
@@ -71,6 +98,11 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
       data-testid={`wrong-word-${word.expression}-${word.quizType}`}
     >
       <Box as="button" onClick={toggle} width="100%" textAlign="left" aria-expanded={expanded}>
+        {meaningIsPrompt && word.meaning && (
+          <Text fontSize="md" mb={1} data-testid="wrong-word-prompt-meaning">
+            {word.meaning}
+          </Text>
+        )}
         <HStack mb={1}>
           <Text fontSize="lg" color="red.500" aria-hidden="true">
             ✗
@@ -79,10 +111,20 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
             {word.expression}
           </Text>
         </HStack>
+        {!meaningIsPrompt && word.meaning && (
+          <Text fontSize="sm" mb={1} data-testid="wrong-word-meaning">
+            {word.meaning}
+          </Text>
+        )}
         <Text fontSize="sm" color="fg.muted" mb={2}>
           {word.notebookTitle || word.notebookId}
           {word.sceneTitle && ` / ${word.sceneTitle}`}
         </Text>
+        {word.exampleSentence && (
+          <Text fontSize="sm" color="fg.muted" fontStyle="italic" mb={2} data-testid="wrong-word-example">
+            “{word.exampleSentence}”
+          </Text>
+        )}
         <HStack justifyContent="space-between">
           <QuizTypeChip quizType={word.quizType} />
           <PatternGlyphs pattern={word.recentPattern} />
@@ -119,7 +161,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
                 <Button
                   as={Link}
                   // @ts-expect-error Chakra Button + Next Link href prop
-                  href={`/learn/${word.notebookId}`}
+                  href={learnHrefFor(word)}
                   mt={2}
                   size="sm"
                   variant="outline"

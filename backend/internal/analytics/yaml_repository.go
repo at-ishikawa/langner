@@ -13,26 +13,44 @@ import (
 // files. It walks every history once per call and caches nothing — the
 // directory is small enough that a fresh read per request is fine, and
 // it keeps the implementation simple.
+//
+// The optional resolver populates WrongWord.Meaning / ExampleSentence /
+// NotebookKind from the source notebooks. Without it the YAML repo
+// still works — meanings are simply blank in the response.
 type YAMLRepository struct {
 	directory string
+	resolver  MetadataResolver
 }
 
 // NewYAMLRepository returns an analytics Repository backed by the YAML
 // learning history files under directory.
 func NewYAMLRepository(directory string) *YAMLRepository {
-	return &YAMLRepository{directory: directory}
+	return &YAMLRepository{directory: directory, resolver: NoMetadataResolver()}
+}
+
+// WithMetadataResolver returns a copy of the repository that consults
+// the given resolver when building wrong-word cards. Use
+// notebook.NewMetadataResolver(reader) in production wiring.
+func (r *YAMLRepository) WithMetadataResolver(m MetadataResolver) *YAMLRepository {
+	if m == nil {
+		m = NoMetadataResolver()
+	}
+	cp := *r
+	cp.resolver = m
+	return &cp
 }
 
 // yamlAttempt carries one record from the YAML files with enough context
 // to filter by notebook/quiz type and look up the parent expression for
 // the per-day detail view.
 type yamlAttempt struct {
-	NotebookID    string
-	NotebookTitle string
-	SceneTitle    string
-	Expression    string
-	QuizType      string
-	Attempt       Attempt
+	NotebookID     string
+	NotebookTitle  string
+	SceneTitle     string
+	Expression     string
+	ExpressionType string
+	QuizType       string
+	Attempt        Attempt
 }
 
 // allAttempts loads every record from every history file, flattens them,
@@ -91,11 +109,12 @@ func appendExpressionAttempts(
 				continue
 			}
 			*out = append(*out, yamlAttempt{
-				NotebookID:    notebookID,
-				NotebookTitle: notebookTitle,
-				SceneTitle:    sceneTitle,
-				Expression:    exp.Expression,
-				QuizType:      quizType,
+				NotebookID:     notebookID,
+				NotebookTitle:  notebookTitle,
+				SceneTitle:     sceneTitle,
+				Expression:     exp.Expression,
+				ExpressionType: exp.Type,
+				QuizType:       quizType,
 				Attempt: Attempt{
 					LearnedAt: rec.LearnedAt.Time,
 					QuizType:  quizType,
@@ -161,7 +180,7 @@ func (r *YAMLRepository) DailySummaries(_ context.Context, rangeDays int, filter
 }
 
 // DayDetail returns the wrong words on day plus prev/next day pointers.
-func (r *YAMLRepository) DayDetail(_ context.Context, day time.Time, filters Filters) (DayDetail, error) {
+func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters Filters) (DayDetail, error) {
 	attempts, err := r.allAttempts(filters)
 	if err != nil {
 		return DayDetail{}, err
@@ -228,6 +247,7 @@ func (r *YAMLRepository) DayDetail(_ context.Context, day time.Time, filters Fil
 		for i := hitIdx; i < len(records); i++ {
 			fromHit = append(fromHit, records[i].Attempt)
 		}
+		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.Expression, hit.ExpressionType)
 		wrong = append(wrong, WrongWord{
 			Expression:            hit.Expression,
 			NotebookID:            hit.NotebookID,
@@ -238,9 +258,20 @@ func (r *YAMLRepository) DayDetail(_ context.Context, day time.Time, filters Fil
 			CurrentWrongStreak:    CurrentWrongStreak(fromHit),
 			PreviousCorrectStreak: PreviousCorrectStreak(fromHit),
 			CurrentStatus:         hit.Attempt.Status,
+			LearnedAt:             hit.Attempt.LearnedAt,
+			Meaning:               meta.Meaning,
+			ExampleSentence:       meta.ExampleSentence,
+			NotebookKind:          meta.NotebookKind,
 		})
 	}
-	sort.Slice(wrong, func(i, j int) bool { return wrong[i].Expression < wrong[j].Expression })
+	// Newest failure first. Ties (rare — same word + quiz type wrong twice on
+	// the same exact instant) fall back to expression for stability.
+	sort.Slice(wrong, func(i, j int) bool {
+		if !wrong[i].LearnedAt.Equal(wrong[j].LearnedAt) {
+			return wrong[i].LearnedAt.After(wrong[j].LearnedAt)
+		}
+		return wrong[i].Expression < wrong[j].Expression
+	})
 
 	// Find prev/next dates with activity (regardless of correct/wrong) matching filters.
 	prev, next := adjacentDates(dayHas, day)

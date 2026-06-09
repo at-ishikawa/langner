@@ -33,3 +33,30 @@ type DayDetail struct {
 	PreviousDate time.Time
 	NextDate     time.Time
 }
+
+// MetadataResolver hydrates a wrong word with the canonical meaning,
+// one example sentence, and the source notebook's kind. The analytics
+// repository walks learning history files which only know expression
+// strings and notebook IDs; the resolver bridges to wherever meanings
+// live (story / flashcard YAML for vocab, etymology session YAML for
+// origins).
+//
+// Implementations may return zero values when no match is found; the
+// frontend hides empty fields rather than failing.
+type MetadataResolver interface {
+	Resolve(ctx context.Context, notebookID, expression, expressionType string) WordMetadata
+}
+
+// noMetadataResolver is the default no-op resolver. The handler uses it
+// when no real resolver is wired so the YAML path still works in tests
+// and YAML-only test setups.
+type noMetadataResolver struct{}
+
+// NoMetadataResolver returns a resolver that yields empty metadata for
+// every lookup. Useful in tests and when the server lacks the notebook
+// fixtures needed to populate meanings.
+func NoMetadataResolver() MetadataResolver { return noMetadataResolver{} }
+
+func (noMetadataResolver) Resolve(_ context.Context, _, _, _ string) WordMetadata {
+	return WordMetadata{}
+}

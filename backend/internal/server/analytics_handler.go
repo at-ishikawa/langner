@@ -129,6 +129,9 @@ func wrongWordToProto(w analytics.WrongWord) *apiv1.WrongWord {
 		CurrentWrongStreak:    int32(w.CurrentWrongStreak),
 		PreviousCorrectStreak: int32(w.PreviousCorrectStreak),
 		CurrentStatus:         w.CurrentStatus,
+		Meaning:               w.Meaning,
+		ExampleSentence:       w.ExampleSentence,
+		NotebookKind:          w.NotebookKind,
 	}
 }
 

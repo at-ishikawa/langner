@@ -105,7 +105,20 @@ func run(ctx context.Context) error {
 	// the learning repository, so the DB's learning_logs has only vocab rows.
 	// Once etymology gets first-class DB storage we can swap this for a
 	// hybrid that pulls vocab from DB and etymology from YAML.
-	analyticsRepo := analytics.Repository(analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory))
+	yamlAnalyticsRepo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
+	if reader, err := notebook.NewReader(
+		cfg.Notebooks.StoriesDirectories,
+		cfg.Notebooks.FlashcardsDirectories,
+		cfg.Notebooks.BooksDirectories,
+		cfg.Notebooks.DefinitionsDirectories,
+		cfg.Notebooks.EtymologyDirectories,
+		dictionaryMap,
+	); err != nil {
+		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
+	} else {
+		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
+	}
+	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
 
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		db, err := database.Open(cfg.Database)

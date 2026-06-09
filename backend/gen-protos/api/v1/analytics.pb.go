@@ -407,6 +407,18 @@ type WrongWord struct {
 	PreviousCorrectStreak int32 `protobuf:"varint,9,opt,name=previous_correct_streak,json=previousCorrectStreak,proto3" json:"previous_correct_streak,omitempty"`
 	// current_status is the learning status after the attempt on this day.
 	CurrentStatus string `protobuf:"bytes,10,opt,name=current_status,json=currentStatus,proto3" json:"current_status,omitempty"`
+	// meaning is the canonical definition the learner was supposed to recall.
+	// For reverse quizzes this is the prompt the learner saw — reading it on
+	// the analytics card reproduces the original cognitive task. For
+	// etymology origins this is the origin's meaning.
+	Meaning string `protobuf:"bytes,11,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	// example_sentence is one illustrative usage of the expression, when
+	// available. Empty when the source notebook has no examples for the
+	// word (typical for etymology origins).
+	ExampleSentence string `protobuf:"bytes,12,opt,name=example_sentence,json=exampleSentence,proto3" json:"example_sentence,omitempty"`
+	// notebook_kind is "story", "flashcard", or "etymology". The frontend
+	// uses it to decide which Learn route to deep-link to.
+	NotebookKind  string `protobuf:"bytes,13,opt,name=notebook_kind,json=notebookKind,proto3" json:"notebook_kind,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -507,6 +519,27 @@ func (x *WrongWord) GetPreviousCorrectStreak() int32 {
 func (x *WrongWord) GetCurrentStatus() string {
 	if x != nil {
 		return x.CurrentStatus
+	}
+	return ""
+}
+
+func (x *WrongWord) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *WrongWord) GetExampleSentence() string {
+	if x != nil {
+		return x.ExampleSentence
+	}
+	return ""
+}
+
+func (x *WrongWord) GetNotebookKind() string {
+	if x != nil {
+		return x.NotebookKind
 	}
 	return ""
 }
@@ -786,7 +819,7 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\vwrong_words\x18\x02 \x03(\v2\x11.api.v1.WrongWordR\n" +
 	"wrongWords\x12#\n" +
 	"\rprevious_date\x18\x03 \x01(\tR\fpreviousDate\x12\x1b\n" +
-	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\x82\x03\n" +
+	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xec\x03\n" +
 	"\tWrongWord\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1e\n" +
 	"\n" +
@@ -802,7 +835,10 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\x14current_wrong_streak\x18\b \x01(\x05R\x12currentWrongStreak\x126\n" +
 	"\x17previous_correct_streak\x18\t \x01(\x05R\x15previousCorrectStreak\x12%\n" +
 	"\x0ecurrent_status\x18\n" +
-	" \x01(\tR\rcurrentStatus\"\xa0\x01\n" +
+	" \x01(\tR\rcurrentStatus\x12\x18\n" +
+	"\ameaning\x18\v \x01(\tR\ameaning\x12)\n" +
+	"\x10example_sentence\x18\f \x01(\tR\x0fexampleSentence\x12#\n" +
+	"\rnotebook_kind\x18\r \x01(\tR\fnotebookKind\"\xa0\x01\n" +
 	"\x15GetWordHistoryRequest\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1f\n" +
 	"\vnotebook_id\x18\x02 \x01(\tR\n" +
