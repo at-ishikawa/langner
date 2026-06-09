@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const sampleHistoryYAML = `- metadata:
@@ -140,6 +142,92 @@ func TestYAMLRepository_WordHistory(t *testing.T) {
 	if got.Attempts[2].StreakBeforeCorrect != 0 || got.Attempts[2].StreakBeforeWrong != 0 {
 		t.Errorf("oldest streak: got w=%d c=%d, want 0/0", got.Attempts[2].StreakBeforeWrong, got.Attempts[2].StreakBeforeCorrect)
 	}
+}
+
+// TestYAMLRepository_DayBoundaryUTC reproduces the day-boundary bug. When the
+// quiz is answered late at night in a westward timezone the YAML learned_at
+// crosses the UTC midnight, but the Quiz Complete deep link in the frontend
+// computes `new Date().toISOString().slice(0,10)` — i.e. today in UTC. If the
+// analytics repo groups by the time's own zone, the entry lands on yesterday-
+// local and the UTC-keyed Day Detail request comes back empty.
+func TestYAMLRepository_DayBoundaryUTC(t *testing.T) {
+	dir := t.TempDir()
+	// 11pm PDT on 2026-06-08 == 06:00 UTC on 2026-06-09. The analytics repo
+	// should bucket this under the UTC date so the frontend, which always
+	// uses UTC today for its deep link, can find it.
+	body := `- metadata:
+    id: word-power-made-easy
+    title: "Word Power Made Easy"
+  scenes:
+    - metadata:
+        title: "Session 1"
+      expressions:
+        - expression: tele
+          type: origin
+          etymology_assembly_logs:
+            - status: misunderstood
+              learned_at: "2026-06-08T23:00:00-07:00"
+              quality: 1
+              quiz_type: etymology_assembly
+              interval_days: 0
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "word-power-made-easy.yml"), []byte(body), 0o600))
+
+	repo := NewYAMLRepository(dir)
+	utcDay, _ := time.Parse("2006-01-02", "2026-06-09")
+	detail, err := repo.DayDetail(context.Background(), utcDay, Filters{})
+	require.NoError(t, err)
+	require.Len(t, detail.WrongWords, 1,
+		"expected the etymology reverse failure to surface under the UTC date %s",
+		"2026-06-09")
+}
+
+// TestYAMLRepository_EtymologyReverseToday is the reproduction for the bug
+// reported when a user answers an etymology reverse quiz and then opens
+// Analytics: the failure should show up under today's date. Etymology
+// reverse writes to etymology_assembly_logs with quiz_type=etymology_assembly;
+// the repo must include that track in DailySummaries / DayDetail.
+func TestYAMLRepository_EtymologyReverseToday(t *testing.T) {
+	dir := t.TempDir()
+	today := time.Now().UTC().Format("2006-01-02")
+	// Fixture mirrors what AddRecordWithQualityForEtymology writes for a
+	// misunderstood etymology reverse answer on the word-power-made-easy
+	// notebook.
+	body := `- metadata:
+    id: word-power-made-easy
+    title: "Word Power Made Easy"
+  scenes:
+    - metadata:
+        title: "Session 1"
+      expressions:
+        - expression: tele
+          type: origin
+          etymology_assembly_logs:
+            - status: misunderstood
+              learned_at: "` + today + `T15:30:00Z"
+              quality: 1
+              quiz_type: etymology_assembly
+              interval_days: 0
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "word-power-made-easy.yml"), []byte(body), 0o600))
+
+	repo := NewYAMLRepository(dir)
+
+	// Day List should include today.
+	days, err := repo.DailySummaries(context.Background(), 0, Filters{})
+	require.NoError(t, err)
+	require.NotEmpty(t, days, "expected today's day row, got none")
+	require.Equal(t, today, days[0].Date.Format("2006-01-02"))
+	require.Equal(t, 1, days[0].WrongCount)
+
+	// Day Detail should list the etymology origin.
+	dayTime, _ := time.Parse("2006-01-02", today)
+	detail, err := repo.DayDetail(context.Background(), dayTime, Filters{})
+	require.NoError(t, err)
+	require.Len(t, detail.WrongWords, 1, "expected the etymology origin to appear under today")
+	w := detail.WrongWords[0]
+	require.Equal(t, "tele", w.Expression)
+	require.Equal(t, "etymology_assembly", w.QuizType)
 }
 
 func TestYAMLRepository_NotebookFilter(t *testing.T) {
