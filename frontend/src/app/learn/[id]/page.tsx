@@ -7,7 +7,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Box,
@@ -34,9 +34,15 @@ import {
 // given text with a bold/colored span. It also honors explicit {{ word }}
 // markers authored in the source notebook. Kept here rather than in /lib
 // because it is only used by the story reader.
+// renderHighlightedText, plus an optional targetWord that — when matched —
+// marks the *first* hit with id="learn-deep-link-target" + a flash hook so
+// the page-level effect can scroll to it. Only the first occurrence is
+// tagged because a single anchor is enough to drive scrollIntoView.
 function renderHighlightedText(
   text: string,
   definitions: NotebookWord[],
+  targetWord?: string,
+  targetFoundRef?: { current: boolean },
 ): React.ReactNode[] {
   const markerParts = text.split(/\{\{\s*([^}]+?)\s*\}\}/);
   const nodes: React.ReactNode[] = [];
@@ -83,13 +89,31 @@ function renderHighlightedText(
         (e) => e.toLowerCase() === sub.toLowerCase(),
       );
       if (isDefined) {
+        const isTarget =
+          !!targetWord &&
+          !targetFoundRef?.current &&
+          sub.toLowerCase() === targetWord.toLowerCase();
+        if (isTarget && targetFoundRef) targetFoundRef.current = true;
         nodes.push(
           <Text
             as="span"
             key={`t-${i}-${j}`}
+            id={isTarget ? "learn-deep-link-target" : undefined}
+            data-deep-link-flash={isTarget ? "true" : undefined}
             fontWeight="bold"
             color="blue.600"
             _dark={{ color: "blue.300" }}
+            css={
+              isTarget
+                ? {
+                    "&[data-deep-link-flash='true']": {
+                      backgroundColor: "var(--chakra-colors-yellow-100)",
+                      borderRadius: "2px",
+                      padding: "0 2px",
+                    },
+                  }
+                : undefined
+            }
           >
             {sub}
           </Text>,
@@ -110,6 +134,9 @@ function renderHighlightedText(
 export default function LearnContentPage() {
   const params = useParams();
   const id = params.id as string;
+  const searchParams = useSearchParams();
+  const targetWord = searchParams.get("word") ?? "";
+  const targetScene = searchParams.get("scene") ?? "";
 
   const [data, setData] = useState<GetNotebookDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -123,6 +150,35 @@ export default function LearnContentPage() {
       .catch(() => setError("Failed to load notebook"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  // Derive the deep-link story index without setState-in-effect: when the
+  // URL pins a target word we pick whichever story contains it (preferring
+  // the matching scene when `?scene=` is also given) and let it override
+  // the user's last manual selection.
+  const deepLinkStoryIndex = useMemo(() => {
+    if (!data || !targetWord) return -1;
+    return data.stories.findIndex((story) =>
+      story.scenes.some((scene) => {
+        if (targetScene && scene.title !== targetScene) return false;
+        return scene.definitions.some(
+          (d) => d.expression.toLowerCase() === targetWord.toLowerCase(),
+        );
+      }),
+    );
+  }, [data, targetWord, targetScene]);
+  const effectiveStoryIndex = deepLinkStoryIndex >= 0 ? deepLinkStoryIndex : selectedStoryIndex;
+
+  // Scroll the first highlighted occurrence of the target word into view and
+  // remove the flash hook after a moment. Runs whenever the visible story
+  // switches so each Open in Learn click re-fires the animation.
+  useEffect(() => {
+    if (!targetWord || !data) return;
+    const el = document.getElementById("learn-deep-link-target");
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    const t = window.setTimeout(() => el.removeAttribute("data-deep-link-flash"), 1800);
+    return () => window.clearTimeout(t);
+  }, [targetWord, data, effectiveStoryIndex]);
 
   const handleDefinitionRemoved = useCallback(
     (storyIndex: number, sceneIndex: number, expression: string) => {
@@ -169,7 +225,7 @@ export default function LearnContentPage() {
   }
 
   const stories = data.stories;
-  const currentStory: StoryEntry | undefined = stories[selectedStoryIndex];
+  const currentStory: StoryEntry | undefined = stories[effectiveStoryIndex];
 
   return (
     <Box p={4} maxW="3xl" mx="auto" position="relative">
@@ -195,7 +251,7 @@ export default function LearnContentPage() {
           <Box flex="1" minW={0}>
             <ChapterSelector
               stories={stories}
-              selectedIndex={selectedStoryIndex}
+              selectedIndex={effectiveStoryIndex}
               onSelect={setSelectedStoryIndex}
             />
           </Box>
@@ -215,9 +271,10 @@ export default function LearnContentPage() {
             <SceneContent
               key={sceneIdx}
               scene={scene}
-              storyIndex={selectedStoryIndex}
+              storyIndex={effectiveStoryIndex}
               sceneIndex={sceneIdx}
               onTextSelect={onTextSelect}
+              targetWord={targetWord}
             />
           ))}
         </VStack>
@@ -241,12 +298,21 @@ function SceneContent({
   storyIndex,
   sceneIndex,
   onTextSelect,
+  targetWord,
 }: {
   scene: StoryScene;
   storyIndex: number;
   sceneIndex: number;
   onTextSelect: (storyIndex: number, sceneIndex: number) => void;
+  // targetWord — when non-empty, the first highlighted occurrence within
+  // this scene gets the id="learn-deep-link-target" anchor used by the
+  // page's scroll effect. Across multiple scenes we still want exactly
+  // one hit, so the parent passes a fresh ref per render below.
+  targetWord?: string;
 }) {
+  // Shared across the prose and the dialogue blocks so only the first
+  // occurrence in this scene wins the anchor.
+  const targetFoundRef = { current: false };
   const hasStatements = scene.statements.length > 0;
   const hasConversations = scene.conversations.length > 0;
 
@@ -271,7 +337,7 @@ function SceneContent({
           <VStack align="stretch" gap={3}>
             {scene.statements.map((stmt, i) => (
               <Text key={i} fontSize="md">
-                {renderHighlightedText(stmt, scene.definitions)}
+                {renderHighlightedText(stmt, scene.definitions, targetWord, targetFoundRef)}
               </Text>
             ))}
           </VStack>
@@ -290,7 +356,7 @@ function SceneContent({
                 <Text as="span" fontWeight="bold" color="fg.default">
                   {conv.speaker}:
                 </Text>{" "}
-                &ldquo;{renderHighlightedText(conv.quote, scene.definitions)}&rdquo;
+                &ldquo;{renderHighlightedText(conv.quote, scene.definitions, targetWord, targetFoundRef)}&rdquo;
               </Text>
             ))}
           </VStack>
