@@ -313,19 +313,19 @@ func rangeCutoff(rangeDays int) time.Time {
 	return time.Now().UTC().AddDate(0, 0, -rangeDays)
 }
 
-// dayKey returns the YYYY-MM-DD bucket for an instant in UTC. Using UTC
-// matches the frontend, which sends today's date via
-// `new Date().toISOString().slice(0,10)` (also UTC). Without this, a quiz
-// answered late at night in a westward timezone ends up under the
-// local-yesterday bucket while the Quiz Complete deep link points at the
-// UTC-today bucket — the entry then appears to be missing.
+// dayKey returns the YYYY-MM-DD bucket for an instant, using the time's
+// stored zone. LearningRecord.LearnedAt is written via time.Now() so the
+// record carries the server's local zone — the user thinks of an
+// evening answer as "today" in their zone, not whatever UTC was when
+// they hit submit. The frontend renders the URL date with the same
+// local-zone semantics; see frontend/src/app/quiz/complete/page.tsx for
+// the matching "today" computation on the Quiz Complete deep link.
 func dayKey(t time.Time) string {
-	return t.UTC().Format("2006-01-02")
+	return t.Format("2006-01-02")
 }
 
 func truncToDay(t time.Time) time.Time {
-	u := t.UTC()
-	return time.Date(u.Year(), u.Month(), u.Day(), 0, 0, 0, 0, time.UTC)
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
 }
 
 func sortedKeys(m map[string]struct{}) []string {

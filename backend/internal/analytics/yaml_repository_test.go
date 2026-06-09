@@ -144,17 +144,15 @@ func TestYAMLRepository_WordHistory(t *testing.T) {
 	}
 }
 
-// TestYAMLRepository_DayBoundaryUTC reproduces the day-boundary bug. When the
-// quiz is answered late at night in a westward timezone the YAML learned_at
-// crosses the UTC midnight, but the Quiz Complete deep link in the frontend
-// computes `new Date().toISOString().slice(0,10)` — i.e. today in UTC. If the
-// analytics repo groups by the time's own zone, the entry lands on yesterday-
-// local and the UTC-keyed Day Detail request comes back empty.
-func TestYAMLRepository_DayBoundaryUTC(t *testing.T) {
+// TestYAMLRepository_DayBoundaryLocalZone pins the day-bucketing semantics
+// the user expects: an entry written at 5pm PDT on Monday belongs to
+// Monday — i.e. the date in the record's stored zone — not Tuesday UTC.
+// Forcing UTC there was a regression (the user reported "analytics shows
+// Tuesday for today's answer though I answered the quiz on Monday before
+// 6pm PT"). The frontend's Quiz Complete deep link mirrors this by also
+// computing the local YYYY-MM-DD instead of using toISOString().
+func TestYAMLRepository_DayBoundaryLocalZone(t *testing.T) {
 	dir := t.TempDir()
-	// 11pm PDT on 2026-06-08 == 06:00 UTC on 2026-06-09. The analytics repo
-	// should bucket this under the UTC date so the frontend, which always
-	// uses UTC today for its deep link, can find it.
 	body := `- metadata:
     id: word-power-made-easy
     title: "Word Power Made Easy"
@@ -166,7 +164,7 @@ func TestYAMLRepository_DayBoundaryUTC(t *testing.T) {
           type: origin
           etymology_assembly_logs:
             - status: misunderstood
-              learned_at: "2026-06-08T23:00:00-07:00"
+              learned_at: "2026-06-08T17:30:00-07:00"
               quality: 1
               quiz_type: etymology_assembly
               interval_days: 0
@@ -174,12 +172,18 @@ func TestYAMLRepository_DayBoundaryUTC(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "word-power-made-easy.yml"), []byte(body), 0o600))
 
 	repo := NewYAMLRepository(dir)
-	utcDay, _ := time.Parse("2006-01-02", "2026-06-09")
-	detail, err := repo.DayDetail(context.Background(), utcDay, Filters{})
+
+	// Should appear under Monday (2026-06-08), the local-zone date.
+	monday, _ := time.Parse("2006-01-02", "2026-06-08")
+	monDetail, err := repo.DayDetail(context.Background(), monday, Filters{})
 	require.NoError(t, err)
-	require.Len(t, detail.WrongWords, 1,
-		"expected the etymology reverse failure to surface under the UTC date %s",
-		"2026-06-09")
+	require.Len(t, monDetail.WrongWords, 1, "expected the entry on Monday (its stored zone)")
+
+	// And must NOT appear under Tuesday UTC.
+	tuesday, _ := time.Parse("2006-01-02", "2026-06-09")
+	tueDetail, err := repo.DayDetail(context.Background(), tuesday, Filters{})
+	require.NoError(t, err)
+	require.Empty(t, tueDetail.WrongWords, "Monday-local entries must not leak into Tuesday UTC")
 }
 
 // TestYAMLRepository_EtymologyReverseToday is the reproduction for the bug

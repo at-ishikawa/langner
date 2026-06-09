@@ -4,6 +4,17 @@ import { useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
+
+// Today as YYYY-MM-DD in the browser's local zone. The backend buckets
+// learning records by the time's stored zone (server-local), so using
+// toISOString() here — which is UTC — would point a westward user at
+// tomorrow and they'd see an empty Day Detail.
+function localTodayYYYYMMDD(): string {
+  const d = new Date();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
 import { useQuizStore } from "@/store/quizStore";
 import { type ResultItem } from "@/components/QuizResultCard";
 import { QuizResultsGroupedList } from "@/components/QuizResultsGroupedList";
@@ -97,7 +108,7 @@ export default function SessionCompletePage() {
         {incorrectCount > 0 && (
           <Box mt={2} textAlign="center">
             <Link
-              href={`/analytics/${new Date().toISOString().slice(0, 10)}`}
+              href={`/analytics/${localTodayYYYYMMDD()}`}
               data-testid="review-wrong-link"
             >
               <Text fontSize="sm" color="blue.500">
