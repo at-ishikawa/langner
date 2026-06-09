@@ -40,11 +40,16 @@ func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expres
 	return r.resolveVocab(notebookID, expression)
 }
 
+// resolveVocab tries every notebook source a vocab definition might live in.
+// In a Word-Power-Made-Easy-style setup the same notebookID can sit in
+// definitions_directories (or as embedded definitions in a legacy etymology
+// session) rather than in stories_directories / flashcards_directories, so
+// the resolver has to walk all four. Matching is case-insensitive as a
+// defensive fallback because the YAML expression can drift in case from the
+// learning-history record.
 func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) WordMetadata {
-	// Stories carry definitions inside scenes; flashcards carry them on the
-	// notebook directly. Try both because the same notebook ID can resolve
-	// in either index depending on how the source declares it.
 	target := strings.TrimSpace(expression)
+
 	if stories, err := r.reader.ReadStoryNotebooks(notebookID); err == nil {
 		for _, s := range stories {
 			for _, scene := range s.Scenes {
@@ -63,12 +68,55 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 			}
 		}
 	}
+	// definitions_directories: definitions notebooks (the typical Word
+	// Power Made Easy layout — words live in a separate definitions file
+	// that the source notebook never sees directly).
+	if defs, ok := r.reader.GetDefinitionsNotes(notebookID); ok {
+		for _, sessionDefs := range defs {
+			for _, sceneNotes := range sessionDefs {
+				if meta, ok := matchVocabNote(sceneNotes, target); ok {
+					// Definitions get merged into the story reader view at
+					// runtime, so a "story" kind here lands the deep link on
+					// /learn/{id} where the word will be highlighted.
+					meta.NotebookKind = "story"
+					return meta
+				}
+			}
+		}
+	}
+	// Legacy etymology session files with inline `definitions:` (pre-
+	// new-shape data). The notebook name on each entry is the etymology
+	// index's display Name (a long-standing inconsistency in the
+	// reader); look up by ID first to get that Name and then filter.
+	if name := r.etymologyNotebookName(notebookID); name != "" {
+		for _, def := range r.reader.ReadAllEtymologyDefinitions() {
+			if def.NotebookName != name {
+				continue
+			}
+			if !matchExpression(def.Expression, def.Definition, target) {
+				continue
+			}
+			return WordMetadata{Meaning: def.Meaning, NotebookKind: "etymology"}
+		}
+	}
 	return WordMetadata{}
+}
+
+// etymologyNotebookName returns the display Name for an etymology index by
+// its ID. ReadAllEtymologyDefinitions tags each definition with that Name,
+// so the resolver needs the name to filter back to a single notebook.
+func (r *NotebookMetadataResolver) etymologyNotebookName(notebookID string) string {
+	for id, idx := range r.reader.GetEtymologyIndexes() {
+		if id == notebookID {
+			return idx.Name
+		}
+	}
+	return ""
 }
 
 func matchVocabNote(notes []notebook.Note, expression string) (WordMetadata, bool) {
 	for _, n := range notes {
-		if n.Expression != expression && n.Definition != expression {
+		if !matchExpression(n.Expression, n.Definition, expression) {
 			continue
 		}
 		meta := WordMetadata{Meaning: n.Meaning}
@@ -80,17 +128,29 @@ func matchVocabNote(notes []notebook.Note, expression string) (WordMetadata, boo
 	return WordMetadata{}, false
 }
 
+// matchExpression compares the target against both the canonical expression
+// and the optional definition (the dictionary-form alias) field. Comparison
+// is exact first, then case-insensitive to absorb stale-case learning-
+// history records.
+func matchExpression(expr, definition, target string) bool {
+	if expr == target || definition == target {
+		return true
+	}
+	low := strings.ToLower(target)
+	return strings.ToLower(expr) == low || strings.ToLower(definition) == low
+}
+
 func (r *NotebookMetadataResolver) resolveOrigin(notebookID, expression string) WordMetadata {
 	origins, err := r.reader.ReadEtymologyNotebook(notebookID)
 	if err != nil {
 		return WordMetadata{}
 	}
 	target := strings.TrimSpace(expression)
+	low := strings.ToLower(target)
 	for _, o := range origins {
-		if o.Origin != target {
-			continue
+		if o.Origin == target || strings.ToLower(o.Origin) == low {
+			return WordMetadata{Meaning: o.Meaning, NotebookKind: "etymology"}
 		}
-		return WordMetadata{Meaning: o.Meaning, NotebookKind: "etymology"}
 	}
 	return WordMetadata{}
 }

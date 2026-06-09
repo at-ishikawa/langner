@@ -83,4 +83,54 @@ origins:
 		got := r.Resolve(context.Background(), "vocab", "nosuchword", ExpressionTypeVocabulary)
 		assert.Equal(t, WordMetadata{}, got)
 	})
+
+	t.Run("case insensitive vocab", func(t *testing.T) {
+		// Learning-history records can drift from the canonical YAML in
+		// case (e.g. "Ephemeral" vs "ephemeral"). The resolver must still
+		// surface the meaning.
+		got := r.Resolve(context.Background(), "vocab", "EPHEMERAL", ExpressionTypeVocabulary)
+		assert.Equal(t, "lasting for a very short time", got.Meaning)
+	})
+
+	t.Run("case insensitive origin", func(t *testing.T) {
+		got := r.Resolve(context.Background(), "wpme", "TELE", notebook.LearningExpressionTypeOrigin)
+		assert.Equal(t, "far", got.Meaning)
+	})
+}
+
+// TestNotebookMetadataResolver_DefinitionsBookCovered targets the Word-Power-
+// Made-Easy class of bug: vocab definitions live in definitions_directories
+// (not stories / flashcards), so the resolver has to walk GetDefinitionsNotes
+// or the meaning silently disappears from the analytics card.
+func TestNotebookMetadataResolver_DefinitionsBookCovered(t *testing.T) {
+	root := t.TempDir()
+
+	defsDir := filepath.Join(root, "definitions", "wpme")
+	require.NoError(t, os.MkdirAll(defsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defsDir, "index.yml"), []byte(`id: wpme
+name: WPME
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "Old age"
+      expressions:
+        - expression: geriatrics
+          meaning: the medicine of the elderly
+          examples:
+            - "The clinic specializes in geriatrics."
+`), 0o644))
+
+	reader, err := notebook.NewReader(nil, nil, nil, []string{filepath.Join(root, "definitions")}, nil, nil)
+	require.NoError(t, err)
+	r := NewNotebookMetadataResolver(reader)
+
+	got := r.Resolve(context.Background(), "wpme", "geriatrics", ExpressionTypeVocabulary)
+	assert.Equal(t, "the medicine of the elderly", got.Meaning)
+	assert.Equal(t, "The clinic specializes in geriatrics.", got.ExampleSentence)
+	assert.Equal(t, "story", got.NotebookKind, "definitions-only notebooks deep-link via the story reader")
 }
