@@ -83,6 +83,12 @@ type WrongWord struct {
 	// NotebookKind is "story", "flashcard", or "etymology". The frontend
 	// uses this to pick the right Learn-page route for the deep link.
 	NotebookKind string
+	// Skipped is true when the expression's SkippedAt map has a non-empty
+	// timestamp for this card's QuizType — i.e. the user has explicitly
+	// excluded the word from this quiz mode. The analytics card renders an
+	// "Excluded" badge so a wrong attempt that won't re-surface in future
+	// quizzes is visibly distinguished from one that will.
+	Skipped bool
 }
 
 // WordMetadata is what a MetadataResolver returns for a single

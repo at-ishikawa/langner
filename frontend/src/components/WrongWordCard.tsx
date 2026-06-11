@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Box, Button, HStack, Spinner, Text, VStack } from "@chakra-ui/react";
+import { Badge, Box, Button, HStack, Spinner, Text, VStack } from "@chakra-ui/react";
 import { PatternGlyphs } from "./PatternGlyphs";
 import { QuizTypeChip } from "./QuizTypeChip";
 import { analyticsClient, type WrongWord, type AttemptEntry } from "@/lib/client";
@@ -110,6 +110,16 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
           <Text fontWeight="bold" fontSize="lg">
             {word.expression}
           </Text>
+          {word.skipped && (
+            <Badge
+              colorPalette="gray"
+              variant="subtle"
+              data-testid="excluded-badge"
+              title="You skipped this word — it won't surface in future quizzes of this type until you clear the skip."
+            >
+              Excluded
+            </Badge>
+          )}
         </HStack>
         {!meaningIsPrompt && word.meaning && (
           <Text fontSize="sm" mb={1} data-testid="wrong-word-meaning">

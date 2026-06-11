@@ -234,6 +234,51 @@ func TestYAMLRepository_EtymologyReverseToday(t *testing.T) {
 	require.Equal(t, "etymology_assembly", w.QuizType)
 }
 
+// TestYAMLRepository_DayDetailExposesSkipped pins the analytics-card
+// "Excluded" badge data path: when a wrong attempt's underlying
+// expression has skipped_at set for the matching quiz type, the
+// resulting WrongWord must carry Skipped=true so the frontend can
+// render the badge. The skip is per-quiz-type, so a skip on `notebook`
+// must not bleed into a wrong attempt on `reverse`.
+func TestYAMLRepository_DayDetailExposesSkipped(t *testing.T) {
+	dir := t.TempDir()
+	body := `- metadata:
+    id: flashcards
+    title: Flashcards
+    type: flashcard
+  expressions:
+    - expression: lose-temper
+      skipped_at:
+        notebook: "2026-06-08T12:00:00Z"
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-06-09T10:00:00Z"
+          quality: 1
+          quiz_type: notebook
+      reverse_logs:
+        - status: misunderstood
+          learned_at: "2026-06-09T10:30:00Z"
+          quality: 1
+          quiz_type: reverse
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "flashcards.yml"), []byte(body), 0o600))
+
+	repo := NewYAMLRepository(dir)
+	day, _ := time.Parse("2006-01-02", "2026-06-09")
+	got, err := repo.DayDetail(context.Background(), day, Filters{})
+	require.NoError(t, err)
+	require.Len(t, got.WrongWords, 2, "both wrong attempts must surface")
+
+	bySlot := make(map[string]WrongWord, len(got.WrongWords))
+	for _, w := range got.WrongWords {
+		bySlot[w.QuizType] = w
+	}
+	require.True(t, bySlot["notebook"].Skipped,
+		"notebook card must carry Skipped=true because skipped_at.notebook is set")
+	require.False(t, bySlot["reverse"].Skipped,
+		"reverse card must carry Skipped=false because skipped_at has no reverse entry — skips are per quiz type")
+}
+
 func TestYAMLRepository_NotebookFilter(t *testing.T) {
 	dir := writeSampleHistory(t)
 	repo := NewYAMLRepository(dir)

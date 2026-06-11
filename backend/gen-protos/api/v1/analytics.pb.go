@@ -418,7 +418,13 @@ type WrongWord struct {
 	ExampleSentence string `protobuf:"bytes,12,opt,name=example_sentence,json=exampleSentence,proto3" json:"example_sentence,omitempty"`
 	// notebook_kind is "story", "flashcard", or "etymology". The frontend
 	// uses it to decide which Learn route to deep-link to.
-	NotebookKind  string `protobuf:"bytes,13,opt,name=notebook_kind,json=notebookKind,proto3" json:"notebook_kind,omitempty"`
+	NotebookKind string `protobuf:"bytes,13,opt,name=notebook_kind,json=notebookKind,proto3" json:"notebook_kind,omitempty"`
+	// skipped is true when the user has currently excluded this word from
+	// this quiz type (skipped_at set for the matching quiz_type slot).
+	// The analytics card surfaces this with an "Excluded" badge so the
+	// user understands why the word still surfaces in history but won't
+	// come up in future quizzes until the skip is cleared.
+	Skipped       bool `protobuf:"varint,14,opt,name=skipped,proto3" json:"skipped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -542,6 +548,13 @@ func (x *WrongWord) GetNotebookKind() string {
 		return x.NotebookKind
 	}
 	return ""
+}
+
+func (x *WrongWord) GetSkipped() bool {
+	if x != nil {
+		return x.Skipped
+	}
+	return false
 }
 
 type GetWordHistoryRequest struct {
@@ -819,7 +832,7 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\vwrong_words\x18\x02 \x03(\v2\x11.api.v1.WrongWordR\n" +
 	"wrongWords\x12#\n" +
 	"\rprevious_date\x18\x03 \x01(\tR\fpreviousDate\x12\x1b\n" +
-	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xec\x03\n" +
+	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\x86\x04\n" +
 	"\tWrongWord\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1e\n" +
 	"\n" +
@@ -838,7 +851,8 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	" \x01(\tR\rcurrentStatus\x12\x18\n" +
 	"\ameaning\x18\v \x01(\tR\ameaning\x12)\n" +
 	"\x10example_sentence\x18\f \x01(\tR\x0fexampleSentence\x12#\n" +
-	"\rnotebook_kind\x18\r \x01(\tR\fnotebookKind\"\xa0\x01\n" +
+	"\rnotebook_kind\x18\r \x01(\tR\fnotebookKind\x12\x18\n" +
+	"\askipped\x18\x0e \x01(\bR\askipped\"\xa0\x01\n" +
 	"\x15GetWordHistoryRequest\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1f\n" +
 	"\vnotebook_id\x18\x02 \x01(\tR\n" +

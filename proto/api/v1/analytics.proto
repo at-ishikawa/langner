@@ -113,6 +113,12 @@ message WrongWord {
   // notebook_kind is "story", "flashcard", or "etymology". The frontend
   // uses it to decide which Learn route to deep-link to.
   string notebook_kind = 13;
+  // skipped is true when the user has currently excluded this word from
+  // this quiz type (skipped_at set for the matching quiz_type slot).
+  // The analytics card surfaces this with an "Excluded" badge so the
+  // user understands why the word still surfaces in history but won't
+  // come up in future quizzes until the skip is cleared.
+  bool skipped = 14;
 }
 
 message GetWordHistoryRequest {

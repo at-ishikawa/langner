@@ -132,6 +132,7 @@ func wrongWordToProto(w analytics.WrongWord) *apiv1.WrongWord {
 		Meaning:               w.Meaning,
 		ExampleSentence:       w.ExampleSentence,
 		NotebookKind:          w.NotebookKind,
+		Skipped:               w.Skipped,
 	}
 }
 

@@ -50,7 +50,12 @@ type yamlAttempt struct {
 	Expression     string
 	ExpressionType string
 	QuizType       string
-	Attempt        Attempt
+	// Skipped is true when the expression's SkippedAt map has a non-empty
+	// timestamp for this attempt's QuizType. Captured at load time so the
+	// per-day detail builder doesn't need to re-walk the history files to
+	// answer "is this card currently excluded".
+	Skipped bool
+	Attempt Attempt
 }
 
 // allAttempts loads every record from every history file, flattens them,
@@ -104,6 +109,7 @@ func appendExpressionAttempts(
 		if quizTypeFilter != "" && quizTypeFilter != quizType {
 			continue
 		}
+		skipped := exp.SkippedAt.IsSkipped(notebook.QuizType(quizType))
 		for _, rec := range records {
 			if rec.LearnedAt.IsZero() {
 				continue
@@ -115,6 +121,7 @@ func appendExpressionAttempts(
 				Expression:     exp.Expression,
 				ExpressionType: exp.Type,
 				QuizType:       quizType,
+				Skipped:        skipped,
 				Attempt: Attempt{
 					LearnedAt: rec.LearnedAt.Time,
 					QuizType:  quizType,
@@ -262,6 +269,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 			Meaning:               meta.Meaning,
 			ExampleSentence:       meta.ExampleSentence,
 			NotebookKind:          meta.NotebookKind,
+			Skipped:               hit.Skipped,
 		})
 	}
 	// Newest failure first. Ties (rare — same word + quiz type wrong twice on
