@@ -43,4 +43,27 @@ describe("WrongWordCard", () => {
     renderCard(baseWord({ skipped: false }));
     expect(screen.queryByTestId("excluded-badge")).toBeNull();
   });
+
+  it("collapses a multi-paragraph scene title to a single short line", () => {
+    // Story-style notebooks (Speak English Like an American etc.) declare
+    // the scene title as the lesson's multi-paragraph plot summary. The
+    // raw value was rendering as a wall of text under the expression and
+    // the user reported it as a wrong "example sentence". The breadcrumb
+    // must collapse it.
+    const longSummary =
+      "Mark, Ron, and Steve work at Gourmet International, a small food company specializing in ethnic frozen foods.\n" +
+      "Mark, a marketing manager at the company, tells his boss Ron and his co-worker Steve that Grand Foods, a large food company, is going to start competing with them in the frozen Chinese meals market.\n" +
+      "Mark got this information from an ex-girlfriend.";
+    renderCard(
+      baseWord({
+        notebookTitle: "LESSON 1: GOURMET INTERNATIONAL GETS NEW COMPETITION",
+        sceneTitle: longSummary,
+      }),
+    );
+    const crumb = screen.getByTestId("wrong-word-breadcrumb");
+    expect(crumb.textContent ?? "").not.toContain("Mark, a marketing manager");
+    expect(crumb.textContent ?? "").not.toContain("\n");
+    expect((crumb.textContent ?? "").length).toBeLessThanOrEqual(180);
+    expect(crumb.textContent).toContain("LESSON 1");
+  });
 });

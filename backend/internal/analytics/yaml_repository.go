@@ -254,7 +254,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 		for i := hitIdx; i < len(records); i++ {
 			fromHit = append(fromHit, records[i].Attempt)
 		}
-		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.Expression, hit.ExpressionType)
+		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.Expression, hit.ExpressionType, hit.QuizType)
 		wrong = append(wrong, WrongWord{
 			Expression:            hit.Expression,
 			NotebookID:            hit.NotebookID,

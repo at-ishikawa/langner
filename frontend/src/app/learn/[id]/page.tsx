@@ -29,6 +29,7 @@ import {
   WordLookupPopup,
   useWordLookup,
 } from "@/components/WordLookupPopup";
+import { findDeepLinkStoryIndex } from "@/lib/deepLink";
 
 // renderHighlightedText wraps every occurrence of a defined expression in the
 // given text with a bold/colored span. It also honors explicit {{ word }}
@@ -156,15 +157,8 @@ export default function LearnContentPage() {
   // the matching scene when `?scene=` is also given) and let it override
   // the user's last manual selection.
   const deepLinkStoryIndex = useMemo(() => {
-    if (!data || !targetWord) return -1;
-    return data.stories.findIndex((story) =>
-      story.scenes.some((scene) => {
-        if (targetScene && scene.title !== targetScene) return false;
-        return scene.definitions.some(
-          (d) => d.expression.toLowerCase() === targetWord.toLowerCase(),
-        );
-      }),
-    );
+    if (!data) return -1;
+    return findDeepLinkStoryIndex(data.stories, targetWord, targetScene);
   }, [data, targetWord, targetScene]);
   const effectiveStoryIndex = deepLinkStoryIndex >= 0 ? deepLinkStoryIndex : selectedStoryIndex;
 

@@ -44,7 +44,15 @@ type DayDetail struct {
 // Implementations may return zero values when no match is found; the
 // frontend hides empty fields rather than failing.
 type MetadataResolver interface {
-	Resolve(ctx context.Context, notebookID, expression, expressionType string) WordMetadata
+	// Resolve returns the meaning + example for an expression on the
+	// analytics card. quizType is the LearningRecord.QuizType of the
+	// attempt that produced the card; resolvers use it to pick between
+	// vocabulary and etymology-origin lookups when the expression
+	// collides across both senses (e.g. "gauche" is both an English
+	// adjective meaning "clumsy" AND a French origin meaning "left").
+	// expressionType comes from the learning-history record's `type`
+	// field and is the fallback signal when quizType is ambiguous.
+	Resolve(ctx context.Context, notebookID, expression, expressionType, quizType string) WordMetadata
 }
 
 // noMetadataResolver is the default no-op resolver. The handler uses it
@@ -57,6 +65,6 @@ type noMetadataResolver struct{}
 // fixtures needed to populate meanings.
 func NoMetadataResolver() MetadataResolver { return noMetadataResolver{} }
 
-func (noMetadataResolver) Resolve(_ context.Context, _, _, _ string) WordMetadata {
+func (noMetadataResolver) Resolve(_ context.Context, _, _, _, _ string) WordMetadata {
 	return WordMetadata{}
 }

@@ -2,6 +2,8 @@ package analytics
 
 import (
 	"context"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -27,17 +29,43 @@ func NewNotebookMetadataResolver(reader *notebook.Reader) MetadataResolver {
 }
 
 // Resolve looks up the meaning and one example for the given expression.
-// The expression type chooses the lookup path: etymology origins are
-// pulled from etymology session files, everything else from story or
-// flashcard definitions.
-func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expression, expressionType string) WordMetadata {
+// The quiz type drives the lookup path so that words colliding between
+// the vocabulary side and the etymology-origin side (e.g. "gauche" the
+// English adjective and "gauche" the French origin) resolve correctly:
+//
+//   - etymology_* quizzes always go through resolveOrigin.
+//   - vocabulary quizzes (notebook / reverse / freeform) always go
+//     through resolveVocab, even when the underlying learning-history
+//     record carries `type: origin` (a known cross-recording artifact
+//     for words that happen to be both an English word and an origin).
+//
+// expressionType is used as a fallback only when the quiz type is
+// missing (legacy callers / no-op resolver).
+func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expression, expressionType, quizType string) WordMetadata {
 	if r == nil || r.reader == nil || notebookID == "" || expression == "" {
 		return WordMetadata{}
+	}
+	if quizType != "" {
+		if isEtymologyQuizType(quizType) {
+			return r.resolveOrigin(notebookID, expression)
+		}
+		return r.resolveVocab(notebookID, expression)
 	}
 	if expressionType == notebook.LearningExpressionTypeOrigin {
 		return r.resolveOrigin(notebookID, expression)
 	}
 	return r.resolveVocab(notebookID, expression)
+}
+
+// isEtymologyQuizType identifies the quiz types whose attempt records
+// should resolve against the etymology side of a notebook (origin
+// meaning). Vocabulary quiz types (notebook / reverse / freeform)
+// always resolve against the vocabulary side. Keeping the check on the
+// quiz type — not on the expression — means an English word that also
+// happens to be an etymology origin still returns the English meaning
+// after a vocabulary-quiz failure.
+func isEtymologyQuizType(quizType string) bool {
+	return strings.HasPrefix(quizType, "etymology_")
 }
 
 // resolveVocab tries every notebook source a vocab definition might live in.
@@ -55,6 +83,18 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 			for _, scene := range s.Scenes {
 				if meta, ok := matchVocabNote(scene.Definitions, target); ok {
 					meta.NotebookKind = "story"
+					if meta.ExampleSentence == "" {
+						// Story-style notebooks (Speak English Like an American,
+						// Friends, etc.) rarely carry per-note `examples:` data —
+						// the in-context usage is the conversation itself. Pull
+						// the first conversation quote / statement that mentions
+						// the expression so the analytics card shows a real
+						// usage line instead of nothing. Both forms (canonical
+						// expression and the definition alias, e.g. "stuffed
+						// shirts" vs "stuffed shirt") are tried so quotes that
+						// use a plural / conjugated variant still match.
+						meta.ExampleSentence = findUsageInScene(scene, target, lookupDefinitionAlias(scene.Definitions, target))
+					}
 					return meta
 				}
 			}
@@ -109,6 +149,110 @@ func (r *NotebookMetadataResolver) etymologyNotebookName(notebookID string) stri
 	for id, idx := range r.reader.GetEtymologyIndexes() {
 		if id == notebookID {
 			return idx.Name
+		}
+	}
+	return ""
+}
+
+// findUsageInScene returns the first conversation quote (or, failing
+// that, statement) in the scene that mentions the expression. The match
+// tries, in order:
+//
+//   - exact (case-insensitive) substring of the expression itself
+//   - exact substring of the definition alias (handles "lose one's
+//     temper" stored as both expression and definition)
+//   - any of the expression's significant content tokens (stopwords and
+//     possessive markers stripped), to absorb conjugated / pluralised
+//     forms ("losing my temper" matching "lose one's temper" via the
+//     shared "temper" stem)
+//
+// Empty when nothing matches — the caller leaves ExampleSentence empty
+// rather than fabricating a usage.
+func findUsageInScene(scene notebook.StoryScene, expression, alias string) string {
+	phrase := strings.ToLower(strings.TrimSpace(expression))
+	aliasLow := strings.ToLower(strings.TrimSpace(alias))
+	phrases := []string{phrase}
+	if aliasLow != "" && aliasLow != phrase {
+		phrases = append(phrases, aliasLow)
+	}
+	tokens := significantTokens(phrase + " " + aliasLow)
+	containsAny := func(haystack string) bool {
+		low := strings.ToLower(haystack)
+		for _, needle := range phrases {
+			if needle != "" && strings.Contains(low, needle) {
+				return true
+			}
+		}
+		for _, t := range tokens {
+			if strings.Contains(low, t) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, conv := range scene.Conversations {
+		if containsAny(conv.Quote) {
+			return cleanExampleSentence(conv.Quote)
+		}
+	}
+	for _, stmt := range scene.Statements {
+		if containsAny(stmt) {
+			return cleanExampleSentence(stmt)
+		}
+	}
+	return ""
+}
+
+// cleanExampleSentence strips the `{{ ... }}` highlight markers that
+// MergeDefinitionsIntoNotebooks wraps around recognised expressions in
+// scene statements. The markers are a rendering hint for the Learn UI;
+// in the analytics card they read as noise.
+func cleanExampleSentence(s string) string {
+	s = strings.TrimSpace(s)
+	s = exampleMarkerOpen.ReplaceAllString(s, "")
+	s = exampleMarkerClose.ReplaceAllString(s, "")
+	return strings.Join(strings.Fields(s), " ")
+}
+
+var exampleMarkerOpen = regexp.MustCompile(`\{\{\s*`)
+var exampleMarkerClose = regexp.MustCompile(`\s*\}\}`)
+
+// significantTokens splits the expression into lowercase content tokens,
+// drops articles / prepositions / possessive markers and anything under
+// 4 characters, and returns the remainder. The list is ordered by token
+// length descending so the longest (and therefore most discriminating)
+// stem is tried first.
+func significantTokens(phrase string) []string {
+	stop := map[string]bool{
+		"a": true, "an": true, "the": true, "to": true, "of": true, "in": true,
+		"on": true, "at": true, "by": true, "for": true, "is": true, "are": true,
+		"was": true, "were": true, "be": true, "been": true, "do": true, "does": true,
+		"did": true, "and": true, "or": true, "but": true, "with": true, "from": true,
+		"my": true, "his": true, "her": true, "your": true, "their": true, "our": true,
+		"its": true, "one's": true, "someone's": true, "one": true, "someone": true,
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, raw := range strings.Fields(phrase) {
+		t := strings.Trim(strings.ToLower(raw), ".,!?;:\"'()[]{}")
+		if len(t) < 4 || stop[t] || seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+	return out
+}
+
+// lookupDefinitionAlias returns the `definition` field of the note that
+// matches the expression. Used by findUsageInScene to widen substring
+// search to the dictionary-form alias when the conversation uses a
+// conjugated / pluralised form.
+func lookupDefinitionAlias(notes []notebook.Note, expression string) string {
+	for _, n := range notes {
+		if matchExpression(n.Expression, n.Definition, expression) {
+			return n.Definition
 		}
 	}
 	return ""

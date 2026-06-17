@@ -30,6 +30,20 @@ function attemptStreakLabel(a: AttemptEntry): string {
   return "(first attempt)";
 }
 
+// summariseSceneTitle keeps the breadcrumb short. Story-style notebooks
+// (Speak English Like an American, Friends) declare the scene title as
+// the lesson's multi-paragraph plot summary; rendering it raw produced a
+// 200-character breadcrumb that visually competed with the meaning and
+// looked like a (wrong) example sentence. This collapses it to a single
+// short line — first sentence-ish — so the card stays scannable. Short
+// titles (the typical flashcard / story case) pass through untouched.
+function summariseSceneTitle(title: string): string {
+  const firstLine = title.split(/\r?\n/).find((line) => line.trim().length > 0) ?? "";
+  const trimmed = firstLine.trim();
+  if (trimmed.length <= 80) return trimmed;
+  return `${trimmed.slice(0, 77).trimEnd()}…`;
+}
+
 // learnHrefFor builds the deep link from a wrong word to its source page
 // in the Learn section. The destination depends on the notebook kind:
 // etymology origins go to the etymology hub keyed by ?origin=…, flashcards
@@ -126,9 +140,9 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
             {word.meaning}
           </Text>
         )}
-        <Text fontSize="sm" color="fg.muted" mb={2}>
+        <Text fontSize="sm" color="fg.muted" mb={2} data-testid="wrong-word-breadcrumb">
           {word.notebookTitle || word.notebookId}
-          {word.sceneTitle && ` / ${word.sceneTitle}`}
+          {word.sceneTitle && ` / ${summariseSceneTitle(word.sceneTitle)}`}
         </Text>
         {word.exampleSentence && (
           <Text fontSize="sm" color="fg.muted" fontStyle="italic" mb={2} data-testid="wrong-word-example">
