@@ -149,22 +149,103 @@ func TestWriter_SingleFileWithEveryNotebook(t *testing.T) {
 		"example sentence still renders inside the entry body as italic")
 }
 
-// TestWriter_RendersStoryConversations pins the story-side context block:
-// when a session belongs to a story notebook (Speak English Like an
-// American etc.), the conversations from that lesson must be rendered
-// as a markdown blockquote so the failed expression sits next to the
-// dialogue it appeared in.
+// TestWriter_RendersStoryConversations pins the story-side context
+// block. The writer must:
+//
+//   - mark the line containing the failed expression with a ✗ prefix
+//     and bold the matched span (root + conjugation: "scrimp" inside
+//     "scrimping" lights up the whole word, not just the root);
+//   - drop scenes that don't contain any failure so a 19-line lesson
+//     with one wrong word doesn't render all 19 lines;
+//   - leave non-matching lines inside a matched scene as plain
+//     dialogue — context for the bolded line;
+//   - suppress the Example: line in the per-failure entry because the
+//     conversation block already carries the same quote.
 func TestWriter_RendersStoryConversations(t *testing.T) {
 	day, _ := time.Parse("2006-01-02", "2026-06-17")
 	repo := &stubRepo{
 		detail: analytics.DayDetail{
 			WrongWords: []analytics.WrongWord{
 				{
+					NotebookID:      "speak-english",
+					NotebookTitle:   "LESSON 18",
+					Expression:      "scrimp",
+					QuizType:        "notebook",
+					Meaning:         "to economize",
+					ExampleSentence: "They're probably scrimping on the plastic.",
+					NotebookKind:    "story",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		conversations: map[string][]SourceScene{
+			"speak-english|LESSON 18": {
+				{
+					Lines: []SourceLine{
+						{Speaker: "Meg", Quote: "What's going on with the CD cases? They keep cracking."},
+						{Speaker: "Josh", Quote: "Our supplier must be cutting corners."},
+						{Speaker: "Meg", Quote: "They're probably scrimping on the plastic. I'll have a word with them."},
+						{Speaker: "Josh", Quote: "Good idea."},
+					},
+				},
+				{
+					// Unrelated scene — every line is just context, no
+					// failed expression mentioned. Must be omitted.
+					Lines: []SourceLine{
+						{Speaker: "Meg", Quote: "Hi Gary, the cases you sent keep cracking."},
+						{Speaker: "Gary", Quote: "That's strange. Try storing them differently."},
+					},
+				},
+			},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+
+	assert.Contains(t, out, "#### Conversations")
+	assert.Contains(t, out, "> ✗ **Meg:** They're probably **scrimping** on the plastic. I'll have a word with them.",
+		"failed line carries ✗ prefix and bolds the whole word ('scrimping') containing the root ('scrimp')")
+	assert.Contains(t, out, "> **Josh:** Our supplier must be cutting corners.",
+		"non-failed lines in the matched scene render as plain context")
+	// The second scene mentions cracking + storing — neither matches
+	// "scrimp" or any significant token of it, so it must be dropped.
+	assert.NotContains(t, out, "Hi Gary",
+		"scenes with zero failure matches must be omitted entirely so the file stays scannable")
+
+	// Example: line in the entry suppressed because the conversation
+	// block already carried the same quote.
+	assert.NotContains(t, out, "- Example:",
+		"Example: line is redundant when the conversation block already shows the quote — it must be suppressed")
+
+	// The conversation block precedes the failed-vocabularies block.
+	assert.Less(t,
+		indexOf(out, "#### Conversations"),
+		indexOf(out, "#### Failed vocabularies"),
+		"conversation context must appear before the failure list so the reader has the dialogue framing the failed word")
+}
+
+// TestWriter_BoldingHandlesTokenFalsePositives pins the regression where
+// "take" — a content token of "take the plunge" — was matched inside
+// "mistake" and falsely marked an unrelated dialogue line. Word-start
+// anchoring on the token fallback prevents the substring-inside-word
+// hit.
+func TestWriter_BoldingHandlesTokenFalsePositives(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
 					NotebookID:    "speak-english",
-					NotebookTitle: "LESSON 1: THE DEAL",
-					Expression:    "talk shop",
+					NotebookTitle: "LESSON 10",
+					Expression:    "take the plunge",
 					QuizType:      "notebook",
-					Meaning:       "talk about work",
+					Meaning:       "to start something risky",
 					NotebookKind:  "story",
 				},
 			},
@@ -172,10 +253,10 @@ func TestWriter_RendersStoryConversations(t *testing.T) {
 	}
 	src := &stubSource{
 		conversations: map[string][]SourceScene{
-			"speak-english|LESSON 1: THE DEAL": {{
+			"speak-english|LESSON 10": {{
 				Lines: []SourceLine{
-					{Speaker: "Mark", Quote: "What did you find out for me?"},
-					{Speaker: "Cindy", Quote: "I'm not ready to talk shop yet."},
+					{Speaker: "Susan", Quote: "I'm ready to take the plunge and join a start-up."},
+					{Speaker: "Craig", Quote: "I still think you're making a mistake leaving King."},
 				},
 			}},
 		},
@@ -187,17 +268,90 @@ func TestWriter_RendersStoryConversations(t *testing.T) {
 	body, err := os.ReadFile(written)
 	require.NoError(t, err)
 	out := string(body)
+	assert.Contains(t, out, "> ✗ **Susan:** I'm ready to **take the plunge** and join a start-up.",
+		"exact-substring match bolds the full expression and marks the line")
+	assert.NotContains(t, out, "✗ **Craig:**",
+		"the second line must NOT be marked — 'take' inside 'mistake' must not light up as a token match")
+	assert.NotContains(t, out, "**mistake**",
+		"'mistake' must not be bolded by accident from the 'take' token of 'take the plunge'")
+}
 
-	assert.Contains(t, out, "#### Conversations",
-		"a session that the source provides conversations for must include the dialogue block")
-	assert.Contains(t, out, "> **Mark:** What did you find out for me?",
-		"speaker lines render as blockquoted bold-speaker lines, mirroring the regular story notebook")
-	assert.Contains(t, out, "> **Cindy:** I'm not ready to talk shop yet.")
-	// The conversation block precedes the failed-vocabularies block.
-	assert.Less(t,
-		indexOf(out, "#### Conversations"),
-		indexOf(out, "#### Failed vocabularies"),
-		"conversation context must appear before the failure list so the reader has the dialogue framing the failed word")
+// TestWriter_TokenFallbackBoldsContentWord pins the multi-word case
+// where the exact expression doesn't substring-match the quote ("drum
+// up business" vs "drum up a lot of business"): the writer should fall
+// back to the longest content token and bold the matching word.
+func TestWriter_TokenFallbackBoldsContentWord(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "speak-business",
+					NotebookTitle: "LESSON 6",
+					Expression:    "drum up business",
+					QuizType:      "notebook",
+					Meaning:       "to create new business",
+					NotebookKind:  "story",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		conversations: map[string][]SourceScene{
+			"speak-business|LESSON 6": {{
+				Lines: []SourceLine{
+					{Speaker: "Linda", Quote: "Linda, your campaign helped us drum up a lot of business."},
+				},
+			}},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	// The exact phrase doesn't appear in the quote — the token
+	// fallback bolds the longest content word (here "business",
+	// 8 chars > "drum", 4 chars).
+	assert.Contains(t, out, "✗ **Linda:**",
+		"line carries the ✗ marker even when the exact phrase isn't a substring")
+	assert.Contains(t, out, "**business**",
+		"the longest content token is bolded as a whole word")
+}
+
+// TestWriter_PreservesExampleWhenNoConversation pins the WPME-style
+// fallback: when the source has no conversations for the session, the
+// Example: line stays because there's no other place the quote
+// surfaces.
+func TestWriter_PreservesExampleWhenNoConversation(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:      "wpme",
+					NotebookTitle:   "Session 5",
+					Expression:      "geriatrics",
+					QuizType:        "notebook",
+					Meaning:         "medicine of the elderly",
+					ExampleSentence: "The clinic specializes in geriatrics.",
+				},
+			},
+		},
+	}
+	src := &stubSource{} // no conversations
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.NotContains(t, out, "#### Conversations")
+	assert.Contains(t, out, "- Example: *The clinic specializes in geriatrics.*",
+		"Example: line stays when the source has no conversations — it's the only carrier of the usage")
 }
 
 // TestWriter_RendersEtymologyConceptsWithHighlight pins the etymology

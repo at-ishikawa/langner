@@ -289,8 +289,10 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source 
 		}
 		for _, s := range g.sessions {
 			fmt.Fprintf(&sb, "### %s\n\n", s.title)
+			hasConversations := false
 			if source != nil {
-				writeStoryConversations(&sb, source.StoryConversations(g.notebookID, s.title))
+				hasConversations = writeStoryConversations(&sb,
+					source.StoryConversations(g.notebookID, s.title), s.vocab)
 				// Highlight matches on BOTH origin failures and vocab
 				// failures: an English word can share its name with the
 				// origin it descends from (`gauche` the adjective vs
@@ -303,13 +305,13 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source 
 			if len(s.origin) > 0 {
 				sb.WriteString("#### Failed origins\n\n")
 				for _, w := range s.origin {
-					writeEntry(&sb, w)
+					writeEntry(&sb, w, hasConversations)
 				}
 			}
 			if len(s.vocab) > 0 {
 				sb.WriteString("#### Failed vocabularies\n\n")
 				for _, w := range s.vocab {
-					writeEntry(&sb, w)
+					writeEntry(&sb, w, hasConversations)
 				}
 			}
 		}
@@ -317,29 +319,201 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source 
 	return sb.String()
 }
 
-// writeStoryConversations renders each scene's dialogue as a markdown
-// blockquote, with the speaker bolded inline. Scene titles (the
-// multi-paragraph plot summary in YAML) are skipped because the analytics
-// page already showed the user reported them as noise; the dialogue
-// alone reproduces the lesson context.
-func writeStoryConversations(sb *strings.Builder, scenes []SourceScene) {
-	if len(scenes) == 0 {
-		return
+// writeStoryConversations renders only the scenes that contain a
+// failed expression, marks each matching line with a ✗ prefix, and
+// bolds the failed expression inside the quote. Scenes without any
+// failure are dropped — a full lesson's dialogue is too much to wade
+// through when the user only failed one word in it. Returns true when
+// at least one scene was written, so the caller can suppress the
+// downstream Example: line in the vocab entry (the conversation block
+// already showed it).
+func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures []analytics.WrongWord) bool {
+	if len(scenes) == 0 || len(failures) == 0 {
+		return false
+	}
+	var rendered []string
+	for _, scene := range scenes {
+		sceneOut := strings.Builder{}
+		anyMatch := false
+		for _, line := range scene.Lines {
+			bolded, matched := boldFailedExpressions(line.Quote, failures)
+			marker := ""
+			if matched {
+				marker = "✗ "
+				anyMatch = true
+			}
+			if line.Speaker != "" {
+				fmt.Fprintf(&sceneOut, "> %s**%s:** %s\n", marker, line.Speaker, bolded)
+			} else {
+				fmt.Fprintf(&sceneOut, "> %s%s\n", marker, bolded)
+			}
+		}
+		if anyMatch {
+			rendered = append(rendered, sceneOut.String())
+		}
+	}
+	if len(rendered) == 0 {
+		return false
 	}
 	sb.WriteString("#### Conversations\n\n")
-	for i, scene := range scenes {
+	for i, r := range rendered {
 		if i > 0 {
-			sb.WriteString(">\n")
+			// Blank line between scenes ends the previous blockquote
+			// and starts the next as a fresh block — cleaner than the
+			// empty `>` line the previous version used.
+			sb.WriteString("\n")
 		}
-		for _, line := range scene.Lines {
-			if line.Speaker != "" {
-				fmt.Fprintf(sb, "> **%s:** %s\n", line.Speaker, line.Quote)
-			} else {
-				fmt.Fprintf(sb, "> %s\n", line.Quote)
+		sb.WriteString(r)
+	}
+	sb.WriteString("\n")
+	return true
+}
+
+// boldFailedExpressions returns the quote with each failed expression
+// it contains wrapped in **bold** markers, and a flag indicating
+// whether any failure matched. Matching tries, per failure:
+//
+//  1. exact case-insensitive substring of the full expression, anchored
+//     at a word boundary on the left and expanded to the next word
+//     boundary on the right ("scrimp" in "scrimping" bolds the whole
+//     "scrimping"; "stuffed shirt" in "stuffed shirts" bolds "stuffed
+//     shirts"). Anchoring to the left boundary prevents stray matches
+//     like "take" inside "mistake".
+//  2. the longest content-token of the expression as a whole-word
+//     match, when (1) misses ("drum up business" → bolds "business"
+//     in "drum up a lot of business"). The token must start at a word
+//     boundary, again to keep "take" out of "mistake".
+//
+// Overlapping spans are merged so multiple failures that share the
+// same word don't produce nested `****…****`.
+func boldFailedExpressions(quote string, failures []analytics.WrongWord) (string, bool) {
+	type span struct{ start, end int }
+	var spans []span
+	lower := strings.ToLower(quote)
+	for _, f := range failures {
+		expr := strings.TrimSpace(f.Expression)
+		if expr == "" {
+			continue
+		}
+		if s, e, ok := matchExpressionSpan(lower, expr); ok {
+			spans = append(spans, span{s, e})
+			continue
+		}
+		for _, tok := range significantTokens(expr) {
+			if s, e, ok := findWordStartingWith(lower, tok); ok {
+				spans = append(spans, span{s, e})
+				break
 			}
 		}
 	}
-	sb.WriteString("\n")
+	if len(spans) == 0 {
+		return quote, false
+	}
+	sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+	merged := []span{spans[0]}
+	for _, s := range spans[1:] {
+		last := &merged[len(merged)-1]
+		if s.start <= last.end {
+			if s.end > last.end {
+				last.end = s.end
+			}
+			continue
+		}
+		merged = append(merged, s)
+	}
+	out := quote
+	for i := len(merged) - 1; i >= 0; i-- {
+		s := merged[i]
+		out = out[:s.start] + "**" + out[s.start:s.end] + "**" + out[s.end:]
+	}
+	return out, true
+}
+
+// matchExpressionSpan finds the first occurrence of expression in the
+// lowercased quote that starts at a word boundary, then expands the
+// right edge to the end of the surrounding word. Used so "scrimp"
+// matches "scrimping" (becomes "scrimping" span) but "take" in "take
+// the plunge" doesn't accidentally match "take" inside "mistake".
+func matchExpressionSpan(lowerQuote, expression string) (int, int, bool) {
+	exprLower := strings.ToLower(expression)
+	if exprLower == "" {
+		return 0, 0, false
+	}
+	pos := 0
+	for {
+		idx := strings.Index(lowerQuote[pos:], exprLower)
+		if idx < 0 {
+			return 0, 0, false
+		}
+		abs := pos + idx
+		if abs > 0 && isWordChar(lowerQuote[abs-1]) {
+			pos = abs + 1
+			continue
+		}
+		end := abs + len(exprLower)
+		for end < len(lowerQuote) && isWordChar(lowerQuote[end]) {
+			end++
+		}
+		return abs, end, true
+	}
+}
+
+// findWordStartingWith returns the byte range covering the first word
+// whose lowercased root starts with the token. Used by the token
+// fallback so "drum" matches "drum" / "drumming" but not "eardrum",
+// and "take" never wanders inside "mistake".
+func findWordStartingWith(lowerQuote, token string) (int, int, bool) {
+	pos := 0
+	for {
+		idx := strings.Index(lowerQuote[pos:], token)
+		if idx < 0 {
+			return 0, 0, false
+		}
+		abs := pos + idx
+		if abs > 0 && isWordChar(lowerQuote[abs-1]) {
+			pos = abs + 1
+			continue
+		}
+		end := abs + len(token)
+		for end < len(lowerQuote) && isWordChar(lowerQuote[end]) {
+			end++
+		}
+		return abs, end, true
+	}
+}
+
+func isWordChar(b byte) bool {
+	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '\''
+}
+
+// significantTokens picks out the content words of a multi-word
+// expression — stopwords / articles / possessive markers stripped,
+// tokens under four characters dropped. Returns the longest first so
+// boldFailedExpressions tries the most discriminating token before
+// giving up. Mirrors the analytics resolver's helper of the same name;
+// duplicated to keep this package independent of the analytics
+// internals.
+func significantTokens(phrase string) []string {
+	stop := map[string]bool{
+		"a": true, "an": true, "the": true, "to": true, "of": true, "in": true,
+		"on": true, "at": true, "by": true, "for": true, "is": true, "are": true,
+		"was": true, "were": true, "be": true, "been": true, "do": true, "does": true,
+		"did": true, "and": true, "or": true, "but": true, "with": true, "from": true,
+		"my": true, "his": true, "her": true, "your": true, "their": true, "our": true,
+		"its": true, "one's": true, "someone's": true, "one": true, "someone": true,
+	}
+	seen := map[string]bool{}
+	var out []string
+	for _, raw := range strings.Fields(phrase) {
+		t := strings.Trim(strings.ToLower(raw), ".,!?;:\"'()[]{}")
+		if len(t) < 4 || stop[t] || seen[t] {
+			continue
+		}
+		seen[t] = true
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return len(out[i]) > len(out[j]) })
+	return out
 }
 
 // writeEtymologyConcepts renders the concept declarations + relations
@@ -446,11 +620,14 @@ func totalEntriesAcross(groups []quizReviewGroup) int {
 }
 
 // writeEntry renders one wrong attempt. Format mirrors the etymology
-// notebook output so the reader's eye trains on the same shape across
-// study materials: headline, italic example, related-group lines.
-func writeEntry(sb *strings.Builder, w analytics.WrongWord) {
+// notebook output: headline, optional italic example, related-group
+// lines. When suppressExample is true (the session has rendered
+// conversations that already carry the same quote) the Example: line
+// is dropped — otherwise it duplicates the bolded line in the
+// conversation block above.
+func writeEntry(sb *strings.Builder, w analytics.WrongWord, suppressExample bool) {
 	fmt.Fprintf(sb, "- **%s** [%s]: %s\n", w.Expression, quizTypeLabel(w.QuizType), defaultIfEmpty(w.Meaning, "—"))
-	if w.ExampleSentence != "" {
+	if !suppressExample && w.ExampleSentence != "" {
 		fmt.Fprintf(sb, "    - Example: *%s*\n", w.ExampleSentence)
 	}
 	for _, group := range w.RelatedGroups {
