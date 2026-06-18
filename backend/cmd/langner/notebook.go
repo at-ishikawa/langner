@@ -241,7 +241,7 @@ The date argument defaults to today in your local timezone.`,
 
 			repo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory).
 				WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
-			writer := quizreview.NewWriter(repo)
+			writer := quizreview.NewWriterWithSource(repo, quizreview.NewReaderSource(reader))
 
 			outDir := cfg.Outputs.QuizReviewDirectory
 			if outDir == "" {

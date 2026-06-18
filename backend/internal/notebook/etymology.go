@@ -578,6 +578,50 @@ func (r *Reader) GetEtymologyIndexes() map[string]EtymologyIndex {
 	return r.etymologyIndexes
 }
 
+// GetEtymologyConceptsBySession returns each session file's concepts +
+// relations keyed by the session title (the YAML event or
+// metadata.title). Used by the quiz-review writer to render the
+// concept block sitting in the session a failed origin or word came
+// from, without paying the cost of book-wide aggregation. Returns nil
+// maps when the book is unknown.
+func (r *Reader) GetEtymologyConceptsBySession(etymologyID string) (concepts map[string][]Concept, relations map[string][]Relation) {
+	index, ok := r.etymologyIndexes[etymologyID]
+	if !ok {
+		return nil, nil
+	}
+	concepts = make(map[string][]Concept)
+	relations = make(map[string][]Relation)
+	for _, nb := range index.NotebookPaths {
+		path := filepath.Join(index.Path, nb)
+		title := sessionTitleFromFile(path)
+		if title == "" {
+			continue
+		}
+		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(path)
+		concepts[title] = append(concepts[title], sessionConcepts...)
+		relations[title] = append(relations[title], sessionRelations...)
+	}
+	return concepts, relations
+}
+
+// sessionTitleFromFile reads only enough of an etymology session YAML
+// to discover the session title (the new-shape `event:` field or the
+// legacy `metadata.title`). Both shapes are tried; the first that
+// yields a non-empty title wins. Returns "" when neither is present.
+func sessionTitleFromFile(path string) string {
+	if newShape, err := readYamlFile[[]EtymologyNotebookEntry](path); err == nil {
+		for _, entry := range newShape {
+			if t := strings.TrimSpace(entry.Event); t != "" {
+				return t
+			}
+		}
+	}
+	if wrapped, err := readYamlFile[etymologySessionFile](path); err == nil {
+		return strings.TrimSpace(wrapped.Metadata.Title)
+	}
+	return ""
+}
+
 // GetEtymologyConceptsAndRelations aggregates concepts and relations
 // declared across every session file in the etymology book. Concepts
 // are merged by Key (per the schema's "same key across sessions =

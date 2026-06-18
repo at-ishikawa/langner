@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/analytics"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/pdf"
 )
 
@@ -28,15 +29,127 @@ import (
 // the user can drill exactly the words / origins they got wrong that
 // day without re-reading the entire notebook.
 type Writer struct {
-	repo analytics.Repository
+	repo   analytics.Repository
+	source SourceContent
 }
 
-// NewWriter constructs a writer. The repository must already be
-// configured with its MetadataResolver so the WrongWords come
-// pre-hydrated with meanings, examples and related groups (the
-// quiz-review rendering reads those fields directly off the WrongWord).
+// SourceContent supplies the per-session source-notebook content the
+// writer interleaves with each session's failure list — the
+// conversation dialogue from a story notebook, the concept declarations
+// and relations from an etymology notebook. Production code wraps a
+// notebook.Reader via NewReaderSource; tests pass a stub so the
+// markdown rendering can be exercised without spinning up the YAML
+// reader. A nil source is allowed and produces the legacy
+// failure-only layout.
+type SourceContent interface {
+	// StoryConversations returns the dialogue scenes declared in the
+	// notebook's matching session (StoryNotebook.Event == sessionTitle).
+	// Each returned slice corresponds to one scene's `conversations:`
+	// block; statements come back joined as a single pseudo-quote so
+	// callers don't need to know about that distinction.
+	StoryConversations(notebookID, sessionTitle string) []SourceScene
+	// EtymologyConcepts returns the concepts + relations declared in
+	// the etymology session of the same title plus a map from origin
+	// name to meaning so the rendered member rows can show
+	// "sinister (Latin) — left hand" without re-walking the origins.
+	EtymologyConcepts(notebookID, sessionTitle string) ([]notebook.Concept, []notebook.Relation, map[string]string)
+}
+
+// SourceScene is one scene's worth of dialogue from a story notebook,
+// flattened to lines so the writer can render it as a markdown
+// blockquote without re-traversing speaker/quote pairs.
+type SourceScene struct {
+	// Title is the scene's narrative summary (typically the multi-line
+	// description in YAML). Empty for flashcard-style scenes.
+	Title string
+	Lines []SourceLine
+}
+
+// SourceLine is one speaker + quote pair OR one statement (in which
+// case Speaker is "").
+type SourceLine struct {
+	Speaker string
+	Quote   string
+}
+
+// NewWriter constructs a writer with no source content — failures
+// render as a flat list. Use NewWriterWithSource to also interleave
+// source dialogue / concept blocks.
 func NewWriter(repo analytics.Repository) *Writer {
 	return &Writer{repo: repo}
+}
+
+// NewWriterWithSource constructs a writer that pulls per-session
+// content (story conversations + etymology concepts) from the given
+// SourceContent and renders it alongside the failure list. The
+// repository must already be configured with its MetadataResolver so
+// the WrongWords come pre-hydrated with meanings, examples and related
+// groups.
+func NewWriterWithSource(repo analytics.Repository, source SourceContent) *Writer {
+	return &Writer{repo: repo, source: source}
+}
+
+// NewReaderSource wraps a notebook.Reader as a SourceContent so the
+// CLI can hand the writer everything it needs in one shot. nil reader
+// yields an empty source (no conversations, no concepts).
+func NewReaderSource(reader *notebook.Reader) SourceContent {
+	if reader == nil {
+		return nil
+	}
+	return &readerSource{reader: reader}
+}
+
+type readerSource struct {
+	reader *notebook.Reader
+}
+
+func (rs *readerSource) StoryConversations(notebookID, sessionTitle string) []SourceScene {
+	stories, err := rs.reader.ReadStoryNotebooks(notebookID)
+	if err != nil {
+		return nil
+	}
+	for _, s := range stories {
+		if s.Event != sessionTitle {
+			continue
+		}
+		out := make([]SourceScene, 0, len(s.Scenes))
+		for _, scene := range s.Scenes {
+			if len(scene.Conversations) == 0 && len(scene.Statements) == 0 {
+				continue
+			}
+			lines := make([]SourceLine, 0, len(scene.Conversations)+len(scene.Statements))
+			for _, c := range scene.Conversations {
+				lines = append(lines, SourceLine{Speaker: c.Speaker, Quote: c.Quote})
+			}
+			for _, st := range scene.Statements {
+				lines = append(lines, SourceLine{Quote: st})
+			}
+			out = append(out, SourceScene{Title: scene.Title, Lines: lines})
+		}
+		return out
+	}
+	return nil
+}
+
+func (rs *readerSource) EtymologyConcepts(notebookID, sessionTitle string) ([]notebook.Concept, []notebook.Relation, map[string]string) {
+	conceptsBySession, relationsBySession := rs.reader.GetEtymologyConceptsBySession(notebookID)
+	concepts := conceptsBySession[sessionTitle]
+	relations := relationsBySession[sessionTitle]
+	if len(concepts) == 0 && len(relations) == 0 {
+		return nil, nil, nil
+	}
+	origins, _ := rs.reader.ReadEtymologyNotebook(notebookID)
+	meaning := make(map[string]string, len(origins))
+	for _, o := range origins {
+		if o.SessionTitle != "" && o.SessionTitle != sessionTitle {
+			// Track origin meanings book-wide so concept members
+			// declared in a different session still render with
+			// their meaning text; the session filter here is only a
+			// cheap fast path.
+		}
+		meaning[o.Origin] = o.Meaning
+	}
+	return concepts, relations, meaning
 }
 
 // Output writes a single markdown file covering every notebook with
@@ -63,7 +176,7 @@ func (w *Writer) Output(ctx context.Context, day time.Time, outputDirectory stri
 
 	dateStr := day.Format("2006-01-02")
 	filename := filepath.Join(outputDirectory, "quiz-review-"+dateStr+".md")
-	body := renderQuizReviewAllNotebooks(dateStr, groupByNotebook(detail.WrongWords))
+	body := renderQuizReviewAllNotebooks(dateStr, groupByNotebook(detail.WrongWords), w.source)
 	if err := os.WriteFile(filename, []byte(body), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", filename, err)
 	}
@@ -150,11 +263,12 @@ func groupByNotebook(wrongs []analytics.WrongWord) []quizReviewGroup {
 // renderQuizReviewAllNotebooks renders every notebook with failures on
 // the day as a single markdown document. Notebooks are emitted in the
 // order they first appeared in the analytics result; within each
-// notebook, sessions follow the same first-appearance order, and
-// per-session subsections separate origin failures from vocabulary
-// failures so the reader can drill the etymology side and the
-// English-word side independently.
-func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup) string {
+// notebook, sessions follow the same first-appearance order. Each
+// session is preceded by its source-notebook context (conversation
+// dialogue for stories, concept blocks for etymology) so the reader
+// gets the surrounding material a normal study notebook would carry,
+// with the day's failures highlighted below.
+func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source SourceContent) string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "# Quiz review — %s\n\n", date)
 	if total := totalEntriesAcross(groups); total > 0 {
@@ -175,6 +289,17 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup) string 
 		}
 		for _, s := range g.sessions {
 			fmt.Fprintf(&sb, "### %s\n\n", s.title)
+			if source != nil {
+				writeStoryConversations(&sb, source.StoryConversations(g.notebookID, s.title))
+				// Highlight matches on BOTH origin failures and vocab
+				// failures: an English word can share its name with the
+				// origin it descends from (`gauche` the adjective vs
+				// `gauche` the French origin), and the user reading the
+				// concept block should see ✗ on either case.
+				highlights := failedNameSet(s.origin, s.vocab)
+				concepts, relations, originMeanings := source.EtymologyConcepts(g.notebookID, s.title)
+				writeEtymologyConcepts(&sb, concepts, relations, originMeanings, highlights)
+			}
 			if len(s.origin) > 0 {
 				sb.WriteString("#### Failed origins\n\n")
 				for _, w := range s.origin {
@@ -190,6 +315,126 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup) string 
 		}
 	}
 	return sb.String()
+}
+
+// writeStoryConversations renders each scene's dialogue as a markdown
+// blockquote, with the speaker bolded inline. Scene titles (the
+// multi-paragraph plot summary in YAML) are skipped because the analytics
+// page already showed the user reported them as noise; the dialogue
+// alone reproduces the lesson context.
+func writeStoryConversations(sb *strings.Builder, scenes []SourceScene) {
+	if len(scenes) == 0 {
+		return
+	}
+	sb.WriteString("#### Conversations\n\n")
+	for i, scene := range scenes {
+		if i > 0 {
+			sb.WriteString(">\n")
+		}
+		for _, line := range scene.Lines {
+			if line.Speaker != "" {
+				fmt.Fprintf(sb, "> **%s:** %s\n", line.Speaker, line.Quote)
+			} else {
+				fmt.Fprintf(sb, "> %s\n", line.Quote)
+			}
+		}
+	}
+	sb.WriteString("\n")
+}
+
+// writeEtymologyConcepts renders the concept declarations + relations
+// the session carries, marking any member whose origin appears in the
+// failedOrigins set with a ✗ prefix so the user's eye lands on the
+// origin they got wrong inside the otherwise-static concept block.
+func writeEtymologyConcepts(
+	sb *strings.Builder,
+	concepts []notebook.Concept,
+	relations []notebook.Relation,
+	originMeanings map[string]string,
+	failedOrigins map[string]bool,
+) {
+	if len(concepts) == 0 && len(relations) == 0 {
+		return
+	}
+	sb.WriteString("#### Concepts\n\n")
+	relationsByKey := groupRelationsByKey(relations)
+	for _, c := range concepts {
+		fmt.Fprintf(sb, "**%s — %s**\n\n", c.Key, c.Meaning)
+		if c.Note != "" {
+			fmt.Fprintf(sb, "_%s_\n\n", c.Note)
+		}
+		if len(c.Members) > 0 {
+			sb.WriteString("| Member | Language | Meaning |\n")
+			sb.WriteString("|---|---|---|\n")
+			for _, m := range c.Members {
+				marker := ""
+				if failedOrigins[m.Origin] {
+					marker = "✗ "
+				}
+				lang := orDash(m.Language)
+				meaning := orDash(originMeanings[m.Origin])
+				fmt.Fprintf(sb, "| %s%s | %s | %s |\n", marker, m.Origin, lang, meaning)
+			}
+			sb.WriteString("\n")
+		}
+		if rels := relationsByKey[c.Key]; len(rels) > 0 {
+			sb.WriteString("Relations: ")
+			for i, r := range rels {
+				if i > 0 {
+					sb.WriteString("; ")
+				}
+				sb.WriteString(r)
+			}
+			sb.WriteString("\n\n")
+		}
+	}
+}
+
+// groupRelationsByKey turns the flat relation list into a per-concept
+// view of outgoing edges, each rendered as "<type> → <other concept>".
+// Symmetric relations surface on both endpoints so a reader looking at
+// either side of an antonym pair sees the link.
+func groupRelationsByKey(relations []notebook.Relation) map[string][]string {
+	out := make(map[string][]string)
+	for _, r := range relations {
+		if r.IsDirected() {
+			if r.From != "" && r.To != "" {
+				out[r.From] = append(out[r.From], fmt.Sprintf("%s → %s", r.Type, r.To))
+			}
+			continue
+		}
+		if len(r.Between) == 2 {
+			a, b := r.Between[0], r.Between[1]
+			if a != "" && b != "" {
+				out[a] = append(out[a], fmt.Sprintf("%s ↔ %s", r.Type, b))
+				out[b] = append(out[b], fmt.Sprintf("%s ↔ %s", r.Type, a))
+			}
+		}
+	}
+	return out
+}
+
+// failedNameSet collects every failed expression name (origin-side or
+// vocab-side) so the concept block can mark matching member rows. Vocab
+// failures are included because an English word can share its name with
+// its etymology origin (`gauche` the adjective vs `gauche` the French
+// origin) — the user should see ✗ on either case.
+func failedNameSet(originFailures, vocabFailures []analytics.WrongWord) map[string]bool {
+	out := make(map[string]bool, len(originFailures)+len(vocabFailures))
+	for _, w := range originFailures {
+		out[w.Expression] = true
+	}
+	for _, w := range vocabFailures {
+		out[w.Expression] = true
+	}
+	return out
+}
+
+func orDash(s string) string {
+	if strings.TrimSpace(s) == "" {
+		return "—"
+	}
+	return s
 }
 
 func totalEntriesAcross(groups []quizReviewGroup) int {
