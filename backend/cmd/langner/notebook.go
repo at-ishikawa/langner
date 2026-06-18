@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"time"
 
+	"github.com/at-ishikawa/langner/internal/analytics"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/notebook"
+	"github.com/at-ishikawa/langner/internal/quizreview"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
@@ -189,6 +193,79 @@ func newNotebookCommand() *cobra.Command {
 	}
 	definitionsCmd.Flags().BoolVar(&definitionsGeneratePDF, "pdf", false, "Generate PDF output in addition to markdown")
 	notebookCommands.AddCommand(definitionsCmd)
+
+	var quizReviewGeneratePDF bool
+	quizReviewCmd := &cobra.Command{
+		Use:   "quiz-review [YYYY-MM-DD]",
+		Short: "Generate per-notebook markdown/PDF of the words and origins you got wrong on the given date (default: today).",
+		Long: `Export a study-friendly markdown file per notebook listing the vocabulary
+words and etymology origins you got wrong on the given date. The output mirrors
+the regular notebook shape — one section per source session, an entry per
+failed expression with its meaning, an example sentence (when available), and
+the concept-graph context (sibling words, sibling origins, antonym / synonym
+members) — so the files can be re-read alongside the original notebook to
+drill exactly that day's failures.
+
+Files land under <outputs.quiz_review_directory>/<date>/<notebookID>.md.
+When quiz_review_directory is unset, the command falls back to
+outputs.story_directory.
+
+The date argument defaults to today in your local timezone.`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			day := time.Now()
+			if len(args) == 1 {
+				parsed, err := time.ParseInLocation("2006-01-02", args[0], time.Local)
+				if err != nil {
+					return fmt.Errorf("parse date %q: %w (expected YYYY-MM-DD)", args[0], err)
+				}
+				day = parsed
+			}
+
+			reader, err := notebook.NewReader(
+				cfg.Notebooks.StoriesDirectories,
+				cfg.Notebooks.FlashcardsDirectories,
+				cfg.Notebooks.BooksDirectories,
+				cfg.Notebooks.DefinitionsDirectories,
+				cfg.Notebooks.EtymologyDirectories,
+				nil,
+			)
+			if err != nil {
+				return fmt.Errorf("notebook.NewReader: %w", err)
+			}
+
+			repo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory).
+				WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
+			writer := quizreview.NewWriter(repo)
+
+			outDir := cfg.Outputs.QuizReviewDirectory
+			if outDir == "" {
+				outDir = cfg.Outputs.StoryDirectory
+			}
+			if outDir == "" {
+				return fmt.Errorf("no output directory configured (set outputs.quiz_review_directory or outputs.story_directory)")
+			}
+
+			written, err := writer.Output(context.Background(), day, outDir, quizReviewGeneratePDF)
+			if err != nil {
+				return fmt.Errorf("writer.Output: %w", err)
+			}
+			if len(written) == 0 {
+				fmt.Printf("No wrong attempts found for %s — nothing to write.\n", day.Format("2006-01-02"))
+				return nil
+			}
+			for _, f := range written {
+				fmt.Printf("Wrote %s\n", f)
+			}
+			return nil
+		},
+	}
+	quizReviewCmd.Flags().BoolVar(&quizReviewGeneratePDF, "pdf", false, "Generate PDF output in addition to markdown")
+	notebookCommands.AddCommand(quizReviewCmd)
 
 	return notebookCommands
 }
