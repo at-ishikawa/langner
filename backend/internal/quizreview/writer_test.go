@@ -214,10 +214,12 @@ func TestWriter_RendersStoryConversations(t *testing.T) {
 	out := string(body)
 
 	assert.Contains(t, out, "#### Conversations")
-	assert.Contains(t, out, "> ✗ **Meg:** They're probably **scrimping** on the plastic. I'll have a word with them.",
+	assert.Contains(t, out, "✗ **Meg:** They're probably **scrimping** on the plastic. I'll have a word with them.",
 		"failed line carries ✗ prefix and bolds the whole word ('scrimping') containing the root ('scrimp')")
-	assert.Contains(t, out, "> **Josh:** Our supplier must be cutting corners.",
-		"non-failed lines in the matched scene render as plain context")
+	assert.Contains(t, out, "**Josh:** Our supplier must be cutting corners.",
+		"non-failed lines in the matched scene render as plain context with bold speaker")
+	assert.NotContains(t, out, "> **Meg:",
+		"conversation lines no longer use the blockquote `> ` prefix — the PDF preprocessor strips **bold** from blockquote lines, which previously made both the speaker chip and the failed-expression highlight vanish from the PDF")
 	// The second scene mentions cracking + storing — neither matches
 	// "scrimp" or any significant token of it, so it must be dropped.
 	assert.NotContains(t, out, "Hi Gary",
@@ -273,7 +275,7 @@ func TestWriter_BoldingHandlesTokenFalsePositives(t *testing.T) {
 	body, err := os.ReadFile(written)
 	require.NoError(t, err)
 	out := string(body)
-	assert.Contains(t, out, "> ✗ **Susan:** I'm ready to **take the plunge** and join a start-up.",
+	assert.Contains(t, out, "✗ **Susan:** I'm ready to **take the plunge** and join a start-up.",
 		"exact-substring match bolds the full expression and marks the line")
 	assert.NotContains(t, out, "✗ **Craig:**",
 		"the second line must NOT be marked — 'take' inside 'mistake' must not light up as a token match")

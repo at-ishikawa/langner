@@ -370,10 +370,18 @@ func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures
 				marker = "✗ "
 				anyMatch = true
 			}
+			// The PDF preprocessor (internal/pdf.convertBoldToItalicInBlockquotes)
+			// strips every **bold** marker from lines starting with "> "
+			// because mdtopdf can't render inline bold inside blockquote
+			// multiCells. That used to wipe both the speaker chip and the
+			// failed-expression highlight from the PDF the user actually
+			// reads on Kobo. Rendering each line as a plain paragraph
+			// instead keeps the bold intact end-to-end while the leading
+			// ✗ marker + bold speaker still carry the dialogue feel.
 			if line.Speaker != "" {
-				fmt.Fprintf(&sceneOut, "> %s**%s:** %s\n", marker, line.Speaker, bolded)
+				fmt.Fprintf(&sceneOut, "%s**%s:** %s\n\n", marker, line.Speaker, bolded)
 			} else {
-				fmt.Fprintf(&sceneOut, "> %s%s\n", marker, bolded)
+				fmt.Fprintf(&sceneOut, "%s%s\n\n", marker, bolded)
 			}
 		}
 		if anyMatch {
@@ -386,14 +394,12 @@ func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures
 	sb.WriteString("#### Conversations\n\n")
 	for i, r := range rendered {
 		if i > 0 {
-			// Blank line between scenes ends the previous blockquote
-			// and starts the next as a fresh block — cleaner than the
-			// empty `>` line the previous version used.
-			sb.WriteString("\n")
+			// Horizontal rule between scenes keeps them visually
+			// separated now that the blockquote framing is gone.
+			sb.WriteString("---\n\n")
 		}
 		sb.WriteString(r)
 	}
-	sb.WriteString("\n")
 	return true
 }
 
