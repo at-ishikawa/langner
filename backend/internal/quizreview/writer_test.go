@@ -23,10 +23,15 @@ type stubSource struct {
 	relations     map[string][]notebook.Relation
 	meanings      map[string]map[string]string
 	bookIDs       map[string]bool
+	vocabulary    map[string][]VocabularyPair
 }
 
 func (s *stubSource) IsBook(notebookID string) bool {
 	return s.bookIDs[notebookID]
+}
+
+func (s *stubSource) VocabularyForSession(notebookID, sessionTitle string) []VocabularyPair {
+	return s.vocabulary[s.key(notebookID, sessionTitle)]
 }
 
 func (s *stubSource) key(notebookID, sessionTitle string) string {
@@ -326,6 +331,60 @@ func TestWriter_TokenFallbackBoldsContentWord(t *testing.T) {
 		"line carries the ✗ marker even when the exact phrase isn't a substring")
 	assert.Contains(t, out, "**business**",
 		"the longest content token is bolded as a whole word")
+}
+
+// TestWriter_BoldsConjugatedFormViaSourceVocabulary pins the regression
+// where the failure was recorded under the dictionary form ("give
+// someone the runaround") but the dialogue uses the conjugated form
+// ("giving me the runaround"). The YAML stores `expression: giving me
+// the runaround` + `definition: give someone the runaround`; the
+// writer must look the pair up via SourceContent.VocabularyForSession
+// and bold the CONJUGATED form so the user can spot the phrase in the
+// dialogue, not just one isolated token of it.
+func TestWriter_BoldsConjugatedFormViaSourceVocabulary(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "speak-english",
+					NotebookTitle: "LESSON 8",
+					Expression:    "give someone the runaround",
+					QuizType:      "notebook",
+					Meaning:       "to lead someone along without giving them what they want",
+					NotebookKind:  "story",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		conversations: map[string][]SourceScene{
+			"speak-english|LESSON 8": {{
+				Lines: []SourceLine{
+					{Speaker: "Mark", Quote: "I feel like you're giving me the runaround."},
+				},
+			}},
+		},
+		vocabulary: map[string][]VocabularyPair{
+			"speak-english|LESSON 8": {
+				{
+					Expression: "giving me the runaround",
+					Definition: "give someone the runaround",
+				},
+			},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.Contains(t, out, "**giving me the runaround**",
+		"the YAML's expression field carries the conjugated form; matching against it lets the writer bold the whole phrase, not just one token")
+	assert.Contains(t, out, "- ✗ _Mark_:",
+		"line still gets the ✗ marker")
 }
 
 // TestWriter_EscapesStrayAsterisksInQuotes pins the regression where a

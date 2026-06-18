@@ -60,6 +60,28 @@ type SourceContent interface {
 	// vocab/origins — book chapters don't fit that mental model and
 	// would drown out the study notebooks in the output.
 	IsBook(notebookID string) bool
+	// VocabularyForSession returns the (expression, definition) pairs
+	// declared in the notebook's matching session. The YAML stores the
+	// CONJUGATED form (e.g. "giving me the runaround") in the
+	// expression field and the dictionary form ("give someone the
+	// runaround") in the definition field. Learning history records
+	// failures under whichever form the quiz prompted with — often the
+	// dictionary form — so the writer needs the pair to find the
+	// matching dialogue span when only the dictionary form was failed.
+	VocabularyForSession(notebookID, sessionTitle string) []VocabularyPair
+}
+
+// VocabularyPair is one definition entry from the source notebook used
+// to bridge learning-history failures (often recorded against the
+// dictionary form) to dialogue text (which uses the conjugated form).
+type VocabularyPair struct {
+	// Expression is the YAML's expression field — the form as it
+	// actually appears in conversation (e.g. "giving me the runaround").
+	Expression string
+	// Definition is the YAML's definition field — the canonical
+	// dictionary form (e.g. "give someone the runaround"). Empty when
+	// the YAML carries only the expression.
+	Definition string
 }
 
 // SourceScene is one scene's worth of dialogue from a story notebook,
@@ -140,6 +162,48 @@ func (rs *readerSource) StoryConversations(notebookID, sessionTitle string) []So
 
 func (rs *readerSource) IsBook(notebookID string) bool {
 	return rs.reader.IsBook(notebookID)
+}
+
+func (rs *readerSource) VocabularyForSession(notebookID, sessionTitle string) []VocabularyPair {
+	// First try ReadStoryNotebooks — story/book-style notebooks have
+	// the definitions already merged into each scene's Definitions
+	// slice, so finding the matching Event yields every pair declared
+	// for that lesson. ReadStoryNotebooks returns an error for
+	// definitions-only books (WPME) but the next branch covers them.
+	if stories, err := rs.reader.ReadStoryNotebooks(notebookID); err == nil {
+		for _, s := range stories {
+			if s.Event != sessionTitle {
+				continue
+			}
+			var pairs []VocabularyPair
+			for _, scene := range s.Scenes {
+				for _, def := range scene.Definitions {
+					pairs = append(pairs, VocabularyPair{
+						Expression: def.Expression,
+						Definition: def.Definition,
+					})
+				}
+			}
+			return pairs
+		}
+	}
+	// Definitions-only books (WPME): walk the per-session map keyed by
+	// title to collect the same pair list.
+	if defs, ok := rs.reader.GetDefinitionsNotes(notebookID); ok {
+		if sessionDefs, ok := defs[sessionTitle]; ok {
+			var pairs []VocabularyPair
+			for _, sceneNotes := range sessionDefs {
+				for _, note := range sceneNotes {
+					pairs = append(pairs, VocabularyPair{
+						Expression: note.Expression,
+						Definition: note.Definition,
+					})
+				}
+			}
+			return pairs
+		}
+	}
+	return nil
 }
 
 func (rs *readerSource) EtymologyConcepts(notebookID, sessionTitle string) ([]notebook.Concept, []notebook.Relation, map[string]string) {
@@ -319,8 +383,14 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source 
 			fmt.Fprintf(&sb, "### %s\n\n", s.title)
 			hasConversations := false
 			if source != nil {
+				// Enrich each failure with the YAML's expression /
+				// definition pair so a failure recorded under the
+				// dictionary form ("give someone the runaround") can
+				// still find and bold the conjugated form ("giving me
+				// the runaround") in the dialogue.
+				enriched := enrichVocabFailures(s.vocab, source.VocabularyForSession(g.notebookID, s.title))
 				hasConversations = writeStoryConversations(&sb,
-					source.StoryConversations(g.notebookID, s.title), s.vocab)
+					source.StoryConversations(g.notebookID, s.title), enriched)
 				// Highlight matches on BOTH origin failures and vocab
 				// failures: an English word can share its name with the
 				// origin it descends from (`gauche` the adjective vs
@@ -355,7 +425,7 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source 
 // at least one scene was written, so the caller can suppress the
 // downstream Example: line in the vocab entry (the conversation block
 // already showed it).
-func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures []analytics.WrongWord) bool {
+func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures []failureTerm) bool {
 	if len(scenes) == 0 || len(failures) == 0 {
 		return false
 	}
@@ -437,6 +507,54 @@ func escapeStrayAsterisks(s string) string {
 	return b.String()
 }
 
+// failureTerm is one failure enriched for matching against dialogue.
+// canonical is the form the writer tries to bold (the YAML's
+// expression — i.e. the conjugated form as it actually appears in the
+// dialogue — when the source notebook had a pair for this failure;
+// otherwise the failure's own expression string). alias is the
+// dictionary form when the YAML carries one, kept as a fallback for
+// the substring path. The token fallback uses canonical's significant
+// tokens so a multi-word phrase whose canonical doesn't literally
+// substring-match the quote still has a chance.
+type failureTerm struct {
+	canonical string
+	alias     string
+}
+
+// enrichVocabFailures maps each WrongWord to a failureTerm using the
+// source's per-session vocabulary pairs. When the failure expression
+// matches a YAML definition (the dictionary form), the YAML's
+// expression (the conjugated form) becomes the canonical match target
+// — so "give someone the runaround" failures still bold "giving me the
+// runaround" in the dialogue. Failures with no source pair fall back
+// to using their own expression as canonical.
+func enrichVocabFailures(failures []analytics.WrongWord, pairs []VocabularyPair) []failureTerm {
+	byDefinition := make(map[string]VocabularyPair)
+	byExpression := make(map[string]VocabularyPair)
+	for _, p := range pairs {
+		if p.Definition != "" {
+			byDefinition[strings.ToLower(strings.TrimSpace(p.Definition))] = p
+		}
+		if p.Expression != "" {
+			byExpression[strings.ToLower(strings.TrimSpace(p.Expression))] = p
+		}
+	}
+	out := make([]failureTerm, 0, len(failures))
+	for _, f := range failures {
+		key := strings.ToLower(strings.TrimSpace(f.Expression))
+		if p, ok := byExpression[key]; ok {
+			out = append(out, failureTerm{canonical: p.Expression, alias: p.Definition})
+			continue
+		}
+		if p, ok := byDefinition[key]; ok {
+			out = append(out, failureTerm{canonical: p.Expression, alias: p.Definition})
+			continue
+		}
+		out = append(out, failureTerm{canonical: f.Expression})
+	}
+	return out
+}
+
 // boldFailedExpressions returns the quote with each failed expression
 // it contains wrapped in **bold** markers, and a flag indicating
 // whether any failure matched. Matching tries, per failure:
@@ -454,18 +572,32 @@ func escapeStrayAsterisks(s string) string {
 //
 // Overlapping spans are merged so multiple failures that share the
 // same word don't produce nested `****…****`.
-func boldFailedExpressions(quote string, failures []analytics.WrongWord) (string, bool) {
+func boldFailedExpressions(quote string, failures []failureTerm) (string, bool) {
 	type span struct{ start, end int }
 	var spans []span
 	lower := strings.ToLower(quote)
 	for _, f := range failures {
-		expr := strings.TrimSpace(f.Expression)
-		if expr == "" {
+		matched := false
+		for _, candidate := range []string{f.canonical, f.alias} {
+			expr := strings.TrimSpace(candidate)
+			if expr == "" {
+				continue
+			}
+			if s, e, ok := matchExpressionSpan(lower, expr); ok {
+				spans = append(spans, span{s, e})
+				matched = true
+				break
+			}
+		}
+		if matched {
 			continue
 		}
-		if s, e, ok := matchExpressionSpan(lower, expr); ok {
-			spans = append(spans, span{s, e})
-			continue
+		// Token fallback uses the canonical form's significant
+		// tokens — that's the one most likely to share content words
+		// with the dialogue ("runaround" matches both directions).
+		expr := strings.TrimSpace(f.canonical)
+		if expr == "" {
+			expr = strings.TrimSpace(f.alias)
 		}
 		for _, tok := range significantTokens(expr) {
 			if s, e, ok := findWordStartingWith(lower, tok); ok {
