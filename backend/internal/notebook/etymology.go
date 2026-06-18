@@ -578,6 +578,57 @@ func (r *Reader) GetEtymologyIndexes() map[string]EtymologyIndex {
 	return r.etymologyIndexes
 }
 
+// GetEtymologyConceptsAndRelations aggregates concepts and relations
+// declared across every session file in the etymology book. Concepts
+// are merged by Key (per the schema's "same key across sessions =
+// member-union" rule). Relations are returned as a flat slice in
+// declaration order. Returns (nil, nil) when the book is unknown.
+//
+// Used by the analytics resolver to surface the concept graph next to
+// each wrong word: definitions-book sibling expressions, sibling
+// origins under the same etymology concept, and related-concept members
+// connected by antonym / synonym / hyponym / similar relations.
+func (r *Reader) GetEtymologyConceptsAndRelations(etymologyID string) ([]Concept, []Relation) {
+	index, ok := r.etymologyIndexes[etymologyID]
+	if !ok {
+		return nil, nil
+	}
+	conceptByKey := make(map[string]int)
+	var concepts []Concept
+	var relations []Relation
+	seenMember := make(map[string]map[conceptMemberKey]bool)
+	for _, nb := range index.NotebookPaths {
+		path := filepath.Join(index.Path, nb)
+		sessionConcepts, sessionRelations := readSessionConceptsAndRelations(path)
+		for _, c := range sessionConcepts {
+			if c.Key == "" {
+				continue
+			}
+			idx, ok := conceptByKey[c.Key]
+			if !ok {
+				concepts = append(concepts, Concept{
+					Key:     c.Key,
+					Meaning: c.Meaning,
+					Note:    c.Note,
+				})
+				idx = len(concepts) - 1
+				conceptByKey[c.Key] = idx
+				seenMember[c.Key] = make(map[conceptMemberKey]bool)
+			}
+			for _, m := range c.Members {
+				k := conceptMemberKey{Origin: m.Origin, Language: m.Language}
+				if seenMember[c.Key][k] {
+					continue
+				}
+				seenMember[c.Key][k] = true
+				concepts[idx].Members = append(concepts[idx].Members, m)
+			}
+		}
+		relations = append(relations, sessionRelations...)
+	}
+	return concepts, relations
+}
+
 // sessionHasOriginsKey checks if a session YAML file has a top-level "origins:" key,
 // indicating it defines etymology origins (not just references them via origin_parts).
 func sessionHasOriginsKey(path string) bool {

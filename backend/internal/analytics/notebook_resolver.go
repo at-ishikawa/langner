@@ -81,7 +81,7 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 	if stories, err := r.reader.ReadStoryNotebooks(notebookID); err == nil {
 		for _, s := range stories {
 			for _, scene := range s.Scenes {
-				if meta, ok := matchVocabNote(scene.Definitions, target); ok {
+				if meta, note, ok := findVocabNote(scene.Definitions, target); ok {
 					meta.NotebookKind = "story"
 					if meta.ExampleSentence == "" {
 						// Story-style notebooks (Speak English Like an American,
@@ -95,6 +95,7 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 						// use a plural / conjugated variant still match.
 						meta.ExampleSentence = findUsageInScene(scene, target, lookupDefinitionAlias(scene.Definitions, target))
 					}
+					meta.RelatedGroups = r.computeVocabRelatedGroups(notebookID, note)
 					return meta
 				}
 			}
@@ -102,8 +103,9 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 	}
 	if flashcards, err := r.reader.ReadFlashcardNotebooks(notebookID); err == nil {
 		for _, fc := range flashcards {
-			if meta, ok := matchVocabNote(fc.Cards, target); ok {
+			if meta, note, ok := findVocabNote(fc.Cards, target); ok {
 				meta.NotebookKind = "flashcard"
+				meta.RelatedGroups = r.computeVocabRelatedGroups(notebookID, note)
 				return meta
 			}
 		}
@@ -114,11 +116,12 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 	if defs, ok := r.reader.GetDefinitionsNotes(notebookID); ok {
 		for _, sessionDefs := range defs {
 			for _, sceneNotes := range sessionDefs {
-				if meta, ok := matchVocabNote(sceneNotes, target); ok {
+				if meta, note, ok := findVocabNote(sceneNotes, target); ok {
 					// Definitions get merged into the story reader view at
 					// runtime, so a "story" kind here lands the deep link on
 					// /learn/{id} where the word will be highlighted.
 					meta.NotebookKind = "story"
+					meta.RelatedGroups = r.computeVocabRelatedGroups(notebookID, note)
 					return meta
 				}
 			}
@@ -259,6 +262,15 @@ func lookupDefinitionAlias(notes []notebook.Note, expression string) string {
 }
 
 func matchVocabNote(notes []notebook.Note, expression string) (WordMetadata, bool) {
+	meta, _, ok := findVocabNote(notes, expression)
+	return meta, ok
+}
+
+// findVocabNote is matchVocabNote that also returns the underlying Note
+// so callers can read origin_parts (used to compute the etymology side
+// of the analytics card's Related Words block). The boolean is true
+// when a matching note was found.
+func findVocabNote(notes []notebook.Note, expression string) (WordMetadata, notebook.Note, bool) {
 	for _, n := range notes {
 		if !matchExpression(n.Expression, n.Definition, expression) {
 			continue
@@ -267,9 +279,9 @@ func matchVocabNote(notes []notebook.Note, expression string) (WordMetadata, boo
 		if len(n.Examples) > 0 {
 			meta.ExampleSentence = n.Examples[0]
 		}
-		return meta, true
+		return meta, n, true
 	}
-	return WordMetadata{}, false
+	return WordMetadata{}, notebook.Note{}, false
 }
 
 // matchExpression compares the target against both the canonical expression
@@ -293,7 +305,11 @@ func (r *NotebookMetadataResolver) resolveOrigin(notebookID, expression string) 
 	low := strings.ToLower(target)
 	for _, o := range origins {
 		if o.Origin == target || strings.ToLower(o.Origin) == low {
-			return WordMetadata{Meaning: o.Meaning, NotebookKind: "etymology"}
+			return WordMetadata{
+				Meaning:       o.Meaning,
+				NotebookKind:  "etymology",
+				RelatedGroups: r.computeOriginRelatedGroups(notebookID, o.Origin),
+			}
 		}
 	}
 	return WordMetadata{}

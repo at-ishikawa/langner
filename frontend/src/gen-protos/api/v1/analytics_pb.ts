@@ -11,7 +11,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/analytics.proto.
  */
 export const file_api_v1_analytics: GenFile = /*@__PURE__*/
-  fileDesc("ChZhcGkvdjEvYW5hbHl0aWNzLnByb3RvEgZhcGkudjEiOgoQQW5hbHl0aWNzRmlsdGVycxITCgtub3RlYm9va19pZBgBIAEoCRIRCglxdWl6X3R5cGUYAiABKAkiYgoYR2V0RGFpbHlTdW1tYXJpZXNSZXF1ZXN0EhsKCnJhbmdlX2RheXMYASABKAVCB7pIBBoCKAASKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIj8KGUdldERhaWx5U3VtbWFyaWVzUmVzcG9uc2USIgoEZGF5cxgBIAMoCzIULmFwaS52MS5EYWlseVN1bW1hcnkicgoMRGFpbHlTdW1tYXJ5EgwKBGRhdGUYASABKAkSEwoLd3JvbmdfY291bnQYAiABKAUSEwoLdG90YWxfY291bnQYAyABKAUSFgoObm90ZWJvb2tfY291bnQYBCABKAUSEgoKcXVpel90eXBlcxgFIAMoCSJXChNHZXREYXlEZXRhaWxSZXF1ZXN0EhUKBGRhdGUYASABKAlCB7pIBHICEAESKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIo8BChRHZXREYXlEZXRhaWxSZXNwb25zZRIlCgdzdW1tYXJ5GAEgASgLMhQuYXBpLnYxLkRhaWx5U3VtbWFyeRImCgt3cm9uZ193b3JkcxgCIAMoCzIRLmFwaS52MS5Xcm9uZ1dvcmQSFQoNcHJldmlvdXNfZGF0ZRgDIAEoCRIRCgluZXh0X2RhdGUYBCABKAkixwIKCVdyb25nV29yZBIPCgdub3RlX2lkGAEgASgDEhIKCmV4cHJlc3Npb24YAiABKAkSEwoLbm90ZWJvb2tfaWQYAyABKAkSFgoObm90ZWJvb2tfdGl0bGUYBCABKAkSEwoLc2NlbmVfdGl0bGUYBSABKAkSEQoJcXVpel90eXBlGAYgASgJEhYKDnJlY2VudF9wYXR0ZXJuGAcgAygJEhwKFGN1cnJlbnRfd3Jvbmdfc3RyZWFrGAggASgFEh8KF3ByZXZpb3VzX2NvcnJlY3Rfc3RyZWFrGAkgASgFEhYKDmN1cnJlbnRfc3RhdHVzGAogASgJEg8KB21lYW5pbmcYCyABKAkSGAoQZXhhbXBsZV9zZW50ZW5jZRgMIAEoCRIVCg1ub3RlYm9va19raW5kGA0gASgJEg8KB3NraXBwZWQYDiABKAgidgoVR2V0V29yZEhpc3RvcnlSZXF1ZXN0Eg8KB25vdGVfaWQYASABKAMSEwoLbm90ZWJvb2tfaWQYAiABKAkSGwoKZXhwcmVzc2lvbhgDIAEoCUIHukgEcgIQARIaCglxdWl6X3R5cGUYBCABKAlCB7pIBHICEAEitwEKFkdldFdvcmRIaXN0b3J5UmVzcG9uc2USEgoKZXhwcmVzc2lvbhgBIAEoCRITCgtub3RlYm9va19pZBgCIAEoCRIWCg5ub3RlYm9va190aXRsZRgDIAEoCRIWCg5jdXJyZW50X3N0YXR1cxgEIAEoCRIcChRjdXJyZW50X3dyb25nX3N0cmVhaxgFIAEoBRImCghhdHRlbXB0cxgGIAMoCzIULmFwaS52MS5BdHRlbXB0RW50cnkijAEKDEF0dGVtcHRFbnRyeRIMCgRkYXRlGAEgASgJEhEKCXF1aXpfdHlwZRgCIAEoCRIOCgZyZXN1bHQYAyABKAkSDwoHcXVhbGl0eRgEIAEoBRIbChNzdHJlYWtfYmVmb3JlX3dyb25nGAUgASgFEh0KFXN0cmVha19iZWZvcmVfY29ycmVjdBgGIAEoBTKIAgoQQW5hbHl0aWNzU2VydmljZRJYChFHZXREYWlseVN1bW1hcmllcxIgLmFwaS52MS5HZXREYWlseVN1bW1hcmllc1JlcXVlc3QaIS5hcGkudjEuR2V0RGFpbHlTdW1tYXJpZXNSZXNwb25zZRJJCgxHZXREYXlEZXRhaWwSGy5hcGkudjEuR2V0RGF5RGV0YWlsUmVxdWVzdBocLmFwaS52MS5HZXREYXlEZXRhaWxSZXNwb25zZRJPCg5HZXRXb3JkSGlzdG9yeRIdLmFwaS52MS5HZXRXb3JkSGlzdG9yeVJlcXVlc3QaHi5hcGkudjEuR2V0V29yZEhpc3RvcnlSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
+  fileDesc("ChZhcGkvdjEvYW5hbHl0aWNzLnByb3RvEgZhcGkudjEiOgoQQW5hbHl0aWNzRmlsdGVycxITCgtub3RlYm9va19pZBgBIAEoCRIRCglxdWl6X3R5cGUYAiABKAkiYgoYR2V0RGFpbHlTdW1tYXJpZXNSZXF1ZXN0EhsKCnJhbmdlX2RheXMYASABKAVCB7pIBBoCKAASKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIj8KGUdldERhaWx5U3VtbWFyaWVzUmVzcG9uc2USIgoEZGF5cxgBIAMoCzIULmFwaS52MS5EYWlseVN1bW1hcnkicgoMRGFpbHlTdW1tYXJ5EgwKBGRhdGUYASABKAkSEwoLd3JvbmdfY291bnQYAiABKAUSEwoLdG90YWxfY291bnQYAyABKAUSFgoObm90ZWJvb2tfY291bnQYBCABKAUSEgoKcXVpel90eXBlcxgFIAMoCSJXChNHZXREYXlEZXRhaWxSZXF1ZXN0EhUKBGRhdGUYASABKAlCB7pIBHICEAESKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIo8BChRHZXREYXlEZXRhaWxSZXNwb25zZRIlCgdzdW1tYXJ5GAEgASgLMhQuYXBpLnYxLkRhaWx5U3VtbWFyeRImCgt3cm9uZ193b3JkcxgCIAMoCzIRLmFwaS52MS5Xcm9uZ1dvcmQSFQoNcHJldmlvdXNfZGF0ZRgDIAEoCRIRCgluZXh0X2RhdGUYBCABKAki9QIKCVdyb25nV29yZBIPCgdub3RlX2lkGAEgASgDEhIKCmV4cHJlc3Npb24YAiABKAkSEwoLbm90ZWJvb2tfaWQYAyABKAkSFgoObm90ZWJvb2tfdGl0bGUYBCABKAkSEwoLc2NlbmVfdGl0bGUYBSABKAkSEQoJcXVpel90eXBlGAYgASgJEhYKDnJlY2VudF9wYXR0ZXJuGAcgAygJEhwKFGN1cnJlbnRfd3Jvbmdfc3RyZWFrGAggASgFEh8KF3ByZXZpb3VzX2NvcnJlY3Rfc3RyZWFrGAkgASgFEhYKDmN1cnJlbnRfc3RhdHVzGAogASgJEg8KB21lYW5pbmcYCyABKAkSGAoQZXhhbXBsZV9zZW50ZW5jZRgMIAEoCRIVCg1ub3RlYm9va19raW5kGA0gASgJEg8KB3NraXBwZWQYDiABKAgSLAoOcmVsYXRlZF9ncm91cHMYDyADKAsyFC5hcGkudjEuUmVsYXRlZEdyb3VwIjwKDFJlbGF0ZWRHcm91cBIMCgRraW5kGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB21lbWJlcnMYAyADKAkidgoVR2V0V29yZEhpc3RvcnlSZXF1ZXN0Eg8KB25vdGVfaWQYASABKAMSEwoLbm90ZWJvb2tfaWQYAiABKAkSGwoKZXhwcmVzc2lvbhgDIAEoCUIHukgEcgIQARIaCglxdWl6X3R5cGUYBCABKAlCB7pIBHICEAEitwEKFkdldFdvcmRIaXN0b3J5UmVzcG9uc2USEgoKZXhwcmVzc2lvbhgBIAEoCRITCgtub3RlYm9va19pZBgCIAEoCRIWCg5ub3RlYm9va190aXRsZRgDIAEoCRIWCg5jdXJyZW50X3N0YXR1cxgEIAEoCRIcChRjdXJyZW50X3dyb25nX3N0cmVhaxgFIAEoBRImCghhdHRlbXB0cxgGIAMoCzIULmFwaS52MS5BdHRlbXB0RW50cnkijAEKDEF0dGVtcHRFbnRyeRIMCgRkYXRlGAEgASgJEhEKCXF1aXpfdHlwZRgCIAEoCRIOCgZyZXN1bHQYAyABKAkSDwoHcXVhbGl0eRgEIAEoBRIbChNzdHJlYWtfYmVmb3JlX3dyb25nGAUgASgFEh0KFXN0cmVha19iZWZvcmVfY29ycmVjdBgGIAEoBTKIAgoQQW5hbHl0aWNzU2VydmljZRJYChFHZXREYWlseVN1bW1hcmllcxIgLmFwaS52MS5HZXREYWlseVN1bW1hcmllc1JlcXVlc3QaIS5hcGkudjEuR2V0RGFpbHlTdW1tYXJpZXNSZXNwb25zZRJJCgxHZXREYXlEZXRhaWwSGy5hcGkudjEuR2V0RGF5RGV0YWlsUmVxdWVzdBocLmFwaS52MS5HZXREYXlEZXRhaWxSZXNwb25zZRJPCg5HZXRXb3JkSGlzdG9yeRIdLmFwaS52MS5HZXRXb3JkSGlzdG9yeVJlcXVlc3QaHi5hcGkudjEuR2V0V29yZEhpc3RvcnlSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
 
 /**
  * AnalyticsFilters carries the optional notebook + quiz-type filters used
@@ -301,6 +301,20 @@ export type WrongWord = Message<"api.v1.WrongWord"> & {
    * @generated from field: bool skipped = 14;
    */
   skipped: boolean;
+
+  /**
+   * related_groups carries the word's place in the concept graph: the
+   * definitions-book concept it shares with sibling expressions, the
+   * etymology concept its origin belongs to (and sibling origins under
+   * the same concept), and concepts connected to that one via etymology
+   * relations (antonym / synonym / hyponym / …). Empty when the
+   * notebook has no concepts. The frontend collapses these into a chip
+   * row under the meaning and the full block in the expanded panel so a
+   * wrong word never reads in isolation.
+   *
+   * @generated from field: repeated api.v1.RelatedGroup related_groups = 15;
+   */
+  relatedGroups: RelatedGroup[];
 };
 
 /**
@@ -309,6 +323,54 @@ export type WrongWord = Message<"api.v1.WrongWord"> & {
  */
 export const WrongWordSchema: GenMessage<WrongWord> = /*@__PURE__*/
   messageDesc(file_api_v1_analytics, 6);
+
+/**
+ * RelatedGroup is one cluster of related entries surfaced on the
+ * analytics card. The grouping is intentionally flat (kind + label +
+ * member strings) so the same shape covers sibling words, sibling
+ * origins, and related-concept members — the frontend renders each as a
+ * labelled chip + list without per-kind branching.
+ *
+ * @generated from message api.v1.RelatedGroup
+ */
+export type RelatedGroup = Message<"api.v1.RelatedGroup"> & {
+  /**
+   * kind names the cluster: "concept" for definitions-book sibling
+   * words, "origin_family" for etymology sibling origins under the
+   * word's origin's concept, and the relation type name ("antonym",
+   * "synonym", "hyponym", …) for related-concept clusters.
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * label is the human-readable header. For "concept" it's the head's
+   * umbrella meaning (e.g. "clumsy in social situations"); for
+   * "origin_family" / relation kinds it's the concept name with the
+   * umbrella meaning ("leftness — left"). Empty when no umbrella was
+   * declared.
+   *
+   * @generated from field: string label = 2;
+   */
+  label: string;
+
+  /**
+   * members are the cluster's entries as already-formatted strings —
+   * e.g. "gaucherie", "sinister (Latin) — left", "dexterity". Ordering
+   * is the order declared in the source notebook.
+   *
+   * @generated from field: repeated string members = 3;
+   */
+  members: string[];
+};
+
+/**
+ * Describes the message api.v1.RelatedGroup.
+ * Use `create(RelatedGroupSchema)` to create a new message.
+ */
+export const RelatedGroupSchema: GenMessage<RelatedGroup> = /*@__PURE__*/
+  messageDesc(file_api_v1_analytics, 7);
 
 /**
  * @generated from message api.v1.GetWordHistoryRequest
@@ -340,7 +402,7 @@ export type GetWordHistoryRequest = Message<"api.v1.GetWordHistoryRequest"> & {
  * Use `create(GetWordHistoryRequestSchema)` to create a new message.
  */
 export const GetWordHistoryRequestSchema: GenMessage<GetWordHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 7);
+  messageDesc(file_api_v1_analytics, 8);
 
 /**
  * @generated from message api.v1.GetWordHistoryResponse
@@ -382,7 +444,7 @@ export type GetWordHistoryResponse = Message<"api.v1.GetWordHistoryResponse"> & 
  * Use `create(GetWordHistoryResponseSchema)` to create a new message.
  */
 export const GetWordHistoryResponseSchema: GenMessage<GetWordHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 8);
+  messageDesc(file_api_v1_analytics, 9);
 
 /**
  * AttemptEntry is a single past attempt with the streak context just
@@ -435,7 +497,7 @@ export type AttemptEntry = Message<"api.v1.AttemptEntry"> & {
  * Use `create(AttemptEntrySchema)` to create a new message.
  */
 export const AttemptEntrySchema: GenMessage<AttemptEntry> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 9);
+  messageDesc(file_api_v1_analytics, 10);
 
 /**
  * @generated from service api.v1.AnalyticsService

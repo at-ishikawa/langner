@@ -118,6 +118,14 @@ func dailySummaryToProto(d analytics.DailySummary) *apiv1.DailySummary {
 }
 
 func wrongWordToProto(w analytics.WrongWord) *apiv1.WrongWord {
+	related := make([]*apiv1.RelatedGroup, 0, len(w.RelatedGroups))
+	for _, g := range w.RelatedGroups {
+		related = append(related, &apiv1.RelatedGroup{
+			Kind:    g.Kind,
+			Label:   g.Label,
+			Members: g.Members,
+		})
+	}
 	return &apiv1.WrongWord{
 		NoteId:                w.NoteID,
 		Expression:            w.Expression,
@@ -133,6 +141,7 @@ func wrongWordToProto(w analytics.WrongWord) *apiv1.WrongWord {
 		ExampleSentence:       w.ExampleSentence,
 		NotebookKind:          w.NotebookKind,
 		Skipped:               w.Skipped,
+		RelatedGroups:         related,
 	}
 }
 

@@ -21,6 +21,7 @@ function baseWord(overrides: Partial<WrongWord> = {}): WrongWord {
     exampleSentence: "",
     notebookKind: "flashcard",
     skipped: false,
+    relatedGroups: [],
     ...overrides,
   } as WrongWord;
 }
@@ -42,6 +43,103 @@ describe("WrongWordCard", () => {
   it("omits the Excluded badge when the word is not skipped", () => {
     renderCard(baseWord({ skipped: false }));
     expect(screen.queryByTestId("excluded-badge")).toBeNull();
+  });
+
+  it("renders chip preview for related groups when collapsed", () => {
+    renderCard(
+      baseWord({
+        relatedGroups: [
+          {
+            $typeName: "api.v1.RelatedGroup",
+            kind: "concept",
+            label: "clumsy, tactless behavior, especially in social situations",
+            members: ["gaucherie"],
+          },
+          {
+            $typeName: "api.v1.RelatedGroup",
+            kind: "antonym",
+            label: "rightness — right",
+            members: ["dexter (Latin) — right hand", "droit (French) — right hand"],
+          },
+          {
+            $typeName: "api.v1.RelatedGroup",
+            kind: "origin_family",
+            label: "leftness — left",
+            members: ["sinister (Latin) — left hand"],
+          },
+        ] as unknown as WrongWord["relatedGroups"],
+      }),
+    );
+    const preview = screen.getByTestId("related-chip-preview");
+    // Card stays collapsed → only 2 chips render so the row stays compact.
+    expect(preview.children.length).toBe(2);
+    expect(screen.getByTestId("related-chip-concept")).toHaveTextContent("same sense: gaucherie");
+    expect(screen.getByTestId("related-chip-antonym")).toHaveTextContent(
+      "antonym: dexter (Latin) — right hand, droit (French) — right hand",
+    );
+    // Expanded-only block must not be visible yet.
+    expect(screen.queryByTestId("related-groups-expanded")).toBeNull();
+  });
+
+  it("expands the related-groups section when the card opens", async () => {
+    const { rerender } = renderCard(
+      baseWord({
+        relatedGroups: [
+          {
+            $typeName: "api.v1.RelatedGroup",
+            kind: "concept",
+            label: "clumsy, tactless behavior, especially in social situations",
+            members: ["gaucherie"],
+          },
+          {
+            $typeName: "api.v1.RelatedGroup",
+            kind: "antonym",
+            label: "rightness — right",
+            members: ["dexter (Latin) — right hand", "droit (French) — right hand"],
+          },
+        ] as unknown as WrongWord["relatedGroups"],
+      }),
+    );
+    const card = screen.getByTestId("wrong-word-ephemeral-notebook");
+    const button = card.querySelector("button[aria-expanded]");
+    expect(button).not.toBeNull();
+    button!.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    rerender(
+      <ChakraProvider value={defaultSystem}>
+        <WrongWordCard
+          word={baseWord({
+            relatedGroups: [
+              {
+                $typeName: "api.v1.RelatedGroup",
+                kind: "concept",
+                label: "clumsy, tactless behavior, especially in social situations",
+                members: ["gaucherie"],
+              },
+              {
+                $typeName: "api.v1.RelatedGroup",
+                kind: "antonym",
+                label: "rightness — right",
+                members: ["dexter (Latin) — right hand", "droit (French) — right hand"],
+              },
+            ] as unknown as WrongWord["relatedGroups"],
+          })}
+        />
+      </ChakraProvider>,
+    );
+    const expanded = await screen.findByTestId("related-groups-expanded");
+    expect(expanded).toHaveTextContent("Related words");
+    const concept = screen.getByTestId("related-group-concept");
+    expect(concept).toHaveTextContent("Same sense");
+    expect(concept).toHaveTextContent("gaucherie");
+    const antonym = screen.getByTestId("related-group-antonym");
+    expect(antonym).toHaveTextContent("antonym");
+    expect(antonym).toHaveTextContent("dexter (Latin) — right hand · droit (French) — right hand");
+  });
+
+  it("omits both chip preview and expanded block when relatedGroups is empty", () => {
+    renderCard(baseWord({ relatedGroups: [] }));
+    expect(screen.queryByTestId("related-chip-preview")).toBeNull();
+    expect(screen.queryByTestId("related-groups-expanded")).toBeNull();
   });
 
   it("collapses a multi-paragraph scene title to a single short line", () => {

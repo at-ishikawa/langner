@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Badge, Box, Button, HStack, Spinner, Text, VStack } from "@chakra-ui/react";
 import { PatternGlyphs } from "./PatternGlyphs";
 import { QuizTypeChip } from "./QuizTypeChip";
-import { analyticsClient, type WrongWord, type AttemptEntry } from "@/lib/client";
+import { analyticsClient, type WrongWord, type AttemptEntry, type RelatedGroup } from "@/lib/client";
 
 function streakSummary(w: WrongWord): string {
   if (w.currentWrongStreak >= 2) {
@@ -42,6 +42,25 @@ function summariseSceneTitle(title: string): string {
   const trimmed = firstLine.trim();
   if (trimmed.length <= 80) return trimmed;
   return `${trimmed.slice(0, 77).trimEnd()}…`;
+}
+
+// chipLabelForGroup compresses one RelatedGroup into a chip body the
+// collapsed card can show without taking a second visual row: the kind
+// becomes a prefix tag ("antonym:") and the first 1-2 members follow,
+// with "+N more" tacked on when the list is longer. Definitions-book
+// "concept" groups don't need the kind prefix because the meaning label
+// is already self-explanatory ("same sense: gaucherie").
+function chipLabelForGroup(g: RelatedGroup): string {
+  const PREVIEW = 2;
+  const head = g.members.slice(0, PREVIEW).join(", ");
+  const rest = g.members.length > PREVIEW ? ` +${g.members.length - PREVIEW}` : "";
+  const tag =
+    g.kind === "concept"
+      ? "same sense"
+      : g.kind === "origin_family"
+        ? "family"
+        : g.kind;
+  return `${tag}: ${head}${rest}`;
 }
 
 // learnHrefFor builds the deep link from a wrong word to its source page
@@ -149,6 +168,21 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
             “{word.exampleSentence}”
           </Text>
         )}
+        {(word.relatedGroups?.length ?? 0) > 0 && (
+          <HStack gap={1} mb={2} flexWrap="wrap" data-testid="related-chip-preview">
+            {(word.relatedGroups ?? []).slice(0, 2).map((g, i) => (
+              <Badge
+                key={`${g.kind}-${i}`}
+                colorPalette="purple"
+                variant="subtle"
+                title={g.label || g.kind}
+                data-testid={`related-chip-${g.kind}`}
+              >
+                {chipLabelForGroup(g)}
+              </Badge>
+            ))}
+          </HStack>
+        )}
         <HStack justifyContent="space-between">
           <QuizTypeChip quizType={word.quizType} />
           <PatternGlyphs pattern={word.recentPattern} />
@@ -160,6 +194,31 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
 
       {expanded && (
         <Box mt={4} pt={4} borderTopWidth="1px">
+          {(word.relatedGroups?.length ?? 0) > 0 && (
+            <VStack
+              align="stretch"
+              gap={2}
+              mb={3}
+              data-testid="related-groups-expanded"
+            >
+              <Text fontSize="sm" fontWeight="semibold">
+                Related words
+              </Text>
+              {(word.relatedGroups ?? []).map((g, i) => (
+                <Box key={`${g.kind}-${i}`} data-testid={`related-group-${g.kind}`}>
+                  <Text fontSize="xs" color="fg.muted" textTransform="uppercase">
+                    {g.kind === "concept"
+                      ? "Same sense"
+                      : g.kind === "origin_family"
+                        ? "Same origin family"
+                        : g.kind}
+                    {g.label ? ` · ${g.label}` : ""}
+                  </Text>
+                  <Text fontSize="sm">{g.members.join(" · ")}</Text>
+                </Box>
+              ))}
+            </VStack>
+          )}
           {loading && <Spinner size="sm" data-testid="word-history-loading" />}
           {error && (
             <Text color="red.500" fontSize="sm">

@@ -89,6 +89,21 @@ type WrongWord struct {
 	// "Excluded" badge so a wrong attempt that won't re-surface in future
 	// quizzes is visibly distinguished from one that will.
 	Skipped bool
+	// RelatedGroups places the word in its concept graph: same-concept
+	// siblings, sibling origins under the same etymology concept, and
+	// concepts connected via etymology relations (antonym / synonym /
+	// hyponym / …). Empty when the source notebook declares no concepts.
+	RelatedGroups []RelatedGroup
+}
+
+// RelatedGroup is one cluster of related entries returned alongside a
+// WrongWord. The kind names the cluster ("concept", "origin_family",
+// "antonym", "synonym", "hyponym", …); the label is a human-readable
+// header and the members are already-formatted display strings.
+type RelatedGroup struct {
+	Kind    string
+	Label   string
+	Members []string
 }
 
 // WordMetadata is what a MetadataResolver returns for a single
@@ -97,6 +112,12 @@ type WordMetadata struct {
 	Meaning         string
 	ExampleSentence string
 	NotebookKind    string
+	// RelatedGroups carries the concept-graph context for the word: the
+	// definitions-book concept it shares with sibling expressions, the
+	// etymology concept its origin belongs to (and sibling origins
+	// under it), plus etymology relations from that concept (antonym /
+	// synonym / hyponym / …). Empty when the notebook has no concepts.
+	RelatedGroups []RelatedGroup
 }
 
 // expressionType is the LearningHistoryExpression.Type value carried into

@@ -338,3 +338,192 @@ notebooks:
 	assert.Equal(t, "The clinic specializes in geriatrics.", got.ExampleSentence)
 	assert.Equal(t, "story", got.NotebookKind, "definitions-only notebooks deep-link via the story reader")
 }
+
+// TestNotebookMetadataResolver_RelatedGroupsPopulated pins the concept-
+// graph surface the analytics card relies on: a vocab card must carry
+// (1) sibling words from the same definitions-book concept head,
+// (2) sibling origins under the etymology concept that the word's first
+// origin part belongs to, and (3) one group per etymology relation
+// connecting that concept to another, with the related concept's
+// members rendered for direct display. The "gauche" scenario reproduces
+// the user-reported case end to end.
+func TestNotebookMetadataResolver_RelatedGroupsPopulated(t *testing.T) {
+	root := t.TempDir()
+
+	// Definitions side: gauche / gaucherie sharing the "gauche" concept
+	// head; adroit / dexterity in two separate concept heads (so the
+	// sibling group must drop the singleton).
+	defsDir := filepath.Join(root, "definitions", "wpme")
+	require.NoError(t, os.MkdirAll(defsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(defsDir, "index.yml"), []byte(`id: wpme
+notebooks:
+  - ./session3.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsDir, "session3.yml"), []byte(`- metadata:
+    title: "Session 3"
+  scenes:
+    - metadata:
+        index: 0
+      expressions:
+        - expression: gauche
+          meaning: clumsy, tactless, especially in social situations
+          origin_parts:
+            - origin: gauche
+              language: French
+        - expression: gaucherie
+          meaning: an awkward, clumsy way of handling situations
+          origin_parts:
+            - origin: gauche
+              language: French
+        - expression: dexterous
+          meaning: skilled with the hands
+          origin_parts:
+            - origin: dexter
+              language: Latin
+  concepts:
+    - head: gauche
+      meaning: clumsy, tactless behavior, especially in social situations
+      expressions:
+        - gauche
+        - gaucherie
+    - head: dexterity
+      meaning: skill, especially with the hands
+      expressions:
+        - dexterous
+`), 0o644))
+
+	// Etymology side: leftness (gauche/French, sinister/Latin) is
+	// antonym to rightness (dexter/Latin, droit/French). Plus a
+	// singleton concept (oddness) the gauche origin doesn't touch — so
+	// the resolver must not accidentally surface it.
+	etymDir := filepath.Join(root, "etymology", "wpme")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: wpme
+kind: Etymology
+name: WPME
+notebooks:
+  - ./session3.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "session3.yml"), []byte(`metadata:
+  title: "Session 3"
+origins:
+  - origin: gauche
+    language: French
+    meaning: left hand
+  - origin: sinister
+    language: Latin
+    meaning: left hand
+  - origin: dexter
+    language: Latin
+    meaning: right hand
+  - origin: droit
+    language: French
+    meaning: right hand
+concepts:
+  - key: leftness
+    meaning: left
+    members:
+      - origin: gauche
+        language: French
+      - origin: sinister
+        language: Latin
+  - key: rightness
+    meaning: right
+    members:
+      - origin: dexter
+        language: Latin
+      - origin: droit
+        language: French
+relations:
+  - type: antonym
+    between:
+      - leftness
+      - rightness
+`), 0o644))
+
+	reader, err := notebook.NewReader(nil, nil, nil,
+		[]string{filepath.Join(root, "definitions")},
+		[]string{filepath.Join(root, "etymology")}, nil)
+	require.NoError(t, err)
+	r := NewNotebookMetadataResolver(reader)
+
+	t.Run("vocab card: concept + origin family + antonym", func(t *testing.T) {
+		got := r.Resolve(context.Background(), "wpme", "gauche",
+			notebook.LearningExpressionTypeOrigin, "notebook")
+		require.NotEmpty(t, got.RelatedGroups, "vocab card on a notebook with concepts must carry related groups")
+
+		byKind := map[string]RelatedGroup{}
+		for _, g := range got.RelatedGroups {
+			byKind[g.Kind] = g
+		}
+
+		concept, ok := byKind["concept"]
+		require.True(t, ok, "expected a definitions-book concept group")
+		assert.Equal(t, []string{"gaucherie"}, concept.Members,
+			"sibling words must exclude the word itself; gauche is in the same concept head as gaucherie")
+
+		family, ok := byKind["origin_family"]
+		require.True(t, ok, "expected an etymology origin_family group keyed on leftness")
+		assert.Contains(t, family.Label, "leftness")
+		assert.Equal(t, []string{"sinister (Latin) — left hand"}, family.Members,
+			"origin_family lists the sibling origins under the same etymology concept, excluding the word's own origin")
+
+		antonym, ok := byKind["antonym"]
+		require.True(t, ok, "expected an antonym group via the leftness <-> rightness relation")
+		assert.Contains(t, antonym.Label, "rightness")
+		assert.ElementsMatch(t,
+			[]string{"dexter (Latin) — right hand", "droit (French) — right hand"},
+			antonym.Members,
+			"antonym members must list both origins of the related concept")
+	})
+
+	t.Run("origin card: no concept group; origin_family + antonym only", func(t *testing.T) {
+		got := r.Resolve(context.Background(), "wpme", "gauche",
+			notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+		require.NotEmpty(t, got.RelatedGroups)
+		for _, g := range got.RelatedGroups {
+			assert.NotEqual(t, "concept", g.Kind,
+				"origin cards must not surface a definitions-book concept group — that group is vocabulary-side")
+		}
+	})
+
+	t.Run("singleton concept does not produce a sibling chip", func(t *testing.T) {
+		got := r.Resolve(context.Background(), "wpme", "dexterous",
+			ExpressionTypeVocabulary, "notebook")
+		for _, g := range got.RelatedGroups {
+			assert.NotEqual(t, "concept", g.Kind,
+				"a concept whose only member is the word itself contributes no siblings — the empty group must be dropped, not rendered as an empty chip")
+		}
+	})
+}
+
+// TestNotebookMetadataResolver_RelatedGroupsEmptyForNotebooksWithoutConcepts
+// confirms a notebook that declares no concepts (the typical flashcard
+// or story setup) returns an empty RelatedGroups slice — the analytics
+// card then renders nothing extra, exactly as before.
+func TestNotebookMetadataResolver_RelatedGroupsEmptyForNotebooksWithoutConcepts(t *testing.T) {
+	root := t.TempDir()
+
+	flashDir := filepath.Join(root, "flashcards", "vocab")
+	require.NoError(t, os.MkdirAll(flashDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "index.yml"), []byte(`id: vocab
+name: Vocab
+notebooks:
+  - ./cards.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "cards.yml"), []byte(`- title: Common
+  date: 2025-01-01T00:00:00Z
+  cards:
+    - expression: ephemeral
+      meaning: lasting for a very short time
+      examples:
+        - "Snow on warm pavement was ephemeral."
+`), 0o644))
+
+	reader, err := notebook.NewReader(nil, []string{filepath.Join(root, "flashcards")}, nil, nil, nil, nil)
+	require.NoError(t, err)
+	r := NewNotebookMetadataResolver(reader)
+
+	got := r.Resolve(context.Background(), "vocab", "ephemeral", ExpressionTypeVocabulary, "notebook")
+	assert.Empty(t, got.RelatedGroups, "notebooks without concepts must not synthesize related groups")
+}

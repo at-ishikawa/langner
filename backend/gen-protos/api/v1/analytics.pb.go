@@ -424,7 +424,16 @@ type WrongWord struct {
 	// The analytics card surfaces this with an "Excluded" badge so the
 	// user understands why the word still surfaces in history but won't
 	// come up in future quizzes until the skip is cleared.
-	Skipped       bool `protobuf:"varint,14,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	Skipped bool `protobuf:"varint,14,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	// related_groups carries the word's place in the concept graph: the
+	// definitions-book concept it shares with sibling expressions, the
+	// etymology concept its origin belongs to (and sibling origins under
+	// the same concept), and concepts connected to that one via etymology
+	// relations (antonym / synonym / hyponym / …). Empty when the
+	// notebook has no concepts. The frontend collapses these into a chip
+	// row under the meaning and the full block in the expanded panel so a
+	// wrong word never reads in isolation.
+	RelatedGroups []*RelatedGroup `protobuf:"bytes,15,rep,name=related_groups,json=relatedGroups,proto3" json:"related_groups,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -557,6 +566,90 @@ func (x *WrongWord) GetSkipped() bool {
 	return false
 }
 
+func (x *WrongWord) GetRelatedGroups() []*RelatedGroup {
+	if x != nil {
+		return x.RelatedGroups
+	}
+	return nil
+}
+
+// RelatedGroup is one cluster of related entries surfaced on the
+// analytics card. The grouping is intentionally flat (kind + label +
+// member strings) so the same shape covers sibling words, sibling
+// origins, and related-concept members — the frontend renders each as a
+// labelled chip + list without per-kind branching.
+type RelatedGroup struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// kind names the cluster: "concept" for definitions-book sibling
+	// words, "origin_family" for etymology sibling origins under the
+	// word's origin's concept, and the relation type name ("antonym",
+	// "synonym", "hyponym", …) for related-concept clusters.
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// label is the human-readable header. For "concept" it's the head's
+	// umbrella meaning (e.g. "clumsy in social situations"); for
+	// "origin_family" / relation kinds it's the concept name with the
+	// umbrella meaning ("leftness — left"). Empty when no umbrella was
+	// declared.
+	Label string `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`
+	// members are the cluster's entries as already-formatted strings —
+	// e.g. "gaucherie", "sinister (Latin) — left", "dexterity". Ordering
+	// is the order declared in the source notebook.
+	Members       []string `protobuf:"bytes,3,rep,name=members,proto3" json:"members,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelatedGroup) Reset() {
+	*x = RelatedGroup{}
+	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelatedGroup) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelatedGroup) ProtoMessage() {}
+
+func (x *RelatedGroup) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelatedGroup.ProtoReflect.Descriptor instead.
+func (*RelatedGroup) Descriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RelatedGroup) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *RelatedGroup) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *RelatedGroup) GetMembers() []string {
+	if x != nil {
+		return x.Members
+	}
+	return nil
+}
+
 type GetWordHistoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
@@ -569,7 +662,7 @@ type GetWordHistoryRequest struct {
 
 func (x *GetWordHistoryRequest) Reset() {
 	*x = GetWordHistoryRequest{}
-	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	mi := &file_api_v1_analytics_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -581,7 +674,7 @@ func (x *GetWordHistoryRequest) String() string {
 func (*GetWordHistoryRequest) ProtoMessage() {}
 
 func (x *GetWordHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	mi := &file_api_v1_analytics_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -594,7 +687,7 @@ func (x *GetWordHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWordHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetWordHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{7}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetWordHistoryRequest) GetNoteId() int64 {
@@ -639,7 +732,7 @@ type GetWordHistoryResponse struct {
 
 func (x *GetWordHistoryResponse) Reset() {
 	*x = GetWordHistoryResponse{}
-	mi := &file_api_v1_analytics_proto_msgTypes[8]
+	mi := &file_api_v1_analytics_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -651,7 +744,7 @@ func (x *GetWordHistoryResponse) String() string {
 func (*GetWordHistoryResponse) ProtoMessage() {}
 
 func (x *GetWordHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[8]
+	mi := &file_api_v1_analytics_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -664,7 +757,7 @@ func (x *GetWordHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWordHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetWordHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{8}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *GetWordHistoryResponse) GetExpression() string {
@@ -730,7 +823,7 @@ type AttemptEntry struct {
 
 func (x *AttemptEntry) Reset() {
 	*x = AttemptEntry{}
-	mi := &file_api_v1_analytics_proto_msgTypes[9]
+	mi := &file_api_v1_analytics_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +835,7 @@ func (x *AttemptEntry) String() string {
 func (*AttemptEntry) ProtoMessage() {}
 
 func (x *AttemptEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[9]
+	mi := &file_api_v1_analytics_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +848,7 @@ func (x *AttemptEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttemptEntry.ProtoReflect.Descriptor instead.
 func (*AttemptEntry) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{9}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *AttemptEntry) GetDate() string {
@@ -832,7 +925,7 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\vwrong_words\x18\x02 \x03(\v2\x11.api.v1.WrongWordR\n" +
 	"wrongWords\x12#\n" +
 	"\rprevious_date\x18\x03 \x01(\tR\fpreviousDate\x12\x1b\n" +
-	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\x86\x04\n" +
+	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xc3\x04\n" +
 	"\tWrongWord\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1e\n" +
 	"\n" +
@@ -852,7 +945,12 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\ameaning\x18\v \x01(\tR\ameaning\x12)\n" +
 	"\x10example_sentence\x18\f \x01(\tR\x0fexampleSentence\x12#\n" +
 	"\rnotebook_kind\x18\r \x01(\tR\fnotebookKind\x12\x18\n" +
-	"\askipped\x18\x0e \x01(\bR\askipped\"\xa0\x01\n" +
+	"\askipped\x18\x0e \x01(\bR\askipped\x12;\n" +
+	"\x0erelated_groups\x18\x0f \x03(\v2\x14.api.v1.RelatedGroupR\rrelatedGroups\"R\n" +
+	"\fRelatedGroup\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +
+	"\amembers\x18\x03 \x03(\tR\amembers\"\xa0\x01\n" +
 	"\x15GetWordHistoryRequest\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1f\n" +
 	"\vnotebook_id\x18\x02 \x01(\tR\n" +
@@ -895,7 +993,7 @@ func file_api_v1_analytics_proto_rawDescGZIP() []byte {
 	return file_api_v1_analytics_proto_rawDescData
 }
 
-var file_api_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_api_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_api_v1_analytics_proto_goTypes = []any{
 	(*AnalyticsFilters)(nil),          // 0: api.v1.AnalyticsFilters
 	(*GetDailySummariesRequest)(nil),  // 1: api.v1.GetDailySummariesRequest
@@ -904,28 +1002,30 @@ var file_api_v1_analytics_proto_goTypes = []any{
 	(*GetDayDetailRequest)(nil),       // 4: api.v1.GetDayDetailRequest
 	(*GetDayDetailResponse)(nil),      // 5: api.v1.GetDayDetailResponse
 	(*WrongWord)(nil),                 // 6: api.v1.WrongWord
-	(*GetWordHistoryRequest)(nil),     // 7: api.v1.GetWordHistoryRequest
-	(*GetWordHistoryResponse)(nil),    // 8: api.v1.GetWordHistoryResponse
-	(*AttemptEntry)(nil),              // 9: api.v1.AttemptEntry
+	(*RelatedGroup)(nil),              // 7: api.v1.RelatedGroup
+	(*GetWordHistoryRequest)(nil),     // 8: api.v1.GetWordHistoryRequest
+	(*GetWordHistoryResponse)(nil),    // 9: api.v1.GetWordHistoryResponse
+	(*AttemptEntry)(nil),              // 10: api.v1.AttemptEntry
 }
 var file_api_v1_analytics_proto_depIdxs = []int32{
-	0, // 0: api.v1.GetDailySummariesRequest.filters:type_name -> api.v1.AnalyticsFilters
-	3, // 1: api.v1.GetDailySummariesResponse.days:type_name -> api.v1.DailySummary
-	0, // 2: api.v1.GetDayDetailRequest.filters:type_name -> api.v1.AnalyticsFilters
-	3, // 3: api.v1.GetDayDetailResponse.summary:type_name -> api.v1.DailySummary
-	6, // 4: api.v1.GetDayDetailResponse.wrong_words:type_name -> api.v1.WrongWord
-	9, // 5: api.v1.GetWordHistoryResponse.attempts:type_name -> api.v1.AttemptEntry
-	1, // 6: api.v1.AnalyticsService.GetDailySummaries:input_type -> api.v1.GetDailySummariesRequest
-	4, // 7: api.v1.AnalyticsService.GetDayDetail:input_type -> api.v1.GetDayDetailRequest
-	7, // 8: api.v1.AnalyticsService.GetWordHistory:input_type -> api.v1.GetWordHistoryRequest
-	2, // 9: api.v1.AnalyticsService.GetDailySummaries:output_type -> api.v1.GetDailySummariesResponse
-	5, // 10: api.v1.AnalyticsService.GetDayDetail:output_type -> api.v1.GetDayDetailResponse
-	8, // 11: api.v1.AnalyticsService.GetWordHistory:output_type -> api.v1.GetWordHistoryResponse
-	9, // [9:12] is the sub-list for method output_type
-	6, // [6:9] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	0,  // 0: api.v1.GetDailySummariesRequest.filters:type_name -> api.v1.AnalyticsFilters
+	3,  // 1: api.v1.GetDailySummariesResponse.days:type_name -> api.v1.DailySummary
+	0,  // 2: api.v1.GetDayDetailRequest.filters:type_name -> api.v1.AnalyticsFilters
+	3,  // 3: api.v1.GetDayDetailResponse.summary:type_name -> api.v1.DailySummary
+	6,  // 4: api.v1.GetDayDetailResponse.wrong_words:type_name -> api.v1.WrongWord
+	7,  // 5: api.v1.WrongWord.related_groups:type_name -> api.v1.RelatedGroup
+	10, // 6: api.v1.GetWordHistoryResponse.attempts:type_name -> api.v1.AttemptEntry
+	1,  // 7: api.v1.AnalyticsService.GetDailySummaries:input_type -> api.v1.GetDailySummariesRequest
+	4,  // 8: api.v1.AnalyticsService.GetDayDetail:input_type -> api.v1.GetDayDetailRequest
+	8,  // 9: api.v1.AnalyticsService.GetWordHistory:input_type -> api.v1.GetWordHistoryRequest
+	2,  // 10: api.v1.AnalyticsService.GetDailySummaries:output_type -> api.v1.GetDailySummariesResponse
+	5,  // 11: api.v1.AnalyticsService.GetDayDetail:output_type -> api.v1.GetDayDetailResponse
+	9,  // 12: api.v1.AnalyticsService.GetWordHistory:output_type -> api.v1.GetWordHistoryResponse
+	10, // [10:13] is the sub-list for method output_type
+	7,  // [7:10] is the sub-list for method input_type
+	7,  // [7:7] is the sub-list for extension type_name
+	7,  // [7:7] is the sub-list for extension extendee
+	0,  // [0:7] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_analytics_proto_init() }
@@ -939,7 +1039,7 @@ func file_api_v1_analytics_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_analytics_proto_rawDesc), len(file_api_v1_analytics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

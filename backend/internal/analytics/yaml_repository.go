@@ -270,6 +270,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 			ExampleSentence:       meta.ExampleSentence,
 			NotebookKind:          meta.NotebookKind,
 			Skipped:               hit.Skipped,
+			RelatedGroups:         meta.RelatedGroups,
 		})
 	}
 	// Newest failure first. Ties (rare — same word + quiz type wrong twice on

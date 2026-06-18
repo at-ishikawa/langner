@@ -91,6 +91,7 @@ export type {
   GetDayDetailRequest,
   GetDayDetailResponse,
   WrongWord,
+  RelatedGroup,
   GetWordHistoryRequest,
   GetWordHistoryResponse,
   AttemptEntry,

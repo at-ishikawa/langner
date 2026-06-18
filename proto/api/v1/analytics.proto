@@ -119,6 +119,38 @@ message WrongWord {
   // user understands why the word still surfaces in history but won't
   // come up in future quizzes until the skip is cleared.
   bool skipped = 14;
+  // related_groups carries the word's place in the concept graph: the
+  // definitions-book concept it shares with sibling expressions, the
+  // etymology concept its origin belongs to (and sibling origins under
+  // the same concept), and concepts connected to that one via etymology
+  // relations (antonym / synonym / hyponym / …). Empty when the
+  // notebook has no concepts. The frontend collapses these into a chip
+  // row under the meaning and the full block in the expanded panel so a
+  // wrong word never reads in isolation.
+  repeated RelatedGroup related_groups = 15;
+}
+
+// RelatedGroup is one cluster of related entries surfaced on the
+// analytics card. The grouping is intentionally flat (kind + label +
+// member strings) so the same shape covers sibling words, sibling
+// origins, and related-concept members — the frontend renders each as a
+// labelled chip + list without per-kind branching.
+message RelatedGroup {
+  // kind names the cluster: "concept" for definitions-book sibling
+  // words, "origin_family" for etymology sibling origins under the
+  // word's origin's concept, and the relation type name ("antonym",
+  // "synonym", "hyponym", …) for related-concept clusters.
+  string kind = 1;
+  // label is the human-readable header. For "concept" it's the head's
+  // umbrella meaning (e.g. "clumsy in social situations"); for
+  // "origin_family" / relation kinds it's the concept name with the
+  // umbrella meaning ("leftness — left"). Empty when no umbrella was
+  // declared.
+  string label = 2;
+  // members are the cluster's entries as already-formatted strings —
+  // e.g. "gaucherie", "sinister (Latin) — left", "dexterity". Ordering
+  // is the order declared in the source notebook.
+  repeated string members = 3;
 }
 
 message GetWordHistoryRequest {
