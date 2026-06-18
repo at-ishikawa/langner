@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/analytics"
@@ -260,6 +261,9 @@ The date argument defaults to today in your local timezone.`,
 			}
 			for _, f := range written {
 				fmt.Printf("Wrote %s\n", f)
+				if quizReviewGeneratePDF {
+					fmt.Printf("Wrote %s\n", strings.TrimSuffix(f, ".md")+".pdf")
+				}
 			}
 			return nil
 		},
