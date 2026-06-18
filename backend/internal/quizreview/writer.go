@@ -53,6 +53,13 @@ type SourceContent interface {
 	// name to meaning so the rendered member rows can show
 	// "sinister (Latin) — left hand" without re-walking the origins.
 	EtymologyConcepts(notebookID, sessionTitle string) ([]notebook.Concept, []notebook.Relation, map[string]string)
+	// IsBook reports whether the notebookID belongs to a full-book
+	// source (Gatsby, John Tenniel, etc., loaded from
+	// books_directories) rather than a study notebook (Speak English,
+	// flashcards, WPME). Quiz-review is a study sheet for failed
+	// vocab/origins — book chapters don't fit that mental model and
+	// would drown out the study notebooks in the output.
+	IsBook(notebookID string) bool
 }
 
 // SourceScene is one scene's worth of dialogue from a story notebook,
@@ -131,6 +138,10 @@ func (rs *readerSource) StoryConversations(notebookID, sessionTitle string) []So
 	return nil
 }
 
+func (rs *readerSource) IsBook(notebookID string) bool {
+	return rs.reader.IsBook(notebookID)
+}
+
 func (rs *readerSource) EtymologyConcepts(notebookID, sessionTitle string) ([]notebook.Concept, []notebook.Relation, map[string]string) {
 	conceptsBySession, relationsBySession := rs.reader.GetEtymologyConceptsBySession(notebookID)
 	concepts := conceptsBySession[sessionTitle]
@@ -166,6 +177,23 @@ func (w *Writer) Output(ctx context.Context, day time.Time, outputDirectory stri
 	detail, err := w.repo.DayDetail(ctx, day, analytics.Filters{})
 	if err != nil {
 		return "", fmt.Errorf("repo.DayDetail: %w", err)
+	}
+	if len(detail.WrongWords) == 0 {
+		return "", nil
+	}
+	// Drop attempts on book-type notebooks (Gatsby, John Tenniel, etc.)
+	// before the file is created. When every failure was on a book, the
+	// day produces no quiz-review file at all — the no-op path the CLI
+	// already prints "nothing to write" for.
+	if w.source != nil {
+		filtered := detail.WrongWords[:0:0]
+		for _, ww := range detail.WrongWords {
+			if w.source.IsBook(ww.NotebookID) {
+				continue
+			}
+			filtered = append(filtered, ww)
+		}
+		detail.WrongWords = filtered
 	}
 	if len(detail.WrongWords) == 0 {
 		return "", nil

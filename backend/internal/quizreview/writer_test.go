@@ -22,6 +22,11 @@ type stubSource struct {
 	concepts      map[string][]notebook.Concept
 	relations     map[string][]notebook.Relation
 	meanings      map[string]map[string]string
+	bookIDs       map[string]bool
+}
+
+func (s *stubSource) IsBook(notebookID string) bool {
+	return s.bookIDs[notebookID]
 }
 
 func (s *stubSource) key(notebookID, sessionTitle string) string {
@@ -466,6 +471,69 @@ func TestWriter_NoSourceContent_RendersLegacyFailureOnlyOutput(t *testing.T) {
 	assert.NotContains(t, out, "#### Conversations")
 	assert.NotContains(t, out, "#### Concepts")
 	assert.Contains(t, out, "#### Failed vocabularies", "failure list still renders")
+}
+
+// TestWriter_FiltersOutBookNotebooks pins the book-exclusion rule:
+// quiz-review is a study sheet for the failed vocabulary / origin
+// quizzes, so failures on full-book sources (Gatsby, John Tenniel,
+// loaded from books_directories) must not appear in the output. A day
+// with failures on a study notebook AND a book renders only the study
+// notebook; a day where every failure was on a book produces no file.
+func TestWriter_FiltersOutBookNotebooks(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "the-great-gatsby",
+					NotebookTitle: "Chapter 1",
+					Expression:    "bond business",
+					QuizType:      "notebook",
+					Meaning:       "the bond market",
+				},
+				{
+					NotebookID:    "word-power-made-easy",
+					NotebookTitle: "Session 3",
+					Expression:    "gauche",
+					QuizType:      "notebook",
+					Meaning:       "clumsy",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		bookIDs: map[string]bool{"the-great-gatsby": true},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.NotContains(t, out, "the-great-gatsby",
+		"book notebooks (loaded from books_directories) must not appear in quiz-review")
+	assert.NotContains(t, out, "bond business",
+		"failures on book notebooks must be dropped end-to-end")
+	assert.Contains(t, out, "word-power-made-easy",
+		"study notebooks on the same day still render normally")
+	assert.Contains(t, out, "gauche")
+	assert.Contains(t, out, "1 wrong attempt across 1 notebook.",
+		"top summary reflects only the surviving (non-book) notebooks")
+
+	// All-book day → no file at all (mirrors the no-failures path).
+	bookOnlyRepo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{NotebookID: "the-great-gatsby", Expression: "x", QuizType: "notebook"},
+			},
+		},
+	}
+	bookOnlyWriter := NewWriterWithSource(bookOnlyRepo, src)
+	written2, err := bookOnlyWriter.Output(context.Background(), day, t.TempDir(), false)
+	require.NoError(t, err)
+	assert.Empty(t, written2,
+		"a day where every failure was on a book produces no quiz-review file")
 }
 
 // TestWriter_NoWrongAttemptsReturnsEmpty pins the no-op for days with no
