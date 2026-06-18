@@ -364,24 +364,28 @@ func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures
 		sceneOut := strings.Builder{}
 		anyMatch := false
 		for _, line := range scene.Lines {
-			bolded, matched := boldFailedExpressions(line.Quote, failures)
+			// Match the source's PROVEN PDF-friendly shape from
+			// assets/templates/story-notebook.md.go.tmpl: each
+			// conversation line is a bullet item with an italic
+			// speaker. Bullet items already render bold correctly
+			// in the user's Kobo PDFs (the words section uses
+			// `- **expression**: meaning`), so reusing the shape
+			// keeps the failed-expression highlight visible end to
+			// end. Stray `*` characters in the YAML source (footnote
+			// markers like "losers*") are escaped first so they
+			// don't accidentally open an italic span that swallows
+			// the trailing **bold** marker for the failed word.
+			safe := escapeStrayAsterisks(line.Quote)
+			bolded, matched := boldFailedExpressions(safe, failures)
 			marker := ""
 			if matched {
 				marker = "✗ "
 				anyMatch = true
 			}
-			// The PDF preprocessor (internal/pdf.convertBoldToItalicInBlockquotes)
-			// strips every **bold** marker from lines starting with "> "
-			// because mdtopdf can't render inline bold inside blockquote
-			// multiCells. That used to wipe both the speaker chip and the
-			// failed-expression highlight from the PDF the user actually
-			// reads on Kobo. Rendering each line as a plain paragraph
-			// instead keeps the bold intact end-to-end while the leading
-			// ✗ marker + bold speaker still carry the dialogue feel.
 			if line.Speaker != "" {
-				fmt.Fprintf(&sceneOut, "%s**%s:** %s\n\n", marker, line.Speaker, bolded)
+				fmt.Fprintf(&sceneOut, "- %s_%s_: %s\n", marker, line.Speaker, bolded)
 			} else {
-				fmt.Fprintf(&sceneOut, "%s%s\n\n", marker, bolded)
+				fmt.Fprintf(&sceneOut, "- %s%s\n", marker, bolded)
 			}
 		}
 		if anyMatch {
@@ -394,13 +398,43 @@ func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures
 	sb.WriteString("#### Conversations\n\n")
 	for i, r := range rendered {
 		if i > 0 {
-			// Horizontal rule between scenes keeps them visually
-			// separated now that the blockquote framing is gone.
-			sb.WriteString("---\n\n")
+			// Blank line ends one bullet list, horizontal rule
+			// separates scenes, blank line starts the next list.
+			sb.WriteString("\n---\n\n")
 		}
 		sb.WriteString(r)
 	}
+	sb.WriteString("\n")
 	return true
+}
+
+// escapeStrayAsterisks backslash-escapes any `*` in the quote that
+// isn't already part of a `**…**` bold span we control. The YAML
+// source data sometimes carries a single `*` as a footnote marker
+// ("losers* lately:"); markdown parsers see that `*` as the start of
+// an italic span and consume the next `**` for the closing marker —
+// the failed-expression bold then evaporates. Escaping the stray
+// before we layer our own bold makes the highlight render reliably.
+func escapeStrayAsterisks(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		if s[i] != '*' {
+			b.WriteByte(s[i])
+			continue
+		}
+		// Leave existing `**` pairs alone — boldFailedExpressions
+		// only ever introduces those, never stray ones, and the
+		// source data doesn't carry literal `**`.
+		if i+1 < len(s) && s[i+1] == '*' {
+			b.WriteByte('*')
+			b.WriteByte('*')
+			i++
+			continue
+		}
+		b.WriteString(`\*`)
+	}
+	return b.String()
 }
 
 // boldFailedExpressions returns the quote with each failed expression

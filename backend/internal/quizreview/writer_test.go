@@ -214,12 +214,12 @@ func TestWriter_RendersStoryConversations(t *testing.T) {
 	out := string(body)
 
 	assert.Contains(t, out, "#### Conversations")
-	assert.Contains(t, out, "✗ **Meg:** They're probably **scrimping** on the plastic. I'll have a word with them.",
-		"failed line carries ✗ prefix and bolds the whole word ('scrimping') containing the root ('scrimp')")
-	assert.Contains(t, out, "**Josh:** Our supplier must be cutting corners.",
-		"non-failed lines in the matched scene render as plain context with bold speaker")
-	assert.NotContains(t, out, "> **Meg:",
-		"conversation lines no longer use the blockquote `> ` prefix — the PDF preprocessor strips **bold** from blockquote lines, which previously made both the speaker chip and the failed-expression highlight vanish from the PDF")
+	assert.Contains(t, out, "- ✗ _Meg_: They're probably **scrimping** on the plastic. I'll have a word with them.",
+		"failed line is a bullet item with italic speaker (matching the existing story-notebook template) and bolds the whole word containing the root")
+	assert.Contains(t, out, "- _Josh_: Our supplier must be cutting corners.",
+		"non-failed lines render as plain bullet items with italic speaker")
+	assert.NotContains(t, out, "> _Meg_",
+		"conversation lines do not use the blockquote `> ` prefix — the PDF preprocessor strips **bold** from blockquote lines, so the bullet+italic shape from story-notebook.md.go.tmpl is reused instead")
 	// The second scene mentions cracking + storing — neither matches
 	// "scrimp" or any significant token of it, so it must be dropped.
 	assert.NotContains(t, out, "Hi Gary",
@@ -275,7 +275,7 @@ func TestWriter_BoldingHandlesTokenFalsePositives(t *testing.T) {
 	body, err := os.ReadFile(written)
 	require.NoError(t, err)
 	out := string(body)
-	assert.Contains(t, out, "✗ **Susan:** I'm ready to **take the plunge** and join a start-up.",
+	assert.Contains(t, out, "- ✗ _Susan_: I'm ready to **take the plunge** and join a start-up.",
 		"exact-substring match bolds the full expression and marks the line")
 	assert.NotContains(t, out, "✗ **Craig:**",
 		"the second line must NOT be marked — 'take' inside 'mistake' must not light up as a token match")
@@ -322,10 +322,53 @@ func TestWriter_TokenFallbackBoldsContentWord(t *testing.T) {
 	// The exact phrase doesn't appear in the quote — the token
 	// fallback bolds the longest content word (here "business",
 	// 8 chars > "drum", 4 chars).
-	assert.Contains(t, out, "✗ **Linda:**",
+	assert.Contains(t, out, "- ✗ _Linda_:",
 		"line carries the ✗ marker even when the exact phrase isn't a substring")
 	assert.Contains(t, out, "**business**",
 		"the longest content token is bolded as a whole word")
+}
+
+// TestWriter_EscapesStrayAsterisksInQuotes pins the regression where a
+// stray `*` in the source text (footnote marker like "losers*") opened
+// an italic span that swallowed the trailing `**bold**` for the failed
+// expression. The escape pass turns the lone `*` into `\*` so the
+// bold survives the markdown parser end to end.
+func TestWriter_EscapesStrayAsterisksInQuotes(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "speak-english",
+					NotebookTitle: "LESSON 7",
+					Expression:    "stuffed shirt",
+					QuizType:      "notebook",
+					Meaning:       "a self-important formal person",
+					NotebookKind:  "story",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		conversations: map[string][]SourceScene{
+			"speak-english|LESSON 7": {{
+				Lines: []SourceLine{
+					{Speaker: "Cindy", Quote: "I've dated a lot of losers* lately: stuffed shirts, two-timers."},
+				},
+			}},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.Contains(t, out, `losers\*`,
+		"stray `*` in the source (footnote marker) must be backslash-escaped so a markdown parser doesn't read it as an italic-open")
+	assert.Contains(t, out, "**stuffed shirts**",
+		"the **bold** for the failed expression must survive — without the escape it gets consumed by the italic the stray `*` opens")
 }
 
 // TestWriter_PreservesExampleWhenNoConversation pins the WPME-style
