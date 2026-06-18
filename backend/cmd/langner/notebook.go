@@ -199,15 +199,15 @@ func newNotebookCommand() *cobra.Command {
 	quizReviewCmd := &cobra.Command{
 		Use:   "quiz-review [YYYY-MM-DD]",
 		Short: "Generate per-notebook markdown/PDF of the words and origins you got wrong on the given date (default: today).",
-		Long: `Export a study-friendly markdown file per notebook listing the vocabulary
-words and etymology origins you got wrong on the given date. The output mirrors
-the regular notebook shape — one section per source session, an entry per
-failed expression with its meaning, an example sentence (when available), and
+		Long: `Export a single study-friendly markdown file covering every notebook
+where you got something wrong on the given date. Each notebook becomes a
+top-level section, broken down by source session, with an entry per failed
+expression carrying its meaning, an example sentence (when available), and
 the concept-graph context (sibling words, sibling origins, antonym / synonym
-members) — so the files can be re-read alongside the original notebook to
+members) — so the file can be re-read alongside the original notebooks to
 drill exactly that day's failures.
 
-Files land under <outputs.quiz_review_directory>/<date>/<notebookID>.md.
+The file lands at <outputs.quiz_review_directory>/quiz-review-<date>.md.
 When quiz_review_directory is unset, the command falls back to
 outputs.story_directory.
 
@@ -255,15 +255,13 @@ The date argument defaults to today in your local timezone.`,
 			if err != nil {
 				return fmt.Errorf("writer.Output: %w", err)
 			}
-			if len(written) == 0 {
+			if written == "" {
 				fmt.Printf("No wrong attempts found for %s — nothing to write.\n", day.Format("2006-01-02"))
 				return nil
 			}
-			for _, f := range written {
-				fmt.Printf("Wrote %s\n", f)
-				if quizReviewGeneratePDF {
-					fmt.Printf("Wrote %s\n", strings.TrimSuffix(f, ".md")+".pdf")
-				}
+			fmt.Printf("Wrote %s\n", written)
+			if quizReviewGeneratePDF {
+				fmt.Printf("Wrote %s\n", strings.TrimSuffix(written, ".md")+".pdf")
 			}
 			return nil
 		},

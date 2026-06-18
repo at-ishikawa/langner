@@ -39,47 +39,40 @@ func NewWriter(repo analytics.Repository) *Writer {
 	return &Writer{repo: repo}
 }
 
-// Output writes one markdown file per notebook with failures on the
-// given day. Files land under <outputDirectory>/<YYYY-MM-DD>/<notebookID>.md.
-// generatePDF additionally writes a PDF alongside each markdown file.
+// Output writes a single markdown file covering every notebook with
+// failures on the given day. The file lands at
+// <outputDirectory>/quiz-review-<YYYY-MM-DD>.md. generatePDF
+// additionally writes a PDF next to it.
 //
-// Returns the list of written markdown paths (so the CLI can echo them)
-// and an error if the analytics fetch or any file write failed. Returns
-// (nil, nil) when the day has no wrong attempts — no files are written
-// in that case.
-func (w *Writer) Output(ctx context.Context, day time.Time, outputDirectory string, generatePDF bool) ([]string, error) {
+// Returns the written markdown path (empty when the day had no wrong
+// attempts) and an error if the analytics fetch or file write failed.
+func (w *Writer) Output(ctx context.Context, day time.Time, outputDirectory string, generatePDF bool) (string, error) {
 	if outputDirectory == "" {
-		return nil, fmt.Errorf("output directory is empty")
+		return "", fmt.Errorf("output directory is empty")
 	}
 	detail, err := w.repo.DayDetail(ctx, day, analytics.Filters{})
 	if err != nil {
-		return nil, fmt.Errorf("repo.DayDetail: %w", err)
+		return "", fmt.Errorf("repo.DayDetail: %w", err)
 	}
 	if len(detail.WrongWords) == 0 {
-		return nil, nil
+		return "", nil
 	}
-	dateStr := day.Format("2006-01-02")
-	dayDir := filepath.Join(outputDirectory, dateStr)
-	if err := os.MkdirAll(dayDir, 0o755); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %w", dayDir, err)
+	if err := os.MkdirAll(outputDirectory, 0o755); err != nil {
+		return "", fmt.Errorf("mkdir %s: %w", outputDirectory, err)
 	}
 
-	groups := groupByNotebook(detail.WrongWords)
-	var written []string
-	for _, g := range groups {
-		filename := filepath.Join(dayDir, sanitizeNotebookID(g.notebookID)+".md")
-		body := renderQuizReview(dateStr, g)
-		if err := os.WriteFile(filename, []byte(body), 0o644); err != nil {
-			return nil, fmt.Errorf("write %s: %w", filename, err)
-		}
-		written = append(written, filename)
-		if generatePDF {
-			if _, err := pdf.ConvertMarkdownToPDF(filename); err != nil {
-				return nil, fmt.Errorf("ConvertMarkdownToPDF(%s): %w", filename, err)
-			}
+	dateStr := day.Format("2006-01-02")
+	filename := filepath.Join(outputDirectory, "quiz-review-"+dateStr+".md")
+	body := renderQuizReviewAllNotebooks(dateStr, groupByNotebook(detail.WrongWords))
+	if err := os.WriteFile(filename, []byte(body), 0o644); err != nil {
+		return "", fmt.Errorf("write %s: %w", filename, err)
+	}
+	if generatePDF {
+		if _, err := pdf.ConvertMarkdownToPDF(filename); err != nil {
+			return filename, fmt.Errorf("ConvertMarkdownToPDF(%s): %w", filename, err)
 		}
 	}
-	return written, nil
+	return filename, nil
 }
 
 // quizReviewGroup is one notebook's slice of failed attempts on the day.
@@ -154,39 +147,57 @@ func groupByNotebook(wrongs []analytics.WrongWord) []quizReviewGroup {
 	return groups
 }
 
-// renderQuizReview turns one notebook's bucket into a markdown document.
-// The top heading mirrors the regular notebook output ("# <Notebook>")
-// and the sub-headings group entries by their source session.
-func renderQuizReview(date string, g quizReviewGroup) string {
+// renderQuizReviewAllNotebooks renders every notebook with failures on
+// the day as a single markdown document. Notebooks are emitted in the
+// order they first appeared in the analytics result; within each
+// notebook, sessions follow the same first-appearance order, and
+// per-session subsections separate origin failures from vocabulary
+// failures so the reader can drill the etymology side and the
+// English-word side independently.
+func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup) string {
 	var sb strings.Builder
-	// NotebookTitle is sourced from the analytics WrongWord, which in
-	// turn pulls h.Metadata.Title — that's the per-session title in the
-	// learning history file, not the notebook's display name. Showing
-	// it as the notebook header would read as "Notebook: Session 6"
-	// which is misleading. The notebook ID is the only reliable
-	// identifier on the WrongWord today, so that's what we surface.
 	fmt.Fprintf(&sb, "# Quiz review — %s\n\n", date)
-	fmt.Fprintf(&sb, "Notebook: %s\n\n", g.notebookID)
-	if total := totalEntries(g); total > 0 {
-		fmt.Fprintf(&sb, "%d wrong attempt%s across %d session%s.\n\n",
-			total, plural(total), len(g.sessions), plural(len(g.sessions)))
+	if total := totalEntriesAcross(groups); total > 0 {
+		fmt.Fprintf(&sb, "%d wrong attempt%s across %d notebook%s.\n\n",
+			total, plural(total), len(groups), plural(len(groups)))
 	}
-	for _, s := range g.sessions {
-		fmt.Fprintf(&sb, "## %s\n\n", s.title)
-		if len(s.origin) > 0 {
-			sb.WriteString("### Failed origins\n\n")
-			for _, w := range s.origin {
-				writeEntry(&sb, w)
-			}
+	for gi, g := range groups {
+		if gi > 0 {
+			sb.WriteString("\n---\n\n")
 		}
-		if len(s.vocab) > 0 {
-			sb.WriteString("### Failed vocabularies\n\n")
-			for _, w := range s.vocab {
-				writeEntry(&sb, w)
+		// Notebook display names aren't reliably available on the
+		// WrongWord (NotebookTitle is the per-session title), so the
+		// notebook ID is the only honest header here.
+		fmt.Fprintf(&sb, "## %s\n\n", g.notebookID)
+		if total := totalEntries(g); total > 0 {
+			fmt.Fprintf(&sb, "%d wrong attempt%s across %d session%s.\n\n",
+				total, plural(total), len(g.sessions), plural(len(g.sessions)))
+		}
+		for _, s := range g.sessions {
+			fmt.Fprintf(&sb, "### %s\n\n", s.title)
+			if len(s.origin) > 0 {
+				sb.WriteString("#### Failed origins\n\n")
+				for _, w := range s.origin {
+					writeEntry(&sb, w)
+				}
+			}
+			if len(s.vocab) > 0 {
+				sb.WriteString("#### Failed vocabularies\n\n")
+				for _, w := range s.vocab {
+					writeEntry(&sb, w)
+				}
 			}
 		}
 	}
 	return sb.String()
+}
+
+func totalEntriesAcross(groups []quizReviewGroup) int {
+	var n int
+	for _, g := range groups {
+		n += totalEntries(g)
+	}
+	return n
 }
 
 // writeEntry renders one wrong attempt. Format mirrors the etymology
@@ -276,16 +287,3 @@ func defaultIfEmpty(s, fallback string) string {
 	return s
 }
 
-// sanitizeNotebookID replaces filesystem-unfriendly characters in a
-// notebook ID so the resulting filename stays portable. Notebook IDs in
-// the codebase are slugs (lower-case + hyphens), so the substitutions
-// only fire defensively.
-func sanitizeNotebookID(id string) string {
-	r := strings.NewReplacer(
-		"/", "-",
-		"\\", "-",
-		":", "-",
-		" ", "-",
-	)
-	return r.Replace(id)
-}

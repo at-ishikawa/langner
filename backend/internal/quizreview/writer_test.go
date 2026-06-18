@@ -31,7 +31,7 @@ func (s *stubRepo) WordHistory(context.Context, analytics.WordRef) (analytics.Wo
 	return analytics.WordHistory{}, nil
 }
 
-func TestWriter_PerNotebookSplitAndContent(t *testing.T) {
+func TestWriter_SingleFileWithEveryNotebook(t *testing.T) {
 	day, _ := time.Parse("2006-01-02", "2026-06-16")
 	repo := &stubRepo{
 		detail: analytics.DayDetail{
@@ -80,49 +80,56 @@ func TestWriter_PerNotebookSplitAndContent(t *testing.T) {
 	tmpDir := t.TempDir()
 	written, err := writer.Output(context.Background(), day, tmpDir, false)
 	require.NoError(t, err)
-	require.Len(t, written, 2, "exactly one file per source notebook with failures on the day")
+	assert.Equal(t, filepath.Join(tmpDir, "quiz-review-2026-06-16.md"), written,
+		"single combined file lives directly under the output directory, named with the date")
 
-	dayDir := filepath.Join(tmpDir, "2026-06-16")
-	wpme := filepath.Join(dayDir, "word-power-made-easy.md")
-	speak := filepath.Join(dayDir, "more-speak-english-like-an-american.md")
-	require.ElementsMatch(t, []string{wpme, speak}, written)
-
-	wpmeBody, err := os.ReadFile(wpme)
+	body, err := os.ReadFile(written)
 	require.NoError(t, err)
-	out := string(wpmeBody)
+	out := string(body)
 
+	// Top-of-file summary covers every notebook.
 	assert.Contains(t, out, "# Quiz review — 2026-06-16")
-	assert.Contains(t, out, "Notebook: word-power-made-easy")
-	assert.Contains(t, out, "3 wrong attempts across 2 sessions.",
-		"summary line counts the wrong attempts and the distinct session subsections — both pluralisation paths exercised here")
+	assert.Contains(t, out, "4 wrong attempts across 2 notebooks.",
+		"top summary counts every wrong attempt across every notebook on the day")
 
-	// Session 3 carries one origin and one vocab entry — both subsections
-	// must render under the same lesson heading.
-	assert.Contains(t, out, "## Session 3")
-	assert.Contains(t, out, "### Failed origins")
+	// Each notebook is a top-level section, in first-appearance order.
+	assert.Contains(t, out, "## word-power-made-easy")
+	assert.Contains(t, out, "## more-speak-english-like-an-american")
+	assert.Less(t, indexOf(out, "## word-power-made-easy"), indexOf(out, "## more-speak-english-like-an-american"),
+		"notebooks render in first-appearance order — WPME comes first because its first wrong attempt was first in the day detail")
+
+	// Per-notebook summary nested under each H2.
+	assert.Contains(t, out, "3 wrong attempts across 2 sessions.",
+		"per-notebook summary covers the entries inside that notebook only")
+	assert.Contains(t, out, "1 wrong attempt across 1 session.",
+		"the second notebook's summary exercises the singular pluralisation path")
+
+	// Sessions sit one level deeper (### instead of ##).
+	assert.Contains(t, out, "### Session 3")
+	assert.Contains(t, out, "### Session 5")
+	assert.Contains(t, out, "### LESSON 7: CINDY ASKS MARK TO GET BACK TOGETHER")
+
+	// Failed-origins and failed-vocabularies blocks pushed to ####.
+	assert.Contains(t, out, "#### Failed origins")
+	assert.Contains(t, out, "#### Failed vocabularies")
 	assert.Contains(t, out, "- **logos** [etymology breakdown]: science, study")
-	assert.Contains(t, out, "### Failed vocabularies")
 	assert.Contains(t, out, "- **gauche** [vocab]: clumsy, tactless, especially in social situations")
 	assert.Contains(t, out, "    - Same sense (clumsy in social situations): gaucherie")
 	assert.Contains(t, out, "    - Antonym (rightness — right): dexter (Latin) — right hand, droit (French) — right hand")
 
-	// Session 5 must appear AFTER Session 3 (declaration order) — first-
-	// appearance ordering keeps the markdown stable for diff review.
-	assert.Less(t, indexOf(out, "## Session 3"), indexOf(out, "## Session 5"))
+	// Notebook sections are separated by a horizontal rule so a reader
+	// scrolling through the file gets a clear cut between notebooks.
+	assert.Contains(t, out, "\n---\n", "horizontal rule separates each notebook section")
 
-	speakBody, err := os.ReadFile(speak)
-	require.NoError(t, err)
-	speakOut := string(speakBody)
-	assert.Contains(t, speakOut, "1 wrong attempt across 1 session.", "singular pluralisation path")
-	assert.Contains(t, speakOut, "## LESSON 7: CINDY ASKS MARK TO GET BACK TOGETHER")
-	assert.Contains(t, speakOut,
+	// Stuffed-shirt example renders italic in the speak-english section.
+	assert.Contains(t, out,
 		"    - Example: *I've dated a lot of losers lately: stuffed shirts, two-timers — you get the picture.*",
-		"example sentence renders inside the entry body as italic")
+		"example sentence still renders inside the entry body as italic")
 }
 
 // TestWriter_NoWrongAttemptsReturnsEmpty pins the no-op for days with no
-// activity: no files are written, no error is raised. The CLI surfaces
-// a friendly "nothing to write" line off the empty result.
+// activity: no file is written, no error is raised. The CLI surfaces a
+// friendly "nothing to write" line off the empty result.
 func TestWriter_NoWrongAttemptsReturnsEmpty(t *testing.T) {
 	repo := &stubRepo{detail: analytics.DayDetail{}}
 	writer := NewWriter(repo)
@@ -132,7 +139,7 @@ func TestWriter_NoWrongAttemptsReturnsEmpty(t *testing.T) {
 	assert.Empty(t, written)
 	entries, err := os.ReadDir(tmpDir)
 	require.NoError(t, err)
-	assert.Empty(t, entries, "no day directory should be created when there is nothing to write")
+	assert.Empty(t, entries, "no file should be created when there is nothing to write")
 }
 
 // TestWriter_RejectsEmptyOutputDirectory guards against silently
