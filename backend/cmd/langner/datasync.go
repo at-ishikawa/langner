@@ -205,7 +205,7 @@ func runRoundTripDiff(ctx context.Context, cfg *config.Config, db *sqlx.DB, out 
 	}
 	defer func() { _ = os.RemoveAll(exportDir) }()
 
-	fmt.Fprintf(out, "Exporting current DB to %s...\n", exportDir)
+	_, _ = fmt.Fprintf(out, "Exporting current DB to %s...\n", exportDir)
 	exporter := newExporterFromConfig(cfg, db, exportDir, io.Discard)
 	if _, err := exporter.ExportAll(ctx); err != nil {
 		return err

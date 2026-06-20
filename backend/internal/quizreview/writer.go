@@ -241,15 +241,13 @@ func (rs *readerSource) EtymologyConcepts(notebookID, sessionTitle string) ([]no
 	if len(concepts) == 0 && len(relations) == 0 {
 		return nil, nil, nil
 	}
+	// Track origin meanings book-wide (not session-scoped) so concept
+	// members declared in a different session still render with their
+	// meaning text — concept references can legitimately cross
+	// sessions inside the same book.
 	origins, _ := rs.reader.ReadEtymologyNotebook(notebookID)
 	meaning := make(map[string]string, len(origins))
 	for _, o := range origins {
-		if o.SessionTitle != "" && o.SessionTitle != sessionTitle {
-			// Track origin meanings book-wide so concept members
-			// declared in a different session still render with
-			// their meaning text; the session filter here is only a
-			// cheap fast path.
-		}
 		meaning[o.Origin] = o.Meaning
 	}
 	return concepts, relations, meaning
@@ -1063,13 +1061,6 @@ func failedConceptMemberSet(originFailures, vocabFailures []analytics.WrongWord,
 	return out
 }
 
-func orDash(s string) string {
-	if strings.TrimSpace(s) == "" {
-		return "—"
-	}
-	return s
-}
-
 func totalEntriesAcross(groups []quizReviewGroup) int {
 	var n int
 	for _, g := range groups {
@@ -1140,28 +1131,6 @@ func isOriginQuizType(quizType string) bool {
 	return strings.HasPrefix(quizType, "etymology_")
 }
 
-// quizTypeLabel maps the internal quiz_type string to a friendly label
-// the reader can scan. Unknown / future quiz types pass through as-is
-// so the file never hides a failure.
-func quizTypeLabel(qt string) string {
-	switch qt {
-	case "notebook":
-		return "vocab"
-	case "reverse":
-		return "vocab reverse"
-	case "freeform":
-		return "vocab freeform"
-	case "etymology_breakdown":
-		return "etymology breakdown"
-	case "etymology_assembly":
-		return "etymology assembly"
-	case "etymology_freeform":
-		return "etymology freeform"
-	default:
-		return qt
-	}
-}
-
 // relatedHeader maps a RelatedGroup.Kind to the bullet header used in
 // the markdown output. The kind strings come straight from the
 // notebooks' relation type field plus two built-in kinds ("concept",
@@ -1175,7 +1144,7 @@ func relatedHeader(kind string) string {
 	case "origin_family":
 		return "Same origin family"
 	default:
-		return strings.Title(strings.ReplaceAll(kind, "_", " "))
+		return titleCase(strings.ReplaceAll(kind, "_", " "))
 	}
 }
 

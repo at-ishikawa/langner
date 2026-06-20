@@ -660,7 +660,7 @@ func (r *Reader) GetEtymologyConceptsAndRelations(etymologyID string) ([]Concept
 				seenMember[c.Key] = make(map[conceptMemberKey]bool)
 			}
 			for _, m := range c.Members {
-				k := conceptMemberKey{Origin: m.Origin, Language: m.Language}
+				k := conceptMemberKey(m)
 				if seenMember[c.Key][k] {
 					continue
 				}

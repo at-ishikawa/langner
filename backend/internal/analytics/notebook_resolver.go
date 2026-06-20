@@ -261,15 +261,10 @@ func lookupDefinitionAlias(notes []notebook.Note, expression string) string {
 	return ""
 }
 
-func matchVocabNote(notes []notebook.Note, expression string) (WordMetadata, bool) {
-	meta, _, ok := findVocabNote(notes, expression)
-	return meta, ok
-}
-
-// findVocabNote is matchVocabNote that also returns the underlying Note
-// so callers can read origin_parts (used to compute the etymology side
-// of the analytics card's Related Words block). The boolean is true
-// when a matching note was found.
+// findVocabNote returns the matched Note alongside the meta so callers
+// can read origin_parts (used to compute the etymology side of the
+// analytics card's Related Words block). The boolean is true when a
+// matching note was found.
 func findVocabNote(notes []notebook.Note, expression string) (WordMetadata, notebook.Note, bool) {
 	for _, n := range notes {
 		if !matchExpression(n.Expression, n.Definition, expression) {
