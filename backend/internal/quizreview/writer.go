@@ -779,9 +779,12 @@ func significantTokens(phrase string) []string {
 }
 
 // writeEtymologyConcepts renders the concept declarations + relations
-// the session carries, marking any member whose origin appears in the
-// failedOrigins set with a ✗ prefix so the user's eye lands on the
-// origin they got wrong inside the otherwise-static concept block.
+// the session carries as bullet lists (NOT tables — mdtopdf doesn't
+// render bold inside table cells reliably on Kobo). For each concept
+// touched by a failure, members render as `- origin (Language) —
+// meaning` with the failed member bolded. Relations expand to the
+// related concept's members so the reader sees what "antonym ↔
+// outward" actually contains without having to scroll.
 func writeEtymologyConcepts(
 	sb *strings.Builder,
 	concepts []notebook.Concept,
@@ -806,41 +809,118 @@ func writeEtymologyConcepts(
 		return
 	}
 	sb.WriteString("#### Concepts\n\n")
-	relationsByKey := groupRelationsByKey(relations)
-	for _, c := range relevant {
-		fmt.Fprintf(sb, "**%s — %s**\n\n", c.Key, c.Meaning)
-		if c.Note != "" {
-			fmt.Fprintf(sb, "_%s_\n\n", c.Note)
-		}
-		if len(c.Members) > 0 {
-			sb.WriteString("| Member | Language | Meaning |\n")
-			sb.WriteString("|---|---|---|\n")
-			for _, m := range c.Members {
-				name := m.Origin
-				// Bold the member name when it matches a failure
-				// — bold survives mdtopdf's PDF rendering inside
-				// table cells, whereas the previous ✗ prefix
-				// glyph was garbled on the user's Kobo.
-				if failedOrigins[m.Origin] {
-					name = "**" + name + "**"
-				}
-				lang := orDash(m.Language)
-				meaning := orDash(originMeanings[m.Origin])
-				fmt.Fprintf(sb, "| %s | %s | %s |\n", name, lang, meaning)
-			}
+	// All concepts (not just the relevant ones) get indexed so a
+	// relation can expand its endpoint inline with that concept's
+	// members — the user sees "antonym → outward (out): ec, ek, ex"
+	// without having to find outward's own block.
+	byKey := make(map[string]notebook.Concept, len(concepts))
+	for _, c := range concepts {
+		byKey[c.Key] = c
+	}
+	relationsByKey := groupConceptRelations(relations)
+	for i, c := range relevant {
+		if i > 0 {
 			sb.WriteString("\n")
 		}
-		if rels := relationsByKey[c.Key]; len(rels) > 0 {
-			sb.WriteString("Relations: ")
-			for i, r := range rels {
-				if i > 0 {
-					sb.WriteString("; ")
-				}
-				sb.WriteString(r)
-			}
-			sb.WriteString("\n\n")
+		fmt.Fprintf(sb, "**%s — %s**\n", c.Key, c.Meaning)
+		if c.Note != "" {
+			fmt.Fprintf(sb, "_%s_\n", c.Note)
+		}
+		sb.WriteString("\n")
+		for _, m := range c.Members {
+			fmt.Fprintf(sb, "- %s\n", formatMemberLine(m, originMeanings, failedOrigins[m.Origin]))
+		}
+		for _, rel := range relationsByKey[c.Key] {
+			sb.WriteString("\n")
+			writeRelationBlock(sb, rel, byKey, originMeanings)
 		}
 	}
+}
+
+// formatMemberLine renders one concept member as the bullet body —
+// "origin (Language) — meaning", with the origin name bolded when
+// it matches a failed origin/expression. Language and meaning collapse
+// out when missing so a bare {origin: foo} member still reads cleanly.
+func formatMemberLine(m notebook.ConceptMember, originMeanings map[string]string, failed bool) string {
+	name := m.Origin
+	if failed {
+		name = "**" + name + "**"
+	}
+	var sb strings.Builder
+	sb.WriteString(name)
+	if m.Language != "" {
+		fmt.Fprintf(&sb, " (%s)", m.Language)
+	}
+	if meaning := originMeanings[m.Origin]; meaning != "" {
+		sb.WriteString(" — " + meaning)
+	}
+	return sb.String()
+}
+
+// writeRelationBlock expands one relation to the other concept's
+// members. When the other concept is known (declared in the same
+// book), its members are listed inline as a nested bullet block
+// under a header line "Antonym → **outward — out**". When the
+// concept isn't found (cross-book reference, malformed YAML), the
+// header still renders so the link isn't silently dropped.
+func writeRelationBlock(sb *strings.Builder, rel conceptRelation, byKey map[string]notebook.Concept, originMeanings map[string]string) {
+	label := titleCase(rel.Type)
+	other, ok := byKey[rel.OtherKey]
+	if !ok {
+		fmt.Fprintf(sb, "%s %s %s\n", label, rel.Arrow, rel.OtherKey)
+		return
+	}
+	fmt.Fprintf(sb, "%s %s **%s — %s**\n", label, rel.Arrow, other.Key, other.Meaning)
+	for _, m := range other.Members {
+		fmt.Fprintf(sb, "    - %s\n", formatMemberLine(m, originMeanings, false))
+	}
+}
+
+// conceptRelation describes one outgoing relation from a concept,
+// carrying enough context for writeRelationBlock to render it without
+// re-walking the relation list. Arrow distinguishes symmetric (↔)
+// from directed (→) relations.
+type conceptRelation struct {
+	Type     string
+	Arrow    string
+	OtherKey string
+}
+
+// groupConceptRelations replaces the old groupRelationsByKey: it
+// keeps the structured form so the writer can look up the other
+// concept's members at render time, instead of pre-formatting to a
+// flat string. Symmetric "between" relations surface on both
+// endpoints; directed "from/to" relations surface only on the From
+// side.
+func groupConceptRelations(relations []notebook.Relation) map[string][]conceptRelation {
+	out := make(map[string][]conceptRelation)
+	for _, r := range relations {
+		if r.IsDirected() {
+			if r.From != "" && r.To != "" {
+				out[r.From] = append(out[r.From], conceptRelation{Type: r.Type, Arrow: "→", OtherKey: r.To})
+			}
+			continue
+		}
+		if len(r.Between) == 2 {
+			a, b := r.Between[0], r.Between[1]
+			if a != "" && b != "" {
+				out[a] = append(out[a], conceptRelation{Type: r.Type, Arrow: "↔", OtherKey: b})
+				out[b] = append(out[b], conceptRelation{Type: r.Type, Arrow: "↔", OtherKey: a})
+			}
+		}
+	}
+	return out
+}
+
+// titleCase upper-cases the first character of a kind string for the
+// relation header ("antonym" → "Antonym"). Unknown kinds pass through
+// unchanged.
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	first := strings.ToUpper(s[:1])
+	return first + s[1:]
 }
 
 // conceptTouchesFailure returns true when at least one of the concept's
@@ -857,30 +937,6 @@ func conceptTouchesFailure(c notebook.Concept, failedOrigins map[string]bool) bo
 		}
 	}
 	return false
-}
-
-// groupRelationsByKey turns the flat relation list into a per-concept
-// view of outgoing edges, each rendered as "<type> → <other concept>".
-// Symmetric relations surface on both endpoints so a reader looking at
-// either side of an antonym pair sees the link.
-func groupRelationsByKey(relations []notebook.Relation) map[string][]string {
-	out := make(map[string][]string)
-	for _, r := range relations {
-		if r.IsDirected() {
-			if r.From != "" && r.To != "" {
-				out[r.From] = append(out[r.From], fmt.Sprintf("%s → %s", r.Type, r.To))
-			}
-			continue
-		}
-		if len(r.Between) == 2 {
-			a, b := r.Between[0], r.Between[1]
-			if a != "" && b != "" {
-				out[a] = append(out[a], fmt.Sprintf("%s ↔ %s", r.Type, b))
-				out[b] = append(out[b], fmt.Sprintf("%s ↔ %s", r.Type, a))
-			}
-		}
-	}
-	return out
 }
 
 // failedNameSet collects every failed expression name (origin-side or

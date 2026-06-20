@@ -546,13 +546,23 @@ func TestWriter_RendersEtymologyConceptsWithHighlight(t *testing.T) {
 	assert.Contains(t, out, "#### Concepts")
 	assert.Contains(t, out, "**leftness — left**", "concept header carries the key + umbrella meaning")
 	assert.Contains(t, out, "_historically pejorative_", "concept note renders as italic")
-	assert.Contains(t, out, "| Member | Language | Meaning |", "concept members render as a markdown table")
-	assert.Contains(t, out, "| **gauche** | French | left hand |",
-		"the failed expression's origin row bolds the member name so the reader sees the failure inside the concept block — bold survives mdtopdf table rendering whereas the previous ✗ glyph was garbled on Kobo")
-	assert.Contains(t, out, "| sinister | Latin | left hand |",
-		"non-failed members render without the marker")
-	assert.Contains(t, out, "Relations: antonym ↔ rightness",
-		"symmetric relations surface on both endpoints")
+	// Members render as bullet items (NOT a markdown table — mdtopdf
+	// doesn't render bold inside table cells reliably on Kobo).
+	assert.Contains(t, out, "- **gauche** (French) — left hand",
+		"the failed expression's origin row bolds the member name in a bullet item — bold survives mdtopdf rendering in bullet lists whereas table cells were unreliable")
+	assert.Contains(t, out, "- sinister (Latin) — left hand",
+		"non-failed members render without the bold")
+	assert.NotContains(t, out, "| Member |",
+		"the table format is gone — bullets replace it")
+	// The antonym now expands inline with the related concept's
+	// members so the reader sees what `outward` actually contains
+	// without scrolling to find its own block (or having no idea
+	// because it's not even rendered).
+	assert.Contains(t, out, "Antonym ↔ **rightness — right**",
+		"symmetric relation header names the related concept + its meaning")
+	assert.Contains(t, out, "    - dexter (Latin) — right hand",
+		"the related concept's members are listed inline as a nested bullet block")
+	assert.Contains(t, out, "    - droit (French) — right hand")
 	// The concept block precedes the failure list for the same session.
 	assert.Less(t,
 		indexOf(out, "#### Concepts"),
@@ -624,7 +634,7 @@ func TestWriter_ConceptsFilteredToFailuresOnly(t *testing.T) {
 	out := string(body)
 	assert.Contains(t, out, "**straightness — straight**",
 		"the concept whose member matches the failed origin must render with the ✗ marker")
-	assert.Contains(t, out, "| **orthos** | Greek |",
+	assert.Contains(t, out, "- **orthos** (Greek)",
 		"failed origin is highlighted inside the rendered concept's members table")
 	assert.NotContains(t, out, "body-part",
 		"concept unrelated to the failure must be dropped entirely — quiz-review focuses on what the user missed")
@@ -692,7 +702,7 @@ func TestWriter_ConceptsRenderForVocabFailureViaOriginParts(t *testing.T) {
 	out := string(body)
 	assert.Contains(t, out, "**woman — woman**",
 		"the concept containing 'gyne' (an origin_part of the failed 'gynecology') must surface")
-	assert.Contains(t, out, "| **gyne** | Greek |",
+	assert.Contains(t, out, "- **gyne** (Greek)",
 		"the origin_part itself is marked because the vocab that depends on it was failed")
 	assert.NotContains(t, out, "**eye — eye**",
 		"the unrelated eye concept must be dropped — the failed gynecology doesn't touch ophthalmos")
@@ -968,6 +978,94 @@ func TestWriter_FailedSideIsBoldedPerQuizDirection(t *testing.T) {
 	// The quiz-type tag in brackets must be gone everywhere.
 	assert.NotContains(t, out, "[vocab", "the [vocab*] tag is dropped")
 	assert.NotContains(t, out, "[etymology", "the [etymology*] tag is dropped")
+}
+
+// TestWriter_RelationExpandsTargetConceptMembersInline pins the
+// user-reported rendering improvement: a relation must show what the
+// OTHER concept actually contains, not just the relation-type +
+// concept name. Before the fix, an antonym relation rendered as
+// "Relations: antonym ↔ outward" and the user had to scroll/scan to
+// find what "outward" was. Now the related concept's members render
+// as a nested bullet block right under the relation header, so the
+// reader sees "Antonym ↔ **outward — out**" followed by the
+// origins it contains.
+func TestWriter_RelationExpandsTargetConceptMembersInline(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "wpme",
+					NotebookTitle: "Session 5",
+					Expression:    "en",
+					QuizType:      "etymology_assembly",
+					Meaning:       "in",
+					NotebookKind:  "etymology",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		concepts: map[string][]notebook.Concept{
+			"wpme|Session 5": {
+				{
+					Key:     "inward",
+					Meaning: "in",
+					Note:    `Greek and Latin prefixes meaning "in, into"`,
+					Members: []notebook.ConceptMember{
+						{Origin: "en", Language: "Greek"},
+						{Origin: "in", Language: "Latin"},
+					},
+				},
+				{
+					Key:     "outward",
+					Meaning: "out",
+					Members: []notebook.ConceptMember{
+						{Origin: "ec", Language: "Greek"},
+						{Origin: "ek", Language: "Greek"},
+						{Origin: "ex", Language: "Latin"},
+					},
+				},
+			},
+		},
+		relations: map[string][]notebook.Relation{
+			"wpme|Session 5": {
+				{Type: "antonym", Between: []string{"inward", "outward"}},
+			},
+		},
+		meanings: map[string]map[string]string{
+			"wpme|Session 5": {
+				"en": "in",
+				"in": "negative, or intensifier",
+				"ec": "out",
+				"ek": "out",
+				"ex": "out",
+			},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+
+	// The primary concept block: members as bullets, failed member bolded.
+	assert.Contains(t, out, "- **en** (Greek) — in",
+		"the failed origin is bolded inside a bullet item (not a table cell)")
+	assert.Contains(t, out, "- in (Latin) — negative, or intensifier",
+		"non-failed member renders as a plain bullet")
+
+	// The relation now expands the other concept inline so the
+	// reader sees what `outward` actually contains. Each member of
+	// outward is a nested bullet under the relation header.
+	assert.Contains(t, out, "Antonym ↔ **outward — out**",
+		"the relation header names the related concept + its meaning, in bold so it reads as a sub-header")
+	assert.Contains(t, out, "    - ec (Greek) — out",
+		"first related-concept member renders as a nested bullet under the relation header")
+	assert.Contains(t, out, "    - ek (Greek) — out")
+	assert.Contains(t, out, "    - ex (Latin) — out")
 }
 
 // TestWriter_NoWrongAttemptsReturnsEmpty pins the no-op for days with no
