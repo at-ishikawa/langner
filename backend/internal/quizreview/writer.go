@@ -73,7 +73,9 @@ type SourceContent interface {
 
 // VocabularyPair is one definition entry from the source notebook used
 // to bridge learning-history failures (often recorded against the
-// dictionary form) to dialogue text (which uses the conjugated form).
+// dictionary form) to dialogue text (which uses the conjugated form),
+// and to filter the etymology concept block to concepts the failed
+// word actually touches.
 type VocabularyPair struct {
 	// Expression is the YAML's expression field — the form as it
 	// actually appears in conversation (e.g. "giving me the runaround").
@@ -82,6 +84,14 @@ type VocabularyPair struct {
 	// dictionary form (e.g. "give someone the runaround"). Empty when
 	// the YAML carries only the expression.
 	Definition string
+	// OriginNames lists the origin names declared under the note's
+	// origin_parts (e.g. "gyne", "logos" for "gynecology"). The writer
+	// expands each vocab failure's concept-filter set with these so a
+	// failure on a derived word still surfaces the etymology concept
+	// the origin belongs to (e.g. failing "gynecology" surfaces the
+	// "woman" concept containing "gyne", not just concepts with
+	// "gynecology" as a member).
+	OriginNames []string
 }
 
 // SourceScene is one scene's worth of dialogue from a story notebook,
@@ -179,8 +189,9 @@ func (rs *readerSource) VocabularyForSession(notebookID, sessionTitle string) []
 			for _, scene := range s.Scenes {
 				for _, def := range scene.Definitions {
 					pairs = append(pairs, VocabularyPair{
-						Expression: def.Expression,
-						Definition: def.Definition,
+						Expression:  def.Expression,
+						Definition:  def.Definition,
+						OriginNames: originPartNames(def.OriginParts),
 					})
 				}
 			}
@@ -195,8 +206,9 @@ func (rs *readerSource) VocabularyForSession(notebookID, sessionTitle string) []
 			for _, sceneNotes := range sessionDefs {
 				for _, note := range sceneNotes {
 					pairs = append(pairs, VocabularyPair{
-						Expression: note.Expression,
-						Definition: note.Definition,
+						Expression:  note.Expression,
+						Definition:  note.Definition,
+						OriginNames: originPartNames(note.OriginParts),
 					})
 				}
 			}
@@ -204,6 +216,22 @@ func (rs *readerSource) VocabularyForSession(notebookID, sessionTitle string) []
 		}
 	}
 	return nil
+}
+
+// originPartNames flattens a list of origin_parts into the origin
+// names declared on the YAML — the bridge used by the writer to find
+// which etymology concepts a failed vocabulary word belongs to.
+func originPartNames(parts []notebook.OriginPartRef) []string {
+	if len(parts) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p.Origin != "" {
+			out = append(out, p.Origin)
+		}
+	}
+	return out
 }
 
 func (rs *readerSource) EtymologyConcepts(notebookID, sessionTitle string) ([]notebook.Concept, []notebook.Relation, map[string]string) {
@@ -387,18 +415,28 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source 
 				// definition pair so a failure recorded under the
 				// dictionary form ("give someone the runaround") can
 				// still find and bold the conjugated form ("giving me
-				// the runaround") in the dialogue.
-				enriched := enrichVocabFailures(s.vocab, source.VocabularyForSession(g.notebookID, s.title))
+				// the runaround") in the dialogue, and so the concept
+				// filter knows which origin_parts each failed vocab
+				// touches.
+				pairs := source.VocabularyForSession(g.notebookID, s.title)
+				enriched := enrichVocabFailures(s.vocab, pairs)
 				hasConversations = writeStoryConversations(&sb,
 					source.StoryConversations(g.notebookID, s.title), enriched)
-				// Highlight matches on BOTH origin failures and vocab
-				// failures: an English word can share its name with the
-				// origin it descends from (`gauche` the adjective vs
-				// `gauche` the French origin), and the user reading the
-				// concept block should see ✗ on either case.
-				highlights := failedNameSet(s.origin, s.vocab)
+				// The concept-filter set includes origin failures (the
+				// origin name IS the concept member), vocab failures
+				// whose names happen to be origin names (gauche the
+				// word == gauche the origin), AND every origin_part of
+				// a failed vocab (gynecology touches `gyne` + `logos`,
+				// so the "woman" concept containing `gyne` surfaces
+				// even though "gynecology" itself isn't a concept
+				// member). Concepts without any matching member are
+				// dropped entirely — Session 9 of WPME previously
+				// dumped 9 unrelated concept tables for a single
+				// origin failure on `orthos`; with the filter it
+				// surfaces only the concept `orthos` actually touches.
+				touched := failedConceptMemberSet(s.origin, s.vocab, pairs)
 				concepts, relations, originMeanings := source.EtymologyConcepts(g.notebookID, s.title)
-				writeEtymologyConcepts(&sb, concepts, relations, originMeanings, highlights)
+				writeEtymologyConcepts(&sb, concepts, relations, originMeanings, touched)
 			}
 			if len(s.origin) > 0 {
 				sb.WriteString("#### Failed origins\n\n")
@@ -730,9 +768,22 @@ func writeEtymologyConcepts(
 	if len(concepts) == 0 && len(relations) == 0 {
 		return
 	}
+	// Drop concepts that don't touch any failed origin/expression.
+	// A session can declare 9 concepts but only one of them is
+	// relevant to today's failures — rendering all of them buried
+	// the actually-failed origin in a wall of unrelated tables.
+	relevant := concepts[:0:0]
+	for _, c := range concepts {
+		if conceptTouchesFailure(c, failedOrigins) {
+			relevant = append(relevant, c)
+		}
+	}
+	if len(relevant) == 0 {
+		return
+	}
 	sb.WriteString("#### Concepts\n\n")
 	relationsByKey := groupRelationsByKey(relations)
-	for _, c := range concepts {
+	for _, c := range relevant {
 		fmt.Fprintf(sb, "**%s — %s**\n\n", c.Key, c.Meaning)
 		if c.Note != "" {
 			fmt.Fprintf(sb, "_%s_\n\n", c.Note)
@@ -762,6 +813,22 @@ func writeEtymologyConcepts(
 			sb.WriteString("\n\n")
 		}
 	}
+}
+
+// conceptTouchesFailure returns true when at least one of the concept's
+// members has its origin name in the failed-origin set — i.e. the
+// member is itself a failed origin, OR it's an origin_part of a failed
+// vocab word (when callers expanded the set via
+// failedConceptMemberSet). Concepts that don't touch any failure are
+// pure context for material the user didn't miss, so dropping them
+// keeps the quiz-review focused.
+func conceptTouchesFailure(c notebook.Concept, failedOrigins map[string]bool) bool {
+	for _, m := range c.Members {
+		if failedOrigins[m.Origin] {
+			return true
+		}
+	}
+	return false
 }
 
 // groupRelationsByKey turns the flat relation list into a per-concept
@@ -800,6 +867,45 @@ func failedNameSet(originFailures, vocabFailures []analytics.WrongWord) map[stri
 	}
 	for _, w := range vocabFailures {
 		out[w.Expression] = true
+	}
+	return out
+}
+
+// failedConceptMemberSet builds the set used to filter etymology
+// concepts in writeEtymologyConcepts. It is failedNameSet PLUS every
+// origin name declared under the origin_parts of a failed vocab word
+// (looked up via the source's VocabularyForSession pairs). A failed
+// vocab whose expression isn't itself an origin name still touches the
+// concepts its origin_parts belong to (e.g. "gynecology" → gyne +
+// logos → the "woman" concept containing gyne surfaces).
+func failedConceptMemberSet(originFailures, vocabFailures []analytics.WrongWord, pairs []VocabularyPair) map[string]bool {
+	out := failedNameSet(originFailures, vocabFailures)
+	if len(vocabFailures) == 0 || len(pairs) == 0 {
+		return out
+	}
+	byExpression := make(map[string]VocabularyPair, len(pairs))
+	byDefinition := make(map[string]VocabularyPair, len(pairs))
+	for _, p := range pairs {
+		if p.Expression != "" {
+			byExpression[strings.ToLower(strings.TrimSpace(p.Expression))] = p
+		}
+		if p.Definition != "" {
+			byDefinition[strings.ToLower(strings.TrimSpace(p.Definition))] = p
+		}
+	}
+	for _, w := range vocabFailures {
+		key := strings.ToLower(strings.TrimSpace(w.Expression))
+		var pair VocabularyPair
+		if p, ok := byExpression[key]; ok {
+			pair = p
+		} else if p, ok := byDefinition[key]; ok {
+			pair = p
+		} else {
+			continue
+		}
+		for _, origin := range pair.OriginNames {
+			out[origin] = true
+		}
 	}
 	return out
 }

@@ -545,6 +545,144 @@ func TestWriter_RendersEtymologyConceptsWithHighlight(t *testing.T) {
 		"concept context must precede the failure list within a session")
 }
 
+// TestWriter_ConceptsFilteredToFailuresOnly pins the noise-reduction
+// rule the user asked for: a session can declare many concepts (Session
+// 9 of WPME has nine), but quiz-review must render only the ones whose
+// members touch a failure on this day. Concepts unrelated to the
+// failure are dropped entirely — the user reading the file shouldn't
+// scroll past a wall of irrelevant tables to find the one concept the
+// failed origin belongs to.
+func TestWriter_ConceptsFilteredToFailuresOnly(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "wpme",
+					NotebookTitle: "Session 9",
+					Expression:    "orthos",
+					QuizType:      "etymology_breakdown",
+					Meaning:       "straight, correct",
+					NotebookKind:  "etymology",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		concepts: map[string][]notebook.Concept{
+			"wpme|Session 9": {
+				// Concept the failed origin belongs to — MUST render.
+				{
+					Key:     "straightness",
+					Meaning: "straight",
+					Members: []notebook.ConceptMember{
+						{Origin: "orthos", Language: "Greek"},
+					},
+				},
+				// Concept on a different sense — MUST drop.
+				{
+					Key:     "body-part",
+					Meaning: "parts of the body",
+					Members: []notebook.ConceptMember{
+						{Origin: "osteon", Language: "Greek"},
+						{Origin: "cheir", Language: "Greek"},
+					},
+				},
+				// Concept on a third sense — MUST drop.
+				{
+					Key:     "measured-quantity",
+					Meaning: "physical quantities subject to measurement",
+					Members: []notebook.ConceptMember{
+						{Origin: "therme", Language: "Greek"},
+						{Origin: "baros", Language: "Greek"},
+					},
+				},
+			},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.Contains(t, out, "**straightness — straight**",
+		"the concept whose member matches the failed origin must render with the ✗ marker")
+	assert.Contains(t, out, "| ✗ orthos | Greek |",
+		"failed origin is highlighted inside the rendered concept's members table")
+	assert.NotContains(t, out, "body-part",
+		"concept unrelated to the failure must be dropped entirely — quiz-review focuses on what the user missed")
+	assert.NotContains(t, out, "measured-quantity",
+		"every concept without a failed-member must be dropped, not just some")
+}
+
+// TestWriter_ConceptsRenderForVocabFailureViaOriginParts pins the
+// origin-parts expansion: a vocab failure like "gynecology" doesn't
+// share its name with any concept member, but its origin_parts list
+// includes "gyne" — and "gyne" IS a concept member. The filter looks
+// up VocabularyForSession and treats every origin_part of a failed
+// vocab as a touched concept member, so the relevant etymology concept
+// still surfaces.
+func TestWriter_ConceptsRenderForVocabFailureViaOriginParts(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "wpme",
+					NotebookTitle: "Session 5",
+					Expression:    "gynecology",
+					QuizType:      "notebook",
+					Meaning:       "the medical science of women",
+					NotebookKind:  "story",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		concepts: map[string][]notebook.Concept{
+			"wpme|Session 5": {
+				{
+					Key:     "woman",
+					Meaning: "woman",
+					Members: []notebook.ConceptMember{
+						{Origin: "gyne", Language: "Greek"},
+					},
+				},
+				{
+					Key:     "eye",
+					Meaning: "eye",
+					Members: []notebook.ConceptMember{
+						{Origin: "ophthalmos", Language: "Greek"},
+					},
+				},
+			},
+		},
+		vocabulary: map[string][]VocabularyPair{
+			"wpme|Session 5": {
+				{
+					Expression:  "gynecology",
+					OriginNames: []string{"gyne", "logos"},
+				},
+			},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.Contains(t, out, "**woman — woman**",
+		"the concept containing 'gyne' (an origin_part of the failed 'gynecology') must surface")
+	assert.Contains(t, out, "| ✗ gyne | Greek |",
+		"the origin_part itself is marked because the vocab that depends on it was failed")
+	assert.NotContains(t, out, "**eye — eye**",
+		"the unrelated eye concept must be dropped — the failed gynecology doesn't touch ophthalmos")
+}
+
 // TestWriter_NoSourceContent_RendersLegacyFailureOnlyOutput pins the
 // no-context fallback: when the writer is constructed via NewWriter
 // (no source), the markdown reverts to the failure-list-only layout —
