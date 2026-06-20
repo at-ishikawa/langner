@@ -133,10 +133,8 @@ func newValidateDBCommand() *cobra.Command {
 
 			// Step 0: Clear existing data for a clean round-trip test
 			fmt.Println("Clearing database for clean round-trip test...")
-			for _, table := range []string{"learning_logs", "notebook_notes", "note_images", "note_references", "notes", "dictionary_entries"} {
-				if _, err := db.ExecContext(ctx, "DELETE FROM "+table); err != nil {
-					return fmt.Errorf("clear table %s: %w", table, err)
-				}
+			if err := clearAllDataTables(ctx, db); err != nil {
+				return err
 			}
 
 			// Step 1: Import
@@ -335,4 +333,65 @@ func extractNotebookIDs(notes []notebook.NoteRecord) []string {
 	}
 	sort.Strings(ids)
 	return ids
+}
+
+// dataTablesInDeletionOrder lists every persisted-data table in an
+// order safe for sequential DELETE: child rows (rows whose FK points
+// at another row in this list) come before their parents. The
+// validate-db roundtrip clears these before re-importing. Keep in
+// sync with schemas/migrations/ — a missing entry surfaces as a
+// foreign-key constraint error at clear time, which is exactly the
+// failure mode TestClearAllDataTablesCoversAllSchemaTables guards
+// against.
+//
+// Order rationale:
+//   - note_origin_parts depends on notes + etymology_origins + etymology_origin_forms (no CASCADE on note_id)
+//   - notebook_notes, note_images, note_references, learning_logs depend on notes
+//   - etymology_origin_forms depends on etymology_origins (CASCADE; listed for clarity)
+//   - semantic_concept_members, concept_relations CASCADE from semantic_concepts
+//   - definition_concept_members CASCADE from definition_concepts
+//   - notes, etymology_origins, semantic_concepts, definition_concepts, dictionary_entries are leaf parents
+func dataTablesInDeletionOrder() []string {
+	return []string{
+		"note_origin_parts",
+		"notebook_notes",
+		"note_images",
+		"note_references",
+		"learning_logs",
+		"etymology_origin_forms",
+		"semantic_concept_members",
+		"concept_relations",
+		"definition_concept_members",
+		"notes",
+		"etymology_origins",
+		"semantic_concepts",
+		"definition_concepts",
+		"dictionary_entries",
+	}
+}
+
+// clearAllDataTables wipes every persisted-data table on a sticky
+// connection with FOREIGN_KEY_CHECKS off. The SET is per-session, so
+// running it on a borrowed *sqlx.DB (which pools connections) would
+// leak: subsequent statements could land on a different connection
+// that still has FK checks enabled. Pinning a single connection via
+// db.Conn keeps the SET effective for the lifetime of the clear.
+func clearAllDataTables(ctx context.Context, db *sqlx.DB) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 0"); err != nil {
+		return fmt.Errorf("disable foreign_key_checks: %w", err)
+	}
+	for _, table := range dataTablesInDeletionOrder() {
+		if _, err := conn.ExecContext(ctx, "DELETE FROM "+table); err != nil {
+			return fmt.Errorf("clear table %s: %w", table, err)
+		}
+	}
+	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 1"); err != nil {
+		return fmt.Errorf("re-enable foreign_key_checks: %w", err)
+	}
+	return nil
 }
