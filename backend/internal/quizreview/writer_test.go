@@ -144,10 +144,21 @@ func TestWriter_SingleFileWithEveryNotebook(t *testing.T) {
 	// Failed-origins and failed-vocabularies blocks pushed to ####.
 	assert.Contains(t, out, "#### Failed origins")
 	assert.Contains(t, out, "#### Failed vocabularies")
-	assert.Contains(t, out, "- **logos** [etymology breakdown]: science, study")
-	assert.Contains(t, out, "- **gauche** [vocab]: clumsy, tactless, especially in social situations")
-	assert.Contains(t, out, "    - Same sense (clumsy in social situations): gaucherie")
-	assert.Contains(t, out, "    - Antonym (rightness — right): dexter (Latin) — right hand, droit (French) — right hand")
+	// etymology_breakdown is a standard quiz (word → meaning); the
+	// meaning is the failed side and gets the bold. The previous
+	// "[etymology breakdown]" tag is dropped — the section header
+	// "Failed origins" plus the bolded side already convey it.
+	assert.Contains(t, out, "- logos: **science, study**")
+	// notebook (standard vocab) → meaning is the failed side.
+	assert.Contains(t, out, "- gauche: **clumsy, tactless, especially in social situations**")
+	// Related groups render as nested bullets with the concept's label
+	// in italic, so a long concept meaning doesn't crowd out the
+	// related word in a single line.
+	assert.Contains(t, out, "    - Same sense — _clumsy in social situations_")
+	assert.Contains(t, out, "        - gaucherie")
+	assert.Contains(t, out, "    - Antonym — _rightness — right_")
+	assert.Contains(t, out, "        - dexter (Latin) — right hand")
+	assert.Contains(t, out, "        - droit (French) — right hand")
 
 	// Notebook sections are separated by a horizontal rule so a reader
 	// scrolling through the file gets a clear cut between notebooks.
@@ -219,10 +230,12 @@ func TestWriter_RendersStoryConversations(t *testing.T) {
 	out := string(body)
 
 	assert.Contains(t, out, "#### Conversations")
-	assert.Contains(t, out, "- ✗ _Meg_: They're probably **scrimping** on the plastic. I'll have a word with them.",
-		"failed line is a bullet item with italic speaker (matching the existing story-notebook template) and bolds the whole word containing the root")
+	assert.Contains(t, out, "- _Meg_: They're probably **scrimping** on the plastic. I'll have a word with them.",
+		"failed line carries the bolded expression — the bold inside the quote IS the visual marker; the previous ✗ prefix was dropped because Kobo's PDF font garbled the glyph")
 	assert.Contains(t, out, "- _Josh_: Our supplier must be cutting corners.",
 		"non-failed lines render as plain bullet items with italic speaker")
+	assert.NotContains(t, out, "✗",
+		"the ✗ glyph is gone everywhere — bolded text inside the quote is the only highlight signal")
 	assert.NotContains(t, out, "> _Meg_",
 		"conversation lines do not use the blockquote `> ` prefix — the PDF preprocessor strips **bold** from blockquote lines, so the bullet+italic shape from story-notebook.md.go.tmpl is reused instead")
 	// The second scene mentions cracking + storing — neither matches
@@ -280,10 +293,8 @@ func TestWriter_BoldingHandlesTokenFalsePositives(t *testing.T) {
 	body, err := os.ReadFile(written)
 	require.NoError(t, err)
 	out := string(body)
-	assert.Contains(t, out, "- ✗ _Susan_: I'm ready to **take the plunge** and join a start-up.",
-		"exact-substring match bolds the full expression and marks the line")
-	assert.NotContains(t, out, "✗ **Craig:**",
-		"the second line must NOT be marked — 'take' inside 'mistake' must not light up as a token match")
+	assert.Contains(t, out, "- _Susan_: I'm ready to **take the plunge** and join a start-up.",
+		"exact-substring match bolds the full expression")
 	assert.NotContains(t, out, "**mistake**",
 		"'mistake' must not be bolded by accident from the 'take' token of 'take the plunge'")
 }
@@ -324,13 +335,17 @@ func TestWriter_TokenFallbackBoldsContentWord(t *testing.T) {
 	body, err := os.ReadFile(written)
 	require.NoError(t, err)
 	out := string(body)
-	// The exact phrase doesn't appear in the quote — the token
-	// fallback bolds the longest content word (here "business",
-	// 8 chars > "drum", 4 chars).
-	assert.Contains(t, out, "- ✗ _Linda_:",
-		"line carries the ✗ marker even when the exact phrase isn't a substring")
+	// The exact phrase doesn't appear in the quote — token fallback
+	// requires ALL significant tokens of the expression to be present
+	// in the line (both "drum" and "business" here). When all match,
+	// each is bolded as a whole word. The previous behaviour (any
+	// single token fires the fallback) was too greedy: it would
+	// highlight any line containing just one token (e.g. "business"
+	// alone, "Smoothitall" alone), painting unrelated dialogue lines.
+	assert.Contains(t, out, "**drum**",
+		"drum is bolded because both significant tokens of 'drum up business' (drum, business) appear in the line")
 	assert.Contains(t, out, "**business**",
-		"the longest content token is bolded as a whole word")
+		"business is bolded for the same reason")
 }
 
 // TestWriter_BoldsConjugatedFormViaSourceVocabulary pins the regression
@@ -383,8 +398,8 @@ func TestWriter_BoldsConjugatedFormViaSourceVocabulary(t *testing.T) {
 	out := string(body)
 	assert.Contains(t, out, "**giving me the runaround**",
 		"the YAML's expression field carries the conjugated form; matching against it lets the writer bold the whole phrase, not just one token")
-	assert.Contains(t, out, "- ✗ _Mark_:",
-		"line still gets the ✗ marker")
+	assert.Contains(t, out, "- _Mark_: I feel like you're **giving me the runaround**.",
+		"the canonical (conjugated) form bolds the whole phrase in the dialogue")
 }
 
 // TestWriter_EscapesStrayAsterisksInQuotes pins the regression where a
@@ -532,8 +547,8 @@ func TestWriter_RendersEtymologyConceptsWithHighlight(t *testing.T) {
 	assert.Contains(t, out, "**leftness — left**", "concept header carries the key + umbrella meaning")
 	assert.Contains(t, out, "_historically pejorative_", "concept note renders as italic")
 	assert.Contains(t, out, "| Member | Language | Meaning |", "concept members render as a markdown table")
-	assert.Contains(t, out, "| ✗ gauche | French | left hand |",
-		"the failed expression's origin row gets a ✗ marker so the reader sees the failure inside the concept block")
+	assert.Contains(t, out, "| **gauche** | French | left hand |",
+		"the failed expression's origin row bolds the member name so the reader sees the failure inside the concept block — bold survives mdtopdf table rendering whereas the previous ✗ glyph was garbled on Kobo")
 	assert.Contains(t, out, "| sinister | Latin | left hand |",
 		"non-failed members render without the marker")
 	assert.Contains(t, out, "Relations: antonym ↔ rightness",
@@ -609,7 +624,7 @@ func TestWriter_ConceptsFilteredToFailuresOnly(t *testing.T) {
 	out := string(body)
 	assert.Contains(t, out, "**straightness — straight**",
 		"the concept whose member matches the failed origin must render with the ✗ marker")
-	assert.Contains(t, out, "| ✗ orthos | Greek |",
+	assert.Contains(t, out, "| **orthos** | Greek |",
 		"failed origin is highlighted inside the rendered concept's members table")
 	assert.NotContains(t, out, "body-part",
 		"concept unrelated to the failure must be dropped entirely — quiz-review focuses on what the user missed")
@@ -677,7 +692,7 @@ func TestWriter_ConceptsRenderForVocabFailureViaOriginParts(t *testing.T) {
 	out := string(body)
 	assert.Contains(t, out, "**woman — woman**",
 		"the concept containing 'gyne' (an origin_part of the failed 'gynecology') must surface")
-	assert.Contains(t, out, "| ✗ gyne | Greek |",
+	assert.Contains(t, out, "| **gyne** | Greek |",
 		"the origin_part itself is marked because the vocab that depends on it was failed")
 	assert.NotContains(t, out, "**eye — eye**",
 		"the unrelated eye concept must be dropped — the failed gynecology doesn't touch ophthalmos")
@@ -776,6 +791,183 @@ func TestWriter_FiltersOutBookNotebooks(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, written2,
 		"a day where every failure was on a book produces no quiz-review file")
+}
+
+// TestWriter_SkipsSkippedFailures pins the user-reported regression:
+// origins / vocab that the user explicitly skipped (skipped_at set on
+// the matching quiz type) still appeared in quiz-review's Failed
+// origins / Failed vocabularies sections. A skipped expression won't
+// come up in future quizzes — it doesn't belong on a study sheet.
+func TestWriter_SkipsSkippedFailures(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "wpme",
+					NotebookTitle: "Session 1",
+					Expression:    "Anglus",
+					QuizType:      "etymology_assembly",
+					Meaning:       "English",
+					Skipped:       true,
+				},
+				{
+					NotebookID:    "wpme",
+					NotebookTitle: "Session 1",
+					Expression:    "logos",
+					QuizType:      "etymology_breakdown",
+					Meaning:       "science, study",
+					Skipped:       false,
+				},
+			},
+		},
+	}
+	src := &stubSource{}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.NotContains(t, out, "Anglus",
+		"a skipped origin must not appear in quiz-review — it's been excluded from future quizzes, so it isn't study material")
+	assert.Contains(t, out, "logos",
+		"non-skipped failures still render normally")
+}
+
+// TestWriter_TokenFallbackRequiresAllSignificantTokens pins the
+// regression where a YAML expression containing a proper noun (e.g.
+// "take Smoothitall off the market") caused the matcher to bold every
+// occurrence of "Smoothitall" across the dialogue — token fallback
+// fired on a single-token hit. The new rule requires ALL significant
+// tokens of the expression to appear in a line before fallback fires,
+// so unrelated mentions of one token (Smoothitall alone, market alone)
+// no longer bold.
+func TestWriter_TokenFallbackRequiresAllSignificantTokens(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "speak-business",
+					NotebookTitle: "LESSON 4",
+					Expression:    "take something off the market",
+					QuizType:      "reverse",
+					Meaning:       "to stop selling a product",
+					NotebookKind:  "story",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		conversations: map[string][]SourceScene{
+			"speak-business|LESSON 4": {{
+				Lines: []SourceLine{
+					{Speaker: "Rob", Quote: "Sales of our new wrinkle cream, Smoothitall, have been surprisingly slow."},
+					{Speaker: "Erica", Quote: "And it's the only wrinkle treatment on the market containing cinnamon."},
+					{Speaker: "Tony", Quote: "Maybe we should take Smoothitall off the market and reintroduce it."},
+					{Speaker: "Tony", Quote: "Let's pull Smoothitall off the shelves."},
+				},
+			}},
+		},
+		vocabulary: map[string][]VocabularyPair{
+			"speak-business|LESSON 4": {
+				{
+					Expression: "take Smoothitall off the market",
+					Definition: "take something off the market",
+				},
+			},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+
+	// The line containing the exact YAML phrase bolds the whole phrase.
+	assert.Contains(t, out, "**take Smoothitall off the market**",
+		"exact-substring match on the YAML's canonical (conjugated) form bolds the full phrase in that one line")
+
+	// All other lines with stray mentions of "Smoothitall" or
+	// "market" must stay unbolded — no false positives.
+	assert.NotContains(t, out,
+		"- _Rob_: Sales of our new wrinkle cream, **Smoothitall**",
+		"a single-token match on 'Smoothitall' alone must NOT bold — the previous behaviour painted every Smoothitall mention across the dialogue")
+	assert.NotContains(t, out, "wrinkle treatment on the **market**",
+		"a single-token match on 'market' alone must NOT bold")
+	assert.NotContains(t, out, "Let's pull **Smoothitall**",
+		"another standalone Smoothitall mention must NOT bold")
+}
+
+// TestWriter_FailedSideIsBoldedPerQuizDirection pins the per-quiz
+// highlight policy: standard quizzes ("notebook" / "etymology_breakdown")
+// show the word and ask for the meaning, so the MEANING is the failed
+// side and gets the bold. Reverse / freeform / etymology_assembly
+// quizzes show the meaning and ask for the word, so the WORD is the
+// failed side and gets the bold. The previous "[vocab reverse]" tag
+// is gone — the bolded side, plus the section header, conveys the
+// quiz direction without an extra label.
+func TestWriter_FailedSideIsBoldedPerQuizDirection(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID: "wpme",
+					NotebookTitle: "Session 6",
+					Expression: "geriatrics",
+					QuizType: "notebook", // standard → meaning failed
+					Meaning: "the medical specialty dealing with the elderly",
+				},
+				{
+					NotebookID: "wpme",
+					NotebookTitle: "Session 6",
+					Expression: "cardiology",
+					QuizType: "reverse", // reverse → word failed
+					Meaning: "the medical specialty dealing with the heart",
+				},
+				{
+					NotebookID: "wpme",
+					NotebookTitle: "Session 6",
+					Expression: "orthos",
+					QuizType: "etymology_breakdown", // standard → meaning failed
+					Meaning: "straight, correct",
+				},
+				{
+					NotebookID: "wpme",
+					NotebookTitle: "Session 6",
+					Expression: "kardia",
+					QuizType: "etymology_assembly", // reverse → word failed
+					Meaning: "heart",
+				},
+			},
+		},
+	}
+	src := &stubSource{}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+
+	assert.Contains(t, out, "- geriatrics: **the medical specialty dealing with the elderly**",
+		"standard vocab quiz: meaning is bolded (the side the user failed)")
+	assert.Contains(t, out, "- **cardiology**: the medical specialty dealing with the heart",
+		"reverse vocab quiz: word is bolded (the side the user failed)")
+	assert.Contains(t, out, "- orthos: **straight, correct**",
+		"etymology_breakdown is the standard direction: meaning bolded")
+	assert.Contains(t, out, "- **kardia**: heart",
+		"etymology_assembly is the reverse direction: word bolded")
+
+	// The quiz-type tag in brackets must be gone everywhere.
+	assert.NotContains(t, out, "[vocab", "the [vocab*] tag is dropped")
+	assert.NotContains(t, out, "[etymology", "the [etymology*] tag is dropped")
 }
 
 // TestWriter_NoWrongAttemptsReturnsEmpty pins the no-op for days with no

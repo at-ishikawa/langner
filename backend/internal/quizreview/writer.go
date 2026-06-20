@@ -274,19 +274,23 @@ func (w *Writer) Output(ctx context.Context, day time.Time, outputDirectory stri
 		return "", nil
 	}
 	// Drop attempts on book-type notebooks (Gatsby, John Tenniel, etc.)
-	// before the file is created. When every failure was on a book, the
-	// day produces no quiz-review file at all — the no-op path the CLI
-	// already prints "nothing to write" for.
-	if w.source != nil {
-		filtered := detail.WrongWords[:0:0]
-		for _, ww := range detail.WrongWords {
-			if w.source.IsBook(ww.NotebookID) {
-				continue
-			}
-			filtered = append(filtered, ww)
+	// AND attempts on expressions the user has explicitly skipped for
+	// the matching quiz type. Both belong in the analytics page but
+	// not in a study sheet: a skipped origin won't come up in future
+	// quizzes anyway, so re-reading it isn't useful — and the user
+	// reported the exact case ("Anglus", "Aphrodite", … all
+	// etymology_assembly skips that kept landing in quiz-review).
+	filtered := detail.WrongWords[:0:0]
+	for _, ww := range detail.WrongWords {
+		if w.source != nil && w.source.IsBook(ww.NotebookID) {
+			continue
 		}
-		detail.WrongWords = filtered
+		if ww.Skipped {
+			continue
+		}
+		filtered = append(filtered, ww)
 	}
+	detail.WrongWords = filtered
 	if len(detail.WrongWords) == 0 {
 		return "", nil
 	}
@@ -485,15 +489,17 @@ func writeStoryConversations(sb *strings.Builder, scenes []SourceScene, failures
 			// the trailing **bold** marker for the failed word.
 			safe := escapeStrayAsterisks(line.Quote)
 			bolded, matched := boldFailedExpressions(safe, failures)
-			marker := ""
 			if matched {
-				marker = "✗ "
 				anyMatch = true
 			}
+			// The bolded expression inside the quote IS the visual
+			// marker for a matched line — Kobo's PDF font renders
+			// `**bold**` reliably but mangled the previous `✗` glyph,
+			// so the line-level marker is dropped.
 			if line.Speaker != "" {
-				fmt.Fprintf(&sceneOut, "- %s_%s_: %s\n", marker, line.Speaker, bolded)
+				fmt.Fprintf(&sceneOut, "- _%s_: %s\n", line.Speaker, bolded)
 			} else {
-				fmt.Fprintf(&sceneOut, "- %s%s\n", marker, bolded)
+				fmt.Fprintf(&sceneOut, "- %s\n", bolded)
 			}
 		}
 		if anyMatch {
@@ -630,18 +636,36 @@ func boldFailedExpressions(quote string, failures []failureTerm) (string, bool) 
 		if matched {
 			continue
 		}
-		// Token fallback uses the canonical form's significant
-		// tokens — that's the one most likely to share content words
-		// with the dialogue ("runaround" matches both directions).
+		// Token fallback: require ALL significant tokens of the
+		// canonical (or alias) to appear in the line — never just one.
+		// A single-token match overshoots when the YAML expression
+		// contains a proper noun or common content word (e.g.
+		// "Smoothitall" or "market" inside "take Smoothitall off the
+		// market") and would bold every occurrence of that token
+		// across the whole dialogue. Skipped entirely for single-token
+		// expressions because the exact-substring path with
+		// word-boundary expansion already handles conjugation cases
+		// without the risk.
 		expr := strings.TrimSpace(f.canonical)
 		if expr == "" {
 			expr = strings.TrimSpace(f.alias)
 		}
-		for _, tok := range significantTokens(expr) {
-			if s, e, ok := findWordStartingWith(lower, tok); ok {
-				spans = append(spans, span{s, e})
+		tokens := significantTokens(expr)
+		if len(tokens) < 2 {
+			continue
+		}
+		var tokenSpans []span
+		allMatched := true
+		for _, tok := range tokens {
+			s, e, ok := findWordStartingWith(lower, tok)
+			if !ok {
+				allMatched = false
 				break
 			}
+			tokenSpans = append(tokenSpans, span{s, e})
+		}
+		if allMatched {
+			spans = append(spans, tokenSpans...)
 		}
 	}
 	if len(spans) == 0 {
@@ -792,13 +816,17 @@ func writeEtymologyConcepts(
 			sb.WriteString("| Member | Language | Meaning |\n")
 			sb.WriteString("|---|---|---|\n")
 			for _, m := range c.Members {
-				marker := ""
+				name := m.Origin
+				// Bold the member name when it matches a failure
+				// — bold survives mdtopdf's PDF rendering inside
+				// table cells, whereas the previous ✗ prefix
+				// glyph was garbled on the user's Kobo.
 				if failedOrigins[m.Origin] {
-					marker = "✗ "
+					name = "**" + name + "**"
 				}
 				lang := orDash(m.Language)
 				meaning := orDash(originMeanings[m.Origin])
-				fmt.Fprintf(sb, "| %s%s | %s | %s |\n", marker, m.Origin, lang, meaning)
+				fmt.Fprintf(sb, "| %s | %s | %s |\n", name, lang, meaning)
 			}
 			sb.WriteString("\n")
 		}
@@ -925,25 +953,58 @@ func totalEntriesAcross(groups []quizReviewGroup) int {
 	return n
 }
 
-// writeEntry renders one wrong attempt. Format mirrors the etymology
-// notebook output: headline, optional italic example, related-group
-// lines. When suppressExample is true (the session has rendered
-// conversations that already carry the same quote) the Example: line
-// is dropped — otherwise it duplicates the bolded line in the
-// conversation block above.
+// writeEntry renders one wrong attempt. The failed SIDE of the entry
+// (the one the user couldn't recall) is bolded — for a standard quiz
+// the user was shown the word and missed the meaning, so the meaning
+// gets the bold; for a reverse / freeform / etymology_assembly quiz
+// the user was shown the meaning and missed the word, so the word
+// gets the bold. The previous "[vocab reverse]" tag is dropped: the
+// section header (Failed origins / Failed vocabularies) plus the
+// bolded side together tell the reader what they missed without
+// adding a separate label to scan past.
+//
+// suppressExample skips the Example: line when the session already
+// rendered conversations (the quote was bolded inside the dialogue).
+//
+// Related-group rendering uses nested bullets — concept members live
+// on their own indented lines under an italicised concept-label
+// header, so a long concept meaning like "a mental illness hindering
+// personality development" no longer crowds out the related word.
 func writeEntry(sb *strings.Builder, w analytics.WrongWord, suppressExample bool) {
-	fmt.Fprintf(sb, "- **%s** [%s]: %s\n", w.Expression, quizTypeLabel(w.QuizType), defaultIfEmpty(w.Meaning, "—"))
+	expression := w.Expression
+	meaning := defaultIfEmpty(w.Meaning, "—")
+	if wordIsFailed(w.QuizType) {
+		expression = "**" + expression + "**"
+	} else {
+		meaning = "**" + meaning + "**"
+	}
+	fmt.Fprintf(sb, "- %s: %s\n", expression, meaning)
 	if !suppressExample && w.ExampleSentence != "" {
 		fmt.Fprintf(sb, "    - Example: *%s*\n", w.ExampleSentence)
 	}
 	for _, group := range w.RelatedGroups {
 		header := relatedHeader(group.Kind)
 		if group.Label != "" {
-			header = fmt.Sprintf("%s (%s)", header, group.Label)
+			fmt.Fprintf(sb, "    - %s — _%s_\n", header, group.Label)
+		} else {
+			fmt.Fprintf(sb, "    - %s\n", header)
 		}
-		fmt.Fprintf(sb, "    - %s: %s\n", header, strings.Join(group.Members, ", "))
+		for _, m := range group.Members {
+			fmt.Fprintf(sb, "        - %s\n", m)
+		}
 	}
 	sb.WriteString("\n")
+}
+
+// wordIsFailed reports whether this quiz type tested the user's recall
+// of the WORD (given the meaning). True for reverse vocab, every
+// _freeform variant, and etymology assembly. False for the standard
+// "see word, recall meaning" direction — in that case the MEANING is
+// the failed side and gets the bold.
+func wordIsFailed(quizType string) bool {
+	return quizType == "reverse" ||
+		quizType == "etymology_assembly" ||
+		strings.HasSuffix(quizType, "_freeform")
 }
 
 // isOriginQuizType matches every etymology-side quiz (breakdown /
