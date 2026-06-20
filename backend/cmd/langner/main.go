@@ -72,6 +72,7 @@ func newMigrateCommand() *cobra.Command {
 	migrateCmd.AddCommand(newMigrateImportDBCommand())
 	migrateCmd.AddCommand(newExportDBCommand())
 	migrateCmd.AddCommand(newValidateDBCommand())
+	migrateCmd.AddCommand(newSyncDBCommand())
 	migrateCmd.AddCommand(newRecalculateIntervalsCommand())
 	migrateCmd.AddCommand(newExtractDefinitionsCommand())
 	migrateCmd.AddCommand(newMigrateMergeConceptsCommand())

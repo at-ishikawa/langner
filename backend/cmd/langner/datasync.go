@@ -121,7 +121,13 @@ func newExportDBCommand() *cobra.Command {
 func newValidateDBCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "validate-db",
-		Short: "Validate database import/export round-trip by comparing source YAML against exported YAML",
+		Short: "Compare current database state against source YAML files (read-only)",
+		Long: `Export the database's current state to a temporary directory and compare
+it against the source YAML notebooks. Reports any mismatches between
+the two and exits non-zero when divergence is found.
+
+This command is read-only: it never writes to the database. To re-sync
+the database from YAML when divergence is found, run "migrate sync-db".`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
@@ -131,73 +137,111 @@ func newValidateDBCommand() *cobra.Command {
 			}
 			defer func() { _ = db.Close() }()
 
-			// Step 0: Clear existing data for a clean round-trip test
-			fmt.Println("Clearing database for clean round-trip test...")
+			return runRoundTripDiff(ctx, cfg, db, os.Stdout)
+		},
+	}
+
+	return cmd
+}
+
+func newSyncDBCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "sync-db",
+		Short: "Rebuild database from source YAML (destructive: clears every persisted-data table first)",
+		Long: `Make the database match the source YAML files. This is a destructive
+operation:
+
+  1. CLEAR every persisted-data table (notes, learning_logs,
+     note_origin_parts, etymology_origins, semantic_concepts,
+     definition_concepts, …).
+  2. Import all source YAML notebooks into the now-empty database.
+  3. Export the database back to a temporary directory.
+  4. Diff source YAML against the exported YAML to verify the
+     roundtrip is lossless.
+
+Use this command when the database has drifted from the YAML and you
+want YAML to win, or when you've migrated the schema and want to
+re-seed from a clean slate. To check current divergence WITHOUT
+modifying the database, use "migrate validate-db" instead.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			cfg, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			fmt.Println("Step 1: Clearing every persisted-data table...")
 			if err := clearAllDataTables(ctx, db); err != nil {
 				return err
 			}
+			fmt.Println("  Clear complete.")
 
-			// Step 1: Import
-			fmt.Println("Step 1: Importing data...")
+			fmt.Println("Step 2: Importing source YAML into the empty database...")
 			importer := newImporterFromConfig(cfg, db, io.Discard)
 			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
 				return err
 			}
 			fmt.Println("  Import complete.")
 
-			// Step 2: Export to temp dir
-			exportDir, err := os.MkdirTemp("", "langner-validate-*")
-			if err != nil {
-				return fmt.Errorf("create temp dir: %w", err)
-			}
-			defer func() { _ = os.RemoveAll(exportDir) }()
-
-			fmt.Printf("Step 2: Exporting data to %s...\n", exportDir)
-			exporter := newExporterFromConfig(cfg, db, exportDir, io.Discard)
-			if _, err := exporter.ExportAll(ctx); err != nil {
-				return err
-			}
-			fmt.Println("  Export complete.")
-
-			// Step 3: Compare source vs exported
-			fmt.Println("Step 3: Validating round-trip...")
-
-			sourceNotes, err := readNotesFromDirs(ctx, cfg.Notebooks.StoriesDirectories, cfg.Notebooks.FlashcardsDirectories, cfg.Notebooks.BooksDirectories, cfg.Notebooks.DefinitionsDirectories)
-			if err != nil {
-				return fmt.Errorf("read source notes: %w", err)
-			}
-			exportedNotes, err := readNotesFromDirs(ctx,
-				[]string{filepath.Join(exportDir, "stories")},
-				[]string{filepath.Join(exportDir, "flashcards")},
-				[]string{filepath.Join(exportDir, "books")},
-				nil,
-			)
-			if err != nil {
-				return fmt.Errorf("read exported notes: %w", err)
-			}
-
-			sourceLearning := readLearningByNotebook(sourceNotes, cfg.Notebooks.LearningNotesDirectory)
-			exportedLearning := readLearningByNotebook(exportedNotes, filepath.Join(exportDir, "learning_notes"))
-
-			sourceDictCount := countDictEntries(cfg.Dictionaries.RapidAPI.CacheDirectory)
-			exportedDictCount := countDictEntries(filepath.Join(exportDir, "dictionaries", "rapidapi"))
-
-			validResult := datasync.ValidateRoundTrip(
-				sourceNotes, exportedNotes,
-				sourceLearning, exportedLearning,
-				sourceDictCount, exportedDictCount,
-				os.Stdout,
-			)
-
-			if validResult.HasMismatches() {
-				return fmt.Errorf("validation failed with %d mismatch(es)", len(validResult.Mismatches))
-			}
-
-			return nil
+			fmt.Println("Step 3: Verifying the roundtrip is lossless...")
+			return runRoundTripDiff(ctx, cfg, db, os.Stdout)
 		},
 	}
 
 	return cmd
+}
+
+// runRoundTripDiff exports the current database state to a temp
+// directory and compares it against the source YAML notebooks. Used
+// by BOTH validate-db (called without any preceding writes) and
+// sync-db (called after the clear+import). The function never writes
+// to the database itself, so it's safe to reuse from a read-only path.
+func runRoundTripDiff(ctx context.Context, cfg *config.Config, db *sqlx.DB, out io.Writer) error {
+	exportDir, err := os.MkdirTemp("", "langner-validate-*")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(exportDir) }()
+
+	fmt.Fprintf(out, "Exporting current DB to %s...\n", exportDir)
+	exporter := newExporterFromConfig(cfg, db, exportDir, io.Discard)
+	if _, err := exporter.ExportAll(ctx); err != nil {
+		return err
+	}
+
+	sourceNotes, err := readNotesFromDirs(ctx, cfg.Notebooks.StoriesDirectories, cfg.Notebooks.FlashcardsDirectories, cfg.Notebooks.BooksDirectories, cfg.Notebooks.DefinitionsDirectories)
+	if err != nil {
+		return fmt.Errorf("read source notes: %w", err)
+	}
+	exportedNotes, err := readNotesFromDirs(ctx,
+		[]string{filepath.Join(exportDir, "stories")},
+		[]string{filepath.Join(exportDir, "flashcards")},
+		[]string{filepath.Join(exportDir, "books")},
+		nil,
+	)
+	if err != nil {
+		return fmt.Errorf("read exported notes: %w", err)
+	}
+
+	sourceLearning := readLearningByNotebook(sourceNotes, cfg.Notebooks.LearningNotesDirectory)
+	exportedLearning := readLearningByNotebook(exportedNotes, filepath.Join(exportDir, "learning_notes"))
+
+	sourceDictCount := countDictEntries(cfg.Dictionaries.RapidAPI.CacheDirectory)
+	exportedDictCount := countDictEntries(filepath.Join(exportDir, "dictionaries", "rapidapi"))
+
+	validResult := datasync.ValidateRoundTrip(
+		sourceNotes, exportedNotes,
+		sourceLearning, exportedLearning,
+		sourceDictCount, exportedDictCount,
+		out,
+	)
+
+	if validResult.HasMismatches() {
+		return fmt.Errorf("validation failed with %d mismatch(es)", len(validResult.Mismatches))
+	}
+	return nil
 }
 
 func openConfigAndDB() (*config.Config, *sqlx.DB, error) {
