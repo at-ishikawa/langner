@@ -1,5 +1,6 @@
 ---
 title: "Reverse Quiz"
+date: 2026-02-14
 weight: 2
 bookCollapseSection: true
 ---

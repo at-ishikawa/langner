@@ -10,6 +10,59 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// yamlEtymologySession is the unified view of one etymology session, parsed
+// from either the legacy (`metadata: ...`) or new-shape (top-level list of
+// `- event: ...`) YAML layout. The importer-facing sources work against
+// this struct so they don't need to know which shape was on disk.
+type yamlEtymologySession struct {
+	Title     string
+	Origins   []EtymologyOrigin
+	Concepts  []Concept
+	Relations []Relation
+}
+
+// parseEtymologySessionAnyShape reads an etymology session file and returns
+// one yamlEtymologySession per logical session. Tries the new event/scenes
+// shape first (which can contain multiple sessions in one file) and falls
+// back to the legacy single-session metadata layout.
+func parseEtymologySessionAnyShape(path string) ([]yamlEtymologySession, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+	}
+	var entries []EtymologyNotebookEntry
+	if err := yaml.Unmarshal(data, &entries); err == nil && hasNewShape(entries) {
+		out := make([]yamlEtymologySession, 0, len(entries))
+		for _, e := range entries {
+			title := strings.TrimSpace(e.Event)
+			if title == "" {
+				continue
+			}
+			var origins []EtymologyOrigin
+			for _, scene := range e.Scenes {
+				origins = append(origins, scene.Origins...)
+			}
+			out = append(out, yamlEtymologySession{
+				Title:     title,
+				Origins:   origins,
+				Concepts:  e.Concepts,
+				Relations: e.Relations,
+			})
+		}
+		return out, nil
+	}
+	var sf etymologySessionFile
+	if err := yaml.Unmarshal(data, &sf); err != nil {
+		return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
+	}
+	return []yamlEtymologySession{{
+		Title:     strings.TrimSpace(sf.Metadata.Title),
+		Origins:   sf.Origins,
+		Concepts:  sf.Concepts,
+		Relations: sf.Relations,
+	}}, nil
+}
+
 // YAMLEtymologyOriginSource reads etymology origins from YAML session files
 // and returns them as EtymologyOriginRecord values ready to compare against
 // the DB's etymology_origins table. The session_title disambiguator comes
@@ -37,33 +90,30 @@ func (s *YAMLEtymologyOriginSource) FindAll(_ context.Context) ([]EtymologyOrigi
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			data, err := os.ReadFile(path)
+			sessions, err := parseEtymologySessionAnyShape(path)
 			if err != nil {
-				return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+				return nil, err
 			}
-			var sf etymologySessionFile
-			if err := yaml.Unmarshal(data, &sf); err != nil {
-				return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
-			}
-			title := strings.TrimSpace(sf.Metadata.Title)
-			if title == "" {
-				return nil, fmt.Errorf("etymology session %s missing required metadata.title", path)
-			}
-			for _, o := range sf.Origins {
-				key := etymologyOriginKey(nbID, title, o.Sense, o.Origin, o.Language)
-				if _, ok := seen[key]; ok {
-					continue
+			for _, sess := range sessions {
+				if sess.Title == "" {
+					return nil, fmt.Errorf("etymology session %s missing required title", path)
 				}
-				seen[key] = struct{}{}
-				rows = append(rows, EtymologyOriginRecord{
-					NotebookID:   nbID,
-					SessionTitle: title,
-					Sense:        o.Sense,
-					Origin:       o.Origin,
-					Type:         o.Type,
-					Language:     o.Language,
-					Meaning:      o.Meaning,
-				})
+				for _, o := range sess.Origins {
+					key := etymologyOriginKey(nbID, sess.Title, o.Sense, o.Origin, o.Language)
+					if _, ok := seen[key]; ok {
+						continue
+					}
+					seen[key] = struct{}{}
+					rows = append(rows, EtymologyOriginRecord{
+						NotebookID:   nbID,
+						SessionTitle: sess.Title,
+						Sense:        o.Sense,
+						Origin:       o.Origin,
+						Type:         o.Type,
+						Language:     o.Language,
+						Meaning:      o.Meaning,
+					})
+				}
 			}
 		}
 	}
@@ -111,36 +161,33 @@ func (s *YAMLEtymologyOriginFormSource) FindAll(_ context.Context) ([]EtymologyO
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			data, err := os.ReadFile(path)
+			sessions, err := parseEtymologySessionAnyShape(path)
 			if err != nil {
-				return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+				return nil, err
 			}
-			var sf etymologySessionFile
-			if err := yaml.Unmarshal(data, &sf); err != nil {
-				return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
-			}
-			title := strings.TrimSpace(sf.Metadata.Title)
-			if title == "" {
-				continue
-			}
-			for _, o := range sf.Origins {
-				for i, f := range o.Forms {
-					key := nbID + "\x00" + title + "\x00" + o.Sense + "\x00" + o.Origin + "\x00" + o.Language + "\x00" + f.Role + "\x00" + f.Form
-					if _, ok := seen[key]; ok {
-						continue
+			for _, sess := range sessions {
+				if sess.Title == "" {
+					continue
+				}
+				for _, o := range sess.Origins {
+					for i, f := range o.Forms {
+						key := nbID + "\x00" + sess.Title + "\x00" + o.Sense + "\x00" + o.Origin + "\x00" + o.Language + "\x00" + f.Role + "\x00" + f.Form
+						if _, ok := seen[key]; ok {
+							continue
+						}
+						seen[key] = struct{}{}
+						rows = append(rows, EtymologyOriginFormForImport{
+							NotebookID:   nbID,
+							SessionTitle: sess.Title,
+							Sense:        o.Sense,
+							Origin:       o.Origin,
+							Language:     o.Language,
+							Form:         f.Form,
+							Role:         f.Role,
+							Note:         f.Note,
+							SortOrder:    i,
+						})
 					}
-					seen[key] = struct{}{}
-					rows = append(rows, EtymologyOriginFormForImport{
-						NotebookID:   nbID,
-						SessionTitle: title,
-						Sense:        o.Sense,
-						Origin:       o.Origin,
-						Language:     o.Language,
-						Form:         f.Form,
-						Role:         f.Role,
-						Note:         f.Note,
-						SortOrder:    i,
-					})
 				}
 			}
 		}
@@ -203,30 +250,27 @@ func (s *YAMLSemanticConceptSource) FindAll(_ context.Context) ([]SemanticConcep
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			data, err := os.ReadFile(path)
+			sessions, err := parseEtymologySessionAnyShape(path)
 			if err != nil {
-				return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+				return nil, err
 			}
-			var sf etymologySessionFile
-			if err := yaml.Unmarshal(data, &sf); err != nil {
-				return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
-			}
-			title := strings.TrimSpace(sf.Metadata.Title)
-			if title == "" {
-				continue
-			}
-			for _, c := range sf.Concepts {
-				if strings.TrimSpace(c.Key) == "" {
+			for _, sess := range sessions {
+				if sess.Title == "" {
 					continue
 				}
-				rows = append(rows, SemanticConceptForImport{
-					NotebookID:   nbID,
-					SessionTitle: title,
-					Key:          c.Key,
-					Meaning:      c.Meaning,
-					Note:         c.Note,
-					Members:      c.Members,
-				})
+				for _, c := range sess.Concepts {
+					if strings.TrimSpace(c.Key) == "" {
+						continue
+					}
+					rows = append(rows, SemanticConceptForImport{
+						NotebookID:   nbID,
+						SessionTitle: sess.Title,
+						Key:          c.Key,
+						Meaning:      c.Meaning,
+						Note:         c.Note,
+						Members:      c.Members,
+					})
+				}
 			}
 		}
 	}
@@ -267,31 +311,28 @@ func (s *YAMLConceptRelationSource) FindAll(_ context.Context) ([]ConceptRelatio
 	for nbID, idx := range indexes {
 		for _, nbPath := range idx.NotebookPaths {
 			path := filepath.Join(idx.Path, nbPath)
-			data, err := os.ReadFile(path)
+			sessions, err := parseEtymologySessionAnyShape(path)
 			if err != nil {
-				return nil, fmt.Errorf("read etymology session %s: %w", path, err)
+				return nil, err
 			}
-			var sf etymologySessionFile
-			if err := yaml.Unmarshal(data, &sf); err != nil {
-				return nil, fmt.Errorf("parse etymology session %s: %w", path, err)
-			}
-			title := strings.TrimSpace(sf.Metadata.Title)
-			for _, r := range sf.Relations {
-				if strings.TrimSpace(r.Type) == "" {
-					continue
+			for _, sess := range sessions {
+				for _, r := range sess.Relations {
+					if strings.TrimSpace(r.Type) == "" {
+						continue
+					}
+					a, b := r.Endpoints()
+					if a == "" || b == "" {
+						continue
+					}
+					rows = append(rows, ConceptRelationForImport{
+						NotebookID:   nbID,
+						SessionTitle: sess.Title,
+						Type:         r.Type,
+						FromKey:      a,
+						ToKey:        b,
+						IsDirected:   r.IsDirected(),
+					})
 				}
-				a, b := r.Endpoints()
-				if a == "" || b == "" {
-					continue
-				}
-				rows = append(rows, ConceptRelationForImport{
-					NotebookID:   nbID,
-					SessionTitle: title,
-					Type:         r.Type,
-					FromKey:      a,
-					ToKey:        b,
-					IsDirected:   r.IsDirected(),
-				})
 			}
 		}
 	}

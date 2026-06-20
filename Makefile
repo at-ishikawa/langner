@@ -80,4 +80,4 @@ docs-setup:
 
 .PHONY: docs-server
 docs-server: docs-setup
-	hugo server -s docs
+	hugo server -s docs --bind 0.0.0.0

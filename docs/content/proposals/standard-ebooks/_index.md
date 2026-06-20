@@ -1,5 +1,6 @@
 ---
 title: "Standard Ebooks"
+date: 2026-02-08
 weight: 1
 bookCollapseSection: true
 ---

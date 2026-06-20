@@ -1,0 +1,153 @@
+package server
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"connectrpc.com/connect"
+
+	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
+	"github.com/at-ishikawa/langner/internal/analytics"
+)
+
+// AnalyticsHandler exposes the analytics views over Connect RPC.
+type AnalyticsHandler struct {
+	repo analytics.Repository
+}
+
+// NewAnalyticsHandler returns a handler that serves analytics requests
+// from the given repository (DB or YAML).
+func NewAnalyticsHandler(repo analytics.Repository) *AnalyticsHandler {
+	return &AnalyticsHandler{repo: repo}
+}
+
+// GetDailySummaries returns one row per day.
+func (h *AnalyticsHandler) GetDailySummaries(
+	ctx context.Context,
+	req *connect.Request[apiv1.GetDailySummariesRequest],
+) (*connect.Response[apiv1.GetDailySummariesResponse], error) {
+	filters := unpackFilters(req.Msg.Filters)
+	days, err := h.repo.DailySummaries(ctx, int(req.Msg.RangeDays), filters)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	out := make([]*apiv1.DailySummary, len(days))
+	for i, d := range days {
+		out[i] = dailySummaryToProto(d)
+	}
+	return connect.NewResponse(&apiv1.GetDailySummariesResponse{Days: out}), nil
+}
+
+// GetDayDetail returns the per-day rollup and wrong words for one day.
+func (h *AnalyticsHandler) GetDayDetail(
+	ctx context.Context,
+	req *connect.Request[apiv1.GetDayDetailRequest],
+) (*connect.Response[apiv1.GetDayDetailResponse], error) {
+	day, err := time.Parse("2006-01-02", req.Msg.Date)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("date: %w", err))
+	}
+	detail, err := h.repo.DayDetail(ctx, day, unpackFilters(req.Msg.Filters))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	wrongs := make([]*apiv1.WrongWord, len(detail.WrongWords))
+	for i, w := range detail.WrongWords {
+		wrongs[i] = wrongWordToProto(w)
+	}
+	resp := &apiv1.GetDayDetailResponse{
+		Summary:      dailySummaryToProto(detail.Summary),
+		WrongWords:   wrongs,
+		PreviousDate: formatDate(detail.PreviousDate),
+		NextDate:     formatDate(detail.NextDate),
+	}
+	return connect.NewResponse(resp), nil
+}
+
+// GetWordHistory returns every attempt for one (word, quiz_type) pair.
+func (h *AnalyticsHandler) GetWordHistory(
+	ctx context.Context,
+	req *connect.Request[apiv1.GetWordHistoryRequest],
+) (*connect.Response[apiv1.GetWordHistoryResponse], error) {
+	hist, err := h.repo.WordHistory(ctx, analytics.WordRef{
+		NoteID:     req.Msg.NoteId,
+		NotebookID: req.Msg.NotebookId,
+		Expression: req.Msg.Expression,
+		QuizType:   req.Msg.QuizType,
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	attempts := make([]*apiv1.AttemptEntry, len(hist.Attempts))
+	for i, a := range hist.Attempts {
+		attempts[i] = &apiv1.AttemptEntry{
+			Date:                 formatDate(a.Date),
+			QuizType:             a.QuizType,
+			Result:               a.Result,
+			Quality:              int32(a.Quality),
+			StreakBeforeWrong:    int32(a.StreakBeforeWrong),
+			StreakBeforeCorrect:  int32(a.StreakBeforeCorrect),
+		}
+	}
+	return connect.NewResponse(&apiv1.GetWordHistoryResponse{
+		Expression:         hist.Expression,
+		NotebookId:         hist.NotebookID,
+		NotebookTitle:      hist.NotebookTitle,
+		CurrentStatus:      hist.CurrentStatus,
+		CurrentWrongStreak: int32(hist.CurrentWrongStreak),
+		Attempts:           attempts,
+	}), nil
+}
+
+func unpackFilters(f *apiv1.AnalyticsFilters) analytics.Filters {
+	if f == nil {
+		return analytics.Filters{}
+	}
+	return analytics.Filters{NotebookID: f.NotebookId, QuizType: f.QuizType}
+}
+
+func dailySummaryToProto(d analytics.DailySummary) *apiv1.DailySummary {
+	return &apiv1.DailySummary{
+		Date:          formatDate(d.Date),
+		WrongCount:    int32(d.WrongCount),
+		TotalCount:    int32(d.TotalCount),
+		NotebookCount: int32(d.NotebookCount),
+		QuizTypes:     d.QuizTypes,
+	}
+}
+
+func wrongWordToProto(w analytics.WrongWord) *apiv1.WrongWord {
+	related := make([]*apiv1.RelatedGroup, 0, len(w.RelatedGroups))
+	for _, g := range w.RelatedGroups {
+		related = append(related, &apiv1.RelatedGroup{
+			Kind:    g.Kind,
+			Label:   g.Label,
+			Members: g.Members,
+		})
+	}
+	return &apiv1.WrongWord{
+		NoteId:                w.NoteID,
+		Expression:            w.Expression,
+		NotebookId:            w.NotebookID,
+		NotebookTitle:         w.NotebookTitle,
+		SceneTitle:            w.SceneTitle,
+		QuizType:              w.QuizType,
+		RecentPattern:         w.RecentPattern,
+		CurrentWrongStreak:    int32(w.CurrentWrongStreak),
+		PreviousCorrectStreak: int32(w.PreviousCorrectStreak),
+		CurrentStatus:         w.CurrentStatus,
+		Meaning:               w.Meaning,
+		ExampleSentence:       w.ExampleSentence,
+		NotebookKind:          w.NotebookKind,
+		Skipped:               w.Skipped,
+		RelatedGroups:         related,
+	}
+}
+
+func formatDate(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format("2006-01-02")
+}

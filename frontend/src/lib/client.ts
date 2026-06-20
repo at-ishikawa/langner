@@ -2,6 +2,7 @@ import { createClient } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import { QuizService } from "@/gen-protos/api/v1/quiz_pb";
 import { NotebookService } from "@/gen-protos/api/v1/notebook_pb";
+import { AnalyticsService } from "@/gen-protos/api/v1/analytics_pb";
 
 const transport = createConnectTransport({
   baseUrl: process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080",
@@ -10,6 +11,7 @@ const transport = createConnectTransport({
 
 export const quizClient = createClient(QuizService, transport);
 export const notebookClient = createClient(NotebookService, transport);
+export const analyticsClient = createClient(AnalyticsService, transport);
 
 export type {
   NotebookSummary,
@@ -80,3 +82,17 @@ export type {
   SemanticConceptMember,
   ConceptRelation,
 } from "@/gen-protos/api/v1/notebook_pb";
+
+export type {
+  AnalyticsFilters,
+  GetDailySummariesRequest,
+  GetDailySummariesResponse,
+  DailySummary,
+  GetDayDetailRequest,
+  GetDayDetailResponse,
+  WrongWord,
+  RelatedGroup,
+  GetWordHistoryRequest,
+  GetWordHistoryResponse,
+  AttemptEntry,
+} from "@/gen-protos/api/v1/analytics_pb";

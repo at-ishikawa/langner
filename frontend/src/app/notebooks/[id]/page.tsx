@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -242,11 +242,45 @@ export default function NotebookDetailPage() {
 
   // Deep-link to chapter from search params — derived without a setState effect
   const chapter = searchParams.get("chapter");
+  const targetWord = searchParams.get("word") ?? "";
+  const targetScene = searchParams.get("scene") ?? "";
+
+  // Auto-pick the story that contains the target word. Analytics deep-links
+  // come in as ?word=…&scene=…; resolve the scene first when present, then
+  // fall back to any story that contains the expression.
+  const autoStoryFromWord = useMemo<StoryEntry | null>(() => {
+    if (!data || !targetWord) return null;
+    for (const story of data.stories) {
+      for (const scene of story.scenes) {
+        if (targetScene && scene.title !== targetScene) continue;
+        if (scene.definitions.some((d) => d.expression === targetWord || d.conceptHead === targetWord)) {
+          return story;
+        }
+      }
+    }
+    return null;
+  }, [data, targetWord, targetScene]);
+
   const selectedStory =
     pickedStory ??
+    autoStoryFromWord ??
     (data && chapter
       ? (data.stories.find((s) => s.event === chapter) ?? null)
       : null);
+
+  // After the WordCard for the target word renders, scroll it into view and
+  // flash it briefly. Re-runs whenever the URL target changes or the story
+  // selection lands so the effect fires once the matching DOM node exists.
+  useEffect(() => {
+    if (!targetWord || !data) return;
+    const id = `word-${targetWord}`;
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.setAttribute("data-deep-link-flash", "true");
+    const t = window.setTimeout(() => el.removeAttribute("data-deep-link-flash"), 1500);
+    return () => window.clearTimeout(t);
+  }, [targetWord, data, selectedStory]);
 
   if (loading) {
     return (
@@ -691,13 +725,29 @@ function WordCard({
 
   const allVocabChecked = VOCAB_SKIP_TYPES.every((t) => skippedTypes.has(t.key));
 
+  // anchorKey backs the deep-link target. Both the bare expression and the
+  // concept-head form may be referenced by an analytics `?word=…` query, so
+  // the WordCard exposes both as DOM ids — the analytics origin link points
+  // at the concept head, the bare expression covers everything else.
+  const anchorKey = isConcept && word.conceptHead ? word.conceptHead : word.expression;
+
   return (
     <Box
+      id={`word-${anchorKey}`}
       borderWidth="1px"
       borderRadius="md"
       overflow="hidden"
       fontSize="sm"
       opacity={isSkippedAnywhere ? 0.6 : 1}
+      // The page-level effect sets data-deep-link-flash on the target card
+      // for a brief moment; the ring + offset glow makes the destination
+      // obvious without altering the in-document layout.
+      transition="box-shadow 0.4s"
+      css={{
+        "&[data-deep-link-flash='true']": {
+          boxShadow: "0 0 0 2px var(--chakra-colors-blue-400)",
+        },
+      }}
     >
       <Box
         p={3}

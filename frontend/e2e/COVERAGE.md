@@ -45,6 +45,8 @@ actual navigation).
 | `/quiz/complete`                    | quiz-reverse      | (both reverse scenarios reach it)                       |
 | `/quiz/complete`                    | quiz-freeform     | Submit one freeform answer and finish                   |
 | `/quiz/complete`                    | quiz-etymology    | (all 3 etymology scenarios reach it)                    |
+| `/analytics`                        | analytics         | Open the Analytics Day List from home                   |
+| `/analytics/[date]`                 | analytics         | Open a Day Detail page with seeded wrong words          |
 
 ## Interactions per page
 
@@ -157,6 +159,18 @@ Tick the box when at least one scenario hits the interaction.
 - [x] Override (Mark Correct/Incorrect) on a result card
 - [x] Click "Exclude" to mark a result as skipped
 - [x] Click "Back to Start" → navigate back to `/quiz`
+
+### `/analytics`
+
+- [x] Open from the home Analytics tile
+- [x] Day list renders with no "Failed to load analytics:" banner (DB-backed)
+
+### `/analytics/[date]`
+
+- [x] Open `/analytics/{YYYY-MM-DD}?range=0` directly
+- [x] Page renders with no "Failed to load day:" banner (DB-backed; catches
+      MySQL-only bugs like `only_full_group_by`)
+- [x] At least one seeded wrong word is visible
 
 ## Add a row when you...
 

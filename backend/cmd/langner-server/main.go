@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
+	"github.com/at-ishikawa/langner/internal/analytics"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
@@ -98,6 +99,27 @@ func run(ctx context.Context) error {
 	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
 	noteRepo = yamlNoteRepo
 
+	// Analytics always reads from YAML: the on-disk learning history files are
+	// the only place etymology quiz results are persisted today —
+	// SaveEtymologyOriginResult writes YAML directly and does not go through
+	// the learning repository, so the DB's learning_logs has only vocab rows.
+	// Once etymology gets first-class DB storage we can swap this for a
+	// hybrid that pulls vocab from DB and etymology from YAML.
+	yamlAnalyticsRepo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
+	if reader, err := notebook.NewReader(
+		cfg.Notebooks.StoriesDirectories,
+		cfg.Notebooks.FlashcardsDirectories,
+		cfg.Notebooks.BooksDirectories,
+		cfg.Notebooks.DefinitionsDirectories,
+		cfg.Notebooks.EtymologyDirectories,
+		dictionaryMap,
+	); err != nil {
+		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
+	} else {
+		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
+	}
+	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
+
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		db, err := database.Open(cfg.Database)
 		if err != nil {
@@ -125,12 +147,15 @@ func run(ctx context.Context) error {
 
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
+	analyticsHandler := server.NewAnalyticsHandler(analyticsRepo)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
+	analyticsPath, analyticsH := apiv1connect.NewAnalyticsServiceHandler(analyticsHandler, errorLogger)
 
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
 	mux.Handle(notebookPath, notebookH)
+	mux.Handle(analyticsPath, analyticsH)
 
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),

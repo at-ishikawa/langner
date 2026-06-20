@@ -40,10 +40,34 @@ func ConvertMarkdownToPDF(markdownPath string) (string, error) {
 
 	pdfPath := strings.TrimSuffix(markdownPath, ".md") + ".pdf"
 
-	renderer := mdtopdf.NewPdfRenderer("P", "A4", pdfPath, "", nil, mdtopdf.LIGHT)
+	// Render to an OS-temp PDF first, then copy bytes into the final
+	// destination with os.WriteFile. gofpdf (used by mdtopdf under the
+	// hood) opens the destination with O_WRONLY|O_CREATE|O_TRUNC, which
+	// fails with "permission denied" on Google Drive Stream's WSL
+	// mount even when os.WriteFile to the same path succeeds (the .md
+	// next to it writes fine). Generating locally first sidesteps
+	// Drive Stream's lock semantics; the second copy hop uses the same
+	// write path the markdown writer already proved works.
+	tmpFile, err := os.CreateTemp("", "langner-pdf-*.pdf")
+	if err != nil {
+		return "", fmt.Errorf("create temp pdf: %w", err)
+	}
+	tmpPath := tmpFile.Name()
+	_ = tmpFile.Close()
+	defer func() { _ = os.Remove(tmpPath) }()
+
+	renderer := mdtopdf.NewPdfRenderer("P", "A4", tmpPath, "", nil, mdtopdf.LIGHT)
 	renderer.UpdateBlockquoteStyler()
 	if err := renderer.Process(content); err != nil {
 		return "", fmt.Errorf("renderer.Process() > %w", err)
+	}
+
+	pdfBytes, err := os.ReadFile(tmpPath)
+	if err != nil {
+		return "", fmt.Errorf("read temp pdf: %w", err)
+	}
+	if err := os.WriteFile(pdfPath, pdfBytes, 0o644); err != nil {
+		return "", fmt.Errorf("write pdf to %s: %w", pdfPath, err)
 	}
 
 	absPath, err := filepath.Abs(pdfPath)

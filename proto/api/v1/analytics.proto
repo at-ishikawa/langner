@@ -1,0 +1,190 @@
+syntax = "proto3";
+
+package api.v1;
+
+import "buf/validate/validate.proto";
+
+option go_package = "github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1";
+
+service AnalyticsService {
+  // GetDailySummaries returns one row per day with quiz activity in the
+  // requested range, newest first. Each row carries the per-day rollup
+  // shown on the Day List page.
+  rpc GetDailySummaries(GetDailySummariesRequest) returns (GetDailySummariesResponse);
+
+  // GetDayDetail returns the words answered wrong on a specific day plus
+  // the per-day rollup. Used by the Day Detail page.
+  rpc GetDayDetail(GetDayDetailRequest) returns (GetDayDetailResponse);
+
+  // GetWordHistory returns every attempt for one (note_id, quiz_type)
+  // pair, newest first, with the streak counts immediately before each
+  // attempt. Used when the user expands a word card on the Day Detail
+  // page.
+  rpc GetWordHistory(GetWordHistoryRequest) returns (GetWordHistoryResponse);
+}
+
+// AnalyticsFilters carries the optional notebook + quiz-type filters used
+// on both the Day List and Day Detail pages.
+message AnalyticsFilters {
+  // notebook_id, when non-empty, restricts results to a single notebook.
+  string notebook_id = 1;
+  // quiz_type, when non-empty, restricts results to a single quiz type
+  // (e.g. "notebook", "etymology_breakdown"). Empty means all types.
+  string quiz_type = 2;
+}
+
+message GetDailySummariesRequest {
+  // range_days bounds the window: only days within now()-range_days are
+  // returned. Zero means "all time".
+  int32 range_days = 1 [
+    (buf.validate.field).int32.gte = 0
+  ];
+  AnalyticsFilters filters = 2;
+}
+
+message GetDailySummariesResponse {
+  repeated DailySummary days = 1;
+}
+
+// DailySummary is one row on the Day List.
+message DailySummary {
+  // date in YYYY-MM-DD format.
+  string date = 1;
+  int32 wrong_count = 2;
+  int32 total_count = 3;
+  int32 notebook_count = 4;
+  // quiz_types lists every quiz type that produced an attempt on this
+  // day (e.g. ["notebook", "reverse", "etymology_breakdown"]).
+  repeated string quiz_types = 5;
+}
+
+message GetDayDetailRequest {
+  // date in YYYY-MM-DD format.
+  string date = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  AnalyticsFilters filters = 2;
+}
+
+message GetDayDetailResponse {
+  DailySummary summary = 1;
+  repeated WrongWord wrong_words = 2;
+  // previous_date and next_date are the adjacent days with quiz activity
+  // matching the current filters, in YYYY-MM-DD format. Empty when no
+  // adjacent day exists.
+  string previous_date = 3;
+  string next_date = 4;
+}
+
+// WrongWord is one (word × quiz_type) attempt the user got wrong on the
+// requested day, plus enough surrounding context to render the card.
+message WrongWord {
+  // note_id is the DB row id of the word. Zero when YAML-only.
+  int64 note_id = 1;
+  string expression = 2;
+  string notebook_id = 3;
+  string notebook_title = 4;
+  string scene_title = 5;
+  // quiz_type uses the same string values as LearningRecord.QuizType
+  // (e.g. "notebook", "reverse", "etymology_breakdown").
+  string quiz_type = 6;
+  // recent_pattern is the last 5 attempts for this (word, quiz_type),
+  // newest LAST so the row reads left-to-right. Each entry is one of
+  // "correct", "wrong" or "none".
+  repeated string recent_pattern = 7;
+  // current_wrong_streak counts consecutive wrong attempts ending at the
+  // attempt on this day.
+  int32 current_wrong_streak = 8;
+  // previous_correct_streak counts consecutive correct attempts
+  // immediately before the current wrong streak (0 when the current
+  // wrong streak starts from the very first attempt).
+  int32 previous_correct_streak = 9;
+  // current_status is the learning status after the attempt on this day.
+  string current_status = 10;
+  // meaning is the canonical definition the learner was supposed to recall.
+  // For reverse quizzes this is the prompt the learner saw — reading it on
+  // the analytics card reproduces the original cognitive task. For
+  // etymology origins this is the origin's meaning.
+  string meaning = 11;
+  // example_sentence is one illustrative usage of the expression, when
+  // available. Empty when the source notebook has no examples for the
+  // word (typical for etymology origins).
+  string example_sentence = 12;
+  // notebook_kind is "story", "flashcard", or "etymology". The frontend
+  // uses it to decide which Learn route to deep-link to.
+  string notebook_kind = 13;
+  // skipped is true when the user has currently excluded this word from
+  // this quiz type (skipped_at set for the matching quiz_type slot).
+  // The analytics card surfaces this with an "Excluded" badge so the
+  // user understands why the word still surfaces in history but won't
+  // come up in future quizzes until the skip is cleared.
+  bool skipped = 14;
+  // related_groups carries the word's place in the concept graph: the
+  // definitions-book concept it shares with sibling expressions, the
+  // etymology concept its origin belongs to (and sibling origins under
+  // the same concept), and concepts connected to that one via etymology
+  // relations (antonym / synonym / hyponym / …). Empty when the
+  // notebook has no concepts. The frontend collapses these into a chip
+  // row under the meaning and the full block in the expanded panel so a
+  // wrong word never reads in isolation.
+  repeated RelatedGroup related_groups = 15;
+}
+
+// RelatedGroup is one cluster of related entries surfaced on the
+// analytics card. The grouping is intentionally flat (kind + label +
+// member strings) so the same shape covers sibling words, sibling
+// origins, and related-concept members — the frontend renders each as a
+// labelled chip + list without per-kind branching.
+message RelatedGroup {
+  // kind names the cluster: "concept" for definitions-book sibling
+  // words, "origin_family" for etymology sibling origins under the
+  // word's origin's concept, and the relation type name ("antonym",
+  // "synonym", "hyponym", …) for related-concept clusters.
+  string kind = 1;
+  // label is the human-readable header. For "concept" it's the head's
+  // umbrella meaning (e.g. "clumsy in social situations"); for
+  // "origin_family" / relation kinds it's the concept name with the
+  // umbrella meaning ("leftness — left"). Empty when no umbrella was
+  // declared.
+  string label = 2;
+  // members are the cluster's entries as already-formatted strings —
+  // e.g. "gaucherie", "sinister (Latin) — left", "dexterity". Ordering
+  // is the order declared in the source notebook.
+  repeated string members = 3;
+}
+
+message GetWordHistoryRequest {
+  int64 note_id = 1;
+  string notebook_id = 2;
+  string expression = 3 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string quiz_type = 4 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message GetWordHistoryResponse {
+  string expression = 1;
+  string notebook_id = 2;
+  string notebook_title = 3;
+  string current_status = 4;
+  int32 current_wrong_streak = 5;
+  repeated AttemptEntry attempts = 6;
+}
+
+// AttemptEntry is a single past attempt with the streak context just
+// before it.
+message AttemptEntry {
+  // date in YYYY-MM-DD format.
+  string date = 1;
+  string quiz_type = 2;
+  // result is "correct" or "wrong".
+  string result = 3;
+  int32 quality = 4;
+  // streak_before_wrong / streak_before_correct describe the run that
+  // ended at this attempt. Exactly one is non-zero. Both zero means
+  // this was the very first attempt.
+  int32 streak_before_wrong = 5;
+  int32 streak_before_correct = 6;
+}

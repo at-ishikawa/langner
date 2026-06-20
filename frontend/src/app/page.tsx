@@ -16,6 +16,12 @@ const features = [
     description: "Practice vocabulary and etymology with spaced repetition",
     icon: "Q",
   },
+  {
+    href: "/analytics",
+    title: "Analytics",
+    description: "Review which words you got wrong, day by day",
+    icon: "A",
+  },
 ];
 
 export default function HomePage() {
