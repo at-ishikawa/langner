@@ -250,10 +250,12 @@ func formatOriginMember(m notebook.ConceptMember, originMeaning map[string]strin
 // labelForConcept builds the human-readable header for a related
 // group's card. The umbrella meaning is preferred over the bare key
 // because keys are slug-like ("leftness", "kinship") and the meaning
-// reads as natural language.
+// reads as natural language. When key and meaning are the same word
+// (e.g. an "eye" concept whose meaning is also "eye"), the em-dash
+// pair would render as "eye — eye" — collapse to just the key.
 func labelForConcept(c notebook.Concept) string {
 	switch {
-	case c.Meaning != "" && c.Key != "":
+	case c.Meaning != "" && c.Key != "" && !strings.EqualFold(strings.TrimSpace(c.Key), strings.TrimSpace(c.Meaning)):
 		return fmt.Sprintf("%s — %s", c.Key, c.Meaning)
 	case c.Meaning != "":
 		return c.Meaning

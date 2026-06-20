@@ -700,7 +700,7 @@ func TestWriter_ConceptsRenderForVocabFailureViaOriginParts(t *testing.T) {
 	body, err := os.ReadFile(written)
 	require.NoError(t, err)
 	out := string(body)
-	assert.Contains(t, out, "**woman — woman**",
+	assert.Contains(t, out, "**woman**",
 		"the concept containing 'gyne' (an origin_part of the failed 'gynecology') must surface")
 	assert.Contains(t, out, "- **gyne** (Greek)",
 		"the origin_part itself is marked because the vocab that depends on it was failed")
@@ -1066,6 +1066,106 @@ func TestWriter_RelationExpandsTargetConceptMembersInline(t *testing.T) {
 		"first related-concept member renders as a nested bullet under the relation header")
 	assert.Contains(t, out, "    - ek (Greek) — out")
 	assert.Contains(t, out, "    - ex (Latin) — out")
+}
+
+// TestWriter_DedupOriginFailureAlreadyShownInConcept pins the user-
+// reported regression: when a failed origin already appears (bolded)
+// in a rendered concept block, the separate "Failed origins" entry
+// for it is redundant — same name, same meaning, same origin_family
+// nested under it — and should be dropped. Vocab failures continue
+// to render because they carry English-side context (meaning,
+// sibling words) the concept block doesn't.
+//
+// Also pins the "eye — eye" collapse: a concept whose key and meaning
+// are the same word renders as just "**eye**", not "**eye — eye**".
+func TestWriter_DedupOriginFailureAlreadyShownInConcept(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "wpme",
+					NotebookTitle: "Session 5",
+					Expression:    "oculus",
+					QuizType:      "etymology_assembly",
+					Meaning:       "eye",
+					NotebookKind:  "etymology",
+				},
+			},
+		},
+	}
+	src := &stubSource{
+		concepts: map[string][]notebook.Concept{
+			"wpme|Session 5": {{
+				Key:     "eye",
+				Meaning: "eye",
+				Members: []notebook.ConceptMember{
+					{Origin: "ophthalmos", Language: "Greek"},
+					{Origin: "oculus", Language: "Latin"},
+				},
+			}},
+		},
+		meanings: map[string]map[string]string{
+			"wpme|Session 5": {
+				"ophthalmos": "eye",
+				"oculus":     "eye",
+			},
+		},
+	}
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+
+	// Concept block renders the failed origin bolded.
+	assert.Contains(t, out, "**eye**", "concept header collapses 'eye — eye' to just 'eye'")
+	assert.NotContains(t, out, "eye — eye", "the redundant 'X — X' form must not render")
+	assert.Contains(t, out, "- **oculus** (Latin) — eye",
+		"the failed origin is bolded inside the concept block's members")
+	assert.Contains(t, out, "- ophthalmos (Greek) — eye",
+		"the sibling origin renders unbolded next to it")
+
+	// No "Failed origins" section AT ALL: the only failed origin
+	// was already shown bolded in the concept block, so the
+	// section header would only carry duplicate content.
+	assert.NotContains(t, out, "#### Failed origins",
+		"a Failed-origins entry that just duplicates the concept block must be dropped, including its section header")
+}
+
+// TestWriter_KeepsFailedOriginWithoutConceptCoverage pins the
+// complement of the dedup: an origin failure that ISN'T a member of
+// any rendered concept still gets a Failed origins entry, because
+// the concept block isn't carrying it.
+func TestWriter_KeepsFailedOriginWithoutConceptCoverage(t *testing.T) {
+	day, _ := time.Parse("2006-01-02", "2026-06-17")
+	repo := &stubRepo{
+		detail: analytics.DayDetail{
+			WrongWords: []analytics.WrongWord{
+				{
+					NotebookID:    "wpme",
+					NotebookTitle: "Session 9",
+					Expression:    "orthos",
+					QuizType:      "etymology_breakdown",
+					Meaning:       "straight, correct",
+					NotebookKind:  "etymology",
+				},
+			},
+		},
+	}
+	src := &stubSource{} // no concept declared for orthos
+	writer := NewWriterWithSource(repo, src)
+	tmpDir := t.TempDir()
+	written, err := writer.Output(context.Background(), day, tmpDir, false)
+	require.NoError(t, err)
+	body, err := os.ReadFile(written)
+	require.NoError(t, err)
+	out := string(body)
+	assert.Contains(t, out, "#### Failed origins",
+		"an origin failure NOT covered by any concept block must keep its Failed origins entry — otherwise the failure would silently disappear from the file")
+	assert.Contains(t, out, "orthos: **straight, correct**")
 }
 
 // TestWriter_NoWrongAttemptsReturnsEmpty pins the no-op for days with no

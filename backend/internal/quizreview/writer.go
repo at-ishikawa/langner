@@ -440,13 +440,18 @@ func renderQuizReviewAllNotebooks(date string, groups []quizReviewGroup, source 
 				// surfaces only the concept `orthos` actually touches.
 				touched := failedConceptMemberSet(s.origin, s.vocab, pairs)
 				concepts, relations, originMeanings := source.EtymologyConcepts(g.notebookID, s.title)
-				writeEtymologyConcepts(&sb, concepts, relations, originMeanings, touched)
-			}
-			if len(s.origin) > 0 {
-				sb.WriteString("#### Failed origins\n\n")
-				for _, w := range s.origin {
-					writeEntry(&sb, w, hasConversations)
-				}
+				renderedAsConceptMember := writeEtymologyConcepts(&sb, concepts, relations, originMeanings, touched)
+				// Drop the "Failed origins" entry for origins already
+				// displayed (bolded) inside a rendered concept block —
+				// the concept block carries the same name + meaning +
+				// origin_family/relation context, so the separate
+				// entry was pure duplication. Vocab failures keep
+				// their entries because they carry English-side info
+				// (meaning, sibling words) that concepts don't.
+				originsToList := uncoveredOriginFailures(s.origin, renderedAsConceptMember)
+				writeOriginSection(&sb, originsToList, hasConversations)
+			} else if len(s.origin) > 0 {
+				writeOriginSection(&sb, s.origin, hasConversations)
 			}
 			if len(s.vocab) > 0 {
 				sb.WriteString("#### Failed vocabularies\n\n")
@@ -785,15 +790,22 @@ func significantTokens(phrase string) []string {
 // meaning` with the failed member bolded. Relations expand to the
 // related concept's members so the reader sees what "antonym ↔
 // outward" actually contains without having to scroll.
+// writeEtymologyConcepts writes the Concepts block and returns the set
+// of failed-origin names it actually rendered as bolded members in a
+// primary concept block. Callers use that set to drop redundant
+// "Failed origins" entries — the concept block already carries the
+// origin's name + meaning + sibling origins, so a separate entry just
+// duplicates information.
 func writeEtymologyConcepts(
 	sb *strings.Builder,
 	concepts []notebook.Concept,
 	relations []notebook.Relation,
 	originMeanings map[string]string,
 	failedOrigins map[string]bool,
-) {
+) map[string]bool {
+	rendered := map[string]bool{}
 	if len(concepts) == 0 && len(relations) == 0 {
-		return
+		return rendered
 	}
 	// Drop concepts that don't touch any failed origin/expression.
 	// A session can declare 9 concepts but only one of them is
@@ -806,7 +818,7 @@ func writeEtymologyConcepts(
 		}
 	}
 	if len(relevant) == 0 {
-		return
+		return rendered
 	}
 	sb.WriteString("#### Concepts\n\n")
 	// All concepts (not just the relevant ones) get indexed so a
@@ -822,19 +834,40 @@ func writeEtymologyConcepts(
 		if i > 0 {
 			sb.WriteString("\n")
 		}
-		fmt.Fprintf(sb, "**%s — %s**\n", c.Key, c.Meaning)
+		fmt.Fprintf(sb, "**%s**\n", formatConceptTitle(c.Key, c.Meaning))
 		if c.Note != "" {
 			fmt.Fprintf(sb, "_%s_\n", c.Note)
 		}
 		sb.WriteString("\n")
 		for _, m := range c.Members {
 			fmt.Fprintf(sb, "- %s\n", formatMemberLine(m, originMeanings, failedOrigins[m.Origin]))
+			if failedOrigins[m.Origin] {
+				rendered[m.Origin] = true
+			}
 		}
 		for _, rel := range relationsByKey[c.Key] {
 			sb.WriteString("\n")
 			writeRelationBlock(sb, rel, byKey, originMeanings)
 		}
 	}
+	return rendered
+}
+
+// formatConceptTitle renders a concept's "key — meaning" header, but
+// collapses to just the key when key and meaning are the same word
+// (e.g. an "eye" concept whose meaning is also "eye" used to render
+// as "**eye — eye**", which the user called out as visual noise).
+func formatConceptTitle(key, meaning string) string {
+	if strings.EqualFold(strings.TrimSpace(key), strings.TrimSpace(meaning)) {
+		return key
+	}
+	if meaning == "" {
+		return key
+	}
+	if key == "" {
+		return meaning
+	}
+	return key + " — " + meaning
 }
 
 // formatMemberLine renders one concept member as the bullet body —
@@ -870,7 +903,7 @@ func writeRelationBlock(sb *strings.Builder, rel conceptRelation, byKey map[stri
 		fmt.Fprintf(sb, "%s %s %s\n", label, rel.Arrow, rel.OtherKey)
 		return
 	}
-	fmt.Fprintf(sb, "%s %s **%s — %s**\n", label, rel.Arrow, other.Key, other.Meaning)
+	fmt.Fprintf(sb, "%s %s **%s**\n", label, rel.Arrow, formatConceptTitle(other.Key, other.Meaning))
 	for _, m := range other.Members {
 		fmt.Fprintf(sb, "    - %s\n", formatMemberLine(m, originMeanings, false))
 	}
@@ -930,6 +963,42 @@ func titleCase(s string) string {
 // failedConceptMemberSet). Concepts that don't touch any failure are
 // pure context for material the user didn't miss, so dropping them
 // keeps the quiz-review focused.
+// writeOriginSection renders the "Failed origins" subsection only when
+// origins is non-empty. Centralising the header write here means
+// callers can pass a pre-filtered slice (e.g. after dropping origins
+// already shown in a concept block) without having to gate the
+// header at every callsite.
+func writeOriginSection(sb *strings.Builder, origins []analytics.WrongWord, hasConversations bool) {
+	if len(origins) == 0 {
+		return
+	}
+	sb.WriteString("#### Failed origins\n\n")
+	for _, w := range origins {
+		writeEntry(sb, w, hasConversations)
+	}
+}
+
+// uncoveredOriginFailures returns the subset of origin failures whose
+// expression is NOT in the renderedAsConceptMember set. Origins that
+// already appeared as a bolded member of a rendered concept block
+// don't need a separate "Failed origins" entry — the concept block
+// carries the same name, meaning, and origin_family context. Vocab
+// failures keep their entries unconditionally because they carry
+// English-side info (meaning, sibling words) that concepts don't.
+func uncoveredOriginFailures(origins []analytics.WrongWord, renderedAsConceptMember map[string]bool) []analytics.WrongWord {
+	if len(origins) == 0 || len(renderedAsConceptMember) == 0 {
+		return origins
+	}
+	out := origins[:0:0]
+	for _, w := range origins {
+		if renderedAsConceptMember[w.Expression] {
+			continue
+		}
+		out = append(out, w)
+	}
+	return out
+}
+
 func conceptTouchesFailure(c notebook.Concept, failedOrigins map[string]bool) bool {
 	for _, m := range c.Members {
 		if failedOrigins[m.Origin] {
