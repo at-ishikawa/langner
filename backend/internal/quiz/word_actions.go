@@ -171,7 +171,7 @@ func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error
 // OverrideAnswer toggles the correctness of the most recent answer for a word.
 // Returns the new next review date string (YYYY-MM-DD format, empty if none).
 func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (string, error) {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return "", fmt.Errorf("failed to load learning histories: %w", err)
 	}

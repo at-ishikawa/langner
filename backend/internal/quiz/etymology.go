@@ -69,7 +69,7 @@ func (s *Service) LoadEtymologyOriginCards(
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -305,7 +305,7 @@ func (s *Service) SaveEtymologyOriginResult(
 	quizType notebook.QuizType,
 	isKnownWord bool,
 ) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -481,7 +481,7 @@ func (s *Service) GetEtymologyOriginNextReviewDates(cards []EtymologyOriginCard)
 	if s.disableShuffle {
 		return map[string]string{}, nil
 	}
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -592,7 +592,7 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}

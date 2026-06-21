@@ -23,12 +23,18 @@ type Service struct {
 	openaiClient       inference.Client
 	dictionaryMap      map[string]rapidapi.Response
 	learningRepository learning.LearningRepository
+	historyStore       learning.HistoryStore
+	originRepo         notebook.EtymologyOriginRepository
+	skipFlagRepo       notebook.SkipFlagRepository
 	calculator         notebook.IntervalCalculator
 	disableShuffle     bool
 }
 
 // NewService creates a new Service.
-// learningRepo is optional; pass nil when DB is not configured.
+// learningRepo / historyStore / originRepo / skipFlagRepo are optional in
+// pure unit tests; the runtime always wires them up via the bootstrap.
+// When historyStore is nil the legacy YAML loader is used as a fallback
+// so the interactive CLI commands keep working without a DB.
 func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.Client, dictionaryMap map[string]rapidapi.Response, learningRepo learning.LearningRepository, quizCfg config.QuizConfig) *Service {
 	return &Service{
 		notebooksConfig:    notebooksConfig,
@@ -38,6 +44,30 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
 		disableShuffle:     quizCfg.DisableShuffle,
 	}
+}
+
+// WithDBState wires the DB-backed history store + supporting repos.
+// Bootstrap calls it after constructing them. Service falls back to the
+// YAML loader for any call where these aren't set.
+func (s *Service) WithDBState(historyStore learning.HistoryStore, originRepo notebook.EtymologyOriginRepository, skipFlagRepo notebook.SkipFlagRepository) *Service {
+	s.historyStore = historyStore
+	s.originRepo = originRepo
+	s.skipFlagRepo = skipFlagRepo
+	return s
+}
+
+// loadHistories returns the per-notebook LearningHistory map either from
+// the DB-backed store (when wired) or from the legacy YAML directory.
+// All in-package callers go through this helper so the cutover from
+// YAML to DB is a single seam. Uses context.Background internally so
+// existing Service methods don't have to grow a ctx parameter just for
+// this — handlers that need real cancellation already pass ctx to
+// SaveResult / GradeAnswer etc.
+func (s *Service) loadHistories() (map[string][]notebook.LearningHistory, error) {
+	if s.historyStore != nil {
+		return s.historyStore.LoadAll(context.Background())
+	}
+	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
@@ -71,7 +101,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -255,7 +285,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, section
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -808,7 +838,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext, inc
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1335,7 +1365,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	}
 
 	// Also load from definitions-only books
-	learningHistories, _ := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, _ := s.loadHistories()
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
 		if _, isStory := storyIndexes[nbID]; isStory {
 			continue
@@ -1356,7 +1386,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 		return nil, err
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1401,7 +1431,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 		return nil, err
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1579,7 +1609,7 @@ func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]s
 	if s.disableShuffle {
 		return map[string]string{}, nil
 	}
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1671,7 +1701,7 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 // GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log
 // of a given expression in a specific notebook.
 func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return "", ""
 	}

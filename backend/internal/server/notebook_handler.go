@@ -19,6 +19,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/pdf"
 )
@@ -32,6 +33,7 @@ type NotebookHandler struct {
 	dictionaryReader *dictionary.Reader
 	openaiClient     inference.Client
 	noteRepository   notebook.NoteRepository
+	historyStore     learning.HistoryStore
 }
 
 // NewNotebookHandler creates a new NotebookHandler.
@@ -47,6 +49,15 @@ func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig 
 	}
 }
 
+// WithHistoryStore wires a DB-backed LearningHistory loader so the
+// handler stops reading learning_notes/*.yml. Bootstrap calls this once
+// the DB is available; when unset the legacy YAML path remains the
+// fallback so tests don't need a database.
+func (h *NotebookHandler) WithHistoryStore(store learning.HistoryStore) *NotebookHandler {
+	h.historyStore = store
+	return h
+}
+
 func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 	return notebook.NewReader(
 		h.notebooksConfig.StoriesDirectories,
@@ -59,12 +70,22 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 }
 
 
-func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
-	histories, err := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
+func (h *NotebookHandler) loadLearningHistory(ctx context.Context, notebookID string) ([]notebook.LearningHistory, error) {
+	histories, err := h.loadAllHistories(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
 	}
 	return histories[notebookID], nil
+}
+
+// loadAllHistories returns the per-notebook history map from the DB
+// store when wired, falling back to the YAML loader otherwise. Single
+// seam for the YAML→DB cutover.
+func (h *NotebookHandler) loadAllHistories(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+	if h.historyStore != nil {
+		return h.historyStore.LoadAll(ctx)
+	}
+	return notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
 }
 
 func convertLogsToProto(logs []notebook.LearningRecord) []*apiv1.LearningLogEntry {
@@ -98,7 +119,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create notebook reader: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(ctx, notebookID)
 	if err != nil {
 		return nil, err
 	}
@@ -530,7 +551,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read story notebooks: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(ctx, notebookID)
 	if err != nil {
 		return nil, err
 	}
