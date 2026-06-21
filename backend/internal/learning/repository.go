@@ -30,30 +30,40 @@ func NewDBLearningRepository(db *sqlx.DB) *DBLearningRepository {
 	return &DBLearningRepository{db: db}
 }
 
-// FindAll returns all learning logs.
+// FindAll returns all learning logs. note_id and origin_id are nullable
+// since migration 016 — COALESCE both to zero so the int64 fields scan
+// cleanly. Callers distinguish vocab vs etymology rows by which one is
+// non-zero.
+const selectLearningLogColumns = `SELECT id, COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0) AS origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, concept_key, easiness_factor, source_notebook_id, created_at, updated_at FROM learning_logs`
+
 func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, error) {
 	var logs []LearningLog
-	if err := r.db.SelectContext(ctx, &logs, "SELECT * FROM learning_logs ORDER BY id"); err != nil {
+	if err := r.db.SelectContext(ctx, &logs, selectLearningLogColumns+" ORDER BY id"); err != nil {
 		return nil, fmt.Errorf("load all learning logs: %w", err)
 	}
 	return logs, nil
 }
 
-// Create inserts a single learning log.
-// If NoteID is 0 and Expression is set, it will find or create the note on demand.
+// Create inserts a single learning log. Vocab logs need a NoteID (it
+// will be found-or-created from Expression if 0); etymology logs need
+// an OriginID. Exactly one of the two must end up non-zero; NULLIF
+// converts the zero side to SQL NULL for the nullable column.
 func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) error {
-	if log.NoteID == 0 && log.Expression != "" {
+	if log.OriginID == 0 && log.NoteID == 0 && log.Expression != "" {
 		noteID, err := r.ensureNoteExists(ctx, log)
 		if err != nil {
 			return fmt.Errorf("ensure note exists: %w", err)
 		}
 		log.NoteID = noteID
 	}
+	if log.NoteID == 0 && log.OriginID == 0 {
+		return fmt.Errorf("learning log requires NoteID or OriginID")
+	}
 
-	query := `INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	query := `INSERT INTO learning_logs (note_id, origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
+		VALUES (NULLIF(?, 0), NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?, ?)`
 	_, err := r.db.ExecContext(ctx, query,
-		log.NoteID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
+		log.NoteID, log.OriginID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
 	if err != nil {
 		return fmt.Errorf("insert learning log: %w", err)
 	}
@@ -97,8 +107,18 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 		return nil
 	}
 
-	columns := []string{"note_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
-	const chunkSize = 5000 // 5000 * 9 columns = 45000 placeholders, well under 65535
+	columns := []string{"note_id", "origin_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
+	const chunkSize = 5000 // 5000 * 10 columns = 50000 placeholders, under 65535
+
+	// Multi-row INSERT can't use NULLIF in VALUES — overwrite zero IDs
+	// with explicit *int64(nil) so sqlx passes SQL NULL. Vocab logs keep
+	// NoteID set; etymology logs keep OriginID set.
+	nullableID := func(id int64) interface{} {
+		if id == 0 {
+			return nil
+		}
+		return id
+	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for i := 0; i < len(logs); i += chunkSize {
@@ -111,7 +131,7 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 			query := database.BuildMultiRowInsert("learning_logs", columns, len(chunk))
 			var args []interface{}
 			for _, l := range chunk {
-				args = append(args, l.NoteID, l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
+				args = append(args, nullableID(l.NoteID), nullableID(l.OriginID), l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return fmt.Errorf("insert learning logs: %w", err)

@@ -397,6 +397,10 @@ func extractNotebookIDs(notes []notebook.NoteRecord) []string {
 //   - notes, etymology_origins, semantic_concepts, definition_concepts, dictionary_entries are leaf parents
 func dataTablesInDeletionOrder() []string {
 	return []string{
+		// note_skip_flags / origin_skip_flags hang off notes / origins
+		// without CASCADE on every dialect; delete them first.
+		"note_skip_flags",
+		"origin_skip_flags",
 		"note_origin_parts",
 		"notebook_notes",
 		"note_images",
@@ -406,6 +410,12 @@ func dataTablesInDeletionOrder() []string {
 		"semantic_concept_members",
 		"concept_relations",
 		"definition_concept_members",
+		// definitions_scenes cascades from definitions_sessions, but
+		// listing both explicitly keeps the FK-error story safe across
+		// dialects that don't honour CASCADE in the migration.
+		"definitions_scenes",
+		"definitions_sessions",
+		"flashcard_decks",
 		"notes",
 		"etymology_origins",
 		"semantic_concepts",
