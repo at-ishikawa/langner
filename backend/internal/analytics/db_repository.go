@@ -166,6 +166,11 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 		if err != nil {
 			return DayDetail{}, err
 		}
+		expressionType := ExpressionTypeVocabulary
+		if isEtymologyQuizType(w.QuizType) {
+			expressionType = ExpressionTypeOrigin
+		}
+		meta := r.metadataResolver.Resolve(ctx, w.NotebookID, w.Expression, expressionType, w.QuizType)
 		words = append(words, WrongWord{
 			NoteID:                w.NoteID,
 			Expression:            w.Expression,
@@ -177,6 +182,11 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 			CurrentWrongStreak:    CurrentWrongStreak(attempts),
 			PreviousCorrectStreak: PreviousCorrectStreak(attempts),
 			CurrentStatus:         w.Status,
+			LearnedAt:             w.LearnedAt,
+			Meaning:               meta.Meaning,
+			ExampleSentence:       meta.ExampleSentence,
+			NotebookKind:          meta.NotebookKind,
+			RelatedGroups:         meta.RelatedGroups,
 		})
 	}
 
