@@ -591,23 +591,15 @@ func (s *Service) applyNextInterval(notebookName, expression string, quizType no
 
 // filterFlashcardNotebooksTestMode returns every flashcard notebook with
 // every card included EXCEPT cards that carry an explicit skip flag for
-// the requested quizType. It populates LearnedLogs / ReverseLogs from
-// history so downstream consumers (concept collapse, response wrapping)
-// see the same shape FilterFlashcardNotebooks would have produced for a
-// non-filtered card.
+// the requested quizType. The Standard-quiz handler doesn't use the
+// note's per-card LearnedLogs / ReverseLogs (it builds Card{} from raw
+// fields), so we skip populating them — that side-steps the deprecation
+// staticcheck on Note.LearnedLogs without changing observable behaviour.
 func filterFlashcardNotebooksTestMode(notebooks []notebook.FlashcardNotebook, learningHistory []notebook.LearningHistory, quizType notebook.QuizType) []notebook.FlashcardNotebook {
 	result := make([]notebook.FlashcardNotebook, 0, len(notebooks))
 	for _, nb := range notebooks {
 		cards := make([]notebook.Note, 0, len(nb.Cards))
 		for _, card := range nb.Cards {
-			for _, h := range learningHistory {
-				if logs := h.GetLogs(nb.Title, "", card); len(logs) > 0 {
-					card.LearnedLogs = logs
-				}
-				if rev := h.GetReverseLogs(nb.Title, "", card); len(rev) > 0 {
-					card.ReverseLogs = rev
-				}
-			}
 			if notebook.IsExpressionSkipped(learningHistory, nb.Title, "", card.Expression, card.Definition, quizType) {
 				continue
 			}
