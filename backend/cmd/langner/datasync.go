@@ -73,6 +73,27 @@ func newMigrateImportDBCommand() *cobra.Command {
 				fmt.Printf("  Note origin parts:  %d new, %d skipped\n", result.Etymology.PartsNew, result.Etymology.PartsSkipped)
 			}
 
+			// Phase 2: seed the migration-016 state tables from the same
+			// YAML the importer just consumed. The state seeder is
+			// idempotent so re-runs only insert what's missing.
+			if !opts.DryRun {
+				seeder := newStateSeederFromConfig(cfg, db, os.Stdout)
+				if seeder == nil {
+					return nil
+				}
+				stateResult, err := seeder.SeedAll(ctx)
+				if err != nil {
+					return fmt.Errorf("seed db-only state: %w", err)
+				}
+				fmt.Println("\nState Seed Summary:")
+				fmt.Printf("  Definitions sessions: %d new\n", stateResult.DefinitionsSessionsCreated)
+				fmt.Printf("  Definitions scenes:   %d new\n", stateResult.DefinitionsScenesCreated)
+				fmt.Printf("  Flashcard decks:      %d new\n", stateResult.FlashcardDecksCreated)
+				fmt.Printf("  Note skip flags:      %d new\n", stateResult.NoteSkipFlagsCreated)
+				fmt.Printf("  Origin skip flags:    %d new\n", stateResult.OriginSkipFlagsCreated)
+				fmt.Printf("  Etymology logs:       %d new\n", stateResult.EtymologyLogsCreated)
+			}
+
 			return nil
 		},
 	}
@@ -258,6 +279,34 @@ func openConfigAndDB() (*config.Config, *sqlx.DB, error) {
 		return nil, nil, fmt.Errorf("open database: %w", err)
 	}
 	return cfg, db, nil
+}
+
+// newStateSeederFromConfig wires the datasync.StateSeeder for the
+// migration-016 tables. Returns nil when the YAML reader can't be
+// built (no notebooks configured) since no source data is available.
+func newStateSeederFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *datasync.StateSeeder {
+	reader, err := notebook.NewReader(
+		cfg.Notebooks.StoriesDirectories,
+		cfg.Notebooks.FlashcardsDirectories,
+		cfg.Notebooks.BooksDirectories,
+		cfg.Notebooks.DefinitionsDirectories,
+		cfg.Notebooks.EtymologyDirectories,
+		nil,
+	)
+	if err != nil {
+		return nil
+	}
+	return datasync.NewStateSeeder(
+		reader,
+		notebook.NewDBNoteRepository(db),
+		notebook.NewDBEtymologyOriginRepository(db),
+		notebook.NewDBDefinitionsRepository(db),
+		notebook.NewDBFlashcardDeckRepository(db),
+		notebook.NewDBSkipFlagRepository(db),
+		learning.NewDBLearningRepository(db),
+		learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, nil),
+		writer,
+	)
 }
 
 func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *datasync.Importer {
