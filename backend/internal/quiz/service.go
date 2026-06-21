@@ -1477,8 +1477,12 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 	for _, story := range stories {
 		for _, scene := range story.Scenes {
 			for _, definition := range scene.Definitions {
-				// Skip words marked as skipped from freeform mode
-				if isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeFreeform, nil) {
+				// Skip words marked as skipped from freeform mode.
+				// disableShuffle bypasses this filter so e2e tests that
+				// share backend state across scenarios can re-use a word
+				// after a prior scenario excluded it (the test suite has
+				// no per-test reset hook).
+				if !s.disableShuffle && isExpressionSkippedInHistory(learningHistories[notebookID], story.Event, scene.Title, &definition, notebook.QuizTypeFreeform, nil) {
 					continue
 				}
 
@@ -1521,8 +1525,9 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 	var cards []FreeformCard
 	for _, nb := range notebooks {
 		for _, card := range nb.Cards {
-			// Skip words marked as skipped from freeform mode
-			if isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeFreeform, nil) {
+			// Skip words marked as skipped from freeform mode.
+			// See loadStoryWords for the disableShuffle rationale.
+			if !s.disableShuffle && isExpressionSkippedInHistory(learningHistories[notebookID], nb.Title, "", &card, notebook.QuizTypeFreeform, nil) {
 				continue
 			}
 
