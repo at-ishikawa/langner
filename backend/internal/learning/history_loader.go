@@ -60,8 +60,11 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 	}
 
 	// Bucket logs by their target. Vocab logs key on note_id; etymology
-	// logs key on origin_id. note_id and origin_id are mutually exclusive
-	// per row (one is non-zero).
+	// logs key on origin_id. ImportLearningLogs (legacy path) routed every
+	// expression — vocab AND origin — through note_id with a synthetic
+	// note when no notebook_notes link existed; mergeOriginHistories below
+	// re-attaches those orphan etymology logs to the matching origin so
+	// the reconstructed shape matches what the YAML reader produced.
 	logsByNote := make(map[int64][]LearningLog, len(logs))
 	logsByOrigin := make(map[int64][]LearningLog)
 	for _, l := range logs {
@@ -72,6 +75,23 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 		if l.OriginID != 0 {
 			logsByOrigin[l.OriginID] = append(logsByOrigin[l.OriginID], l)
 		}
+	}
+
+	// orphanNoteLogsByName lets mergeOriginHistories find logs the
+	// legacy importer stashed on synthetic notes (Usage = origin name,
+	// no notebook_notes link). Keyed by lower(Usage).
+	orphanNoteLogsByName := make(map[string][]LearningLog)
+	for _, n := range notes {
+		if len(n.NotebookNotes) > 0 {
+			continue
+		}
+		ls := logsByNote[n.ID]
+		if len(ls) == 0 {
+			continue
+		}
+		orphanNoteLogsByName[strings.ToLower(strings.TrimSpace(n.Usage))] = append(
+			orphanNoteLogsByName[strings.ToLower(strings.TrimSpace(n.Usage))], ls...,
+		)
 	}
 
 	noteIDs := make([]int64, 0, len(notes))
@@ -117,7 +137,7 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 			m[f.QuizType] = f.SkippedAt.UTC().Format(time.RFC3339)
 			skipFlagsByOrigin[f.OriginID] = m
 		}
-		mergeOriginHistories(origins, logsByOrigin, skipFlagsByOrigin, histories)
+		mergeOriginHistories(origins, logsByOrigin, orphanNoteLogsByName, skipFlagsByOrigin, histories)
 	}
 
 	return histories, nil
@@ -221,11 +241,20 @@ func buildVocabHistories(
 func mergeOriginHistories(
 	origins []notebook.EtymologyOriginRecord,
 	logsByOrigin map[int64][]LearningLog,
+	orphanLogsByName map[string][]LearningLog,
 	skipFlagsByOrigin map[int64]notebook.SkippedAtMap,
 	out map[string][]notebook.LearningHistory,
 ) {
 	for _, o := range origins {
-		expr := newExpressionFromOrigin(o, logsByOrigin[o.ID], skipFlagsByOrigin[o.ID])
+		// Combine logs the importer wrote with origin_id (forward-only
+		// path) and those it stashed on a synthetic note keyed by name
+		// (legacy path). Same origin may have both kinds during the
+		// transition window.
+		logs := append([]LearningLog{}, logsByOrigin[o.ID]...)
+		if orphan := orphanLogsByName[strings.ToLower(strings.TrimSpace(o.Origin))]; len(orphan) > 0 {
+			logs = append(logs, orphan...)
+		}
+		expr := newExpressionFromOrigin(o, logs, skipFlagsByOrigin[o.ID])
 		histories := out[o.NotebookID]
 		matched := false
 		for i := range histories {
@@ -271,19 +300,61 @@ func sessionMatches(h notebook.LearningHistory, sessionTitle string) bool {
 }
 
 func newExpressionFromNote(n notebook.NoteRecord, logs []LearningLog, skipFlags notebook.SkippedAtMap) notebook.LearningHistoryExpression {
-	exp := buildExpression(n.Usage, logs)
-	if n.Entry != "" && n.Entry != n.Usage {
-		// Use Entry as the canonical expression when set — matches the YAML convention.
-		exp.Expression = n.Entry
+	entry := n.Entry
+	if entry == "" {
+		entry = n.Usage
 	}
+	exp := buildExpressionFromDBOrder(entry, logs)
 	exp.Type = notebook.LearningExpressionTypeVocabulary
 	exp.SkippedAt = skipFlags
 	return exp
 }
 
 func newExpressionFromOrigin(o notebook.EtymologyOriginRecord, logs []LearningLog, skipFlags notebook.SkippedAtMap) notebook.LearningHistoryExpression {
-	exp := buildExpression(o.Origin, logs)
+	exp := buildExpressionFromDBOrder(o.Origin, logs)
 	exp.Type = notebook.LearningExpressionTypeOrigin
 	exp.SkippedAt = skipFlags
 	return exp
+}
+
+// buildExpressionFromDBOrder is the DB-side companion to
+// learning.buildExpression. The YAML reader keeps records in their YAML
+// array order ("first" is "newest" — new entries are PREPENDED on write).
+// Logs land in the DB during import in YAML order; their primary key is
+// monotonically increasing, so ORDER BY id ASC reproduces the YAML array
+// order. We therefore split logs into the per-quiz-type buckets without
+// re-sorting so callers' GetLatestStatus / GetLatestLogs sees the same
+// [0] entry the YAML loader would have surfaced.
+func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.LearningHistoryExpression {
+	var learnedLogs, reverseLogs, breakdownLogs, assemblyLogs []notebook.LearningRecord
+	convert := func(l LearningLog) notebook.LearningRecord {
+		return notebook.LearningRecord{
+			Status:         notebook.LearnedStatus(l.Status),
+			LearnedAt:      notebook.NewDate(l.LearnedAt),
+			Quality:        l.Quality,
+			ResponseTimeMs: int64(l.ResponseTimeMs),
+			QuizType:       l.QuizType,
+			IntervalDays:   l.IntervalDays,
+		}
+	}
+	for _, l := range logs {
+		rec := convert(l)
+		switch l.QuizType {
+		case string(notebook.QuizTypeReverse):
+			reverseLogs = append(reverseLogs, rec)
+		case string(notebook.QuizTypeEtymologyStandard):
+			breakdownLogs = append(breakdownLogs, rec)
+		case string(notebook.QuizTypeEtymologyReverse):
+			assemblyLogs = append(assemblyLogs, rec)
+		default:
+			learnedLogs = append(learnedLogs, rec)
+		}
+	}
+	return notebook.LearningHistoryExpression{
+		Expression:             expression,
+		LearnedLogs:            learnedLogs,
+		ReverseLogs:            reverseLogs,
+		EtymologyBreakdownLogs: breakdownLogs,
+		EtymologyAssemblyLogs:  assemblyLogs,
+	}
 }
