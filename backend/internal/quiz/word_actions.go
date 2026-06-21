@@ -1,6 +1,7 @@
 package quiz
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -89,6 +90,9 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook
 	if len(quizTypes) == 0 {
 		return fmt.Errorf("at least one quiz type is required to skip a word")
 	}
+	if s.skipFlagRepo != nil && s.noteRepo != nil {
+		return s.skipWordDB(info, quizTypes)
+	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
 		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
@@ -148,6 +152,9 @@ func (s *Service) conceptMembersOrSelf(notebookName, expression string) []string
 func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error {
 	if len(quizTypes) == 0 {
 		return fmt.Errorf("at least one quiz type is required to resume a word")
+	}
+	if s.skipFlagRepo != nil && s.noteRepo != nil {
+		return s.resumeWordDB(info, quizTypes)
 	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
@@ -223,6 +230,86 @@ func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, inf
 		}
 	}
 	return ""
+}
+
+// skipWordDB writes the skip flags through SkipFlagRepository. The word's
+// note IDs are resolved by walking noteRepo.FindAll once and matching
+// notes whose notebook_notes link to this notebook with a matching
+// expression; concept-sibling propagation reuses the same expansion the
+// YAML path uses.
+func (s *Service) skipWordDB(info CardInfo, quizTypes []notebook.QuizType) error {
+	ctx := context.Background()
+	notesByExpr, err := s.notesForNotebook(ctx, info.NotebookName)
+	if err != nil {
+		return err
+	}
+	expressions := s.conceptMembersOrSelf(info.NotebookName, info.Expression)
+	skippedAt := time.Now()
+	for _, expr := range expressions {
+		noteID := notesByExpr[strings.ToLower(strings.TrimSpace(expr))]
+		if noteID == 0 {
+			continue
+		}
+		for _, qt := range quizTypes {
+			if err := s.skipFlagRepo.SkipNote(ctx, noteID, string(qt), skippedAt); err != nil {
+				return fmt.Errorf("skip note %d (%s): %w", noteID, qt, err)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) resumeWordDB(info CardInfo, quizTypes []notebook.QuizType) error {
+	ctx := context.Background()
+	notesByExpr, err := s.notesForNotebook(ctx, info.NotebookName)
+	if err != nil {
+		return err
+	}
+	expressions := s.conceptMembersOrSelf(info.NotebookName, info.Expression)
+	for _, expr := range expressions {
+		noteID := notesByExpr[strings.ToLower(strings.TrimSpace(expr))]
+		if noteID == 0 {
+			continue
+		}
+		for _, qt := range quizTypes {
+			if err := s.skipFlagRepo.ResumeNote(ctx, noteID, string(qt)); err != nil {
+				return fmt.Errorf("resume note %d (%s): %w", noteID, qt, err)
+			}
+		}
+	}
+	return nil
+}
+
+// notesForNotebook returns a lowercase-expression → note_id index for
+// every note linked to notebookID via notebook_notes. The Service holds
+// no per-notebook cache yet; this is one FindAll per Skip/Resume RPC,
+// which mirrors the previous behaviour of loading the full YAML
+// directory and is fine for the current data sizes.
+func (s *Service) notesForNotebook(ctx context.Context, notebookID string) (map[string]int64, error) {
+	notes, err := s.noteRepo.FindAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load notes for skip: %w", err)
+	}
+	out := make(map[string]int64)
+	for _, n := range notes {
+		linked := false
+		for _, nn := range n.NotebookNotes {
+			if nn.NotebookID == notebookID {
+				linked = true
+				break
+			}
+		}
+		if !linked {
+			continue
+		}
+		if k := strings.ToLower(strings.TrimSpace(n.Usage)); k != "" {
+			out[k] = n.ID
+		}
+		if k := strings.ToLower(strings.TrimSpace(n.Entry)); k != "" {
+			out[k] = n.ID
+		}
+	}
+	return out, nil
 }
 
 func toggleLogs(expr *notebook.LearningHistoryExpression, quizType notebook.QuizType, calculator notebook.IntervalCalculator) string {

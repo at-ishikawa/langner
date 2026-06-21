@@ -26,6 +26,7 @@ type Service struct {
 	historyStore       learning.HistoryStore
 	originRepo         notebook.EtymologyOriginRepository
 	skipFlagRepo       notebook.SkipFlagRepository
+	noteRepo           notebook.NoteRepository
 	calculator         notebook.IntervalCalculator
 	disableShuffle     bool
 }
@@ -49,10 +50,11 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 // WithDBState wires the DB-backed history store + supporting repos.
 // Bootstrap calls it after constructing them. Service falls back to the
 // YAML loader for any call where these aren't set.
-func (s *Service) WithDBState(historyStore learning.HistoryStore, originRepo notebook.EtymologyOriginRepository, skipFlagRepo notebook.SkipFlagRepository) *Service {
+func (s *Service) WithDBState(historyStore learning.HistoryStore, originRepo notebook.EtymologyOriginRepository, skipFlagRepo notebook.SkipFlagRepository, noteRepo notebook.NoteRepository) *Service {
 	s.historyStore = historyStore
 	s.originRepo = originRepo
 	s.skipFlagRepo = skipFlagRepo
+	s.noteRepo = noteRepo
 	return s
 }
 

@@ -127,7 +127,7 @@ func run(ctx context.Context) error {
 	analyticsRepo := analytics.Repository(dbAnalyticsRepo)
 
 	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
-	svc.WithDBState(historyStore, originRepo, skipFlagRepo)
+	svc.WithDBState(historyStore, originRepo, skipFlagRepo, noteRepo)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
