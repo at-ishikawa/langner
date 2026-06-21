@@ -134,8 +134,10 @@ func run(ctx context.Context) error {
 		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
 	}
 	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
+	definitionsRepo := notebook.NewDBDefinitionsRepository(db)
 	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
 	notebookHandler.WithHistoryStore(historyStore)
+	notebookHandler.WithDefinitionsRepo(definitionsRepo)
 
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
