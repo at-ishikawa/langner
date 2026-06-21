@@ -3,7 +3,6 @@ package quiz
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -451,34 +450,11 @@ func (s *Service) loadFlashcardCards(
 		return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", notebookID, err)
 	}
 
-	// TEMP debug: diagnose why LoadCards returns 0 cards for Idioms in e2e CI.
-	{
-		histories := learningHistories[notebookID]
-		summaries := make([]string, 0, len(histories))
-		for _, h := range histories {
-			summaries = append(summaries, fmt.Sprintf("title=%q type=%q exprs=%d", h.Metadata.Title, h.Metadata.Type, len(h.Expressions)))
-		}
-		nbSummaries := make([]string, 0, len(notebooks))
-		for _, nb := range notebooks {
-			nbSummaries = append(nbSummaries, fmt.Sprintf("title=%q cards=%d", nb.Title, len(nb.Cards)))
-		}
-		log.Printf("DEBUG loadFlashcardCards id=%s sectionFilter=%v includeUnstudied=%v notebooks=[%s] histories=[%s]",
-			notebookID, sectionFilter, includeUnstudied, strings.Join(nbSummaries, "; "), strings.Join(summaries, "; "))
-	}
-
 	filtered, err := notebook.FilterFlashcardNotebooks(
 		notebooks, learningHistories[notebookID], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
-	}
-	// TEMP debug: report how many cards survived the filter.
-	{
-		total := 0
-		for _, nb := range filtered {
-			total += len(nb.Cards)
-		}
-		log.Printf("DEBUG loadFlashcardCards id=%s filteredNotebooks=%d filteredCardsTotal=%d", notebookID, len(filtered), total)
 	}
 
 	var cards []Card
@@ -556,7 +532,9 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer str
 // every time a member-named concept card is graded.
 func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
-	if result.Correct { status = "understood" }
+	if result.Correct {
+		status = "understood"
+	}
 	expression := card.Entry
 	originalExpression := card.OriginalEntry
 	if card.ConceptHead != "" {
@@ -571,10 +549,51 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 		Expression: expression, OriginalExpression: originalExpression,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
+	s.applyNextInterval(card.NotebookName, expression, notebook.QuizTypeNotebook, log)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
 	return nil
+}
+
+// applyNextInterval mirrors what YAMLLearningRepository.Create did inside
+// the in-memory updater: load the existing per-quiz-type log chain, ask
+// the calculator for the new tentative record's interval, and stamp it
+// onto the LearningLog before the repository write. Without this step
+// the DB row's interval_days stays 0 and needsToLearn falls back to a
+// count-based threshold that wrongly drops recently-correct cards.
+func (s *Service) applyNextInterval(notebookName, expression string, quizType notebook.QuizType, log *learning.LearningLog) {
+	if s.calculator == nil {
+		return
+	}
+	existing := s.existingLogsForQuizType(notebookName, expression, quizType)
+	tentative := notebook.LearningRecord{
+		Status:         notebook.LearnedStatus(log.Status),
+		LearnedAt:      notebook.NewDate(log.LearnedAt),
+		Quality:        log.Quality,
+		ResponseTimeMs: int64(log.ResponseTimeMs),
+		QuizType:       log.QuizType,
+	}
+	interval, _ := s.calculator.NextIntervalForWrite(existing, tentative)
+	log.IntervalDays = interval
+}
+
+// existingLogsForQuizType returns the chain of LearningRecords for
+// the given expression in the given notebook, filtered to the requested
+// quiz type. FindExpressionByName walks both flat (flashcard) and
+// scene-based (story) histories, so this works regardless of notebook
+// shape. Returns nil when no history exists yet.
+func (s *Service) existingLogsForQuizType(notebookName, expression string, quizType notebook.QuizType) []notebook.LearningRecord {
+	histories, err := s.loadHistories()
+	if err != nil {
+		return nil
+	}
+	updater := notebook.NewLearningHistoryUpdater(histories[notebookName], s.calculator)
+	expr := updater.FindExpressionByName(expression)
+	if expr == nil {
+		return nil
+	}
+	return expr.GetLogsForQuizType(quizType)
 }
 
 // storyHasContent reports whether any scene carries prose or dialogue worth
@@ -1337,6 +1356,7 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 		Expression: expression, OriginalExpression: expression,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
+	s.applyNextInterval(card.NotebookName, expression, notebook.QuizTypeReverse, log)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -1607,6 +1627,7 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 		Expression: expression, OriginalExpression: expression,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
+	s.applyNextInterval(card.NotebookName, expression, notebook.QuizTypeFreeform, log)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}

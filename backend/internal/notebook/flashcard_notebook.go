@@ -2,7 +2,6 @@ package notebook
 
 import (
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	"time"
@@ -137,12 +136,8 @@ func FilterFlashcardNotebooks(
 				return nil, fmt.Errorf("empty card.Expression: %v in flashcard notebook %s", card, notebook.Title)
 			}
 
-			// TEMP debug
-			log.Printf("DEBUG FilterFlashcardNotebooks card=%q learnedLogs=%d reverseLogs=%d", card.Expression, len(card.LearnedLogs), len(card.ReverseLogs))
-
 			// Skip words that are marked as skipped from this quiz type
 			if isExpressionSkipped(learningHistory, notebook.Title, "", card, quizType) {
-				log.Printf("DEBUG FilterFlashcardNotebooks card=%q DROPPED reason=skipped\n", card.Expression)
 				continue
 			}
 
@@ -153,13 +148,11 @@ func FilterFlashcardNotebooks(
 			// always returns true for misunderstood. The "Include unstudied"
 			// toggle controls this path.
 			if !includeNoCorrectAnswers && !card.hasAnyCorrectAnswer() {
-				log.Printf("DEBUG FilterFlashcardNotebooks card=%q DROPPED reason=no-correct-answer\n", card.Expression)
 				continue
 			}
 
 			// Check if card needs to be learned based on spaced repetition
 			if !card.needsToLearn() {
-				log.Printf("DEBUG FilterFlashcardNotebooks card=%q DROPPED reason=does-not-need-to-learn\n", card.Expression)
 				continue
 			}
 
@@ -168,7 +161,6 @@ func FilterFlashcardNotebooks(
 				return nil, fmt.Errorf("card.SetDetails() > %w", err)
 			}
 
-			log.Printf("DEBUG FilterFlashcardNotebooks card=%q KEPT\n", card.Expression)
 			cards = append(cards, card)
 		}
 
