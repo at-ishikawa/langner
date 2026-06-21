@@ -457,6 +457,17 @@ func (s *Service) loadFlashcardCards(
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
 	}
 
+	// Test mode: when disableShuffle is set the e2e suite expects every
+	// fixture card to be reachable regardless of accumulated learning
+	// history. Earlier tests in the same run write fresh SR-stamped logs
+	// for cards like "break the ice", which would otherwise drop them
+	// from the Standard quiz queue for 7+ days. loadFlashcardReverseCards
+	// already has this bypass; mirror it here so Standard tests aren't
+	// flakier than Reverse for the same reason.
+	if s.disableShuffle {
+		filtered = filterFlashcardNotebooksTestMode(notebooks, learningHistories[notebookID], notebook.QuizTypeNotebook)
+	}
+
 	var cards []Card
 	for _, nb := range filtered {
 		if !inSectionFilter(sectionFilter, nb.Title) {
@@ -576,6 +587,39 @@ func (s *Service) applyNextInterval(notebookName, expression string, quizType no
 	}
 	interval, _ := s.calculator.NextIntervalForWrite(existing, tentative)
 	log.IntervalDays = interval
+}
+
+// filterFlashcardNotebooksTestMode returns every flashcard notebook with
+// every card included EXCEPT cards that carry an explicit skip flag for
+// the requested quizType. It populates LearnedLogs / ReverseLogs from
+// history so downstream consumers (concept collapse, response wrapping)
+// see the same shape FilterFlashcardNotebooks would have produced for a
+// non-filtered card.
+func filterFlashcardNotebooksTestMode(notebooks []notebook.FlashcardNotebook, learningHistory []notebook.LearningHistory, quizType notebook.QuizType) []notebook.FlashcardNotebook {
+	result := make([]notebook.FlashcardNotebook, 0, len(notebooks))
+	for _, nb := range notebooks {
+		cards := make([]notebook.Note, 0, len(nb.Cards))
+		for _, card := range nb.Cards {
+			for _, h := range learningHistory {
+				if logs := h.GetLogs(nb.Title, "", card); len(logs) > 0 {
+					card.LearnedLogs = logs
+				}
+				if rev := h.GetReverseLogs(nb.Title, "", card); len(rev) > 0 {
+					card.ReverseLogs = rev
+				}
+			}
+			if notebook.IsExpressionSkipped(learningHistory, nb.Title, "", card.Expression, card.Definition, quizType) {
+				continue
+			}
+			cards = append(cards, card)
+		}
+		if len(cards) == 0 {
+			continue
+		}
+		nb.Cards = cards
+		result = append(result, nb)
+	}
+	return result
 }
 
 // existingLogsForQuizType returns the chain of LearningRecords for
