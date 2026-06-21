@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -73,11 +74,10 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
-	if err != nil {
-		slog.Warn("failed to load dictionary cache", "error", err)
-		dictionaryMap = make(map[string]rapidapi.Response)
-	}
+	// dictionaryMap is loaded from the DB further below, after the
+	// MySQL connection is open. Initialise empty here so the various
+	// handlers can still close over the pointer before that happens.
+	dictionaryMap := make(map[string]rapidapi.Response)
 
 	errorLogger := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -110,6 +110,18 @@ func run(ctx context.Context) error {
 	originRepo := notebook.NewDBEtymologyOriginRepository(db)
 	skipFlagRepo := notebook.NewDBSkipFlagRepository(db)
 	historyStore := learning.NewDBHistoryStore(noteRepo, learningRepo, originRepo, skipFlagRepo)
+
+	dictRepo := dictionary.NewDBDictionaryRepository(db)
+	if entries, derr := dictRepo.FindAll(ctx); derr != nil {
+		slog.Warn("failed to load dictionary cache from DB", "error", derr)
+	} else {
+		for _, e := range entries {
+			var resp rapidapi.Response
+			if uerr := json.Unmarshal(e.Response, &resp); uerr == nil {
+				dictionaryMap[e.Word] = resp
+			}
+		}
+	}
 
 	dbAnalyticsRepo := analytics.NewDBRepository(db)
 	if reader, err := notebook.NewReader(
@@ -172,14 +184,6 @@ func loadConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("config.NewConfigLoader() > %w", err)
 	}
 	return loader.Load()
-}
-
-func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
-	responses, err := rapidapi.NewReader().Read(cacheDir)
-	if err != nil {
-		return nil, fmt.Errorf("rapidapi.NewReader().Read() > %w", err)
-	}
-	return rapidapi.FromResponsesToMap(responses), nil
 }
 
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
