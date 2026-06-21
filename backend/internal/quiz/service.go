@@ -3,6 +3,7 @@ package quiz
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"regexp"
 	"sort"
@@ -450,11 +451,34 @@ func (s *Service) loadFlashcardCards(
 		return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", notebookID, err)
 	}
 
+	// TEMP debug: diagnose why LoadCards returns 0 cards for Idioms in e2e CI.
+	{
+		histories := learningHistories[notebookID]
+		summaries := make([]string, 0, len(histories))
+		for _, h := range histories {
+			summaries = append(summaries, fmt.Sprintf("title=%q type=%q exprs=%d", h.Metadata.Title, h.Metadata.Type, len(h.Expressions)))
+		}
+		nbSummaries := make([]string, 0, len(notebooks))
+		for _, nb := range notebooks {
+			nbSummaries = append(nbSummaries, fmt.Sprintf("title=%q cards=%d", nb.Title, len(nb.Cards)))
+		}
+		log.Printf("DEBUG loadFlashcardCards id=%s sectionFilter=%v includeUnstudied=%v notebooks=[%s] histories=[%s]",
+			notebookID, sectionFilter, includeUnstudied, strings.Join(nbSummaries, "; "), strings.Join(summaries, "; "))
+	}
+
 	filtered, err := notebook.FilterFlashcardNotebooks(
 		notebooks, learningHistories[notebookID], s.dictionaryMap, false, includeUnstudied, notebook.QuizTypeNotebook,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to filter flashcard notebook %q: %w", notebookID, err)
+	}
+	// TEMP debug: report how many cards survived the filter.
+	{
+		total := 0
+		for _, nb := range filtered {
+			total += len(nb.Cards)
+		}
+		log.Printf("DEBUG loadFlashcardCards id=%s filteredNotebooks=%d filteredCardsTotal=%d", notebookID, len(filtered), total)
 	}
 
 	var cards []Card
