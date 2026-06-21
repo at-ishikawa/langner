@@ -342,9 +342,25 @@ func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.
 		switch l.QuizType {
 		case string(notebook.QuizTypeReverse):
 			reverseLogs = append(reverseLogs, rec)
+		case string(notebook.QuizTypeFreeform):
+			// Freeform tests both directions: append to LearnedLogs
+			// AND ReverseLogs so GetLogsForQuizType returns the entry
+			// regardless of which slot the caller queries. Mirrors how
+			// SaveResult's updater wrote two records when the YAML
+			// path was authoritative.
+			learnedLogs = append(learnedLogs, rec)
+			reverseLogs = append(reverseLogs, rec)
 		case string(notebook.QuizTypeEtymologyStandard):
 			breakdownLogs = append(breakdownLogs, rec)
 		case string(notebook.QuizTypeEtymologyReverse):
+			assemblyLogs = append(assemblyLogs, rec)
+		case string(notebook.QuizTypeEtymologyFreeform):
+			// Etymology Freeform writes a single DB row with this
+			// quiz_type; SetLogsForQuizType / GetLogsForQuizType
+			// expect both etymology slots populated. Duplicate the
+			// record into both so a follow-up Override or read sees
+			// the entry on either lookup side.
+			breakdownLogs = append(breakdownLogs, rec)
 			assemblyLogs = append(assemblyLogs, rec)
 		default:
 			learnedLogs = append(learnedLogs, rec)
