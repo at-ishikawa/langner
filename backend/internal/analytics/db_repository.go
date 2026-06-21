@@ -15,12 +15,25 @@ import (
 // notebook_notes (for the notebook title and scene) so the response
 // matches what the YAML repository produces.
 type DBRepository struct {
-	db *sqlx.DB
+	db               *sqlx.DB
+	metadataResolver MetadataResolver
 }
 
 // NewDBRepository returns an analytics Repository backed by the configured DB.
 func NewDBRepository(db *sqlx.DB) *DBRepository {
-	return &DBRepository{db: db}
+	return &DBRepository{db: db, metadataResolver: noMetadataResolver{}}
+}
+
+// WithMetadataResolver attaches a resolver that hydrates WrongWord
+// cards with the canonical meaning, an example sentence, and the
+// notebook kind. Same shape the YAML repository accepts so handlers
+// don't need to know which side they're on.
+func (r *DBRepository) WithMetadataResolver(resolver MetadataResolver) *DBRepository {
+	if resolver == nil {
+		resolver = noMetadataResolver{}
+	}
+	r.metadataResolver = resolver
+	return r
 }
 
 // dailyRow is the projection used for one row of the daily summary query.

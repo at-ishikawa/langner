@@ -89,23 +89,29 @@ func run(ctx context.Context) error {
 		}
 	}))
 
-	// Set up repositories with dual storage when DB is configured
-	calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
-	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, calculator)
-	var learningRepo learning.LearningRepository = yamlLearningRepo
-	var noteRepo notebook.NoteRepository
-	var defsDir string
-	if len(cfg.Notebooks.DefinitionsDirectories) > 0 && cfg.Notebooks.DefinitionsDirectories[0] != "" { defsDir = cfg.Notebooks.DefinitionsDirectories[0] }
-	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
-	noteRepo = yamlNoteRepo
+	// The server is DB-only: state (notes, learning logs, skip flags,
+	// definition / flashcard structure, dictionary cache) lives in MySQL.
+	// YAML files under examples/* stay as the shared content library
+	// (stories, ebook chapters, etymology reference notebooks) and are
+	// still read by notebook.Reader at request time.
+	if cfg.Database.Host == "" || cfg.Database.Password == "" {
+		return fmt.Errorf("database is required: set database.host and DB_PASSWORD")
+	}
+	db, err := database.Open(cfg.Database)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	app.AddShutdownHook(func(ctx context.Context) error {
+		return db.Close()
+	})
 
-	// Analytics always reads from YAML: the on-disk learning history files are
-	// the only place etymology quiz results are persisted today —
-	// SaveEtymologyOriginResult writes YAML directly and does not go through
-	// the learning repository, so the DB's learning_logs has only vocab rows.
-	// Once etymology gets first-class DB storage we can swap this for a
-	// hybrid that pulls vocab from DB and etymology from YAML.
-	yamlAnalyticsRepo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
+	learningRepo := learning.NewDBLearningRepository(db)
+	noteRepo := notebook.NewDBNoteRepository(db)
+	originRepo := notebook.NewDBEtymologyOriginRepository(db)
+	skipFlagRepo := notebook.NewDBSkipFlagRepository(db)
+	historyStore := learning.NewDBHistoryStore(noteRepo, learningRepo, originRepo, skipFlagRepo)
+
+	dbAnalyticsRepo := analytics.NewDBRepository(db)
 	if reader, err := notebook.NewReader(
 		cfg.Notebooks.StoriesDirectories,
 		cfg.Notebooks.FlashcardsDirectories,
@@ -116,27 +122,12 @@ func run(ctx context.Context) error {
 	); err != nil {
 		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
 	} else {
-		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
+		dbAnalyticsRepo = dbAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
 	}
-	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
-
-	if cfg.Database.Host != "" && cfg.Database.Password != "" {
-		db, err := database.Open(cfg.Database)
-		if err != nil {
-			slog.Warn("failed to open database, running with YAML-only storage", "error", err)
-		} else {
-			app.AddShutdownHook(func(ctx context.Context) error {
-				return db.Close()
-			})
-			dbLearningRepo := learning.NewDBLearningRepository(db)
-			dbNoteRepo := notebook.NewDBNoteRepository(db)
-			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
-			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
-			slog.Info("database connected, dual storage enabled")
-		}
-	}
+	analyticsRepo := analytics.Repository(dbAnalyticsRepo)
 
 	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
+	svc.WithDBState(historyStore, originRepo, skipFlagRepo)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
@@ -144,6 +135,7 @@ func run(ctx context.Context) error {
 	}
 	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
 	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
+	notebookHandler.WithHistoryStore(historyStore)
 
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
