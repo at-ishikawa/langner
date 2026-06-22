@@ -98,3 +98,75 @@ jobs:
         run: ./langner migrate validate-db --config config.example.yml
         env:
           DB_PASSWORD: password
+
+      # Exercise sync-db against MySQL end-to-end: drop the schema this
+      # job just populated, run every migration from scratch, re-import
+      # the example YAML, and verify the roundtrip. This is the path a
+      # user would take to recover from a half-applied migration or
+      # drifted DB; if it ever fails on a fresh checkout we want CI to
+      # catch it instead of the user.
+      - name: Run langner migrate sync-db (MySQL)
+        run: ./langner migrate sync-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
+
+  sync-db-tidb:
+    name: migrate sync-db against TiDB
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'backend/go.mod'
+
+      # The PingCAP service image needs ContainerCommand overrides to
+      # run in standalone mode, which GitHub Actions' `services:` block
+      # doesn't support cleanly. Running it as a manual `docker run`
+      # keeps the command line explicit.
+      - name: Start TiDB
+        run: |
+          docker run -d --name tidb -p 4000:4000 \
+            pingcap/tidb:v8.5.0 \
+            /tidb-server -P 4000 --store=unistore --path=""
+          for i in {1..60}; do
+            if docker exec tidb /bin/sh -c "echo 'SELECT 1' | mysql -h 127.0.0.1 -P 4000 -u root" >/dev/null 2>&1; then
+              echo "TiDB is ready"; break
+            fi
+            sleep 2
+          done
+
+      - name: Install mysql client
+        run: sudo apt-get update && sudo apt-get install -y mysql-client
+
+      - name: Create test database on TiDB
+        run: mysql -h 127.0.0.1 -P 4000 -u root -e "CREATE DATABASE IF NOT EXISTS langner_tidb"
+
+      - name: Write TiDB config
+        run: |
+          # Reuse config.example.yml but point at TiDB; root has no
+          # password in unistore mode, so DB_PASSWORD is empty.
+          sed -e 's/^  port:.*/  port: 4000/' \
+              -e 's/^  database:.*/  database: langner_tidb/' \
+              -e 's/^  username:.*/  username: root/' \
+              -e 's/^  password:.*/  password: ""/' \
+              config.example.yml > config.tidb.yml
+          cat config.tidb.yml | head -25
+
+      - name: Build langner
+        run: cd backend && go build -o ../langner ./cmd/langner
+
+      - name: Run langner migrate sync-db (TiDB)
+        run: ./langner migrate sync-db --config config.tidb.yml
+        env:
+          DB_PASSWORD: ""
+
+      - name: Verify quiz-review wires up against TiDB
+        run: ./langner --config config.tidb.yml notebooks quiz-review 2025-01-01
+        env:
+          DB_PASSWORD: ""
+
+      - name: Dump TiDB logs on failure
+        if: failure()
+        run: docker logs tidb | tail -200
