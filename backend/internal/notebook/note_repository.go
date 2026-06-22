@@ -67,21 +67,39 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Insert notes one at a time to safely get each auto-increment ID.
-		// A multi-row INSERT with LastInsertId+offset is unsafe under
-		// innodb_autoinc_lock_mode=2 (MySQL 8.0+ default) with concurrent inserts.
-		for _, n := range notes {
-			result, err := tx.ExecContext(ctx,
-				"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number, concept_key) VALUES (?, ?, ?, ?, ?, ?)",
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey)
-			if err != nil {
-				return fmt.Errorf("insert note: %w", err)
+		// Insert notes via multi-row INSERT VALUES, chunked. MySQL and
+		// TiDB both guarantee that the auto-increment IDs produced by a
+		// single "simple insert" (multi-row VALUES with a known row
+		// count) are consecutive starting at LastInsertId(), even under
+		// MySQL 8's default innodb_autoinc_lock_mode=2 — the
+		// non-consecutive case only applies to bulk INSERT … SELECT
+		// where the row count is unknown ahead of time. Importer
+		// concurrency is single-writer for sync-db, so we don't have
+		// to worry about interleaved sessions either.
+		const chunkSize = 500
+		columns := []string{"`usage`", "entry", "meaning", "level", "dictionary_number", "concept_key"}
+		for i := 0; i < len(notes); i += chunkSize {
+			end := i + chunkSize
+			if end > len(notes) {
+				end = len(notes)
 			}
-			id, err := result.LastInsertId()
-			if err != nil {
-				return fmt.Errorf("get note insert ID: %w", err)
+			chunk := notes[i:end]
+			query := database.BuildMultiRowInsert("notes", columns, len(chunk))
+			args := make([]interface{}, 0, len(chunk)*len(columns))
+			for _, n := range chunk {
+				args = append(args, n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey)
 			}
-			n.ID = id
+			result, err := tx.ExecContext(ctx, query, args...)
+			if err != nil {
+				return fmt.Errorf("insert notes (%d rows): %w", len(chunk), err)
+			}
+			firstID, err := result.LastInsertId()
+			if err != nil {
+				return fmt.Errorf("get notes insert ID: %w", err)
+			}
+			for k, n := range chunk {
+				n.ID = firstID + int64(k)
+			}
 		}
 
 		// Collect all images

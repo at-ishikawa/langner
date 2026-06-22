@@ -391,12 +391,12 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1, "").
-					WillReturnResult(sqlmock.NewResult(10, 1))
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
-					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "").
-					WillReturnResult(sqlmock.NewResult(11, 1))
+				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs(
+						"idiom", "break the ice", "to initiate conversation", "B2", 1, "",
+						"phrasal_verb", "give up", "to stop trying", "A2", 2, "",
+					).
+					WillReturnResult(sqlmock.NewResult(10, 2))
 				mock.ExpectExec("INSERT INTO note_images \\(note_id, url, sort_order\\) VALUES \\(\\?, \\?, \\?\\)").
 					WithArgs(int64(10), "https://example.com/img.png", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
