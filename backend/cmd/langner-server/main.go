@@ -25,6 +25,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/internal/server"
+	"github.com/at-ishikawa/langner/schemas"
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 )
@@ -104,6 +105,14 @@ func run(ctx context.Context) error {
 	app.AddShutdownHook(func(ctx context.Context) error {
 		return db.Close()
 	})
+
+	// Apply embedded schema migrations on startup so a freshly-deployed
+	// server binary never queries against an older schema. golang-migrate
+	// is a no-op when the database is already at head; the cost is one
+	// SELECT on the schema_migrations table per restart.
+	if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+		return fmt.Errorf("apply schema migrations: %w", err)
+	}
 
 	learningRepo := learning.NewDBLearningRepository(db)
 	noteRepo := notebook.NewDBNoteRepository(db)
