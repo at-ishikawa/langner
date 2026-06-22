@@ -219,6 +219,9 @@ func (s *StateSeeder) seedSkipFlagsAndEtymologyLogs(ctx context.Context, result 
 		for _, id := range s.reader.GetDefinitionsBookIDs() {
 			collect(id)
 		}
+		for id := range s.reader.GetEtymologyIndexes() {
+			collect(id)
+		}
 	}
 
 	for nbID := range seenIDs {
