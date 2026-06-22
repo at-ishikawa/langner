@@ -69,8 +69,6 @@ func newMigrateCommand() *cobra.Command {
 	}
 
 	migrateCmd.AddCommand(newMigrateLearningHistoryCommand())
-	migrateCmd.AddCommand(newMigrateUpCommand())
-	migrateCmd.AddCommand(newMigrateForceCommand())
 	migrateCmd.AddCommand(newMigrateImportDBCommand())
 	migrateCmd.AddCommand(newExportDBCommand())
 	migrateCmd.AddCommand(newValidateDBCommand())

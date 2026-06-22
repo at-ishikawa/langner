@@ -21,68 +21,6 @@ import (
 	"github.com/at-ishikawa/langner/schemas"
 )
 
-// newMigrateForceCommand pins the schema_migrations table to a specific
-// version and clears its dirty flag. Use this only after manually
-// reconciling the DB to that version's expected state — for example
-// after a partially-applied migration on MySQL/TiDB, where DDL doesn't
-// roll back and golang-migrate otherwise refuses to proceed.
-func newMigrateForceCommand() *cobra.Command {
-	var version int
-	cmd := &cobra.Command{
-		Use:   "force",
-		Short: "Clear dirty flag and pin schema_migrations to a known version",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfig()
-			if err != nil {
-				return err
-			}
-			db, err := openDB(cfg)
-			if err != nil {
-				return fmt.Errorf("open database: %w", err)
-			}
-			defer func() { _ = db.Close() }()
-			if err := database.ForceMigrationVersion(db, schemas.Migrations, "migrations", version); err != nil {
-				return err
-			}
-			fmt.Printf("schema_migrations forced to version %d (dirty=false).\n", version)
-			return nil
-		},
-	}
-	cmd.Flags().IntVar(&version, "version", -1, "Version to pin schema_migrations to (required)")
-	_ = cmd.MarkFlagRequired("version")
-	return cmd
-}
-
-// newMigrateUpCommand applies pending schema migrations against the
-// configured database without importing or re-importing notebook
-// content. Use this after upgrading the binary when migration files
-// have been added (e.g. 016_db_only_state) but you don't want
-// `import-db` to walk the YAML again.
-func newMigrateUpCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "up",
-		Short: "Apply pending schema migrations (no content import)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			cfg, err := loadConfig()
-			if err != nil {
-				return err
-			}
-			db, err := openDB(cfg)
-			if err != nil {
-				return fmt.Errorf("open database: %w", err)
-			}
-			defer func() { _ = db.Close() }()
-
-			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
-				return fmt.Errorf("apply schema migrations: %w", err)
-			}
-			fmt.Println("Schema migrations applied.")
-			return nil
-		},
-	}
-	return cmd
-}
-
 func newMigrateImportDBCommand() *cobra.Command {
 	var dryRun bool
 	var updateExisting bool
