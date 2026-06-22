@@ -30,10 +30,11 @@ func newQuizEtymologyStatusCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			histories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
+			histories, db, err := loadLearningHistoriesFromDB(cmd.Context(), cfg)
 			if err != nil {
-				return fmt.Errorf("load learning histories: %w", err)
+				return err
 			}
+			defer func() { _ = db.Close() }()
 			for _, dir := range cfg.Notebooks.EtymologyDirectories {
 				if err := walkEtymologyStatus(dir, histories); err != nil {
 					return err

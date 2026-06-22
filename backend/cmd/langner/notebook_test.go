@@ -88,6 +88,7 @@ func TestSortFlag_Type(t *testing.T) {
 }
 
 func TestNewNotebookCommand_Stories_RunE(t *testing.T) {
+	skipIfNoDB(t)
 	tmpDir := t.TempDir()
 	cfgPath := testutil.SetupTestConfig(t, tmpDir)
 	setConfigFile(t, cfgPath)
@@ -101,6 +102,7 @@ func TestNewNotebookCommand_Stories_RunE(t *testing.T) {
 }
 
 func TestNewNotebookCommand_Flashcards_RunE(t *testing.T) {
+	skipIfNoDB(t)
 	tmpDir := t.TempDir()
 	cfgPath := testutil.SetupTestConfig(t, tmpDir)
 	setConfigFile(t, cfgPath)
@@ -170,6 +172,7 @@ func TestNewNotebookCommand_NotFound(t *testing.T) {
 // EtymologyNotebookWriter, and the markdown template. The CLI test
 // covers all of those together.
 func TestNewNotebookCommand_Etymology_HidesMasteredWords(t *testing.T) {
+	skipIfNoDB(t)
 	tmpDir := t.TempDir()
 
 	// Build an etymology + definitions + learning_notes layout matching
