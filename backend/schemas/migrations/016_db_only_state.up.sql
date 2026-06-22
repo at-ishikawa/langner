@@ -88,8 +88,17 @@ CREATE TABLE origin_skip_flags (
 -- one of the two is set per row. source_notebook_id already carries the
 -- etymology notebook ID; the new origin_id column lets analytics filter
 -- etymology logs directly without joining notes.
+--
+-- These are split into four statements (instead of a single multi-clause
+-- ALTER TABLE) because TiDB processes the clauses of a multi-clause
+-- ALTER independently; the ADD INDEX clause errored with "Key column
+-- 'origin_id' doesn't exist in table" because it ran before the ADD
+-- COLUMN that created the column.
 ALTER TABLE learning_logs
-    MODIFY COLUMN note_id BIGINT NULL COMMENT 'Vocab note this log targets (null for etymology logs)',
-    ADD COLUMN origin_id BIGINT NULL COMMENT 'Etymology origin this log targets (null for vocab logs)' AFTER note_id,
-    ADD CONSTRAINT fk_learning_logs_origin_id FOREIGN KEY (origin_id) REFERENCES etymology_origins(id) ON DELETE CASCADE,
+    MODIFY COLUMN note_id BIGINT NULL COMMENT 'Vocab note this log targets (null for etymology logs)';
+ALTER TABLE learning_logs
+    ADD COLUMN origin_id BIGINT NULL COMMENT 'Etymology origin this log targets (null for vocab logs)' AFTER note_id;
+ALTER TABLE learning_logs
+    ADD CONSTRAINT fk_learning_logs_origin_id FOREIGN KEY (origin_id) REFERENCES etymology_origins(id) ON DELETE CASCADE;
+ALTER TABLE learning_logs
     ADD INDEX idx_learning_logs_origin_id (origin_id);

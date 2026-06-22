@@ -100,6 +100,31 @@ func Migrate(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 	return nil
 }
 
+// ForceMigrationVersion clears the dirty flag on the schema_migrations
+// table and pins the migration version to `version`. Use it to recover
+// when a migration failed mid-flight against a backend that doesn't
+// roll back DDL (MySQL, TiDB) and you've manually reconciled the
+// schema to a known state — golang-migrate otherwise refuses to
+// re-apply anything while dirty=true.
+func ForceMigrationVersion(db *sqlx.DB, migrationsFS fs.FS, dir string, version int) error {
+	src, err := iofs.New(migrationsFS, dir)
+	if err != nil {
+		return fmt.Errorf("init migration source: %w", err)
+	}
+	driver, err := migratemysql.WithInstance(db.DB, &migratemysql.Config{})
+	if err != nil {
+		return fmt.Errorf("init migration driver: %w", err)
+	}
+	m, err := migrate.NewWithInstance("iofs", src, "mysql", driver)
+	if err != nil {
+		return fmt.Errorf("create migrator: %w", err)
+	}
+	if err := m.Force(version); err != nil {
+		return fmt.Errorf("force version %d: %w", version, err)
+	}
+	return nil
+}
+
 // BuildMultiRowInsert builds a multi-row INSERT query.
 func BuildMultiRowInsert(table string, columns []string, rowCount int) string {
 	placeholder := "(" + strings.Repeat("?, ", len(columns)-1) + "?)"
