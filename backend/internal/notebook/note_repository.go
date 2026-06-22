@@ -3,11 +3,20 @@ package notebook
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 
 	"github.com/at-ishikawa/langner/internal/database"
 )
+
+// noteUniqueKey is the in-memory tuple matching the notes table's
+// UNIQUE (usage, entry) key. Used by BatchCreate to map post-INSERT
+// IDs back onto the input records.
+type noteUniqueKey struct {
+	usage string
+	entry string
+}
 
 // NoteRepository defines operations for managing notes.
 type NoteRepository interface {
@@ -67,15 +76,15 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Insert notes via multi-row INSERT VALUES, chunked. MySQL and
-		// TiDB both guarantee that the auto-increment IDs produced by a
-		// single "simple insert" (multi-row VALUES with a known row
-		// count) are consecutive starting at LastInsertId(), even under
-		// MySQL 8's default innodb_autoinc_lock_mode=2 — the
-		// non-consecutive case only applies to bulk INSERT … SELECT
-		// where the row count is unknown ahead of time. Importer
-		// concurrency is single-writer for sync-db, so we don't have
-		// to worry about interleaved sessions either.
+		// Insert notes via chunked multi-row INSERT VALUES, then look
+		// up each row's auto-increment ID by its unique (usage, entry)
+		// key. The previous "one INSERT per row" approach used
+		// LastInsertId() per row, but that was the slow path on
+		// remote backends. Trying "LastInsertId() + offset" instead is
+		// unsafe: TiDB allocates auto-IDs from per-server caches and
+		// does not guarantee consecutive IDs within a single
+		// multi-row INSERT, which produced the duplicate-key
+		// collisions we hit on the first attempt.
 		const chunkSize = 500
 		columns := []string{"`usage`", "entry", "meaning", "level", "dictionary_number", "concept_key"}
 		for i := 0; i < len(notes); i += chunkSize {
@@ -89,16 +98,42 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			for _, n := range chunk {
 				args = append(args, n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey)
 			}
-			result, err := tx.ExecContext(ctx, query, args...)
-			if err != nil {
+			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return fmt.Errorf("insert notes (%d rows): %w", len(chunk), err)
 			}
-			firstID, err := result.LastInsertId()
-			if err != nil {
-				return fmt.Errorf("get notes insert ID: %w", err)
+
+			// Resolve IDs by the UNIQUE (usage, entry) key. The IN
+			// list is built explicitly because sqlx.In does not
+			// support composite tuples on MySQL.
+			placeholders := strings.Repeat("(?, ?), ", len(chunk)-1) + "(?, ?)"
+			selectArgs := make([]interface{}, 0, len(chunk)*2)
+			for _, n := range chunk {
+				selectArgs = append(selectArgs, n.Usage, n.Entry)
 			}
-			for k, n := range chunk {
-				n.ID = firstID + int64(k)
+			selectQuery := "SELECT id, `usage`, entry FROM notes WHERE (`usage`, entry) IN (" + placeholders + ")"
+			rows, err := tx.QueryContext(ctx, selectQuery, selectArgs...)
+			if err != nil {
+				return fmt.Errorf("look up note IDs: %w", err)
+			}
+			idByKey := make(map[noteUniqueKey]int64, len(chunk))
+			for rows.Next() {
+				var id int64
+				var usage, entry string
+				if err := rows.Scan(&id, &usage, &entry); err != nil {
+					_ = rows.Close()
+					return fmt.Errorf("scan note ID: %w", err)
+				}
+				idByKey[noteUniqueKey{usage, entry}] = id
+			}
+			if err := rows.Close(); err != nil {
+				return fmt.Errorf("close note ID rows: %w", err)
+			}
+			for _, n := range chunk {
+				id, ok := idByKey[noteUniqueKey{n.Usage, n.Entry}]
+				if !ok {
+					return fmt.Errorf("note (%q, %q) missing from ID lookup after insert", n.Usage, n.Entry)
+				}
+				n.ID = id
 			}
 		}
 
