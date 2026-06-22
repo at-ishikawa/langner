@@ -431,23 +431,25 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 	existing := state.noteCache[key]
 
 	if existing == nil {
-		// Brand new note. Dedupe its NotebookNotes against each other
-		// AND populate state.nnCache so a later sourceNotes record that
-		// shares the same (usage, entry) cannot reattach the same
-		// (notebook_type, notebook_id, group, subgroup) tuple. Without
-		// the dedupe step, BatchCreate's multi-row INSERT into
-		// notebook_notes collides on UNIQUE (note_id, notebook_type,
-		// notebook_id, group) — the symptom the user reported as
-		// "Duplicate entry '?' for key 'notebook_notes.note_id_2'"
-		// after sync-db's step 3.
+		// Brand new note. Dedupe its NotebookNotes against EACH OTHER
+		// using a per-record map: a single source record can list the
+		// same (notebook_type, notebook_id, group, subgroup) tuple
+		// twice, and BatchCreate's multi-row INSERT into notebook_notes
+		// would then collide on UNIQUE (note_id, …). Use a per-record
+		// map rather than state.nnCache, because the global cache is
+		// keyed by (note_id, …) and note_id is still 0 here —
+		// different in-flight notes that legitimately share the same
+		// (notebook, group, scene) tuple would otherwise dedupe
+		// against each other and lose their notebook_notes rows.
+		seen := make(map[nnTupleKey]bool, len(src.NotebookNotes))
 		deduped := make([]notebook.NotebookNote, 0, len(src.NotebookNotes))
 		for _, nn := range src.NotebookNotes {
-			k := nnKey{0, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
-			if state.nnCache[k] {
+			t := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			if seen[t] {
 				state.result.NotebookSkipped++
 				continue
 			}
-			state.nnCache[k] = true
+			seen[t] = true
 			deduped = append(deduped, nn)
 		}
 		src.NotebookNotes = deduped
@@ -476,8 +478,34 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 		state.result.NotesSkipped++
 	}
 
-	// Check each notebook_note link from the source
+	// Check each notebook_note link from the source.
 	for _, nn := range src.NotebookNotes {
+		if existing.ID == 0 {
+			// Pending-insertion path: existing was classified NEW
+			// earlier in this run, so existing.ID is still 0 and
+			// nnCache (keyed by note_id) can't disambiguate. Dedupe
+			// against existing.NotebookNotes directly — a small
+			// linear scan is fine because real records typically
+			// list a handful of notebook_notes.
+			target := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			already := false
+			for _, e := range existing.NotebookNotes {
+				if (nnTupleKey{e.NotebookType, e.NotebookID, e.Group, e.Subgroup}) == target {
+					already = true
+					break
+				}
+			}
+			if already {
+				state.result.NotebookSkipped++
+				continue
+			}
+			existing.NotebookNotes = append(existing.NotebookNotes, nn)
+			state.result.NotebookNew++
+			continue
+		}
+
+		// Existing DB note path: existing.ID is a real row, so the
+		// nnCache key uniquely identifies the notebook_note row.
 		nnk := nnKey{existing.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
 		if id, ok := state.nnIDByKey[nnk]; ok {
 			state.matchedNNIDs[id] = true
@@ -486,17 +514,23 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 			state.result.NotebookSkipped++
 			continue
 		}
-		if existing.ID == 0 {
-			// Note is pending insertion (classified as NEW earlier); append NNs to it directly.
-			existing.NotebookNotes = append(existing.NotebookNotes, nn)
-		} else {
-			state.newNNs = append(state.newNNs, notebook.NotebookNote{
-				NoteID: existing.ID, NotebookType: nn.NotebookType, NotebookID: nn.NotebookID, Group: nn.Group, Subgroup: nn.Subgroup,
-			})
-		}
+		state.newNNs = append(state.newNNs, notebook.NotebookNote{
+			NoteID: existing.ID, NotebookType: nn.NotebookType, NotebookID: nn.NotebookID, Group: nn.Group, Subgroup: nn.Subgroup,
+		})
 		state.nnCache[nnk] = true
 		state.result.NotebookNew++
 	}
+}
+
+// nnTupleKey is the schema-level uniqueness key for a notebook_notes
+// row, scoped to a single note. Used when classifying in-flight new
+// notes whose note_id isn't assigned yet, so the global nnCache (keyed
+// by note_id) can't differentiate them.
+type nnTupleKey struct {
+	NotebookType string
+	NotebookID   string
+	Group        string
+	Subgroup     string
 }
 
 // noteLookup indexes notes by Entry, supporting notebook-aware lookup.
