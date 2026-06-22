@@ -431,12 +431,31 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 	existing := state.noteCache[key]
 
 	if existing == nil {
-		// Brand new note -- all NNs are new
+		// Brand new note. Dedupe its NotebookNotes against each other
+		// AND populate state.nnCache so a later sourceNotes record that
+		// shares the same (usage, entry) cannot reattach the same
+		// (notebook_type, notebook_id, group, subgroup) tuple. Without
+		// the dedupe step, BatchCreate's multi-row INSERT into
+		// notebook_notes collides on UNIQUE (note_id, notebook_type,
+		// notebook_id, group) — the symptom the user reported as
+		// "Duplicate entry '?' for key 'notebook_notes.note_id_2'"
+		// after sync-db's step 3.
+		deduped := make([]notebook.NotebookNote, 0, len(src.NotebookNotes))
+		for _, nn := range src.NotebookNotes {
+			k := nnKey{0, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			if state.nnCache[k] {
+				state.result.NotebookSkipped++
+				continue
+			}
+			state.nnCache[k] = true
+			deduped = append(deduped, nn)
+		}
+		src.NotebookNotes = deduped
 		state.newNotes = append(state.newNotes, src)
 		state.noteCache[key] = src
 		_, _ = fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", src.Usage, src.Entry)
 		state.result.NotesNew++
-		state.result.NotebookNew += len(src.NotebookNotes)
+		state.result.NotebookNew += len(deduped)
 		return
 	}
 
