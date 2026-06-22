@@ -21,6 +21,36 @@ import (
 	"github.com/at-ishikawa/langner/schemas"
 )
 
+// newMigrateUpCommand applies pending schema migrations against the
+// configured database without importing or re-importing notebook
+// content. Use this after upgrading the binary when migration files
+// have been added (e.g. 016_db_only_state) but you don't want
+// `import-db` to walk the YAML again.
+func newMigrateUpCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "up",
+		Short: "Apply pending schema migrations (no content import)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			db, err := openDB(cfg)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer func() { _ = db.Close() }()
+
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
+			fmt.Println("Schema migrations applied.")
+			return nil
+		},
+	}
+	return cmd
+}
+
 func newMigrateImportDBCommand() *cobra.Command {
 	var dryRun bool
 	var updateExisting bool
