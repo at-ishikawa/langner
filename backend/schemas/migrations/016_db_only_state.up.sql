@@ -7,26 +7,35 @@
 -- One row per session in a definitions notebook (e.g. "Session 13:
 -- graphein"). Date drives the notebook-detail sort order; sort_order
 -- preserves the YAML's original ordering for ties.
+-- title and notebook_file use TEXT because real definitions YAML
+-- carries lesson headings well over the 255-char VARCHAR cap (e.g.
+-- the Word Power Made Easy session titles). The UNIQUE index uses a
+-- 191-char prefix on title and notebook_file so the three-column key
+-- stays under InnoDB's 3072-byte index limit on utf8mb4: 191*4 +
+-- 191*4 + 255*4 = 2548 bytes.
 CREATE TABLE definitions_sessions (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     notebook_id VARCHAR(255) NOT NULL COMMENT 'Definitions notebook this session belongs to',
-    title VARCHAR(255) NOT NULL COMMENT 'Session title (was Metadata.Title in YAML)',
-    notebook_file VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Original YAML filename, kept as a stable identifier when the title is missing',
+    title TEXT NOT NULL COMMENT 'Session title (was Metadata.Title in YAML)',
+    notebook_file TEXT NOT NULL COMMENT 'Original YAML filename, kept as a stable identifier when the title is missing',
     date DATETIME NULL COMMENT 'Optional session date for sorting',
     sort_order INT NOT NULL DEFAULT 0 COMMENT 'Tie-breaker when date is null or identical',
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE (notebook_id, title, notebook_file),
+    UNIQUE (notebook_id, title(191), notebook_file(191)),
     INDEX (notebook_id)
 ) COMMENT='Sessions inside a definitions notebook';
 
 -- definitions_scenes: replaces the YAML DefinitionsScene.Metadata block.
 -- One row per scene under a session. scene_index is the YAML field; it
 -- doesn't have to be unique across sessions, only within one.
+-- Scene title is TEXT to hold real lesson scene names — some entries
+-- in the user's definitions YAML run hundreds of characters. Nothing
+-- indexes the title column, so no prefix dance is needed here.
 CREATE TABLE definitions_scenes (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     session_id BIGINT NOT NULL,
-    title VARCHAR(255) NOT NULL DEFAULT '' COMMENT 'Scene title (was metadata.title)',
+    title TEXT NOT NULL COMMENT 'Scene title (was metadata.title)',
     scene_index INT NOT NULL DEFAULT 0 COMMENT 'Scene index within the session (was metadata.scene/index)',
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -39,16 +48,19 @@ CREATE TABLE definitions_scenes (
 -- flashcard_decks: replaces the YAML FlashcardNotebook outer struct.
 -- One row per flashcard deck within a flashcard index. The cards
 -- themselves are still stored as notes + notebook_notes(group=title).
+-- Deck title is TEXT for the same reason definitions session/scene
+-- titles are TEXT — user YAML can carry long names. UNIQUE uses a
+-- 191-char prefix to keep the index under InnoDB's 3072-byte cap.
 CREATE TABLE flashcard_decks (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     notebook_id VARCHAR(255) NOT NULL COMMENT 'Flashcard index ID this deck belongs to',
-    title VARCHAR(255) NOT NULL COMMENT 'Deck title; matches notebook_notes.group for its cards',
+    title TEXT NOT NULL COMMENT 'Deck title; matches notebook_notes.group for its cards',
     description TEXT NOT NULL,
     date DATETIME NULL,
     sort_order INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    UNIQUE (notebook_id, title),
+    UNIQUE (notebook_id, title(191)),
     INDEX (notebook_id)
 ) COMMENT='Flashcard deck metadata';
 
