@@ -304,6 +304,12 @@ func TestBuildNoteStats(t *testing.T) {
 			wantNotebookCounts: map[string]int{"s1": 2, "f1": 1},
 		},
 		{
+			// Two source rows that differ only in casing collapse to one
+			// note (TotalNotes==1) AND to one notebook_notes row, because
+			// the schema's UNIQUE on (note_id, notebook_type,
+			// notebook_id, group) sees them as the same key after the
+			// importer lowercases (usage, entry). DefinitionCount must
+			// match what the export reads back from the DB.
 			name: "case-insensitive deduplication of unique notes",
 			notes: []notebook.NoteRecord{
 				{
@@ -320,7 +326,7 @@ func TestBuildNoteStats(t *testing.T) {
 				},
 			},
 			wantTotalNotes:     1,
-			wantNotebookCounts: map[string]int{"s1": 2},
+			wantNotebookCounts: map[string]int{"s1": 1},
 		},
 	}
 
