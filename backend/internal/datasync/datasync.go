@@ -74,9 +74,16 @@ func (lc *logCounter) leftoverIDs() []int64 {
 	return out
 }
 
+// nnKey identifies a notebook_notes row at the DB-level: the
+// schema's UNIQUE is `(note_id, notebook_type, notebook_id, group)`,
+// so subgroup is intentionally NOT in the key. Tracking subgroup here
+// would let two YAML rows that differ only in subgroup pass through
+// state.nnCache and BatchUpdate's INSERT would then collide on the
+// UNIQUE, which is the regression migration 001 already prevents at
+// the schema layer.
 type nnKey struct {
-	noteID                                    int64
-	notebookType, notebookID, group, subgroup string
+	noteID                          int64
+	notebookType, notebookID, group string
 }
 
 // classifyState holds mutable state passed through the classification loop.
@@ -350,7 +357,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 	for i := range allNotes {
 		state.noteCache[newNoteKey(allNotes[i].Usage, allNotes[i].Entry)] = &allNotes[i]
 		for _, nn := range allNotes[i].NotebookNotes {
-			k := nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			k := nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}
 			state.nnCache[k] = true
 			state.nnIDByKey[k] = nn.ID
 		}
@@ -408,7 +415,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 		imp.touchedNNKeys = make(map[nnKey]bool)
 	}
 	for _, nn := range state.newNNs {
-		imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+		imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}] = true
 	}
 	// New notebook_notes attached to brand-new notes (existing.ID==0
 	// branch) live on n.NotebookNotes; those notes get IDs from
@@ -419,7 +426,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 			continue
 		}
 		for _, nn := range n.NotebookNotes {
-			imp.touchedNNKeys[nnKey{n.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+			imp.touchedNNKeys[nnKey{n.ID, nn.NotebookType, nn.NotebookID, nn.Group}] = true
 		}
 	}
 
@@ -444,7 +451,7 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 		seen := make(map[nnTupleKey]bool, len(src.NotebookNotes))
 		deduped := make([]notebook.NotebookNote, 0, len(src.NotebookNotes))
 		for _, nn := range src.NotebookNotes {
-			t := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			t := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group}
 			if seen[t] {
 				state.result.NotebookSkipped++
 				continue
@@ -487,10 +494,10 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 			// against existing.NotebookNotes directly — a small
 			// linear scan is fine because real records typically
 			// list a handful of notebook_notes.
-			target := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			target := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group}
 			already := false
 			for _, e := range existing.NotebookNotes {
-				if (nnTupleKey{e.NotebookType, e.NotebookID, e.Group, e.Subgroup}) == target {
+				if (nnTupleKey{e.NotebookType, e.NotebookID, e.Group}) == target {
 					already = true
 					break
 				}
@@ -506,7 +513,7 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 
 		// Existing DB note path: existing.ID is a real row, so the
 		// nnCache key uniquely identifies the notebook_note row.
-		nnk := nnKey{existing.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+		nnk := nnKey{existing.ID, nn.NotebookType, nn.NotebookID, nn.Group}
 		if id, ok := state.nnIDByKey[nnk]; ok {
 			state.matchedNNIDs[id] = true
 		}
@@ -523,14 +530,17 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 }
 
 // nnTupleKey is the schema-level uniqueness key for a notebook_notes
-// row, scoped to a single note. Used when classifying in-flight new
-// notes whose note_id isn't assigned yet, so the global nnCache (keyed
-// by note_id) can't differentiate them.
+// row, scoped to a single note. It mirrors the UNIQUE constraint
+// `(note_id, notebook_type, notebook_id, group)` defined in migration
+// 001 — subgroup is intentionally NOT part of the key because the
+// schema treats two rows that differ only in subgroup as a duplicate.
+// Used when classifying in-flight new notes whose note_id isn't
+// assigned yet, so the global nnCache (keyed by note_id) can't
+// differentiate them.
 type nnTupleKey struct {
 	NotebookType string
 	NotebookID   string
 	Group        string
-	Subgroup     string
 }
 
 // noteLookup indexes notes by Entry, supporting notebook-aware lookup.
@@ -1960,7 +1970,7 @@ func (imp *Importer) reconcileNotes(ctx context.Context, opts ImportOptions, not
 			// New notebook_notes inserted this run match by key (the
 			// IDs were assigned by the DB after BatchUpdate, so they
 			// aren't in touchedNNIDs).
-			if imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] {
+			if imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}] {
 				continue
 			}
 			staleNNIDs = append(staleNNIDs, nn.ID)
