@@ -46,7 +46,18 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 		mysqlCfg.Params = cfg.Params
 	}
 
-	baseConnector, err := mysql.NewConnector(mysqlCfg)
+	// Round-trip the DSN so the driver's parser normalises special keys
+	// (charset → Collation, tls → TLSConfig, …) the same way it does
+	// for sql.Open. mysql.NewConnector(mysqlCfg) skips that step and
+	// would then issue a literal `SET @@charset = utf8mb4` per
+	// connection, which TiDB rejects with `Unknown system variable
+	// 'charset'`.
+	dsn := mysqlCfg.FormatDSN()
+	normalizedCfg, err := mysql.ParseDSN(dsn)
+	if err != nil {
+		return nil, fmt.Errorf("parse mysql DSN: %w", err)
+	}
+	baseConnector, err := mysql.NewConnector(normalizedCfg)
 	if err != nil {
 		return nil, fmt.Errorf("build mysql connector: %w", err)
 	}
