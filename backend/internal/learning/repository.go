@@ -125,25 +125,34 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 		return id
 	}
 
-	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		for i := 0; i < len(logs); i += chunkSize {
-			end := i + chunkSize
-			if end > len(logs) {
-				end = len(logs)
-			}
-			chunk := logs[i:end]
-
-			query := database.BuildMultiRowInsert("learning_logs", columns, len(chunk))
-			var args []interface{}
-			for _, l := range chunk {
-				args = append(args, nullableID(l.NoteID), nullableID(l.OriginID), l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
-			}
-			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
-				return fmt.Errorf("insert learning logs: %w", err)
-			}
+	// Each chunk commits in its own implicit transaction (db.ExecContext
+	// rather than tx.ExecContext) so a multi-thousand-row import doesn't
+	// hold one pooled connection open for the entire run. Long-lived
+	// connections inside one transaction surfaced as
+	// `tls: bad record MAC` against TiDB Cloud — the connection went
+	// stale partway through and the in-flight transaction died with no
+	// recovery path. Per-chunk commits let the pool rotate connections,
+	// at the cost of partial-commit visibility if the import fails mid-
+	// way. Sync-db's drop-and-reimport flow tolerates that (re-running
+	// drops everything anyway); incremental import-db users who care
+	// about atomicity can re-run after a failure.
+	for i := 0; i < len(logs); i += chunkSize {
+		end := i + chunkSize
+		if end > len(logs) {
+			end = len(logs)
 		}
-		return nil
-	})
+		chunk := logs[i:end]
+
+		query := database.BuildMultiRowInsert("learning_logs", columns, len(chunk))
+		var args []interface{}
+		for _, l := range chunk {
+			args = append(args, nullableID(l.NoteID), nullableID(l.OriginID), l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
+		}
+		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+			return fmt.Errorf("insert learning logs (rows %d..%d): %w", i, end, err)
+		}
+	}
+	return nil
 }
 
 // BatchDelete removes the rows whose IDs are in the slice. Used by the

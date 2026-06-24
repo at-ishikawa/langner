@@ -141,20 +141,22 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 		wantErr   bool
 	}{
 		{
+			// Per-chunk implicit commits keep one pooled connection from
+			// staying open for a multi-thousand-row import — sync-db
+			// otherwise tripped `tls: bad record MAC` on TiDB Cloud part
+			// way through the run.
 			name: "creates multiple logs with multi-row insert",
 			logs: []*LearningLog{
 				{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 				{NoteID: 11, Status: "misunderstood", LearnedAt: now, Quality: 1, ResponseTimeMs: 3000, QuizType: "freeform", IntervalDays: 1, SourceNotebookID: "nb-2"},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\)").
 					WithArgs(
 						int64(10), nil, "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
 						int64(11), nil, "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
 					).
 					WillReturnResult(sqlmock.NewResult(1, 2))
-				mock.ExpectCommit()
 			},
 		},
 		{
@@ -170,10 +172,8 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 				{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO learning_logs").
 					WillReturnError(fmt.Errorf("duplicate entry"))
-				mock.ExpectRollback()
 			},
 			wantErr: true,
 		},
