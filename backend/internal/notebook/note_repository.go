@@ -85,7 +85,15 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 		// does not guarantee consecutive IDs within a single
 		// multi-row INSERT, which produced the duplicate-key
 		// collisions we hit on the first attempt.
-		const chunkSize = 500
+		//
+		// chunkSize is conservative for TLS round-trips against TiDB
+		// Cloud: 500-row INSERTs intermittently surfaced as
+		// `tls: bad record MAC` mid-stream, presumably because the
+		// query plus the SELECT-back exceeded what one TLS record
+		// frame could carry cleanly. 100 rows leaves plenty of
+		// headroom and still amortises the RTT cost over 100x fewer
+		// statements than the original per-row path.
+		const chunkSize = 100
 		columns := []string{"`usage`", "entry", "meaning", "level", "dictionary_number", "concept_key"}
 		for i := 0; i < len(notes); i += chunkSize {
 			end := i + chunkSize

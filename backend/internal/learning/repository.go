@@ -108,7 +108,12 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 	}
 
 	columns := []string{"note_id", "origin_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
-	const chunkSize = 5000 // 5000 * 10 columns = 50000 placeholders, under 65535
+	// chunkSize bounds the multi-row INSERT payload so TLS round-trips
+	// against TiDB Cloud don't trip `bad record MAC` mid-stream the way
+	// 5000-row INSERTs did during sync-db. 500 rows × 10 columns =
+	// 5000 placeholders, comfortably under MySQL's 65535 placeholder
+	// cap and under the wire-frame size that triggered the failure.
+	const chunkSize = 500
 
 	// Multi-row INSERT can't use NULLIF in VALUES — overwrite zero IDs
 	// with explicit *int64(nil) so sqlx passes SQL NULL. Vocab logs keep
