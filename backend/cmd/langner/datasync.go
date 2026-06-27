@@ -461,6 +461,7 @@ func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, wr
 	dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(outputDir)
 
 	exp := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, writer)
+	exp = exp.WithEtymologyOrigins(notebook.NewDBEtymologyOriginRepository(db))
 	return exp.WithDefinitionConcepts(
 		notebook.NewDBDefinitionConceptRepository(db),
 		notebook.NewYAMLDefinitionsBookSink(outputDir),

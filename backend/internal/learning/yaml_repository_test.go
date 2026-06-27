@@ -499,7 +499,7 @@ func TestYAMLLearningRepository_WriteAll(t *testing.T) {
 			outputDir := t.TempDir()
 			repo := NewYAMLLearningRepositoryWriter(outputDir)
 
-			err := repo.WriteAll(tt.notes, tt.logs)
+			err := repo.WriteAll(tt.notes, tt.logs, nil)
 			if tt.wantErr {
 				assert.Error(t, err)
 				return
@@ -534,7 +534,7 @@ func TestYAMLLearningRepository_WriteAll_errors(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			repo := NewYAMLLearningRepositoryWriter("/dev/null/invalid")
-			err := repo.WriteAll(tt.notes, tt.logs)
+			err := repo.WriteAll(tt.notes, tt.logs, nil)
 			assert.Error(t, err)
 		})
 	}
@@ -654,7 +654,7 @@ func TestYAMLLearningRepository_WriteAll_RoutesQuizTypesToCorrectSlots(t *testin
 
 	outputDir := t.TempDir()
 	repo := NewYAMLLearningRepositoryWriter(outputDir)
-	require.NoError(t, repo.WriteAll(notes, logs))
+	require.NoError(t, repo.WriteAll(notes, logs, nil))
 
 	var histories []notebook.LearningHistory
 	readYAMLHelper(t, filepath.Join(outputDir, "learning_notes", "demo.yml"), &histories)

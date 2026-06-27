@@ -300,6 +300,20 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 	return nil
 }
 
+// persistEtymologyLogsForExpression writes every YAML log slot for an
+// origin-typed expression against etymology_origins.id. Vocab
+// expressions are handled by ImportLearningLogs; origin expressions
+// are intentionally skipped there because attaching their logs to a
+// note_id-keyed phantom note loses them on export (the note has no
+// NotebookNotes to belong to, so the export's per-notebook YAML walk
+// never visits it).
+//
+// All four slots — LearnedLogs, ReverseLogs, EtymologyBreakdownLogs,
+// EtymologyAssemblyLogs — get the same treatment. Each record's
+// quiz_type is preserved exactly, falling back to the per-slot default
+// only when the record itself didn't specify one. That keeps round-
+// trip lossless against YAML that parks freeform/etymology_freeform
+// records in any slot.
 func (s *StateSeeder) persistEtymologyLogsForExpression(
 	ctx context.Context,
 	nbID string,
@@ -310,7 +324,11 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 	if s.learningRepo == nil {
 		return nil
 	}
-	if len(expr.EtymologyBreakdownLogs) == 0 && len(expr.EtymologyAssemblyLogs) == 0 {
+	if expr.Type != notebook.LearningExpressionTypeOrigin {
+		return nil
+	}
+	if len(expr.LearnedLogs) == 0 && len(expr.ReverseLogs) == 0 &&
+		len(expr.EtymologyBreakdownLogs) == 0 && len(expr.EtymologyAssemblyLogs) == 0 {
 		return nil
 	}
 	// Match the origin by (notebookID, lower(origin)). Without a session
@@ -331,15 +349,19 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 		return nil
 	}
 
-	writeLogs := func(records []notebook.LearningRecord, quizType notebook.QuizType) error {
+	writeLogs := func(records []notebook.LearningRecord, defaultQuizType notebook.QuizType) error {
 		for _, r := range records {
+			quizType := string(r.QuizType)
+			if quizType == "" {
+				quizType = string(defaultQuizType)
+			}
 			log := &learning.LearningLog{
 				OriginID:         originID,
 				Status:           string(r.Status),
 				LearnedAt:        r.LearnedAt.Time,
 				Quality:          r.Quality,
 				ResponseTimeMs:   int(r.ResponseTimeMs),
-				QuizType:         string(quizType),
+				QuizType:         quizType,
 				IntervalDays:     r.IntervalDays,
 				SourceNotebookID: nbID,
 			}
@@ -351,6 +373,12 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 		return nil
 	}
 
+	if err := writeLogs(expr.LearnedLogs, notebook.QuizTypeNotebook); err != nil {
+		return err
+	}
+	if err := writeLogs(expr.ReverseLogs, notebook.QuizTypeReverse); err != nil {
+		return err
+	}
 	if err := writeLogs(expr.EtymologyBreakdownLogs, notebook.QuizTypeEtymologyStandard); err != nil {
 		return err
 	}

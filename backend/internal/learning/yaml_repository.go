@@ -59,7 +59,15 @@ func (r *YAMLLearningRepository) FindByNotebookID(notebookID string) ([]notebook
 }
 
 // WriteAll converts learning logs to LearningHistory YAML files grouped by notebook.
-func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []LearningLog) error {
+//
+// origins carries every etymology_origins row in the DB. Origin-typed
+// logs in `logs` (NoteID == 0, OriginID != 0) get attributed back to
+// their origin's notebook and emitted as `type: origin` expressions in
+// the same YAML file as that notebook's vocab logs. Without this path
+// origin logs survive sync-db's import but vanish from the round-trip,
+// which is the source of every `source=N, exported=0` row the
+// validator reported for word-power-made-easy origins.
+func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []LearningLog, origins []notebook.EtymologyOriginRecord) error {
 	noteByID := make(map[int64]*notebook.NoteRecord, len(notes))
 	for i := range notes {
 		noteByID[notes[i].ID] = &notes[i]
@@ -71,7 +79,12 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 		notebookID string
 	}
 	logsByNoteNotebook := make(map[noteNotebook][]LearningLog)
+	originLogsByID := make(map[int64][]LearningLog)
 	for _, log := range logs {
+		if log.OriginID > 0 {
+			originLogsByID[log.OriginID] = append(originLogsByID[log.OriginID], log)
+			continue
+		}
 		key := noteNotebook{log.NoteID, log.SourceNotebookID}
 		logsByNoteNotebook[key] = append(logsByNoteNotebook[key], log)
 	}
@@ -96,6 +109,18 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 			if nn.NotebookType == "flashcard" {
 				info.isFlashcard = true
 			}
+		}
+	}
+
+	// Group origins by their owning notebook so each notebook's file
+	// picks up its origin expressions even if no vocab note in the
+	// notebook has touched a log.
+	originsByNotebook := make(map[string][]notebook.EtymologyOriginRecord)
+	for _, o := range origins {
+		originsByNotebook[o.NotebookID] = append(originsByNotebook[o.NotebookID], o)
+		if _, ok := notebookMap[o.NotebookID]; !ok {
+			notebookMap[o.NotebookID] = &notebookInfo{}
+			notebookIDs = append(notebookIDs, o.NotebookID)
 		}
 	}
 
@@ -129,6 +154,8 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 			histories = r.buildStoryHistories(nbID, uniqueNoteIDs, noteByID, filteredLogs)
 		}
 
+		histories = appendOriginHistories(histories, nbID, originsByNotebook[nbID], originLogsByID)
+
 		if len(histories) == 0 {
 			continue
 		}
@@ -145,6 +172,85 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 	}
 
 	return nil
+}
+
+// appendOriginHistories adds origin-typed LearningHistoryExpression
+// rows into the existing per-notebook histories. Each origin lands
+// under a LearningHistory block whose Title matches the origin's
+// session_title, with a scene of the same title — the convention the
+// DBHistoryStore reconstructor uses on the read side, so the
+// round-trip stays symmetric. Validate counts logs per expression
+// name regardless of scene structure, so a different scene title in
+// the original source YAML doesn't trip the comparison.
+func appendOriginHistories(
+	histories []notebook.LearningHistory,
+	nbID string,
+	origins []notebook.EtymologyOriginRecord,
+	originLogsByID map[int64][]LearningLog,
+) []notebook.LearningHistory {
+	if len(origins) == 0 {
+		return histories
+	}
+
+	// Sort origins for deterministic output: by session_title, origin, sense.
+	sort.Slice(origins, func(i, j int) bool {
+		if origins[i].SessionTitle != origins[j].SessionTitle {
+			return origins[i].SessionTitle < origins[j].SessionTitle
+		}
+		if origins[i].Origin != origins[j].Origin {
+			return origins[i].Origin < origins[j].Origin
+		}
+		return origins[i].Sense < origins[j].Sense
+	})
+
+	historyIdxByTitle := make(map[string]int, len(histories))
+	for i := range histories {
+		historyIdxByTitle[histories[i].Metadata.Title] = i
+	}
+
+	for _, o := range origins {
+		expr := buildOriginExpression(o.Origin, originLogsByID[o.ID])
+		title := o.SessionTitle
+		idx, ok := historyIdxByTitle[title]
+		if !ok {
+			histories = append(histories, notebook.LearningHistory{
+				Metadata: notebook.LearningHistoryMetadata{NotebookID: nbID, Title: title},
+				Scenes: []notebook.LearningScene{{
+					Metadata:    notebook.LearningSceneMetadata{Title: title},
+					Expressions: []notebook.LearningHistoryExpression{expr},
+				}},
+			})
+			historyIdxByTitle[title] = len(histories) - 1
+			continue
+		}
+		// Reuse the existing block; find a scene with matching title or
+		// append a new one. Scene-level placement isn't observable by
+		// the validate diff (counts are per-expression, not per-scene)
+		// but keeps the YAML structure tidy.
+		sceneFound := false
+		for j := range histories[idx].Scenes {
+			if histories[idx].Scenes[j].Metadata.Title == title {
+				histories[idx].Scenes[j].Expressions = append(histories[idx].Scenes[j].Expressions, expr)
+				sceneFound = true
+				break
+			}
+		}
+		if !sceneFound {
+			histories[idx].Scenes = append(histories[idx].Scenes, notebook.LearningScene{
+				Metadata:    notebook.LearningSceneMetadata{Title: title},
+				Expressions: []notebook.LearningHistoryExpression{expr},
+			})
+		}
+	}
+	return histories
+}
+
+// buildOriginExpression mirrors buildExpression but tags the result as
+// type: origin. Logs flow into the same slots based on quiz_type.
+func buildOriginExpression(origin string, logs []LearningLog) notebook.LearningHistoryExpression {
+	expr := buildExpression(origin, logs)
+	expr.Type = notebook.LearningExpressionTypeOrigin
+	return expr
 }
 
 func (r *YAMLLearningRepository) buildFlashcardHistories(

@@ -433,17 +433,17 @@ func (m *MockLearningSink) EXPECT() *MockLearningSinkMockRecorder {
 }
 
 // WriteAll mocks base method.
-func (m *MockLearningSink) WriteAll(notes []notebook.NoteRecord, logs []learning.LearningLog) error {
+func (m *MockLearningSink) WriteAll(notes []notebook.NoteRecord, logs []learning.LearningLog, origins []notebook.EtymologyOriginRecord) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WriteAll", notes, logs)
+	ret := m.ctrl.Call(m, "WriteAll", notes, logs, origins)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // WriteAll indicates an expected call of WriteAll.
-func (mr *MockLearningSinkMockRecorder) WriteAll(notes, logs any) *gomock.Call {
+func (mr *MockLearningSinkMockRecorder) WriteAll(notes, logs, origins any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockLearningSink)(nil).WriteAll), notes, logs)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WriteAll", reflect.TypeOf((*MockLearningSink)(nil).WriteAll), notes, logs, origins)
 }
 
 // MockDictionarySink is a mock of DictionarySink interface.
