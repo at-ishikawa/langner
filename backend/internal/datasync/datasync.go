@@ -632,6 +632,38 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 	}
 
+	// Build a set of (notebookID, lowercase origin name) tuples so any
+	// expression matching a known origin gets routed to the StateSeeder
+	// instead of auto-noted. The user's YAML often omits the
+	// `type: origin` marker on entries like "ambi" / "ascetic" / "epi"
+	// — those still belong on etymology_origins.id, not on a
+	// NotebookNotes-less phantom note that vanishes on export.
+	originNamesByNotebook := map[string]map[string]bool{}
+	if imp.etymologyOriginRepo != nil {
+		existing, err := imp.etymologyOriginRepo.FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", err)
+		}
+		for _, o := range existing {
+			byNB := originNamesByNotebook[o.NotebookID]
+			if byNB == nil {
+				byNB = map[string]bool{}
+				originNamesByNotebook[o.NotebookID] = byNB
+			}
+			byNB[strings.ToLower(strings.TrimSpace(o.Origin))] = true
+		}
+	}
+	isKnownOrigin := func(expr exprWithNotebook) bool {
+		if expr.Type == notebook.LearningExpressionTypeOrigin {
+			return true
+		}
+		byNB, ok := originNamesByNotebook[expr.notebookID]
+		if !ok {
+			return false
+		}
+		return byNB[strings.ToLower(strings.TrimSpace(expr.Expression))]
+	}
+
 	// First pass: batch-create auto notes for unknown vocab expressions.
 	// Origin-type expressions (e.g. "aequus", "theos") are intentionally
 	// excluded — they belong in etymology_origins, and StateSeeder writes
@@ -642,7 +674,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 	newNoteEntries := make(map[string]bool)
 	var newNotes []*notebook.NoteRecord
 	for _, expr := range allExpressions {
-		if expr.Type == notebook.LearningExpressionTypeOrigin {
+		if isKnownOrigin(expr) {
 			continue
 		}
 		if noteMap.lookup(expr.Expression, expr.notebookID) == nil && !newNoteEntries[expr.Expression] {
@@ -678,7 +710,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 	// and skipped here so their logs don't get attached to phantom notes.
 	var newLogs []*learning.LearningLog
 	for _, expr := range allExpressions {
-		if expr.Type == notebook.LearningExpressionTypeOrigin {
+		if isKnownOrigin(expr) {
 			continue
 		}
 		n := noteMap.lookup(expr.Expression, expr.notebookID)

@@ -324,9 +324,6 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 	if s.learningRepo == nil {
 		return nil
 	}
-	if expr.Type != notebook.LearningExpressionTypeOrigin {
-		return nil
-	}
 	if len(expr.LearnedLogs) == 0 && len(expr.ReverseLogs) == 0 &&
 		len(expr.EtymologyBreakdownLogs) == 0 && len(expr.EtymologyAssemblyLogs) == 0 {
 		return nil
@@ -334,6 +331,13 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 	// Match the origin by (notebookID, lower(origin)). Without a session
 	// title in the expression we accept the first match — the YAML was
 	// ambiguous anyway and the migrate command is one-shot.
+	//
+	// The expression doesn't need an explicit `type: origin` marker.
+	// Some entries in the user's learning_notes (e.g. "ambi", "ascetic")
+	// omit it but still refer to a Latin/Greek root that exists in
+	// etymology_origins. Anything whose name resolves to an origin row
+	// in the notebook gets routed here; ImportLearningLogs uses the
+	// same predicate to skip those expressions on the note-side.
 	var originID int64
 	for k, id := range originIDByKey {
 		if k.notebookID != nbID {
