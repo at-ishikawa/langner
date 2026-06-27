@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/at-ishikawa/langner/internal/database"
 )
 
 // DictionaryRepository defines operations for managing dictionary entries.
@@ -59,7 +61,7 @@ func (r *DBDictionaryRepository) BatchUpsert(ctx context.Context, entries []*Dic
 		for _, e := range chunk {
 			args = append(args, e.Word, e.SourceType, e.Response)
 		}
-		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+		if err := database.ExecWithRetry(ctx, r.db, query, args...); err != nil {
 			return fmt.Errorf("upsert dictionary entries (%d rows): %w", len(chunk), err)
 		}
 	}

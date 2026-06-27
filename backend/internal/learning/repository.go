@@ -136,6 +136,15 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 	// way. Sync-db's drop-and-reimport flow tolerates that (re-running
 	// drops everything anyway); incremental import-db users who care
 	// about atomicity can re-run after a failure.
+	//
+	// Per-chunk retry handles TiDB Cloud's occasional mid-statement
+	// connection death. ExecContext on autocommit means a failed INSERT
+	// rolled back atomically — no rows landed — so re-running the same
+	// chunk on a fresh pool connection is safe. We retry only on
+	// transient connection-level errors (TLS framing, `invalid
+	// connection`, driver.ErrBadConn); persistent errors like
+	// duplicate-key get returned immediately so the caller sees the
+	// real cause.
 	for i := 0; i < len(logs); i += chunkSize {
 		end := i + chunkSize
 		if end > len(logs) {
@@ -148,12 +157,13 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 		for _, l := range chunk {
 			args = append(args, nullableID(l.NoteID), nullableID(l.OriginID), l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
 		}
-		if _, err := r.db.ExecContext(ctx, query, args...); err != nil {
+		if err := database.ExecWithRetry(ctx, r.db, query, args...); err != nil {
 			return fmt.Errorf("insert learning logs (rows %d..%d): %w", i, end, err)
 		}
 	}
 	return nil
 }
+
 
 // BatchDelete removes the rows whose IDs are in the slice. Used by the
 // importer's reconcile pass to drop DB-only logs whose YAML counterpart

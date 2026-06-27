@@ -101,6 +101,62 @@ func (c *tidbAwareConnector) Driver() driver.Driver {
 	return c.inner.Driver()
 }
 
+// ExecWithRetry runs query/args on the pool, retrying up to three
+// times on transient connection-level failures. Used by chunked
+// importers (learning_logs, dictionary_entries) to absorb TiDB
+// Cloud's occasional mid-statement `tls: bad record MAC`, where the
+// connection silently rots inside the pool and the next checkout
+// finds it unusable. Persistent errors (duplicate-key, constraint,
+// parse) bubble up immediately so callers see the real cause.
+//
+// Safe only for autocommit ExecContext calls — a query inside an
+// open *sqlx.Tx must not be retried this way because the surrounding
+// transaction will already be rolled back. Wrap individual chunks,
+// not whole batches.
+func ExecWithRetry(ctx context.Context, db *sqlx.DB, query string, args ...interface{}) error {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		_, err := db.ExecContext(ctx, query, args...)
+		if err == nil {
+			return nil
+		}
+		if !isTransientConnError(err) {
+			return err
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(attempt) * 200 * time.Millisecond):
+		}
+	}
+	return fmt.Errorf("retry exhausted after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// isTransientConnError reports whether err describes a connection-
+// level fault we can retry. database/sql.ErrBadConn covers the
+// driver-signalled case; TLS framing errors against TiDB Cloud
+// surface as plain strings rather than typed errors, so we also
+// match by substring.
+func isTransientConnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, driver.ErrBadConn) {
+		return true
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "invalid connection") ||
+		strings.Contains(msg, "bad record MAC") ||
+		strings.Contains(msg, "tls:") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset by peer") {
+		return true
+	}
+	return false
+}
+
 // RunInTx runs fn within a database transaction.
 // If fn returns an error, the transaction is rolled back; otherwise, it is committed.
 func RunInTx(ctx context.Context, db *sqlx.DB, fn func(ctx context.Context, tx *sqlx.Tx) error) error {
