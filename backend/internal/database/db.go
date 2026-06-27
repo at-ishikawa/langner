@@ -69,9 +69,20 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 	if cfg.MaxIdleConns > 0 {
 		db.SetMaxIdleConns(cfg.MaxIdleConns)
 	}
+
+	// TiDB Cloud's load balancer drops TCP sockets out from under
+	// long-idle connections; the pool then hands the dead socket to
+	// the next ExecContext, which decodes whatever fresh bytes
+	// arrive (TCP-RST, zeros) through its old TLS state machine and
+	// returns `tls: bad record MAC`. Capping the pool's connection
+	// lifetime and idle time refreshes sockets before the load
+	// balancer abandons them — the user's config can override.
+	lifetime := 1 * time.Minute
 	if cfg.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Second)
+		lifetime = time.Duration(cfg.ConnMaxLifetime) * time.Second
 	}
+	db.SetConnMaxLifetime(lifetime)
+	db.SetConnMaxIdleTime(30 * time.Second)
 
 	return db, nil
 }
