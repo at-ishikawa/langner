@@ -23,3 +23,22 @@
           quality: 4
           quiz_type: etymology_freeform
           interval_days: 7
+    # Origin-typed expression: exercises the StateSeeder origin-logs
+    # path. ImportLearningLogs must skip this expression and the
+    # seeder must persist its logs against etymology_origins.id;
+    # YAMLLearningRepository.WriteAll must emit it back so the
+    # round-trip diff sees source=exported=1 for "scrib".
+    - expression: scrib
+      type: origin
+      learned_logs:
+        - status: understood
+          learned_at: "2025-12-14T00:00:00Z"
+          quality: 4
+          quiz_type: notebook
+          interval_days: 7
+      etymology_breakdown_logs:
+        - status: usable
+          learned_at: "2025-12-15T00:00:00Z"
+          quality: 3
+          quiz_type: etymology_breakdown
+          interval_days: 7
