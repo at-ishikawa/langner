@@ -21,6 +21,36 @@ import (
 	"github.com/at-ishikawa/langner/schemas"
 )
 
+// newMigrateUpCommand applies pending schema migrations against the
+// configured database without importing or re-importing notebook
+// content. Use this after upgrading the binary when migration files
+// have been added (e.g. 016_db_only_state) but you don't want
+// `import-db` to walk the YAML again.
+func newMigrateUpCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "up",
+		Short: "Apply pending schema migrations (no content import)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := loadConfig()
+			if err != nil {
+				return err
+			}
+			db, err := openDB(cfg)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer func() { _ = db.Close() }()
+
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
+			fmt.Println("Schema migrations applied.")
+			return nil
+		},
+	}
+	return cmd
+}
+
 func newMigrateImportDBCommand() *cobra.Command {
 	var dryRun bool
 	var updateExisting bool
@@ -71,6 +101,27 @@ func newMigrateImportDBCommand() *cobra.Command {
 			if result.Etymology != nil {
 				fmt.Printf("  Etymology origins:  %d new, %d skipped\n", result.Etymology.OriginsNew, result.Etymology.OriginsSkipped)
 				fmt.Printf("  Note origin parts:  %d new, %d skipped\n", result.Etymology.PartsNew, result.Etymology.PartsSkipped)
+			}
+
+			// Phase 2: seed the migration-016 state tables from the same
+			// YAML the importer just consumed. The state seeder is
+			// idempotent so re-runs only insert what's missing.
+			if !opts.DryRun {
+				seeder := newStateSeederFromConfig(cfg, db, os.Stdout)
+				if seeder == nil {
+					return nil
+				}
+				stateResult, err := seeder.SeedAll(ctx)
+				if err != nil {
+					return fmt.Errorf("seed db-only state: %w", err)
+				}
+				fmt.Println("\nState Seed Summary:")
+				fmt.Printf("  Definitions sessions: %d new\n", stateResult.DefinitionsSessionsCreated)
+				fmt.Printf("  Definitions scenes:   %d new\n", stateResult.DefinitionsScenesCreated)
+				fmt.Printf("  Flashcard decks:      %d new\n", stateResult.FlashcardDecksCreated)
+				fmt.Printf("  Note skip flags:      %d new\n", stateResult.NoteSkipFlagsCreated)
+				fmt.Printf("  Origin skip flags:    %d new\n", stateResult.OriginSkipFlagsCreated)
+				fmt.Printf("  Etymology logs:       %d new\n", stateResult.EtymologyLogsCreated)
 			}
 
 			return nil
@@ -147,22 +198,24 @@ the database from YAML when divergence is found, run "migrate sync-db".`,
 func newSyncDBCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync-db",
-		Short: "Rebuild database from source YAML (destructive: clears every persisted-data table first)",
-		Long: `Make the database match the source YAML files. This is a destructive
-operation:
+		Short: "Drop schema, re-apply migrations, re-import from source YAML (destructive)",
+		Long: `Make the database match the source YAML files from a clean slate.
+This is a destructive operation:
 
-  1. CLEAR every persisted-data table (notes, learning_logs,
-     note_origin_parts, etymology_origins, semantic_concepts,
-     definition_concepts, …).
-  2. Import all source YAML notebooks into the now-empty database.
-  3. Export the database back to a temporary directory.
-  4. Diff source YAML against the exported YAML to verify the
-     roundtrip is lossless.
+  1. DROP every table in the database (including schema_migrations).
+     This also clears any half-applied migration state, which is the
+     safe path to recover from a migration that failed mid-flight on
+     a backend that doesn't roll back DDL (MySQL, TiDB).
+  2. Apply every schema migration from scratch.
+  3. Import all source YAML notebooks into the now-empty database.
+  4. Export the database back to a temporary directory and diff
+     against the source YAML to verify the roundtrip is lossless.
 
 Use this command when the database has drifted from the YAML and you
-want YAML to win, or when you've migrated the schema and want to
-re-seed from a clean slate. To check current divergence WITHOUT
-modifying the database, use "migrate validate-db" instead.`,
+want YAML to win, when a migration failed and the schema is in a
+partially-applied state, or after upgrading the binary. To check
+current divergence WITHOUT modifying the database, use
+"migrate validate-db" instead.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
@@ -172,25 +225,88 @@ modifying the database, use "migrate validate-db" instead.`,
 			}
 			defer func() { _ = db.Close() }()
 
-			fmt.Println("Step 1: Clearing every persisted-data table...")
-			if err := clearAllDataTables(ctx, db); err != nil {
+			fmt.Println("Step 1: Dropping every table in the database...")
+			if err := dropAllTables(ctx, db, cfg.Database.Database); err != nil {
 				return err
 			}
-			fmt.Println("  Clear complete.")
+			fmt.Println("  Drop complete.")
 
-			fmt.Println("Step 2: Importing source YAML into the empty database...")
+			fmt.Println("Step 2: Applying schema migrations from scratch...")
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
+			fmt.Println("  Migrations applied.")
+
+			fmt.Println("Step 3: Importing source YAML into the empty database...")
 			importer := newImporterFromConfig(cfg, db, io.Discard)
 			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
 				return err
 			}
 			fmt.Println("  Import complete.")
 
-			fmt.Println("Step 3: Verifying the roundtrip is lossless...")
+			if seeder := newStateSeederFromConfig(cfg, db, io.Discard); seeder != nil {
+				fmt.Println("Step 4: Seeding DB-only state tables from YAML...")
+				if _, err := seeder.SeedAll(ctx); err != nil {
+					return fmt.Errorf("seed db-only state: %w", err)
+				}
+				fmt.Println("  Seed complete.")
+			}
+
+			fmt.Println("Step 5: Verifying the roundtrip is lossless...")
 			return runRoundTripDiff(ctx, cfg, db, os.Stdout)
 		},
 	}
 
 	return cmd
+}
+
+// dropAllTables drops every base table in the given schema, regardless
+// of FK direction, on a sticky connection with foreign_key_checks off.
+// Required because sync-db needs to remove tables that may not exist in
+// the current migration set (post-rollback or after the schema drifted)
+// as well as schema_migrations itself, which Migrate would otherwise
+// see as "we're at head, nothing to do."
+func dropAllTables(ctx context.Context, db *sqlx.DB, schema string) error {
+	conn, err := db.Conn(ctx)
+	if err != nil {
+		return fmt.Errorf("acquire connection: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+
+	rows, err := conn.QueryContext(ctx, `
+		SELECT table_name
+		FROM information_schema.tables
+		WHERE table_schema = ? AND table_type = 'BASE TABLE'
+	`, schema)
+	if err != nil {
+		return fmt.Errorf("list tables in %s: %w", schema, err)
+	}
+	var names []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scan table name: %w", err)
+		}
+		names = append(names, name)
+	}
+	_ = rows.Close()
+	if len(names) == 0 {
+		return nil
+	}
+
+	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 0"); err != nil {
+		return fmt.Errorf("disable foreign_key_checks: %w", err)
+	}
+	for _, name := range names {
+		if _, err := conn.ExecContext(ctx, "DROP TABLE IF EXISTS `"+name+"`"); err != nil {
+			return fmt.Errorf("drop table %s: %w", name, err)
+		}
+	}
+	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 1"); err != nil {
+		return fmt.Errorf("re-enable foreign_key_checks: %w", err)
+	}
+	return nil
 }
 
 // runRoundTripDiff exports the current database state to a temp
@@ -260,6 +376,34 @@ func openConfigAndDB() (*config.Config, *sqlx.DB, error) {
 	return cfg, db, nil
 }
 
+// newStateSeederFromConfig wires the datasync.StateSeeder for the
+// migration-016 tables. Returns nil when the YAML reader can't be
+// built (no notebooks configured) since no source data is available.
+func newStateSeederFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *datasync.StateSeeder {
+	reader, err := notebook.NewReader(
+		cfg.Notebooks.StoriesDirectories,
+		cfg.Notebooks.FlashcardsDirectories,
+		cfg.Notebooks.BooksDirectories,
+		cfg.Notebooks.DefinitionsDirectories,
+		cfg.Notebooks.EtymologyDirectories,
+		nil,
+	)
+	if err != nil {
+		return nil
+	}
+	return datasync.NewStateSeeder(
+		reader,
+		notebook.NewDBNoteRepository(db),
+		notebook.NewDBEtymologyOriginRepository(db),
+		notebook.NewDBDefinitionsRepository(db),
+		notebook.NewDBFlashcardDeckRepository(db),
+		notebook.NewDBSkipFlagRepository(db),
+		learning.NewDBLearningRepository(db),
+		learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, nil),
+		writer,
+	)
+}
+
 func newImporterFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *datasync.Importer {
 	noteRepo := notebook.NewDBNoteRepository(db)
 	learningRepo := learning.NewDBLearningRepository(db)
@@ -317,6 +461,7 @@ func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, wr
 	dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(outputDir)
 
 	exp := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, writer)
+	exp = exp.WithEtymologyOrigins(notebook.NewDBEtymologyOriginRepository(db))
 	return exp.WithDefinitionConcepts(
 		notebook.NewDBDefinitionConceptRepository(db),
 		notebook.NewYAMLDefinitionsBookSink(outputDir),
@@ -379,63 +524,3 @@ func extractNotebookIDs(notes []notebook.NoteRecord) []string {
 	return ids
 }
 
-// dataTablesInDeletionOrder lists every persisted-data table in an
-// order safe for sequential DELETE: child rows (rows whose FK points
-// at another row in this list) come before their parents. The
-// validate-db roundtrip clears these before re-importing. Keep in
-// sync with schemas/migrations/ — a missing entry surfaces as a
-// foreign-key constraint error at clear time, which is exactly the
-// failure mode TestClearAllDataTablesCoversAllSchemaTables guards
-// against.
-//
-// Order rationale:
-//   - note_origin_parts depends on notes + etymology_origins + etymology_origin_forms (no CASCADE on note_id)
-//   - notebook_notes, note_images, note_references, learning_logs depend on notes
-//   - etymology_origin_forms depends on etymology_origins (CASCADE; listed for clarity)
-//   - semantic_concept_members, concept_relations CASCADE from semantic_concepts
-//   - definition_concept_members CASCADE from definition_concepts
-//   - notes, etymology_origins, semantic_concepts, definition_concepts, dictionary_entries are leaf parents
-func dataTablesInDeletionOrder() []string {
-	return []string{
-		"note_origin_parts",
-		"notebook_notes",
-		"note_images",
-		"note_references",
-		"learning_logs",
-		"etymology_origin_forms",
-		"semantic_concept_members",
-		"concept_relations",
-		"definition_concept_members",
-		"notes",
-		"etymology_origins",
-		"semantic_concepts",
-		"definition_concepts",
-		"dictionary_entries",
-	}
-}
-
-// clearAllDataTables wipes every persisted-data table on a sticky
-// connection with FOREIGN_KEY_CHECKS off. The SET is per-session, so
-// running it on a borrowed *sqlx.DB (which pools connections) would
-// leak: subsequent statements could land on a different connection
-// that still has FK checks enabled. Pinning a single connection via
-// db.Conn keeps the SET effective for the lifetime of the clear.
-func clearAllDataTables(ctx context.Context, db *sqlx.DB) error {
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire connection: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 0"); err != nil {
-		return fmt.Errorf("disable foreign_key_checks: %w", err)
-	}
-	for _, table := range dataTablesInDeletionOrder() {
-		if _, err := conn.ExecContext(ctx, "DELETE FROM "+table); err != nil {
-			return fmt.Errorf("clear table %s: %w", table, err)
-		}
-	}
-	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 1"); err != nil {
-		return fmt.Errorf("re-enable foreign_key_checks: %w", err)
-	}
-	return nil
-}

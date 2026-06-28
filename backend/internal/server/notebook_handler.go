@@ -19,6 +19,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/pdf"
 )
@@ -32,6 +33,8 @@ type NotebookHandler struct {
 	dictionaryReader *dictionary.Reader
 	openaiClient     inference.Client
 	noteRepository   notebook.NoteRepository
+	historyStore     learning.HistoryStore
+	definitionsRepo  notebook.DefinitionsRepository
 }
 
 // NewNotebookHandler creates a new NotebookHandler.
@@ -47,6 +50,25 @@ func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig 
 	}
 }
 
+// WithHistoryStore wires a DB-backed LearningHistory loader so the
+// handler stops reading learning_notes/*.yml. Bootstrap calls this once
+// the DB is available; when unset the legacy YAML path remains the
+// fallback so tests don't need a database.
+func (h *NotebookHandler) WithHistoryStore(store learning.HistoryStore) *NotebookHandler {
+	h.historyStore = store
+	return h
+}
+
+// WithDefinitionsRepo wires the DB-backed DefinitionsRepository so
+// RegisterDefinition can persist session/scene structure. When unset,
+// the handler still inserts the note + notebook_notes link but skips
+// the structural upsert (the migrate command will seed the structure
+// the next time it runs).
+func (h *NotebookHandler) WithDefinitionsRepo(repo notebook.DefinitionsRepository) *NotebookHandler {
+	h.definitionsRepo = repo
+	return h
+}
+
 func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 	return notebook.NewReader(
 		h.notebooksConfig.StoriesDirectories,
@@ -59,12 +81,22 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 }
 
 
-func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
-	histories, err := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
+func (h *NotebookHandler) loadLearningHistory(ctx context.Context, notebookID string) ([]notebook.LearningHistory, error) {
+	histories, err := h.loadAllHistories(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
 	}
 	return histories[notebookID], nil
+}
+
+// loadAllHistories returns the per-notebook history map from the DB
+// store when wired, falling back to the YAML loader otherwise. Single
+// seam for the YAML→DB cutover.
+func (h *NotebookHandler) loadAllHistories(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+	if h.historyStore != nil {
+		return h.historyStore.LoadAll(ctx)
+	}
+	return notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
 }
 
 func convertLogsToProto(logs []notebook.LearningRecord) []*apiv1.LearningLogEntry {
@@ -98,7 +130,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create notebook reader: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(ctx, notebookID)
 	if err != nil {
 		return nil, err
 	}
@@ -530,7 +562,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read story notebooks: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(ctx, notebookID)
 	if err != nil {
 		return nil, err
 	}
@@ -1016,37 +1048,61 @@ func (h *NotebookHandler) loadEtymologyConcepts(
 	return out, conceptKeysByOrigin, nil
 }
 
-// RegisterDefinition adds a definition via the repository.
+// RegisterDefinition adds a definition by inserting a notes row and a
+// notebook_notes link, plus the session/scene structure rows the read
+// path renders from. All four writes go to MySQL; the legacy YAML
+// append is gone.
 func (h *NotebookHandler) RegisterDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.RegisterDefinitionRequest],
 ) (*connect.Response[apiv1.RegisterDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	defsDir := "notebooks/definitions"
-	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" { defsDir = h.notebooksConfig.DefinitionsDirectories[0] }
-	notebookIDRaw := req.Msg.GetNotebookId()
-	checkPath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
-	rel, err := filepath.Rel(defsDir, checkPath)
-	if err != nil || strings.HasPrefix(rel, "..") { return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id")) }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+
+	notebookID := req.Msg.GetNotebookId()
+	notebookFile := req.Msg.GetNotebookFile()
 	expression := req.Msg.GetExpression()
 	meaning := req.Msg.GetMeaning()
-	note := &notebook.NoteRecord{
-		Usage: expression, Entry: expression, Meaning: meaning,
-		DefinitionsDir: defsDir, NotebookFile: req.Msg.GetNotebookFile(),
-		SceneIndex: int(req.Msg.GetSceneIndex()),
-		PartOfSpeech: req.Msg.GetPartOfSpeech(), Examples: req.Msg.GetExamples(),
-		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: notebookIDRaw, Group: req.Msg.GetNotebookFile()}},
+	sceneIndex := int(req.Msg.GetSceneIndex())
+
+	if h.definitionsRepo != nil {
+		session, err := h.definitionsRepo.FindOrCreateSession(ctx, notebookID, notebookFile, notebookFile, nil)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("upsert definitions session: %w", err))
+		}
+		if _, err := h.definitionsRepo.FindOrCreateScene(ctx, session.ID, sceneIndex, ""); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("upsert definitions scene: %w", err))
+		}
 	}
-	if err := h.noteRepository.Create(ctx, note); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err)) }
+
+	note := &notebook.NoteRecord{
+		Usage:   expression,
+		Entry:   expression,
+		Meaning: meaning,
+		NotebookNotes: []notebook.NotebookNote{{
+			NotebookType: "book",
+			NotebookID:   notebookID,
+			Group:        notebookFile,
+		}},
+	}
+	if err := h.noteRepository.Create(ctx, note); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err))
+	}
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
 
-// DeleteDefinition removes a definition via the repository.
+// DeleteDefinition removes the notebook_notes link and (when no other
+// notebook references the note) the note + its dependents. All MySQL.
 func (h *NotebookHandler) DeleteDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.DeleteDefinitionRequest],
 ) (*connect.Response[apiv1.DeleteDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err)) }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err))
+	}
 	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
 }

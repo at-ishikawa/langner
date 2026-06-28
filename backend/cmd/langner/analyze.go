@@ -35,7 +35,13 @@ func newAnalyzeReportCommand() *cobra.Command {
 				return err
 			}
 
-			return cli.RunAnalyzeReport(cfg.Notebooks.LearningNotesDirectory, year, month)
+			histories, db, err := loadLearningHistoriesFromDB(cmd.Context(), cfg)
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			return cli.RunAnalyzeReport(histories, year, month)
 		},
 	}
 

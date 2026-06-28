@@ -3,6 +3,8 @@ package database
 
 import (
 	"context"
+	"database/sql"
+	"database/sql/driver"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,7 +20,16 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 )
 
-// Open opens a MySQL connection using the provided config.
+// Open opens a MySQL/TiDB connection using the provided config.
+//
+// Every connection produced from the pool is best-effort-asked to set
+// tidb_skip_isolation_level_check=1. golang-migrate begins each
+// migration in a SERIALIZABLE transaction; TiDB rejects that isolation
+// level unless this session variable is set, and adding it to
+// DatabaseConfig.Params would break MySQL (which doesn't recognize the
+// variable). Issuing the SET per-connection and ignoring its error
+// lets the same binary speak to both engines without forcing the
+// operator to maintain two configs.
 func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 	mysqlCfg := mysql.NewConfig()
 	mysqlCfg.User = cfg.Username
@@ -35,10 +46,22 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 		mysqlCfg.Params = cfg.Params
 	}
 
-	db, err := sqlx.Open("mysql", mysqlCfg.FormatDSN())
+	// Round-trip the DSN so the driver's parser normalises special keys
+	// (charset → Collation, tls → TLSConfig, …) the same way it does
+	// for sql.Open. mysql.NewConnector(mysqlCfg) skips that step and
+	// would then issue a literal `SET @@charset = utf8mb4` per
+	// connection, which TiDB rejects with `Unknown system variable
+	// 'charset'`.
+	dsn := mysqlCfg.FormatDSN()
+	normalizedCfg, err := mysql.ParseDSN(dsn)
 	if err != nil {
-		return nil, fmt.Errorf("open database connection: %w", err)
+		return nil, fmt.Errorf("parse mysql DSN: %w", err)
 	}
+	baseConnector, err := mysql.NewConnector(normalizedCfg)
+	if err != nil {
+		return nil, fmt.Errorf("build mysql connector: %w", err)
+	}
+	db := sqlx.NewDb(sql.OpenDB(&tidbAwareConnector{inner: baseConnector}), "mysql")
 
 	if cfg.MaxOpenConns > 0 {
 		db.SetMaxOpenConns(cfg.MaxOpenConns)
@@ -46,11 +69,103 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 	if cfg.MaxIdleConns > 0 {
 		db.SetMaxIdleConns(cfg.MaxIdleConns)
 	}
+
+	// TiDB Cloud's load balancer drops TCP sockets out from under
+	// long-idle connections; the pool then hands the dead socket to
+	// the next ExecContext, which decodes whatever fresh bytes
+	// arrive (TCP-RST, zeros) through its old TLS state machine and
+	// returns `tls: bad record MAC`. Capping the pool's connection
+	// lifetime and idle time refreshes sockets before the load
+	// balancer abandons them — the user's config can override.
+	lifetime := 1 * time.Minute
 	if cfg.ConnMaxLifetime > 0 {
-		db.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Second)
+		lifetime = time.Duration(cfg.ConnMaxLifetime) * time.Second
 	}
+	db.SetConnMaxLifetime(lifetime)
+	db.SetConnMaxIdleTime(30 * time.Second)
 
 	return db, nil
+}
+
+// tidbAwareConnector wraps the standard MySQL driver.Connector so that
+// each connection it produces tries to enable
+// tidb_skip_isolation_level_check. On TiDB the SET succeeds and lets
+// golang-migrate run its SERIALIZABLE transactions. On MySQL the
+// variable doesn't exist, the SET errors, and we discard the error so
+// the connection stays usable.
+type tidbAwareConnector struct {
+	inner driver.Connector
+}
+
+func (c *tidbAwareConnector) Connect(ctx context.Context) (driver.Conn, error) {
+	conn, err := c.inner.Connect(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if execer, ok := conn.(driver.ExecerContext); ok {
+		_, _ = execer.ExecContext(ctx, "SET @@SESSION.tidb_skip_isolation_level_check = 1", nil)
+	}
+	return conn, nil
+}
+
+func (c *tidbAwareConnector) Driver() driver.Driver {
+	return c.inner.Driver()
+}
+
+// ExecWithRetry runs query/args on the pool, retrying up to three
+// times on transient connection-level failures. Used by chunked
+// importers (learning_logs, dictionary_entries) to absorb TiDB
+// Cloud's occasional mid-statement `tls: bad record MAC`, where the
+// connection silently rots inside the pool and the next checkout
+// finds it unusable. Persistent errors (duplicate-key, constraint,
+// parse) bubble up immediately so callers see the real cause.
+//
+// Safe only for autocommit ExecContext calls — a query inside an
+// open *sqlx.Tx must not be retried this way because the surrounding
+// transaction will already be rolled back. Wrap individual chunks,
+// not whole batches.
+func ExecWithRetry(ctx context.Context, db *sqlx.DB, query string, args ...interface{}) error {
+	const maxAttempts = 3
+	var lastErr error
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		_, err := db.ExecContext(ctx, query, args...)
+		if err == nil {
+			return nil
+		}
+		if !isTransientConnError(err) {
+			return err
+		}
+		lastErr = err
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Duration(attempt) * 200 * time.Millisecond):
+		}
+	}
+	return fmt.Errorf("retry exhausted after %d attempts: %w", maxAttempts, lastErr)
+}
+
+// isTransientConnError reports whether err describes a connection-
+// level fault we can retry. database/sql.ErrBadConn covers the
+// driver-signalled case; TLS framing errors against TiDB Cloud
+// surface as plain strings rather than typed errors, so we also
+// match by substring.
+func isTransientConnError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, driver.ErrBadConn) {
+		return true
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "invalid connection") ||
+		strings.Contains(msg, "bad record MAC") ||
+		strings.Contains(msg, "tls:") ||
+		strings.Contains(msg, "broken pipe") ||
+		strings.Contains(msg, "connection reset by peer") {
+		return true
+	}
+	return false
 }
 
 // RunInTx runs fn within a database transaction.

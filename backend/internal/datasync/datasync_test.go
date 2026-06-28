@@ -442,6 +442,58 @@ func TestImporter_ImportNotes(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			// Regression: the user's sync-db hit
+			//   Error 1062 (23000): Duplicate entry '?' for key 'notebook_notes.note_id_2'
+			// when a single source note listed multiple NotebookNotes for
+			// the same (notebook_type, notebook_id, group) but different
+			// subgroups. The DB's UNIQUE is
+			// (note_id, notebook_type, notebook_id, group) — subgroup
+			// isn't part of it — so BatchCreate's multi-row INSERT
+			// collided. classifyRecord must dedupe by the same key the
+			// schema enforces, keeping the first occurrence.
+			name: "new note with duplicate group differing only in subgroup keeps one",
+			sourceNotes: []notebook.NoteRecord{
+				{
+					Usage:   "break the ice",
+					Entry:   "start a conversation",
+					Meaning: "to initiate social interaction",
+					NotebookNotes: []notebook.NotebookNote{
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Scene 1"},
+						{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Scene 4"},
+					},
+				},
+			},
+			opts: ImportOptions{},
+			setup: func(noteSource *mock_datasync.MockNoteSource, noteRepo *mock_notebook.MockNoteRepository) {
+				noteSource.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{
+						Usage:   "break the ice",
+						Entry:   "start a conversation",
+						Meaning: "to initiate social interaction",
+						NotebookNotes: []notebook.NotebookNote{
+							{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Scene 1"},
+							{NotebookType: "story", NotebookID: "test-story", Group: "Episode 1", Subgroup: "Scene 4"},
+						},
+					},
+				}, nil)
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
+						require.Len(t, notes, 1)
+						require.Len(t, notes[0].NotebookNotes, 1,
+							"NotebookNotes for the same (notebook, group) but differing subgroup must collapse to one row — otherwise the multi-row INSERT collides on the DB's UNIQUE")
+						assert.Equal(t, "Scene 1", notes[0].NotebookNotes[0].Subgroup,
+							"first occurrence should win so the dedupe is deterministic")
+						return nil
+					})
+			},
+			want: &ImportNotesResult{
+				NotesNew:        1,
+				NotebookNew:     1,
+				NotebookSkipped: 1,
+			},
+		},
+		{
 			name: "BatchUpdate error propagates for new notebook_note on existing note",
 			sourceNotes: []notebook.NoteRecord{
 				{
@@ -1116,8 +1168,8 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 					{ID: 1, NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook"},
 					{ID: 2, NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 5, QuizType: "reverse"},
 				}, nil)
-				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(notes []notebook.NoteRecord, logs []learning.LearningLog) error {
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(notes []notebook.NoteRecord, logs []learning.LearningLog, origins []notebook.EtymologyOriginRecord) error {
 						require.Len(t, notes, 1)
 						require.Len(t, logs, 2)
 						return nil
@@ -1130,7 +1182,7 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).Return(nil)
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: &ExportLearningLogsResult{},
 		},
@@ -1154,7 +1206,7 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).Return(fmt.Errorf("write failed"))
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("write failed"))
 			},
 			wantErr: true,
 		},

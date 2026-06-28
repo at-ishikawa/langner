@@ -1,25 +1,52 @@
 - metadata:
-    notebook_id: common-roots
+    id: common-roots
     title: "Common Latin and Greek Roots"
-  expressions:
-    - expression: bene
-      etymology_breakdown_logs:
-        - status: usable
-          learned_at: "2025-12-10T00:00:00Z"
-          quality: 4
-          quiz_type: etymology_freeform
-          interval_days: 30
-    - expression: mal
-      etymology_breakdown_logs:
-        - status: misunderstood
-          learned_at: "2025-12-13T00:00:00Z"
-          quality: 1
-          quiz_type: etymology_freeform
-          interval_days: 1
-    - expression: dict
-      etymology_breakdown_logs:
-        - status: understood
-          learned_at: "2025-12-12T00:00:00Z"
-          quality: 4
-          quiz_type: etymology_freeform
-          interval_days: 7
+  scenes:
+    - metadata:
+        title: "Common Roots"
+      expressions:
+        # Origin expression WITHOUT the `type: origin` marker. The user's
+        # word-power-made-easy YAML has many entries like this (e.g.
+        # "ambi", "ascetic", "epi", "geo", "gyne", "kentron"). Import
+        # must detect them by name-against-etymology_origins and route
+        # through StateSeeder, not auto-note them; export must emit
+        # them back. Regressing here makes source/exported diverge by
+        # the count of etymology_freeform records (validate routes
+        # etymology_freeform → learned bucket).
+        - expression: bene
+          etymology_breakdown_logs:
+            - status: usable
+              learned_at: "2025-12-10T00:00:00Z"
+              quality: 4
+              quiz_type: etymology_freeform
+              interval_days: 30
+        - expression: mal
+          etymology_breakdown_logs:
+            - status: misunderstood
+              learned_at: "2025-12-13T00:00:00Z"
+              quality: 1
+              quiz_type: etymology_freeform
+              interval_days: 1
+        - expression: dict
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "2025-12-12T00:00:00Z"
+              quality: 4
+              quiz_type: etymology_freeform
+              interval_days: 7
+        # Same idea but WITH the explicit `type: origin` marker — covers
+        # the path where Type is set on the LearningHistoryExpression.
+        - expression: scrib
+          type: origin
+          learned_logs:
+            - status: understood
+              learned_at: "2025-12-14T00:00:00Z"
+              quality: 4
+              quiz_type: notebook
+              interval_days: 7
+          etymology_breakdown_logs:
+            - status: usable
+              learned_at: "2025-12-15T00:00:00Z"
+              quality: 3
+              quiz_type: etymology_breakdown
+              interval_days: 7

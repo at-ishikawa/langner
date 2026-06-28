@@ -3,8 +3,11 @@ package dictionary
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/at-ishikawa/langner/internal/database"
 )
 
 // DictionaryRepository defines operations for managing dictionary entries.
@@ -32,14 +35,34 @@ func (r *DBDictionaryRepository) FindAll(ctx context.Context) ([]DictionaryEntry
 	return entries, nil
 }
 
-// BatchUpsert inserts or updates multiple dictionary entries.
+// BatchUpsert inserts or updates multiple dictionary entries in
+// chunked multi-row INSERT … ON DUPLICATE KEY UPDATE statements. The
+// previous implementation issued one round-trip per entry under
+// autocommit, which on a remote backend (TiDB Cloud) dominated the
+// sync-db wall clock — `response` carries the largest JSON blob in
+// the schema, so chunk size is conservative to keep each statement
+// well under MySQL's default max_allowed_packet.
 func (r *DBDictionaryRepository) BatchUpsert(ctx context.Context, entries []*DictionaryEntry) error {
-	for _, e := range entries {
-		_, err := r.db.NamedExecContext(ctx,
-			"INSERT INTO dictionary_entries (word, source_type, response) VALUES (:word, :source_type, :response) ON DUPLICATE KEY UPDATE source_type = VALUES(source_type), response = VALUES(response)",
-			e)
-		if err != nil {
-			return fmt.Errorf("upsert dictionary entry: %w", err)
+	if len(entries) == 0 {
+		return nil
+	}
+	const chunkSize = 200
+	for i := 0; i < len(entries); i += chunkSize {
+		end := i + chunkSize
+		if end > len(entries) {
+			end = len(entries)
+		}
+		chunk := entries[i:end]
+		placeholders := strings.Repeat("(?, ?, ?), ", len(chunk)-1) + "(?, ?, ?)"
+		query := "INSERT INTO dictionary_entries (word, source_type, response) VALUES " +
+			placeholders +
+			" ON DUPLICATE KEY UPDATE source_type = VALUES(source_type), response = VALUES(response)"
+		args := make([]interface{}, 0, len(chunk)*3)
+		for _, e := range chunk {
+			args = append(args, e.Word, e.SourceType, e.Response)
+		}
+		if err := database.ExecWithRetry(ctx, r.db, query, args...); err != nil {
+			return fmt.Errorf("upsert dictionary entries (%d rows): %w", len(chunk), err)
 		}
 	}
 	return nil

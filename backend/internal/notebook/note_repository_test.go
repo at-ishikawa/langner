@@ -391,12 +391,17 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
-					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1, "").
-					WillReturnResult(sqlmock.NewResult(10, 1))
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
-					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "").
-					WillReturnResult(sqlmock.NewResult(11, 1))
+				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+					WithArgs(
+						"idiom", "break the ice", "to initiate conversation", "B2", 1, "",
+						"phrasal_verb", "give up", "to stop trying", "A2", 2, "",
+					).
+					WillReturnResult(sqlmock.NewResult(10, 2))
+				mock.ExpectQuery("SELECT id, `usage`, entry FROM notes WHERE \\(`usage`, entry\\) IN \\(\\(\\?, \\?\\), \\(\\?, \\?\\)\\)").
+					WithArgs("idiom", "break the ice", "phrasal_verb", "give up").
+					WillReturnRows(sqlmock.NewRows([]string{"id", "usage", "entry"}).
+						AddRow(int64(10), "idiom", "break the ice").
+						AddRow(int64(11), "phrasal_verb", "give up"))
 				mock.ExpectExec("INSERT INTO note_images \\(note_id, url, sort_order\\) VALUES \\(\\?, \\?, \\?\\)").
 					WithArgs(int64(10), "https://example.com/img.png", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
@@ -432,14 +437,16 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "last insert id error",
+			name: "id lookup error",
 			notes: []*NoteRecord{
 				{Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
-					WillReturnResult(sqlmock.NewErrorResult(fmt.Errorf("last insert id error")))
+					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("SELECT id, `usage`, entry FROM notes").
+					WillReturnError(fmt.Errorf("select failed"))
 				mock.ExpectRollback()
 			},
 			wantErr: true,
@@ -456,6 +463,9 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
 					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("SELECT id, `usage`, entry FROM notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id", "usage", "entry"}).
+						AddRow(int64(10), "idiom", "break the ice"))
 				mock.ExpectExec("INSERT INTO note_images").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
@@ -474,6 +484,9 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
 					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("SELECT id, `usage`, entry FROM notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id", "usage", "entry"}).
+						AddRow(int64(10), "idiom", "break the ice"))
 				mock.ExpectExec("INSERT INTO note_references").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
@@ -492,6 +505,9 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
 					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("SELECT id, `usage`, entry FROM notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id", "usage", "entry"}).
+						AddRow(int64(10), "idiom", "break the ice"))
 				mock.ExpectExec("INSERT INTO notebook_notes").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
@@ -507,6 +523,9 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO notes").
 					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("SELECT id, `usage`, entry FROM notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id", "usage", "entry"}).
+						AddRow(int64(10), "idiom", "break the ice"))
 				mock.ExpectCommit().WillReturnError(fmt.Errorf("commit failed"))
 			},
 			wantErr: true,

@@ -1,11 +1,26 @@
 package main
 
 import (
+	"net"
 	"testing"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/stretchr/testify/assert"
 )
+
+// skipIfNoDB short-circuits tests that require a reachable MySQL.
+// SetupTestConfig points the CLI at localhost:3306; in environments
+// without MySQL (sandbox, CI without service container) the test would
+// only ever exercise the connection-refused path.
+func skipIfNoDB(t *testing.T) {
+	t.Helper()
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:3306", 200*time.Millisecond)
+	if err != nil {
+		t.Skip("MySQL not reachable on 127.0.0.1:3306 — skipping DB-backed CLI smoke test")
+	}
+	_ = conn.Close()
+}
 
 func TestNewAnalyzeReportCommand_RunE(t *testing.T) {
 	tests := []struct {
@@ -50,6 +65,7 @@ func TestNewAnalyzeReportCommand_RunE(t *testing.T) {
 }
 
 func TestNewAnalyzeReportCommand_RunE_WithConfig(t *testing.T) {
+	skipIfNoDB(t)
 	tmpDir := t.TempDir()
 	cfgPath := testutil.SetupTestConfig(t, tmpDir)
 	setConfigFile(t, cfgPath)

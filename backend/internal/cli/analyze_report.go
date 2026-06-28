@@ -7,14 +7,11 @@ import (
 	"github.com/at-ishikawa/langner/internal/statistics"
 )
 
-// RunAnalyzeReport displays learning statistics report
-func RunAnalyzeReport(learningNotesDir string, year, month int) error {
-	// Load learning histories
-	histories, err := notebook.NewLearningHistories(learningNotesDir)
-	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
-	}
-
+// RunAnalyzeReport displays learning statistics report from pre-loaded
+// histories. The caller chooses the data source — CLI passes DB-backed
+// histories so the report matches what the user did in the web UI;
+// tests pass YAML-loaded histories for fixture coverage.
+func RunAnalyzeReport(histories map[string][]notebook.LearningHistory, year, month int) error {
 	// Calculate statistics
 	result := statistics.CalculateStatistics(histories, year, month)
 

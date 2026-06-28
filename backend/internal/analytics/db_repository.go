@@ -15,12 +15,25 @@ import (
 // notebook_notes (for the notebook title and scene) so the response
 // matches what the YAML repository produces.
 type DBRepository struct {
-	db *sqlx.DB
+	db               *sqlx.DB
+	metadataResolver MetadataResolver
 }
 
 // NewDBRepository returns an analytics Repository backed by the configured DB.
 func NewDBRepository(db *sqlx.DB) *DBRepository {
-	return &DBRepository{db: db}
+	return &DBRepository{db: db, metadataResolver: noMetadataResolver{}}
+}
+
+// WithMetadataResolver attaches a resolver that hydrates WrongWord
+// cards with the canonical meaning, an example sentence, and the
+// notebook kind. Same shape the YAML repository accepts so handlers
+// don't need to know which side they're on.
+func (r *DBRepository) WithMetadataResolver(resolver MetadataResolver) *DBRepository {
+	if resolver == nil {
+		resolver = noMetadataResolver{}
+	}
+	r.metadataResolver = resolver
+	return r
 }
 
 // dailyRow is the projection used for one row of the daily summary query.
@@ -84,14 +97,15 @@ func (r *DBRepository) DailySummaries(ctx context.Context, rangeDays int, filter
 
 // wrongRow is the projection used for one wrong attempt on the requested day.
 type wrongRow struct {
-	NoteID           int64     `db:"note_id"`
-	Expression       string    `db:"expression"`
-	NotebookID       string    `db:"notebook_id"`
-	NotebookTitle    string    `db:"notebook_title"`
-	SceneTitle       string    `db:"scene_title"`
-	QuizType         string    `db:"quiz_type"`
-	LearnedAt        time.Time `db:"learned_at"`
-	Status           string    `db:"status"`
+	NoteID        sql.NullInt64 `db:"note_id"`
+	OriginID      sql.NullInt64 `db:"origin_id"`
+	Expression    string        `db:"expression"`
+	NotebookID    string        `db:"notebook_id"`
+	NotebookTitle string        `db:"notebook_title"`
+	SceneTitle    string        `db:"scene_title"`
+	QuizType      string        `db:"quiz_type"`
+	LearnedAt     time.Time     `db:"learned_at"`
+	Status        string        `db:"status"`
 }
 
 // DayDetail returns the wrong words for the day plus adjacent-day pointers.
@@ -115,13 +129,14 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 		return DayDetail{}, err
 	}
 
-	// Wrong attempts on the day. The scene title is fetched via a correlated
-	// subquery rather than a LEFT JOIN so MySQL's only_full_group_by mode
-	// doesn't reject the SELECT (and so a note belonging to multiple notebook
-	// rows doesn't fan out into duplicate cards).
+	// Wrong attempts on the day. Vocab logs (note_id set) join `notes` for
+	// the usage; etymology origin logs (origin_id set) join
+	// `etymology_origins` for the origin string. The two SELECTs are
+	// UNIONed so the Day Detail shows both kinds of wrong words.
 	wrongQuery := `
 		SELECT
-			ll.note_id,
+			ll.note_id AS note_id,
+			NULL AS origin_id,
 			n.usage AS expression,
 			COALESCE(ll.source_notebook_id, '') AS notebook_id,
 			COALESCE(ll.source_notebook_id, '') AS notebook_title,
@@ -138,10 +153,29 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 		JOIN notes n ON n.id = ll.note_id
 		` + whereDay + `
 			AND ll.status = 'misunderstood'
-		ORDER BY n.usage
+			AND ll.note_id IS NOT NULL
+		UNION ALL
+		SELECT
+			NULL AS note_id,
+			ll.origin_id AS origin_id,
+			eo.origin AS expression,
+			COALESCE(ll.source_notebook_id, '') AS notebook_id,
+			COALESCE(ll.source_notebook_id, '') AS notebook_title,
+			'' AS scene_title,
+			ll.quiz_type,
+			ll.learned_at,
+			ll.status
+		FROM learning_logs ll
+		JOIN etymology_origins eo ON eo.id = ll.origin_id
+		` + whereDay + `
+			AND ll.status = 'misunderstood'
+			AND ll.origin_id IS NOT NULL
+		ORDER BY expression
 	`
+	// The whereDay clause is referenced twice in the UNION above.
+	unionArgs := append(append([]interface{}{}, args...), args...)
 	var wrongs []wrongRow
-	if err := r.db.SelectContext(ctx, &wrongs, wrongQuery, args...); err != nil {
+	if err := r.db.SelectContext(ctx, &wrongs, wrongQuery, unionArgs...); err != nil {
 		return DayDetail{}, fmt.Errorf("wrong words: %w", err)
 	}
 
@@ -149,12 +183,17 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 	// helpers can compute the pattern and the streaks around the day's attempt.
 	words := make([]WrongWord, 0, len(wrongs))
 	for _, w := range wrongs {
-		attempts, err := r.recentAttempts(ctx, w.NoteID, w.QuizType, w.LearnedAt)
+		attempts, err := r.recentAttempts(ctx, w.NoteID, w.OriginID, w.QuizType, w.LearnedAt)
 		if err != nil {
 			return DayDetail{}, err
 		}
+		expressionType := ExpressionTypeVocabulary
+		if isEtymologyQuizType(w.QuizType) {
+			expressionType = ExpressionTypeOrigin
+		}
+		meta := r.metadataResolver.Resolve(ctx, w.NotebookID, w.Expression, expressionType, w.QuizType)
 		words = append(words, WrongWord{
-			NoteID:                w.NoteID,
+			NoteID:                w.NoteID.Int64,
 			Expression:            w.Expression,
 			NotebookID:            w.NotebookID,
 			NotebookTitle:         w.NotebookTitle,
@@ -164,6 +203,11 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 			CurrentWrongStreak:    CurrentWrongStreak(attempts),
 			PreviousCorrectStreak: PreviousCorrectStreak(attempts),
 			CurrentStatus:         w.Status,
+			LearnedAt:             w.LearnedAt,
+			Meaning:               meta.Meaning,
+			ExampleSentence:       meta.ExampleSentence,
+			NotebookKind:          meta.NotebookKind,
+			RelatedGroups:         meta.RelatedGroups,
 		})
 	}
 
@@ -224,22 +268,39 @@ func (r *DBRepository) daySummary(ctx context.Context, dayStr string, filters Fi
 }
 
 // recentAttempts returns up to RecentPatternLength most recent attempts for the
-// given (note, quiz_type) on or before upTo (inclusive of upTo).
-func (r *DBRepository) recentAttempts(ctx context.Context, noteID int64, quizType string, upTo time.Time) ([]Attempt, error) {
-	query := `
-		SELECT status, learned_at, quality, quiz_type
-		FROM learning_logs
-		WHERE note_id = ? AND quiz_type = ? AND learned_at <= ?
-		ORDER BY learned_at DESC
-		LIMIT ?
-	`
+// given target on or before upTo (inclusive of upTo). Exactly one of noteID
+// or originID is expected to be set — vocab logs key by note, etymology
+// logs key by origin.
+func (r *DBRepository) recentAttempts(ctx context.Context, noteID, originID sql.NullInt64, quizType string, upTo time.Time) ([]Attempt, error) {
+	var query string
+	var args []interface{}
+	switch {
+	case originID.Valid:
+		query = `
+			SELECT status, learned_at, quality, quiz_type
+			FROM learning_logs
+			WHERE origin_id = ? AND quiz_type = ? AND learned_at <= ?
+			ORDER BY learned_at DESC
+			LIMIT ?
+		`
+		args = []interface{}{originID.Int64, quizType, upTo, RecentPatternLength}
+	default:
+		query = `
+			SELECT status, learned_at, quality, quiz_type
+			FROM learning_logs
+			WHERE note_id = ? AND quiz_type = ? AND learned_at <= ?
+			ORDER BY learned_at DESC
+			LIMIT ?
+		`
+		args = []interface{}{noteID.Int64, quizType, upTo, RecentPatternLength}
+	}
 	var rows []struct {
 		Status    string    `db:"status"`
 		LearnedAt time.Time `db:"learned_at"`
 		Quality   int       `db:"quality"`
 		QuizType  string    `db:"quiz_type"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, query, noteID, quizType, upTo, RecentPatternLength); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, fmt.Errorf("recent attempts: %w", err)
 	}
 	out := make([]Attempt, len(rows))

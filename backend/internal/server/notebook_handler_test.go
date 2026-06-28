@@ -9,10 +9,12 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	mock_notebook "github.com/at-ishikawa/langner/internal/mocks/notebook"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -460,17 +462,21 @@ func TestNotebookHandler_LookupWord_NotFound(t *testing.T) {
 }
 
 func TestNotebookHandler_RegisterDefinition(t *testing.T) {
-	defsDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	noteRepo := mock_notebook.NewMockNoteRepository(ctrl)
+	var captured *notebook.NoteRecord
+	noteRepo.EXPECT().Create(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, n *notebook.NoteRecord) error {
+		captured = n
+		return nil
+	})
 
 	handler := NewNotebookHandler(
-		config.NotebooksConfig{
-			DefinitionsDirectories: []string{defsDir},
-		},
+		config.NotebooksConfig{},
 		config.TemplatesConfig{},
 		make(map[string]rapidapi.Response),
 		nil,
 		nil,
-		notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
+		noteRepo,
 	)
 
 	resp, err := handler.RegisterDefinition(
@@ -487,71 +493,11 @@ func TestNotebookHandler_RegisterDefinition(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, resp)
-
-	// Verify the definitions file was written
-	data, err := os.ReadFile(filepath.Join(defsDir, "mybook.yml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "lose one's temper")
-	assert.Contains(t, string(data), "001-chapter-1.yml")
-}
-
-func TestNotebookHandler_RegisterDefinition_Subdirectory(t *testing.T) {
-	defsDir := t.TempDir()
-
-	handler := NewNotebookHandler(
-		config.NotebooksConfig{
-			DefinitionsDirectories: []string{defsDir},
-		},
-		config.TemplatesConfig{},
-		make(map[string]rapidapi.Response),
-		nil,
-		nil,
-		notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
-	)
-
-	resp, err := handler.RegisterDefinition(
-		context.Background(),
-		connect.NewRequest(&apiv1.RegisterDefinitionRequest{
-			NotebookId:   "books/mybook",
-			NotebookFile: "001-chapter-1.yml",
-			SceneIndex:   0,
-			Expression:   "break the ice",
-			Meaning:      "to do something to relieve tension",
-			PartOfSpeech: "phrase",
-		}),
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, resp)
-
-	// Verify the file was created under the subdirectory, not at the top level
-	data, err := os.ReadFile(filepath.Join(defsDir, "books", "mybook.yml"))
-	require.NoError(t, err)
-	assert.Contains(t, string(data), "break the ice")
-}
-
-func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
-	defsDir := t.TempDir()
-
-	handler := NewNotebookHandler(
-		config.NotebooksConfig{
-			DefinitionsDirectories: []string{defsDir},
-		},
-		config.TemplatesConfig{},
-		make(map[string]rapidapi.Response),
-		nil,
-		nil,
-		notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir),
-	)
-
-	_, err := handler.RegisterDefinition(
-		context.Background(),
-		connect.NewRequest(&apiv1.RegisterDefinitionRequest{
-			NotebookId: "../../etc/passwd",
-			Expression: "test",
-			Meaning:    "test meaning",
-		}),
-	)
-
-	require.Error(t, err, "path traversal should be rejected")
+	require.NotNil(t, captured)
+	assert.Equal(t, "lose one's temper", captured.Usage)
+	assert.Equal(t, "to become very angry", captured.Meaning)
+	require.Len(t, captured.NotebookNotes, 1)
+	assert.Equal(t, "mybook", captured.NotebookNotes[0].NotebookID)
+	assert.Equal(t, "001-chapter-1.yml", captured.NotebookNotes[0].Group)
+	assert.Equal(t, "book", captured.NotebookNotes[0].NotebookType)
 }

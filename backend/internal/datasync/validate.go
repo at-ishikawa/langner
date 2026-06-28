@@ -51,6 +51,16 @@ func (r *ValidateResult) HasMismatches() bool {
 }
 
 // buildNoteStats aggregates note records into per-notebook statistics.
+//
+// DefinitionCount is incremented per unique
+// (note, notebook_type, notebook_id, group) — the same key the
+// notebook_notes schema enforces UNIQUE on. Source YAML can list the
+// same note in multiple subgroups under the same group (e.g.
+// "Episode 1 / Scene 1" and "Episode 1 / Scene 4"), but the import
+// collapses those into a single notebook_notes row to satisfy the
+// schema UNIQUE. Counting raw YAML occurrences would then report a
+// drift the import is required to introduce — the round-trip
+// comparison must use the schema-level key on both sides.
 func buildNoteStats(notes []notebook.NoteRecord) DataStats {
 	stats := DataStats{
 		NotebookStats: make(map[string]*NotebookStats),
@@ -59,9 +69,36 @@ func buildNoteStats(notes []notebook.NoteRecord) DataStats {
 	type nk struct{ usage, entry string }
 	uniqueNotes := make(map[nk]bool)
 
+	type nnk struct {
+		usage, entry             string
+		notebookType, notebookID string
+		group                    string
+	}
+
+	// Global dedupe across ALL records: the importer's noteLookup is
+	// case-insensitive and notes are uniqueified by (usage, entry), so
+	// two source records that differ only in casing collapse into one
+	// DB note. Counting them as separate NotebookNotes here would
+	// double-count the same notebook_notes row. Different (usage,
+	// entry) pairs still get counted independently even when their
+	// (notebook, group) tuple matches.
+	seen := make(map[nnk]bool)
+
 	for _, rec := range notes {
 		uniqueNotes[nk{strings.ToLower(rec.Usage), strings.ToLower(rec.Entry)}] = true
+
 		for _, nn := range rec.NotebookNotes {
+			k := nnk{
+				usage:        strings.ToLower(rec.Usage),
+				entry:        strings.ToLower(rec.Entry),
+				notebookType: nn.NotebookType,
+				notebookID:   nn.NotebookID,
+				group:        nn.Group,
+			}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
 			ns, ok := stats.NotebookStats[nn.NotebookID]
 			if !ok {
 				ns = &NotebookStats{}
@@ -76,8 +113,44 @@ func buildNoteStats(notes []notebook.NoteRecord) DataStats {
 }
 
 // buildLearningStats aggregates learning expressions by notebook.
+//
+// Counts each record by its CANONICAL slot — the slot the YAML export
+// path puts it in based on quiz_type — rather than the slot it
+// happened to be parked in on disk. Older langner versions wrote
+// etymology_freeform records inside etymology_breakdown_logs /
+// etymology_assembly_logs, so a source YAML with those records reports
+// 5 LearnedLogs while the round-trip export normalises them into
+// LearnedLogs and reports 7. Routing on both sides by quiz_type makes
+// the round-trip comparison apples-to-apples.
+//
+// The slot convention mirrors yaml_repository.go's buildExpression:
+//   - reverse              → reverse slot
+//   - etymology_breakdown  → etymology_breakdown slot (not counted)
+//   - etymology_assembly   → etymology_assembly slot (not counted)
+//   - everything else      → learned slot
 func buildLearningStats(learningByNotebook map[string][]notebook.LearningHistoryExpression) map[string]map[string]*LearningExpressionStats {
 	result := make(map[string]map[string]*LearningExpressionStats)
+
+	tallyRecords := func(es *LearningExpressionStats, recs []notebook.LearningRecord, defaultSlot string) {
+		for _, rec := range recs {
+			qt := string(rec.QuizType)
+			if qt == "" {
+				qt = defaultSlot
+			}
+			switch qt {
+			case string(notebook.QuizTypeReverse):
+				es.ReverseLogCount++
+			case string(notebook.QuizTypeEtymologyStandard),
+				string(notebook.QuizTypeEtymologyReverse):
+				// Counted under etymology slots, not learned/reverse.
+				// validate doesn't surface those today.
+			default:
+				// notebook, freeform, etymology_freeform — all land in
+				// learned_logs in the YAML convention.
+				es.LearnedLogCount++
+			}
+		}
+	}
 
 	for nbID, expressions := range learningByNotebook {
 		exprStats := make(map[string]*LearningExpressionStats)
@@ -94,8 +167,10 @@ func buildLearningStats(learningByNotebook map[string][]notebook.LearningHistory
 				es = &LearningExpressionStats{}
 				exprStats[key] = es
 			}
-			es.LearnedLogCount += len(expr.LearnedLogs)
-			es.ReverseLogCount += len(expr.ReverseLogs)
+			tallyRecords(es, expr.LearnedLogs, string(notebook.QuizTypeNotebook))
+			tallyRecords(es, expr.ReverseLogs, string(notebook.QuizTypeReverse))
+			tallyRecords(es, expr.EtymologyBreakdownLogs, string(notebook.QuizTypeEtymologyStandard))
+			tallyRecords(es, expr.EtymologyAssemblyLogs, string(notebook.QuizTypeEtymologyReverse))
 		}
 		result[nbID] = exprStats
 	}

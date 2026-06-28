@@ -560,7 +560,16 @@ func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, se
 		if normalizeQuotes(h.Metadata.Title) != normalised {
 			continue
 		}
-		scenesByOrigin := make(map[string][]string)
+		// Track distinct scene titles per origin. Multi-sense origins
+		// (e.g. "pathos" = "feeling" AND "pathos" = "disease" both in
+		// Greek-roots Session 9, see migration 011) legitimately appear
+		// multiple times under one session — once per sense. The
+		// invariant we still want to catch is the original
+		// "two logos sessions" bug: the same origin name in two
+		// distinct scenes of the same session. Deduping the scene-title
+		// list to a set keeps the multi-sense case green while
+		// preserving the cross-scene guard.
+		scenesByOrigin := make(map[string]map[string]struct{})
 		for _, scene := range h.Scenes {
 			for _, expr := range scene.Expressions {
 				if expr.Type != LearningExpressionTypeOrigin {
@@ -570,14 +579,23 @@ func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, se
 				if name == "" {
 					continue
 				}
-				scenesByOrigin[name] = append(scenesByOrigin[name], scene.Metadata.Title)
+				bucket := scenesByOrigin[name]
+				if bucket == nil {
+					bucket = make(map[string]struct{})
+					scenesByOrigin[name] = bucket
+				}
+				bucket[scene.Metadata.Title] = struct{}{}
 			}
 		}
 		for origin, scenes := range scenesByOrigin {
 			if len(scenes) > 1 {
+				titles := make([]string, 0, len(scenes))
+				for t := range scenes {
+					titles = append(titles, t)
+				}
 				return fmt.Errorf(
 					"invariant violation: origin %q appears in %d scenes (%v) within notebook %q session %q — refusing to write",
-					origin, len(scenes), scenes, notebookID, sessionTitle,
+					origin, len(scenes), titles, notebookID, sessionTitle,
 				)
 			}
 		}

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -69,7 +70,7 @@ func (s *Service) LoadEtymologyOriginCards(
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -296,7 +297,11 @@ func (s *Service) isSameMeaningOrigin(card EtymologyOriginCard, answer string) b
 	return false
 }
 
-// SaveEtymologyOriginResult updates the learning history for an etymology origin quiz answer.
+// SaveEtymologyOriginResult records an etymology quiz attempt. With the
+// DB stack wired (learningRepository + originRepo + historyStore), it
+// writes one row to learning_logs keyed on origin_id and drops the YAML
+// write entirely. The legacy YAML path remains as fallback so unit tests
+// that don't construct the DB stack still exercise the updater logic.
 func (s *Service) SaveEtymologyOriginResult(
 	card EtymologyOriginCard,
 	quality int,
@@ -305,7 +310,7 @@ func (s *Service) SaveEtymologyOriginResult(
 	quizType notebook.QuizType,
 	isKnownWord bool,
 ) error {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -342,11 +347,103 @@ func (s *Service) SaveEtymologyOriginResult(
 		return fmt.Errorf("save etymology origin %q: %w", card.Origin, err)
 	}
 
+	if s.learningRepository != nil && s.originRepo != nil {
+		return s.saveEtymologyLogToDB(updater.GetHistory(), card, quizType)
+	}
+
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
 
+	return nil
+}
+
+// saveEtymologyLogToDB extracts the newest log the updater just appended
+// for this card and persists it to learning_logs via LearningRepository
+// with origin_id resolved from etymology_origins. The (NotebookName,
+// SessionTitle, Sense, Origin, Language) tuple is the etymology origin
+// unique key.
+func (s *Service) saveEtymologyLogToDB(history []notebook.LearningHistory, card EtymologyOriginCard, quizType notebook.QuizType) error {
+	ctx := context.Background()
+	record := findLatestEtymologyRecord(history, card, quizType)
+	if record == nil {
+		return fmt.Errorf("updater did not produce a record for origin %q in session %q", card.Origin, card.SessionTitle)
+	}
+
+	originID, err := s.lookupOriginID(ctx, card)
+	if err != nil {
+		return err
+	}
+
+	log := &learning.LearningLog{
+		OriginID:         originID,
+		Status:           string(record.Status),
+		LearnedAt:        record.LearnedAt.Time,
+		Quality:          record.Quality,
+		ResponseTimeMs:   int(record.ResponseTimeMs),
+		QuizType:         string(quizType),
+		IntervalDays:     record.IntervalDays,
+		SourceNotebookID: card.NotebookName,
+	}
+	if err := s.learningRepository.Create(ctx, log); err != nil {
+		return fmt.Errorf("save etymology log: %w", err)
+	}
+	return nil
+}
+
+// lookupOriginID walks the etymology_origins table for the row matching
+// the card's (notebook, session, sense, origin, language) tuple.
+func (s *Service) lookupOriginID(ctx context.Context, card EtymologyOriginCard) (int64, error) {
+	origins, err := s.originRepo.FindAll(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("load etymology origins: %w", err)
+	}
+	for _, o := range origins {
+		if o.NotebookID != card.NotebookName {
+			continue
+		}
+		if o.SessionTitle != card.SessionTitle {
+			continue
+		}
+		if o.Sense != card.Sense {
+			continue
+		}
+		if !strings.EqualFold(o.Origin, card.Origin) {
+			continue
+		}
+		if o.Language != card.Language {
+			continue
+		}
+		return o.ID, nil
+	}
+	return 0, fmt.Errorf("etymology origin %q (session %q, sense %q, lang %q) not found in notebook %q", card.Origin, card.SessionTitle, card.Sense, card.Language, card.NotebookName)
+}
+
+// findLatestEtymologyRecord locates the newest LearningRecord the
+// updater just appended to the in-memory history for the card's origin.
+// The record carries status, interval, and easiness factor we then
+// write to learning_logs. Returns nil if the updater didn't add one,
+// which would indicate an upstream bug.
+func findLatestEtymologyRecord(history []notebook.LearningHistory, card EtymologyOriginCard, quizType notebook.QuizType) *notebook.LearningRecord {
+	for _, h := range history {
+		if h.Metadata.Title != card.SessionTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			for _, expr := range scene.Expressions {
+				if expr.Expression != card.Origin {
+					continue
+				}
+				logs := expr.GetLogsForQuizType(quizType)
+				if len(logs) == 0 {
+					continue
+				}
+				latest := logs[0]
+				return &latest
+			}
+		}
+	}
 	return nil
 }
 
@@ -481,7 +578,7 @@ func (s *Service) GetEtymologyOriginNextReviewDates(cards []EtymologyOriginCard)
 	if s.disableShuffle {
 		return map[string]string{}, nil
 	}
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -592,7 +689,7 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -671,11 +768,19 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 // Rules (mirroring the user-visible behaviour):
 //
 //   - per-type skip → exclude (a skip in one mode does not affect the other).
-//   - never-seen (no logs in any track) → include iff includeUnstudied.
-//   - has any logs → defer to the SR interval for the requested mode.
-//     A `misunderstood` log triggers retry (interval 1d, status check in
-//     NeedsEtymologyReview); standard/reverse show the correct answer on
-//     the feedback screen, so a prior correct answer is not required.
+//   - never-seen in this mode → include iff includeUnstudied.
+//     "Never seen in this mode" means the origin's expression has no
+//     logs in the slot the requested mode reads from
+//     (etymology_breakdown for standard, etymology_assembly for
+//     reverse). An origin studied in standard but never in reverse
+//     therefore stays out of the reverse queue when includeUnstudied
+//     is off, which is what stops the start-page count from blowing
+//     up after sync-db routes more logs onto etymology_origins.id.
+//   - has logs for THIS mode → defer to the SR interval. A
+//     `misunderstood` log triggers retry (interval 1d, status check
+//     in NeedsEtymologyReview); standard/reverse show the correct
+//     answer on the feedback screen, so a prior correct answer is
+//     not required.
 func shouldIncludeOrigin(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
@@ -685,7 +790,11 @@ func shouldIncludeOrigin(
 	if isOriginSkipped(histories, notebookTitle, sessionTitle, origin, quizType) {
 		return false
 	}
-	if findOriginExpression(histories, notebookTitle, sessionTitle, origin) == nil {
+	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
+	if expr == nil {
+		return includeUnstudied
+	}
+	if len(expr.GetLogsForQuizType(quizType)) == 0 {
 		return includeUnstudied
 	}
 	return needsOriginReview(histories, notebookTitle, sessionTitle, origin, quizType)

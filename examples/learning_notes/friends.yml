@@ -5,8 +5,20 @@
     - metadata:
         title: Central Perk - Morning Coffee
       expressions:
+        # reverse_logs carries a record whose quiz_type is freeform.
+        # Older langner versions wrote freeform records into the
+        # reverse_logs slot, so the import must preserve rec.QuizType
+        # rather than hardcoding "reverse". Round-trip should keep
+        # source and exported in sync via the per-record quiz_type.
         - expression: break the ice
           learned_logs: []
+          reverse_logs:
+            - status: understood
+              learned_at: "2026-02-19T00:00:00Z"
+              quality: 4
+              response_time_ms: 4000
+              quiz_type: freeform
+              interval_days: 7
         - expression: hang out
           learned_logs:
             - status: misunderstood

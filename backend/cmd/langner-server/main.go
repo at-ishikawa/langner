@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -73,11 +74,10 @@ func run(ctx context.Context) error {
 		}
 	}
 
-	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
-	if err != nil {
-		slog.Warn("failed to load dictionary cache", "error", err)
-		dictionaryMap = make(map[string]rapidapi.Response)
-	}
+	// dictionaryMap is loaded from the DB further below, after the
+	// MySQL connection is open. Initialise empty here so the various
+	// handlers can still close over the pointer before that happens.
+	dictionaryMap := make(map[string]rapidapi.Response)
 
 	errorLogger := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
@@ -89,23 +89,49 @@ func run(ctx context.Context) error {
 		}
 	}))
 
-	// Set up repositories with dual storage when DB is configured
-	calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
-	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, calculator)
-	var learningRepo learning.LearningRepository = yamlLearningRepo
-	var noteRepo notebook.NoteRepository
-	var defsDir string
-	if len(cfg.Notebooks.DefinitionsDirectories) > 0 && cfg.Notebooks.DefinitionsDirectories[0] != "" { defsDir = cfg.Notebooks.DefinitionsDirectories[0] }
-	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
-	noteRepo = yamlNoteRepo
+	// The server is DB-only: state (notes, learning logs, skip flags,
+	// definition / flashcard structure, dictionary cache) lives in MySQL.
+	// YAML files under examples/* stay as the shared content library
+	// (stories, ebook chapters, etymology reference notebooks) and are
+	// still read by notebook.Reader at request time.
+	if cfg.Database.Host == "" || cfg.Database.Password == "" {
+		return fmt.Errorf("database is required: set database.host and DB_PASSWORD")
+	}
+	db, err := database.Open(cfg.Database)
+	if err != nil {
+		return fmt.Errorf("open database: %w", err)
+	}
+	app.AddShutdownHook(func(ctx context.Context) error {
+		return db.Close()
+	})
 
-	// Analytics always reads from YAML: the on-disk learning history files are
-	// the only place etymology quiz results are persisted today —
-	// SaveEtymologyOriginResult writes YAML directly and does not go through
-	// the learning repository, so the DB's learning_logs has only vocab rows.
-	// Once etymology gets first-class DB storage we can swap this for a
-	// hybrid that pulls vocab from DB and etymology from YAML.
-	yamlAnalyticsRepo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
+	// Schema migrations are NOT applied on startup. Run
+	// `langner migrate up` (schema only) or `langner migrate import-db`
+	// (schema + YAML import) after upgrading the binary. Auto-migrating
+	// here is incompatible with the e2e setup, where Playwright's
+	// `webServer` starts before `globalSetup` creates the test
+	// database — the server would then fail with
+	// `Unknown database` before the schema even exists.
+
+	learningRepo := learning.NewDBLearningRepository(db)
+	noteRepo := notebook.NewDBNoteRepository(db)
+	originRepo := notebook.NewDBEtymologyOriginRepository(db)
+	skipFlagRepo := notebook.NewDBSkipFlagRepository(db)
+	historyStore := learning.NewDBHistoryStore(noteRepo, learningRepo, originRepo, skipFlagRepo)
+
+	dictRepo := dictionary.NewDBDictionaryRepository(db)
+	if entries, derr := dictRepo.FindAll(ctx); derr != nil {
+		slog.Warn("failed to load dictionary cache from DB", "error", derr)
+	} else {
+		for _, e := range entries {
+			var resp rapidapi.Response
+			if uerr := json.Unmarshal(e.Response, &resp); uerr == nil {
+				dictionaryMap[e.Word] = resp
+			}
+		}
+	}
+
+	dbAnalyticsRepo := analytics.NewDBRepository(db)
 	if reader, err := notebook.NewReader(
 		cfg.Notebooks.StoriesDirectories,
 		cfg.Notebooks.FlashcardsDirectories,
@@ -116,34 +142,22 @@ func run(ctx context.Context) error {
 	); err != nil {
 		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
 	} else {
-		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
+		dbAnalyticsRepo = dbAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
 	}
-	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
-
-	if cfg.Database.Host != "" && cfg.Database.Password != "" {
-		db, err := database.Open(cfg.Database)
-		if err != nil {
-			slog.Warn("failed to open database, running with YAML-only storage", "error", err)
-		} else {
-			app.AddShutdownHook(func(ctx context.Context) error {
-				return db.Close()
-			})
-			dbLearningRepo := learning.NewDBLearningRepository(db)
-			dbNoteRepo := notebook.NewDBNoteRepository(db)
-			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
-			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
-			slog.Info("database connected, dual storage enabled")
-		}
-	}
+	analyticsRepo := analytics.Repository(dbAnalyticsRepo)
 
 	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
+	svc.WithDBState(historyStore, originRepo, skipFlagRepo, noteRepo)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
 		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
 	}
 	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
+	definitionsRepo := notebook.NewDBDefinitionsRepository(db)
 	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
+	notebookHandler.WithHistoryStore(historyStore)
+	notebookHandler.WithDefinitionsRepo(definitionsRepo)
 
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
@@ -178,14 +192,6 @@ func loadConfig() (*config.Config, error) {
 		return nil, fmt.Errorf("config.NewConfigLoader() > %w", err)
 	}
 	return loader.Load()
-}
-
-func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
-	responses, err := rapidapi.NewReader().Read(cacheDir)
-	if err != nil {
-		return nil, fmt.Errorf("rapidapi.NewReader().Read() > %w", err)
-	}
-	return rapidapi.FromResponsesToMap(responses), nil
 }
 
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {

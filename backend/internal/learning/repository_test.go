@@ -25,18 +25,18 @@ func TestDBLearningRepository_FindAll(t *testing.T) {
 			name: "returns all learning logs",
 			setupMock: func(mock sqlmock.Sqlmock) {
 				rows := sqlmock.NewRows([]string{
-					"id", "note_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "created_at", "updated_at",
+					"id", "note_id", "origin_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "concept_key", "easiness_factor", "source_notebook_id", "created_at", "updated_at",
 				}).
-					AddRow(1, 10, "understood", now, 4, 1500, "notebook", 7, "", now, now).
-					AddRow(2, 11, "misunderstood", now, 1, 3000, "freeform", 1, "", now, now)
-				mock.ExpectQuery("SELECT \\* FROM learning_logs ORDER BY id").WillReturnRows(rows)
+					AddRow(1, 10, 0, "understood", now, 4, 1500, "notebook", 7, "", nil, "", now, now).
+					AddRow(2, 11, 0, "misunderstood", now, 1, 3000, "freeform", 1, "", nil, "", now, now)
+				mock.ExpectQuery("SELECT id, COALESCE\\(note_id, 0\\) AS note_id, COALESCE\\(origin_id, 0\\) AS origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, concept_key, easiness_factor, source_notebook_id, created_at, updated_at FROM learning_logs ORDER BY id").WillReturnRows(rows)
 			},
 			wantLen: 2,
 		},
 		{
 			name: "db error",
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT \\* FROM learning_logs ORDER BY id").
+				mock.ExpectQuery("SELECT id, COALESCE\\(note_id, 0\\) AS note_id, COALESCE\\(origin_id, 0\\) AS origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, concept_key, easiness_factor, source_notebook_id, created_at, updated_at FROM learning_logs ORDER BY id").
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
 			wantErr: true,
@@ -85,7 +85,16 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			log:  &LearningLog{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WithArgs(int64(10), int64(0), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
+		{
+			name: "inserts an etymology log keyed by origin_id",
+			log:  &LearningLog{OriginID: 99, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "etymology_standard", IntervalDays: 7, SourceNotebookID: "et-1"},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectExec("INSERT INTO learning_logs").
+					WithArgs(int64(0), int64(99), "understood", now, 4, 1500, "etymology_standard", 7, "et-1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -132,20 +141,22 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 		wantErr   bool
 	}{
 		{
+			// Per-chunk implicit commits keep one pooled connection from
+			// staying open for a multi-thousand-row import — sync-db
+			// otherwise tripped `tls: bad record MAC` on TiDB Cloud part
+			// way through the run.
 			name: "creates multiple logs with multi-row insert",
 			logs: []*LearningLog{
 				{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 				{NoteID: 11, Status: "misunderstood", LearnedAt: now, Quality: 1, ResponseTimeMs: 3000, QuizType: "freeform", IntervalDays: 1, SourceNotebookID: "nb-2"},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\)").
 					WithArgs(
-						int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
-						int64(11), "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
+						int64(10), nil, "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
+						int64(11), nil, "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
 					).
 					WillReturnResult(sqlmock.NewResult(1, 2))
-				mock.ExpectCommit()
 			},
 		},
 		{
@@ -161,10 +172,8 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 				{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
 				mock.ExpectExec("INSERT INTO learning_logs").
 					WillReturnError(fmt.Errorf("duplicate entry"))
-				mock.ExpectRollback()
 			},
 			wantErr: true,
 		},

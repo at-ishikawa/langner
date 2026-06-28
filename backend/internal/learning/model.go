@@ -2,10 +2,16 @@ package learning
 
 import "time"
 
-// LearningLog represents a learning history entry for a note.
+// LearningLog represents a learning history entry. Exactly one of
+// NoteID and OriginID is non-zero: vocabulary quizzes target a note
+// (NoteID set, OriginID 0); etymology quizzes target an origin
+// (OriginID set, NoteID 0). Migration 016 made note_id nullable and
+// added origin_id so both quiz kinds share one logs table; the
+// repository converts zero values to SQL NULL on write.
 type LearningLog struct {
 	ID             int64     `db:"id"`
 	NoteID         int64     `db:"note_id"`
+	OriginID       int64     `db:"origin_id"`
 	Status         string    `db:"status"`
 	LearnedAt      time.Time `db:"learned_at"`
 	Quality        int       `db:"quality"`

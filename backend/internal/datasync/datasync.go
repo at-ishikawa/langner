@@ -74,9 +74,16 @@ func (lc *logCounter) leftoverIDs() []int64 {
 	return out
 }
 
+// nnKey identifies a notebook_notes row at the DB-level: the
+// schema's UNIQUE is `(note_id, notebook_type, notebook_id, group)`,
+// so subgroup is intentionally NOT in the key. Tracking subgroup here
+// would let two YAML rows that differ only in subgroup pass through
+// state.nnCache and BatchUpdate's INSERT would then collide on the
+// UNIQUE, which is the regression migration 001 already prevents at
+// the schema layer.
 type nnKey struct {
-	noteID                                    int64
-	notebookType, notebookID, group, subgroup string
+	noteID                          int64
+	notebookType, notebookID, group string
 }
 
 // classifyState holds mutable state passed through the classification loop.
@@ -350,7 +357,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 	for i := range allNotes {
 		state.noteCache[newNoteKey(allNotes[i].Usage, allNotes[i].Entry)] = &allNotes[i]
 		for _, nn := range allNotes[i].NotebookNotes {
-			k := nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+			k := nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}
 			state.nnCache[k] = true
 			state.nnIDByKey[k] = nn.ID
 		}
@@ -408,7 +415,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 		imp.touchedNNKeys = make(map[nnKey]bool)
 	}
 	for _, nn := range state.newNNs {
-		imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+		imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}] = true
 	}
 	// New notebook_notes attached to brand-new notes (existing.ID==0
 	// branch) live on n.NotebookNotes; those notes get IDs from
@@ -419,7 +426,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 			continue
 		}
 		for _, nn := range n.NotebookNotes {
-			imp.touchedNNKeys[nnKey{n.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] = true
+			imp.touchedNNKeys[nnKey{n.ID, nn.NotebookType, nn.NotebookID, nn.Group}] = true
 		}
 	}
 
@@ -431,12 +438,33 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 	existing := state.noteCache[key]
 
 	if existing == nil {
-		// Brand new note -- all NNs are new
+		// Brand new note. Dedupe its NotebookNotes against EACH OTHER
+		// using a per-record map: a single source record can list the
+		// same (notebook_type, notebook_id, group, subgroup) tuple
+		// twice, and BatchCreate's multi-row INSERT into notebook_notes
+		// would then collide on UNIQUE (note_id, …). Use a per-record
+		// map rather than state.nnCache, because the global cache is
+		// keyed by (note_id, …) and note_id is still 0 here —
+		// different in-flight notes that legitimately share the same
+		// (notebook, group, scene) tuple would otherwise dedupe
+		// against each other and lose their notebook_notes rows.
+		seen := make(map[nnTupleKey]bool, len(src.NotebookNotes))
+		deduped := make([]notebook.NotebookNote, 0, len(src.NotebookNotes))
+		for _, nn := range src.NotebookNotes {
+			t := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group}
+			if seen[t] {
+				state.result.NotebookSkipped++
+				continue
+			}
+			seen[t] = true
+			deduped = append(deduped, nn)
+		}
+		src.NotebookNotes = deduped
 		state.newNotes = append(state.newNotes, src)
 		state.noteCache[key] = src
 		_, _ = fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", src.Usage, src.Entry)
 		state.result.NotesNew++
-		state.result.NotebookNew += len(src.NotebookNotes)
+		state.result.NotebookNew += len(deduped)
 		return
 	}
 
@@ -457,9 +485,35 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 		state.result.NotesSkipped++
 	}
 
-	// Check each notebook_note link from the source
+	// Check each notebook_note link from the source.
 	for _, nn := range src.NotebookNotes {
-		nnk := nnKey{existing.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
+		if existing.ID == 0 {
+			// Pending-insertion path: existing was classified NEW
+			// earlier in this run, so existing.ID is still 0 and
+			// nnCache (keyed by note_id) can't disambiguate. Dedupe
+			// against existing.NotebookNotes directly — a small
+			// linear scan is fine because real records typically
+			// list a handful of notebook_notes.
+			target := nnTupleKey{nn.NotebookType, nn.NotebookID, nn.Group}
+			already := false
+			for _, e := range existing.NotebookNotes {
+				if (nnTupleKey{e.NotebookType, e.NotebookID, e.Group}) == target {
+					already = true
+					break
+				}
+			}
+			if already {
+				state.result.NotebookSkipped++
+				continue
+			}
+			existing.NotebookNotes = append(existing.NotebookNotes, nn)
+			state.result.NotebookNew++
+			continue
+		}
+
+		// Existing DB note path: existing.ID is a real row, so the
+		// nnCache key uniquely identifies the notebook_note row.
+		nnk := nnKey{existing.ID, nn.NotebookType, nn.NotebookID, nn.Group}
 		if id, ok := state.nnIDByKey[nnk]; ok {
 			state.matchedNNIDs[id] = true
 		}
@@ -467,17 +521,26 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 			state.result.NotebookSkipped++
 			continue
 		}
-		if existing.ID == 0 {
-			// Note is pending insertion (classified as NEW earlier); append NNs to it directly.
-			existing.NotebookNotes = append(existing.NotebookNotes, nn)
-		} else {
-			state.newNNs = append(state.newNNs, notebook.NotebookNote{
-				NoteID: existing.ID, NotebookType: nn.NotebookType, NotebookID: nn.NotebookID, Group: nn.Group, Subgroup: nn.Subgroup,
-			})
-		}
+		state.newNNs = append(state.newNNs, notebook.NotebookNote{
+			NoteID: existing.ID, NotebookType: nn.NotebookType, NotebookID: nn.NotebookID, Group: nn.Group, Subgroup: nn.Subgroup,
+		})
 		state.nnCache[nnk] = true
 		state.result.NotebookNew++
 	}
+}
+
+// nnTupleKey is the schema-level uniqueness key for a notebook_notes
+// row, scoped to a single note. It mirrors the UNIQUE constraint
+// `(note_id, notebook_type, notebook_id, group)` defined in migration
+// 001 — subgroup is intentionally NOT part of the key because the
+// schema treats two rows that differ only in subgroup as a duplicate.
+// Used when classifying in-flight new notes whose note_id isn't
+// assigned yet, so the global nnCache (keyed by note_id) can't
+// differentiate them.
+type nnTupleKey struct {
+	NotebookType string
+	NotebookID   string
+	Group        string
 }
 
 // noteLookup indexes notes by Entry, supporting notebook-aware lookup.
@@ -569,10 +632,51 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 	}
 
-	// First pass: batch-create auto notes for unknown expressions
+	// Build a set of (notebookID, lowercase origin name) tuples so any
+	// expression matching a known origin gets routed to the StateSeeder
+	// instead of auto-noted. The user's YAML often omits the
+	// `type: origin` marker on entries like "ambi" / "ascetic" / "epi"
+	// — those still belong on etymology_origins.id, not on a
+	// NotebookNotes-less phantom note that vanishes on export.
+	originNamesByNotebook := map[string]map[string]bool{}
+	if imp.etymologyOriginRepo != nil {
+		existing, err := imp.etymologyOriginRepo.FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", err)
+		}
+		for _, o := range existing {
+			byNB := originNamesByNotebook[o.NotebookID]
+			if byNB == nil {
+				byNB = map[string]bool{}
+				originNamesByNotebook[o.NotebookID] = byNB
+			}
+			byNB[strings.ToLower(strings.TrimSpace(o.Origin))] = true
+		}
+	}
+	isKnownOrigin := func(expr exprWithNotebook) bool {
+		if expr.Type == notebook.LearningExpressionTypeOrigin {
+			return true
+		}
+		byNB, ok := originNamesByNotebook[expr.notebookID]
+		if !ok {
+			return false
+		}
+		return byNB[strings.ToLower(strings.TrimSpace(expr.Expression))]
+	}
+
+	// First pass: batch-create auto notes for unknown vocab expressions.
+	// Origin-type expressions (e.g. "aequus", "theos") are intentionally
+	// excluded — they belong in etymology_origins, and StateSeeder writes
+	// their logs against origin_id. Auto-noting them here would attach
+	// the logs to a NotebookNotes-less note whose only appearance is in
+	// learning_notes/<nb>.yml; on export the note has no notebook to
+	// belong to and the logs vanish from the YAML.
 	newNoteEntries := make(map[string]bool)
 	var newNotes []*notebook.NoteRecord
 	for _, expr := range allExpressions {
+		if isKnownOrigin(expr) {
+			continue
+		}
 		if noteMap.lookup(expr.Expression, expr.notebookID) == nil && !newNoteEntries[expr.Expression] {
 			newNoteEntries[expr.Expression] = true
 			n := &notebook.NoteRecord{
@@ -601,9 +705,14 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		imp.touchedNoteIDs = make(map[int64]bool)
 	}
 
-	// Second pass: collect learning logs with correct note IDs
+	// Second pass: collect learning logs with correct note IDs. Origin
+	// expressions are handled by StateSeeder.persistOriginLogsForExpression
+	// and skipped here so their logs don't get attached to phantom notes.
 	var newLogs []*learning.LearningLog
 	for _, expr := range allExpressions {
+		if isKnownOrigin(expr) {
+			continue
+		}
 		n := noteMap.lookup(expr.Expression, expr.notebookID)
 		if n == nil {
 			continue
@@ -635,7 +744,20 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 
 		for _, rec := range expr.ReverseLogs {
-			quizType := "reverse"
+			// Preserve the YAML record's own quiz_type — the YAML
+			// reverse_logs slot occasionally carries
+			// freeform/etymology_freeform records (older versions of
+			// the writer parked them there). Defaulting to "reverse"
+			// only when the record itself is unspecified keeps the
+			// round-trip lossless. Hardcoding to "reverse" silently
+			// reclassifies those records and trips the validator with
+			// the matching `source +1 learn / exported +1 reverse`
+			// pattern that drowned word-power-made-easy and
+			// speak-more-business-english-and-make-more-money runs.
+			quizType := rec.QuizType
+			if quizType == "" {
+				quizType = string(notebook.QuizTypeReverse)
+			}
 			key := logKey{n.ID, quizType, rec.LearnedAt.UTC(), expr.notebookID, string(rec.Status)}
 			if existingLogs.matchSource(key) {
 				result.LearningSkipped++
@@ -770,8 +892,21 @@ type NoteSink interface {
 }
 
 // LearningSink writes exported learning logs.
+//
+// Origin-typed logs (those keyed on etymology_origins.id rather than
+// notes.id) flow through `origins` + the origin logs already present
+// in `logs`. The sink groups them by origin_id and emits one
+// origin-typed LearningHistoryExpression per origin under its
+// session_title. Without this path, origin logs survived sync-db's
+// import (StateSeeder writes them with origin_id) but vanished from
+// the round-trip — validate then reported every origin expression
+// as `source=N, exported=0`.
 type LearningSink interface {
-	WriteAll(notes []notebook.NoteRecord, logs []learning.LearningLog) error
+	WriteAll(
+		notes []notebook.NoteRecord,
+		logs []learning.LearningLog,
+		origins []notebook.EtymologyOriginRecord,
+	) error
 }
 
 // DictionarySink writes exported dictionary entries.
@@ -817,6 +952,11 @@ type Exporter struct {
 	noteSink       NoteSink
 	learningSink   LearningSink
 	dictionarySink DictionarySink
+	// originRepo is consulted by ExportLearningLogs so origin-typed
+	// LearningHistoryExpression rows round-trip through the YAML. Nil
+	// means "no etymology data": origin logs in the DB will skip the
+	// sink, matching the pre-DB behaviour.
+	originRepo notebook.EtymologyOriginRepository
 	// Optional definition-concept side. When either is nil,
 	// ExportAll skips the definition-concept phase.
 	definitionConceptRepo notebook.DefinitionConceptRepository
@@ -835,6 +975,14 @@ func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.Learnin
 		dictionarySink: dictionarySink,
 		writer:         writer,
 	}
+}
+
+// WithEtymologyOrigins wires the etymology_origins repository so
+// ExportLearningLogs hands every origin to the LearningSink. Without
+// this call origin-typed expressions silently drop on round-trip.
+func (exp *Exporter) WithEtymologyOrigins(originRepo notebook.EtymologyOriginRepository) *Exporter {
+	exp.originRepo = originRepo
+	return exp
 }
 
 // WithDefinitionConcepts configures the definitions-concept export
@@ -878,7 +1026,15 @@ func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLog
 		return nil, fmt.Errorf("load learning logs: %w", err)
 	}
 
-	if err := exp.learningSink.WriteAll(notes, logs); err != nil {
+	var origins []notebook.EtymologyOriginRecord
+	if exp.originRepo != nil {
+		origins, err = exp.originRepo.FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", err)
+		}
+	}
+
+	if err := exp.learningSink.WriteAll(notes, logs, origins); err != nil {
 		return nil, fmt.Errorf("write learning logs: %w", err)
 	}
 
@@ -1907,7 +2063,7 @@ func (imp *Importer) reconcileNotes(ctx context.Context, opts ImportOptions, not
 			// New notebook_notes inserted this run match by key (the
 			// IDs were assigned by the DB after BatchUpdate, so they
 			// aren't in touchedNNIDs).
-			if imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}] {
+			if imp.touchedNNKeys[nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group}] {
 				continue
 			}
 			staleNNIDs = append(staleNNIDs, nn.ID)

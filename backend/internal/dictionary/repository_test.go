@@ -100,11 +100,11 @@ func TestDBDictionaryRepository_BatchUpsert(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO dictionary_entries").
-					WithArgs("hello", "rapidapi", json.RawMessage(`{"word":"hello"}`)).
-					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("INSERT INTO dictionary_entries").
-					WithArgs("world", "rapidapi", json.RawMessage(`{"word":"world"}`)).
-					WillReturnResult(sqlmock.NewResult(2, 1))
+					WithArgs(
+						"hello", "rapidapi", json.RawMessage(`{"word":"hello"}`),
+						"world", "rapidapi", json.RawMessage(`{"word":"world"}`),
+					).
+					WillReturnResult(sqlmock.NewResult(2, 2))
 			},
 		},
 		{

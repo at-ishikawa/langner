@@ -81,10 +81,11 @@ func newNotebookCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("textbook.NewFlashcardReader() > %w", err)
 			}
-			learningHistories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
+			learningHistories, db, err := loadLearningHistoriesFromDB(cmd.Context(), cfg)
 			if err != nil {
-				return fmt.Errorf("textbook.NewFlashcardReader() > %w", err)
+				return err
 			}
+			defer func() { _ = db.Close() }()
 
 			writer := notebook.NewStoryNotebookWriter(reader, cfg.Templates.StoryNotebookTemplate)
 			if err := writer.OutputStoryNotebooks(storyID, dictionaryMap, learningHistories, sortFlag == SortDescending, cfg.Outputs.StoryDirectory, generatePDF); err != nil {
@@ -120,10 +121,11 @@ func newNotebookCommand() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("notebook.NewReader() > %w", err)
 			}
-			learningHistories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
+			learningHistories, db, err := loadLearningHistoriesFromDB(cmd.Context(), cfg)
 			if err != nil {
-				return fmt.Errorf("notebook.NewLearningHistories() > %w", err)
+				return err
 			}
+			defer func() { _ = db.Close() }()
 
 			writer := notebook.NewFlashcardNotebookWriter(reader, cfg.Templates.FlashcardNotebookTemplate)
 			if err := writer.OutputFlashcardNotebooks(flashcardID, dictionaryMap, learningHistories, sortFlag == SortDescending, cfg.Outputs.FlashcardDirectory, flashcardGeneratePDF); err != nil {
@@ -154,10 +156,11 @@ func newNotebookCommand() *cobra.Command {
 				return fmt.Errorf("notebook.NewReader() > %w", err)
 			}
 
-			learningHistories, err := notebook.NewLearningHistories(cfg.Notebooks.LearningNotesDirectory)
+			learningHistories, db, err := loadLearningHistoriesFromDB(cmd.Context(), cfg)
 			if err != nil {
-				return fmt.Errorf("notebook.NewLearningHistories() > %w", err)
+				return err
 			}
+			defer func() { _ = db.Close() }()
 			writer := notebook.NewEtymologyNotebookWriter(reader, cfg.Templates.EtymologyNotebookTemplate, cfg.Notebooks.DefinitionsDirectories, learningHistories)
 			if err := writer.OutputEtymologyNotebook(etymologyID, cfg.Outputs.EtymologyDirectory, etymologyGeneratePDF); err != nil {
 				return fmt.Errorf("writer.OutputEtymologyNotebook > %w", err)
@@ -239,7 +242,16 @@ The date argument defaults to today in your local timezone.`,
 				return fmt.Errorf("notebook.NewReader: %w", err)
 			}
 
-			repo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory).
+			// After migration 016 the langner-server writes quiz logs to
+			// MySQL, not YAML. Reading YAML here would return only
+			// pre-migration data — typically the Word Power Made Easy
+			// notebook a user happened to study before the cutover.
+			db, err := openDB(cfg)
+			if err != nil {
+				return fmt.Errorf("open database: %w", err)
+			}
+			defer func() { _ = db.Close() }()
+			repo := analytics.NewDBRepository(db).
 				WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
 			writer := quizreview.NewWriterWithSource(repo, quizreview.NewReaderSource(reader))
 
