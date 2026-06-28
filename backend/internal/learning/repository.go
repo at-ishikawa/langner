@@ -62,9 +62,9 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 
 	query := `INSERT INTO learning_logs (note_id, origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
 		VALUES (NULLIF(?, 0), NULLIF(?, 0), ?, ?, ?, ?, ?, ?, ?, ?)`
-	_, err := r.db.ExecContext(ctx, query,
-		log.NoteID, log.OriginID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
-	if err != nil {
+	if err := database.ExecWithRetry(ctx, r.db, query,
+		log.NoteID, log.OriginID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey,
+	); err != nil {
 		return fmt.Errorf("insert learning log: %w", err)
 	}
 	return nil

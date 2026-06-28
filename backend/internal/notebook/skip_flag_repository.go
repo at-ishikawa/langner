@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/jmoiron/sqlx"
+
+	"github.com/at-ishikawa/langner/internal/database"
 )
 
 // NoteSkipFlagRecord mirrors a row of note_skip_flags. Replaces the
@@ -97,14 +99,17 @@ func (r *DBSkipFlagRepository) FindOriginFlags(ctx context.Context, originIDs []
 	return rows, nil
 }
 
-// SkipNote upserts the flag for (note_id, quiz_type).
+// SkipNote upserts the flag for (note_id, quiz_type). Wrapped in
+// database.ExecWithRetry so the per-row seeder loop survives the
+// TiDB-Cloud pool-rot we already mitigate for chunked INSERTs:
+// `read: connection reset by peer` on one upsert no longer kills
+// the whole sync-db seed phase.
 func (r *DBSkipFlagRepository) SkipNote(ctx context.Context, noteID int64, quizType string, at time.Time) error {
-	_, err := r.db.ExecContext(ctx,
+	if err := database.ExecWithRetry(ctx, r.db,
 		`INSERT INTO note_skip_flags (note_id, quiz_type, skipped_at) VALUES (?, ?, ?)
 		 ON DUPLICATE KEY UPDATE skipped_at = VALUES(skipped_at)`,
 		noteID, quizType, at,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("upsert note skip flag: %w", err)
 	}
 	return nil
@@ -112,11 +117,10 @@ func (r *DBSkipFlagRepository) SkipNote(ctx context.Context, noteID int64, quizT
 
 // ResumeNote drops the flag for (note_id, quiz_type).
 func (r *DBSkipFlagRepository) ResumeNote(ctx context.Context, noteID int64, quizType string) error {
-	_, err := r.db.ExecContext(ctx,
+	if err := database.ExecWithRetry(ctx, r.db,
 		`DELETE FROM note_skip_flags WHERE note_id = ? AND quiz_type = ?`,
 		noteID, quizType,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("delete note skip flag: %w", err)
 	}
 	return nil
@@ -124,12 +128,11 @@ func (r *DBSkipFlagRepository) ResumeNote(ctx context.Context, noteID int64, qui
 
 // SkipOrigin upserts the flag for (origin_id, quiz_type).
 func (r *DBSkipFlagRepository) SkipOrigin(ctx context.Context, originID int64, quizType string, at time.Time) error {
-	_, err := r.db.ExecContext(ctx,
+	if err := database.ExecWithRetry(ctx, r.db,
 		`INSERT INTO origin_skip_flags (origin_id, quiz_type, skipped_at) VALUES (?, ?, ?)
 		 ON DUPLICATE KEY UPDATE skipped_at = VALUES(skipped_at)`,
 		originID, quizType, at,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("upsert origin skip flag: %w", err)
 	}
 	return nil
@@ -137,11 +140,10 @@ func (r *DBSkipFlagRepository) SkipOrigin(ctx context.Context, originID int64, q
 
 // ResumeOrigin drops the flag for (origin_id, quiz_type).
 func (r *DBSkipFlagRepository) ResumeOrigin(ctx context.Context, originID int64, quizType string) error {
-	_, err := r.db.ExecContext(ctx,
+	if err := database.ExecWithRetry(ctx, r.db,
 		`DELETE FROM origin_skip_flags WHERE origin_id = ? AND quiz_type = ?`,
 		originID, quizType,
-	)
-	if err != nil {
+	); err != nil {
 		return fmt.Errorf("delete origin skip flag: %w", err)
 	}
 	return nil
