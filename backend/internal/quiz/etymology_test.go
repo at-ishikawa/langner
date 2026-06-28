@@ -629,6 +629,151 @@ origins:
 	assert.False(t, zFuture, "root-z has no logs and should remain freely drillable")
 }
 
+// TestService_EtymologyReverseQueueCountsOnlyAssemblyHistory reproduces
+// the start-page count blow-up the user reported after sync-db: every
+// origin they had ever touched in *any* etymology mode (freeform or
+// breakdown) showed up in the reverse queue, not just the ones they
+// had actually drilled in reverse.
+//
+// The underlying cause is in shouldIncludeOrigin → needsOriginReview:
+// for an origin with a history entry but no logs in the requested
+// quiz_type slot, needsOriginReview returns true ("never studied this
+// mode, so due now"). That semantic means an origin studied only via
+// etymology_breakdown / freeform gets pulled into the reverse queue
+// unconditionally — and the more import-side fixes routed origin logs
+// onto etymology_origins.id, the more origins qualified as
+// "studied in some mode," so the reverse queue grew with every
+// well-routed import.
+//
+// What the user expects (and what this test asserts):
+//   - Origins with assembly logs (reverse history) → counted in reverse.
+//   - Origins with only breakdown / freeform logs → counted ONLY when
+//     includeUnstudied is on. With includeUnstudied=false the reverse
+//     queue should NOT pull them in.
+//
+// The test is intentionally written to fail under the current logic
+// so the next commit's fix to shouldIncludeOrigin is visible in the
+// diff. The companion test TestService_EtymologySummaryMatchesQuizLoad
+// below still pins quiz-load and start-page parity for whatever the
+// gate ends up being.
+func TestService_EtymologyReverseQueueCountsOnlyAssemblyHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-roots
+kind: Etymology
+name: Demo Roots
+notebooks:
+  - ./origins.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "Demo Lesson"
+origins:
+  - origin: reverse-studied
+    type: root
+    language: Latin
+    meaning: drilled in reverse before (assembly logs present)
+  - origin: only-breakdown
+    type: root
+    language: Latin
+    meaning: drilled in standard only, never in reverse
+  - origin: only-freeform
+    type: root
+    language: Latin
+    meaning: typed in freeform only, never in reverse
+`), 0o644))
+
+	today := time.Now().Format("2006-01-02")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-roots.yml"), []byte(`- metadata:
+    notebook_id: demo-roots
+    title: Demo Roots
+  scenes:
+    - metadata:
+        title: "Demo Lesson"
+      expressions:
+        - expression: reverse-studied
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "2024-01-01"
+              quality: 4
+              interval_days: 7
+              quiz_type: etymology_assembly
+        - expression: only-breakdown
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_breakdown
+        - expression: only-freeform
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_freeform
+`), 0o644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{DisableShuffle: true},
+	)
+
+	t.Run("reverse with includeUnstudied=false counts only assembly-history origins", func(t *testing.T) {
+		cards, err := svc.LoadEtymologyOriginCards(
+			[]string{"demo-roots"}, false, false, notebook.QuizTypeEtymologyReverse, nil,
+		)
+		require.NoError(t, err)
+		gotOrigins := make([]string, 0, len(cards))
+		for _, c := range cards {
+			gotOrigins = append(gotOrigins, c.Origin)
+		}
+		sort.Strings(gotOrigins)
+		// reverse-studied has an old (overdue) assembly log → should be due.
+		// only-breakdown and only-freeform have no assembly logs at all;
+		// with includeUnstudied=false they should be filtered out.
+		assert.Equal(t, []string{"reverse-studied"}, gotOrigins,
+			"the reverse queue with includeUnstudied=false should NOT include "+
+				"origins whose history exists in other etymology modes but not "+
+				"in assembly — that's what blows up the start-page count after sync-db")
+	})
+
+	t.Run("reverse with includeUnstudied=true counts everything", func(t *testing.T) {
+		cards, err := svc.LoadEtymologyOriginCards(
+			[]string{"demo-roots"}, true, false, notebook.QuizTypeEtymologyReverse, nil,
+		)
+		require.NoError(t, err)
+		gotOrigins := make([]string, 0, len(cards))
+		for _, c := range cards {
+			gotOrigins = append(gotOrigins, c.Origin)
+		}
+		sort.Strings(gotOrigins)
+		assert.Equal(t, []string{"only-breakdown", "only-freeform", "reverse-studied"}, gotOrigins,
+			"includeUnstudied=true should bring in cross-mode-only origins as 'unstudied for reverse'")
+	})
+
+	t.Run("start-page reverse count matches the quiz queue", func(t *testing.T) {
+		for _, includeUnstudied := range []bool{false, true} {
+			cards, err := svc.LoadEtymologyOriginCards(
+				[]string{"demo-roots"}, includeUnstudied, false, notebook.QuizTypeEtymologyReverse, nil,
+			)
+			require.NoError(t, err)
+
+			summaries, err := svc.LoadEtymologyNotebookSummaries(includeUnstudied)
+			require.NoError(t, err)
+			require.Len(t, summaries, 1)
+			assert.Equal(t, len(cards), summaries[0].EtymologyReverseReviewCount,
+				"includeUnstudied=%v: summary reverse count must match quiz queue size", includeUnstudied)
+		}
+	})
+}
+
 // TestService_EtymologySummaryMatchesQuizLoad pins the fix for the
 // start-page-vs-quiz count mismatch: the per-notebook and per-section
 // EtymologyReviewCount on the start page must equal the number of cards
@@ -756,10 +901,16 @@ origins:
 			wantOrigins:      []string{"studied-due", "tried-failed", "never-seen-1", "never-seen-2"},
 		},
 		{
+			// tried-failed has logs only in etymology_breakdown_logs, not
+			// in etymology_assembly_logs. Per the updated shouldIncludeOrigin
+			// semantic, "no logs in the requested mode's slot" falls under
+			// the includeUnstudied gate; with includeUnstudied=false the
+			// reverse queue should drop it. This is the fix that stops the
+			// start-page reverse count from exploding after sync-db.
 			name:             "reverse, includeUnstudied=false",
 			includeUnstudied: false,
 			quizType:         notebook.QuizTypeEtymologyReverse,
-			wantOrigins:      []string{"studied-due", "tried-failed"},
+			wantOrigins:      []string{"studied-due"},
 		},
 		{
 			name:             "reverse, includeUnstudied=true",

@@ -768,11 +768,19 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 // Rules (mirroring the user-visible behaviour):
 //
 //   - per-type skip → exclude (a skip in one mode does not affect the other).
-//   - never-seen (no logs in any track) → include iff includeUnstudied.
-//   - has any logs → defer to the SR interval for the requested mode.
-//     A `misunderstood` log triggers retry (interval 1d, status check in
-//     NeedsEtymologyReview); standard/reverse show the correct answer on
-//     the feedback screen, so a prior correct answer is not required.
+//   - never-seen in this mode → include iff includeUnstudied.
+//     "Never seen in this mode" means the origin's expression has no
+//     logs in the slot the requested mode reads from
+//     (etymology_breakdown for standard, etymology_assembly for
+//     reverse). An origin studied in standard but never in reverse
+//     therefore stays out of the reverse queue when includeUnstudied
+//     is off, which is what stops the start-page count from blowing
+//     up after sync-db routes more logs onto etymology_origins.id.
+//   - has logs for THIS mode → defer to the SR interval. A
+//     `misunderstood` log triggers retry (interval 1d, status check
+//     in NeedsEtymologyReview); standard/reverse show the correct
+//     answer on the feedback screen, so a prior correct answer is
+//     not required.
 func shouldIncludeOrigin(
 	histories []notebook.LearningHistory,
 	notebookTitle, sessionTitle, origin string,
@@ -782,7 +790,11 @@ func shouldIncludeOrigin(
 	if isOriginSkipped(histories, notebookTitle, sessionTitle, origin, quizType) {
 		return false
 	}
-	if findOriginExpression(histories, notebookTitle, sessionTitle, origin) == nil {
+	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
+	if expr == nil {
+		return includeUnstudied
+	}
+	if len(expr.GetLogsForQuizType(quizType)) == 0 {
 		return includeUnstudied
 	}
 	return needsOriginReview(histories, notebookTitle, sessionTitle, origin, quizType)
