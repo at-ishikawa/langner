@@ -6,9 +6,10 @@ import (
 )
 
 // Repository is the read-only data source for the analytics views. The
-// langner-server picks a concrete implementation at startup: when MySQL
-// is configured the DB repository is used; otherwise the YAML
-// implementation falls back to the on-disk learning history files.
+// langner-server picks a concrete implementation at startup: when a
+// PostgreSQL database is configured the DB repository is used;
+// otherwise the YAML implementation falls back to the on-disk learning
+// history files.
 type Repository interface {
 	// DailySummaries returns one row per day with quiz activity within
 	// [now-rangeDays, now]. rangeDays == 0 means "all time".

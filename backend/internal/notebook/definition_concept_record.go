@@ -51,7 +51,7 @@ type DefinitionConceptRepository interface {
 	BatchDeleteMembers(ctx context.Context, ids []int64) error
 }
 
-// DBDefinitionConceptRepository is a MySQL-backed implementation.
+// DBDefinitionConceptRepository is a PostgreSQL-backed implementation.
 type DBDefinitionConceptRepository struct {
 	db *sqlx.DB
 }
@@ -66,7 +66,7 @@ func (r *DBDefinitionConceptRepository) ListDefinitionConceptsByNotebook(ctx con
 	var rows []DefinitionConceptRecord
 	if err := r.db.SelectContext(ctx, &rows,
 		`SELECT id, notebook_id, head, meaning, created_at, updated_at
-		 FROM definition_concepts WHERE notebook_id = ?`, notebookID,
+		 FROM definition_concepts WHERE notebook_id = $1`, notebookID,
 	); err != nil {
 		return nil, fmt.Errorf("select definition_concepts: %w", err)
 	}
@@ -148,7 +148,7 @@ func (r *DBDefinitionConceptRepository) BatchUpdateConcepts(ctx context.Context,
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for _, rec := range records {
 			if _, err := tx.ExecContext(ctx,
-				`UPDATE definition_concepts SET meaning = ? WHERE id = ?`,
+				`UPDATE definition_concepts SET meaning = $1 WHERE id = $2`,
 				rec.Meaning, rec.ID,
 			); err != nil {
 				return fmt.Errorf("update definition_concept %d: %w", rec.ID, err)

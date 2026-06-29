@@ -10,7 +10,7 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// DBRepository serves analytics queries from the langner MySQL schema.
+// DBRepository serves analytics queries from the langner PostgreSQL schema.
 // It joins learning_logs with notes (for the expression) and
 // notebook_notes (for the notebook title and scene) so the response
 // matches what the YAML repository produces.
@@ -25,29 +25,38 @@ func NewDBRepository(db *sqlx.DB) *DBRepository {
 
 // dailyRow is the projection used for one row of the daily summary query.
 type dailyRow struct {
-	Date          time.Time `db:"date"`
-	Total         int       `db:"total"`
-	Wrong         int       `db:"wrong"`
-	Notebooks     int       `db:"notebooks"`
-	QuizTypesCSV  string    `db:"quiz_types"`
+	Date         time.Time `db:"date"`
+	Total        int       `db:"total"`
+	Wrong        int       `db:"wrong"`
+	Notebooks    int       `db:"notebooks"`
+	QuizTypesCSV string    `db:"quiz_types"`
+}
+
+// placeholderBuilder accumulates PostgreSQL-numbered ($1, $2, …) placeholders
+// while collecting the matching args, since query conditions are appended
+// dynamically based on filter presence.
+type placeholderBuilder struct {
+	args []interface{}
+}
+
+func (p *placeholderBuilder) next(v interface{}) string {
+	p.args = append(p.args, v)
+	return fmt.Sprintf("$%d", len(p.args))
 }
 
 // DailySummaries returns per-day rollups for the given range and filters.
 // rangeDays == 0 means "all time".
 func (r *DBRepository) DailySummaries(ctx context.Context, rangeDays int, filters Filters) ([]DailySummary, error) {
-	var args []interface{}
+	pb := &placeholderBuilder{}
 	conds := []string{}
 	if rangeDays > 0 {
-		conds = append(conds, "learned_at >= ?")
-		args = append(args, time.Now().UTC().AddDate(0, 0, -rangeDays))
+		conds = append(conds, "learned_at >= "+pb.next(time.Now().UTC().AddDate(0, 0, -rangeDays)))
 	}
 	if filters.NotebookID != "" {
-		conds = append(conds, "source_notebook_id = ?")
-		args = append(args, filters.NotebookID)
+		conds = append(conds, "source_notebook_id = "+pb.next(filters.NotebookID))
 	}
 	if filters.QuizType != "" {
-		conds = append(conds, "quiz_type = ?")
-		args = append(args, filters.QuizType)
+		conds = append(conds, "quiz_type = "+pb.next(filters.QuizType))
 	}
 	where := ""
 	if len(conds) > 0 {
@@ -59,14 +68,14 @@ func (r *DBRepository) DailySummaries(ctx context.Context, rangeDays int, filter
 			COUNT(*) AS total,
 			SUM(CASE WHEN status = 'misunderstood' THEN 1 ELSE 0 END) AS wrong,
 			COUNT(DISTINCT source_notebook_id) AS notebooks,
-			GROUP_CONCAT(DISTINCT quiz_type ORDER BY quiz_type) AS quiz_types
+			STRING_AGG(DISTINCT quiz_type, ',' ORDER BY quiz_type) AS quiz_types
 		FROM learning_logs
 		` + where + `
 		GROUP BY DATE(learned_at)
 		ORDER BY DATE(learned_at) DESC
 	`
 	var rows []dailyRow
-	if err := r.db.SelectContext(ctx, &rows, query, args...); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, pb.args...); err != nil {
 		return nil, fmt.Errorf("daily summaries: %w", err)
 	}
 	out := make([]DailySummary, len(rows))
@@ -84,28 +93,26 @@ func (r *DBRepository) DailySummaries(ctx context.Context, rangeDays int, filter
 
 // wrongRow is the projection used for one wrong attempt on the requested day.
 type wrongRow struct {
-	NoteID           int64     `db:"note_id"`
-	Expression       string    `db:"expression"`
-	NotebookID       string    `db:"notebook_id"`
-	NotebookTitle    string    `db:"notebook_title"`
-	SceneTitle       string    `db:"scene_title"`
-	QuizType         string    `db:"quiz_type"`
-	LearnedAt        time.Time `db:"learned_at"`
-	Status           string    `db:"status"`
+	NoteID        int64     `db:"note_id"`
+	Expression    string    `db:"expression"`
+	NotebookID    string    `db:"notebook_id"`
+	NotebookTitle string    `db:"notebook_title"`
+	SceneTitle    string    `db:"scene_title"`
+	QuizType      string    `db:"quiz_type"`
+	LearnedAt     time.Time `db:"learned_at"`
+	Status        string    `db:"status"`
 }
 
 // DayDetail returns the wrong words for the day plus adjacent-day pointers.
 func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Filters) (DayDetail, error) {
 	dayStr := dayKey(day)
-	args := []interface{}{dayStr}
-	conds := []string{"DATE(ll.learned_at) = ?"}
+	pb := &placeholderBuilder{}
+	conds := []string{"DATE(ll.learned_at) = " + pb.next(dayStr)}
 	if filters.NotebookID != "" {
-		conds = append(conds, "ll.source_notebook_id = ?")
-		args = append(args, filters.NotebookID)
+		conds = append(conds, "ll.source_notebook_id = "+pb.next(filters.NotebookID))
 	}
 	if filters.QuizType != "" {
-		conds = append(conds, "ll.quiz_type = ?")
-		args = append(args, filters.QuizType)
+		conds = append(conds, "ll.quiz_type = "+pb.next(filters.QuizType))
 	}
 	whereDay := "WHERE " + strings.Join(conds, " AND ")
 
@@ -116,13 +123,12 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 	}
 
 	// Wrong attempts on the day. The scene title is fetched via a correlated
-	// subquery rather than a LEFT JOIN so MySQL's only_full_group_by mode
-	// doesn't reject the SELECT (and so a note belonging to multiple notebook
-	// rows doesn't fan out into duplicate cards).
+	// subquery rather than a LEFT JOIN so a note belonging to multiple
+	// notebook rows doesn't fan out into duplicate cards.
 	wrongQuery := `
 		SELECT
 			ll.note_id,
-			n.usage AS expression,
+			n."usage" AS expression,
 			COALESCE(ll.source_notebook_id, '') AS notebook_id,
 			COALESCE(ll.source_notebook_id, '') AS notebook_title,
 			COALESCE((
@@ -138,10 +144,10 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 		JOIN notes n ON n.id = ll.note_id
 		` + whereDay + `
 			AND ll.status = 'misunderstood'
-		ORDER BY n.usage
+		ORDER BY n."usage"
 	`
 	var wrongs []wrongRow
-	if err := r.db.SelectContext(ctx, &wrongs, wrongQuery, args...); err != nil {
+	if err := r.db.SelectContext(ctx, &wrongs, wrongQuery, pb.args...); err != nil {
 		return DayDetail{}, fmt.Errorf("wrong words: %w", err)
 	}
 
@@ -183,15 +189,13 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 
 // daySummary builds a single-day rollup (one row) used by DayDetail.
 func (r *DBRepository) daySummary(ctx context.Context, dayStr string, filters Filters) (DailySummary, error) {
-	args := []interface{}{dayStr}
-	conds := []string{"DATE(learned_at) = ?"}
+	pb := &placeholderBuilder{}
+	conds := []string{"DATE(learned_at) = " + pb.next(dayStr)}
 	if filters.NotebookID != "" {
-		conds = append(conds, "source_notebook_id = ?")
-		args = append(args, filters.NotebookID)
+		conds = append(conds, "source_notebook_id = "+pb.next(filters.NotebookID))
 	}
 	if filters.QuizType != "" {
-		conds = append(conds, "quiz_type = ?")
-		args = append(args, filters.QuizType)
+		conds = append(conds, "quiz_type = "+pb.next(filters.QuizType))
 	}
 	where := "WHERE " + strings.Join(conds, " AND ")
 	query := `
@@ -200,13 +204,13 @@ func (r *DBRepository) daySummary(ctx context.Context, dayStr string, filters Fi
 			COUNT(*) AS total,
 			SUM(CASE WHEN status = 'misunderstood' THEN 1 ELSE 0 END) AS wrong,
 			COUNT(DISTINCT source_notebook_id) AS notebooks,
-			GROUP_CONCAT(DISTINCT quiz_type ORDER BY quiz_type) AS quiz_types
+			STRING_AGG(DISTINCT quiz_type, ',' ORDER BY quiz_type) AS quiz_types
 		FROM learning_logs
 		` + where + `
 		GROUP BY DATE(learned_at)
 	`
 	var row dailyRow
-	err := r.db.GetContext(ctx, &row, query, args...)
+	err := r.db.GetContext(ctx, &row, query, pb.args...)
 	if err == sql.ErrNoRows {
 		d, _ := time.Parse("2006-01-02", dayStr)
 		return DailySummary{Date: d}, nil
@@ -229,9 +233,9 @@ func (r *DBRepository) recentAttempts(ctx context.Context, noteID int64, quizTyp
 	query := `
 		SELECT status, learned_at, quality, quiz_type
 		FROM learning_logs
-		WHERE note_id = ? AND quiz_type = ? AND learned_at <= ?
+		WHERE note_id = $1 AND quiz_type = $2 AND learned_at <= $3
 		ORDER BY learned_at DESC
-		LIMIT ?
+		LIMIT $4
 	`
 	var rows []struct {
 		Status    string    `db:"status"`
@@ -258,33 +262,34 @@ func (r *DBRepository) recentAttempts(ctx context.Context, noteID int64, quizTyp
 // adjacentDayDates returns prev/next dates with activity matching filters.
 func (r *DBRepository) adjacentDayDates(ctx context.Context, day time.Time, filters Filters) (time.Time, time.Time, error) {
 	dayStr := dayKey(day)
-	condsBase := []string{}
-	var argsBase []interface{}
+	pbPrev := &placeholderBuilder{}
+	prevConds := []string{"DATE(learned_at) < " + pbPrev.next(dayStr)}
 	if filters.NotebookID != "" {
-		condsBase = append(condsBase, "source_notebook_id = ?")
-		argsBase = append(argsBase, filters.NotebookID)
+		prevConds = append(prevConds, "source_notebook_id = "+pbPrev.next(filters.NotebookID))
 	}
 	if filters.QuizType != "" {
-		condsBase = append(condsBase, "quiz_type = ?")
-		argsBase = append(argsBase, filters.QuizType)
-	}
-	tail := ""
-	if len(condsBase) > 0 {
-		tail = " AND " + strings.Join(condsBase, " AND ")
+		prevConds = append(prevConds, "quiz_type = "+pbPrev.next(filters.QuizType))
 	}
 
 	var prev sql.NullTime
-	prevArgs := append([]interface{}{dayStr}, argsBase...)
 	if err := r.db.GetContext(ctx, &prev,
-		"SELECT MAX(learned_at) FROM learning_logs WHERE DATE(learned_at) < ?"+tail,
-		prevArgs...); err != nil && err != sql.ErrNoRows {
+		"SELECT MAX(learned_at) FROM learning_logs WHERE "+strings.Join(prevConds, " AND "),
+		pbPrev.args...); err != nil && err != sql.ErrNoRows {
 		return time.Time{}, time.Time{}, fmt.Errorf("prev day: %w", err)
 	}
+
+	pbNext := &placeholderBuilder{}
+	nextConds := []string{"DATE(learned_at) > " + pbNext.next(dayStr)}
+	if filters.NotebookID != "" {
+		nextConds = append(nextConds, "source_notebook_id = "+pbNext.next(filters.NotebookID))
+	}
+	if filters.QuizType != "" {
+		nextConds = append(nextConds, "quiz_type = "+pbNext.next(filters.QuizType))
+	}
 	var next sql.NullTime
-	nextArgs := append([]interface{}{dayStr}, argsBase...)
 	if err := r.db.GetContext(ctx, &next,
-		"SELECT MIN(learned_at) FROM learning_logs WHERE DATE(learned_at) > ?"+tail,
-		nextArgs...); err != nil && err != sql.ErrNoRows {
+		"SELECT MIN(learned_at) FROM learning_logs WHERE "+strings.Join(nextConds, " AND "),
+		pbNext.args...); err != nil && err != sql.ErrNoRows {
 		return time.Time{}, time.Time{}, fmt.Errorf("next day: %w", err)
 	}
 	var prevT, nextT time.Time
@@ -304,7 +309,7 @@ func (r *DBRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistor
 		if err := r.db.GetContext(ctx, &ref.NoteID, `
 			SELECT n.id FROM notes n
 			JOIN notebook_notes nn ON nn.note_id = n.id
-			WHERE n.usage = ? AND nn.notebook_id = ?
+			WHERE n."usage" = $1 AND nn.notebook_id = $2
 			LIMIT 1`, ref.Expression, ref.NotebookID); err != nil {
 			if err == sql.ErrNoRows {
 				return WordHistory{Expression: ref.Expression, NotebookID: ref.NotebookID}, nil
@@ -316,7 +321,7 @@ func (r *DBRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistor
 	query := `
 		SELECT status, learned_at, quality, quiz_type
 		FROM learning_logs
-		WHERE note_id = ? AND quiz_type = ?
+		WHERE note_id = $1 AND quiz_type = $2
 		ORDER BY learned_at DESC
 	`
 	var rows []struct {
@@ -363,7 +368,7 @@ func (r *DBRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistor
 	var notebookTitle string
 	_ = r.db.GetContext(ctx, &notebookTitle, `
 		SELECT notebook_id FROM notebook_notes
-		WHERE note_id = ?
+		WHERE note_id = $1
 		ORDER BY id LIMIT 1`, ref.NoteID)
 	if ref.NotebookID == "" {
 		ref.NotebookID = notebookTitle

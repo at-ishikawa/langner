@@ -20,7 +20,7 @@ type LearningRepository interface {
 	BatchDelete(ctx context.Context, ids []int64) error
 }
 
-// DBLearningRepository implements LearningRepository using MySQL.
+// DBLearningRepository implements LearningRepository using PostgreSQL.
 type DBLearningRepository struct {
 	db *sqlx.DB
 }
@@ -51,7 +51,7 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 	}
 
 	query := `INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 	_, err := r.db.ExecContext(ctx, query,
 		log.NoteID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
 	if err != nil {
@@ -71,27 +71,22 @@ func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *Learni
 
 	// Try to find existing note
 	var noteID int64
-	err := r.db.GetContext(ctx, &noteID, "SELECT id FROM notes WHERE `usage` = ? AND entry = ?", usage, entry)
+	err := r.db.GetContext(ctx, &noteID, `SELECT id FROM notes WHERE "usage" = $1 AND entry = $2`, usage, entry)
 	if err == nil {
 		return noteID, nil
 	}
 
 	// Create the note
-	result, err := r.db.ExecContext(ctx,
-		"INSERT INTO notes (`usage`, entry, meaning) VALUES (?, ?, ?)",
-		usage, entry, "")
-	if err != nil {
+	if err := r.db.GetContext(ctx, &noteID,
+		`INSERT INTO notes ("usage", entry, meaning) VALUES ($1, $2, $3) RETURNING id`,
+		usage, entry, ""); err != nil {
 		return 0, fmt.Errorf("insert note: %w", err)
-	}
-	noteID, err = result.LastInsertId()
-	if err != nil {
-		return 0, fmt.Errorf("get note insert ID: %w", err)
 	}
 	return noteID, nil
 }
 
 // BatchCreate inserts multiple learning logs in a single transaction using multi-row INSERTs.
-// Rows are chunked to stay under MySQL's 65535 placeholder limit.
+// Rows are chunked to stay under PostgreSQL's 65535 parameter limit.
 func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*LearningLog) error {
 	if len(logs) == 0 {
 		return nil
@@ -140,7 +135,7 @@ func (r *DBLearningRepository) BatchDelete(ctx context.Context, ids []int64) err
 			if err != nil {
 				return fmt.Errorf("build delete query: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			if _, err := tx.ExecContext(ctx, tx.Rebind(query), args...); err != nil {
 				return fmt.Errorf("delete learning logs: %w", err)
 			}
 		}

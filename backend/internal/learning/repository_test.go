@@ -49,7 +49,7 @@ func TestDBLearningRepository_FindAll(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBLearningRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -106,7 +106,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBLearningRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -139,7 +139,7 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5, \\$6, \\$7, \\$8, \\$9\\), \\(\\$10, \\$11, \\$12, \\$13, \\$14, \\$15, \\$16, \\$17, \\$18\\)").
 					WithArgs(
 						int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
 						int64(11), "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
@@ -176,7 +176,7 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBLearningRepository(sqlxDB)
 			tt.setupMock(mock)
 

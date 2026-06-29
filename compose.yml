@@ -1,15 +1,19 @@
 services:
-  mysql:
-    image: mysql:8
+  postgres:
+    image: postgres:16
     ports:
-      - "3306:3306"
+      - "5432:5432"
     environment:
-      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-password}
-      MYSQL_DATABASE: local
-      MYSQL_USER: user
-      MYSQL_PASSWORD: ${DB_PASSWORD:-password}
+      POSTGRES_DB: local
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-password}
     volumes:
-      - mysql-data:/var/lib/mysql
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d local"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
-  mysql-data:
+  postgres-data:

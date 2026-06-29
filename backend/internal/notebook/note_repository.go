@@ -25,7 +25,7 @@ type NoteRepository interface {
 	BatchDeleteNotebookNotes(ctx context.Context, ids []int64) error
 }
 
-// DBNoteRepository implements NoteRepository using MySQL.
+// DBNoteRepository implements NoteRepository using PostgreSQL.
 type DBNoteRepository struct {
 	db *sqlx.DB
 }
@@ -50,7 +50,7 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 // FindByID returns a single note by ID with its notebook notes.
 func (r *DBNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) {
 	var note NoteRecord
-	if err := r.db.GetContext(ctx, &note, "SELECT * FROM notes WHERE id = ?", id); err != nil {
+	if err := r.db.GetContext(ctx, &note, `SELECT * FROM notes WHERE id = $1`, id); err != nil {
 		return nil, fmt.Errorf("find note by id %d: %w", id, err)
 	}
 	notes := []NoteRecord{note}
@@ -67,21 +67,14 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Insert notes one at a time to safely get each auto-increment ID.
-		// A multi-row INSERT with LastInsertId+offset is unsafe under
-		// innodb_autoinc_lock_mode=2 (MySQL 8.0+ default) with concurrent inserts.
+		// Insert notes one at a time so each auto-generated ID can be returned
+		// via RETURNING id.
 		for _, n := range notes {
-			result, err := tx.ExecContext(ctx,
-				"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number, concept_key) VALUES (?, ?, ?, ?, ?, ?)",
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey)
-			if err != nil {
+			if err := tx.GetContext(ctx, &n.ID,
+				`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey); err != nil {
 				return fmt.Errorf("insert note: %w", err)
 			}
-			id, err := result.LastInsertId()
-			if err != nil {
-				return fmt.Errorf("get note insert ID: %w", err)
-			}
-			n.ID = id
 		}
 
 		// Collect all images
@@ -130,7 +123,7 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 		if nnCount > 0 {
-			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, nnCount)
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, nnCount)
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
@@ -143,23 +136,16 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 // Create inserts a single note with its notebook_notes in a transaction.
 func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		result, err := tx.ExecContext(ctx,
-			"INSERT INTO notes (`usage`, entry, meaning, level, dictionary_number, concept_key) VALUES (?, ?, ?, ?, ?, ?)",
-			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ConceptKey)
-		if err != nil {
+		if err := tx.GetContext(ctx, &note.ID,
+			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
+			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ConceptKey); err != nil {
 			return fmt.Errorf("insert note: %w", err)
 		}
-		id, err := result.LastInsertId()
-		if err != nil {
-			return fmt.Errorf("get note insert ID: %w", err)
-		}
-		note.ID = id
 
 		for _, nn := range note.NotebookNotes {
-			_, err := tx.ExecContext(ctx,
-				"INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, `group`, subgroup) VALUES (?, ?, ?, ?, ?)",
-				note.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup)
-			if err != nil {
+			if _, err := tx.ExecContext(ctx,
+				`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup) VALUES ($1, $2, $3, $4, $5)`,
+				note.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup); err != nil {
 				return fmt.Errorf("insert notebook note: %w", err)
 			}
 		}
@@ -176,7 +162,7 @@ func (r *DBNoteRepository) Delete(ctx context.Context, notebookID string, expres
 		var noteIDs []int64
 		query := `SELECT n.id FROM notes n
 			JOIN notebook_notes nn ON n.id = nn.note_id
-			WHERE nn.notebook_id = ? AND LOWER(n.usage) = LOWER(?)`
+			WHERE nn.notebook_id = $1 AND LOWER(n."usage") = LOWER($2)`
 		if err := tx.SelectContext(ctx, &noteIDs, query, notebookID, expression); err != nil {
 			return fmt.Errorf("find notes to delete: %w", err)
 		}
@@ -186,13 +172,13 @@ func (r *DBNoteRepository) Delete(ctx context.Context, notebookID string, expres
 
 		for _, noteID := range noteIDs {
 			// Remove the specific notebook_notes link for this notebook
-			if _, err := tx.ExecContext(ctx, "DELETE FROM notebook_notes WHERE note_id = ? AND notebook_id = ?", noteID, notebookID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM notebook_notes WHERE note_id = $1 AND notebook_id = $2`, noteID, notebookID); err != nil {
 				return fmt.Errorf("delete notebook note link: %w", err)
 			}
 
 			// Check if the note still has any remaining notebook_notes links
 			var remaining int
-			if err := tx.GetContext(ctx, &remaining, "SELECT COUNT(*) FROM notebook_notes WHERE note_id = ?", noteID); err != nil {
+			if err := tx.GetContext(ctx, &remaining, `SELECT COUNT(*) FROM notebook_notes WHERE note_id = $1`, noteID); err != nil {
 				return fmt.Errorf("count remaining notebook notes: %w", err)
 			}
 			if remaining > 0 {
@@ -200,16 +186,16 @@ func (r *DBNoteRepository) Delete(ctx context.Context, notebookID string, expres
 			}
 
 			// No remaining links — delete the note and all related data
-			if _, err := tx.ExecContext(ctx, "DELETE FROM learning_logs WHERE note_id = ?", noteID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM learning_logs WHERE note_id = $1`, noteID); err != nil {
 				return fmt.Errorf("delete learning logs: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx, "DELETE FROM note_images WHERE note_id = ?", noteID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM note_images WHERE note_id = $1`, noteID); err != nil {
 				return fmt.Errorf("delete note images: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx, "DELETE FROM note_references WHERE note_id = ?", noteID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM note_references WHERE note_id = $1`, noteID); err != nil {
 				return fmt.Errorf("delete note references: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx, "DELETE FROM notes WHERE id = ?", noteID); err != nil {
+			if _, err := tx.ExecContext(ctx, `DELETE FROM notes WHERE id = $1`, noteID); err != nil {
 				return fmt.Errorf("delete note: %w", err)
 			}
 		}
@@ -226,7 +212,7 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for _, n := range notes {
 			_, err := tx.ExecContext(ctx,
-				"UPDATE notes SET `usage` = ?, entry = ?, meaning = ?, level = ?, dictionary_number = ?, concept_key = ? WHERE id = ?",
+				`UPDATE notes SET "usage" = $1, entry = $2, meaning = $3, level = $4, dictionary_number = $5, concept_key = $6 WHERE id = $7`,
 				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.ID)
 			if err != nil {
 				return fmt.Errorf("update note: %w", err)
@@ -238,7 +224,7 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 			for _, nn := range newNotebookNotes {
 				nnArgs = append(nnArgs, nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup)
 			}
-			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", "`group`", "subgroup"}, len(newNotebookNotes))
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, len(newNotebookNotes))
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
@@ -335,7 +321,7 @@ func (r *DBNoteRepository) BatchDeleteNotes(ctx context.Context, ids []int64) er
 				if err != nil {
 					return fmt.Errorf("build delete query for %s: %w", t, err)
 				}
-				if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+				if _, err := tx.ExecContext(ctx, tx.Rebind(query), args...); err != nil {
 					return fmt.Errorf("delete from %s: %w", t, err)
 				}
 			}
@@ -363,7 +349,7 @@ func (r *DBNoteRepository) BatchDeleteNotebookNotes(ctx context.Context, ids []i
 			if err != nil {
 				return fmt.Errorf("build delete query: %w", err)
 			}
-			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+			if _, err := tx.ExecContext(ctx, tx.Rebind(query), args...); err != nil {
 				return fmt.Errorf("delete notebook_notes: %w", err)
 			}
 		}

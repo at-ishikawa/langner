@@ -15,7 +15,7 @@ func newDBDefinitionConceptRepoForTest(t *testing.T) (*DBDefinitionConceptReposi
 	t.Helper()
 	mockDB, mock, err := sqlmock.New()
 	require.NoError(t, err)
-	sqlxDB := sqlx.NewDb(mockDB, "mysql")
+	sqlxDB := sqlx.NewDb(mockDB, "pgx")
 	return NewDBDefinitionConceptRepository(sqlxDB), mock, func() { _ = mockDB.Close() }
 }
 
@@ -27,7 +27,7 @@ func TestDBDefinitionConceptRepository_ListDefinitionConceptsByNotebook(t *testi
 	rows := sqlmock.NewRows([]string{"id", "notebook_id", "head", "meaning", "created_at", "updated_at"}).
 		AddRow(1, "wpme", "ambidextrous", "skilled with both hands", now, now).
 		AddRow(2, "wpme", "ambivalent", "having mixed feelings", now, now)
-	mock.ExpectQuery("SELECT id, notebook_id, head, meaning, created_at, updated_at FROM definition_concepts WHERE notebook_id = ?").
+	mock.ExpectQuery(`SELECT id, notebook_id, head, meaning, created_at, updated_at FROM definition_concepts WHERE notebook_id = \$1`).
 		WithArgs("wpme").
 		WillReturnRows(rows)
 

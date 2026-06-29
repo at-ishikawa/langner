@@ -56,7 +56,7 @@ type NoteOriginPartRepository interface {
 	BatchCreate(ctx context.Context, records []*NoteOriginPartRecord) error
 }
 
-// DBEtymologyOriginRepository is a MySQL-backed implementation.
+// DBEtymologyOriginRepository is a PostgreSQL-backed implementation.
 type DBEtymologyOriginRepository struct {
 	db *sqlx.DB
 }
@@ -94,8 +94,8 @@ func (r *DBEtymologyOriginRepository) BatchCreate(ctx context.Context, records [
 			return fmt.Errorf("insert etymology_origins: %w", err)
 		}
 		// Reload IDs so callers can use them for note_origin_parts FKs.
-		// Cheaper than per-row LAST_INSERT_ID because BatchCreate is the
-		// only writer for new rows in a single import pass.
+		// Cheaper than per-row RETURNING tracking because BatchCreate is
+		// the only writer for new rows in a single import pass.
 		var inserted []EtymologyOriginRecord
 		if err := tx.SelectContext(ctx, &inserted, `SELECT id, notebook_id, session_title, sense, origin, language FROM etymology_origins`); err != nil {
 			return fmt.Errorf("reload etymology_origins after insert: %w", err)
@@ -115,7 +115,7 @@ func etymologyOriginKey(notebookID, sessionTitle, sense, origin, language string
 	return notebookID + "\x00" + sessionTitle + "\x00" + sense + "\x00" + origin + "\x00" + language
 }
 
-// DBNoteOriginPartRepository is a MySQL-backed implementation.
+// DBNoteOriginPartRepository is a PostgreSQL-backed implementation.
 type DBNoteOriginPartRepository struct {
 	db *sqlx.DB
 }
