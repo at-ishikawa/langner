@@ -19,6 +19,10 @@ export default async function globalTeardown() {
     database: "postgres",
   });
   await conn.connect();
-  await conn.query(`DROP DATABASE IF EXISTS "${NAME}"`);
+  // WITH (FORCE) terminates any lingering backend connections to the test DB
+  // before dropping it. Without this, the running langner-server webServer's
+  // pool still holds connections and Postgres refuses with "database is being
+  // accessed by other users". Requires Postgres >= 13; we're on 16.
+  await conn.query(`DROP DATABASE IF EXISTS "${NAME}" WITH (FORCE)`);
   await conn.end();
 }

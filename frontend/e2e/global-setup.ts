@@ -39,7 +39,9 @@ export default async function globalSetup() {
     database: "postgres",
   });
   await admin.connect();
-  await admin.query(`DROP DATABASE IF EXISTS "${NAME}"`);
+  // WITH (FORCE) lets us recover from a previous run that left connections
+  // open (e.g. a crashed langner-server). Requires Postgres >= 13.
+  await admin.query(`DROP DATABASE IF EXISTS "${NAME}" WITH (FORCE)`);
   await admin.query(`CREATE DATABASE "${NAME}" ENCODING 'UTF8'`);
   await admin.end();
 
