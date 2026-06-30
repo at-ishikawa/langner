@@ -1,13 +1,14 @@
 package quiz
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io/fs"
 	"path/filepath"
-	"strings"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -28,34 +29,70 @@ func loadSingleLearningHistory(dir, notebookName string) ([]notebook.LearningHis
 
 // CardInfo holds the minimal information needed to identify a word
 // in the learning history for skip/resume/override operations.
+//
+// OriginalExpression carries the original Note.Expression form when
+// the card's Expression is actually a Definition (e.g. a definitions-
+// style notebook with a longer explanatory key). The YAML stores
+// learning history under Note.Expression, so override has to fall
+// back to OriginalExpression when matching by Expression misses.
+//
+// LearnedAt and MarkCorrect carry the user's intent on
+// OverrideAnswer: the specific log timestamp they clicked on (so the
+// service flips THAT entry, not blindly the latest) and the desired
+// correct/incorrect state (so the service idempotently applies the
+// intent instead of toggling whatever's there).
 type CardInfo struct {
-	NotebookName string
-	StoryTitle   string
-	SceneTitle   string
-	Expression   string
+	NotebookName       string
+	StoryTitle         string
+	SceneTitle         string
+	Expression         string
+	OriginalExpression string
+	LearnedAt          string
+	MarkCorrect        *bool
+	// NoteID is the DB primary key for the note this card represents,
+	// set by the handler when override is routed to a DB-backed repo.
+	// Zero when the card came from a YAML-only deployment (DB-side
+	// updates are a no-op in that case).
+	NoteID int64
+	// Used only by UndoOverrideAnswer — the pre-override snapshot the
+	// frontend captured when it first called OverrideAnswer, so the
+	// restore can put the log back to where it was without re-deriving
+	// quality from a now-flipped status.
+	OriginalQuality      int
+	OriginalStatus       string
+	OriginalIntervalDays int
 }
 
-// CardInfoFromCard converts a Card to CardInfo.
+// CardInfoFromCard converts a Card to CardInfo. OriginalExpression
+// preserves the Note.Expression form when the card was loaded with a
+// separate Definition entry — see CardInfo for why this fallback is
+// required.
 func CardInfoFromCard(card Card) CardInfo {
 	return CardInfo{
-		NotebookName: card.NotebookName,
-		StoryTitle:   card.StoryTitle,
-		SceneTitle:   card.SceneTitle,
-		Expression:   card.Entry,
+		NotebookName:       card.NotebookName,
+		StoryTitle:         card.StoryTitle,
+		SceneTitle:         card.SceneTitle,
+		Expression:         card.Entry,
+		OriginalExpression: card.OriginalEntry,
 	}
 }
 
 // CardInfoFromFreeformCard converts a FreeformCard to CardInfo.
 func CardInfoFromFreeformCard(card FreeformCard) CardInfo {
 	return CardInfo{
-		NotebookName: card.NotebookName,
-		StoryTitle:   card.StoryTitle,
-		SceneTitle:   card.SceneTitle,
-		Expression:   card.Expression,
+		NotebookName:       card.NotebookName,
+		StoryTitle:         card.StoryTitle,
+		SceneTitle:         card.SceneTitle,
+		Expression:         card.Expression,
+		OriginalExpression: card.OriginalExpression,
 	}
 }
 
-// CardInfoFromReverseCard converts a ReverseCard to CardInfo.
+// CardInfoFromReverseCard converts a ReverseCard to CardInfo. The
+// reverse-quiz prompt is the meaning, the user types the word, and
+// ReverseCard.Expression already holds Note.Expression — there's no
+// separate Definition-as-key form to disambiguate, so no
+// OriginalExpression fallback is needed here.
 func CardInfoFromReverseCard(card ReverseCard) CardInfo {
 	return CardInfo{
 		NotebookName: card.NotebookName,
@@ -168,97 +205,113 @@ func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error
 	return nil
 }
 
-// OverrideAnswer toggles the correctness of the most recent answer for a word.
-// Returns the new next review date string (YYYY-MM-DD format, empty if none).
-func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (string, error) {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+// OverrideResult captures the pre-change values of the affected log
+// plus the recomputed next-review date. Surfaces the original* fields
+// the frontend needs to render an "Undo" button after a Mark-as-Correct.
+type OverrideResult struct {
+	NextReviewDate       string
+	OriginalQuality      int
+	OriginalStatus       string
+	OriginalIntervalDays int
+}
+
+// OverrideAnswer rewrites the log identified by (info, quizType,
+// info.LearnedAt) according to info.MarkCorrect, on every configured
+// storage backend.
+//
+// Storage routing: the service hands the override to
+// s.learningRepository, which is whatever was wired at startup —
+// YAML, DB, or MultiLearningRepository(YAML+DB). YAML reproduces the
+// updater's full SM-2 recompute; DB does an UPDATE on
+// learning_logs(note_id, quiz_type, learned_at). For multi-store
+// setups, MultiLearningRepository runs the YAML write first and
+// mirrors the exact values onto the DB so the two stores agree.
+//
+// info.LearnedAt MUST be the timestamp of the specific log the user
+// clicked; the override targets THAT entry, not blindly logs[0]. When
+// info.MarkCorrect is nil the call is a no-op for status/quality
+// (kept for symmetry with the proto's optional field).
+//
+// Freeform variants flip the matching entry in both paired log lists
+// in the same call so the two halves of one logical freeform answer
+// stay consistent on disk.
+//
+// Returns the new next-review date as YYYY-MM-DD (empty when no
+// matching log was found).
+func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (OverrideResult, error) {
+	if s.learningRepository == nil {
+		return OverrideResult{}, fmt.Errorf("no learning repository configured")
+	}
+	res, err := s.learningRepository.UpdateLog(context.Background(), learning.UpdateLogInput{
+		NoteID:             info.NoteID,
+		NotebookName:       info.NotebookName,
+		StoryTitle:         info.StoryTitle,
+		SceneTitle:         info.SceneTitle,
+		Expression:         info.Expression,
+		OriginalExpression: info.OriginalExpression,
+		QuizType:           string(quizType),
+		LearnedAt:          parseLearnedAt(info.LearnedAt),
+		MarkCorrect:        info.MarkCorrect,
+	})
 	if err != nil {
-		return "", fmt.Errorf("failed to load learning histories: %w", err)
+		return OverrideResult{}, fmt.Errorf("override learning log: %w", err)
 	}
-
-	updater := notebook.NewLearningHistoryUpdater(learningHistories[info.NotebookName], s.calculator)
-	nextReview := s.toggleLastAnswer(updater, info, quizType)
-
-	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, info.NotebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return "", fmt.Errorf("failed to save learning history for %q: %w", info.NotebookName, err)
-	}
-	return nextReview, nil
+	return OverrideResult{
+		NextReviewDate:       res.NewNextReviewDate,
+		OriginalQuality:      res.OriginalQuality,
+		OriginalStatus:       res.OriginalStatus,
+		OriginalIntervalDays: res.OriginalIntervalDays,
+	}, nil
 }
 
-// UndoOverrideAnswer reverts the most recent answer override (toggles back).
-// Returns the new next review date string (YYYY-MM-DD format, empty if none).
-func (s *Service) UndoOverrideAnswer(info CardInfo, quizType notebook.QuizType) (string, error) {
-	return s.OverrideAnswer(info, quizType)
+// UndoOverrideAnswer restores a previously overridden log to the
+// captured pre-override values (passed via info.OriginalQuality /
+// OriginalStatus / OriginalIntervalDays). Returns the new next-review
+// date and whether the restored entry is now considered correct.
+//
+// Implementation note: undo is just an override with MirrorValues
+// pre-set to the originals — neither markCorrect nor the calculator
+// is consulted, so the restored row is byte-identical to what it was
+// before the user clicked Mark-as-Correct.
+func (s *Service) UndoOverrideAnswer(info CardInfo, quizType notebook.QuizType) (correct bool, nextReview string, err error) {
+	if s.learningRepository == nil {
+		return false, "", fmt.Errorf("no learning repository configured")
+	}
+	res, err := s.learningRepository.UpdateLog(context.Background(), learning.UpdateLogInput{
+		NoteID:             info.NoteID,
+		NotebookName:       info.NotebookName,
+		StoryTitle:         info.StoryTitle,
+		SceneTitle:         info.SceneTitle,
+		Expression:         info.Expression,
+		OriginalExpression: info.OriginalExpression,
+		QuizType:           string(quizType),
+		LearnedAt:          parseLearnedAt(info.LearnedAt),
+		MirrorValues: &learning.UpdateLogMirror{
+			Status:       info.OriginalStatus,
+			Quality:      info.OriginalQuality,
+			IntervalDays: info.OriginalIntervalDays,
+		},
+	})
+	if err != nil {
+		return false, "", fmt.Errorf("undo override learning log: %w", err)
+	}
+	correct = res.NewQuality >= 3
+	return correct, res.NewNextReviewDate, nil
 }
 
-// toggleLastAnswer toggles the correctness status and quality of the most recent
-// learning log entry. Returns the new next review date.
-func (s *Service) toggleLastAnswer(updater *notebook.LearningHistoryUpdater, info CardInfo, quizType notebook.QuizType) string {
-	for _, h := range updater.GetHistory() {
-		if h.Metadata.Title != info.StoryTitle {
-			continue
-		}
-
-		if len(h.Expressions) > 0 {
-			for ei, expr := range h.Expressions {
-				if !strings.EqualFold(expr.Expression, info.Expression) {
-					continue
-				}
-				return toggleLogs(&h.Expressions[ei], quizType, s.calculator)
-			}
-			continue
-		}
-
-		for _, scene := range h.Scenes {
-			if scene.Metadata.Title != info.SceneTitle {
-				continue
-			}
-			for ei, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, info.Expression) {
-					continue
-				}
-				return toggleLogs(&scene.Expressions[ei], quizType, s.calculator)
-			}
-		}
+// parseLearnedAt accepts the YYYY-MM-DD or RFC3339 string the
+// frontend sends and returns the time.Time the repos look up by. An
+// unparseable string returns zero — UpdateLog implementations treat
+// that as a no-op.
+func parseLearnedAt(s string) time.Time {
+	if s == "" {
+		return time.Time{}
 	}
-	return ""
-}
-
-func toggleLogs(expr *notebook.LearningHistoryExpression, quizType notebook.QuizType, calculator notebook.IntervalCalculator) string {
-	logs := expr.GetLogsForQuizType(quizType)
-
-	if len(logs) == 0 {
-		return ""
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
 	}
-
-	log := &logs[0]
-	if log.Status == notebook.LearnedStatusMisunderstood {
-		if quizType == notebook.QuizTypeEtymologyFreeform || quizType == notebook.QuizTypeFreeform {
-			log.Status = notebook.LearnedStatusCanBeUsed
-		} else {
-			log.Status = notebook.LearnedStatusUnderstood
-		}
-		log.Quality = 4
-	} else {
-		log.Status = notebook.LearnedStatusMisunderstood
-		log.Quality = 1
+	if t, err := time.Parse("2006-01-02", s); err == nil {
+		return t
 	}
-
-	// Replay the older-log chain with this flipped entry appended so the
-	// recomputed interval matches what `validate --fix` would produce.
-	var previousLogs []notebook.LearningRecord
-	if len(logs) > 1 {
-		previousLogs = logs[1:]
-	}
-	newInterval, _ := calculator.NextIntervalForWrite(previousLogs, *log)
-	log.IntervalDays = newInterval
-
-	expr.SetLogsForQuizType(quizType, logs)
-
-	if newInterval > 0 {
-		nextDate := log.LearnedAt.AddDate(0, 0, newInterval)
-		return nextDate.Format("2006-01-02")
-	}
-	return ""
+	return time.Time{}
 }

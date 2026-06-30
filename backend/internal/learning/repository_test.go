@@ -191,3 +191,102 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 		})
 	}
 }
+
+// TestDBLearningRepository_UpdateLog_MarkCorrect locks in the DB-side
+// shape of OverrideAnswer: SELECT the matching row by (note_id,
+// quiz_type, learned_at), UPDATE status/quality/interval, hand back
+// the pre-update values for the frontend Undo flow.
+func TestDBLearningRepository_UpdateLog_MarkCorrect(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "pgx")
+	repo := NewDBLearningRepository(sqlxDB)
+
+	learnedAt := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
+		WithArgs(int64(42), "notebook", "2026-06-29").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "quality", "interval_days", "learned_at"}).
+			AddRow(int64(7), "misunderstood", 1, 1, learnedAt))
+	mock.ExpectExec(`UPDATE learning_logs SET status = \$1, quality = \$2, interval_days = \$3 WHERE id = \$4`).
+		WithArgs("understood", 4, 1, int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	markCorrect := true
+	res, err := repo.UpdateLog(context.Background(), UpdateLogInput{
+		NoteID:      42,
+		QuizType:    "notebook",
+		LearnedAt:   learnedAt,
+		MarkCorrect: &markCorrect,
+	})
+	require.NoError(t, err)
+	assert.True(t, res.Found)
+	assert.Equal(t, "misunderstood", res.OriginalStatus, "OriginalStatus surfaces the pre-override value for Undo")
+	assert.Equal(t, 1, res.OriginalQuality)
+	assert.Equal(t, "understood", res.NewStatus)
+	assert.Equal(t, 4, res.NewQuality)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestDBLearningRepository_UpdateLog_Mirror covers the path
+// MultiLearningRepository takes after the primary (YAML) has computed
+// the new status/quality/interval — the secondary store applies the
+// values verbatim, no markCorrect derivation.
+func TestDBLearningRepository_UpdateLog_Mirror(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "pgx")
+	repo := NewDBLearningRepository(sqlxDB)
+
+	learnedAt := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
+		WithArgs(int64(42), "notebook", "2026-06-29").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "quality", "interval_days", "learned_at"}).
+			AddRow(int64(7), "misunderstood", 1, 1, learnedAt))
+	mock.ExpectExec(`UPDATE learning_logs SET status = \$1, quality = \$2, interval_days = \$3 WHERE id = \$4`).
+		WithArgs("understood", 4, 3, int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	res, err := repo.UpdateLog(context.Background(), UpdateLogInput{
+		NoteID:    42,
+		QuizType:  "notebook",
+		LearnedAt: learnedAt,
+		MirrorValues: &UpdateLogMirror{
+			Status:       "understood",
+			Quality:      4,
+			IntervalDays: 3,
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, res.Found)
+	assert.Equal(t, 3, res.NewIntervalDays, "MirrorValues overrides any markCorrect-derived interval")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestDBLearningRepository_UpdateLog_NoMatch confirms the soft-no-op
+// when no row matches: Found=false, no error. This is what
+// MultiLearningRepository relies on so a YAML-only entry doesn't
+// fail the whole override when the DB side hasn't seen it yet.
+func TestDBLearningRepository_UpdateLog_NoMatch(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "pgx")
+	repo := NewDBLearningRepository(sqlxDB)
+
+	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
+		WithArgs(int64(42), "notebook", "2026-06-29").
+		WillReturnError(fmt.Errorf("sql: no rows in result set"))
+
+	markCorrect := true
+	res, err := repo.UpdateLog(context.Background(), UpdateLogInput{
+		NoteID:      42,
+		QuizType:    "notebook",
+		LearnedAt:   time.Date(2026, 6, 29, 0, 0, 0, 0, time.UTC),
+		MarkCorrect: &markCorrect,
+	})
+	require.NoError(t, err, "missing row must be a soft no-op, not an error")
+	assert.False(t, res.Found)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}

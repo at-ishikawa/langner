@@ -271,19 +271,33 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 // FindExpressionByName searches for an expression across all histories, returning
 // a pointer to the expression. Returns nil if not found.
 func (u *LearningHistoryUpdater) FindExpressionByName(expression string) *LearningHistoryExpression {
-	for hi := range u.history {
-		h := &u.history[hi]
-		// Always search top-level expressions first (flashcard, etymology, etc.)
-		for ei := range h.Expressions {
-			if strings.EqualFold(h.Expressions[ei].Expression, expression) {
-				return &h.Expressions[ei]
-			}
+	return u.FindExpressionByAnyName(expression)
+}
+
+// FindExpressionByAnyName tries every candidate name in order and returns
+// the first matching expression across all histories. Used for the
+// definitions-style case where a card's Expression is the Definition
+// form but the YAML stores the entry under the original Note.Expression
+// — callers pass both forms so the fallback succeeds.
+func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *LearningHistoryExpression {
+	for _, name := range names {
+		if name == "" {
+			continue
 		}
-		// Then search scenes
-		for si := range h.Scenes {
-			for ei := range h.Scenes[si].Expressions {
-				if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, expression) {
-					return &h.Scenes[si].Expressions[ei]
+		for hi := range u.history {
+			h := &u.history[hi]
+			// Always search top-level expressions first (flashcard, etymology, etc.)
+			for ei := range h.Expressions {
+				if strings.EqualFold(h.Expressions[ei].Expression, name) {
+					return &h.Expressions[ei]
+				}
+			}
+			// Then search scenes
+			for si := range h.Scenes {
+				for ei := range h.Scenes[si].Expressions {
+					if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, name) {
+						return &h.Scenes[si].Expressions[ei]
+					}
 				}
 			}
 		}
@@ -291,123 +305,252 @@ func (u *LearningHistoryUpdater) FindExpressionByName(expression string) *Learni
 	return nil
 }
 
-// OverrideLog finds a learning log by learnedAt date and quiz type, then overrides it.
-// Returns the original values for undo purposes.
-func (u *LearningHistoryUpdater) OverrideLog(
-	expression string,
-	quizType QuizType,
-	learnedAt string,
-	markCorrect *bool,
-	nextReviewDate string,
-) (originalQuality int, originalStatus string, originalIntervalDays int, newNextReview string, found bool) {
-	expr := u.FindExpressionByName(expression)
-	if expr == nil {
-		return 0, "", 0, "", false
-	}
-
-	logs := expr.GetLogsForQuizType(quizType)
-	for i, log := range logs {
-		if log.LearnedAt.Format("2006-01-02") != learnedAt && log.LearnedAt.Format(time.RFC3339) != learnedAt {
-			continue
-		}
-
-		originalQuality = log.Quality
-		originalStatus = string(log.Status)
-		originalIntervalDays = log.IntervalDays
-
-		if markCorrect != nil {
-			if *markCorrect {
-				logs[i].Quality = 3
-				logs[i].Status = LearnedStatusUnderstood
-			} else {
-				logs[i].Quality = 1
-				logs[i].Status = LearnedStatusMisunderstood
-			}
-
-			// Replay the chain of older logs with this entry appended so
-			// the recomputed interval matches what `validate --fix` would
-			// produce: same chain logic, same early-review guard.
-			var previousLogs []LearningRecord
-			if i+1 < len(logs) {
-				previousLogs = logs[i+1:]
-			}
-			newInterval, _ := u.calculator.NextIntervalForWrite(previousLogs, logs[i])
-			logs[i].IntervalDays = newInterval
-		}
-
-		if nextReviewDate != "" {
-			nextDate, err := time.Parse("2006-01-02", nextReviewDate)
-			if err == nil {
-				intervalDays := int(nextDate.Sub(log.LearnedAt.Time).Hours() / 24)
-				if intervalDays < 1 {
-					intervalDays = 1
-				}
-				logs[i].IntervalDays = intervalDays
-				logs[i].OverrideInterval = intervalDays
-			}
-		}
-
-		// Write back the logs
-		switch quizType {
-		case QuizTypeReverse:
-			expr.ReverseLogs = logs
-		case QuizTypeEtymologyStandard:
-			expr.EtymologyBreakdownLogs = logs
-		case QuizTypeEtymologyReverse:
-			expr.EtymologyAssemblyLogs = logs
-		default:
-			expr.LearnedLogs = logs
-		}
-
-		newNextReview = logs[i].LearnedAt.AddDate(0, 0, logs[i].IntervalDays).Format("2006-01-02")
-		return originalQuality, originalStatus, originalIntervalDays, newNextReview, true
-	}
-
-	return 0, "", 0, "", false
+// OverrideLogInput carries everything OverrideLog needs to locate and
+// rewrite a single learning log entry.
+//
+//   - Expression / OriginalExpression: the YAML lookup key. Definitions-
+//     style cards expose the long Definition form as the card's Entry
+//     while the YAML keeps the original word; passing both lets the
+//     updater fall back. Either field may be empty.
+//   - QuizType: which per-quiz-type log list to scan. For Freeform
+//     variants, OverrideLog mirrors the write side (Create) and flips
+//     the matching entry in BOTH paired lists.
+//   - LearnedAt: YYYY-MM-DD or RFC3339; identifies the specific log
+//     within the list (never blindly logs[0]).
+//   - MarkCorrect: nil = no status change; non-nil = set the entry to
+//     the explicit correct/incorrect state. Toggling is not a primitive
+//     here — callers that want toggle should compute it themselves and
+//     pass the desired state, which is what the frontend already does.
+type OverrideLogInput struct {
+	Expression         string
+	OriginalExpression string
+	QuizType           QuizType
+	LearnedAt          string
+	MarkCorrect        *bool
 }
 
-// UndoOverrideLog restores original values for a learning log entry.
-func (u *LearningHistoryUpdater) UndoOverrideLog(
-	expression string,
-	quizType QuizType,
-	learnedAt string,
-	originalQuality int,
-	originalStatus string,
-	originalIntervalDays int,
-) (correct bool, nextReview string, found bool) {
-	expr := u.FindExpressionByName(expression)
+// OverrideLogResult reports the pre-change values of the affected log
+// plus the recomputed next-review date. Found is false when no log
+// matched the (expression, quiz_type, learned_at) tuple — callers must
+// treat that as a soft no-op (the same way Update returns rows-affected
+// 0 in SQL).
+type OverrideLogResult struct {
+	OriginalQuality      int
+	OriginalStatus       string
+	OriginalIntervalDays int
+	NewNextReviewDate    string
+	Found                bool
+}
+
+// OverrideLog rewrites the log identified by (expression/originalExpression,
+// quizType, learnedAt) according to MarkCorrect. When the quiz type is one
+// of the freeform variants — which write the same answer into two paired
+// log lists at submit time — the override is applied to both lists in the
+// same call so the two halves of one logical answer stay in sync.
+func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogResult {
+	expr := u.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
 	if expr == nil {
-		return false, "", false
+		return OverrideLogResult{}
 	}
 
-	logs := expr.GetLogsForQuizType(quizType)
+	primary := in.QuizType.PrimaryLogList()
+	logs := getLogsByList(expr, primary)
+	idx := indexLogByLearnedAt(logs, in.LearnedAt)
+	if idx < 0 {
+		return OverrideLogResult{}
+	}
+
+	result := OverrideLogResult{
+		OriginalQuality:      logs[idx].Quality,
+		OriginalStatus:       string(logs[idx].Status),
+		OriginalIntervalDays: logs[idx].IntervalDays,
+	}
+
+	if in.MarkCorrect != nil {
+		applyMark(&logs[idx], *in.MarkCorrect, in.QuizType)
+		var previous []LearningRecord
+		if idx+1 < len(logs) {
+			previous = logs[idx+1:]
+		}
+		newInterval, _ := u.calculator.NextIntervalForWrite(previous, logs[idx])
+		logs[idx].IntervalDays = newInterval
+	}
+	setLogsByList(expr, primary, logs)
+	mirrorOverrideToPair(expr, in.QuizType, logs[idx])
+
+	result.NewNextReviewDate = logs[idx].LearnedAt.AddDate(0, 0, logs[idx].IntervalDays).Format("2006-01-02")
+	result.Found = true
+	return result
+}
+
+// UndoOverrideLogInput is the symmetric input for UndoOverrideLog.
+type UndoOverrideLogInput struct {
+	Expression           string
+	OriginalExpression   string
+	QuizType             QuizType
+	LearnedAt            string
+	OriginalQuality      int
+	OriginalStatus       string
+	OriginalIntervalDays int
+}
+
+// UndoOverrideLogResult mirrors OverrideLogResult for the undo path.
+type UndoOverrideLogResult struct {
+	Correct           bool
+	NewNextReviewDate string
+	Found             bool
+}
+
+// UndoOverrideLog restores a log entry to a previously captured state.
+// Used by the Analytics UI's "Undo" button after a manual override.
+// Like OverrideLog, the freeform variants mirror the restore across
+// both paired log lists.
+func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOverrideLogResult {
+	expr := u.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	if expr == nil {
+		return UndoOverrideLogResult{}
+	}
+
+	primary := in.QuizType.PrimaryLogList()
+	logs := getLogsByList(expr, primary)
+	idx := indexLogByLearnedAt(logs, in.LearnedAt)
+	if idx < 0 {
+		return UndoOverrideLogResult{}
+	}
+
+	logs[idx].Quality = in.OriginalQuality
+	logs[idx].Status = LearnedStatus(in.OriginalStatus)
+	logs[idx].IntervalDays = in.OriginalIntervalDays
+	logs[idx].OverrideInterval = 0
+	setLogsByList(expr, primary, logs)
+	mirrorOverrideToPair(expr, in.QuizType, logs[idx])
+
+	return UndoOverrideLogResult{
+		Correct:           logs[idx].Quality >= 3,
+		NewNextReviewDate: logs[idx].LearnedAt.AddDate(0, 0, logs[idx].IntervalDays).Format("2006-01-02"),
+		Found:             true,
+	}
+}
+
+// applyMark writes the desired correct/incorrect state onto a log.
+// Standard / reverse / etymology-non-freeform use the binary
+// understood/misunderstood pair; freeform variants use can-be-used to
+// match the higher bar the freeform write path sets (active recall).
+func applyMark(log *LearningRecord, markCorrect bool, quizType QuizType) {
+	if !markCorrect {
+		log.Quality = 1
+		log.Status = LearnedStatusMisunderstood
+		return
+	}
+	log.Quality = 4
+	if quizType == QuizTypeFreeform || quizType == QuizTypeEtymologyFreeform {
+		log.Status = LearnedStatusCanBeUsed
+	} else {
+		log.Status = LearnedStatusUnderstood
+	}
+}
+
+// indexLogByLearnedAt returns the index of the log entry whose LearnedAt
+// matches the given YYYY-MM-DD or RFC3339 string, or -1 if none match.
+func indexLogByLearnedAt(logs []LearningRecord, learnedAt string) int {
+	if learnedAt == "" {
+		return -1
+	}
 	for i, log := range logs {
-		if log.LearnedAt.Format("2006-01-02") != learnedAt && log.LearnedAt.Format(time.RFC3339) != learnedAt {
-			continue
+		if log.LearnedAt.Format("2006-01-02") == learnedAt ||
+			log.LearnedAt.Format(time.RFC3339) == learnedAt {
+			return i
 		}
-
-		logs[i].Quality = originalQuality
-		logs[i].Status = LearnedStatus(originalStatus)
-		logs[i].IntervalDays = originalIntervalDays
-		logs[i].OverrideInterval = 0
-
-		switch quizType {
-		case QuizTypeReverse:
-			expr.ReverseLogs = logs
-		case QuizTypeEtymologyStandard:
-			expr.EtymologyBreakdownLogs = logs
-		case QuizTypeEtymologyReverse:
-			expr.EtymologyAssemblyLogs = logs
-		default:
-			expr.LearnedLogs = logs
-		}
-
-		correct = logs[i].Quality >= 3
-		nextReview = logs[i].LearnedAt.AddDate(0, 0, logs[i].IntervalDays).Format("2006-01-02")
-		return correct, nextReview, true
 	}
+	return -1
+}
 
-	return false, "", false
+// mirrorOverrideToPair handles the freeform-pair case: when QuizType is
+// Freeform / EtymologyFreeform, the write path appends the same answer
+// into two log lists (LearnedLogs+ReverseLogs, or EtymologyBreakdown+
+// EtymologyAssembly). After overriding one half we must apply the same
+// mutation to the matching entry in the other half so the two stay
+// consistent. The same-day match-by-learnedAt is how the lookup pairs
+// them — the freeform writer stamps both with the same timestamp.
+func mirrorOverrideToPair(expr *LearningHistoryExpression, quizType QuizType, updated LearningRecord) {
+	var pair logList
+	switch quizType {
+	case QuizTypeFreeform:
+		pair = listReverse
+	case QuizTypeEtymologyFreeform:
+		pair = listEtymologyAssembly
+	default:
+		return
+	}
+	pairLogs := getLogsByList(expr, pair)
+	idx := indexLogByLearnedAt(pairLogs, updated.LearnedAt.Format(time.RFC3339))
+	if idx < 0 {
+		idx = indexLogByLearnedAt(pairLogs, updated.LearnedAt.Format("2006-01-02"))
+	}
+	if idx < 0 {
+		return
+	}
+	pairLogs[idx].Quality = updated.Quality
+	pairLogs[idx].Status = updated.Status
+	pairLogs[idx].IntervalDays = updated.IntervalDays
+	pairLogs[idx].OverrideInterval = updated.OverrideInterval
+	setLogsByList(expr, pair, pairLogs)
+}
+
+// logList is an internal enum picking which log slice on a
+// LearningHistoryExpression to read/write. Kept private to this file so
+// OverrideLog / UndoOverrideLog / mirrorOverrideToPair speak the same
+// language without exposing the discriminator to the rest of the package.
+type logList int
+
+const (
+	listLearned logList = iota
+	listReverse
+	listEtymologyBreakdown
+	listEtymologyAssembly
+)
+
+// PrimaryLogList returns the log list a single OverrideLog call mutates
+// for the given quiz type. Freeform variants identify their primary
+// list here; the secondary (paired) list is handled by
+// mirrorOverrideToPair after the primary has been written.
+func (qt QuizType) PrimaryLogList() logList {
+	switch qt {
+	case QuizTypeReverse:
+		return listReverse
+	case QuizTypeEtymologyStandard, QuizTypeEtymologyFreeform:
+		return listEtymologyBreakdown
+	case QuizTypeEtymologyReverse:
+		return listEtymologyAssembly
+	default:
+		return listLearned
+	}
+}
+
+func getLogsByList(expr *LearningHistoryExpression, list logList) []LearningRecord {
+	switch list {
+	case listReverse:
+		return expr.ReverseLogs
+	case listEtymologyBreakdown:
+		return expr.EtymologyBreakdownLogs
+	case listEtymologyAssembly:
+		return expr.EtymologyAssemblyLogs
+	default:
+		return expr.LearnedLogs
+	}
+}
+
+func setLogsByList(expr *LearningHistoryExpression, list logList, logs []LearningRecord) {
+	switch list {
+	case listReverse:
+		expr.ReverseLogs = logs
+	case listEtymologyBreakdown:
+		expr.EtymologyBreakdownLogs = logs
+	case listEtymologyAssembly:
+		expr.EtymologyAssemblyLogs = logs
+	default:
+		expr.LearnedLogs = logs
+	}
 }
 
 // SetSkippedAt records a skip for the given quiz type at the given timestamp.

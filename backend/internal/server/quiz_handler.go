@@ -574,21 +574,52 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *co
 }
 
 func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[apiv1.OverrideAnswerRequest]) (*connect.Response[apiv1.OverrideAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
+	info.NoteID = req.Msg.GetNoteId()
+	info.LearnedAt = req.Msg.GetLearnedAt()
+	if req.Msg.MarkCorrect != nil {
+		mc := req.Msg.GetMarkCorrect()
+		info.MarkCorrect = &mc
+	}
 	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
-	nextReviewDate, err := h.svc.OverrideAnswer(*info, quizType)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err)) }
-	return connect.NewResponse(&apiv1.OverrideAnswerResponse{NextReviewDate: nextReviewDate}), nil
+	res, err := h.svc.OverrideAnswer(*info, quizType)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err))
+	}
+	return connect.NewResponse(&apiv1.OverrideAnswerResponse{
+		NextReviewDate:       res.NextReviewDate,
+		OriginalQuality:      int32(res.OriginalQuality),
+		OriginalStatus:       res.OriginalStatus,
+		OriginalIntervalDays: int32(res.OriginalIntervalDays),
+	}), nil
 }
 
 func (h *QuizHandler) UndoOverrideAnswer(ctx context.Context, req *connect.Request[apiv1.UndoOverrideAnswerRequest]) (*connect.Response[apiv1.UndoOverrideAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
+	info.NoteID = req.Msg.GetNoteId()
+	info.LearnedAt = req.Msg.GetLearnedAt()
+	info.OriginalQuality = int(req.Msg.GetOriginalQuality())
+	info.OriginalStatus = req.Msg.GetOriginalStatus()
+	info.OriginalIntervalDays = int(req.Msg.GetOriginalIntervalDays())
 	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
-	nextReviewDate, err := h.svc.UndoOverrideAnswer(*info, quizType)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("undo override answer: %w", err)) }
-	return connect.NewResponse(&apiv1.UndoOverrideAnswerResponse{NextReviewDate: nextReviewDate}), nil
+	correct, nextReviewDate, err := h.svc.UndoOverrideAnswer(*info, quizType)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("undo override answer: %w", err))
+	}
+	return connect.NewResponse(&apiv1.UndoOverrideAnswerResponse{
+		Correct:        correct,
+		NextReviewDate: nextReviewDate,
+	}), nil
 }
