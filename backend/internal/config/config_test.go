@@ -76,7 +76,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				},
 				Database: DatabaseConfig{
 					Host:     "localhost",
-					Port:     3306,
+					Port:     5432,
 					Database: "local",
 					Username: "user",
 					TLS:      false,
@@ -132,7 +132,7 @@ outputs:
 				},
 				Database: DatabaseConfig{
 					Host:     "localhost",
-					Port:     3306,
+					Port:     5432,
 					Database: "local",
 					Username: "user",
 					TLS:      false,
@@ -182,7 +182,7 @@ outputs:
 				},
 				Database: DatabaseConfig{
 					Host:     "localhost",
-					Port:     3306,
+					Port:     5432,
 					Database: "local",
 					Username: "user",
 					TLS:      false,

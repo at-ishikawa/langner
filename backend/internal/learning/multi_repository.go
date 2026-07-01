@@ -35,3 +35,29 @@ func (m *MultiLearningRepository) BatchDelete(ctx context.Context, ids []int64) 
 	if err := m.secondary.BatchDelete(ctx, ids); err != nil { slog.Warn("secondary learning batch delete failed", "error", err) }
 	return nil
 }
+
+// UpdateLog overrides on both stores: primary first (its computed
+// values are authoritative), then secondary with MirrorValues set so
+// it writes exactly what primary just wrote. Secondary failure is
+// logged, not returned — the primary already committed the user's
+// intended override and a missing DB row is recoverable via re-import.
+func (m *MultiLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput) (UpdateLogResult, error) {
+	res, err := m.primary.UpdateLog(ctx, in)
+	if err != nil {
+		return UpdateLogResult{}, err
+	}
+	if !res.Found {
+		return res, nil
+	}
+	secondaryIn := in
+	secondaryIn.MarkCorrect = nil
+	secondaryIn.MirrorValues = &UpdateLogMirror{
+		Status:       res.NewStatus,
+		Quality:      res.NewQuality,
+		IntervalDays: res.NewIntervalDays,
+	}
+	if _, err := m.secondary.UpdateLog(ctx, secondaryIn); err != nil {
+		slog.Warn("secondary learning override failed", "error", err)
+	}
+	return res, nil
+}

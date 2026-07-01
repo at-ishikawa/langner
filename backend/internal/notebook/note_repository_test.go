@@ -35,14 +35,14 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					"id", "note_id", "url", "sort_order", "created_at", "updated_at",
 				}).
 					AddRow(1, 1, "https://example.com/img1.png", 0, now, now)
-				mock.ExpectQuery("SELECT \\* FROM note_images WHERE note_id IN \\(\\?,\\s*\\?\\) ORDER BY sort_order").
+				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1,\s*\$2\) ORDER BY sort_order`).
 					WithArgs(int64(1), int64(2)).
 					WillReturnRows(imageRows)
 
 				refRows := sqlmock.NewRows([]string{
 					"id", "note_id", "link", "description", "sort_order", "created_at", "updated_at",
 				})
-				mock.ExpectQuery("SELECT \\* FROM note_references WHERE note_id IN \\(\\?,\\s*\\?\\) ORDER BY sort_order").
+				mock.ExpectQuery(`SELECT \* FROM note_references WHERE note_id IN \(\$1,\s*\$2\) ORDER BY sort_order`).
 					WithArgs(int64(1), int64(2)).
 					WillReturnRows(refRows)
 
@@ -50,7 +50,7 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					"id", "note_id", "notebook_type", "notebook_id", "group", "subgroup", "created_at", "updated_at",
 				}).
 					AddRow(1, 1, "story", "book-1", "chapter-1", "", now, now)
-				mock.ExpectQuery("SELECT \\* FROM notebook_notes WHERE note_id IN \\(\\?,\\s*\\?\\) ORDER BY id").
+				mock.ExpectQuery(`SELECT \* FROM notebook_notes WHERE note_id IN \(\$1,\s*\$2\) ORDER BY id`).
 					WithArgs(int64(1), int64(2)).
 					WillReturnRows(nnRows)
 			},
@@ -73,7 +73,7 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					AddRow(1, "idiom", "break the ice", "to initiate conversation", "B2", 1, now, now)
 				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").WillReturnRows(noteRows)
 
-				mock.ExpectQuery("SELECT \\* FROM note_images WHERE note_id IN \\(\\?\\) ORDER BY sort_order").
+				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
@@ -88,13 +88,13 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					AddRow(1, "idiom", "break the ice", "to initiate conversation", "B2", 1, now, now)
 				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").WillReturnRows(noteRows)
 
-				mock.ExpectQuery("SELECT \\* FROM note_images WHERE note_id IN \\(\\?\\) ORDER BY sort_order").
+				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnRows(sqlmock.NewRows([]string{
 						"id", "note_id", "url", "sort_order", "created_at", "updated_at",
 					}))
 
-				mock.ExpectQuery("SELECT \\* FROM note_references WHERE note_id IN \\(\\?\\) ORDER BY sort_order").
+				mock.ExpectQuery(`SELECT \* FROM note_references WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
@@ -109,19 +109,19 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					AddRow(1, "idiom", "break the ice", "to initiate conversation", "B2", 1, now, now)
 				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").WillReturnRows(noteRows)
 
-				mock.ExpectQuery("SELECT \\* FROM note_images WHERE note_id IN \\(\\?\\) ORDER BY sort_order").
+				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnRows(sqlmock.NewRows([]string{
 						"id", "note_id", "url", "sort_order", "created_at", "updated_at",
 					}))
 
-				mock.ExpectQuery("SELECT \\* FROM note_references WHERE note_id IN \\(\\?\\) ORDER BY sort_order").
+				mock.ExpectQuery(`SELECT \* FROM note_references WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnRows(sqlmock.NewRows([]string{
 						"id", "note_id", "link", "description", "sort_order", "created_at", "updated_at",
 					}))
 
-				mock.ExpectQuery("SELECT \\* FROM notebook_notes WHERE note_id IN \\(\\?\\) ORDER BY id").
+				mock.ExpectQuery(`SELECT \* FROM notebook_notes WHERE note_id IN \(\$1\) ORDER BY id`).
 					WithArgs(int64(1)).
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
@@ -135,7 +135,7 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -183,9 +183,9 @@ func TestDBNoteRepository_Create(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
+				mock.ExpectQuery("INSERT INTO notes").
 					WithArgs("break the ice", "break the ice", "to initiate conversation", "", 0, "").
-					WillReturnResult(sqlmock.NewResult(42, 1))
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
 				mock.ExpectExec("INSERT INTO notebook_notes").
 					WithArgs(int64(42), "book", "test-book", "chapter1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
@@ -202,9 +202,9 @@ func TestDBNoteRepository_Create(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
+				mock.ExpectQuery("INSERT INTO notes").
 					WithArgs("give up", "give up", "to stop trying", "", 0, "").
-					WillReturnResult(sqlmock.NewResult(43, 1))
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(43)))
 				mock.ExpectCommit()
 			},
 			wantID: 43,
@@ -218,7 +218,7 @@ func TestDBNoteRepository_Create(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
+				mock.ExpectQuery("INSERT INTO notes").
 					WillReturnError(fmt.Errorf("duplicate entry"))
 				mock.ExpectRollback()
 			},
@@ -232,7 +232,7 @@ func TestDBNoteRepository_Create(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -265,7 +265,7 @@ func TestDBNoteRepository_Delete(t *testing.T) {
 				mock.ExpectQuery("SELECT n.id FROM notes").
 					WithArgs("test-book", "break the ice").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
-				mock.ExpectExec("DELETE FROM notebook_notes WHERE note_id = \\? AND notebook_id = \\?").
+				mock.ExpectExec(`DELETE FROM notebook_notes WHERE note_id = \$1 AND notebook_id = \$2`).
 					WithArgs(int64(42), "test-book").
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectQuery("SELECT COUNT").
@@ -295,7 +295,7 @@ func TestDBNoteRepository_Delete(t *testing.T) {
 				mock.ExpectQuery("SELECT n.id FROM notes").
 					WithArgs("test-book", "break the ice").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(42))
-				mock.ExpectExec("DELETE FROM notebook_notes WHERE note_id = \\? AND notebook_id = \\?").
+				mock.ExpectExec(`DELETE FROM notebook_notes WHERE note_id = \$1 AND notebook_id = \$2`).
 					WithArgs(int64(42), "test-book").
 					WillReturnResult(sqlmock.NewResult(0, 1))
 				mock.ExpectQuery("SELECT COUNT").
@@ -336,7 +336,7 @@ func TestDBNoteRepository_Delete(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -391,19 +391,19 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning, level, dictionary_number, concept_key\) VALUES \(\$1, \$2, \$3, \$4, \$5, \$6\) RETURNING id`).
 					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1, "").
-					WillReturnResult(sqlmock.NewResult(10, 1))
-				mock.ExpectExec("INSERT INTO notes \\(`usage`, entry, meaning, level, dictionary_number, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?\\)").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(10)))
+				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning, level, dictionary_number, concept_key\) VALUES \(\$1, \$2, \$3, \$4, \$5, \$6\) RETURNING id`).
 					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "").
-					WillReturnResult(sqlmock.NewResult(11, 1))
-				mock.ExpectExec("INSERT INTO note_images \\(note_id, url, sort_order\\) VALUES \\(\\?, \\?, \\?\\)").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(11)))
+				mock.ExpectExec(`INSERT INTO note_images \(note_id, url, sort_order\) VALUES \(\$1, \$2, \$3\)`).
 					WithArgs(int64(10), "https://example.com/img.png", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("INSERT INTO note_references \\(note_id, link, description, sort_order\\) VALUES \\(\\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec(`INSERT INTO note_references \(note_id, link, description, sort_order\) VALUES \(\$1, \$2, \$3, \$4\)`).
 					WithArgs(int64(10), "https://example.com/ref", "reference", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec("INSERT INTO notebook_notes \\(note_id, notebook_type, notebook_id, `group`, subgroup\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\)`).
 					WithArgs(int64(10), "story", "book-1", "ch1", "scene1",
 						int64(11), "flashcard", "vocab-1", "unit1", "").
 					WillReturnResult(sqlmock.NewResult(1, 2))
@@ -425,21 +425,8 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
+				mock.ExpectQuery("INSERT INTO notes").
 					WillReturnError(fmt.Errorf("duplicate entry"))
-				mock.ExpectRollback()
-			},
-			wantErr: true,
-		},
-		{
-			name: "last insert id error",
-			notes: []*NoteRecord{
-				{Usage: "idiom", Entry: "break the ice", Meaning: "to initiate conversation", Level: "B2", DictionaryNumber: 1},
-			},
-			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
-					WillReturnResult(sqlmock.NewErrorResult(fmt.Errorf("last insert id error")))
 				mock.ExpectRollback()
 			},
 			wantErr: true,
@@ -454,8 +441,8 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
-					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("INSERT INTO notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(10)))
 				mock.ExpectExec("INSERT INTO note_images").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
@@ -472,8 +459,8 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
-					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("INSERT INTO notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(10)))
 				mock.ExpectExec("INSERT INTO note_references").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
@@ -490,8 +477,8 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
-					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("INSERT INTO notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(10)))
 				mock.ExpectExec("INSERT INTO notebook_notes").
 					WillReturnError(fmt.Errorf("connection refused"))
 				mock.ExpectRollback()
@@ -505,8 +492,8 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notes").
-					WillReturnResult(sqlmock.NewResult(10, 1))
+				mock.ExpectQuery("INSERT INTO notes").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(10)))
 				mock.ExpectCommit().WillReturnError(fmt.Errorf("commit failed"))
 			},
 			wantErr: true,
@@ -519,7 +506,7 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -569,7 +556,7 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 				mock.ExpectExec("UPDATE notes SET").
 					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "", int64(2)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
-				mock.ExpectExec("INSERT INTO notebook_notes \\(note_id, notebook_type, notebook_id, `group`, subgroup\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\)`).
 					WithArgs(int64(1), "story", "book-2", "ch1", "",
 						int64(2), "flashcard", "vocab-1", "unit1", "").
 					WillReturnResult(sqlmock.NewResult(1, 2))
@@ -606,7 +593,7 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO notebook_notes \\(note_id, notebook_type, notebook_id, `group`, subgroup\\) VALUES \\(\\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\)`).
 					WithArgs(int64(1), "story", "book-2", "ch1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				mock.ExpectCommit()
@@ -646,7 +633,7 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBNoteRepository(sqlxDB)
 			tt.setupMock(mock)
 

@@ -22,7 +22,7 @@ func TestOpen(t *testing.T) {
 			name: "creates connection with valid config",
 			cfg: config.DatabaseConfig{
 				Host:     "localhost",
-				Port:     3306,
+				Port:     5432,
 				Database: "testdb",
 				Username: "testuser",
 				Password: "testpass",
@@ -32,7 +32,7 @@ func TestOpen(t *testing.T) {
 			name: "creates connection with custom port",
 			cfg: config.DatabaseConfig{
 				Host:     "db.example.com",
-				Port:     3307,
+				Port:     5433,
 				Database: "langner",
 				Username: "admin",
 				Password: "secret",
@@ -42,7 +42,7 @@ func TestOpen(t *testing.T) {
 			name: "creates connection with pool settings",
 			cfg: config.DatabaseConfig{
 				Host:            "localhost",
-				Port:            3306,
+				Port:            5432,
 				Database:        "testdb",
 				Username:        "testuser",
 				Password:        "testpass",
@@ -55,7 +55,7 @@ func TestOpen(t *testing.T) {
 			name: "creates connection with TLS enabled",
 			cfg: config.DatabaseConfig{
 				Host:     "localhost",
-				Port:     3306,
+				Port:     5432,
 				Database: "testdb",
 				Username: "testuser",
 				Password: "testpass",
@@ -66,11 +66,11 @@ func TestOpen(t *testing.T) {
 			name: "creates connection with custom params",
 			cfg: config.DatabaseConfig{
 				Host:     "localhost",
-				Port:     3306,
+				Port:     5432,
 				Database: "testdb",
 				Username: "testuser",
 				Password: "testpass",
-				Params:   map[string]string{"charset": "utf8mb4", "loc": "UTC"},
+				Params:   map[string]string{"application_name": "langner", "sslmode": "prefer"},
 			},
 		},
 	}
@@ -82,9 +82,44 @@ func TestOpen(t *testing.T) {
 			require.NotNil(t, got)
 			defer got.Close()
 
-			assert.Equal(t, "mysql", got.DriverName())
+			assert.Equal(t, "pgx", got.DriverName())
 		})
 	}
+}
+
+func TestBuildDSN(t *testing.T) {
+	t.Run("defaults to sslmode=disable", func(t *testing.T) {
+		dsn := buildDSN(config.DatabaseConfig{
+			Host: "localhost", Port: 5432, Database: "db", Username: "u", Password: "p",
+		})
+		assert.Contains(t, dsn, "postgres://u:p@localhost:5432/db")
+		assert.Contains(t, dsn, "sslmode=disable")
+	})
+	t.Run("TLS enables sslmode=require", func(t *testing.T) {
+		dsn := buildDSN(config.DatabaseConfig{
+			Host: "h", Port: 5432, Database: "db", Username: "u", Password: "p", TLS: true,
+		})
+		assert.Contains(t, dsn, "sslmode=require")
+	})
+	t.Run("Params override sslmode", func(t *testing.T) {
+		dsn := buildDSN(config.DatabaseConfig{
+			Host: "h", Port: 5432, Database: "db", Username: "u", Password: "p",
+			Params: map[string]string{"sslmode": "verify-full"},
+		})
+		assert.Contains(t, dsn, "sslmode=verify-full")
+		assert.NotContains(t, dsn, "sslmode=disable")
+	})
+}
+
+func TestBuildMultiRowInsert(t *testing.T) {
+	t.Run("single row", func(t *testing.T) {
+		got := BuildMultiRowInsert("notes", []string{"a", "b"}, 1)
+		assert.Equal(t, "INSERT INTO notes (a, b) VALUES ($1, $2)", got)
+	})
+	t.Run("multi row", func(t *testing.T) {
+		got := BuildMultiRowInsert("notes", []string{"a", "b", "c"}, 3)
+		assert.Equal(t, "INSERT INTO notes (a, b, c) VALUES ($1, $2, $3), ($4, $5, $6), ($7, $8, $9)", got)
+	})
 }
 
 func TestRunInTx(t *testing.T) {
@@ -148,7 +183,7 @@ func TestRunInTx(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			tt.setupMock(mock)
 
 			err = RunInTx(context.Background(), sqlxDB, tt.fn)

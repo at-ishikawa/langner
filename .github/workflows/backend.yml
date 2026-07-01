@@ -47,20 +47,19 @@ jobs:
     name: Validate example configurations
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8
+      postgres:
+        image: postgres:16
         ports:
-          - 3306:3306
+          - 5432:5432
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: local
-          MYSQL_USER: user
-          MYSQL_PASSWORD: password
+          POSTGRES_DB: local
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
         options: >-
-          --health-cmd="mysqladmin ping"
+          --health-cmd="pg_isready -U user -d local"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=5
+          --health-retries=10
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -79,10 +78,10 @@ jobs:
         run: ./langner --config config.example.yml notebooks stories friends --pdf
 
       - name: Install migrate tool
-        run: go install -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
       - name: Run database migrations
-        run: migrate -source file://backend/schemas/migrations -database "mysql://user:password@tcp(localhost:3306)/local" up
+        run: migrate -source file://backend/schemas/migrations -database "postgres://user:password@localhost:5432/local?sslmode=disable" up
 
       - name: Import example data to DB
         run: ./langner migrate import-db --config config.example.yml

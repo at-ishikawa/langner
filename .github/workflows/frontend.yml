@@ -65,21 +65,21 @@ jobs:
     name: Frontend E2E Test
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8.0
+      postgres:
+        image: postgres:16
         env:
-          MYSQL_ROOT_PASSWORD: password
+          POSTGRES_PASSWORD: password
         ports:
-          - 3306:3306
+          - 5432:5432
         options: >-
-          --health-cmd="mysqladmin ping --silent"
+          --health-cmd="pg_isready -U postgres"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=10
     env:
       LANGNER_TEST_DB_HOST: 127.0.0.1
-      LANGNER_TEST_DB_PORT: 3306
-      LANGNER_TEST_DB_USER: root
+      LANGNER_TEST_DB_PORT: 5432
+      LANGNER_TEST_DB_USER: postgres
       LANGNER_TEST_DB_PASSWORD: password
       LANGNER_TEST_DB_NAME: langner_e2e
       LANGNER_TEST_CONFIG: config.e2e.yml

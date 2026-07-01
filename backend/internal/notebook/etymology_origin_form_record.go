@@ -35,7 +35,7 @@ type EtymologyOriginFormRepository interface {
 	BatchDelete(ctx context.Context, ids []int64) error
 }
 
-// DBEtymologyOriginFormRepository is a MySQL-backed implementation.
+// DBEtymologyOriginFormRepository is a PostgreSQL-backed implementation.
 type DBEtymologyOriginFormRepository struct {
 	db *sqlx.DB
 }
@@ -98,7 +98,7 @@ func (r *DBEtymologyOriginFormRepository) BatchUpdate(ctx context.Context, recor
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for _, rec := range records {
 			if _, err := tx.ExecContext(ctx,
-				`UPDATE etymology_origin_forms SET note = ?, sort_order = ? WHERE id = ?`,
+				`UPDATE etymology_origin_forms SET note = $1, sort_order = $2 WHERE id = $3`,
 				rec.Note, rec.SortOrder, rec.ID,
 			); err != nil {
 				return fmt.Errorf("update etymology_origin_form %d: %w", rec.ID, err)

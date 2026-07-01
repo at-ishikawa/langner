@@ -68,7 +68,7 @@ type ConceptRelationRepository interface {
 	BatchDeleteRelations(ctx context.Context, ids []int64) error
 }
 
-// DBSemanticConceptRepository is a MySQL-backed implementation.
+// DBSemanticConceptRepository is a PostgreSQL-backed implementation.
 type DBSemanticConceptRepository struct {
 	db *sqlx.DB
 }
@@ -83,7 +83,7 @@ func (r *DBSemanticConceptRepository) ListSemanticConceptsByNotebook(ctx context
 	var rows []SemanticConceptRecord
 	if err := r.db.SelectContext(ctx, &rows,
 		`SELECT id, notebook_id, concept_key, meaning, note, created_at, updated_at
-		 FROM semantic_concepts WHERE notebook_id = ?`, notebookID,
+		 FROM semantic_concepts WHERE notebook_id = $1`, notebookID,
 	); err != nil {
 		return nil, fmt.Errorf("select semantic_concepts: %w", err)
 	}
@@ -153,7 +153,7 @@ func (r *DBSemanticConceptRepository) BatchUpdateConcepts(ctx context.Context, r
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for _, rec := range records {
 			if _, err := tx.ExecContext(ctx,
-				`UPDATE semantic_concepts SET meaning = ?, note = ? WHERE id = ?`,
+				`UPDATE semantic_concepts SET meaning = $1, note = $2 WHERE id = $3`,
 				rec.Meaning, rec.Note, rec.ID,
 			); err != nil {
 				return fmt.Errorf("update semantic_concept %d: %w", rec.ID, err)
@@ -217,7 +217,7 @@ func semanticConceptKey(notebookID, conceptKey string) string {
 	return notebookID + "\x00" + conceptKey
 }
 
-// DBConceptRelationRepository is a MySQL-backed implementation.
+// DBConceptRelationRepository is a PostgreSQL-backed implementation.
 type DBConceptRelationRepository struct {
 	db *sqlx.DB
 }
@@ -232,7 +232,7 @@ func (r *DBConceptRelationRepository) ListConceptRelationsByNotebook(ctx context
 	var rows []ConceptRelationRecord
 	if err := r.db.SelectContext(ctx, &rows,
 		`SELECT id, notebook_id, type, from_concept_id, to_concept_id, is_directed, created_at, updated_at
-		 FROM concept_relations WHERE notebook_id = ?`, notebookID,
+		 FROM concept_relations WHERE notebook_id = $1`, notebookID,
 	); err != nil {
 		return nil, fmt.Errorf("select concept_relations: %w", err)
 	}
