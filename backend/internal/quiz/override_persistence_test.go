@@ -271,6 +271,66 @@ func TestService_OverrideAnswer_Freeform_KeepsLearnedAndReverseLogsInSync(t *tes
 		"override should have flipped misunderstood to a correct status")
 }
 
+// UndoOverrideAnswer restores the log to the caller-supplied
+// pre-override snapshot on disk — this is the path the frontend's
+// Analytics "Undo" button takes after a Mark-as-Correct. Without
+// this, YAML.UpdateLog silently no-op'd when MirrorValues was set
+// (Undo passes MirrorValues, not MarkCorrect), leaving the log stuck
+// in the overridden state.
+func TestService_UndoOverrideAnswer_RestoresOriginalStateOnDisk(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	learningDir := t.TempDir()
+
+	// Seed with the OVERRIDDEN state: user previously marked this correct.
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-story.yml"), []byte(`- metadata:
+    notebook_id: test-story
+    title: "Chapter One"
+  scenes:
+    - metadata:
+        title: "Opening"
+      expressions:
+        - expression: "preposterous"
+          learned_logs:
+            - status: understood
+              learned_at: "2026-06-29T10:00:00Z"
+              quality: 4
+              quiz_type: notebook
+              interval_days: 3
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{t.TempDir()},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	info := CardInfo{
+		NotebookName:         "test-story",
+		StoryTitle:           "Chapter One",
+		SceneTitle:           "Opening",
+		Expression:           "preposterous",
+		LearnedAt:            "2026-06-29",
+		OriginalQuality:      1,
+		OriginalStatus:       "misunderstood",
+		OriginalIntervalDays: 1,
+	}
+
+	correct, _, err := svc.UndoOverrideAnswer(info, notebook.QuizTypeNotebook)
+	require.NoError(t, err)
+	assert.False(t, correct, "restored log has quality 1 < 3, so undo reports correct=false")
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, "test-story.yml"))
+	require.NoError(t, err)
+	var got []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	logs := got[0].Scenes[0].Expressions[0].LearnedLogs
+	require.Len(t, logs, 1)
+	assert.Equal(t, notebook.LearnedStatus("misunderstood"), logs[0].Status,
+		"Undo must restore status to the pre-override snapshot on disk")
+	assert.Equal(t, 1, logs[0].Quality)
+	assert.Equal(t, 1, logs[0].IntervalDays)
+}
+
 // Flashcard variant: top-level Expressions (no Scenes). This is the
 // shape the user's vocabulary-book notebooks use.
 func TestService_OverrideAnswer_PersistsCorrectionToYAML_StandardFlashcard(t *testing.T) {

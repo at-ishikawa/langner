@@ -427,10 +427,17 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	return nil
 }
 
-// UpdateLog rewrites the YAML log entry identified by the lookup keys
-// according to in.MarkCorrect, using LearningHistoryUpdater so the
-// calculator recomputes interval_days and (for freeform variants)
-// both halves of the paired log lists stay in sync.
+// UpdateLog rewrites the YAML log entry identified by the lookup keys.
+// Two modes:
+//
+//   - in.MirrorValues != nil (Undo path): restore the log to the
+//     captured pre-override snapshot exactly. Delegates to
+//     updater.UndoOverrideLog so status/quality/interval_days come
+//     back byte-identical.
+//   - otherwise (fresh Override path): apply in.MarkCorrect via
+//     updater.OverrideLog, which recomputes interval_days through
+//     the calculator and, for freeform variants, syncs both halves
+//     of the paired log lists.
 func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput) (UpdateLogResult, error) {
 	dir := r.directory
 	histories, err := notebook.NewLearningHistories(dir)
@@ -439,15 +446,39 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 	}
 	updater := notebook.NewLearningHistoryUpdater(histories[in.NotebookName], r.calculator)
 
-	res := updater.OverrideLog(notebook.OverrideLogInput{
-		Expression:         in.Expression,
-		OriginalExpression: in.OriginalExpression,
-		QuizType:           notebook.QuizType(in.QuizType),
-		LearnedAt:          formatLearnedAt(in.LearnedAt),
-		MarkCorrect:        in.MarkCorrect,
-	})
-	if !res.Found {
-		return UpdateLogResult{}, nil
+	var res notebook.OverrideLogResult
+	if in.MirrorValues != nil {
+		undo := updater.UndoOverrideLog(notebook.UndoOverrideLogInput{
+			Expression:           in.Expression,
+			OriginalExpression:   in.OriginalExpression,
+			QuizType:             notebook.QuizType(in.QuizType),
+			LearnedAt:            formatLearnedAt(in.LearnedAt),
+			OriginalQuality:      in.MirrorValues.Quality,
+			OriginalStatus:       in.MirrorValues.Status,
+			OriginalIntervalDays: in.MirrorValues.IntervalDays,
+		})
+		if !undo.Found {
+			return UpdateLogResult{}, nil
+		}
+		// UndoOverrideLog doesn't carry the pre-restore values (there's
+		// no callsite that needs them), so we surface the caller-
+		// supplied MirrorValues as the "new" state and leave Original*
+		// zeroed for this branch.
+		res = notebook.OverrideLogResult{
+			NewNextReviewDate: undo.NewNextReviewDate,
+			Found:             true,
+		}
+	} else {
+		res = updater.OverrideLog(notebook.OverrideLogInput{
+			Expression:         in.Expression,
+			OriginalExpression: in.OriginalExpression,
+			QuizType:           notebook.QuizType(in.QuizType),
+			LearnedAt:          formatLearnedAt(in.LearnedAt),
+			MarkCorrect:        in.MarkCorrect,
+		})
+		if !res.Found {
+			return UpdateLogResult{}, nil
+		}
 	}
 
 	notePath := filepath.Join(dir, in.NotebookName+".yml")
