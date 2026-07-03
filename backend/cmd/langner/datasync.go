@@ -173,6 +173,16 @@ modifying the database, use "migrate validate-db" instead.`,
 			}
 			defer func() { _ = db.Close() }()
 
+			// Auto-apply schema migrations before clearing so the TRUNCATE
+			// has tables to target. Without this, sync-db against a
+			// freshly-created database fails with "relation ... does not
+			// exist" — the user has to run migrations by hand first, which
+			// import-db avoids by running them itself. Same rationale as
+			// import-db's inline migration step.
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
+
 			fmt.Println("Step 1: Clearing every persisted-data table...")
 			if err := clearAllDataTables(ctx, db); err != nil {
 				return err

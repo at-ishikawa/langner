@@ -97,3 +97,26 @@ jobs:
         run: ./langner migrate validate-db --config config.example.yml
         env:
           DB_PASSWORD: password
+
+      # Exercise sync-db against the live Postgres so its destructive
+      # clear+reimport path is covered by CI. Catches regressions like
+      # the MySQL-era SET foreign_key_checks that broke on PG, or a
+      # future TRUNCATE against tables that a migration forgot to
+      # create.
+      - name: Run langner migrate sync-db
+        run: ./langner migrate sync-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
+
+      # And once more against a table-less schema — this is what a
+      # fresh Postgres looks like before migrations run. Catches the
+      # class of bug where sync-db assumed tables already existed.
+      # DROP + CREATE SCHEMA public wipes every table and sequence in
+      # one shot without needing to drop the whole database.
+      - name: Drop all tables so the database is empty
+        run: PGPASSWORD=password psql -h localhost -U user -d local -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+      - name: Run langner migrate sync-db on empty DB
+        run: ./langner migrate sync-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
