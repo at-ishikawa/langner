@@ -403,7 +403,7 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 				mock.ExpectExec(`INSERT INTO note_references \(note_id, link, description, sort_order\) VALUES \(\$1, \$2, \$3, \$4\)`).
 					WithArgs(int64(10), "https://example.com/ref", "reference", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\) ON CONFLICT \(note_id, notebook_type, notebook_id, "group"\) DO NOTHING`).
+				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\)`).
 					WithArgs(int64(10), "story", "book-1", "ch1", "scene1",
 						int64(11), "flashcard", "vocab-1", "unit1", "").
 					WillReturnResult(sqlmock.NewResult(1, 2))
@@ -556,7 +556,7 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 				mock.ExpectExec("UPDATE notes SET").
 					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "", int64(2)).
 					WillReturnResult(sqlmock.NewResult(0, 1))
-				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\) ON CONFLICT \(note_id, notebook_type, notebook_id, "group"\) DO NOTHING`).
+				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\)`).
 					WithArgs(int64(1), "story", "book-2", "ch1", "",
 						int64(2), "flashcard", "vocab-1", "unit1", "").
 					WillReturnResult(sqlmock.NewResult(1, 2))
@@ -593,7 +593,7 @@ func TestDBNoteRepository_BatchUpdate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\) ON CONFLICT \(note_id, notebook_type, notebook_id, "group"\) DO NOTHING`).
+				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\)`).
 					WithArgs(int64(1), "story", "book-2", "ch1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 				mock.ExpectCommit()

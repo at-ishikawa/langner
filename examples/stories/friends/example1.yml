@@ -43,6 +43,16 @@
           quote: Could you please {{ keep it down }}? I'm trying to concentrate over here.
         - speaker: Monica
           quote: Don't {{ put off }} calling him back, it could be a great opportunity.
+        # "break the ice" also appeared in the first scene of this
+        # episode. Two notebook_notes rows share (note_id,
+        # notebook_type, notebook_id, group="Friends S01E01") but
+        # differ on subgroup. The DB unique key covers only the four
+        # leading columns, so sync-db (clear-and-reimport) fails with
+        # a duplicate-key constraint violation unless the batch
+        # insert uses ON CONFLICT DO NOTHING. Keeping this line here
+        # is the regression guard.
+        - speaker: Rachel
+          quote: The team meeting went well once I found a way to {{ break the ice }} with them.
       definitions:
         - expression: ran into
           definition: run into
@@ -51,6 +61,8 @@
           meaning: To be quieter or reduce the noise level
         - expression: put off
           meaning: To delay or postpone something
+        - expression: break the ice
+          meaning: To initiate conversation or relieve tension in a social situation
     - scene: Ross's Apartment - Late Night
       conversations:
         - speaker: Ross

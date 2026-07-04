@@ -123,17 +123,7 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 		if nnCount > 0 {
-			// The DB unique constraint on notebook_notes is
-			// (note_id, notebook_type, notebook_id, group) — four fields,
-			// no subgroup. The importer's in-memory dedup keys by all
-			// five, so a note appearing in multiple scenes of the same
-			// story emits multiple candidate rows that collide on the
-			// four-field DB key. ON CONFLICT DO NOTHING matches the
-			// schema's intent (one row per notebook×group, subgroup is
-			// the first scene that lands) without failing the whole
-			// import.
-			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, nnCount) +
-				` ON CONFLICT (note_id, notebook_type, notebook_id, "group") DO NOTHING`
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, nnCount)
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
@@ -234,10 +224,7 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 			for _, nn := range newNotebookNotes {
 				nnArgs = append(nnArgs, nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup)
 			}
-			// See BatchCreate for why we skip duplicates on the 4-field
-			// unique key instead of failing.
-			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, len(newNotebookNotes)) +
-				` ON CONFLICT (note_id, notebook_type, notebook_id, "group") DO NOTHING`
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, len(newNotebookNotes))
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
