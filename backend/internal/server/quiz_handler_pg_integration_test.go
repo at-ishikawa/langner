@@ -126,9 +126,16 @@ notebooks:
       examples:
         - "It was pure serendipity that they met."
 `), 0644))
+	// loadFlashcardCards hard-codes StoryTitle="flashcards" on the
+	// read side, and SaveResult / UpdateOrCreateExpressionWithQuality
+	// use that same value on the write side. Seed the learning
+	// history with title="flashcards" so the SubmitAnswer's log
+	// appends to this block instead of forking a new one — otherwise
+	// FindExpressionByAnyName returns the wrong block's expression
+	// during OverrideAnswer and the DB update silently no-ops.
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-vocab.yml"), []byte(`- metadata:
     notebook_id: test-vocab
-    title: "Basic Words"
+    title: "flashcards"
     type: "flashcard"
   expressions:
     - expression: "serendipity"
