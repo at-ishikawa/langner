@@ -98,6 +98,20 @@ jobs:
         env:
           DB_PASSWORD: password
 
+      # Exercise the quiz-answer write path against live Postgres. The
+      # unit tests are sqlmock-based and can't verify actual constraint
+      # semantics; without this, a quiz answer whose note already
+      # exists in the DB (which is what happens once sync-db has
+      # imported data) can silently hit a unique-key violation like
+      # the one the user reported on standard vocabulary. The
+      # integration test uses its own throwaway schema so it can run
+      # alongside the other examples.
+      - name: Integration test — DBLearningRepository against live Postgres
+        working-directory: backend
+        run: go test -count=1 -run TestDBLearningRepository_Create_LivePostgres_Integration ./internal/learning/
+        env:
+          LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
+
       # Exercise sync-db against the live Postgres so its destructive
       # clear+reimport path is covered by CI. Catches regressions like
       # the MySQL-era SET foreign_key_checks that broke on PG, or a

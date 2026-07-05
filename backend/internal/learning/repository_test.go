@@ -98,6 +98,50 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// Quiz-answer path: NoteID is 0 and Expression is set, so
+			// ensureNoteExists gets called. When the note doesn't
+			// exist yet, the UPSERT inserts it and RETURNING gives us
+			// the new id (61); the log then lands with that id.
+			name: "quiz answer without NoteID upserts note then writes log",
+			log: &LearningLog{
+				Expression: "serendipity", OriginalExpression: "",
+				Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500,
+				QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1",
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning\) VALUES \(\$1, \$2, \$3\)\s+ON CONFLICT \("usage", entry\) DO UPDATE SET "usage" = EXCLUDED\."usage"\s+RETURNING id`).
+					WithArgs("serendipity", "serendipity", "").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(61)))
+				mock.ExpectExec("INSERT INTO learning_logs").
+					WithArgs(int64(61), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
+		{
+			// The bug the user hit: the note already exists in the DB
+			// (imported via sync-db), so the previous SELECT-then-
+			// INSERT path would see SELECT return ErrNoRows (or race
+			// with another writer) and then hit the (usage, entry)
+			// unique constraint on the follow-up INSERT. The new
+			// ON CONFLICT DO UPDATE ... RETURNING atomically hands
+			// back the existing row's id — regression lock so a
+			// refactor can't reintroduce the race.
+			name: "quiz answer when note already exists returns existing id via ON CONFLICT",
+			log: &LearningLog{
+				Expression: "cardiology", OriginalExpression: "",
+				Status: "misunderstood", LearnedAt: now, Quality: 1, ResponseTimeMs: 3000,
+				QuizType: "notebook", IntervalDays: 1, SourceNotebookID: "wpme",
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`INSERT INTO notes .* ON CONFLICT \("usage", entry\) DO UPDATE .* RETURNING id`).
+					WithArgs("cardiology", "cardiology", "").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+				mock.ExpectExec("INSERT INTO learning_logs").
+					WithArgs(int64(42), "misunderstood", now, 1, 3000, "notebook", 1, "wpme", "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
 	}
 
 	for _, tt := range tests {

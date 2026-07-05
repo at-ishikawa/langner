@@ -117,6 +117,18 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 
 // ensureNoteExists finds an existing note by usage/entry or creates one.
 // Uses Definition as entry if set, otherwise Expression. Stores Expression as usage.
+//
+// Uses INSERT ... ON CONFLICT DO UPDATE ... RETURNING as a race-free
+// upsert. The previous SELECT-then-INSERT pattern lost a race the user
+// hit in production: a quiz answer whose note already existed in the
+// DB slipped past the SELECT (either because SELECT scan failed
+// silently, or two Create calls interleaved between one another's
+// SELECT and INSERT) and the follow-up INSERT then violated the
+// (usage, entry) unique constraint. ON CONFLICT DO UPDATE lets us
+// atomically hand back the existing row's id — the no-op SET
+// (setting a column to its own EXCLUDED value) is the standard
+// Postgres idiom for "RETURNING the row whether it was inserted or
+// already existed".
 func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *LearningLog) (int64, error) {
 	entry := log.OriginalExpression
 	if entry == "" {
@@ -124,17 +136,11 @@ func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *Learni
 	}
 	usage := log.Expression
 
-	// Try to find existing note
 	var noteID int64
-	err := r.db.GetContext(ctx, &noteID, `SELECT id FROM notes WHERE "usage" = $1 AND entry = $2`, usage, entry)
-	if err == nil {
-		return noteID, nil
-	}
-
-	// Create the note
-	if err := r.db.GetContext(ctx, &noteID,
-		`INSERT INTO notes ("usage", entry, meaning) VALUES ($1, $2, $3) RETURNING id`,
-		usage, entry, ""); err != nil {
+	if err := r.db.GetContext(ctx, &noteID, `
+		INSERT INTO notes ("usage", entry, meaning) VALUES ($1, $2, $3)
+		ON CONFLICT ("usage", entry) DO UPDATE SET "usage" = EXCLUDED."usage"
+		RETURNING id`, usage, entry, ""); err != nil {
 		return 0, fmt.Errorf("insert note: %w", err)
 	}
 	return noteID, nil
