@@ -98,17 +98,23 @@ jobs:
         env:
           DB_PASSWORD: password
 
-      # Exercise the quiz-answer write path against live Postgres. The
-      # unit tests are sqlmock-based and can't verify actual constraint
-      # semantics; without this, a quiz answer whose note already
-      # exists in the DB (which is what happens once sync-db has
-      # imported data) can silently hit a unique-key violation like
-      # the one the user reported on standard vocabulary. The
-      # integration test uses its own throwaway schema so it can run
-      # alongside the other examples.
-      - name: Integration test — DBLearningRepository against live Postgres
+      # Live-Postgres RPC-level coverage: every quiz-type Submit path
+      # runs against the real DB with MultiLearningRepository
+      # (YAML+DB), matching production wiring. Repeating the same
+      # answer twice reproduces the ensureNoteExists race that
+      # silently hit "duplicate key value violates unique constraint
+      # notes_usage_entry_key" in the user's real setup. Each subtest
+      # resets its own schema so ordering with the other examples-
+      # config steps below doesn't matter.
+      #
+      # This is the coverage that should have existed from the start
+      # of the Postgres migration. sqlmock unit tests match SQL
+      # patterns but can't verify actual Postgres constraint
+      # semantics; import-db CI exercises a different code path
+      # (BatchCreate, not Create+ensureNoteExists) than quiz answers.
+      - name: Integration tests — quiz RPCs + repository against live Postgres
         working-directory: backend
-        run: go test -count=1 -run TestDBLearningRepository_Create_LivePostgres_Integration ./internal/learning/
+        run: go test -count=1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/
         env:
           LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
 
