@@ -356,9 +356,20 @@ func buildExpression(
 			breakdownLogs = append(breakdownLogs, log)
 		case string(notebook.QuizTypeEtymologyReverse): // stored as "etymology_assembly"
 			assemblyLogs = append(assemblyLogs, log)
+		case string(notebook.QuizTypeEtymologyFreeform):
+			// Freeform is one event that exercises both directions of
+			// recall, and AddRecordWithQualityForEtymology mirrors it
+			// into both YAML slots on the write side. Export has to
+			// mirror the same way so the round-trip matches — landing
+			// it in learned_logs (the previous default behavior)
+			// silently inflated LearnedLogCount by every freeform
+			// event, which validate-db surfaced as a +2 delta on
+			// short polysemous roots like "alter".
+			breakdownLogs = append(breakdownLogs, log)
+			assemblyLogs = append(assemblyLogs, log)
 		default:
-			// notebook (standard), freeform, etymology_freeform — all
-			// land in learned_logs in the YAML convention.
+			// notebook (standard) and freeform (vocabulary, not
+			// etymology) land in learned_logs in the YAML convention.
 			learnedLogs = append(learnedLogs, log)
 		}
 	}
