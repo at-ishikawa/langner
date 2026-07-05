@@ -183,12 +183,41 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 // recomputed next-review date so the handler can hand them back to the
 // frontend's Undo workflow.
 //
-// Lookup matches by exact learned_at when LearnedAt is non-zero; the
-// frontend always sends the YYYY-MM-DD or RFC3339 string of the
-// specific log the user clicked, so a same-day match is sufficient. If
-// no row matches, the call returns Found=false (no SQL no-op error).
+// Note-id resolution: the frontend can't reliably know the DB's
+// notes.id (StartQuiz returns handler-assigned sequential card IDs,
+// not DB IDs). So we resolve the DB note first from Expression /
+// OriginalExpression, then look up the matching log by (note_id,
+// quiz_type, learned_at). This mirrors what ensureNoteExists does on
+// the write side and keeps the frontend contract "send whatever
+// card.noteId you got back from Start*Quiz" honest.
+//
+// If either the note or the log can't be found the call returns
+// Found=false with no error — MultiLearningRepository treats that as
+// a soft no-op so the YAML write's success isn't unwound.
 func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput) (UpdateLogResult, error) {
-	if in.NoteID == 0 || in.QuizType == "" || in.LearnedAt.IsZero() {
+	if in.QuizType == "" || in.LearnedAt.IsZero() {
+		return UpdateLogResult{}, nil
+	}
+
+	// Resolve DB note id from expression/originalExpression. Fall
+	// back to in.NoteID only when neither lookup key is present, so
+	// callers that already know the real DB id (rare, but keeps the
+	// API forward-compatible) can still use it.
+	noteID := int64(0)
+	if in.Expression != "" {
+		entry := in.OriginalExpression
+		if entry == "" {
+			entry = in.Expression
+		}
+		if err := r.db.GetContext(ctx, &noteID,
+			`SELECT id FROM notes WHERE "usage" = $1 AND entry = $2`,
+			in.Expression, entry); err != nil {
+			// No note matches — soft no-op.
+			return UpdateLogResult{}, nil
+		}
+	} else if in.NoteID > 0 {
+		noteID = in.NoteID
+	} else {
 		return UpdateLogResult{}, nil
 	}
 
@@ -208,7 +237,7 @@ func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput)
 		FROM learning_logs
 		WHERE note_id = $1 AND quiz_type = $2 AND DATE(learned_at) = $3::date
 		ORDER BY learned_at DESC LIMIT 1`,
-		in.NoteID, in.QuizType, in.LearnedAt.Format("2006-01-02"))
+		noteID, in.QuizType, in.LearnedAt.Format("2006-01-02"))
 	if err != nil {
 		// No row matches — treat as soft no-op so callers in
 		// MultiLearningRepository don't fail the whole override when
