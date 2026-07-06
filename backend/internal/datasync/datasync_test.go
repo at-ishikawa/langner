@@ -837,6 +837,79 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 			},
 		},
 		{
+			// An etymology_freeform answer is written to both
+			// EtymologyBreakdownLogs AND EtymologyAssemblyLogs on the
+			// YAML side (AddRecordWithQualityForEtymology mirrors it).
+			// The importer must recognise the assembly copy as a
+			// duplicate of the breakdown copy and insert only one DB
+			// row per event. Without this, sync-db doubles every
+			// freeform log and the round-trip validate-db reports +2
+			// per short polysemous root like "alter" — which is the
+			// exact failure the user hit in production.
+			name: "etymology_freeform log is inserted once even when mirrored to both slots",
+			setup: func(learningSource *mock_datasync.MockLearningSource, noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Entry: "alter", NotebookNotes: []notebook.NotebookNote{{NotebookID: "wpme"}}},
+				}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
+				learningSource.EXPECT().FindByNotebookID("wpme").Return([]notebook.LearningHistoryExpression{
+					{
+						Expression: "alter",
+						EtymologyBreakdownLogs: []notebook.LearningRecord{
+							{Status: "understood", LearnedAt: notebook.NewDate(baseTime), Quality: 4, ResponseTimeMs: 1500, QuizType: string(notebook.QuizTypeEtymologyFreeform), IntervalDays: 7},
+						},
+						EtymologyAssemblyLogs: []notebook.LearningRecord{
+							{Status: "understood", LearnedAt: notebook.NewDate(baseTime), Quality: 4, ResponseTimeMs: 1500, QuizType: string(notebook.QuizTypeEtymologyFreeform), IntervalDays: 7},
+						},
+					},
+				}, nil)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 1, "one freeform event must not be inserted twice")
+						assert.Equal(t, string(notebook.QuizTypeEtymologyFreeform), logs[0].QuizType)
+						return nil
+					})
+			},
+			want: &ImportLearningLogsResult{
+				LearningNew: 1,
+			},
+		},
+		{
+			// A pure etymology_reverse log in the assembly slot is
+			// unrelated to freeform and must still get imported —
+			// confirming the dedup is scoped to freeform.
+			name: "etymology_reverse assembly log is not filtered out by freeform dedup",
+			setup: func(learningSource *mock_datasync.MockLearningSource, noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Entry: "alter", NotebookNotes: []notebook.NotebookNote{{NotebookID: "wpme"}}},
+				}, nil)
+				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
+				learningSource.EXPECT().FindByNotebookID("wpme").Return([]notebook.LearningHistoryExpression{
+					{
+						Expression: "alter",
+						EtymologyBreakdownLogs: []notebook.LearningRecord{
+							{Status: "understood", LearnedAt: notebook.NewDate(baseTime), Quality: 4, ResponseTimeMs: 1500, QuizType: string(notebook.QuizTypeEtymologyFreeform), IntervalDays: 7},
+						},
+						EtymologyAssemblyLogs: []notebook.LearningRecord{
+							{Status: "understood", LearnedAt: notebook.NewDate(baseTime), Quality: 4, ResponseTimeMs: 1500, QuizType: string(notebook.QuizTypeEtymologyFreeform), IntervalDays: 7},
+							{Status: "misunderstood", LearnedAt: notebook.NewDate(baseTime.Add(24 * time.Hour)), Quality: 1, ResponseTimeMs: 3000, QuizType: string(notebook.QuizTypeEtymologyReverse), IntervalDays: 1},
+						},
+					},
+				}, nil)
+				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
+						require.Len(t, logs, 2, "freeform deduped, pure reverse kept")
+						types := []string{logs[0].QuizType, logs[1].QuizType}
+						assert.Contains(t, types, string(notebook.QuizTypeEtymologyFreeform))
+						assert.Contains(t, types, string(notebook.QuizTypeEtymologyReverse))
+						return nil
+					})
+			},
+			want: &ImportLearningLogsResult{
+				LearningNew: 2,
+			},
+		},
+		{
 			name: "duplicate reverse log is skipped",
 			setup: func(learningSource *mock_datasync.MockLearningSource, noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{

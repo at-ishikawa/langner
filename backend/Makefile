@@ -48,7 +48,7 @@ db-import:
 
 .PHONY: install-tools
 install-tools:
-	$(GO) install -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+	$(GO) install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 	$(GO) install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 	$(GO) install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest

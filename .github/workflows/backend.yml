@@ -47,20 +47,19 @@ jobs:
     name: Validate example configurations
     runs-on: ubuntu-latest
     services:
-      mysql:
-        image: mysql:8
+      postgres:
+        image: postgres:16
         ports:
-          - 3306:3306
+          - 5432:5432
         env:
-          MYSQL_ROOT_PASSWORD: password
-          MYSQL_DATABASE: local
-          MYSQL_USER: user
-          MYSQL_PASSWORD: password
+          POSTGRES_DB: local
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
         options: >-
-          --health-cmd="mysqladmin ping"
+          --health-cmd="pg_isready -U user -d local"
           --health-interval=10s
           --health-timeout=5s
-          --health-retries=5
+          --health-retries=10
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -79,10 +78,10 @@ jobs:
         run: ./langner --config config.example.yml notebooks stories friends --pdf
 
       - name: Install migrate tool
-        run: go install -tags 'mysql' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+        run: go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
 
       - name: Run database migrations
-        run: migrate -source file://backend/schemas/migrations -database "mysql://user:password@tcp(localhost:3306)/local" up
+        run: migrate -source file://backend/schemas/migrations -database "postgres://user:password@localhost:5432/local?sslmode=disable" up
 
       - name: Import example data to DB
         run: ./langner migrate import-db --config config.example.yml
@@ -96,5 +95,48 @@ jobs:
 
       - name: Run langner migrate validate-db
         run: ./langner migrate validate-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
+
+      # Live-Postgres RPC-level coverage: every quiz-type Submit path
+      # runs against the real DB with MultiLearningRepository
+      # (YAML+DB), matching production wiring. Repeating the same
+      # answer twice reproduces the ensureNoteExists race that
+      # silently hit "duplicate key value violates unique constraint
+      # notes_usage_entry_key" in the user's real setup. Each subtest
+      # resets its own schema so ordering with the other examples-
+      # config steps below doesn't matter.
+      #
+      # This is the coverage that should have existed from the start
+      # of the Postgres migration. sqlmock unit tests match SQL
+      # patterns but can't verify actual Postgres constraint
+      # semantics; import-db CI exercises a different code path
+      # (BatchCreate, not Create+ensureNoteExists) than quiz answers.
+      - name: Integration tests — quiz RPCs + repository against live Postgres
+        working-directory: backend
+        run: go test -count=1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/
+        env:
+          LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
+
+      # Exercise sync-db against the live Postgres so its destructive
+      # clear+reimport path is covered by CI. Catches regressions like
+      # the MySQL-era SET foreign_key_checks that broke on PG, or a
+      # future TRUNCATE against tables that a migration forgot to
+      # create.
+      - name: Run langner migrate sync-db
+        run: ./langner migrate sync-db --config config.example.yml
+        env:
+          DB_PASSWORD: password
+
+      # And once more against a table-less schema — this is what a
+      # fresh Postgres looks like before migrations run. Catches the
+      # class of bug where sync-db assumed tables already existed.
+      # DROP + CREATE SCHEMA public wipes every table and sequence in
+      # one shot without needing to drop the whole database.
+      - name: Drop all tables so the database is empty
+        run: PGPASSWORD=password psql -h localhost -U user -d local -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+      - name: Run langner migrate sync-db on empty DB
+        run: ./langner migrate sync-db --config config.example.yml
         env:
           DB_PASSWORD: password

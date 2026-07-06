@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
@@ -171,6 +172,16 @@ modifying the database, use "migrate validate-db" instead.`,
 				return err
 			}
 			defer func() { _ = db.Close() }()
+
+			// Auto-apply schema migrations before clearing so the TRUNCATE
+			// has tables to target. Without this, sync-db against a
+			// freshly-created database fails with "relation ... does not
+			// exist" — the user has to run migrations by hand first, which
+			// import-db avoids by running them itself. Same rationale as
+			// import-db's inline migration step.
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
 
 			fmt.Println("Step 1: Clearing every persisted-data table...")
 			if err := clearAllDataTables(ctx, db); err != nil {
@@ -414,28 +425,19 @@ func dataTablesInDeletionOrder() []string {
 	}
 }
 
-// clearAllDataTables wipes every persisted-data table on a sticky
-// connection with FOREIGN_KEY_CHECKS off. The SET is per-session, so
-// running it on a borrowed *sqlx.DB (which pools connections) would
-// leak: subsequent statements could land on a different connection
-// that still has FK checks enabled. Pinning a single connection via
-// db.Conn keeps the SET effective for the lifetime of the clear.
+// clearAllDataTables wipes every persisted-data table in one
+// TRUNCATE. CASCADE truncates dependent-referenced rows so the FK
+// graph doesn't have to be walked in a specific order; RESTART
+// IDENTITY resets the BIGSERIAL sequences so re-imported rows get
+// the same IDs a fresh migration would assign. This replaces the
+// MySQL-era FOREIGN_KEY_CHECKS=0 dance — Postgres has no session
+// switch, and TRUNCATE ... CASCADE achieves the same result without
+// the sticky-connection ceremony.
 func clearAllDataTables(ctx context.Context, db *sqlx.DB) error {
-	conn, err := db.Conn(ctx)
-	if err != nil {
-		return fmt.Errorf("acquire connection: %w", err)
-	}
-	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 0"); err != nil {
-		return fmt.Errorf("disable foreign_key_checks: %w", err)
-	}
-	for _, table := range dataTablesInDeletionOrder() {
-		if _, err := conn.ExecContext(ctx, "DELETE FROM "+table); err != nil {
-			return fmt.Errorf("clear table %s: %w", table, err)
-		}
-	}
-	if _, err := conn.ExecContext(ctx, "SET foreign_key_checks = 1"); err != nil {
-		return fmt.Errorf("re-enable foreign_key_checks: %w", err)
+	tables := dataTablesInDeletionOrder()
+	sql := "TRUNCATE " + strings.Join(tables, ", ") + " RESTART IDENTITY CASCADE"
+	if _, err := db.ExecContext(ctx, sql); err != nil {
+		return fmt.Errorf("truncate data tables: %w", err)
 	}
 	return nil
 }

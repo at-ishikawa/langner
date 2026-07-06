@@ -1,6 +1,6 @@
 OPENAI_API_KEY ?=
 API_BASE_URL ?= http://localhost:8080
-DATABASE_URL ?= mysql://user:password@tcp(localhost:3306)/local?multiStatements=true
+DATABASE_URL ?= postgres://user:password@localhost:5432/local?sslmode=disable
 
 .PHONY: pre-commit
 pre-commit: generate validate test

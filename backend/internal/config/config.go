@@ -162,7 +162,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")
-	v.SetDefault("database.port", 3306)
+	v.SetDefault("database.port", 5432)
 	v.SetDefault("database.database", "local")
 	v.SetDefault("database.username", "user")
 	v.SetDefault("server.port", 8080)

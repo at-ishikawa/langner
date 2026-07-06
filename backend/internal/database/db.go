@@ -6,36 +6,25 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/go-sql-driver/mysql"
+	_ "github.com/jackc/pgx/v5/stdlib" // register the pgx driver under the name "pgx"
 	migrate "github.com/golang-migrate/migrate/v4"
-	migratemysql "github.com/golang-migrate/migrate/v4/database/mysql"
+	migratepgx "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"github.com/jmoiron/sqlx"
 
 	"github.com/at-ishikawa/langner/internal/config"
 )
 
-// Open opens a MySQL connection using the provided config.
+// Open opens a PostgreSQL connection using the provided config.
 func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
-	mysqlCfg := mysql.NewConfig()
-	mysqlCfg.User = cfg.Username
-	mysqlCfg.Passwd = cfg.Password
-	mysqlCfg.Net = "tcp"
-	mysqlCfg.Addr = fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
-	mysqlCfg.DBName = cfg.Database
-	mysqlCfg.ParseTime = true
-	mysqlCfg.MultiStatements = true
-	if cfg.TLS {
-		mysqlCfg.TLSConfig = "true"
-	}
-	if len(cfg.Params) > 0 {
-		mysqlCfg.Params = cfg.Params
-	}
+	dsn := buildDSN(cfg)
 
-	db, err := sqlx.Open("mysql", mysqlCfg.FormatDSN())
+	db, err := sqlx.Open("pgx", dsn)
 	if err != nil {
 		return nil, fmt.Errorf("open database connection: %w", err)
 	}
@@ -51,6 +40,29 @@ func Open(cfg config.DatabaseConfig) (*sqlx.DB, error) {
 	}
 
 	return db, nil
+}
+
+// buildDSN constructs a PostgreSQL connection URL from the configuration.
+// Defaults sslmode=disable so local Docker deployments connect without
+// extra setup; cfg.TLS upgrades that to sslmode=require, and any value
+// in cfg.Params takes precedence so callers can override per environment.
+func buildDSN(cfg config.DatabaseConfig) string {
+	u := url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(cfg.Username, cfg.Password),
+		Host:   fmt.Sprintf("%s:%d", cfg.Host, cfg.Port),
+		Path:   "/" + cfg.Database,
+	}
+	q := u.Query()
+	q.Set("sslmode", "disable")
+	if cfg.TLS {
+		q.Set("sslmode", "require")
+	}
+	for k, v := range cfg.Params {
+		q.Set(k, v)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 // RunInTx runs fn within a database transaction.
@@ -84,12 +96,12 @@ func Migrate(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 		return fmt.Errorf("init migration source: %w", err)
 	}
 
-	driver, err := migratemysql.WithInstance(db.DB, &migratemysql.Config{})
+	driver, err := migratepgx.WithInstance(db.DB, &migratepgx.Config{})
 	if err != nil {
 		return fmt.Errorf("init migration driver: %w", err)
 	}
 
-	m, err := migrate.NewWithInstance("iofs", src, "mysql", driver)
+	m, err := migrate.NewWithInstance("iofs", src, "pgx5", driver)
 	if err != nil {
 		return fmt.Errorf("create migrator: %w", err)
 	}
@@ -100,10 +112,30 @@ func Migrate(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 	return nil
 }
 
-// BuildMultiRowInsert builds a multi-row INSERT query.
+// BuildMultiRowInsert builds a multi-row INSERT query using PostgreSQL's
+// numbered placeholder syntax ($1, $2, ...).
 func BuildMultiRowInsert(table string, columns []string, rowCount int) string {
-	placeholder := "(" + strings.Repeat("?, ", len(columns)-1) + "?)"
-	values := strings.Repeat(placeholder+", ", rowCount-1) + placeholder
-	return fmt.Sprintf("INSERT INTO %s (%s) VALUES %s", table, strings.Join(columns, ", "), values)
+	var b strings.Builder
+	b.WriteString("INSERT INTO ")
+	b.WriteString(table)
+	b.WriteString(" (")
+	b.WriteString(strings.Join(columns, ", "))
+	b.WriteString(") VALUES ")
+	n := 0
+	for r := 0; r < rowCount; r++ {
+		if r > 0 {
+			b.WriteString(", ")
+		}
+		b.WriteByte('(')
+		for c := 0; c < len(columns); c++ {
+			if c > 0 {
+				b.WriteString(", ")
+			}
+			n++
+			b.WriteByte('$')
+			b.WriteString(strconv.Itoa(n))
+		}
+		b.WriteByte(')')
+	}
+	return b.String()
 }
-

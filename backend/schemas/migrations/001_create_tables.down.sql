@@ -4,3 +4,4 @@ DROP TABLE IF EXISTS note_references;
 DROP TABLE IF EXISTS note_images;
 DROP TABLE IF EXISTS notebook_notes;
 DROP TABLE IF EXISTS notes;
+DROP FUNCTION IF EXISTS set_updated_at();

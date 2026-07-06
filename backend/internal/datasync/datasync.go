@@ -525,6 +525,33 @@ func (m noteLookup) lookup(entry, notebookID string) *notebook.NoteRecord {
 }
 
 // ImportLearningLogs imports learning history YAML data into the database.
+// anyFreeformIn reports whether any of the given records carry a
+// freeform quiz_type. Used by ImportLearningLogs to detect the "one
+// event, two YAML slots" pattern that AddRecordWithQualityForEtymology
+// writes for etymology_freeform answers.
+func anyFreeformIn(records []notebook.LearningRecord) bool {
+	for _, r := range records {
+		if r.QuizType == string(notebook.QuizTypeEtymologyFreeform) {
+			return true
+		}
+	}
+	return false
+}
+
+// filterOutFreeform returns a new slice with any freeform records
+// removed. Used to dedup the assembly mirror of a freeform answer so
+// import inserts one DB row per event, not two.
+func filterOutFreeform(records []notebook.LearningRecord) []notebook.LearningRecord {
+	out := make([]notebook.LearningRecord, 0, len(records))
+	for _, r := range records {
+		if r.QuizType == string(notebook.QuizTypeEtymologyFreeform) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
 func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions) (*ImportLearningLogsResult, error) {
 	var result ImportLearningLogsResult
 
@@ -683,7 +710,19 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 			}
 		}
 		appendEtymologyLogs(expr.EtymologyBreakdownLogs, string(notebook.QuizTypeEtymologyStandard))
-		appendEtymologyLogs(expr.EtymologyAssemblyLogs, string(notebook.QuizTypeEtymologyReverse))
+		// An etymology_freeform answer writes twice on the YAML side —
+		// once to breakdown and once to assembly — because both
+		// directions were exercised. On the DB side that's still one
+		// event; we already inserted it via the breakdown loop, so we
+		// skip the assembly mirror. Without this dedup, sync-db's
+		// re-import doubles every etymology_freeform log and validate-
+		// db catches it on the round-trip (learned_log count +2 per
+		// short polysemous root that has freeform history).
+		assemblyLogs := expr.EtymologyAssemblyLogs
+		if len(assemblyLogs) > 0 && anyFreeformIn(expr.EtymologyBreakdownLogs) {
+			assemblyLogs = filterOutFreeform(assemblyLogs)
+		}
+		appendEtymologyLogs(assemblyLogs, string(notebook.QuizTypeEtymologyReverse))
 	}
 
 	if !opts.DryRun && len(newLogs) > 0 {

@@ -49,7 +49,7 @@ func TestDBLearningRepository_FindAll(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBLearningRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -98,6 +98,50 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// Quiz-answer path: NoteID is 0 and Expression is set, so
+			// ensureNoteExists gets called. When the note doesn't
+			// exist yet, the UPSERT inserts it and RETURNING gives us
+			// the new id (61); the log then lands with that id.
+			name: "quiz answer without NoteID upserts note then writes log",
+			log: &LearningLog{
+				Expression: "serendipity", OriginalExpression: "",
+				Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500,
+				QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1",
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning\) VALUES \(\$1, \$2, \$3\)\s+ON CONFLICT \("usage", entry\) DO UPDATE SET "usage" = EXCLUDED\."usage"\s+RETURNING id`).
+					WithArgs("serendipity", "serendipity", "").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(61)))
+				mock.ExpectExec("INSERT INTO learning_logs").
+					WithArgs(int64(61), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
+		{
+			// The bug the user hit: the note already exists in the DB
+			// (imported via sync-db), so the previous SELECT-then-
+			// INSERT path would see SELECT return ErrNoRows (or race
+			// with another writer) and then hit the (usage, entry)
+			// unique constraint on the follow-up INSERT. The new
+			// ON CONFLICT DO UPDATE ... RETURNING atomically hands
+			// back the existing row's id — regression lock so a
+			// refactor can't reintroduce the race.
+			name: "quiz answer when note already exists returns existing id via ON CONFLICT",
+			log: &LearningLog{
+				Expression: "cardiology", OriginalExpression: "",
+				Status: "misunderstood", LearnedAt: now, Quality: 1, ResponseTimeMs: 3000,
+				QuizType: "notebook", IntervalDays: 1, SourceNotebookID: "wpme",
+			},
+			setupMock: func(mock sqlmock.Sqlmock) {
+				mock.ExpectQuery(`INSERT INTO notes .* ON CONFLICT \("usage", entry\) DO UPDATE .* RETURNING id`).
+					WithArgs("cardiology", "cardiology", "").
+					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
+				mock.ExpectExec("INSERT INTO learning_logs").
+					WithArgs(int64(42), "misunderstood", now, 1, 3000, "notebook", 1, "wpme", "").
+					WillReturnResult(sqlmock.NewResult(1, 1))
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -106,7 +150,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBLearningRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -139,7 +183,7 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\), \\(\\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?, \\?\\)").
+				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5, \\$6, \\$7, \\$8, \\$9\\), \\(\\$10, \\$11, \\$12, \\$13, \\$14, \\$15, \\$16, \\$17, \\$18\\)").
 					WithArgs(
 						int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
 						int64(11), "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
@@ -176,7 +220,7 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBLearningRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -190,4 +234,103 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			assert.NoError(t, mock.ExpectationsWereMet())
 		})
 	}
+}
+
+// TestDBLearningRepository_UpdateLog_MarkCorrect locks in the DB-side
+// shape of OverrideAnswer: SELECT the matching row by (note_id,
+// quiz_type, learned_at), UPDATE status/quality/interval, hand back
+// the pre-update values for the frontend Undo flow.
+func TestDBLearningRepository_UpdateLog_MarkCorrect(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "pgx")
+	repo := NewDBLearningRepository(sqlxDB)
+
+	learnedAt := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
+		WithArgs(int64(42), "notebook", "2026-06-29").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "quality", "interval_days", "learned_at"}).
+			AddRow(int64(7), "misunderstood", 1, 1, learnedAt))
+	mock.ExpectExec(`UPDATE learning_logs SET status = \$1, quality = \$2, interval_days = \$3 WHERE id = \$4`).
+		WithArgs("understood", 4, 1, int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	markCorrect := true
+	res, err := repo.UpdateLog(context.Background(), UpdateLogInput{
+		NoteID:      42,
+		QuizType:    "notebook",
+		LearnedAt:   learnedAt,
+		MarkCorrect: &markCorrect,
+	})
+	require.NoError(t, err)
+	assert.True(t, res.Found)
+	assert.Equal(t, "misunderstood", res.OriginalStatus, "OriginalStatus surfaces the pre-override value for Undo")
+	assert.Equal(t, 1, res.OriginalQuality)
+	assert.Equal(t, "understood", res.NewStatus)
+	assert.Equal(t, 4, res.NewQuality)
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestDBLearningRepository_UpdateLog_Mirror covers the path
+// MultiLearningRepository takes after the primary (YAML) has computed
+// the new status/quality/interval — the secondary store applies the
+// values verbatim, no markCorrect derivation.
+func TestDBLearningRepository_UpdateLog_Mirror(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "pgx")
+	repo := NewDBLearningRepository(sqlxDB)
+
+	learnedAt := time.Date(2026, 6, 29, 10, 0, 0, 0, time.UTC)
+	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
+		WithArgs(int64(42), "notebook", "2026-06-29").
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "quality", "interval_days", "learned_at"}).
+			AddRow(int64(7), "misunderstood", 1, 1, learnedAt))
+	mock.ExpectExec(`UPDATE learning_logs SET status = \$1, quality = \$2, interval_days = \$3 WHERE id = \$4`).
+		WithArgs("understood", 4, 3, int64(7)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	res, err := repo.UpdateLog(context.Background(), UpdateLogInput{
+		NoteID:    42,
+		QuizType:  "notebook",
+		LearnedAt: learnedAt,
+		MirrorValues: &UpdateLogMirror{
+			Status:       "understood",
+			Quality:      4,
+			IntervalDays: 3,
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, res.Found)
+	assert.Equal(t, 3, res.NewIntervalDays, "MirrorValues overrides any markCorrect-derived interval")
+	assert.NoError(t, mock.ExpectationsWereMet())
+}
+
+// TestDBLearningRepository_UpdateLog_NoMatch confirms the soft-no-op
+// when no row matches: Found=false, no error. This is what
+// MultiLearningRepository relies on so a YAML-only entry doesn't
+// fail the whole override when the DB side hasn't seen it yet.
+func TestDBLearningRepository_UpdateLog_NoMatch(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+	sqlxDB := sqlx.NewDb(db, "pgx")
+	repo := NewDBLearningRepository(sqlxDB)
+
+	mock.ExpectQuery(`SELECT id, status, quality, interval_days, learned_at FROM learning_logs`).
+		WithArgs(int64(42), "notebook", "2026-06-29").
+		WillReturnError(fmt.Errorf("sql: no rows in result set"))
+
+	markCorrect := true
+	res, err := repo.UpdateLog(context.Background(), UpdateLogInput{
+		NoteID:      42,
+		QuizType:    "notebook",
+		LearnedAt:   time.Date(2026, 6, 29, 0, 0, 0, 0, time.UTC),
+		MarkCorrect: &markCorrect,
+	})
+	require.NoError(t, err, "missing row must be a soft no-op, not an error")
+	assert.False(t, res.Found)
+	assert.NoError(t, mock.ExpectationsWereMet())
 }

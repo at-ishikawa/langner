@@ -6,9 +6,9 @@ server:
 
 database:
   host: 127.0.0.1
-  port: 3306
+  port: 5432
   database: langner_e2e
-  username: root
+  username: postgres
   password: password
   tls: false
 

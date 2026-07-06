@@ -50,7 +50,7 @@ func TestDBDictionaryRepository_FindAll(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBDictionaryRepository(sqlxDB)
 			tt.setupMock(mock)
 
@@ -131,7 +131,7 @@ func TestDBDictionaryRepository_BatchUpsert(t *testing.T) {
 			require.NoError(t, err)
 			defer db.Close()
 
-			sqlxDB := sqlx.NewDb(db, "mysql")
+			sqlxDB := sqlx.NewDb(db, "pgx")
 			repo := NewDBDictionaryRepository(sqlxDB)
 			tt.setupMock(mock)
 

@@ -8,14 +8,15 @@ server:
 
 database:
   host: localhost
-  port: 3306
+  port: 5432
   database: local
   username: user
   password: password
   tls: false
-  # Additional MySQL driver parameters
+  # Additional PostgreSQL driver parameters
   # params:
-  #   charset: utf8mb4
+  #   application_name: langner
+  #   sslmode: disable
   # Connection pool settings
   # max_open_conns: 25
   # max_idle_conns: 5

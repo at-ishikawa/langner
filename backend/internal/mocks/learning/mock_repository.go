@@ -97,3 +97,18 @@ func (mr *MockLearningRepositoryMockRecorder) FindAll(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FindAll", reflect.TypeOf((*MockLearningRepository)(nil).FindAll), ctx)
 }
+
+// UpdateLog mocks base method.
+func (m *MockLearningRepository) UpdateLog(ctx context.Context, in learning.UpdateLogInput) (learning.UpdateLogResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLog", ctx, in)
+	ret0, _ := ret[0].(learning.UpdateLogResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateLog indicates an expected call of UpdateLog.
+func (mr *MockLearningRepositoryMockRecorder) UpdateLog(ctx, in any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLog", reflect.TypeOf((*MockLearningRepository)(nil).UpdateLog), ctx, in)
+}

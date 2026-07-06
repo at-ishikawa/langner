@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"time"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
@@ -355,9 +356,20 @@ func buildExpression(
 			breakdownLogs = append(breakdownLogs, log)
 		case string(notebook.QuizTypeEtymologyReverse): // stored as "etymology_assembly"
 			assemblyLogs = append(assemblyLogs, log)
+		case string(notebook.QuizTypeEtymologyFreeform):
+			// Freeform is one event that exercises both directions of
+			// recall, and AddRecordWithQualityForEtymology mirrors it
+			// into both YAML slots on the write side. Export has to
+			// mirror the same way so the round-trip matches — landing
+			// it in learned_logs (the previous default behavior)
+			// silently inflated LearnedLogCount by every freeform
+			// event, which validate-db surfaced as a +2 delta on
+			// short polysemous roots like "alter".
+			breakdownLogs = append(breakdownLogs, log)
+			assemblyLogs = append(assemblyLogs, log)
 		default:
-			// notebook (standard), freeform, etymology_freeform — all
-			// land in learned_logs in the YAML convention.
+			// notebook (standard) and freeform (vocabulary, not
+			// etymology) land in learned_logs in the YAML convention.
 			learnedLogs = append(learnedLogs, log)
 		}
 	}
@@ -424,6 +436,109 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	notePath := filepath.Join(dir, log.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil { return fmt.Errorf("write learning history for %q: %w", log.NotebookName, err) }
 	return nil
+}
+
+// UpdateLog rewrites the YAML log entry identified by the lookup keys.
+// Two modes:
+//
+//   - in.MirrorValues != nil (Undo path): restore the log to the
+//     captured pre-override snapshot exactly. Delegates to
+//     updater.UndoOverrideLog so status/quality/interval_days come
+//     back byte-identical.
+//   - otherwise (fresh Override path): apply in.MarkCorrect via
+//     updater.OverrideLog, which recomputes interval_days through
+//     the calculator and, for freeform variants, syncs both halves
+//     of the paired log lists.
+func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput) (UpdateLogResult, error) {
+	dir := r.directory
+	histories, err := notebook.NewLearningHistories(dir)
+	if err != nil {
+		return UpdateLogResult{}, fmt.Errorf("load learning histories: %w", err)
+	}
+	updater := notebook.NewLearningHistoryUpdater(histories[in.NotebookName], r.calculator)
+
+	var res notebook.OverrideLogResult
+	if in.MirrorValues != nil {
+		undo := updater.UndoOverrideLog(notebook.UndoOverrideLogInput{
+			Expression:           in.Expression,
+			OriginalExpression:   in.OriginalExpression,
+			QuizType:             notebook.QuizType(in.QuizType),
+			LearnedAt:            formatLearnedAt(in.LearnedAt),
+			OriginalQuality:      in.MirrorValues.Quality,
+			OriginalStatus:       in.MirrorValues.Status,
+			OriginalIntervalDays: in.MirrorValues.IntervalDays,
+		})
+		if !undo.Found {
+			return UpdateLogResult{}, nil
+		}
+		// UndoOverrideLog doesn't carry the pre-restore values (there's
+		// no callsite that needs them), so we surface the caller-
+		// supplied MirrorValues as the "new" state and leave Original*
+		// zeroed for this branch.
+		res = notebook.OverrideLogResult{
+			NewNextReviewDate: undo.NewNextReviewDate,
+			Found:             true,
+		}
+	} else {
+		res = updater.OverrideLog(notebook.OverrideLogInput{
+			Expression:         in.Expression,
+			OriginalExpression: in.OriginalExpression,
+			QuizType:           notebook.QuizType(in.QuizType),
+			LearnedAt:          formatLearnedAt(in.LearnedAt),
+			MarkCorrect:        in.MarkCorrect,
+		})
+		if !res.Found {
+			return UpdateLogResult{}, nil
+		}
+	}
+
+	notePath := filepath.Join(dir, in.NotebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return UpdateLogResult{}, fmt.Errorf("write learning history for %q: %w", in.NotebookName, err)
+	}
+	// Read back the just-written entry so the caller can mirror the
+	// exact bytes onto the secondary store. The updater's result
+	// already carries originals; we re-resolve the expression to read
+	// out the new status/quality/interval that landed on disk.
+	expr := updater.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	var newStatus string
+	var newQuality, newInterval int
+	if expr != nil {
+		logs := expr.GetLogsForQuizType(notebook.QuizType(in.QuizType))
+		for _, l := range logs {
+			if l.LearnedAt.Format(time.RFC3339) == formatLearnedAt(in.LearnedAt) ||
+				l.LearnedAt.Format("2006-01-02") == formatLearnedAt(in.LearnedAt) {
+				newStatus = string(l.Status)
+				newQuality = l.Quality
+				newInterval = l.IntervalDays
+				break
+			}
+		}
+	}
+	return UpdateLogResult{
+		OriginalQuality:      res.OriginalQuality,
+		OriginalStatus:       res.OriginalStatus,
+		OriginalIntervalDays: res.OriginalIntervalDays,
+		NewQuality:           newQuality,
+		NewStatus:            newStatus,
+		NewIntervalDays:      newInterval,
+		NewNextReviewDate:    res.NewNextReviewDate,
+		Found:                true,
+	}, nil
+}
+
+// formatLearnedAt picks the same string format the updater's
+// indexLogByLearnedAt accepts. Prefers RFC3339 so micro-second-precise
+// timestamps round-trip; falls back to YYYY-MM-DD for older logs the
+// importer stored without time-of-day.
+func formatLearnedAt(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	if t.Hour() == 0 && t.Minute() == 0 && t.Second() == 0 && t.Nanosecond() == 0 {
+		return t.Format("2006-01-02")
+	}
+	return t.Format(time.RFC3339)
 }
 
 func (r *YAMLLearningRepository) FindAll(_ context.Context) ([]LearningLog, error) {
