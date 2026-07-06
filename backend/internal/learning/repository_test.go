@@ -29,14 +29,14 @@ func TestDBLearningRepository_FindAll(t *testing.T) {
 				}).
 					AddRow(1, 10, "understood", now, 4, 1500, "notebook", 7, "", now, now).
 					AddRow(2, 11, "misunderstood", now, 1, 3000, "freeform", 1, "", now, now)
-				mock.ExpectQuery("SELECT \\* FROM learning_logs ORDER BY id").WillReturnRows(rows)
+				mock.ExpectQuery("SELECT id, COALESCE\\(note_id, 0\\) AS note_id, COALESCE\\(origin_id, 0\\) AS origin_id").WillReturnRows(rows)
 			},
 			wantLen: 2,
 		},
 		{
 			name: "db error",
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT \\* FROM learning_logs ORDER BY id").
+				mock.ExpectQuery("SELECT id, COALESCE\\(note_id, 0\\) AS note_id, COALESCE\\(origin_id, 0\\) AS origin_id").
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
 			wantErr: true,
@@ -85,7 +85,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 			log:  &LearningLog{NoteID: 10, Status: "understood", LearnedAt: now, Quality: 4, ResponseTimeMs: 1500, QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1"},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WithArgs(int64(10), int64(0), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -114,7 +114,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 					WithArgs("serendipity", "serendipity", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(61)))
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(61), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
+					WithArgs(int64(61), int64(0), "understood", now, 4, 1500, "notebook", 7, "nb-1", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -138,7 +138,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 					WithArgs("cardiology", "cardiology", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
 				mock.ExpectExec("INSERT INTO learning_logs").
-					WithArgs(int64(42), "misunderstood", now, 1, 3000, "notebook", 1, "wpme", "").
+					WithArgs(int64(42), int64(0), "misunderstood", now, 1, 3000, "notebook", 1, "wpme", "").
 					WillReturnResult(sqlmock.NewResult(1, 1))
 			},
 		},
@@ -183,10 +183,10 @@ func TestDBLearningRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5, \\$6, \\$7, \\$8, \\$9\\), \\(\\$10, \\$11, \\$12, \\$13, \\$14, \\$15, \\$16, \\$17, \\$18\\)").
+				mock.ExpectExec("INSERT INTO learning_logs \\(note_id, origin_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key\\) VALUES \\(\\$1, \\$2, \\$3, \\$4, \\$5, \\$6, \\$7, \\$8, \\$9, \\$10\\), \\(\\$11, \\$12, \\$13, \\$14, \\$15, \\$16, \\$17, \\$18, \\$19, \\$20\\)").
 					WithArgs(
-						int64(10), "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
-						int64(11), "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
+						int64(10), nil, "understood", now, 4, 1500, "notebook", 7, "nb-1", "",
+						int64(11), nil, "misunderstood", now, 1, 3000, "freeform", 1, "nb-2", "",
 					).
 					WillReturnResult(sqlmock.NewResult(1, 2))
 				mock.ExpectCommit()
