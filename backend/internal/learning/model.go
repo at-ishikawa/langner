@@ -6,6 +6,12 @@ import "time"
 type LearningLog struct {
 	ID             int64     `db:"id"`
 	NoteID         int64     `db:"note_id"`
+	// OriginID targets an etymology_origins row instead of a note.
+	// Exactly one of NoteID / OriginID is non-zero: vocab logs set
+	// NoteID, etymology-origin logs set OriginID. Migration 017 made
+	// note_id nullable and added origin_id so both quiz kinds share
+	// one logs table.
+	OriginID       int64     `db:"origin_id"`
 	Status         string    `db:"status"`
 	LearnedAt      time.Time `db:"learned_at"`
 	Quality        int       `db:"quality"`
