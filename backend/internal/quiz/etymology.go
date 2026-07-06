@@ -685,7 +685,19 @@ func shouldIncludeOrigin(
 	if isOriginSkipped(histories, notebookTitle, sessionTitle, origin, quizType) {
 		return false
 	}
-	if findOriginExpression(histories, notebookTitle, sessionTitle, origin) == nil {
+	expr := findOriginExpression(histories, notebookTitle, sessionTitle, origin)
+	if expr == nil {
+		return includeUnstudied
+	}
+	// "Never seen in THIS mode" — the origin has history but no logs in
+	// the slot the requested mode reads from (etymology_breakdown for
+	// standard, etymology_assembly for reverse) — goes through the
+	// includeUnstudied gate, same as an origin with no history at all.
+	// Without this, an origin studied only in standard/freeform floods
+	// the reverse queue: needsOriginReview treats an empty same-mode
+	// slot as "due now", so every cross-mode-only origin appears in the
+	// reverse start-page count.
+	if len(expr.GetLogsForQuizType(quizType)) == 0 {
 		return includeUnstudied
 	}
 	return needsOriginReview(histories, notebookTitle, sessionTitle, origin, quizType)

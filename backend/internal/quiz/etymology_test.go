@@ -756,10 +756,17 @@ origins:
 			wantOrigins:      []string{"studied-due", "tried-failed", "never-seen-1", "never-seen-2"},
 		},
 		{
+			// tried-failed has logs only in etymology_breakdown_logs, not
+			// in etymology_assembly_logs. Per shouldIncludeOrigin's
+			// cross-mode gate, "no logs in the requested mode's slot"
+			// falls under includeUnstudied; with it off the reverse queue
+			// drops tried-failed. This is the fix that keeps the reverse
+			// start-page count from exploding when origins studied only in
+			// standard/freeform acquire history.
 			name:             "reverse, includeUnstudied=false",
 			includeUnstudied: false,
 			quizType:         notebook.QuizTypeEtymologyReverse,
-			wantOrigins:      []string{"studied-due", "tried-failed"},
+			wantOrigins:      []string{"studied-due"},
 		},
 		{
 			name:             "reverse, includeUnstudied=true",
@@ -805,4 +812,97 @@ origins:
 				"start page section count for the active mode must equal what the quiz loads")
 		})
 	}
+}
+
+// TestService_EtymologyReverseQueueCountsOnlyAssemblyHistory pins the
+// cross-mode gate in shouldIncludeOrigin: an origin studied only in a
+// different etymology mode (breakdown / freeform) must NOT flood the
+// reverse queue when includeUnstudied is off. Reproduces the start-page
+// count blow-up reported after sync-db routed origin logs onto
+// etymology_origins.id.
+func TestService_EtymologyReverseQueueCountsOnlyAssemblyHistory(t *testing.T) {
+	tmpDir := t.TempDir()
+	etymDir := filepath.Join(tmpDir, "etymology", "demo-roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: demo-roots
+kind: Etymology
+name: Demo Roots
+notebooks:
+  - ./origins.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "Demo Lesson"
+origins:
+  - origin: reverse-studied
+    type: root
+    language: Latin
+    meaning: drilled in reverse before (assembly logs present)
+  - origin: only-breakdown
+    type: root
+    language: Latin
+    meaning: drilled in standard only, never in reverse
+`), 0o644))
+
+	today := time.Now().Format("2006-01-02")
+	learningDir := filepath.Join(tmpDir, "learning")
+	require.NoError(t, os.MkdirAll(learningDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "demo-roots.yml"), []byte(`- metadata:
+    notebook_id: demo-roots
+    title: Demo Roots
+  scenes:
+    - metadata:
+        title: "Demo Lesson"
+      expressions:
+        - expression: reverse-studied
+          etymology_assembly_logs:
+            - status: understood
+              learned_at: "2024-01-01"
+              quality: 4
+              interval_days: 7
+              quiz_type: etymology_assembly
+        - expression: only-breakdown
+          etymology_breakdown_logs:
+            - status: understood
+              learned_at: "`+today+`"
+              quality: 4
+              interval_days: 90
+              quiz_type: etymology_breakdown
+`), 0o644))
+
+	svc := NewService(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{filepath.Join(tmpDir, "etymology")},
+			LearningNotesDirectory: learningDir,
+		},
+		nil, nil, nil,
+		config.QuizConfig{DisableShuffle: true},
+	)
+
+	t.Run("reverse includeUnstudied=false counts only assembly-history origins", func(t *testing.T) {
+		cards, err := svc.LoadEtymologyOriginCards(
+			[]string{"demo-roots"}, false, false, notebook.QuizTypeEtymologyReverse, nil,
+		)
+		require.NoError(t, err)
+		var got []string
+		for _, c := range cards {
+			got = append(got, c.Origin)
+		}
+		sort.Strings(got)
+		assert.Equal(t, []string{"reverse-studied"}, got,
+			"reverse queue with includeUnstudied=false must exclude origins whose "+
+				"history exists only in other etymology modes")
+	})
+
+	t.Run("reverse includeUnstudied=true counts everything", func(t *testing.T) {
+		cards, err := svc.LoadEtymologyOriginCards(
+			[]string{"demo-roots"}, true, false, notebook.QuizTypeEtymologyReverse, nil,
+		)
+		require.NoError(t, err)
+		var got []string
+		for _, c := range cards {
+			got = append(got, c.Origin)
+		}
+		sort.Strings(got)
+		assert.Equal(t, []string{"only-breakdown", "reverse-studied"}, got)
+	})
 }
