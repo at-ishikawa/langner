@@ -26,10 +26,10 @@ type HistoryStore interface {
 // DBHistoryStore composes the DB repositories needed to reconstruct the
 // learning_notes/*.yml view from rows.
 type DBHistoryStore struct {
-	noteRepo      notebook.NoteRepository
-	learningRepo  LearningRepository
-	originRepo    notebook.EtymologyOriginRepository
-	skipFlagRepo  notebook.SkipFlagRepository
+	noteRepo     notebook.NoteRepository
+	learningRepo LearningRepository
+	originRepo   notebook.EtymologyOriginRepository
+	skipFlagRepo notebook.SkipFlagRepository
 }
 
 // NewDBHistoryStore constructs the store. originRepo is optional — pass
