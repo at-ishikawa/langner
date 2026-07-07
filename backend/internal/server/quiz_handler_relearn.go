@@ -43,10 +43,16 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 
 	var clears map[string]time.Time
 	if h.relearnClears != nil {
-		var err error
-		clears, err = h.relearnClears.AllClears(ctx)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load relearn clears: %w", err))
+		if loaded, err := h.relearnClears.AllClears(ctx); err != nil {
+			// The clear markers only keep already-recovered words out of the
+			// NEXT session — they are an optimization, not core to relearning.
+			// If the store is unavailable (e.g. a database is configured but
+			// the relearn_clears table has not been migrated yet), degrade
+			// gracefully and build the pool without clear suppression rather
+			// than failing the whole quiz.
+			slog.Warn("failed to load relearn clears; building pool without them", "error", err)
+		} else {
+			clears = loaded
 		}
 	}
 
