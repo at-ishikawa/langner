@@ -64,6 +64,13 @@ func (c RelearnCard) VocabCard() Card { return c.vocabCard }
 // EtymologyCard returns the card used to grade an etymology-origin relearn word.
 func (c RelearnCard) EtymologyCard() EtymologyOriginCard { return c.etymologyCard }
 
+// relearnKeySep separates the fields of a relearn clear_key. It is the ASCII
+// Unit Separator (0x1F): a valid UTF-8 byte that cannot appear in notebook
+// names or expressions. A NUL byte (0x00) must NOT be used — Postgres rejects
+// NUL in text/varchar values ("invalid byte sequence for encoding UTF8: 0x00"),
+// which would silently fail the relearn_clears insert.
+const relearnKeySep = "\x1f"
+
 // RelearnClearKey builds the stable key identifying a word in the relearn_clears
 // marker store. The kind prefix ("v"/"o") keeps a vocab word and an etymology
 // origin that share a spelling in the same notebook distinct, mirroring how the
@@ -73,7 +80,7 @@ func RelearnClearKey(isEtymology bool, notebookName, expression string) string {
 	if isEtymology {
 		kind = "o"
 	}
-	return kind + "\x00" + notebookName + "\x00" + strings.ToLower(strings.TrimSpace(expression))
+	return kind + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expression))
 }
 
 // relearnCandidate is an intermediate wrong-word record before it is resolved
