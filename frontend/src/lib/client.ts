@@ -52,6 +52,15 @@ export type {
   StartEtymologyFreeformQuizResponse,
   SubmitEtymologyFreeformAnswerRequest,
   SubmitEtymologyFreeformAnswerResponse,
+  StartRelearnQuizRequest,
+  StartRelearnQuizResponse,
+  RelearnCard,
+  SubmitRelearnAnswerRequest,
+  SubmitRelearnAnswerResponse,
+  RelearnContextScene,
+  RelearnConversationLine,
+  BatchSubmitRelearnAnswersRequest,
+  BatchSubmitRelearnAnswersResponse,
 } from "@/gen-protos/api/v1/quiz_pb";
 
 export { QuizType, EtymologyQuizMode } from "@/gen-protos/api/v1/quiz_pb";

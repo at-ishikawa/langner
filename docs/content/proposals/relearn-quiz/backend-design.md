@@ -35,41 +35,17 @@ The pool is "every word whose most-recent in-window log status is `misunderstood
 
 Selection runs on the same two backends the rest of the app uses. Per `backend/cmd/langner-server/main.go:93-137`, YAML is the source of truth and the DB is a secondary mirror enabled only when `Database.Host` and `Database.Password` are set.
 
-### DB path (`learning_logs`)
+### Source: the YAML learning histories (both storage modes)
 
-The analytics DB repo already selects wrong rows with `WHERE ll.status = 'misunderstood'` and computes most-recent status via `recentAttempts` ordered `learned_at DESC` (`backend/internal/analytics/db_repository.go:128-260`). The Relearn pool applies the same idea over a rolling window using Postgres `DISTINCT ON` (the codebase runs on pgx/Postgres):
+The pool is built from the on-disk YAML learning histories in **every** configuration — with or without a database — implemented as `Service.LoadRelearnPool` in `backend/internal/quiz/relearn.go`.
 
-```sql
--- $1 = window start (now - window_hours)
-WITH latest AS (
-  SELECT DISTINCT ON (note_id, quiz_type)
-         note_id, quiz_type, status, learned_at
-  FROM learning_logs
-  WHERE learned_at >= $1
-  ORDER BY note_id, quiz_type, learned_at DESC   -- most-recent-in-window per series
-)
-SELECT DISTINCT ON (l.note_id) l.note_id, l.quiz_type, l.learned_at
-FROM latest l
-WHERE l.status = 'misunderstood'
-  AND NOT EXISTS (
-    SELECT 1 FROM relearn_clears rc
-    WHERE rc.note_id = l.note_id
-      AND rc.cleared_at > l.learned_at            -- cleared after the last wrong log
-  )
-ORDER BY l.note_id, l.learned_at DESC;            -- de-dup to one card per note
-```
+This mirrors a decision the codebase already made for analytics. `main.go:102-107` documents it verbatim: *"Analytics always reads from YAML: the on-disk learning history files are the only place etymology quiz results are persisted today — `SaveEtymologyOriginResult` writes YAML directly and does not go through the learning repository, so the DB's `learning_logs` has only vocab rows."* A `learning_logs`-only query would therefore silently drop every etymology-origin wrong word. The YAML histories are the complete, canonical source, so the Relearn pool reads them directly and spans vocabulary and etymology uniformly.
 
-- The inner `latest` CTE picks the most-recent in-window log **per `(note_id, quiz_type)` series**, so a word answered correctly at 11am after being wrong at 9am (in a real quiz) is excluded — its latest log is `understood`.
-- The outer `DISTINCT ON (note_id)` collapses a word that is wrong in multiple quiz types down to a single card, keeping the most-recent wrong quiz type for the "source" label.
-- The `NOT EXISTS` clause drops words whose relearn-clear marker is newer than their last wrong log (see below).
+`LoadRelearnPool` walks `notebook.NewLearningHistories(dir)` and, for each expression, inspects its four independent log series — `LearnedLogs` (notebook + freeform), `ReverseLogs`, `EtymologyBreakdownLogs`, `EtymologyAssemblyLogs`. For each series it takes the newest log (histories are stored newest-first) and includes the word when that log is within the window **and** its status is `misunderstood` — exactly the "most-recent-in-window wrong" rule analytics uses (`internal/notebook/types.go`: *"IsWrong is true when the attempt was marked misunderstood"*). A word wrong in several series collapses to one card, keeping the most-recent wrong series for the `source_quiz_type` label.
 
-Word text and metadata are joined from `notes` exactly as the analytics query does (`JOIN notes n ON n.id = ll.note_id`, selecting `n."usage"`).
+Each surviving wrong word is then resolved to a gradeable card by intersecting against the words the notebook readers already load — `Service.LoadAllWords()` for vocabulary and `Service.LoadEtymologyOriginCards(...)` for origins — indexed by expression. That yields the meaning, contexts, and (for origins) the sense needed to grade and to render the feedback card. Words with no matching card are skipped (nothing to grade or show).
 
-### YAML-only path
-
-The analytics YAML repo (`backend/internal/analytics/yaml_repository.go`) already reads on-disk learning history, computes `IsWrong: rec.Status == notebook.LearnedStatusMisunderstood` (`:128`), and resolves per-word metadata via `NotebookMetadataResolver` (`notebook_resolver.go`). The Relearn pool reuses this: for each expression's per-quiz-type log series, take the most recent log within the window; include the word if that log is `misunderstood`; exclude it if the in-memory relearn-clear time for its note is newer. De-duplicate to one card per expression.
-
-Because both paths share the same "most-recent-in-window `misunderstood`" rule, the two implementations must apply that rule from **one selector** used by both — the same discipline the invariants require of read/write symmetry — even though neither writes a log here.
+The single selector is the one place the "most-recent-in-window `misunderstood`" rule lives, and both the DB-configured and YAML-only deployments call it — the read/write-symmetry discipline the learning-history invariants require, even though the Relearn pool writes no log.
 
 ## "Relearn Clears" Marker
 
@@ -83,11 +59,10 @@ Migrations use golang-migrate with `NNN_description.up.sql` / `.down.sql`, 3-dig
 
 ```sql
 CREATE TABLE relearn_clears (
-    note_id BIGINT NOT NULL,
+    clear_key VARCHAR(512) NOT NULL,
     cleared_at TIMESTAMP NOT NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (note_id),
-    FOREIGN KEY (note_id) REFERENCES notes(id)
+    PRIMARY KEY (clear_key)
 );
 CREATE INDEX idx_relearn_clears_cleared_at ON relearn_clears (cleared_at);
 ```
@@ -98,37 +73,38 @@ CREATE INDEX idx_relearn_clears_cleared_at ON relearn_clears (cleared_at);
 DROP TABLE IF EXISTS relearn_clears;
 ```
 
+**Why a text `clear_key` and not a `note_id` foreign key.** The pool is built from the YAML histories, which include etymology origins — and origins have no row in `notes` (they live in `etymology_origins`, and `SaveEtymologyOriginResult` never creates a note). A `note_id` FK could not represent a cleared origin at all. The key is therefore an opaque string the pool builder owns: `"<v|o>\x00<notebook>\x00<lowercased expression>"` (a kind prefix keeps a vocab word and an origin that share a spelling in the same notebook distinct — the same `(name, type)` disambiguation the learning history already uses). `RelearnClearKey` in `backend/internal/quiz/relearn.go` is the single function that builds it, and both the pool read and the clear write call it.
+
 Design choices that keep this from being a learning log:
 
-- **One row per note**, keyed by `note_id`; a new clear upserts `cleared_at` to `now()`. There is no history of clears — only the latest matters for pool suppression.
+- **One row per key**; a new clear upserts `cleared_at` to `now()`. There is no history of clears — only the latest matters for pool suppression.
 - It has **no `quiz_type`, no `status`, no `quality`, no `interval_days`, no `easiness_factor`**. It is structurally incapable of feeding SM-2.
-- Nothing reads this table except the Relearn pool query's `NOT EXISTS` clause. Neither the SM-2 write path (`learning.LearningRepository`) nor the analytics repos reference it.
+- Nothing reads this table except the Relearn pool builder. Neither the SM-2 write path (`learning.LearningRepository`) nor the analytics repos reference it.
 
 The upsert:
 
 ```sql
-INSERT INTO relearn_clears (note_id, cleared_at) VALUES ($1, $2)
-ON CONFLICT (note_id) DO UPDATE SET cleared_at = EXCLUDED.cleared_at;
+INSERT INTO relearn_clears (clear_key, cleared_at) VALUES ($1, $2)
+ON CONFLICT (clear_key) DO UPDATE SET cleared_at = EXCLUDED.cleared_at;
 ```
 
-### In-memory map (YAML-only)
+### In-memory map (no DB)
 
-When no DB is configured, relearn clears live in a process-local `map[int64]time.Time` (note_id → latest cleared_at), guarded by a mutex, held on the handler (alongside its existing in-memory card stores). It is **never** written to any YAML learning-history file — writing it there would make it a learning record and violate the whole point. It is naturally ephemeral: a process restart clears it, at which point words age out of the pool on their own via the rolling window.
+When no database is configured, relearn clears live in a process-local `map[string]time.Time` (clear_key → latest cleared_at), guarded by a mutex. It is **never** written to any YAML learning-history file — writing it there would make it a learning record and violate the whole point. It is naturally ephemeral: a process restart clears it, at which point words age out of the pool on their own via the rolling window.
 
-A tiny interface lets the handler treat both the same way:
+One interface, defined in `backend/internal/learning/relearn_clears.go`, lets the handler treat both the same way:
 
 ```go
-// backend/internal/quiz/relearn_clears.go
-type RelearnClears interface {
-    // MarkCleared upserts the latest clear time for a note.
-    MarkCleared(ctx context.Context, noteID int64, at time.Time) error
-    // ClearedAfter returns note IDs whose clear time is strictly after the given time.
-    // (Used by the pool selector; on the DB path this is folded into the SQL instead.)
-    IsClearedSince(ctx context.Context, noteID int64, since time.Time) (bool, error)
+type RelearnClearStore interface {
+    // AllClears returns every recorded clear keyed by clear_key. The pool
+    // builder reads the whole set once per session start and filters in Go.
+    AllClears(ctx context.Context) (map[string]time.Time, error)
+    // MarkCleared upserts the latest clear time for a key.
+    MarkCleared(ctx context.Context, clearKey string, at time.Time) error
 }
 ```
 
-`DBRelearnClears` runs the upsert / `NOT EXISTS`; `MemoryRelearnClears` reads and writes the map. Selection is wired the same way as `learningRepo` in `main.go` — DB implementation when host+password are set, memory otherwise.
+`DBRelearnClearStore` runs the SQL above; `MemoryRelearnClearStore` reads and writes the map. `main.go` selects the DB implementation when `Database.Host`+`Password` are set (`handler.SetRelearnClearStore(...)`) and the memory implementation otherwise — the same wiring pattern as `learningRepo`. The pool builder takes the `AllClears` map and excludes a word when `clears[key]` is not before its most-recent wrong log; the handler calls `MarkCleared(card.ClearKey, now)` only on a correct answer.
 
 ## Proto API
 
@@ -253,22 +229,17 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx, req) (*SubmitRelearnAnswerRespons
     card := h.relearnStore[req.Msg.GetNoteId()]   // under h.mu; NotFound if missing
 
     var grade quiz.GradeResult
-    switch {
-    case req.Msg.GetIsSkipped():
-        grade = skippedGradeResult()              // reuse quiz_handler_batch.go:22-29
-    case card.IsEtymologyOrigin:
-        // etymology-origin words graded by the etymology meaning grader
-        grade, err = h.svc.GradeEtymologyStandardAnswer(ctx, card.AsEtymologyOriginCard(),
-            req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-    default:
-        // all other words graded by the notebook meaning grader
-        grade, err = h.svc.GradeNotebookAnswer(ctx, card.AsCard(),
-            req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-    }
+    // gradeRelearn dispatches to the pure grader for the card's kind:
+    //   skip                -> skippedGradeResult()            (quiz_handler_batch.go:22-29)
+    //   card.IsEtymology    -> GradeEtymologyStandardAnswer(card.EtymologyCard(), ...)
+    //   otherwise           -> GradeNotebookAnswer(card.VocabCard(), ...)
+    grade, err := h.gradeRelearn(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs(), req.Msg.GetIsSkipped())
 
-    // Record NOTHING to learning history. The ONLY persistence is the non-SR clear marker.
+    // Record NOTHING to learning history. The ONLY persistence is the non-SR
+    // clear marker, and only on a correct answer. A marker-write failure is
+    // logged, never fatal (the word simply reappears next session).
     if grade.Correct {
-        _ = h.relearnClears.MarkCleared(ctx, card.NoteID, time.Now())
+        _ = h.relearnClears.MarkCleared(ctx, card.ClearKey, time.Now())
     }
 
     return connect.NewResponse(&apiv1.SubmitRelearnAnswerResponse{
@@ -277,9 +248,9 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx, req) (*SubmitRelearnAnswerRespons
         Reason:        grade.Reason,
         WordDetail:    toProtoWordDetail(card.WordDetail),
         Images:        card.Images,
-        ContextScenes: buildRelearnContext(card),   // conversations/statements
-        GraphContext:  card.GraphContext,            // etymology graph (nil if none)
-        ExampleWords:  card.ExampleWords,            // related words (empty if none)
+        ContextScenes: toProtoRelearnScenes(card.ContextScenes),  // conversations/statements
+        GraphContext:  graphContext,                              // etymology graph (nil if none)
+        ExampleWords:  exampleWords,                              // related words (empty if none)
         // no NextReviewDate, no LearnedAt — not fields on this message
     }), nil
 }
@@ -296,14 +267,14 @@ Guarantees this path upholds:
 
 ### Grading source selection
 
-Whether a word is graded by the etymology grader or the notebook grader is decided by the card metadata captured at `StartRelearnQuiz` time (`IsEtymologyOrigin`, derived from the word's `source_quiz_type` / notebook kind), not by anything the client sends — keeping the grading rule server-side and in one place.
+Whether a word is graded by the etymology grader or the notebook grader is decided by the card metadata captured at `StartRelearnQuiz` time (`RelearnCard.IsEtymology`, derived from which log series the wrong answer came from), not by anything the client sends — keeping the grading rule server-side and in one place.
 
 ### Context assembly
 
-`buildRelearnContext(card)` and the `graph_context` / `example_words` fields are populated from the same notebook and etymology data the app already loads:
+The context scenes and the `graph_context` / `example_words` fields are populated from the same notebook and etymology data the app already loads:
 
-- **Conversations/statements** come from the word's scene data (the same source the reverse quiz uses to fill `SubmitReverseAnswerResponse.contexts`), shaped into `RelearnContextScene` so the frontend can highlight the expression.
-- **`example_words` and `graph_context`** are exactly what etymology cards/responses already carry (e.g. `SubmitEtymologyStandardAnswerResponse.graph_context` / `example_words` at `quiz.proto:483-503`); for non-etymology words they are empty/absent.
+- **Conversations/statements** come from the word's context sentences (`card.Contexts`, the same data the reverse quiz surfaces), shaped into `RelearnContextScene` so the frontend can highlight the expression.
+- **`example_words` and `graph_context`** reuse the exact helpers the etymology submit handler already uses — `loadCardExampleWords(card)` and `buildGraphContextForCard(...)` (`quiz_handler.go`); for non-etymology words they are empty/absent.
 
 Because this context is assembled from read-only notebook data and returned in the response, it involves no learning-history access and cannot affect SM-2 or analytics.
 
@@ -313,12 +284,12 @@ Because this context is assembled from read-only notebook data and returned in t
 proto/api/v1/quiz.proto                                   # ADD RPCs, RelearnCard, Submit/Start messages, QUIZ_TYPE_RELEARN
 backend/schemas/migrations/017_add_relearn_clears.up.sql  # NEW
 backend/schemas/migrations/017_add_relearn_clears.down.sql# NEW
-backend/internal/quiz/relearn.go                          # NEW: RelearnCard, pool selector, context builder
-backend/internal/quiz/relearn_clears.go                   # NEW: RelearnClears interface + DB & memory impls
+backend/internal/quiz/relearn.go                          # NEW: RelearnCard, LoadRelearnPool, context builders
+backend/internal/learning/relearn_clears.go               # NEW: RelearnClearStore + DB & memory impls
 backend/internal/server/quiz_handler_relearn.go           # NEW: Start/Submit/Batch handlers
-backend/internal/server/quiz_handler.go                   # MODIFY: add relearnStore + relearnClears to QuizHandler
-backend/cmd/langner-server/main.go                        # MODIFY: wire RelearnClears (DB vs memory), like learningRepo
-backend/cmd/langner/*                                     # MODIFY (optional): a CLI relearn entrypoint for parity
+backend/internal/server/quiz_handler.go                   # MODIFY: add relearnStore + relearnClears + setter
+backend/cmd/langner-server/main.go                        # MODIFY: wire RelearnClearStore (DB vs memory), like learningRepo
+backend/cmd/langner/datasync.go                           # MODIFY: list relearn_clears in the clear/validate-db table set
 ```
 
 No changes to `learning_logs`, to `learning.LearningRepository`, to the SM-2 `IntervalCalculator`, or to any analytics code — the Relearn Quiz sits entirely alongside them.

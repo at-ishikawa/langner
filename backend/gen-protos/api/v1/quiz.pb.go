@@ -32,6 +32,11 @@ const (
 	QuizType_QUIZ_TYPE_ETYMOLOGY_STANDARD QuizType = 4
 	QuizType_QUIZ_TYPE_ETYMOLOGY_REVERSE  QuizType = 5
 	QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM QuizType = 6
+	// QUIZ_TYPE_RELEARN is a label-only value used by the Relearn Quiz to tag
+	// where a pooled word originally came from and to name the mode in the UI.
+	// It is NEVER written to a learning_logs row or a YAML quiz_type field —
+	// the Relearn Quiz records no learning history at all.
+	QuizType_QUIZ_TYPE_RELEARN QuizType = 7
 )
 
 // Enum value maps for QuizType.
@@ -44,6 +49,7 @@ var (
 		4: "QUIZ_TYPE_ETYMOLOGY_STANDARD",
 		5: "QUIZ_TYPE_ETYMOLOGY_REVERSE",
 		6: "QUIZ_TYPE_ETYMOLOGY_FREEFORM",
+		7: "QUIZ_TYPE_RELEARN",
 	}
 	QuizType_value = map[string]int32{
 		"QUIZ_TYPE_UNSPECIFIED":        0,
@@ -53,6 +59,7 @@ var (
 		"QUIZ_TYPE_ETYMOLOGY_STANDARD": 4,
 		"QUIZ_TYPE_ETYMOLOGY_REVERSE":  5,
 		"QUIZ_TYPE_ETYMOLOGY_FREEFORM": 6,
+		"QUIZ_TYPE_RELEARN":            7,
 	}
 )
 
@@ -3936,6 +3943,553 @@ func (x *SubmitEtymologyFreeformAnswerResponse) GetExampleWords() []string {
 	return nil
 }
 
+type StartRelearnQuizRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// window_hours is the look-back window for the wrong-word pool. 0 means
+	// "use the default" (24). The server clamps the effective value to
+	// [1, 168] (up to 7 days). A word qualifies when its most-recent learning
+	// log inside the window has status "misunderstood".
+	WindowHours   int32 `protobuf:"varint,1,opt,name=window_hours,json=windowHours,proto3" json:"window_hours,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartRelearnQuizRequest) Reset() {
+	*x = StartRelearnQuizRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[54]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartRelearnQuizRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartRelearnQuizRequest) ProtoMessage() {}
+
+func (x *StartRelearnQuizRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[54]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartRelearnQuizRequest.ProtoReflect.Descriptor instead.
+func (*StartRelearnQuizRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{54}
+}
+
+func (x *StartRelearnQuizRequest) GetWindowHours() int32 {
+	if x != nil {
+		return x.WindowHours
+	}
+	return 0
+}
+
+type StartRelearnQuizResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Cards         []*RelearnCard         `protobuf:"bytes,1,rep,name=cards,proto3" json:"cards,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *StartRelearnQuizResponse) Reset() {
+	*x = StartRelearnQuizResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[55]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StartRelearnQuizResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StartRelearnQuizResponse) ProtoMessage() {}
+
+func (x *StartRelearnQuizResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[55]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StartRelearnQuizResponse.ProtoReflect.Descriptor instead.
+func (*StartRelearnQuizResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{55}
+}
+
+func (x *StartRelearnQuizResponse) GetCards() []*RelearnCard {
+	if x != nil {
+		return x.Cards
+	}
+	return nil
+}
+
+type RelearnCard struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	// entry is the expression shown to the learner and the key graded against.
+	Entry string `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
+	// source_quiz_type records the quiz mode whose wrong answer put this word in
+	// the pool. Label-only — it never selects a grading rule the client can see
+	// and is never persisted. May be QUIZ_TYPE_RELEARN's siblings only.
+	SourceQuizType QuizType   `protobuf:"varint,3,opt,name=source_quiz_type,json=sourceQuizType,proto3,enum=api.v1.QuizType" json:"source_quiz_type,omitempty"`
+	Examples       []*Example `protobuf:"bytes,4,rep,name=examples,proto3" json:"examples,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *RelearnCard) Reset() {
+	*x = RelearnCard{}
+	mi := &file_api_v1_quiz_proto_msgTypes[56]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelearnCard) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelearnCard) ProtoMessage() {}
+
+func (x *RelearnCard) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[56]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelearnCard.ProtoReflect.Descriptor instead.
+func (*RelearnCard) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{56}
+}
+
+func (x *RelearnCard) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *RelearnCard) GetEntry() string {
+	if x != nil {
+		return x.Entry
+	}
+	return ""
+}
+
+func (x *RelearnCard) GetSourceQuizType() QuizType {
+	if x != nil {
+		return x.SourceQuizType
+	}
+	return QuizType_QUIZ_TYPE_UNSPECIFIED
+}
+
+func (x *RelearnCard) GetExamples() []*Example {
+	if x != nil {
+		return x.Examples
+	}
+	return nil
+}
+
+type SubmitRelearnAnswerRequest struct {
+	state  protoimpl.MessageState `protogen:"open.v1"`
+	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	// answer is the user's typed meaning. Ignored when is_skipped is true.
+	Answer         string `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SubmitRelearnAnswerRequest) Reset() {
+	*x = SubmitRelearnAnswerRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[57]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitRelearnAnswerRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitRelearnAnswerRequest) ProtoMessage() {}
+
+func (x *SubmitRelearnAnswerRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[57]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitRelearnAnswerRequest.ProtoReflect.Descriptor instead.
+func (*SubmitRelearnAnswerRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{57}
+}
+
+func (x *SubmitRelearnAnswerRequest) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *SubmitRelearnAnswerRequest) GetAnswer() string {
+	if x != nil {
+		return x.Answer
+	}
+	return ""
+}
+
+func (x *SubmitRelearnAnswerRequest) GetResponseTimeMs() int64 {
+	if x != nil {
+		return x.ResponseTimeMs
+	}
+	return 0
+}
+
+func (x *SubmitRelearnAnswerRequest) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
+}
+
+type SubmitRelearnAnswerResponse struct {
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Correct    bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
+	Meaning    string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Reason     string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
+	WordDetail *WordDetail            `protobuf:"bytes,4,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
+	Images     []string               `protobuf:"bytes,5,rep,name=images,proto3" json:"images,omitempty"`
+	// Rich Learn-page context, assembled read-only from notebook/etymology data:
+	// the scenes the word appears in, the etymology relation graph, and related
+	// words. All optional — omitted sub-parts render nothing.
+	ContextScenes []*RelearnContextScene `protobuf:"bytes,6,rep,name=context_scenes,json=contextScenes,proto3" json:"context_scenes,omitempty"`
+	GraphContext  *GraphPrompt           `protobuf:"bytes,7,opt,name=graph_context,json=graphContext,proto3" json:"graph_context,omitempty"`
+	ExampleWords  []string               `protobuf:"bytes,8,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SubmitRelearnAnswerResponse) Reset() {
+	*x = SubmitRelearnAnswerResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[58]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SubmitRelearnAnswerResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SubmitRelearnAnswerResponse) ProtoMessage() {}
+
+func (x *SubmitRelearnAnswerResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[58]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SubmitRelearnAnswerResponse.ProtoReflect.Descriptor instead.
+func (*SubmitRelearnAnswerResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{58}
+}
+
+func (x *SubmitRelearnAnswerResponse) GetCorrect() bool {
+	if x != nil {
+		return x.Correct
+	}
+	return false
+}
+
+func (x *SubmitRelearnAnswerResponse) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
+func (x *SubmitRelearnAnswerResponse) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *SubmitRelearnAnswerResponse) GetWordDetail() *WordDetail {
+	if x != nil {
+		return x.WordDetail
+	}
+	return nil
+}
+
+func (x *SubmitRelearnAnswerResponse) GetImages() []string {
+	if x != nil {
+		return x.Images
+	}
+	return nil
+}
+
+func (x *SubmitRelearnAnswerResponse) GetContextScenes() []*RelearnContextScene {
+	if x != nil {
+		return x.ContextScenes
+	}
+	return nil
+}
+
+func (x *SubmitRelearnAnswerResponse) GetGraphContext() *GraphPrompt {
+	if x != nil {
+		return x.GraphContext
+	}
+	return nil
+}
+
+func (x *SubmitRelearnAnswerResponse) GetExampleWords() []string {
+	if x != nil {
+		return x.ExampleWords
+	}
+	return nil
+}
+
+// RelearnContextScene mirrors what the Learn page renders for a word: the
+// prose statements and the speaker/quote conversation lines in which the
+// expression appears, within one scene.
+type RelearnContextScene struct {
+	state         protoimpl.MessageState     `protogen:"open.v1"`
+	NotebookName  string                     `protobuf:"bytes,1,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	SceneTitle    string                     `protobuf:"bytes,2,opt,name=scene_title,json=sceneTitle,proto3" json:"scene_title,omitempty"`
+	Statements    []string                   `protobuf:"bytes,3,rep,name=statements,proto3" json:"statements,omitempty"`
+	Conversations []*RelearnConversationLine `protobuf:"bytes,4,rep,name=conversations,proto3" json:"conversations,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelearnContextScene) Reset() {
+	*x = RelearnContextScene{}
+	mi := &file_api_v1_quiz_proto_msgTypes[59]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelearnContextScene) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelearnContextScene) ProtoMessage() {}
+
+func (x *RelearnContextScene) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[59]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelearnContextScene.ProtoReflect.Descriptor instead.
+func (*RelearnContextScene) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{59}
+}
+
+func (x *RelearnContextScene) GetNotebookName() string {
+	if x != nil {
+		return x.NotebookName
+	}
+	return ""
+}
+
+func (x *RelearnContextScene) GetSceneTitle() string {
+	if x != nil {
+		return x.SceneTitle
+	}
+	return ""
+}
+
+func (x *RelearnContextScene) GetStatements() []string {
+	if x != nil {
+		return x.Statements
+	}
+	return nil
+}
+
+func (x *RelearnContextScene) GetConversations() []*RelearnConversationLine {
+	if x != nil {
+		return x.Conversations
+	}
+	return nil
+}
+
+type RelearnConversationLine struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Speaker       string                 `protobuf:"bytes,1,opt,name=speaker,proto3" json:"speaker,omitempty"`
+	Quote         string                 `protobuf:"bytes,2,opt,name=quote,proto3" json:"quote,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RelearnConversationLine) Reset() {
+	*x = RelearnConversationLine{}
+	mi := &file_api_v1_quiz_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RelearnConversationLine) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RelearnConversationLine) ProtoMessage() {}
+
+func (x *RelearnConversationLine) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RelearnConversationLine.ProtoReflect.Descriptor instead.
+func (*RelearnConversationLine) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *RelearnConversationLine) GetSpeaker() string {
+	if x != nil {
+		return x.Speaker
+	}
+	return ""
+}
+
+func (x *RelearnConversationLine) GetQuote() string {
+	if x != nil {
+		return x.Quote
+	}
+	return ""
+}
+
+type BatchSubmitRelearnAnswersRequest struct {
+	state         protoimpl.MessageState        `protogen:"open.v1"`
+	Answers       []*SubmitRelearnAnswerRequest `protobuf:"bytes,1,rep,name=answers,proto3" json:"answers,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchSubmitRelearnAnswersRequest) Reset() {
+	*x = BatchSubmitRelearnAnswersRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchSubmitRelearnAnswersRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchSubmitRelearnAnswersRequest) ProtoMessage() {}
+
+func (x *BatchSubmitRelearnAnswersRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchSubmitRelearnAnswersRequest.ProtoReflect.Descriptor instead.
+func (*BatchSubmitRelearnAnswersRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *BatchSubmitRelearnAnswersRequest) GetAnswers() []*SubmitRelearnAnswerRequest {
+	if x != nil {
+		return x.Answers
+	}
+	return nil
+}
+
+type BatchSubmitRelearnAnswersResponse struct {
+	state         protoimpl.MessageState         `protogen:"open.v1"`
+	Responses     []*SubmitRelearnAnswerResponse `protobuf:"bytes,1,rep,name=responses,proto3" json:"responses,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BatchSubmitRelearnAnswersResponse) Reset() {
+	*x = BatchSubmitRelearnAnswersResponse{}
+	mi := &file_api_v1_quiz_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BatchSubmitRelearnAnswersResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BatchSubmitRelearnAnswersResponse) ProtoMessage() {}
+
+func (x *BatchSubmitRelearnAnswersResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BatchSubmitRelearnAnswersResponse.ProtoReflect.Descriptor instead.
+func (*BatchSubmitRelearnAnswersResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *BatchSubmitRelearnAnswersResponse) GetResponses() []*SubmitRelearnAnswerResponse {
+	if x != nil {
+		return x.Responses
+	}
+	return nil
+}
+
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
 
 const file_api_v1_quiz_proto_rawDesc = "" +
@@ -4257,7 +4811,48 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
 	"all_senses\x18\n" +
 	" \x03(\v2\x1c.api.v1.EtymologyOriginSenseR\tallSenses\x12#\n" +
-	"\rexample_words\x18\v \x03(\tR\fexampleWords*\xd1\x01\n" +
+	"\rexample_words\x18\v \x03(\tR\fexampleWords\"H\n" +
+	"\x17StartRelearnQuizRequest\x12-\n" +
+	"\fwindow_hours\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xa8\x01(\x00R\vwindowHours\"E\n" +
+	"\x18StartRelearnQuizResponse\x12)\n" +
+	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xa5\x01\n" +
+	"\vRelearnCard\x12\x17\n" +
+	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
+	"\x05entry\x18\x02 \x01(\tR\x05entry\x12:\n" +
+	"\x10source_quiz_type\x18\x03 \x01(\x0e2\x10.api.v1.QuizTypeR\x0esourceQuizType\x12+\n" +
+	"\bexamples\x18\x04 \x03(\v2\x0f.api.v1.ExampleR\bexamples\"\x9f\x01\n" +
+	"\x1aSubmitRelearnAnswerRequest\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xd9\x02\n" +
+	"\x1bSubmitRelearnAnswerResponse\x12\x18\n" +
+	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
+	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\x123\n" +
+	"\vword_detail\x18\x04 \x01(\v2\x12.api.v1.WordDetailR\n" +
+	"wordDetail\x12\x16\n" +
+	"\x06images\x18\x05 \x03(\tR\x06images\x12B\n" +
+	"\x0econtext_scenes\x18\x06 \x03(\v2\x1b.api.v1.RelearnContextSceneR\rcontextScenes\x128\n" +
+	"\rgraph_context\x18\a \x01(\v2\x13.api.v1.GraphPromptR\fgraphContext\x12#\n" +
+	"\rexample_words\x18\b \x03(\tR\fexampleWords\"\xc2\x01\n" +
+	"\x13RelearnContextScene\x12#\n" +
+	"\rnotebook_name\x18\x01 \x01(\tR\fnotebookName\x12\x1f\n" +
+	"\vscene_title\x18\x02 \x01(\tR\n" +
+	"sceneTitle\x12\x1e\n" +
+	"\n" +
+	"statements\x18\x03 \x03(\tR\n" +
+	"statements\x12E\n" +
+	"\rconversations\x18\x04 \x03(\v2\x1f.api.v1.RelearnConversationLineR\rconversations\"I\n" +
+	"\x17RelearnConversationLine\x12\x18\n" +
+	"\aspeaker\x18\x01 \x01(\tR\aspeaker\x12\x14\n" +
+	"\x05quote\x18\x02 \x01(\tR\x05quote\"j\n" +
+	" BatchSubmitRelearnAnswersRequest\x12F\n" +
+	"\aanswers\x18\x01 \x03(\v2\".api.v1.SubmitRelearnAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"f\n" +
+	"!BatchSubmitRelearnAnswersResponse\x12A\n" +
+	"\tresponses\x18\x01 \x03(\v2#.api.v1.SubmitRelearnAnswerResponseR\tresponses*\xe8\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +
@@ -4265,11 +4860,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x12QUIZ_TYPE_FREEFORM\x10\x03\x12 \n" +
 	"\x1cQUIZ_TYPE_ETYMOLOGY_STANDARD\x10\x04\x12\x1f\n" +
 	"\x1bQUIZ_TYPE_ETYMOLOGY_REVERSE\x10\x05\x12 \n" +
-	"\x1cQUIZ_TYPE_ETYMOLOGY_FREEFORM\x10\x06*{\n" +
+	"\x1cQUIZ_TYPE_ETYMOLOGY_FREEFORM\x10\x06\x12\x15\n" +
+	"\x11QUIZ_TYPE_RELEARN\x10\a*{\n" +
 	"\x11EtymologyQuizMode\x12#\n" +
 	"\x1fETYMOLOGY_QUIZ_MODE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cETYMOLOGY_QUIZ_MODE_STANDARD\x10\x01\x12\x1f\n" +
-	"\x1bETYMOLOGY_QUIZ_MODE_REVERSE\x10\x022\xc8\x0f\n" +
+	"\x1bETYMOLOGY_QUIZ_MODE_REVERSE\x10\x022\xf1\x11\n" +
 	"\vQuizService\x12O\n" +
 	"\x0eGetQuizOptions\x12\x1d.api.v1.GetQuizOptionsRequest\x1a\x1e.api.v1.GetQuizOptionsResponse\x12@\n" +
 	"\tStartQuiz\x12\x18.api.v1.StartQuizRequest\x1a\x19.api.v1.StartQuizResponse\x12I\n" +
@@ -4291,7 +4887,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x1cSubmitEtymologyReverseAnswer\x12+.api.v1.SubmitEtymologyReverseAnswerRequest\x1a,.api.v1.SubmitEtymologyReverseAnswerResponse\x12\x8b\x01\n" +
 	"\"BatchSubmitEtymologyReverseAnswers\x121.api.v1.BatchSubmitEtymologyReverseAnswersRequest\x1a2.api.v1.BatchSubmitEtymologyReverseAnswersResponse\x12s\n" +
 	"\x1aStartEtymologyFreeformQuiz\x12).api.v1.StartEtymologyFreeformQuizRequest\x1a*.api.v1.StartEtymologyFreeformQuizResponse\x12|\n" +
-	"\x1dSubmitEtymologyFreeformAnswer\x12,.api.v1.SubmitEtymologyFreeformAnswerRequest\x1a-.api.v1.SubmitEtymologyFreeformAnswerResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x1dSubmitEtymologyFreeformAnswer\x12,.api.v1.SubmitEtymologyFreeformAnswerRequest\x1a-.api.v1.SubmitEtymologyFreeformAnswerResponse\x12U\n" +
+	"\x10StartRelearnQuiz\x12\x1f.api.v1.StartRelearnQuizRequest\x1a .api.v1.StartRelearnQuizResponse\x12^\n" +
+	"\x13SubmitRelearnAnswer\x12\".api.v1.SubmitRelearnAnswerRequest\x1a#.api.v1.SubmitRelearnAnswerResponse\x12p\n" +
+	"\x19BatchSubmitRelearnAnswers\x12(.api.v1.BatchSubmitRelearnAnswersRequest\x1a).api.v1.BatchSubmitRelearnAnswersResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_quiz_proto_rawDescOnce sync.Once
@@ -4306,7 +4905,7 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 56)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 65)
 var file_api_v1_quiz_proto_goTypes = []any{
 	(QuizType)(0),                                       // 0: api.v1.QuizType
 	(EtymologyQuizMode)(0),                              // 1: api.v1.EtymologyQuizMode
@@ -4366,8 +4965,17 @@ var file_api_v1_quiz_proto_goTypes = []any{
 	(*SubmitEtymologyFreeformAnswerRequest)(nil),        // 55: api.v1.SubmitEtymologyFreeformAnswerRequest
 	(*EtymologyOriginSense)(nil),                        // 56: api.v1.EtymologyOriginSense
 	(*SubmitEtymologyFreeformAnswerResponse)(nil),       // 57: api.v1.SubmitEtymologyFreeformAnswerResponse
-	nil, // 58: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
-	nil, // 59: api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
+	(*StartRelearnQuizRequest)(nil),                     // 58: api.v1.StartRelearnQuizRequest
+	(*StartRelearnQuizResponse)(nil),                    // 59: api.v1.StartRelearnQuizResponse
+	(*RelearnCard)(nil),                                 // 60: api.v1.RelearnCard
+	(*SubmitRelearnAnswerRequest)(nil),                  // 61: api.v1.SubmitRelearnAnswerRequest
+	(*SubmitRelearnAnswerResponse)(nil),                 // 62: api.v1.SubmitRelearnAnswerResponse
+	(*RelearnContextScene)(nil),                         // 63: api.v1.RelearnContextScene
+	(*RelearnConversationLine)(nil),                     // 64: api.v1.RelearnConversationLine
+	(*BatchSubmitRelearnAnswersRequest)(nil),            // 65: api.v1.BatchSubmitRelearnAnswersRequest
+	(*BatchSubmitRelearnAnswersResponse)(nil),           // 66: api.v1.BatchSubmitRelearnAnswersResponse
+	nil, // 67: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	nil, // 68: api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
 	6,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
@@ -4385,7 +4993,7 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	13, // 12: api.v1.SubmitReverseAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	23, // 13: api.v1.BatchSubmitReverseAnswersRequest.answers:type_name -> api.v1.SubmitReverseAnswerRequest
 	24, // 14: api.v1.BatchSubmitReverseAnswersResponse.responses:type_name -> api.v1.SubmitReverseAnswerResponse
-	58, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	67, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 	13, // 16: api.v1.SubmitFreeformAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	0,  // 17: api.v1.OverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
 	0,  // 18: api.v1.UndoOverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
@@ -4404,53 +5012,68 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	46, // 31: api.v1.BatchSubmitEtymologyStandardAnswersResponse.responses:type_name -> api.v1.SubmitEtymologyStandardAnswerResponse
 	49, // 32: api.v1.BatchSubmitEtymologyReverseAnswersRequest.answers:type_name -> api.v1.SubmitEtymologyReverseAnswerRequest
 	50, // 33: api.v1.BatchSubmitEtymologyReverseAnswersResponse.responses:type_name -> api.v1.SubmitEtymologyReverseAnswerResponse
-	59, // 34: api.v1.StartEtymologyFreeformQuizResponse.next_review_dates:type_name -> api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
+	68, // 34: api.v1.StartEtymologyFreeformQuizResponse.next_review_dates:type_name -> api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
 	56, // 35: api.v1.SubmitEtymologyFreeformAnswerResponse.all_senses:type_name -> api.v1.EtymologyOriginSense
-	4,  // 36: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	9,  // 37: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	15, // 38: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	17, // 39: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
-	19, // 40: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	23, // 41: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	25, // 42: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
-	27, // 43: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	29, // 44: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	31, // 45: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	33, // 46: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	35, // 47: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	37, // 48: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	43, // 49: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
-	45, // 50: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
-	47, // 51: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
-	49, // 52: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
-	51, // 53: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
-	53, // 54: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
-	55, // 55: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
-	5,  // 56: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	10, // 57: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	16, // 58: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	18, // 59: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
-	20, // 60: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	24, // 61: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	26, // 62: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
-	28, // 63: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	30, // 64: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	32, // 65: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
-	34, // 66: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
-	36, // 67: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
-	38, // 68: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
-	44, // 69: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
-	46, // 70: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
-	48, // 71: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
-	50, // 72: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
-	52, // 73: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
-	54, // 74: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
-	57, // 75: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
-	56, // [56:76] is the sub-list for method output_type
-	36, // [36:56] is the sub-list for method input_type
-	36, // [36:36] is the sub-list for extension type_name
-	36, // [36:36] is the sub-list for extension extendee
-	0,  // [0:36] is the sub-list for field type_name
+	60, // 36: api.v1.StartRelearnQuizResponse.cards:type_name -> api.v1.RelearnCard
+	0,  // 37: api.v1.RelearnCard.source_quiz_type:type_name -> api.v1.QuizType
+	12, // 38: api.v1.RelearnCard.examples:type_name -> api.v1.Example
+	13, // 39: api.v1.SubmitRelearnAnswerResponse.word_detail:type_name -> api.v1.WordDetail
+	63, // 40: api.v1.SubmitRelearnAnswerResponse.context_scenes:type_name -> api.v1.RelearnContextScene
+	40, // 41: api.v1.SubmitRelearnAnswerResponse.graph_context:type_name -> api.v1.GraphPrompt
+	64, // 42: api.v1.RelearnContextScene.conversations:type_name -> api.v1.RelearnConversationLine
+	61, // 43: api.v1.BatchSubmitRelearnAnswersRequest.answers:type_name -> api.v1.SubmitRelearnAnswerRequest
+	62, // 44: api.v1.BatchSubmitRelearnAnswersResponse.responses:type_name -> api.v1.SubmitRelearnAnswerResponse
+	4,  // 45: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	9,  // 46: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	15, // 47: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	17, // 48: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
+	19, // 49: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	23, // 50: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	25, // 51: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
+	27, // 52: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	29, // 53: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	31, // 54: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	33, // 55: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	35, // 56: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	37, // 57: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	43, // 58: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
+	45, // 59: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
+	47, // 60: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
+	49, // 61: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
+	51, // 62: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
+	53, // 63: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
+	55, // 64: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
+	58, // 65: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
+	61, // 66: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
+	65, // 67: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
+	5,  // 68: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	10, // 69: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	16, // 70: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	18, // 71: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
+	20, // 72: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	24, // 73: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	26, // 74: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
+	28, // 75: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	30, // 76: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	32, // 77: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	34, // 78: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	36, // 79: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	38, // 80: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	44, // 81: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
+	46, // 82: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
+	48, // 83: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
+	50, // 84: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
+	52, // 85: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
+	54, // 86: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
+	57, // 87: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
+	59, // 88: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
+	62, // 89: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
+	66, // 90: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
+	68, // [68:91] is the sub-list for method output_type
+	45, // [45:68] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -4465,7 +5088,7 @@ func file_api_v1_quiz_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   56,
+			NumMessages:   65,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

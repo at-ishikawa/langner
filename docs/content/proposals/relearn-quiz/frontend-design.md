@@ -24,31 +24,23 @@ frontend/src/
       complete/
         page.tsx                 # NEW: session-complete summary
   store/
-    quizStore.ts                 # MODIFY: add "relearn" to QuizType; add a working-queue slice
-    relearnStore.ts              # NEW (option): isolate the queue slice if quizStore grows too large
+    relearnStore.ts              # NEW: isolated working-queue store (kept out of quizStore)
   components/
-    LearnContext.tsx             # NEW: shared context block (extracted from learn/[id]/page.tsx)
-    QuizResultCard.tsx           # REUSE: result card (override buttons stay hidden — see below)
+    RelearnContext.tsx           # NEW: Learn-page context block (scenes + related words + graph)
+  app/quiz/page.tsx              # MODIFY: add a Relearn entry link to the hub
   lib/
     client.ts                    # MODIFY: re-export Relearn request/response types
-    quizResultItems.ts           # MODIFY: relearnResultToItem mapper
-  app/learn/[id]/page.tsx        # MODIFY: extract SceneContent + renderHighlightedText into LearnContext
 ```
 
-## Quiz Mode Representation
+The working queue lives in its **own** `relearnStore.ts` rather than in `quizStore.ts`: the loop needs a requeue primitive the linear `currentIndex` store lacks, and isolating it keeps the existing store (and its tests) untouched. The feedback verdict is a small self-contained block in the session page rather than a reuse of `QuizResultCard` — the Relearn response has no `learned_at`/`next_review_date` and needs no override callbacks, so a dedicated banner is simpler than mapping to a `ResultItem`. The override buttons are absent by construction (there is nothing to override).
 
-A quiz mode exists in three parallel places today; a consistent `relearn` mode touches each:
+## How Relearn Slots Into the Existing Modes
 
-1. **Store string union** — `frontend/src/store/quizStore.ts:3`:
-   ```ts
-   export type QuizType = "standard" | "reverse" | "freeform"
-     | "etymology-standard" | "etymology-reverse" | "etymology-freeform";
-   ```
-   Add `"relearn"`.
+The existing quiz modes are represented in three parallel places (the `quizStore.ts` string `QuizType` union, the proto `QuizType` enum, and the hub's `vocabularyModes`/`etymologyModes` config with per-mode `/quiz/<mode>` routes). Relearn deliberately does **not** thread through all of them, because it is a self-contained flow with its own store and routes:
 
-2. **Proto enum** — `QuizType` in `gen-protos/api/v1/quiz_pb.ts` (`STANDARD=1 … ETYMOLOGY_FREEFORM=6`). Add the label-only `QUIZ_TYPE_RELEARN`. Note (see [Backend Design]({{< relref "backend-design" >}})) this enum value is **never persisted** — it is a UI label only.
-
-3. **Hub UI config + routing** — `app/quiz/page.tsx` has `vocabularyModes` / `etymologyModes` arrays of `{ key, title, description }` (around lines 28–38) and a `handleStart` switch (lines 303–391) that calls the right `start*` RPC and `router.push`es to a literal `/quiz/<mode>` folder (there is no dynamic `[mode]` route). Add a Relearn card and a branch that pushes to `/quiz/relearn`.
+1. **Proto enum** — `QUIZ_TYPE_RELEARN` is added to the proto `QuizType` (label-only, never persisted; see [Backend Design]({{< relref "backend-design" >}})). It labels a pooled word's `source_quiz_type`.
+2. **Store** — Relearn uses its own `relearnStore.ts`; it is **not** added to the `quizStore.ts` string union (which drives the override/analytics result actions Relearn has none of).
+3. **Hub** — instead of a mode card wired into `handleStart`, the hub gets a lightweight **Relearn link** (`app/quiz/page.tsx`) that routes to `/quiz/relearn`, which then owns its own start → session → complete pages.
 
 ## Start Screen — `app/quiz/relearn/page.tsx`
 
@@ -99,39 +91,32 @@ Because the loop is entirely client-side, leaving the page just discards the que
 
 - Render the front card: the expression as a heading, the muted `sourceQuizType` label ("missed in Reverse"), and a single meaning `AnswerInput` (reused from the standard quiz).
 - **Submit** calls `quizClient.submitRelearnAnswer({ noteId, answer, responseTimeMs })`. Following the existing optimistic-transition pattern (`QuizPhase = "answering" | "grading" | "feedback"` mirrors `quiz/standard/page.tsx:22`), the UI flips to the feedback layout immediately and fills in the verdict when the RPC returns.
-- **Skip** resolves the front card as not-correct without an RPC grade, but still shows the feedback screen (so the learner sees the meaning + context). It is treated exactly like a wrong answer for the queue.
-- Relearn submits **one card at a time** (not batched). The batched `batchSubmitAnswers` path used by the linear quizzes exists to write many logs efficiently; Relearn writes nothing and the loop needs a per-card decision, so the single-shot `submitRelearnAnswer` (with a `batchSubmitRelearnAnswers` available for parity) is used. See [Backend Design]({{< relref "backend-design" >}}).
+- **Skip** submits with `isSkipped: true`; the backend grades it as wrong but still returns the meaning + context, so the learner sees the answer. It is treated exactly like a wrong answer for the queue.
+- Relearn submits **one card at a time** (not batched). The batched path used by the linear quizzes exists to write many logs efficiently; Relearn writes nothing and the loop needs a per-card decision, so the single-shot `submitRelearnAnswer` (with `batchSubmitRelearnAnswers` available for parity) is used. See [Backend Design]({{< relref "backend-design" >}}).
 
-### Result card (reused, with override intentionally inert)
+### Result verdict (dedicated, no override)
 
-The feedback verdict reuses `components/QuizResultCard.tsx`. Its override / undo controls are gated on **both `noteId` and `learnedAt`** (`QuizResultCard.tsx:272–284`):
-
-```tsx
-{!item.isOverridden && !item.isSkipped && item.noteId && item.learnedAt && (
-  <Button onClick={() => onOverride(item)}>…</Button>
-)}
-```
-
-The Relearn response deliberately carries **no `learnedAt`** (and no next-review date), so mapping a Relearn result into a `ResultItem` with `learnedAt` left undefined makes the override buttons **stay hidden automatically** — no special-casing needed. This is the frontend expression of the "writes nothing to history" invariant: there is no log to override, and the existing gate already hides the control. The `relearnResultToItem` mapper (in `lib/quizResultItems.ts`) sets `entry`, `meaning`, `correct`, `reason`, `userAnswer`, and the context fields, and leaves `learnedAt`/`nextReviewDate` unset.
-
-Note `ResultItem` already has no `nextReviewDate` field (`QuizResultCard.tsx:15–47`) — the card never renders a review date — so nothing extra is needed to suppress it.
+The feedback verdict is a small self-contained block in the session page: a green/red banner (`✓ Correct` / `✗ Incorrect`), the expression, its meaning, and the grader's reason. It is **not** a reuse of `QuizResultCard`, and there are **no override / mark-as-correct controls at all** — the Relearn response carries no `learned_at` and no next-review date, so there is nothing to override and no schedule to show. This is the frontend expression of the "writes nothing to history" invariant: the control is absent by construction, not merely hidden.
 
 ### Learn-page context block (the distinguishing feature)
 
-Below the result card, the feedback screen renders the same context the Learn page shows. The real reusable pieces (the restart prompt's names do not exist):
+Below the result card, the feedback screen renders the Learn-page context for the word. The restart prompt named helpers that do not exist in the tree (`buildFromConversations`, `buildWordDetail`, `LoadEtymologyExampleWords`); the real building blocks are:
 
-| Restart-prompt name | Actual code | Location | Status |
-|---------------------|-------------|----------|--------|
-| `buildFromConversations` / `SceneContent` | `SceneContent` + `renderHighlightedText` | `app/learn/[id]/page.tsx:290`, `:42` | **inline — extract** |
-| `buildWordDetail` | `WordDetailView` component + `buildOriginBreakdown` mapper | `components/WordDetailView.tsx`, `lib/quizResultItems.ts:10` | already shared |
-| `LoadEtymologyExampleWords` | server-delivered `exampleWords` + the origin/related-words view | `notebooks/etymology/[id]/page.tsx` (`OriginDetailView`, `relatedDefs`) | server-provided |
-| `graph_context` / `RelationGraph` | `RelationGraph` (read-only, `compact`) | `components/RelationGraph.tsx` | already shared |
+| Restart-prompt name | Actual code | Location |
+|---------------------|-------------|----------|
+| `buildFromConversations` / `SceneContent` | conversations/statements rendering (`SceneContent` + `renderHighlightedText`) | `app/learn/[id]/page.tsx:290`, `:42` (inline) |
+| `LoadEtymologyExampleWords` | server-delivered `example_words` | `SubmitRelearnAnswerResponse.exampleWords` |
+| `graph_context` / `RelationGraph` | `RelationGraph` (read-only, `compact`) | `components/RelationGraph.tsx` (already shared) |
 
-Plan:
+Implementation: a new shared component **`components/RelearnContext.tsx`** renders the context the backend ships on `SubmitRelearnAnswerResponse`:
 
-1. **Extract** `SceneContent` and `renderHighlightedText` from `app/learn/[id]/page.tsx` into a shared `components/LearnContext.tsx`. Today the module comment says they are "kept here rather than in /lib because it is only used by the story reader" — the Relearn feedback screen becomes the second consumer, which justifies extraction. The Learn page imports them back from the shared component (no behavior change), satisfying the "one source of truth" goal so the two surfaces cannot drift.
-2. `LearnContext` renders, for the word: the **conversations/statements** it appears in (via `SceneContent`, with the expression highlighted by `renderHighlightedText`), the **word detail / origin** (via `WordDetailView`), the **related words** (`exampleWords` chip row), and the **relation graph** (`<RelationGraph prompt={graphContext} value="" onValueChange={()=>{}} disabled compact />`, exactly as `QuizResultCard.tsx:258–268` already does).
-3. The context payload (scenes, `graphContext`, `exampleWords`) arrives on `SubmitRelearnAnswerResponse` so the client does not need extra round-trips. Sub-sections with no data are omitted (matching `SceneContent` hiding empty scenes and `WordDetailView` rendering nothing when empty).
+1. **"Where it appears"** — the response's `contextScenes` (statements + speaker/quote conversation lines), with every occurrence of the expression bolded by a small local `highlightEntry` helper (unit-tested).
+2. **"Related words"** — the `exampleWords` chip row.
+3. **"Origin"** — the etymology `graphContext` via `<RelationGraph prompt={graphContext} value="" onValueChange={() => {}} disabled compact />`, exactly as `QuizResultCard.tsx:258–268` renders it.
+
+Every sub-section is omitted when its data is empty, so a word with no context or no etymology renders nothing extra. Because the whole payload arrives on the submit response, the feedback screen needs no extra round-trips.
+
+**Deferred:** the restart prompt suggested extracting `SceneContent` + `renderHighlightedText` out of `app/learn/[id]/page.tsx` into a shared module so the Learn page and the Relearn feedback share one implementation. That refactor is intentionally **not** done here — those helpers are tightly coupled to the story reader's deep-link/target-word ref logic, and rewiring them risks destabilizing the Learn page and its e2e coverage. `RelearnContext` implements its own small, self-contained highlighter instead; folding the two into one shared component is a low-risk follow-up.
 
 ## Complete Screen — `app/quiz/relearn/complete/page.tsx`
 
@@ -149,9 +134,13 @@ export const quizClient = createClient(QuizService, transport);
 
 After the proto adds `StartRelearnQuiz` / `SubmitRelearnAnswer` / `BatchSubmitRelearnAnswers`, the regenerated `QuizService` exposes `quizClient.startRelearnQuiz(...)` / `quizClient.submitRelearnAnswer(...)` with no manual client changes. Request/response types are re-exported from `client.ts` alongside the existing ones.
 
-## Testing (Vitest + React Testing Library)
+## Testing
 
-- **Queue reducer**: `resolveFront(true)` drops the front and increments `clearedCount`; `resolveFront(false)` moves the front to the back and leaves `clearedCount` unchanged; the session ends only when `queue.length === 0`. A word answered wrong then correct is cleared exactly once.
-- **Override buttons hidden**: mapping a Relearn result to a `ResultItem` with `learnedAt` undefined renders no Override / Mark-as-Correct button (asserts the gate).
-- **Context omission**: a word with no scenes/etymology renders the result card with the context sub-sections absent, not empty.
-- Tests live next to source (`*.test.tsx`), consistent with the existing frontend test layout (e.g. `quizStore.test.ts`).
+**Vitest + React Testing Library** (unit), covering the new code:
+
+- **Queue reducer** (`relearnStore.test.ts`): `resolveFront(true)` drops the front and increments `clearedCount`; `resolveFront(false)` moves the front to the back and leaves `clearedCount` unchanged; the session ends only when `queue.length === 0`; a word answered wrong then correct is cleared exactly once; `resolveFront` on an empty queue is a no-op.
+- **Session loop** (`session/page.test.tsx`): submit → feedback → Next clears the word; a wrong answer requeues it to the back; skip submits `isSkipped`; clearing the last word routes to `/quiz/relearn/complete`; a grading error returns to the answering phase.
+- **Start / complete pages**: pool count, empty state, window change, Start seeds the queue; the summary counts and the reset-and-navigate buttons.
+- **Context**: `RelearnContext` renders nothing when empty, and renders statements/conversations, related-word chips, and the relation graph when present; `highlightEntry` bolds occurrences.
+
+**Playwright BDD** (e2e, `relearn.feature`): answer a Standard card wrong to seed a fresh `misunderstood` log, then open the Relearn Quiz, start the session, and clear every pooled word through to the complete page — exercising all three routes end-to-end against the real backend.

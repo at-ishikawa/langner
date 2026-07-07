@@ -411,6 +411,11 @@ export default function QuizHubPage() {
         </Box>
         <Box px={4} pb={3} textAlign="center">
           <Heading size="md">Quiz</Heading>
+          <Link href="/quiz/relearn">
+            <Text mt={1} color="purple.600" _dark={{ color: "purple.300" }} fontSize="xs" fontWeight="medium">
+              ↻ Relearn recent mistakes — off the record
+            </Text>
+          </Link>
         </Box>
       </Box>
 

@@ -14,6 +14,11 @@ enum QuizType {
   QUIZ_TYPE_ETYMOLOGY_STANDARD = 4;
   QUIZ_TYPE_ETYMOLOGY_REVERSE = 5;
   QUIZ_TYPE_ETYMOLOGY_FREEFORM = 6;
+  // QUIZ_TYPE_RELEARN is a label-only value used by the Relearn Quiz to tag
+  // where a pooled word originally came from and to name the mode in the UI.
+  // It is NEVER written to a learning_logs row or a YAML quiz_type field —
+  // the Relearn Quiz records no learning history at all.
+  QUIZ_TYPE_RELEARN = 7;
 }
 
 enum EtymologyQuizMode {
@@ -43,6 +48,14 @@ service QuizService {
   rpc BatchSubmitEtymologyReverseAnswers(BatchSubmitEtymologyReverseAnswersRequest) returns (BatchSubmitEtymologyReverseAnswersResponse);
   rpc StartEtymologyFreeformQuiz(StartEtymologyFreeformQuizRequest) returns (StartEtymologyFreeformQuizResponse);
   rpc SubmitEtymologyFreeformAnswer(SubmitEtymologyFreeformAnswerRequest) returns (SubmitEtymologyFreeformAnswerResponse);
+
+  // Relearn Quiz — a practice-only quiz over recently-missed words. It writes
+  // NOTHING to learning history: Submit calls only the pure meaning graders,
+  // never any Save/UpdateLog path, and the responses carry no next_review_date
+  // or learned_at. See docs/content/proposals/relearn-quiz.
+  rpc StartRelearnQuiz(StartRelearnQuizRequest) returns (StartRelearnQuizResponse);
+  rpc SubmitRelearnAnswer(SubmitRelearnAnswerRequest) returns (SubmitRelearnAnswerResponse);
+  rpc BatchSubmitRelearnAnswers(BatchSubmitRelearnAnswersRequest) returns (BatchSubmitRelearnAnswersResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -581,4 +594,91 @@ message SubmitEtymologyFreeformAnswerResponse {
   repeated EtymologyOriginSense all_senses = 10;
   // example_words: see SubmitEtymologyStandardAnswerResponse.example_words.
   repeated string example_words = 11;
+}
+
+// Relearn Quiz Messages
+//
+// The Relearn Quiz gathers every word answered incorrectly across all quiz
+// types within a recent window and drills them in a unified recognition
+// format. It is practice-only: nothing here is ever persisted to learning
+// history, and the Submit response deliberately omits next_review_date and
+// learned_at (there is no schedule to move and no log to override).
+
+message StartRelearnQuizRequest {
+  // window_hours is the look-back window for the wrong-word pool. 0 means
+  // "use the default" (24). The server clamps the effective value to
+  // [1, 168] (up to 7 days). A word qualifies when its most-recent learning
+  // log inside the window has status "misunderstood".
+  int32 window_hours = 1 [
+    (buf.validate.field).int32 = {gte: 0, lte: 168}
+  ];
+}
+
+message StartRelearnQuizResponse {
+  repeated RelearnCard cards = 1;
+}
+
+message RelearnCard {
+  int64 note_id = 1;
+  // entry is the expression shown to the learner and the key graded against.
+  string entry = 2;
+  // source_quiz_type records the quiz mode whose wrong answer put this word in
+  // the pool. Label-only — it never selects a grading rule the client can see
+  // and is never persisted. May be QUIZ_TYPE_RELEARN's siblings only.
+  QuizType source_quiz_type = 3;
+  repeated Example examples = 4;
+}
+
+message SubmitRelearnAnswerRequest {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  // answer is the user's typed meaning. Ignored when is_skipped is true.
+  string answer = 2;
+  int64 response_time_ms = 3;
+  bool is_skipped = 4;
+}
+
+message SubmitRelearnAnswerResponse {
+  bool correct = 1;
+  string meaning = 2;
+  string reason = 3;
+  WordDetail word_detail = 4;
+  repeated string images = 5;
+
+  // Rich Learn-page context, assembled read-only from notebook/etymology data:
+  // the scenes the word appears in, the etymology relation graph, and related
+  // words. All optional — omitted sub-parts render nothing.
+  repeated RelearnContextScene context_scenes = 6;
+  GraphPrompt graph_context = 7;
+  repeated string example_words = 8;
+
+  // NOTE: intentionally NO next_review_date and NO learned_at. The Relearn
+  // Quiz writes no learning history, so there is no schedule to show and no
+  // log to override.
+}
+
+// RelearnContextScene mirrors what the Learn page renders for a word: the
+// prose statements and the speaker/quote conversation lines in which the
+// expression appears, within one scene.
+message RelearnContextScene {
+  string notebook_name = 1;
+  string scene_title = 2;
+  repeated string statements = 3;
+  repeated RelearnConversationLine conversations = 4;
+}
+
+message RelearnConversationLine {
+  string speaker = 1;
+  string quote = 2;
+}
+
+message BatchSubmitRelearnAnswersRequest {
+  repeated SubmitRelearnAnswerRequest answers = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+}
+
+message BatchSubmitRelearnAnswersResponse {
+  repeated SubmitRelearnAnswerResponse responses = 1;
 }

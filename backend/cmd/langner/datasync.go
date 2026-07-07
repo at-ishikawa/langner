@@ -422,6 +422,10 @@ func dataTablesInDeletionOrder() []string {
 		"semantic_concepts",
 		"definition_concepts",
 		"dictionary_entries",
+		// relearn_clears is a standalone marker table (no FK, not imported
+		// from YAML). Listed so the clear step wipes it and the schema-
+		// coverage test passes; order is irrelevant as it references nothing.
+		"relearn_clears",
 	}
 }
 

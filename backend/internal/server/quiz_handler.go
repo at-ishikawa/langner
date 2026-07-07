@@ -17,6 +17,7 @@ import (
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
@@ -35,6 +36,8 @@ type QuizHandler struct {
 	etymologyOriginStore map[int64]quiz.EtymologyOriginCard
 	etymologyOriginCards []quiz.EtymologyOriginCard
 	etymologyQuizMode    apiv1.EtymologyQuizMode
+	relearnStore   map[int64]quiz.RelearnCard
+	relearnClears  learning.RelearnClearStore
 	nextID         int64
 }
 
@@ -46,12 +49,24 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		reverseStore:         make(map[int64]quiz.ReverseCard),
 		freeformStore:        make(map[int64]quiz.FreeformCard),
 		etymologyOriginStore: make(map[int64]quiz.EtymologyOriginCard),
+		relearnStore:         make(map[int64]quiz.RelearnCard),
+		relearnClears:        learning.NewMemoryRelearnClearStore(),
 		nextID:               1,
 	}
 }
 
 func (h *QuizHandler) SetNoteRepository(repo notebook.NoteRepository) {
 	h.noteRepository = repo
+}
+
+// SetRelearnClearStore replaces the default in-memory relearn-clear marker
+// store. main.go passes a DB-backed store when a database is configured so the
+// "already relearned today" markers survive restarts. The store is NOT part of
+// the learning-history schema and is never read by SM-2 or analytics.
+func (h *QuizHandler) SetRelearnClearStore(store learning.RelearnClearStore) {
+	if store != nil {
+		h.relearnClears = store
+	}
 }
 
 func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[apiv1.GetQuizOptionsRequest]) (*connect.Response[apiv1.GetQuizOptionsResponse], error) {

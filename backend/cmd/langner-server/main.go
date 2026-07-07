@@ -93,6 +93,7 @@ func run(ctx context.Context) error {
 	calculator := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
 	yamlLearningRepo := learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, calculator)
 	var learningRepo learning.LearningRepository = yamlLearningRepo
+	var relearnClearStore learning.RelearnClearStore = learning.NewMemoryRelearnClearStore()
 	var noteRepo notebook.NoteRepository
 	var defsDir string
 	if len(cfg.Notebooks.DefinitionsDirectories) > 0 && cfg.Notebooks.DefinitionsDirectories[0] != "" { defsDir = cfg.Notebooks.DefinitionsDirectories[0] }
@@ -132,6 +133,10 @@ func run(ctx context.Context) error {
 			dbNoteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
 			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
+			// Relearn clears persist to the DB when one is available so
+			// "already relearned today" survives restarts. This is NOT a
+			// learning log — it never feeds SM-2 or analytics.
+			relearnClearStore = learning.NewDBRelearnClearStore(db)
 			slog.Info("database connected, dual storage enabled")
 		}
 	}
@@ -147,6 +152,7 @@ func run(ctx context.Context) error {
 
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
+	handler.SetRelearnClearStore(relearnClearStore)
 	analyticsHandler := server.NewAnalyticsHandler(analyticsRepo)
 	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
 	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
