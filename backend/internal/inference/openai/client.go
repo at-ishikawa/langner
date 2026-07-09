@@ -326,6 +326,12 @@ MARK CORRECT FOR THESE EQUIVALENCES:
    - If user provides alternatives (with "or", ";", "in this context")
    - If ANY alternative matches, mark CORRECT
 
+8. MINOR SPELLING ERRORS IN THE ANSWER:
+   - Judge the MEANING the user intended, not their spelling
+   - Typos, transposed/missing/extra letters, and small misspellings do NOT make an answer INCORRECT when the intended meaning is clear
+   - This holds even when a misspelling happens to look like another real word: infer intent from the whole answer, not the isolated token
+   - Spelling is NEVER a valid reason to mark INCORRECT
+
 === DECISION PROCESS ===
 
 1. First: Check for self-definition (STOP if found - mark INCORRECT)
@@ -334,8 +340,9 @@ MARK CORRECT FOR THESE EQUIVALENCES:
 4. Fourth: Check if context uses a compound term
 5. Fifth: Check IS vs USES error (category confusion)
 6. Sixth: Check PASSIVE vs ACTIVE error (direction reversal)
-7. Seventh: Apply semantic equivalence GENEROUSLY
-8. When uncertain: default to INCORRECT
+7. Seventh: Judge intended meaning, not spelling - ignore typos and misspellings
+8. Eighth: Apply semantic equivalence GENEROUSLY
+9. When uncertain: default to INCORRECT
 
 is_expression_input HANDLING
 - If true: expression may have typos; judge user's intended meaning
@@ -368,7 +375,7 @@ OUTPUT FORMAT:
 REASON FORMAT:
 - CORRECT: explain match (e.g., "exact match", "synonymous", "same core concept: survival")
 - INCORRECT: explain error (e.g., "self-definition", "IS vs USES: user described container not substance", "PASSIVE vs ACTIVE: user said victim but means resilience")
-- NEVER USE AS REASON: "context uses negation", "context implies X is not true"`
+- NEVER USE AS REASON: "context uses negation", "context implies X is not true", "spelling error", "misspelling", "typo"`
 
 	// promptExample to demonstrate correct evaluation patterns
 	type promptExample struct {
@@ -682,6 +689,28 @@ REASON FORMAT:
 					Meaning:    "the skill or work of making things from wood",
 					AnswersForContext: []inference.AnswersForContext{
 						{Correct: true, Context: "I don't know the first thing about carpentry.", Reason: "user correctly defines what carpentry IS - the context is about speaker's knowledge, not changing the word's meaning", Quality: 4},
+					},
+				},
+			},
+		},
+		{
+			description: "CORRECT - Minor spelling error: intended meaning is clear despite a typo that resembles another word",
+			userRequest: []inference.Expression{
+				{
+					Expression: "generous",
+					Meaning:    "willing to give and shair freely",
+					Contexts: []inference.Context{
+						{Context: "She was generous with her time and money.", ReferenceDefinition: "willing to give and share freely", Usage: "generous"},
+					},
+					IsExpressionInput: false,
+				},
+			},
+			assistantAnswer: []inference.AnswerMeaning{
+				{
+					Expression: "generous",
+					Meaning:    "willing to give and share freely",
+					AnswersForContext: []inference.AnswersForContext{
+						{Correct: true, Context: "She was generous with her time and money.", Reason: "matches the reference definition - 'shair' is a typo of 'share' and the intended meaning is clearly correct", Quality: 4},
 					},
 				},
 			},

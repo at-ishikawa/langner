@@ -77,6 +77,18 @@ func TestClient_AnswerMeanings_Evaluate(t *testing.T) {
 					{Correct: false, Reason: "user meaning is about moving, not operating"},
 				},
 			},
+			{
+				Expression: inference.Expression{
+					Expression: "brave",
+					Meaning:    "showing corage when facing danger",
+					Contexts: []inference.Context{
+						{Context: "The brave firefighter ran into the burning building.", ReferenceDefinition: "showing courage when facing danger"},
+					},
+				},
+				Wants: []IntegrationTestTargetWant{
+					{Correct: true, Reason: "'corage' is a typo of 'courage'; intended meaning is correct and spelling must be ignored"},
+				},
+			},
 		}
 	}
 
