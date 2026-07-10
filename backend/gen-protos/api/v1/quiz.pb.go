@@ -4038,15 +4038,25 @@ func (x *StartRelearnQuizResponse) GetCards() []*RelearnCard {
 type RelearnCard struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	// entry is the expression shown to the learner and the key graded against.
+	// entry is the word (or etymology origin) — the prompt for recognition /
+	// etymology-standard cards, and the answer the learner types for reverse /
+	// etymology-reverse cards.
 	Entry string `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
-	// source_quiz_type records the quiz mode whose wrong answer put this word in
-	// the pool. Label-only — it never selects a grading rule the client can see
-	// and is never persisted. May be QUIZ_TYPE_RELEARN's siblings only.
-	SourceQuizType QuizType   `protobuf:"varint,3,opt,name=source_quiz_type,json=sourceQuizType,proto3,enum=api.v1.QuizType" json:"source_quiz_type,omitempty"`
-	Examples       []*Example `protobuf:"bytes,4,rep,name=examples,proto3" json:"examples,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// source_quiz_type is the format the card is presented and graded in — the
+	// quiz type it was failed in: QUIZ_TYPE_STANDARD (recognition: show entry,
+	// ask meaning), QUIZ_TYPE_REVERSE (show meaning + contexts, ask entry),
+	// QUIZ_TYPE_ETYMOLOGY_STANDARD (show origin, ask meaning), or
+	// QUIZ_TYPE_ETYMOLOGY_REVERSE (show meaning, ask origin). Never persisted.
+	SourceQuizType QuizType `protobuf:"varint,3,opt,name=source_quiz_type,json=sourceQuizType,proto3,enum=api.v1.QuizType" json:"source_quiz_type,omitempty"`
+	// meaning is the prompt for reverse / etymology-reverse cards and the
+	// expected answer otherwise. Always sent so feedback can show both sides.
+	Meaning       string             `protobuf:"bytes,4,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Examples      []*Example         `protobuf:"bytes,5,rep,name=examples,proto3" json:"examples,omitempty"` // recognition hint
+	Contexts      []*ContextSentence `protobuf:"bytes,6,rep,name=contexts,proto3" json:"contexts,omitempty"` // reverse hint (masked)
+	Type          string             `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"`         // etymology origin type (root/prefix/suffix)
+	Language      string             `protobuf:"bytes,8,opt,name=language,proto3" json:"language,omitempty"` // etymology origin language
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RelearnCard) Reset() {
@@ -4100,11 +4110,39 @@ func (x *RelearnCard) GetSourceQuizType() QuizType {
 	return QuizType_QUIZ_TYPE_UNSPECIFIED
 }
 
+func (x *RelearnCard) GetMeaning() string {
+	if x != nil {
+		return x.Meaning
+	}
+	return ""
+}
+
 func (x *RelearnCard) GetExamples() []*Example {
 	if x != nil {
 		return x.Examples
 	}
 	return nil
+}
+
+func (x *RelearnCard) GetContexts() []*ContextSentence {
+	if x != nil {
+		return x.Contexts
+	}
+	return nil
+}
+
+func (x *RelearnCard) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *RelearnCard) GetLanguage() string {
+	if x != nil {
+		return x.Language
+	}
+	return ""
 }
 
 type SubmitRelearnAnswerRequest struct {
@@ -4816,12 +4854,16 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\fwindow_hours\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xa8\x01(\x00R\vwindowHours\"E\n" +
 	"\x18StartRelearnQuizResponse\x12)\n" +
-	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xa5\x01\n" +
+	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xa4\x02\n" +
 	"\vRelearnCard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
 	"\x05entry\x18\x02 \x01(\tR\x05entry\x12:\n" +
-	"\x10source_quiz_type\x18\x03 \x01(\x0e2\x10.api.v1.QuizTypeR\x0esourceQuizType\x12+\n" +
-	"\bexamples\x18\x04 \x03(\v2\x0f.api.v1.ExampleR\bexamples\"\x9f\x01\n" +
+	"\x10source_quiz_type\x18\x03 \x01(\x0e2\x10.api.v1.QuizTypeR\x0esourceQuizType\x12\x18\n" +
+	"\ameaning\x18\x04 \x01(\tR\ameaning\x12+\n" +
+	"\bexamples\x18\x05 \x03(\v2\x0f.api.v1.ExampleR\bexamples\x123\n" +
+	"\bcontexts\x18\x06 \x03(\v2\x17.api.v1.ContextSentenceR\bcontexts\x12\x12\n" +
+	"\x04type\x18\a \x01(\tR\x04type\x12\x1a\n" +
+	"\blanguage\x18\b \x01(\tR\blanguage\"\x9f\x01\n" +
 	"\x1aSubmitRelearnAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
@@ -5017,63 +5059,64 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	60, // 36: api.v1.StartRelearnQuizResponse.cards:type_name -> api.v1.RelearnCard
 	0,  // 37: api.v1.RelearnCard.source_quiz_type:type_name -> api.v1.QuizType
 	12, // 38: api.v1.RelearnCard.examples:type_name -> api.v1.Example
-	13, // 39: api.v1.SubmitRelearnAnswerResponse.word_detail:type_name -> api.v1.WordDetail
-	63, // 40: api.v1.SubmitRelearnAnswerResponse.context_scenes:type_name -> api.v1.RelearnContextScene
-	40, // 41: api.v1.SubmitRelearnAnswerResponse.graph_context:type_name -> api.v1.GraphPrompt
-	64, // 42: api.v1.RelearnContextScene.conversations:type_name -> api.v1.RelearnConversationLine
-	61, // 43: api.v1.BatchSubmitRelearnAnswersRequest.answers:type_name -> api.v1.SubmitRelearnAnswerRequest
-	62, // 44: api.v1.BatchSubmitRelearnAnswersResponse.responses:type_name -> api.v1.SubmitRelearnAnswerResponse
-	4,  // 45: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	9,  // 46: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	15, // 47: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	17, // 48: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
-	19, // 49: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	23, // 50: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	25, // 51: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
-	27, // 52: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	29, // 53: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	31, // 54: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	33, // 55: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	35, // 56: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	37, // 57: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	43, // 58: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
-	45, // 59: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
-	47, // 60: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
-	49, // 61: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
-	51, // 62: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
-	53, // 63: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
-	55, // 64: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
-	58, // 65: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
-	61, // 66: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
-	65, // 67: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
-	5,  // 68: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	10, // 69: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	16, // 70: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	18, // 71: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
-	20, // 72: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	24, // 73: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	26, // 74: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
-	28, // 75: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	30, // 76: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	32, // 77: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
-	34, // 78: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
-	36, // 79: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
-	38, // 80: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
-	44, // 81: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
-	46, // 82: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
-	48, // 83: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
-	50, // 84: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
-	52, // 85: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
-	54, // 86: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
-	57, // 87: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
-	59, // 88: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
-	62, // 89: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
-	66, // 90: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
-	68, // [68:91] is the sub-list for method output_type
-	45, // [45:68] is the sub-list for method input_type
-	45, // [45:45] is the sub-list for extension type_name
-	45, // [45:45] is the sub-list for extension extendee
-	0,  // [0:45] is the sub-list for field type_name
+	22, // 39: api.v1.RelearnCard.contexts:type_name -> api.v1.ContextSentence
+	13, // 40: api.v1.SubmitRelearnAnswerResponse.word_detail:type_name -> api.v1.WordDetail
+	63, // 41: api.v1.SubmitRelearnAnswerResponse.context_scenes:type_name -> api.v1.RelearnContextScene
+	40, // 42: api.v1.SubmitRelearnAnswerResponse.graph_context:type_name -> api.v1.GraphPrompt
+	64, // 43: api.v1.RelearnContextScene.conversations:type_name -> api.v1.RelearnConversationLine
+	61, // 44: api.v1.BatchSubmitRelearnAnswersRequest.answers:type_name -> api.v1.SubmitRelearnAnswerRequest
+	62, // 45: api.v1.BatchSubmitRelearnAnswersResponse.responses:type_name -> api.v1.SubmitRelearnAnswerResponse
+	4,  // 46: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	9,  // 47: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	15, // 48: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	17, // 49: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
+	19, // 50: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	23, // 51: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	25, // 52: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
+	27, // 53: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	29, // 54: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	31, // 55: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	33, // 56: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	35, // 57: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	37, // 58: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	43, // 59: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
+	45, // 60: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
+	47, // 61: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
+	49, // 62: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
+	51, // 63: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
+	53, // 64: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
+	55, // 65: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
+	58, // 66: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
+	61, // 67: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
+	65, // 68: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
+	5,  // 69: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	10, // 70: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	16, // 71: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	18, // 72: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
+	20, // 73: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	24, // 74: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	26, // 75: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
+	28, // 76: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	30, // 77: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	32, // 78: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	34, // 79: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	36, // 80: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	38, // 81: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	44, // 82: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
+	46, // 83: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
+	48, // 84: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
+	50, // 85: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
+	52, // 86: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
+	54, // 87: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
+	57, // 88: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
+	59, // 89: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
+	62, // 90: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
+	66, // 91: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
+	69, // [69:92] is the sub-list for method output_type
+	46, // [46:69] is the sub-list for method input_type
+	46, // [46:46] is the sub-list for extension type_name
+	46, // [46:46] is the sub-list for extension extendee
+	0,  // [0:46] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }

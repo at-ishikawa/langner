@@ -2,25 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Input, Spinner, Text } from "@chakra-ui/react";
+import { Box, Button, Heading, Spinner, Text } from "@chakra-ui/react";
 import { quizClient, QuizType, type SubmitRelearnAnswerResponse } from "@/lib/client";
+import { AnswerInput } from "@/components/AnswerInput";
 import { useRelearnStore } from "@/store/relearnStore";
 import RelearnContext from "@/components/RelearnContext";
 
-// sourceLabel names, for context only, which quiz originally produced the wrong
-// answer that pooled this word. It never changes how the word is asked.
+// sourceLabel names which quiz produced the wrong answer that pooled this card —
+// and, now that relearn mirrors that quiz, which format it is presented in.
 function sourceLabel(source: QuizType): string {
   switch (source) {
     case QuizType.REVERSE:
-      return "missed in Reverse";
-    case QuizType.FREEFORM:
-      return "missed in Freeform";
+      return "Reverse — recall the word";
     case QuizType.ETYMOLOGY_STANDARD:
+      return "Etymology — recall the meaning";
     case QuizType.ETYMOLOGY_REVERSE:
-    case QuizType.ETYMOLOGY_FREEFORM:
-      return "missed in Etymology";
+      return "Etymology — recall the origin";
     default:
-      return "missed in Notebook";
+      return "Recognition — recall the meaning";
   }
 }
 
@@ -57,6 +56,24 @@ export default function RelearnSessionPage() {
     return null;
   }
 
+  // Each card mirrors the quiz type it was failed in. For the reverse formats
+  // the learner produces the word/origin from the meaning; otherwise they
+  // recall the meaning from the word/origin.
+  const isReverse =
+    current.sourceQuizType === QuizType.REVERSE ||
+    current.sourceQuizType === QuizType.ETYMOLOGY_REVERSE;
+  const isEtymology =
+    current.sourceQuizType === QuizType.ETYMOLOGY_STANDARD ||
+    current.sourceQuizType === QuizType.ETYMOLOGY_REVERSE;
+  const promptText = isReverse ? current.meaning : current.entry;
+  const answerLabel = isReverse ? (isEtymology ? "The origin" : "The word") : "Your meaning";
+  const answerPlaceholder = isReverse
+    ? isEtymology
+      ? "Type the origin"
+      : "Type the word"
+    : "Type the meaning";
+  const etymologyBadge = [current.type, current.language].filter(Boolean).join(" · ");
+
   const submit = async (isSkipped: boolean) => {
     setSubmitting(true);
     setError(null);
@@ -91,36 +108,60 @@ export default function RelearnSessionPage() {
         {queue.length} {queue.length === 1 ? "word" : "words"} left
       </Text>
 
-      <Box textAlign="center" mb={4}>
-        <Heading size="lg" data-testid="relearn-entry">{current.entry}</Heading>
-        <Text fontSize="xs" color="gray.400" mt={1} aria-label={`originally ${sourceLabel(current.sourceQuizType)}`}>
+      {/* Prompt card — mirrors the source quiz's format. */}
+      <Box bg="white" _dark={{ bg: "gray.800" }} borderRadius="lg" borderWidth="1px" borderColor="gray.200" p={5} mb={4}>
+        <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium" mb={2}>
           {sourceLabel(current.sourceQuizType)}
         </Text>
+        <Heading size="lg" textAlign="center" data-testid="relearn-prompt">
+          {promptText}
+        </Heading>
+        {isEtymology && etymologyBadge && (
+          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center" mt={1}>
+            {etymologyBadge}
+          </Text>
+        )}
+
+        {/* Hints: examples for recognition, masked contexts for reverse. */}
+        {!isReverse && current.examples.length > 0 && (
+          <Box mt={3} display="flex" flexDirection="column" gap={1}>
+            {current.examples.map((ex, i) => (
+              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+                {ex.speaker ? `${ex.speaker}: ` : ""}
+                {ex.text}
+              </Text>
+            ))}
+          </Box>
+        )}
+        {isReverse && !isEtymology && current.contexts.length > 0 && (
+          <Box mt={3} display="flex" flexDirection="column" gap={1}>
+            {current.contexts.map((c, i) => (
+              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+                {c.maskedContext || c.context}
+              </Text>
+            ))}
+          </Box>
+        )}
       </Box>
 
       {phase === "answering" ? (
         <Box display="flex" flexDirection="column" gap={3}>
-          <Text fontSize="sm" fontWeight="medium">Your meaning:</Text>
-          <Input
-            autoFocus
+          <AnswerInput
+            label={answerLabel}
             value={answer}
-            onChange={(e) => setAnswer(e.target.value)}
+            onChange={setAnswer}
+            onSubmit={() => void submit(false)}
+            onSkip={() => void submit(true)}
             onKeyDown={(e) => {
               if (e.key === "Enter" && answer.trim()) void submit(false);
             }}
-            placeholder="Type the meaning"
+            placeholder={answerPlaceholder}
           />
           {error && (
-            <Text color="red.500" fontSize="sm" role="alert">{error}</Text>
+            <Text color="red.500" fontSize="sm" role="alert">
+              {error}
+            </Text>
           )}
-          <Box display="flex" gap={2}>
-            <Button variant="outline" flex={1} onClick={() => void submit(true)} aria-label="Skip and see the answer">
-              Skip
-            </Button>
-            <Button colorPalette="purple" flex={1} onClick={() => void submit(false)} disabled={!answer.trim()}>
-              Submit
-            </Button>
-          </Box>
         </Box>
       ) : (
         <Box display="flex" flexDirection="column" gap={3}>
@@ -143,9 +184,19 @@ export default function RelearnSessionPage() {
               >
                 {feedback.correct ? "✓ Correct" : "✗ Incorrect"}
               </Box>
+              {/* Always show the word and its meaning, whichever side was asked. */}
               <Box>
-                <Text fontWeight="bold">{current.entry}</Text>
-                <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }} data-testid="relearn-meaning">{feedback.meaning}</Text>
+                <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
+                  {current.entry}
+                </Text>
+                <Text
+                  fontSize="sm"
+                  color="gray.600"
+                  _dark={{ color: "gray.300" }}
+                  data-testid={isReverse ? undefined : "relearn-answer"}
+                >
+                  {feedback.meaning || current.meaning}
+                </Text>
               </Box>
               {feedback.reason && (
                 <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>

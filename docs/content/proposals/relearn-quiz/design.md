@@ -85,30 +85,38 @@ Shown when the pool is empty for the selected window.
 
 ## Screen R2: Quiz Card (`/quiz/relearn/session`)
 
-The recognition card. Every word — no matter which quiz originally produced the wrong answer — is shown in the same format: the expression on top, an input for its meaning below.
+Each card **mirrors the quiz type the word was failed in** — the same prompt, hint, direction, and layout as that quiz, reusing the shared `AnswerInput`. There are four formats:
+
+| Failed in | Prompt (shown) | Hint | Input asks |
+|-----------|----------------|------|-----------|
+| Notebook / Freeform (recognition) | the **expression** | example sentences | its meaning |
+| **Reverse** | the **meaning** | the masked context sentences | the word |
+| Etymology standard | the **origin** (+ type · language) | — | its meaning |
+| Etymology assembly (reverse) | the **meaning** (+ type · language) | — | the origin |
+
+A reverse-failed word (shown below) is drilled the reverse way — the meaning is the prompt and the masked contexts are the hint, exactly as in the reverse quiz — so the learner re-practices the skill they actually failed (producing the word), not recognizing it.
 
 ```
 ┌─────────────────────────────────────┐
-│ ████████░░░░░░░░  9 words left       │
-│                                     │
-│           ephemeral                 │
-│        missed in Reverse            │
-│                                     │
-│  Your meaning:                      │
+│  9 words left                       │
+│ ┌─────────────────────────────────┐ │
+│ │ Reverse — recall the word       │ │
+│ │   lasting a very short time     │ │   ← the meaning is the prompt
+│ │   "It was a ____ moment."       │ │   ← masked context hint
+│ └─────────────────────────────────┘ │
+│  The word:                          │
 │  ┌───────────────────────────────┐  │
 │  │                               │  │
 │  └───────────────────────────────┘  │
-│                                     │
-│         [ Skip ]   [ Submit ]       │
+│      [ Submit ]  [ Don't Know ]     │
 └─────────────────────────────────────┘
 ```
 
-- **Progress bar + counter** at the top, styled like the existing quizzes — but the counter shows **"N words left"** (distinct words remaining in the working queue), not "card X of Y", because the queue only shrinks as words are cleared and a wrong/skipped word comes back later.
-- **Word card**: the expression, prominent. Below it, a small muted **origin label** ("missed in Reverse", "missed in Etymology Breakdown", "missed in Notebook") for context only — it does not change how the word is asked.
-- **Meaning input**: a single text field, auto-focused.
-- **Submit** and **Skip** buttons fixed at the bottom.
-  - **Submit** grades the typed meaning.
-  - **Skip** counts as not-correct: the word goes to the back of the queue (same as a wrong answer) and the feedback screen is shown so the learner still sees the meaning and context.
+- **Counter** at the top shows **"N words left"** (distinct cards remaining in the working queue), not "card X of Y", because the queue only shrinks as cards are cleared and a wrong/skipped card comes back later.
+- **Prompt card**: a header naming the format and skill ("Reverse — recall the word"), the prompt, and the format's hint.
+- **Input + buttons**: the shared `AnswerInput` (Submit + "Don't Know"), so the layout matches the other quizzes.
+  - **Submit** grades the typed answer *in the card's direction* (the reverse grader for a reverse card, the notebook grader for a recognition card, etc.).
+  - **Don't Know** counts as not-correct: the card goes to the back of the queue and the feedback screen is shown so the learner still sees the answer and context.
 
 ## Screen R3: Feedback (`/quiz/relearn/session`, feedback state)
 

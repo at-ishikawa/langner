@@ -620,13 +620,23 @@ message StartRelearnQuizResponse {
 
 message RelearnCard {
   int64 note_id = 1;
-  // entry is the expression shown to the learner and the key graded against.
+  // entry is the word (or etymology origin) — the prompt for recognition /
+  // etymology-standard cards, and the answer the learner types for reverse /
+  // etymology-reverse cards.
   string entry = 2;
-  // source_quiz_type records the quiz mode whose wrong answer put this word in
-  // the pool. Label-only — it never selects a grading rule the client can see
-  // and is never persisted. May be QUIZ_TYPE_RELEARN's siblings only.
+  // source_quiz_type is the format the card is presented and graded in — the
+  // quiz type it was failed in: QUIZ_TYPE_STANDARD (recognition: show entry,
+  // ask meaning), QUIZ_TYPE_REVERSE (show meaning + contexts, ask entry),
+  // QUIZ_TYPE_ETYMOLOGY_STANDARD (show origin, ask meaning), or
+  // QUIZ_TYPE_ETYMOLOGY_REVERSE (show meaning, ask origin). Never persisted.
   QuizType source_quiz_type = 3;
-  repeated Example examples = 4;
+  // meaning is the prompt for reverse / etymology-reverse cards and the
+  // expected answer otherwise. Always sent so feedback can show both sides.
+  string meaning = 4;
+  repeated Example examples = 5;          // recognition hint
+  repeated ContextSentence contexts = 6;  // reverse hint (masked)
+  string type = 7;                        // etymology origin type (root/prefix/suffix)
+  string language = 8;                    // etymology origin language
 }
 
 message SubmitRelearnAnswerRequest {

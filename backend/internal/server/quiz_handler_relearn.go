@@ -72,11 +72,19 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 		for _, ex := range card.Examples {
 			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker})
 		}
+		var contexts []*apiv1.ContextSentence
+		for _, c := range card.Contexts {
+			contexts = append(contexts, &apiv1.ContextSentence{Context: c.Context, MaskedContext: c.MaskedContext})
+		}
 		protoCards = append(protoCards, &apiv1.RelearnCard{
 			NoteId:         noteID,
 			Entry:          card.Entry,
-			SourceQuizType: notebookQuizTypeToProto(card.SourceQuizType),
+			SourceQuizType: notebookQuizTypeToProto(card.Format),
+			Meaning:        card.Meaning,
 			Examples:       examples,
+			Contexts:       contexts,
+			Type:           card.OriginType,
+			Language:       card.Language,
 		})
 	}
 
@@ -150,16 +158,23 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 	return connect.NewResponse(&apiv1.BatchSubmitRelearnAnswersResponse{Responses: responses}), nil
 }
 
-// gradeRelearn dispatches to the pure grader matching the card's kind. A skip
-// is graded as wrong without calling the grader (same as the other quizzes).
+// gradeRelearn dispatches to the pure grader that matches the card's Format, so
+// each word is graded in the direction it was failed in. A skip is graded as
+// wrong without calling the grader (same as the other quizzes).
 func (h *QuizHandler) gradeRelearn(ctx context.Context, card quiz.RelearnCard, answer string, responseTimeMs int64, skipped bool) (quiz.GradeResult, error) {
 	if skipped {
 		return skippedGradeResult(), nil
 	}
-	if card.IsEtymology {
+	switch card.Format {
+	case notebook.QuizTypeReverse:
+		return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
+	case notebook.QuizTypeEtymologyStandard:
 		return h.svc.GradeEtymologyStandardAnswer(ctx, card.EtymologyCard(), answer, responseTimeMs)
+	case notebook.QuizTypeEtymologyReverse:
+		return h.svc.GradeEtymologyReverseAnswer(ctx, card.EtymologyCard(), answer, responseTimeMs)
+	default:
+		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
 	}
-	return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
 }
 
 // markRelearnCleared records the non-SR clear marker when the answer is
@@ -186,7 +201,7 @@ func (h *QuizHandler) buildRelearnResponse(ctx context.Context, card quiz.Relear
 		Images:        card.Images,
 		ContextScenes: toProtoRelearnScenes(card.ContextScenes),
 	}
-	if card.IsEtymology {
+	if card.IsEtymology() {
 		ec := card.EtymologyCard()
 		resp.ExampleWords = h.loadCardExampleWords(ec)
 		if r, err := h.svc.NewReader(); err == nil {

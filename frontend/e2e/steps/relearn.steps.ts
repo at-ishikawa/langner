@@ -27,35 +27,37 @@ Then("I see a relearn card", async ({ page }) => {
 });
 
 // Loops through the working queue until it empties and the session lands on the
-// complete page. The pool can hold both vocabulary and etymology-origin words,
-// and the mock etymology grader only accepts the exact meaning. So the loop
-// captures each card's meaning from its feedback and reuses it on the next
-// encounter: an etymology card is answered wrong once (recording its meaning),
-// then correct. Vocabulary cards clear on the first non-"wrong" answer. Every
-// card therefore clears within two passes, so the loop converges.
+// complete page. Each card mirrors its source quiz type, so the prompt and the
+// correct answer differ per card (recognition asks the meaning; reverse asks
+// the word; etymology asks the meaning/origin). The mock reverse/etymology
+// graders accept only the exact answer, so the loop captures each card's correct
+// answer from its feedback (data-testid=relearn-answer) keyed by its prompt
+// (data-testid=relearn-prompt) and reuses it on the next encounter: a card is
+// answered wrong once (recording the answer), then correct. Recognition cards
+// clear on the first non-"wrong" answer. Every card clears within two passes.
 //
 // exact:true is required on the button names: `next dev` injects a "Open
 // Next.js Dev Tools" button whose accessible name contains "Next", which a
 // loose name match collides with.
 When("I clear every remaining relearn card", async ({ page }) => {
-  const meanings = new Map<string, string>();
+  const answers = new Map<string, string>();
   const submit = page.getByRole("button", { name: "Submit", exact: true });
   const next = page.getByRole("button", { name: "Next", exact: true });
   for (let i = 0; i < 200 && !page.url().includes("/quiz/relearn/complete"); i++) {
     await submit.waitFor({ state: "visible" });
-    const entry = ((await page.getByTestId("relearn-entry").textContent()) ?? "").trim();
-    await page.getByPlaceholder("Type the meaning").fill(meanings.get(entry) ?? "an attempt");
+    const prompt = ((await page.getByTestId("relearn-prompt").textContent()) ?? "").trim();
+    await page.getByRole("textbox").first().fill(answers.get(prompt) ?? "an attempt");
     await submit.click();
-    const meaningEl = page.getByTestId("relearn-meaning");
-    await meaningEl.waitFor({ state: "visible" });
-    meanings.set(entry, ((await meaningEl.textContent()) ?? "").trim());
+    const answerEl = page.getByTestId("relearn-answer");
+    await answerEl.waitFor({ state: "visible" });
+    answers.set(prompt, ((await answerEl.textContent()) ?? "").trim());
     await next.click();
     // Wait until either the next card's input mounts or the session navigates
     // to the complete page — avoids racing the blank transition frame.
     await page.waitForFunction(
       () =>
         location.pathname.includes("/quiz/relearn/complete") ||
-        !!document.querySelector('input[placeholder="Type the meaning"]'),
+        !!document.querySelector("input"),
       undefined,
       { timeout: 15000 },
     );

@@ -27,7 +27,12 @@ function renderPage() {
   );
 }
 
-const card = (entry: string): RelearnCard => ({ entry, noteId: BigInt(entry.length), sourceQuizType: 1 }) as RelearnCard;
+const card = (entry: string): RelearnCard =>
+  ({ entry, noteId: BigInt(entry.length), sourceQuizType: 1, meaning: `${entry}-meaning`, examples: [], contexts: [] }) as RelearnCard;
+
+// A reverse-format card: shown meaning, asks for the word.
+const reverseCard = (entry: string, meaning: string): RelearnCard =>
+  ({ entry, noteId: BigInt(entry.length), sourceQuizType: 2, meaning, examples: [], contexts: [] }) as RelearnCard;
 
 describe("RelearnSessionPage", () => {
   beforeEach(() => {
@@ -46,7 +51,17 @@ describe("RelearnSessionPage", () => {
     renderPage();
     expect(screen.getByText("alpha")).toBeInTheDocument();
     expect(screen.getByText("2 words left")).toBeInTheDocument();
-    expect(screen.getByText("missed in Notebook")).toBeInTheDocument();
+    expect(screen.getByText(/Recognition/)).toBeInTheDocument();
+  });
+
+  it("renders a reverse-format card as meaning-to-word", () => {
+    useRelearnStore.getState().seedQueue([reverseCard("delta", "a change or difference")]);
+    renderPage();
+    // The meaning is the prompt; the word is NOT shown.
+    expect(screen.getByTestId("relearn-prompt")).toHaveTextContent("a change or difference");
+    expect(screen.queryByText("delta")).not.toBeInTheDocument();
+    expect(screen.getByText(/Reverse/)).toBeInTheDocument();
+    expect(screen.getByText("The word")).toBeInTheDocument();
   });
 
   it("submits a correct answer, shows feedback, and clears the word on Next", async () => {
@@ -85,7 +100,7 @@ describe("RelearnSessionPage", () => {
     submitRelearnAnswer.mockResolvedValue({ correct: false, meaning: "the first", reason: "skipped by user" });
     renderPage();
 
-    fireEvent.click(screen.getByRole("button", { name: "Skip and see the answer" }));
+    fireEvent.click(screen.getByRole("button", { name: "Don't Know" }));
     expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
     expect(submitRelearnAnswer).toHaveBeenCalledWith(expect.objectContaining({ isSkipped: true }));
   });

@@ -25,44 +25,56 @@ type RelearnContextScene struct {
 	Conversations []RelearnConversationLine
 }
 
-// RelearnCard is one pooled wrong word, fully resolved for grading and for the
-// rich feedback response. It is held in the handler's in-memory store for the
-// life of a Relearn session.
+// RelearnCard is one pooled wrong word, resolved for grading and feedback,
+// held in the handler's in-memory store for the life of a Relearn session.
 //
-// Nothing about a RelearnCard is ever written to learning history. ClearKey is
-// the only value that leaves the session, and only into the relearn_clears
-// marker store — never into a learning log.
+// Each card mirrors the ONE quiz type it was failed in — Format decides how the
+// frontend presents it and which pure grader the handler uses:
+//
+//	QuizTypeNotebook          recognition: show Entry, ask the Meaning
+//	QuizTypeReverse           production:  show Meaning + masked Contexts, ask Entry
+//	QuizTypeEtymologyStandard show Entry (origin), ask the Meaning
+//	QuizTypeEtymologyReverse  show Meaning, ask Entry (origin)
+//
+// A word failed in several quiz types yields one card per type. Nothing about a
+// RelearnCard is ever written to learning history; ClearKey is the only value
+// that leaves the session, and only into the relearn_clears marker store.
 type RelearnCard struct {
-	Entry          string
-	NotebookName   string
-	SourceQuizType notebook.QuizType
-	IsEtymology    bool
+	Format       notebook.QuizType
+	Entry        string
+	Meaning      string
+	NotebookName string
+	ClearKey     string
 
-	// ClearKey is the stable key used to record a relearn-clear when this
-	// word is answered correctly, and the key the pool builder checks to
-	// exclude already-recovered words. Kept on the card so the write side and
-	// the read side always agree (mirrors the learning-history L2 rule, even
-	// though this is not a learning log).
-	ClearKey string
+	// Etymology display extras (empty for vocab cards).
+	OriginType string
+	Language   string
 
-	Meaning       string
+	// Answering-screen hints.
+	Examples []Example        // recognition
+	Contexts []ReverseContext // reverse (masked)
+
+	// Rich feedback.
 	WordDetail    WordDetail
 	Images        []string
-	Examples      []Example
 	ContextScenes []RelearnContextScene
 
-	// vocabCard / etymologyCard carry the grading inputs. Exactly one is
-	// populated depending on IsEtymology; the handler grades with the matching
-	// pure grader (GradeNotebookAnswer or GradeEtymologyStandardAnswer).
+	// Grading inputs — one populated per Format.
 	vocabCard     Card
+	reverseCard   ReverseCard
 	etymologyCard EtymologyOriginCard
 }
 
-// VocabCard returns the card used to grade a non-etymology relearn word.
-func (c RelearnCard) VocabCard() Card { return c.vocabCard }
-
-// EtymologyCard returns the card used to grade an etymology-origin relearn word.
+// VocabCard, ReverseCard, EtymologyCard return the card the matching pure grader
+// consumes for this Format.
+func (c RelearnCard) VocabCard() Card                    { return c.vocabCard }
+func (c RelearnCard) ReverseCard() ReverseCard           { return c.reverseCard }
 func (c RelearnCard) EtymologyCard() EtymologyOriginCard { return c.etymologyCard }
+
+// IsEtymology reports whether the card's Format is one of the etymology modes.
+func (c RelearnCard) IsEtymology() bool {
+	return c.Format == notebook.QuizTypeEtymologyStandard || c.Format == notebook.QuizTypeEtymologyReverse
+}
 
 // relearnKeySep separates the fields of a relearn clear_key. It is the ASCII
 // Unit Separator (0x1F): a valid UTF-8 byte that cannot appear in notebook
@@ -71,49 +83,45 @@ func (c RelearnCard) EtymologyCard() EtymologyOriginCard { return c.etymologyCar
 // which would silently fail the relearn_clears insert.
 const relearnKeySep = "\x1f"
 
-// RelearnClearKey builds the stable key identifying a word in the relearn_clears
-// marker store. The kind prefix ("v"/"o") keeps a vocab word and an etymology
-// origin that share a spelling in the same notebook distinct, mirroring how the
-// learning history keys them by (name, type).
-func RelearnClearKey(isEtymology bool, notebookName, expression string) string {
-	kind := "v"
-	if isEtymology {
-		kind = "o"
-	}
-	return kind + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expression))
+// RelearnClearKey builds the stable key identifying one relearn card in the
+// relearn_clears marker store. The Format is part of the key so a word failed
+// in several quiz types clears each format independently — recovering the
+// recognition card does not clear the reverse card for the same word.
+func RelearnClearKey(format notebook.QuizType, notebookName, expression string) string {
+	return string(format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expression))
 }
 
-// relearnCandidate is an intermediate wrong-word record before it is resolved
-// to a gradeable card.
+// relearnCandidate is an intermediate per-format wrong-word record before it is
+// resolved to a gradeable card.
 type relearnCandidate struct {
 	notebookName string
 	expression   string
-	isEtymology  bool
-	sourceQT     notebook.QuizType
+	format       notebook.QuizType
 	latestWrong  time.Time
 }
 
-// LoadRelearnPool builds the Relearn Quiz pool: every word whose most-recent
-// learning log within [windowStart, now] has status "misunderstood", across
-// all quiz types, minus words cleared more recently than that wrong log.
+// LoadRelearnPool builds the Relearn Quiz pool: for every learning-log series
+// (recognition, reverse, etymology breakdown, etymology assembly) whose
+// most-recent log within [windowStart, now] has status "misunderstood", it
+// emits one card that mirrors that series' quiz type — minus series already
+// cleared more recently. A word failed in several types produces several cards.
 //
 // It reads the YAML learning histories directly — the source of truth and the
 // only place etymology-origin results are stored — so the pool spans both
 // vocabulary and etymology words regardless of whether a database is
 // configured. It writes nothing.
 //
-// clears maps a RelearnClearKey to the time that word was last recovered in a
-// Relearn session; a word is excluded when its clear time is not before its
-// most-recent in-window wrong log.
+// clears maps a RelearnClearKey to the time that (word, format) was last
+// recovered; it is excluded when its clear time is not before its most-recent
+// in-window wrong log.
 func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.Time) ([]RelearnCard, error) {
 	histories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
 
-	// Collect the most-recent in-window wrong candidate per (kind, notebook,
-	// expression). A word wrong in several quiz types collapses to one card,
-	// keeping the most recent wrong log for the source label.
+	// One candidate per (format, notebook, expression); the same expression can
+	// recur across scenes (multi-sense etymology), so keep the most-recent wrong.
 	candidates := make(map[string]relearnCandidate)
 	consider := func(notebookName string, expr notebook.LearningHistoryExpression) {
 		for _, sp := range relearnSeries(expr) {
@@ -121,25 +129,17 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 				continue
 			}
 			latest := sp.logs[0] // newest-first
-			if latest.LearnedAt.Before(windowStart) {
+			if latest.LearnedAt.Before(windowStart) || latest.Status != notebook.LearnedStatusMisunderstood {
 				continue
 			}
-			if latest.Status != notebook.LearnedStatusMisunderstood {
-				continue
-			}
-			sourceQT := notebook.QuizType(latest.QuizType)
-			if sourceQT == "" {
-				sourceQT = sp.defaultQT
-			}
-			key := RelearnClearKey(sp.isEtymology, notebookName, expr.Expression)
+			key := RelearnClearKey(sp.format, notebookName, expr.Expression)
 			if existing, ok := candidates[key]; ok && !latest.LearnedAt.After(existing.latestWrong) {
 				continue
 			}
 			candidates[key] = relearnCandidate{
 				notebookName: notebookName,
 				expression:   expr.Expression,
-				isEtymology:  sp.isEtymology,
-				sourceQT:     sourceQT,
+				format:       sp.format,
 				latestWrong:  latest.LearnedAt.Time,
 			}
 		}
@@ -157,7 +157,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 		}
 	}
 
-	// Drop words already recovered in a later Relearn session.
+	// Drop series already recovered in a later Relearn session.
 	for key, c := range candidates {
 		if clearedAt, ok := clears[key]; ok && !clearedAt.Before(c.latestWrong) {
 			delete(candidates, key)
@@ -178,56 +178,67 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 
 	cards := make([]RelearnCard, 0, len(candidates))
 	for key, c := range candidates {
-		if c.isEtymology {
+		if c.format == notebook.QuizTypeEtymologyStandard || c.format == notebook.QuizTypeEtymologyReverse {
 			sense, ok := etymByOrigin[strings.ToLower(strings.TrimSpace(c.expression))]
 			if !ok {
 				continue // no origin data to grade/display against
 			}
 			cards = append(cards, RelearnCard{
-				Entry: c.expression, NotebookName: c.notebookName, SourceQuizType: c.sourceQT,
-				IsEtymology: true, ClearKey: key, Meaning: sense.Meaning, etymologyCard: sense,
+				Format: c.format, Entry: c.expression, Meaning: sense.Meaning, NotebookName: c.notebookName,
+				ClearKey: key, OriginType: sense.Type, Language: sense.Language, etymologyCard: sense,
 			})
 			continue
 		}
-		card, ok := vocabByNotebookExpr[strings.ToLower(c.notebookName)+"\x00"+strings.ToLower(strings.TrimSpace(c.expression))]
+		fc, ok := vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]
 		if !ok {
-			card, ok = vocabByExpr[strings.ToLower(strings.TrimSpace(c.expression))]
+			fc, ok = vocabByExpr[strings.ToLower(strings.TrimSpace(c.expression))]
 		}
 		if !ok {
 			continue // no vocab data to grade/display against
 		}
-		cards = append(cards, RelearnCard{
-			Entry: c.expression, NotebookName: c.notebookName, SourceQuizType: c.sourceQT,
-			IsEtymology: false, ClearKey: key, Meaning: card.Meaning,
-			WordDetail: card.WordDetail, Images: card.Images,
-			Examples:      relearnExamplesFromContexts(card.Contexts),
-			ContextScenes: relearnScenesFromCard(card),
-			vocabCard: Card{
-				NotebookName: card.NotebookName, StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-				Entry: card.Expression, OriginalEntry: card.OriginalExpression, Meaning: card.Meaning,
-				Contexts: card.Contexts, WordDetail: card.WordDetail, Images: card.Images,
-			},
-		})
+		card := RelearnCard{
+			Format: c.format, Entry: c.expression, Meaning: fc.Meaning, NotebookName: c.notebookName,
+			ClearKey: key, WordDetail: fc.WordDetail, Images: fc.Images,
+			ContextScenes: relearnScenesFromCard(fc),
+		}
+		if c.format == notebook.QuizTypeReverse {
+			masked := relearnMaskedContexts(fc)
+			card.Contexts = masked
+			card.reverseCard = ReverseCard{
+				NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
+				Meaning: fc.Meaning, Contexts: masked, Expression: fc.Expression, AltForm: fc.OriginalExpression,
+				WordDetail: fc.WordDetail, Images: fc.Images,
+			}
+		} else {
+			card.Examples = relearnExamplesFromContexts(fc.Contexts)
+			card.vocabCard = Card{
+				NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
+				Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
+				Contexts: fc.Contexts, WordDetail: fc.WordDetail, Images: fc.Images,
+			}
+		}
+		cards = append(cards, card)
 	}
 	return cards, nil
 }
 
-// relearnSeriesSpec describes one learning-log series to inspect for a wrong word.
+// relearnSeriesSpec describes one learning-log series to inspect for a wrong
+// word, and the relearn card format it maps to.
 type relearnSeriesSpec struct {
-	logs        []notebook.LearningRecord
-	isEtymology bool
-	defaultQT   notebook.QuizType
+	logs   []notebook.LearningRecord
+	format notebook.QuizType
 }
 
-// relearnSeries returns the four independent log series an expression can carry.
-// Notebook and freeform share LearnedLogs; the recorded QuizType on the log
-// distinguishes them for the source label.
+// relearnSeries returns the four independent log series an expression can carry,
+// each mapped to the relearn card format that mirrors it. Notebook and freeform
+// share LearnedLogs and both replay as recognition; etymology freeform shares
+// the breakdown track and replays as etymology-standard.
 func relearnSeries(expr notebook.LearningHistoryExpression) []relearnSeriesSpec {
 	return []relearnSeriesSpec{
-		{logs: expr.LearnedLogs, isEtymology: false, defaultQT: notebook.QuizTypeNotebook},
-		{logs: expr.ReverseLogs, isEtymology: false, defaultQT: notebook.QuizTypeReverse},
-		{logs: expr.EtymologyBreakdownLogs, isEtymology: true, defaultQT: notebook.QuizTypeEtymologyStandard},
-		{logs: expr.EtymologyAssemblyLogs, isEtymology: true, defaultQT: notebook.QuizTypeEtymologyReverse},
+		{logs: expr.LearnedLogs, format: notebook.QuizTypeNotebook},
+		{logs: expr.ReverseLogs, format: notebook.QuizTypeReverse},
+		{logs: expr.EtymologyBreakdownLogs, format: notebook.QuizTypeEtymologyStandard},
+		{logs: expr.EtymologyAssemblyLogs, format: notebook.QuizTypeEtymologyReverse},
 	}
 }
 
@@ -248,7 +259,7 @@ func (s *Service) relearnVocabIndex() (byExpr map[string]FreeformCard, byNoteboo
 				continue
 			}
 			byExpr[e] = w
-			byNotebookExpr[strings.ToLower(w.NotebookName)+"\x00"+e] = w
+			byNotebookExpr[strings.ToLower(w.NotebookName)+relearnKeySep+e] = w
 		}
 	}
 	return byExpr, byNotebookExpr, nil
@@ -282,9 +293,26 @@ func (s *Service) relearnEtymologyIndex() (map[string]EtymologyOriginCard, error
 	return byOrigin, nil
 }
 
-// relearnScenesFromCard turns a vocab card's contexts into a single
-// context scene keyed by the card's scene. The expression's sentences render
-// as prose statements on the feedback screen.
+// relearnMaskedContexts builds reverse-quiz-style masked contexts from a vocab
+// card: the sentences the word appears in, with the word blanked out so it can
+// serve as a hint without giving away the answer.
+func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
+	var out []ReverseContext
+	for _, c := range fc.Contexts {
+		text := strings.TrimSpace(c.Context)
+		if text == "" {
+			continue
+		}
+		out = append(out, ReverseContext{
+			Context:       text,
+			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression),
+		})
+	}
+	return out
+}
+
+// relearnScenesFromCard turns a vocab card's contexts into a single context
+// scene keyed by the card's scene, rendered as prose on the feedback screen.
 func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 	var statements []string
 	for _, c := range card.Contexts {
@@ -303,7 +331,7 @@ func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 }
 
 // relearnExamplesFromContexts exposes the card's context sentences as examples
-// so the answering screen can show a hint, matching the standard quiz card.
+// so the recognition answering screen can show a hint, like the standard quiz.
 func relearnExamplesFromContexts(contexts []inference.Context) []Example {
 	var out []Example
 	for _, c := range contexts {

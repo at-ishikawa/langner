@@ -50,6 +50,8 @@ notebooks:
       meaning: "the third thing"
     - expression: "delta"
       meaning: "a change or difference"
+    - expression: "epsilon"
+      meaning: "the fifth thing"
 `), 0644))
 
 	now := time.Now()
@@ -84,7 +86,16 @@ notebooks:
         - status: "misunderstood"
           learned_at: %q
           quiz_type: "reverse"
-`, recent, recent, old, veryRecent)
+    - expression: "epsilon"
+      learned_logs:
+        - status: "misunderstood"
+          learned_at: %q
+          quiz_type: "notebook"
+      reverse_logs:
+        - status: "misunderstood"
+          learned_at: %q
+          quiz_type: "reverse"
+`, recent, recent, old, veryRecent, recent, recent)
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-vocab.yml"), []byte(history), 0644))
 
 	svc := quiz.NewService(config.NotebooksConfig{
@@ -109,6 +120,57 @@ func startRelearn(t *testing.T, h *QuizHandler, windowHours int32) []*apiv1.Rele
 		connect.NewRequest(&apiv1.StartRelearnQuizRequest{WindowHours: windowHours}))
 	require.NoError(t, err)
 	return resp.Msg.GetCards()
+}
+
+// relearnByEntryType keys cards by "entry/source_quiz_type" so a word failed in
+// more than one quiz type (and thus present as several cards) stays distinct.
+func relearnByEntryType(cards []*apiv1.RelearnCard) map[string]*apiv1.RelearnCard {
+	out := make(map[string]*apiv1.RelearnCard, len(cards))
+	for _, c := range cards {
+		out[c.GetEntry()+"/"+c.GetSourceQuizType().String()] = c
+	}
+	return out
+}
+
+func TestRelearn_MirrorsEachSourceQuizType(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+	byKey := relearnByEntryType(startRelearn(t, h, 24))
+
+	// alpha was failed in the notebook (recognition) quiz.
+	alpha := byKey["alpha/QUIZ_TYPE_STANDARD"]
+	require.NotNil(t, alpha)
+	assert.NotEmpty(t, alpha.GetExamples(), "recognition cards carry examples as a hint")
+
+	// delta was failed in the reverse quiz: it must carry the meaning as the
+	// prompt and masked contexts as the hint (not examples).
+	delta := byKey["delta/QUIZ_TYPE_REVERSE"]
+	require.NotNil(t, delta)
+	assert.Equal(t, "a change or difference", delta.GetMeaning(), "reverse card prompts with the meaning")
+}
+
+func TestRelearn_WordFailedInTwoTypesYieldsTwoCards(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+	byKey := relearnByEntryType(startRelearn(t, h, 24))
+
+	assert.Contains(t, byKey, "epsilon/QUIZ_TYPE_STANDARD", "recognition card for the standard failure")
+	assert.Contains(t, byKey, "epsilon/QUIZ_TYPE_REVERSE", "reverse card for the reverse failure")
+}
+
+func TestRelearn_ReverseCardIsGradedByTheWordNotTheMeaning(t *testing.T) {
+	// The mock reverse grader marks correct only when the answer matches the
+	// expected WORD (same_word). Typing the meaning must be wrong — this is the
+	// bug the mirror rework fixes. Each answer uses a fresh handler so the reverse
+	// card is not cleared by a prior correct answer.
+	submitDelta := func(ans string) bool {
+		h, _ := newRelearnTestHandler(t)
+		id := relearnByEntryType(startRelearn(t, h, 24))["delta/QUIZ_TYPE_REVERSE"].GetNoteId()
+		resp, err := h.SubmitRelearnAnswer(context.Background(),
+			connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: id, Answer: ans}))
+		require.NoError(t, err)
+		return resp.Msg.GetCorrect()
+	}
+	assert.True(t, submitDelta("delta"), "typing the WORD is correct in a reverse card")
+	assert.False(t, submitDelta("a change or difference"), "typing the MEANING is wrong in a reverse card")
 }
 
 func TestRelearn_PoolSelectsRecentWrongWordsAcrossTypes(t *testing.T) {

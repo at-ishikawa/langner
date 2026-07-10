@@ -14,7 +14,7 @@ This document is grounded in the current code. All type/function references are 
 ### Goals
 
 - Select the pool as **every word whose most-recent in-window learning log has status `misunderstood`**, across all quiz types, mirroring how analytics selects wrong words — on both the DB (`learning_logs`) and YAML-only paths.
-- Grade answers with the **existing pure graders** `GradeNotebookAnswer` and `GradeEtymologyStandardAnswer`.
+- Present and grade each word **in the format of the quiz it was failed in** — one pooled card per failed log series — using the matching existing pure grader: `GradeNotebookAnswer` (recognition), `GradeReverseAnswer` (reverse), `GradeEtymologyStandardAnswer` / `GradeEtymologyReverseAnswer` (etymology).
 - Persist **nothing** to learning history: the submit path calls only the `Grade*` methods and **never** `SaveResult` / `SaveReverseResult` / `SaveFreeformResult` / `SaveEtymologyOriginResult` / `learningRepository.Create` / `UpdateLog` / any etymology YAML write / `GetLatestLearnedInfo`.
 - Keep already-recovered words out of the next Relearn session via a lightweight, non-SR **"relearn clears"** marker — a new `relearn_clears` table when a DB is present, or an in-memory map otherwise. It is explicitly **not** a learning log.
 - Return a rich response carrying the result card **plus** context scenes, `graph_context`, and `example_words`, but deliberately **no** `next_review_date` / `learned_at`.
@@ -229,10 +229,13 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx, req) (*SubmitRelearnAnswerRespons
     card := h.relearnStore[req.Msg.GetNoteId()]   // under h.mu; NotFound if missing
 
     var grade quiz.GradeResult
-    // gradeRelearn dispatches to the pure grader for the card's kind:
-    //   skip                -> skippedGradeResult()            (quiz_handler_batch.go:22-29)
-    //   card.IsEtymology    -> GradeEtymologyStandardAnswer(card.EtymologyCard(), ...)
-    //   otherwise           -> GradeNotebookAnswer(card.VocabCard(), ...)
+    // gradeRelearn dispatches to the pure grader matching the card's Format, so
+    // the answer is graded in the direction the word was failed in:
+    //   skip                        -> skippedGradeResult()   (quiz_handler_batch.go:22-29)
+    //   QuizTypeReverse             -> GradeReverseAnswer(card.ReverseCard(), ...)
+    //   QuizTypeEtymologyStandard   -> GradeEtymologyStandardAnswer(card.EtymologyCard(), ...)
+    //   QuizTypeEtymologyReverse    -> GradeEtymologyReverseAnswer(card.EtymologyCard(), ...)
+    //   default (recognition)       -> GradeNotebookAnswer(card.VocabCard(), ...)
     grade, err := h.gradeRelearn(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs(), req.Msg.GetIsSkipped())
 
     // Record NOTHING to learning history. The ONLY persistence is the non-SR
@@ -258,7 +261,7 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx, req) (*SubmitRelearnAnswerRespons
 
 Guarantees this path upholds:
 
-- It calls **only** `GradeNotebookAnswer` / `GradeEtymologyStandardAnswer` (both pure — `service.go:464`, `etymology.go:159` — they call `AnswerMeanings` / `ValidateWordForm` and return `GradeResult{Correct, Reason, Quality, Classification}` with no repository access).
+- It calls **only** the pure graders `GradeNotebookAnswer` / `GradeReverseAnswer` / `GradeEtymologyStandardAnswer` / `GradeEtymologyReverseAnswer` (all pure — they call `AnswerMeanings` / `ValidateWordForm` and return `GradeResult{Correct, Reason, Quality, Classification}` with no repository access).
 - It **never** calls `SaveResult` / `SaveReverseResult` / `SaveFreeformResult` / `SaveEtymologyOriginResult`, so `learningRepository.Create` and the etymology YAML write are never reached.
 - It **never** calls `GetLatestLearnedInfo`, so no `learned_at` / `next_review_date` is computed or returned.
 - The only write is `relearn_clears`, which no SM-2 or analytics code reads.
@@ -300,4 +303,4 @@ No changes to `learning_logs`, to `learning.LearningRepository`, to the SM-2 `In
 - **Pool selection (YAML)**: same cases over on-disk history + the in-memory clears map.
 - **No-write guarantee**: after a full Relearn session (mix of correct/wrong/skip), assert `learning_logs` row count is unchanged, no YAML learning-history file mtime changed, and analytics `DayDetail`/`DailySummaries` for the day are identical to before. This is the load-bearing test for the feature's core promise.
 - **Clear marker is not a log**: assert a cleared word has a `relearn_clears` row but **no** new `learning_logs` row, and that its `next_review_date` from a subsequent real quiz is unaffected.
-- **Grading dispatch**: an etymology-origin word routes to `GradeEtymologyStandardAnswer`; a notebook word routes to `GradeNotebookAnswer`; a skip yields `skippedGradeResult()` and re-queues client-side.
+- **Grading dispatch / direction**: a reverse card grades by the word (`GradeReverseAnswer` — typing the meaning is wrong); a recognition card grades by the meaning; etymology cards route to the standard/reverse etymology graders; a skip yields `skippedGradeResult()` and re-queues client-side. A word failed in two types yields two independent cards.

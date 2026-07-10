@@ -7,7 +7,7 @@ weight: 1
 
 ## Overview
 
-Add a **Relearn Quiz** — a standalone quiz type that collects every word the learner recently got wrong, across *all* quiz types (notebook, freeform, reverse, and the etymology modes), into a single mixed session. The session presents each word in one unified recognition format (show the expression, ask for its meaning) and loops until every word has been answered correctly at least once.
+Add a **Relearn Quiz** — a standalone quiz type that collects every word the learner recently got wrong, across *all* quiz types (notebook, freeform, reverse, and the etymology modes), into a single mixed session. The session presents each word **in the format of the quiz it was failed in** — a word missed in the reverse quiz is re-drilled the reverse way (show the meaning, ask for the word), a word missed in recognition is shown and its meaning asked, and etymology words keep their breakdown/assembly direction — and loops until every word has been answered correctly at least once. A word failed in more than one quiz type yields one card per type.
 
 The Relearn Quiz is a **practice-only** tool. It deliberately writes **nothing** to learning history: it never records a log, never advances or resets a spaced-repetition (SM-2) interval, and never appears in Quiz Analytics. It exists so the learner can drill down on their recent mistakes as many times as they like without polluting the data that drives scheduling and analytics.
 
@@ -30,7 +30,7 @@ The existing quizzes select words by SM-2 due-date and notebook membership. None
 ## Goals
 
 - Provide a one-tap session built from **every word answered incorrectly across all quiz types within a recent time window** (default: last 24 hours, configurable on the start screen).
-- Present all words in a **single unified recognition format** (expression → meaning), regardless of the quiz type that originally produced the wrong answer.
+- Present each word **mirroring the quiz type it was failed in** — recognition (expression → meaning), reverse (meaning + contexts → word), etymology standard (origin → meaning), or etymology assembly (meaning → origin) — grading in that same direction. A word failed in several quiz types produces one card per type.
 - **Loop** the session until every word has been answered correctly at least once — a word answered correctly leaves the queue; a word answered wrong or skipped goes to the back of the queue.
 - Grade answers with the **same OpenAI meaning graders** the existing quizzes use, so "correct" means the same thing here as everywhere else.
 - Write **nothing** to learning history — no logs, no SM-2 changes, no analytics impact.
