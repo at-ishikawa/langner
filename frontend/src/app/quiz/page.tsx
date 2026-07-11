@@ -411,12 +411,37 @@ export default function QuizHubPage() {
         </Box>
         <Box px={4} pb={3} textAlign="center">
           <Heading size="md">Quiz</Heading>
-          <Link href="/quiz/relearn">
-            <Text mt={1} color="purple.600" _dark={{ color: "purple.300" }} fontSize="xs" fontWeight="medium">
-              ↻ Relearn recent mistakes — off the record
-            </Text>
-          </Link>
         </Box>
+      </Box>
+
+      {/* Relearn entry — spans all quiz types, so it sits above the tabs as a
+          first-class card styled like the mode cards below (purple accent). */}
+      <Box px={4} pt={4}>
+        <Link href="/quiz/relearn">
+          <Box
+            p={4}
+            bg="white"
+            borderWidth="1px"
+            borderColor="purple.300"
+            _dark={{ bg: "gray.800", borderColor: "purple.600" }}
+            borderRadius="lg"
+            cursor="pointer"
+          >
+            <Box display="flex" alignItems="center" justifyContent="space-between">
+              <Box>
+                <Text fontWeight="semibold" fontSize="md" color="purple.700" _dark={{ color: "purple.300" }}>
+                  ↻ Relearn
+                </Text>
+                <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>
+                  Re-drill the words you recently got wrong — off the record
+                </Text>
+              </Box>
+              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>
+                &rsaquo;
+              </Text>
+            </Box>
+          </Box>
+        </Link>
       </Box>
 
       {/* Tabs */}

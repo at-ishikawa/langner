@@ -6,7 +6,7 @@ const { When, Then } = createBdd();
 // covers route: /quiz/relearn
 When("I open the Relearn Quiz", async ({ page }) => {
   await page.goto("/quiz");
-  await page.getByRole("link", { name: /Relearn recent mistakes/i }).click();
+  await page.getByRole("link", { name: /Relearn/i }).click();
   await expect(page).toHaveURL(/\/quiz\/relearn$/);
 });
 
