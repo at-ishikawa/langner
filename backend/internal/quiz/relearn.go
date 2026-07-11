@@ -214,7 +214,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 			card.vocabCard = Card{
 				NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
 				Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
-				Contexts: fc.Contexts, WordDetail: fc.WordDetail, Images: fc.Images,
+				Contexts: relearnRecognitionContexts(fc), WordDetail: fc.WordDetail, Images: fc.Images,
 			}
 		}
 		cards = append(cards, card)
@@ -307,6 +307,31 @@ func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 			Context:       text,
 			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression),
 		})
+	}
+	return out
+}
+
+// relearnRecognitionContexts builds the contexts the meaning grader
+// (GradeNotebookAnswer -> AnswerMeanings) sees for a recognition card. It:
+//
+//  1. Sets reference_definition to the word's known meaning on every context.
+//     The grader treats a non-empty reference_definition as authoritative
+//     ground truth and grades the user's answer against it — far more lenient
+//     and accurate than re-deriving the meaning from a sentence (e.g. it
+//     accepts "does not pursue pleasure of flesh" for "ascetic").
+//  2. Guarantees at least one context. Vocabulary words with no example
+//     sentences (e.g. plain definition entries) would otherwise be sent with
+//     zero contexts, and the grader returns zero answers — which
+//     extractAnswerResult treats as INCORRECT no matter what the learner types,
+//     trapping the word in the relearn loop.
+func relearnRecognitionContexts(fc FreeformCard) []inference.Context {
+	out := make([]inference.Context, 0, len(fc.Contexts)+1)
+	for _, c := range fc.Contexts {
+		c.ReferenceDefinition = fc.Meaning
+		out = append(out, c)
+	}
+	if len(out) == 0 {
+		out = append(out, inference.Context{ReferenceDefinition: fc.Meaning})
 	}
 	return out
 }
