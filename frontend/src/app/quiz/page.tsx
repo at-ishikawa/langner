@@ -21,7 +21,7 @@ import {
 } from "@/lib/client";
 import { useQuizStore, type QuizType } from "@/store/quizStore";
 
-type Tab = "vocabulary" | "etymology";
+type Tab = "vocabulary" | "etymology" | "relearn";
 type VocabMode = "standard" | "reverse" | "freeform";
 type EtyMode = "standard" | "reverse" | "freeform";
 
@@ -265,6 +265,12 @@ export default function QuizHubPage() {
     }, 0);
 
   const handleTabChange = (newTab: Tab) => {
+    // Relearn is a separate, cross-quiz-type flow with its own start screen, so
+    // its tab navigates there rather than swapping mode cards in place.
+    if (newTab === "relearn") {
+      router.push("/quiz/relearn");
+      return;
+    }
     setTab(newTab);
     setSelectedIds(new Set());
     setSectionSelections(new Map());
@@ -414,39 +420,10 @@ export default function QuizHubPage() {
         </Box>
       </Box>
 
-      {/* Relearn entry — spans all quiz types, so it sits above the tabs as a
-          first-class card styled like the mode cards below (purple accent). */}
-      <Box px={4} pt={4}>
-        <Link href="/quiz/relearn">
-          <Box
-            p={4}
-            bg="white"
-            borderWidth="1px"
-            borderColor="purple.300"
-            _dark={{ bg: "gray.800", borderColor: "purple.600" }}
-            borderRadius="lg"
-            cursor="pointer"
-          >
-            <Box display="flex" alignItems="center" justifyContent="space-between">
-              <Box>
-                <Text fontWeight="semibold" fontSize="md" color="purple.700" _dark={{ color: "purple.300" }}>
-                  ↻ Relearn
-                </Text>
-                <Text fontSize="xs" color="gray.600" _dark={{ color: "gray.400" }}>
-                  Re-drill the words you recently got wrong — off the record
-                </Text>
-              </Box>
-              <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} flexShrink={0}>
-                &rsaquo;
-              </Text>
-            </Box>
-          </Box>
-        </Link>
-      </Box>
-
-      {/* Tabs */}
+      {/* Tabs — Vocabulary / Etymology switch mode cards in place; Relearn is a
+          cross-quiz-type flow whose tab navigates to its own start screen. */}
       <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200" display="flex">
-        {(["vocabulary", "etymology"] as Tab[]).map((t) => (
+        {(["vocabulary", "etymology", "relearn"] as Tab[]).map((t) => (
           <Box
             key={t}
             flex={1}
@@ -462,7 +439,7 @@ export default function QuizHubPage() {
               color={tab === t ? "blue.600" : "gray.500"}
               _dark={{ color: tab === t ? "blue.300" : "gray.400" }}
             >
-              {t === "vocabulary" ? "Vocabulary" : "Etymology"}
+              {t === "vocabulary" ? "Vocabulary" : t === "etymology" ? "Etymology" : "Relearn"}
             </Text>
             {tab === t && (
               <Box
