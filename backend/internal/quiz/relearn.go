@@ -2,6 +2,7 @@ package quiz
 
 import (
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -158,12 +159,16 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 	}
 
 	// Drop series already recovered in a later Relearn session.
+	candidatesFound := len(candidates)
 	for key, c := range candidates {
 		if clearedAt, ok := clears[key]; ok && !clearedAt.Before(c.latestWrong) {
 			delete(candidates, key)
 		}
 	}
+	afterClears := len(candidates)
 	if len(candidates) == 0 {
+		slog.Info("relearn pool empty",
+			"in_window_misunderstood", candidatesFound, "after_clears", afterClears, "clears_in_store", len(clears))
 		return nil, nil
 	}
 
@@ -219,6 +224,12 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 		}
 		cards = append(cards, card)
 	}
+	// One line so an empty/short pool can be diagnosed from the server log:
+	// how many wrong words were in the window, how many survived the clear
+	// markers, and how many matched a gradeable card.
+	slog.Info("relearn pool built",
+		"in_window_misunderstood", candidatesFound, "after_clears", afterClears,
+		"matched_cards", len(cards), "clears_in_store", len(clears))
 	return cards, nil
 }
 
