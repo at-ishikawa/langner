@@ -99,6 +99,9 @@ const (
 	// QuizServiceBatchSubmitRelearnAnswersProcedure is the fully-qualified name of the QuizService's
 	// BatchSubmitRelearnAnswers RPC.
 	QuizServiceBatchSubmitRelearnAnswersProcedure = "/api.v1.QuizService/BatchSubmitRelearnAnswers"
+	// QuizServiceOverrideRelearnCardProcedure is the fully-qualified name of the QuizService's
+	// OverrideRelearnCard RPC.
+	QuizServiceOverrideRelearnCardProcedure = "/api.v1.QuizService/OverrideRelearnCard"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -130,6 +133,13 @@ type QuizServiceClient interface {
 	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
 	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
 	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
+	// OverrideRelearnCard reconciles the off-the-record clear marker when the
+	// learner overrides the grader's verdict for a card (e.g. the meaning grader
+	// wrongly marked a correct answer wrong). It is session-only: it records or
+	// removes the relearn_clears marker and NEVER writes a learning log — SM-2
+	// and analytics stay untouched. The client applies the flipped verdict to
+	// the working queue itself.
+	OverrideRelearnCard(context.Context, *connect.Request[v1.OverrideRelearnCardRequest]) (*connect.Response[v1.OverrideRelearnCardResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -281,6 +291,12 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
 			connect.WithClientOptions(opts...),
 		),
+		overrideRelearnCard: connect.NewClient[v1.OverrideRelearnCardRequest, v1.OverrideRelearnCardResponse](
+			httpClient,
+			baseURL+QuizServiceOverrideRelearnCardProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("OverrideRelearnCard")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -309,6 +325,7 @@ type quizServiceClient struct {
 	startRelearnQuiz                    *connect.Client[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse]
 	submitRelearnAnswer                 *connect.Client[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse]
 	batchSubmitRelearnAnswers           *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
+	overrideRelearnCard                 *connect.Client[v1.OverrideRelearnCardRequest, v1.OverrideRelearnCardResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -426,6 +443,11 @@ func (c *quizServiceClient) BatchSubmitRelearnAnswers(ctx context.Context, req *
 	return c.batchSubmitRelearnAnswers.CallUnary(ctx, req)
 }
 
+// OverrideRelearnCard calls api.v1.QuizService.OverrideRelearnCard.
+func (c *quizServiceClient) OverrideRelearnCard(ctx context.Context, req *connect.Request[v1.OverrideRelearnCardRequest]) (*connect.Response[v1.OverrideRelearnCardResponse], error) {
+	return c.overrideRelearnCard.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -455,6 +477,13 @@ type QuizServiceHandler interface {
 	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
 	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
 	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
+	// OverrideRelearnCard reconciles the off-the-record clear marker when the
+	// learner overrides the grader's verdict for a card (e.g. the meaning grader
+	// wrongly marked a correct answer wrong). It is session-only: it records or
+	// removes the relearn_clears marker and NEVER writes a learning log — SM-2
+	// and analytics stay untouched. The client applies the flipped verdict to
+	// the working queue itself.
+	OverrideRelearnCard(context.Context, *connect.Request[v1.OverrideRelearnCardRequest]) (*connect.Response[v1.OverrideRelearnCardResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -602,6 +631,12 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceOverrideRelearnCardHandler := connect.NewUnaryHandler(
+		QuizServiceOverrideRelearnCardProcedure,
+		svc.OverrideRelearnCard,
+		connect.WithSchema(quizServiceMethods.ByName("OverrideRelearnCard")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -650,6 +685,8 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceSubmitRelearnAnswerHandler.ServeHTTP(w, r)
 		case QuizServiceBatchSubmitRelearnAnswersProcedure:
 			quizServiceBatchSubmitRelearnAnswersHandler.ServeHTTP(w, r)
+		case QuizServiceOverrideRelearnCardProcedure:
+			quizServiceOverrideRelearnCardHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -749,4 +786,8 @@ func (UnimplementedQuizServiceHandler) SubmitRelearnAnswer(context.Context, *con
 
 func (UnimplementedQuizServiceHandler) BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.BatchSubmitRelearnAnswers is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) OverrideRelearnCard(context.Context, *connect.Request[v1.OverrideRelearnCardRequest]) (*connect.Response[v1.OverrideRelearnCardResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.OverrideRelearnCard is not implemented"))
 }

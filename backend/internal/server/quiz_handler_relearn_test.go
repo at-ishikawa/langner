@@ -285,6 +285,44 @@ func TestRelearn_BatchSubmit(t *testing.T) {
 	assert.Contains(t, next, "delta")
 }
 
+func TestRelearn_OverrideMarkCorrectClearsWithoutWritingHistory(t *testing.T) {
+	h, learningDir := newRelearnTestHandler(t)
+	before, err := os.ReadFile(filepath.Join(learningDir, "test-vocab.yml"))
+	require.NoError(t, err)
+
+	// alpha was wrong; the learner overrides it to correct.
+	alpha := relearnByEntryType(startRelearn(t, h, 24))["alpha/QUIZ_TYPE_STANDARD"]
+	_, err = h.OverrideRelearnCard(context.Background(),
+		connect.NewRequest(&apiv1.OverrideRelearnCardRequest{NoteId: alpha.GetNoteId(), MarkCorrect: true}))
+	require.NoError(t, err)
+
+	// It is now cleared from the next session, and no learning history changed.
+	next := relearnByEntryType(startRelearn(t, h, 24))
+	assert.NotContains(t, next, "alpha/QUIZ_TYPE_STANDARD", "mark-correct clears the word from the next session")
+	after, err := os.ReadFile(filepath.Join(learningDir, "test-vocab.yml"))
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "an override must not write learning history")
+}
+
+func TestRelearn_OverrideMarkIncorrectUnclears(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+
+	// Answer alpha correctly (records the clear marker), then — without
+	// re-starting, so the card is still in the session store — override it back
+	// to incorrect. It should return to the next session's pool.
+	alpha := relearnByEntryType(startRelearn(t, h, 24))["alpha/QUIZ_TYPE_STANDARD"]
+	_, err := h.SubmitRelearnAnswer(context.Background(),
+		connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: alpha.GetNoteId(), Answer: "the first thing"}))
+	require.NoError(t, err)
+
+	_, err = h.OverrideRelearnCard(context.Background(),
+		connect.NewRequest(&apiv1.OverrideRelearnCardRequest{NoteId: alpha.GetNoteId(), MarkCorrect: false}))
+	require.NoError(t, err)
+
+	assert.Contains(t, relearnByEntryType(startRelearn(t, h, 24)), "alpha/QUIZ_TYPE_STANDARD",
+		"mark-incorrect unclears the word so it returns to the pool")
+}
+
 func TestRelearn_SubmitUnknownCardIsNotFound(t *testing.T) {
 	h, _ := newRelearnTestHandler(t)
 	_ = startRelearn(t, h, 24)

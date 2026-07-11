@@ -23,6 +23,10 @@ type RelearnClearStore interface {
 	AllClears(ctx context.Context) (map[string]time.Time, error)
 	// MarkCleared upserts the latest clear time for a key.
 	MarkCleared(ctx context.Context, clearKey string, at time.Time) error
+	// Unmark removes a key's clear marker (no-op if absent). Used when a
+	// session-only override flips a cleared card back to not-cleared so it can
+	// reappear in the next session.
+	Unmark(ctx context.Context, clearKey string) error
 }
 
 // MemoryRelearnClearStore keeps clears in a process-local map. It is used when
@@ -58,6 +62,13 @@ func (s *MemoryRelearnClearStore) MarkCleared(_ context.Context, clearKey string
 	return nil
 }
 
+func (s *MemoryRelearnClearStore) Unmark(_ context.Context, clearKey string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.clears, clearKey)
+	return nil
+}
+
 // DBRelearnClearStore persists clears in the relearn_clears table. It is used
 // when a database is configured. The table has no foreign key and no
 // learning-log columns — it is not part of the learning-history schema.
@@ -90,5 +101,10 @@ func (s *DBRelearnClearStore) MarkCleared(ctx context.Context, clearKey string, 
 		`INSERT INTO relearn_clears (clear_key, cleared_at) VALUES ($1, $2)
 		 ON CONFLICT (clear_key) DO UPDATE SET cleared_at = EXCLUDED.cleared_at`,
 		clearKey, at)
+	return err
+}
+
+func (s *DBRelearnClearStore) Unmark(ctx context.Context, clearKey string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM relearn_clears WHERE clear_key = $1`, clearKey)
 	return err
 }

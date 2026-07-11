@@ -101,6 +101,9 @@ type RelearnClearStore interface {
     AllClears(ctx context.Context) (map[string]time.Time, error)
     // MarkCleared upserts the latest clear time for a key.
     MarkCleared(ctx context.Context, clearKey string, at time.Time) error
+    // Unmark removes a key's marker (used when a session-only override flips a
+    // cleared card back to not-cleared).
+    Unmark(ctx context.Context, clearKey string) error
 }
 ```
 
@@ -114,6 +117,9 @@ Add to `proto/api/v1/quiz.proto`. The `QuizService` currently has the RPCs liste
 service QuizService {
   // ... existing RPCs ...
   rpc StartRelearnQuiz(StartRelearnQuizRequest) returns (StartRelearnQuizResponse);
+  // OverrideRelearnCard — session-only verdict override; records/removes the
+  // clear marker, writes no learning history.
+  rpc OverrideRelearnCard(OverrideRelearnCardRequest) returns (OverrideRelearnCardResponse);
   rpc SubmitRelearnAnswer(SubmitRelearnAnswerRequest) returns (SubmitRelearnAnswerResponse);
   rpc BatchSubmitRelearnAnswers(BatchSubmitRelearnAnswersRequest) returns (BatchSubmitRelearnAnswersResponse);
 }

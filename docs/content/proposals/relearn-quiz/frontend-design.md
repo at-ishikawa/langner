@@ -32,7 +32,7 @@ frontend/src/
     client.ts                    # MODIFY: re-export Relearn request/response types
 ```
 
-The working queue lives in its **own** `relearnStore.ts` rather than in `quizStore.ts`: the loop needs a requeue primitive the linear `currentIndex` store lacks, and isolating it keeps the existing store (and its tests) untouched. The feedback verdict is a small self-contained block in the session page rather than a reuse of `QuizResultCard` — the Relearn response has no `learned_at`/`next_review_date` and needs no override callbacks, so a dedicated banner is simpler than mapping to a `ResultItem`. The override buttons are absent by construction (there is nothing to override).
+The working queue lives in its **own** `relearnStore.ts` rather than in `quizStore.ts`: the loop needs a requeue primitive the linear `currentIndex` store lacks, and isolating it keeps the existing store (and its tests) untouched. The feedback verdict is a small self-contained block in the session page rather than a reuse of `QuizResultCard` — the Relearn response has no `learned_at`/`next_review_date`, so a dedicated banner is simpler than mapping to a `ResultItem`. It carries a **session-only** Mark-as-Correct/Incorrect override (see below) that affects the working queue and the off-the-record clear marker, never learning history.
 
 ## How Relearn Slots Into the Existing Modes
 
@@ -94,9 +94,11 @@ Because the loop is entirely client-side, leaving the page just discards the que
 - **Skip** submits with `isSkipped: true`; the backend grades it as wrong but still returns the meaning + context, so the learner sees the answer. It is treated exactly like a wrong answer for the queue.
 - Relearn submits **one card at a time** (not batched). The batched path used by the linear quizzes exists to write many logs efficiently; Relearn writes nothing and the loop needs a per-card decision, so the single-shot `submitRelearnAnswer` (with `batchSubmitRelearnAnswers` available for parity) is used. See [Backend Design]({{< relref "backend-design" >}}).
 
-### Result verdict (dedicated, no override)
+### Result verdict + session-only override
 
-The feedback verdict is a small self-contained block in the session page: a green/red banner (`✓ Correct` / `✗ Incorrect`), the expression, its meaning, and the grader's reason. It is **not** a reuse of `QuizResultCard`, and there are **no override / mark-as-correct controls at all** — the Relearn response carries no `learned_at` and no next-review date, so there is nothing to override and no schedule to show. This is the frontend expression of the "writes nothing to history" invariant: the control is absent by construction, not merely hidden.
+The feedback verdict is a small self-contained block in the session page: a green/red banner (`✓ Correct` / `✗ Incorrect`), the expression, its meaning, and the grader's reason. It is **not** a reuse of `QuizResultCard` (the Relearn response carries no `learned_at` / next-review date, so there is no schedule to show).
+
+It **does** carry a **Mark as Correct / Mark as Incorrect** toggle — because the OpenAI meaning grader is imperfect and can mark a correct answer wrong. But unlike the normal quizzes, where that button edits the learning log and reschedules SM-2, here it is **session-only**: it flips the verdict the working queue uses (`resolveFront`) so the learner isn't forced to re-drill a word they know, and it calls `quizClient.overrideRelearnCard({ noteId, markCorrect })` to record/remove the off-the-record clear marker for the *next* session. It writes **no** learning history. The banner reflects the effective (post-override) verdict and shows an "(overridden)" tag; the override RPC is called on **Next** only when the learner actually flipped the grader's verdict.
 
 ### Learn-page context block (the distinguishing feature)
 

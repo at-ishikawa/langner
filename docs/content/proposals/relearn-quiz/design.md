@@ -141,7 +141,7 @@ Following the existing optimistic-transition pattern, the layout switches to the
 ```
 
 - Reuses the existing quiz result card: green/red banner, the expression, the canonical meaning, the learner's answer, and the grader's reason.
-- **Crucially, this card shows NO "next review date" and NO Override / Change-Date actions.** Those surfaces exist only for quizzes that write history. Because the Relearn Quiz records nothing, there is nothing to override and no schedule to show. The result card is display-only here.
+- **The card shows NO "next review date" and NO Change-Review-Date action** — there is no schedule to move. It **does** show a **Mark as Correct / Mark as Incorrect** toggle, because the meaning grader is imperfect; but that override is **session-only** — it flips the verdict the working queue uses and records/removes the off-the-record clear marker, and writes **no** learning history (unlike the normal quizzes, where the same button edits the log and SM-2).
 
 ### R3b: Learn-page context (below the result card)
 
@@ -239,11 +239,11 @@ The Relearn Quiz intentionally reuses the current quiz UI so it feels native:
 Because the Relearn Quiz never writes history, several familiar quiz surfaces are intentionally **removed**, not just hidden:
 
 - **No next-review date** on the feedback card.
-- **No Override / Mark-as-Correct / Change-Review-Date** actions anywhere (no log exists to override).
+- **No Change-Review-Date action** (no schedule exists to move).
 - **No Session Complete result list** with per-word history actions.
 - **No appearance in Quiz Analytics** — a Relearn session leaves no trace on the Day List or Day Detail pages.
 
-These absences are the visible expression of the invariant that the Relearn Quiz is off the record.
+The Mark-as-Correct/Incorrect toggle **is** present, but re-scoped: it corrects the grader's verdict for *this session's loop* and the off-the-record clear marker only, never the learning log or SM-2. These absences (and the one re-scoped control) are the visible expression of the invariant that the Relearn Quiz is off the record.
 
 ## Accessibility
 

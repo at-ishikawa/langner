@@ -61,6 +61,8 @@ export type {
   RelearnConversationLine,
   BatchSubmitRelearnAnswersRequest,
   BatchSubmitRelearnAnswersResponse,
+  OverrideRelearnCardRequest,
+  OverrideRelearnCardResponse,
 } from "@/gen-protos/api/v1/quiz_pb";
 
 export { QuizType, EtymologyQuizMode } from "@/gen-protos/api/v1/quiz_pb";

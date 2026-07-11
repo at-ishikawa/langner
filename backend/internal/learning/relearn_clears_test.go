@@ -43,6 +43,20 @@ func TestMemoryRelearnClearStore_KeepsLatestClear(t *testing.T) {
 	assert.Equal(t, later, all[key], "the most recent clear time must win")
 }
 
+func TestMemoryRelearnClearStore_Unmark(t *testing.T) {
+	store := NewMemoryRelearnClearStore()
+	ctx := context.Background()
+	require.NoError(t, store.MarkCleared(ctx, "k", time.Unix(10, 0)))
+	require.NoError(t, store.Unmark(ctx, "k"))
+
+	all, err := store.AllClears(ctx)
+	require.NoError(t, err)
+	assert.NotContains(t, all, "k", "Unmark removes the marker")
+
+	// Unmarking an absent key is a no-op.
+	require.NoError(t, store.Unmark(ctx, "missing"))
+}
+
 func TestMemoryRelearnClearStore_AllClearsIsACopy(t *testing.T) {
 	store := NewMemoryRelearnClearStore()
 	ctx := context.Background()

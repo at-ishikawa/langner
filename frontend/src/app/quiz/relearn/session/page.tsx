@@ -35,6 +35,10 @@ export default function RelearnSessionPage() {
   const [phase, setPhase] = useState<Phase>("answering");
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<SubmitRelearnAnswerResponse | null>(null);
+  // override holds the learner's overriding verdict for the current card, or
+  // null when they accept the grader's. It only affects this session (the
+  // working queue) and the off-the-record clear marker — never learning history.
+  const [override, setOverride] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const startRef = useRef<number>(Date.now());
@@ -94,12 +98,24 @@ export default function RelearnSessionPage() {
     }
   };
 
-  const handleNext = () => {
-    const correct = feedback?.correct ?? false;
+  const handleNext = async () => {
+    const graded = feedback?.correct ?? false;
+    const effective = override ?? graded;
+    // When the learner flipped the verdict, reconcile the off-the-record clear
+    // marker (records or removes it). Non-fatal: the queue already reflects the
+    // override; only the next session's suppression could be stale.
+    if (override !== null && override !== graded) {
+      try {
+        await quizClient.overrideRelearnCard({ noteId: current.noteId, markCorrect: override });
+      } catch {
+        // ignore — session behavior is unaffected
+      }
+    }
     setAnswer("");
     setFeedback(null);
+    setOverride(null);
     setPhase("answering");
-    resolveFront(correct);
+    resolveFront(effective);
   };
 
   return (
@@ -171,19 +187,42 @@ export default function RelearnSessionPage() {
             </Box>
           ) : (
             <>
-              <Box
-                bg={feedback.correct ? "green.50" : "red.50"}
-                color={feedback.correct ? "green.700" : "red.700"}
-                _dark={{
-                  bg: feedback.correct ? "green.900" : "red.900",
-                  color: feedback.correct ? "green.200" : "red.200",
-                }}
-                borderRadius="md"
-                p={3}
-                fontWeight="semibold"
-              >
-                {feedback.correct ? "✓ Correct" : "✗ Incorrect"}
-              </Box>
+              {(() => {
+                const effectiveCorrect = override ?? feedback.correct;
+                return (
+                  <Box
+                    bg={effectiveCorrect ? "green.50" : "red.50"}
+                    color={effectiveCorrect ? "green.700" : "red.700"}
+                    _dark={{
+                      bg: effectiveCorrect ? "green.900" : "red.900",
+                      color: effectiveCorrect ? "green.200" : "red.200",
+                    }}
+                    borderRadius="md"
+                    p={3}
+                    fontWeight="semibold"
+                    display="flex"
+                    justifyContent="space-between"
+                    alignItems="center"
+                  >
+                    <Text as="span">
+                      {effectiveCorrect ? "✓ Correct" : "✗ Incorrect"}
+                      {override !== null && (
+                        <Text as="span" fontWeight="normal" fontSize="xs" ml={2}>
+                          (overridden)
+                        </Text>
+                      )}
+                    </Text>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      colorPalette={effectiveCorrect ? "red" : "green"}
+                      onClick={() => setOverride(!effectiveCorrect)}
+                    >
+                      {effectiveCorrect ? "Mark as Incorrect" : "Mark as Correct"}
+                    </Button>
+                  </Box>
+                );
+              })()}
               {/* Always show the word and its meaning, whichever side was asked. */}
               <Box>
                 <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
@@ -209,7 +248,7 @@ export default function RelearnSessionPage() {
                 exampleWords={feedback.exampleWords ?? []}
                 graphContext={feedback.graphContext}
               />
-              <Button colorPalette="purple" w="full" mt={2} onClick={handleNext}>
+              <Button colorPalette="purple" w="full" mt={2} onClick={() => void handleNext()}>
                 Next
               </Button>
             </>

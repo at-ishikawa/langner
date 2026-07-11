@@ -158,6 +158,36 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 	return connect.NewResponse(&apiv1.BatchSubmitRelearnAnswersResponse{Responses: responses}), nil
 }
 
+// OverrideRelearnCard reconciles the clear marker when the learner overrides
+// the grader's verdict. It is session-only: it records or removes the
+// relearn_clears marker and writes NO learning history. The client applies the
+// flipped verdict to its working queue.
+func (h *QuizHandler) OverrideRelearnCard(ctx context.Context, req *connect.Request[apiv1.OverrideRelearnCardRequest]) (*connect.Response[apiv1.OverrideRelearnCardResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	h.mu.Lock()
+	card, ok := h.relearnStore[req.Msg.GetNoteId()]
+	h.mu.Unlock()
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("relearn card %d not found", req.Msg.GetNoteId()))
+	}
+	if h.relearnClears != nil {
+		var err error
+		if req.Msg.GetMarkCorrect() {
+			err = h.relearnClears.MarkCleared(ctx, card.ClearKey, time.Now())
+		} else {
+			err = h.relearnClears.Unmark(ctx, card.ClearKey)
+		}
+		if err != nil {
+			// The marker is a next-session optimization; the client already
+			// applied the override to this session's queue. Don't fail the RPC.
+			slog.Warn("failed to reconcile relearn clear on override", "clear_key", card.ClearKey, "error", err)
+		}
+	}
+	return connect.NewResponse(&apiv1.OverrideRelearnCardResponse{}), nil
+}
+
 // gradeRelearn dispatches to the pure grader that matches the card's Format, so
 // each word is graded in the direction it was failed in. A skip is graded as
 // wrong without calling the grader (same as the other quizzes).
