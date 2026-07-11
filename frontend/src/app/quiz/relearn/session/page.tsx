@@ -200,19 +200,28 @@ export default function RelearnSessionPage() {
               onOverride={() => setOverride(!feedback.correct)}
               onUndo={() => setOverride(null)}
             >
-              {/* Always show the word and its meaning, whichever side was asked. */}
-              <Box>
+              {/* Show the word, its correct meaning, and what the learner typed
+                  so they can see exactly what was off. */}
+              <Box display="flex" flexDirection="column" gap={1}>
                 <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
                   {current.entry}
                 </Text>
-                <Text
-                  fontSize="sm"
-                  color="gray.600"
-                  _dark={{ color: "gray.300" }}
-                  data-testid={isReverse ? undefined : "relearn-answer"}
-                >
-                  {feedback.meaning || current.meaning}
+                <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>
+                  <Text as="span" fontWeight="semibold">Meaning: </Text>
+                  <Text as="span" data-testid={isReverse ? undefined : "relearn-answer"}>
+                    {feedback.meaning || current.meaning}
+                  </Text>
                 </Text>
+                {answer.trim() && (
+                  <Text
+                    fontSize="sm"
+                    color={(override ?? feedback.correct) ? "gray.500" : "red.600"}
+                    _dark={{ color: (override ?? feedback.correct) ? "gray.400" : "red.300" }}
+                  >
+                    <Text as="span" fontWeight="semibold">Your answer: </Text>
+                    {answer}
+                  </Text>
+                )}
               </Box>
               {feedback.reason && (
                 <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>

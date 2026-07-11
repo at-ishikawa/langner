@@ -125,9 +125,14 @@ describe("RelearnSessionPage", () => {
     submitRelearnAnswer.mockResolvedValue({ correct: false, meaning: "the first", reason: "nope" });
     renderPage();
 
-    fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "bad" } });
+    fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "bad guess" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
+    // The correct meaning and the learner's own answer are both shown.
+    expect(screen.getByText("Meaning:")).toBeInTheDocument();
+    expect(screen.getByText("the first")).toBeInTheDocument();
+    expect(screen.getByText("Your answer:")).toBeInTheDocument();
+    expect(screen.getByText("bad guess")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     expect(useRelearnStore.getState().queue.map((c) => c.entry)).toEqual(["beta", "alpha"]);
