@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Button, Heading, Spinner, Text } from "@chakra-ui/react";
+import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
 import { quizClient, QuizType, type SubmitRelearnAnswerResponse } from "@/lib/client";
 import { AnswerInput } from "@/components/AnswerInput";
+import { FeedbackActions } from "@/components/FeedbackActions";
 import { useRelearnStore } from "@/store/relearnStore";
 import RelearnContext from "@/components/RelearnContext";
 
@@ -186,43 +187,19 @@ export default function RelearnSessionPage() {
               <Spinner />
             </Box>
           ) : (
-            <>
-              {(() => {
-                const effectiveCorrect = override ?? feedback.correct;
-                return (
-                  <Box
-                    bg={effectiveCorrect ? "green.50" : "red.50"}
-                    color={effectiveCorrect ? "green.700" : "red.700"}
-                    _dark={{
-                      bg: effectiveCorrect ? "green.900" : "red.900",
-                      color: effectiveCorrect ? "green.200" : "red.200",
-                    }}
-                    borderRadius="md"
-                    p={3}
-                    fontWeight="semibold"
-                    display="flex"
-                    justifyContent="space-between"
-                    alignItems="center"
-                  >
-                    <Text as="span">
-                      {effectiveCorrect ? "✓ Correct" : "✗ Incorrect"}
-                      {override !== null && (
-                        <Text as="span" fontWeight="normal" fontSize="xs" ml={2}>
-                          (overridden)
-                        </Text>
-                      )}
-                    </Text>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      colorPalette={effectiveCorrect ? "red" : "green"}
-                      onClick={() => setOverride(!effectiveCorrect)}
-                    >
-                      {effectiveCorrect ? "Mark as Incorrect" : "Mark as Correct"}
-                    </Button>
-                  </Box>
-                );
-              })()}
+            // Same feedback actions (banner + Mark-as-Correct/Incorrect + Next)
+            // the other quizzes use, so the UI is consistent. The override here
+            // is session-only — see handleNext / OverrideRelearnCard.
+            <FeedbackActions
+              isCorrect={override ?? feedback.correct}
+              noteId={current.noteId}
+              isOverridden={override !== null}
+              isSkipped={false}
+              nextLabel="Next"
+              onNext={() => void handleNext()}
+              onOverride={() => setOverride(!feedback.correct)}
+              onUndo={() => setOverride(null)}
+            >
               {/* Always show the word and its meaning, whichever side was asked. */}
               <Box>
                 <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
@@ -248,10 +225,7 @@ export default function RelearnSessionPage() {
                 exampleWords={feedback.exampleWords ?? []}
                 graphContext={feedback.graphContext}
               />
-              <Button colorPalette="purple" w="full" mt={2} onClick={() => void handleNext()}>
-                Next
-              </Button>
-            </>
+            </FeedbackActions>
           )}
         </Box>
       )}
