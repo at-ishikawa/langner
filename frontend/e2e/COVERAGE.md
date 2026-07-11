@@ -45,7 +45,6 @@ actual navigation).
 | `/quiz/complete`                    | quiz-reverse      | (both reverse scenarios reach it)                       |
 | `/quiz/complete`                    | quiz-freeform     | Submit one freeform answer and finish                   |
 | `/quiz/complete`                    | quiz-etymology    | (all 3 etymology scenarios reach it)                    |
-| `/quiz/relearn`                     | relearn           | Relearn a word missed moments ago in a Standard quiz    |
 | `/quiz/relearn/session`             | relearn           | Relearn a word missed moments ago in a Standard quiz    |
 | `/quiz/relearn/complete`            | relearn           | Relearn a word missed moments ago in a Standard quiz    |
 | `/analytics`                        | analytics         | Open the Analytics Day List from home                   |

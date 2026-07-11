@@ -12,7 +12,7 @@ export default function RelearnCompletePage() {
 
   const goStart = () => {
     reset();
-    router.push("/quiz/relearn");
+    router.push("/quiz?tab=relearn");
   };
   const goHub = () => {
     reset();

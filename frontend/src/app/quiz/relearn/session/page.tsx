@@ -48,7 +48,7 @@ export default function RelearnSessionPage() {
   // yet bounces back to the start screen instead of a hollow complete page.
   useEffect(() => {
     if (queue.length === 0) {
-      router.push(totalAnswers > 0 ? "/quiz/relearn/complete" : "/quiz/relearn");
+      router.push(totalAnswers > 0 ? "/quiz/relearn/complete" : "/quiz?tab=relearn");
     }
   }, [queue.length, totalAnswers, router]);
 

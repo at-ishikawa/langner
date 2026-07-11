@@ -42,7 +42,7 @@ describe("RelearnCompletePage", () => {
     useRelearnStore.getState().resolveFront(true);
     renderPage();
     fireEvent.click(screen.getByRole("button", { name: "Relearn again" }));
-    expect(pushMock).toHaveBeenCalledWith("/quiz/relearn");
+    expect(pushMock).toHaveBeenCalledWith("/quiz?tab=relearn");
     expect(useRelearnStore.getState().clearedCount).toBe(0);
   });
 

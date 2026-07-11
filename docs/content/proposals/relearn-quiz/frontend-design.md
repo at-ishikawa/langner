@@ -18,7 +18,6 @@ frontend/src/
   app/quiz/
     page.tsx                     # MODIFY: add a "Relearn" mode card to the hub
     relearn/
-      page.tsx                   # NEW: start screen (window selector + pool count)
       session/
         page.tsx                 # NEW: looping card + rich feedback
       complete/
@@ -40,7 +39,7 @@ The existing quiz modes are represented in three parallel places (the `quizStore
 
 1. **Proto enum** — `QUIZ_TYPE_RELEARN` is added to the proto `QuizType` (label-only, never persisted; see [Backend Design]({{< relref "backend-design" >}})). It labels a pooled word's `source_quiz_type`.
 2. **Store** — Relearn uses its own `relearnStore.ts`; it is **not** added to the `quizStore.ts` string union (which drives the override/analytics result actions Relearn has none of).
-3. **Hub** — the hub gets a third **Relearn tab** alongside Vocabulary and Etymology (`app/quiz/page.tsx`), consistent with the existing tab row. Because Relearn is a cross-quiz-type flow with its own start screen, selecting the tab navigates to `/quiz/relearn` (which owns its start → session → complete pages) rather than swapping mode cards in place. It is not wired into `handleStart`.
+3. **Hub** — the hub gets a third **Relearn tab** alongside Vocabulary and Etymology (`app/quiz/page.tsx`). Like the other tabs it switches content **in place**: selecting it renders the `RelearnStart` component (window selector + pool count + Start) inline under the tab row, so it stays within the tabbed hub. Start seeds the queue and navigates to `/quiz/relearn/session`; the session/complete pages return via `/quiz?tab=relearn` (the hub reads that query param to reopen the tab). There is no standalone `/quiz/relearn` page.
 
 ## Start Screen — `app/quiz/relearn/page.tsx`
 

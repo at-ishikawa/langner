@@ -82,7 +82,7 @@ describe("RelearnSessionPage", () => {
 
   it("redirects to start when the queue is empty and nothing was answered", async () => {
     renderPage();
-    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/quiz/relearn"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/quiz?tab=relearn"));
   });
 
   it("shows the current card and the words-left counter", () => {
