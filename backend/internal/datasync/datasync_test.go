@@ -1189,8 +1189,8 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 					{ID: 1, NoteID: 1, Status: "understood", LearnedAt: baseTime, Quality: 4, QuizType: "notebook"},
 					{ID: 2, NoteID: 1, Status: "understood", LearnedAt: baseTime.Add(24 * time.Hour), Quality: 5, QuizType: "reverse"},
 				}, nil)
-				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(notes []notebook.NoteRecord, logs []learning.LearningLog) error {
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any(), gomock.Any()).
+					DoAndReturn(func(notes []notebook.NoteRecord, logs []learning.LearningLog, origins []notebook.EtymologyOriginRecord) error {
 						require.Len(t, notes, 1)
 						require.Len(t, logs, 2)
 						return nil
@@ -1203,7 +1203,7 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).Return(nil)
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 			},
 			want: &ExportLearningLogsResult{},
 		},
@@ -1227,7 +1227,7 @@ func TestExporter_ExportLearningLogs(t *testing.T) {
 			setup: func(noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository, learningSink *mock_datasync.MockLearningSink) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{}, nil)
 				learningRepo.EXPECT().FindAll(gomock.Any()).Return([]learning.LearningLog{}, nil)
-				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any()).Return(fmt.Errorf("write failed"))
+				learningSink.EXPECT().WriteAll(gomock.Any(), gomock.Any(), gomock.Any()).Return(fmt.Errorf("write failed"))
 			},
 			wantErr: true,
 		},

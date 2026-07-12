@@ -596,10 +596,48 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 	}
 
-	// First pass: batch-create auto notes for unknown expressions
+	// Build a (notebookID, lowercase origin name) set so any expression
+	// matching a known etymology origin is routed to the StateSeeder
+	// (origin_id logs) instead of being auto-noted here. The user's YAML
+	// frequently omits the `type: origin` marker on roots like "ambi" /
+	// "ascetic" / "epi", so name-matching against etymology_origins is
+	// the reliable signal. Attaching their logs to a NotebookNotes-less
+	// phantom note would drop them on export.
+	originNamesByNotebook := map[string]map[string]bool{}
+	if imp.etymologyOriginRepo != nil {
+		existingOrigins, oerr := imp.etymologyOriginRepo.FindAll(ctx)
+		if oerr != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", oerr)
+		}
+		for _, o := range existingOrigins {
+			byNB := originNamesByNotebook[o.NotebookID]
+			if byNB == nil {
+				byNB = map[string]bool{}
+				originNamesByNotebook[o.NotebookID] = byNB
+			}
+			byNB[strings.ToLower(strings.TrimSpace(o.Origin))] = true
+		}
+	}
+	isKnownOrigin := func(expr exprWithNotebook) bool {
+		if expr.Type == notebook.LearningExpressionTypeOrigin {
+			return true
+		}
+		byNB, ok := originNamesByNotebook[expr.notebookID]
+		if !ok {
+			return false
+		}
+		return byNB[strings.ToLower(strings.TrimSpace(expr.Expression))]
+	}
+
+	// First pass: batch-create auto notes for unknown vocab expressions.
+	// Origin expressions are excluded — the StateSeeder writes their
+	// logs against origin_id.
 	newNoteEntries := make(map[string]bool)
 	var newNotes []*notebook.NoteRecord
 	for _, expr := range allExpressions {
+		if isKnownOrigin(expr) {
+			continue
+		}
 		if noteMap.lookup(expr.Expression, expr.notebookID) == nil && !newNoteEntries[expr.Expression] {
 			newNoteEntries[expr.Expression] = true
 			n := &notebook.NoteRecord{
@@ -628,9 +666,14 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		imp.touchedNoteIDs = make(map[int64]bool)
 	}
 
-	// Second pass: collect learning logs with correct note IDs
+	// Second pass: collect learning logs with correct note IDs. Origin
+	// expressions are owned by the StateSeeder (origin_id logs) and
+	// skipped here so their logs don't attach to phantom notes.
 	var newLogs []*learning.LearningLog
 	for _, expr := range allExpressions {
+		if isKnownOrigin(expr) {
+			continue
+		}
 		n := noteMap.lookup(expr.Expression, expr.notebookID)
 		if n == nil {
 			continue
@@ -662,7 +705,14 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 
 		for _, rec := range expr.ReverseLogs {
-			quizType := "reverse"
+			// Preserve the record's own quiz_type — older YAML parks
+			// freeform records inside the reverse_logs slot. Defaulting
+			// to "reverse" only when unspecified keeps the round-trip
+			// lossless (hardcoding it silently reclassifies those).
+			quizType := rec.QuizType
+			if quizType == "" {
+				quizType = "reverse"
+			}
 			key := logKey{n.ID, quizType, rec.LearnedAt.UTC(), expr.notebookID, string(rec.Status)}
 			if existingLogs.matchSource(key) {
 				result.LearningSkipped++
@@ -809,8 +859,19 @@ type NoteSink interface {
 }
 
 // LearningSink writes exported learning logs.
+//
+// origins carries every etymology_origins row so origin-typed logs
+// (NoteID == 0, OriginID != 0) round-trip back into the YAML as
+// `type: origin` expressions. Without it, origin logs survive import
+// (StateSeeder writes them with origin_id) but vanish from the
+// round-trip, and validate-db reports every origin as source=N,
+// exported=0.
 type LearningSink interface {
-	WriteAll(notes []notebook.NoteRecord, logs []learning.LearningLog) error
+	WriteAll(
+		notes []notebook.NoteRecord,
+		logs []learning.LearningLog,
+		origins []notebook.EtymologyOriginRecord,
+	) error
 }
 
 // DictionarySink writes exported dictionary entries.
@@ -856,6 +917,10 @@ type Exporter struct {
 	noteSink       NoteSink
 	learningSink   LearningSink
 	dictionarySink DictionarySink
+	// originRepo is consulted by ExportLearningLogs so origin-typed
+	// LearningHistoryExpression rows round-trip through YAML. Nil means
+	// "no etymology data": origin logs skip the sink.
+	originRepo notebook.EtymologyOriginRepository
 	// Optional definition-concept side. When either is nil,
 	// ExportAll skips the definition-concept phase.
 	definitionConceptRepo notebook.DefinitionConceptRepository
@@ -874,6 +939,14 @@ func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.Learnin
 		dictionarySink: dictionarySink,
 		writer:         writer,
 	}
+}
+
+// WithEtymologyOrigins wires the etymology_origins repository so
+// ExportLearningLogs hands every origin to the LearningSink. Without
+// this call origin-typed expressions silently drop on round-trip.
+func (exp *Exporter) WithEtymologyOrigins(originRepo notebook.EtymologyOriginRepository) *Exporter {
+	exp.originRepo = originRepo
+	return exp
 }
 
 // WithDefinitionConcepts configures the definitions-concept export
@@ -917,7 +990,15 @@ func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLog
 		return nil, fmt.Errorf("load learning logs: %w", err)
 	}
 
-	if err := exp.learningSink.WriteAll(notes, logs); err != nil {
+	var origins []notebook.EtymologyOriginRecord
+	if exp.originRepo != nil {
+		origins, err = exp.originRepo.FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", err)
+		}
+	}
+
+	if err := exp.learningSink.WriteAll(notes, logs, origins); err != nil {
 		return nil, fmt.Errorf("write learning logs: %w", err)
 	}
 

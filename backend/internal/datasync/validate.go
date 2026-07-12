@@ -94,8 +94,16 @@ func buildLearningStats(learningByNotebook map[string][]notebook.LearningHistory
 				es = &LearningExpressionStats{}
 				exprStats[key] = es
 			}
-			es.LearnedLogCount += len(expr.LearnedLogs)
-			es.ReverseLogCount += len(expr.ReverseLogs)
+			// Count each record in the learned/reverse slots by its
+			// quiz_type, not by which slot it sits in. Older YAML parks
+			// freeform records in the reverse_logs slot; import preserves
+			// their quiz_type and export routes them back to learned_logs
+			// (buildExpression's convention). Counting by slot membership
+			// would then show source reverse=1 / exported reverse=0. The
+			// etymology_breakdown / etymology_assembly slots are left
+			// uncounted, matching the pre-existing behaviour.
+			tallyByQuizType(es, expr.LearnedLogs, notebook.QuizTypeNotebook)
+			tallyByQuizType(es, expr.ReverseLogs, notebook.QuizTypeReverse)
 		}
 		result[nbID] = exprStats
 	}
@@ -318,4 +326,28 @@ func mergeStringKeys[V any](a, b map[string]V) []string {
 		keys = append(keys, k)
 	}
 	return keys
+}
+
+// tallyByQuizType routes each record into the learned or reverse count
+// by its quiz_type, falling back to defaultQuizType when the record
+// didn't specify one. reverse counts as reverse; etymology_breakdown /
+// etymology_assembly are not tallied here (they live in their own YAML
+// slots and aren't part of the learned/reverse round-trip counts);
+// everything else (notebook, freeform, etymology_freeform) counts as
+// learned — matching buildExpression's slot routing on export.
+func tallyByQuizType(es *LearningExpressionStats, recs []notebook.LearningRecord, defaultQuizType notebook.QuizType) {
+	for _, rec := range recs {
+		qt := notebook.QuizType(rec.QuizType)
+		if qt == "" {
+			qt = defaultQuizType
+		}
+		switch qt {
+		case notebook.QuizTypeReverse:
+			es.ReverseLogCount++
+		case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse:
+			// not counted in learned/reverse
+		default:
+			es.LearnedLogCount++
+		}
+	}
 }
