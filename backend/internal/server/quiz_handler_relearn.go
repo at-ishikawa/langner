@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"connectrpc.com/connect"
@@ -41,22 +40,7 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 	}
 	window := clampRelearnWindow(req.Msg.GetWindowHours())
 
-	var clears map[string]time.Time
-	if h.relearnClears != nil {
-		if loaded, err := h.relearnClears.AllClears(ctx); err != nil {
-			// The clear markers only keep already-recovered words out of the
-			// NEXT session — they are an optimization, not core to relearning.
-			// If the store is unavailable (e.g. a database is configured but
-			// the relearn_clears table has not been migrated yet), degrade
-			// gracefully and build the pool without clear suppression rather
-			// than failing the whole quiz.
-			slog.Warn("failed to load relearn clears; building pool without them", "error", err)
-		} else {
-			clears = loaded
-		}
-	}
-
-	cards, err := h.svc.LoadRelearnPool(time.Now().Add(-window), clears)
+	cards, err := h.svc.LoadRelearnPool(time.Now().Add(-window))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load relearn pool: %w", err))
 	}
@@ -96,11 +80,12 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 	return connect.NewResponse(&apiv1.StartRelearnQuizResponse{Cards: protoCards}), nil
 }
 
-// SubmitRelearnAnswer grades one relearn answer. It records NOTHING to learning
-// history: it calls only the pure meaning graders and, on a correct answer,
-// writes the non-SR relearn-clear marker. It never touches Save*, UpdateLog, or
-// GetLatestLearnedInfo, and the response carries no next_review_date /
-// learned_at.
+// SubmitRelearnAnswer grades one relearn answer. It records NOTHING: it calls
+// only the pure meaning graders and writes no state at all — not learning
+// history and not any relearn-local marker. Relearn is repeatable, so a word
+// stays in the pool until it ages out of the window or is fixed in a real quiz.
+// It never touches Save*, UpdateLog, or GetLatestLearnedInfo, and the response
+// carries no next_review_date / learned_at.
 func (h *QuizHandler) SubmitRelearnAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitRelearnAnswerRequest]) (*connect.Response[apiv1.SubmitRelearnAnswerResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
@@ -118,13 +103,11 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade relearn answer: %w", err))
 	}
 
-	h.markRelearnCleared(ctx, card, grade)
 	return connect.NewResponse(h.buildRelearnResponse(ctx, card, grade)), nil
 }
 
 // BatchSubmitRelearnAnswers grades a batch of relearn answers. Grading runs in
-// parallel; clear markers are written serially. Like the single-shot path it
-// writes no learning history.
+// parallel. Like the single-shot path it writes no state.
 func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connect.Request[apiv1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[apiv1.BatchSubmitRelearnAnswersResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
@@ -152,40 +135,9 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 
 	responses := make([]*apiv1.SubmitRelearnAnswerResponse, len(answers))
 	for i := range answers {
-		h.markRelearnCleared(ctx, cards[i], grades[i])
 		responses[i] = h.buildRelearnResponse(ctx, cards[i], grades[i])
 	}
 	return connect.NewResponse(&apiv1.BatchSubmitRelearnAnswersResponse{Responses: responses}), nil
-}
-
-// OverrideRelearnCard reconciles the clear marker when the learner overrides
-// the grader's verdict. It is session-only: it records or removes the
-// relearn_clears marker and writes NO learning history. The client applies the
-// flipped verdict to its working queue.
-func (h *QuizHandler) OverrideRelearnCard(ctx context.Context, req *connect.Request[apiv1.OverrideRelearnCardRequest]) (*connect.Response[apiv1.OverrideRelearnCardResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-	h.mu.Lock()
-	card, ok := h.relearnStore[req.Msg.GetNoteId()]
-	h.mu.Unlock()
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("relearn card %d not found", req.Msg.GetNoteId()))
-	}
-	if h.relearnClears != nil {
-		var err error
-		if req.Msg.GetMarkCorrect() {
-			err = h.relearnClears.MarkCleared(ctx, card.ClearKey, time.Now())
-		} else {
-			err = h.relearnClears.Unmark(ctx, card.ClearKey)
-		}
-		if err != nil {
-			// The marker is a next-session optimization; the client already
-			// applied the override to this session's queue. Don't fail the RPC.
-			slog.Warn("failed to reconcile relearn clear on override", "clear_key", card.ClearKey, "error", err)
-		}
-	}
-	return connect.NewResponse(&apiv1.OverrideRelearnCardResponse{}), nil
 }
 
 // gradeRelearn dispatches to the pure grader that matches the card's Format, so
@@ -204,18 +156,6 @@ func (h *QuizHandler) gradeRelearn(ctx context.Context, card quiz.RelearnCard, a
 		return h.svc.GradeEtymologyReverseAnswer(ctx, card.EtymologyCard(), answer, responseTimeMs)
 	default:
 		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
-	}
-}
-
-// markRelearnCleared records the non-SR clear marker when the answer is
-// correct. A marker-write failure is logged but never fails the answer — the
-// only consequence is that the word may reappear in the next relearn session.
-func (h *QuizHandler) markRelearnCleared(ctx context.Context, card quiz.RelearnCard, grade quiz.GradeResult) {
-	if !grade.Correct || h.relearnClears == nil {
-		return
-	}
-	if err := h.relearnClears.MarkCleared(ctx, card.ClearKey, time.Now()); err != nil {
-		slog.Warn("failed to record relearn clear", "clear_key", card.ClearKey, "error", err)
 	}
 }
 

@@ -27,11 +27,12 @@ import (
 // load-bearing promises of the Relearn Quiz on the DB path:
 //  1. A relearn answer writes NOTHING to learning_logs (SM-2 and analytics are
 //     untouched).
-//  2. A correct answer records a relearn_clears marker that persists in the DB,
-//     so the recovered word drops out of the next session.
+//  2. Relearn persists no state of its own, so the practised word is repeatable:
+//     it stays in the pool and reappears in the next session even after a
+//     correct answer, until it ages out of the window or is fixed in a real quiz.
 //
 // Runs only when LANGNER_INTEGRATION_DB_URL is set (the postgres:16 service in
-// CI). The relearn_clears table comes from migration 017.
+// CI).
 func TestRelearn_LivePostgres_Integration(t *testing.T) {
 	dsn := os.Getenv(integrationDBEnv)
 	if dsn == "" {
@@ -85,21 +86,14 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock.NewClient(), make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
 	handler := NewQuizHandler(svc)
-	handler.SetRelearnClearStore(learning.NewDBRelearnClearStore(db))
 
 	logCount := func() int {
 		var n int
 		require.NoError(t, db.Get(&n, `SELECT COUNT(*) FROM learning_logs`))
 		return n
 	}
-	clearCount := func() int {
-		var n int
-		require.NoError(t, db.Get(&n, `SELECT COUNT(*) FROM relearn_clears`))
-		return n
-	}
 
 	require.Equal(t, 0, logCount())
-	require.Equal(t, 0, clearCount())
 
 	start, err := handler.StartRelearnQuiz(context.Background(),
 		connect.NewRequest(&apiv1.StartRelearnQuizRequest{WindowHours: 24}))
@@ -114,12 +108,12 @@ notebooks:
 
 	// (1) No learning history was written.
 	assert.Equal(t, 0, logCount(), "a relearn answer must not write to learning_logs")
-	// (2) A clear marker was persisted.
-	assert.Equal(t, 1, clearCount(), "a correct relearn answer must record one relearn_clears row")
 
-	// The persisted marker excludes the word from the next session.
+	// (2) Relearn is repeatable: the word is still in the pool next session
+	// because a correct relearn answer persists nothing.
 	start2, err := handler.StartRelearnQuiz(context.Background(),
 		connect.NewRequest(&apiv1.StartRelearnQuizRequest{WindowHours: 24}))
 	require.NoError(t, err)
-	assert.Empty(t, start2.Msg.GetCards(), "a DB-cleared word must not reappear in the next session")
+	require.Len(t, start2.Msg.GetCards(), 1, "a relearned word must reappear next session — relearn stores no clear state")
+	assert.Equal(t, "alpha", start2.Msg.GetCards()[0].GetEntry())
 }

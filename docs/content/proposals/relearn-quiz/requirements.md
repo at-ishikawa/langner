@@ -58,19 +58,16 @@ Selection details:
 - **All quiz types contribute.** A word wrong in `reverse`, a word wrong in `etymology_breakdown`, and a word wrong in `notebook` all land in the same pool. They are de-duplicated to a single card per underlying word so the learner is not asked the same expression twice in one loop.
 - **Both storage backends.** Selection works on the database path (the `learning_logs` table) and on the YAML-only path (learning-history files), the same two paths the rest of the app already supports.
 
-### "Relearn clears" — keeping recovered words out of the next session
+### Relearn is repeatable — it stores nothing
 
-Because a Relearn attempt records nothing, answering a word correctly in Relearn would normally leave its most-recent *real* log unchanged — so the same word would reappear in the very next Relearn session that day, even though the learner just recovered it.
+A Relearn attempt records nothing at all — not a learning log, and not any relearn-local marker. Answering a word correctly in Relearn leaves its most-recent *real* log unchanged, so the word stays in the pool: the learner can drill the same in-window words again and again, session after session, which is the whole point of the feature.
 
-To avoid that, a Relearn session records a lightweight, **non-spaced-repetition** marker when a word is cleared: a "relearn clear" of `(note_id, cleared_at)`. When the next Relearn pool is built, a word is excluded if it has a relearn-clear marker more recent than its most-recent in-window wrong log.
+A word leaves the pool only through the two mechanisms that already existed:
 
-This marker is explicitly **not a learning log**:
+- It **ages out** of the rolling look-back window.
+- It is **fixed in a real quiz** — a later `understood` log becomes the most-recent in-window log, so the most-recent-in-window check drops it.
 
-- It is never read by SM-2 and never affects intervals, easiness factors, or next-review dates.
-- It is never read by Quiz Analytics.
-- It only gates the Relearn pool.
-
-A word that the learner later gets wrong again in a *real* quiz reappears in the pool naturally, because that new wrong log is more recent than the relearn-clear marker. Conversely, a word cleared by a later real quiz also drops out naturally via the most-recent-log check — the marker is only needed to cover words that Relearn itself recovered.
+This keeps the Relearn Quiz genuinely off the record: there is no state it writes, nowhere its activity leaks, and nothing to reconcile between what the learner practised and what the schedule believes.
 
 ## User Stories
 
@@ -96,10 +93,10 @@ As a learner, I want every word presented the same way — see the word, type it
 
 As a learner, I want the session to keep going until I have answered every word correctly at least once, so I actually finish having relearned all of them.
 
-- A correct answer removes the word from the working queue.
+- A correct answer removes the word from the working queue **for this session only** — nothing is persisted, so it is still in the pool next time.
 - A wrong answer, or a skip, sends the word to the **back** of the queue to come around again later in the same session.
 - The session ends only when the queue is empty.
-- A progress indicator shows how many distinct words remain (not a fixed "1 of N"), since the queue can grow shorter only as words are cleared.
+- A progress indicator shows how many distinct words remain (not a fixed "1 of N"), since the queue can only shrink as words are answered.
 
 ### See Rich Context on Every Answer
 
@@ -116,13 +113,13 @@ As a learner, I want to know that drilling these words changes nothing about my 
 
 - Nothing I do in a Relearn session appears in Quiz Analytics.
 - No next-review date moves; no easiness factor changes; no log is added to any word's history.
-- I can run Relearn twice in a row; words I cleared the first time do not come back the second time (that day), but words I am still missing do.
+- I can run Relearn as many times as I like; the same recent words come back each time so I can keep drilling them until they stick.
 
 ### Return the Next Day
 
-As a learner, I want yesterday's cleared words gone, but anything I *newly* get wrong tomorrow to show up.
+As a learner, I want the words to keep coming back while they are recent, but old mistakes to fall away on their own.
 
-- The relearn-clear markers only suppress words relative to their most-recent wrong log. A fresh wrong answer in a real quiz always re-qualifies a word for the pool.
+- The pool is always "every in-window wrong word", rebuilt fresh each session — Relearn stores nothing, so a word only leaves the pool when it ages out of the window or is fixed in a real quiz.
 - The window is a rolling look-back, so old mistakes age out on their own.
 
 ## Out of Scope

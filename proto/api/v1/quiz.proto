@@ -56,13 +56,6 @@ service QuizService {
   rpc StartRelearnQuiz(StartRelearnQuizRequest) returns (StartRelearnQuizResponse);
   rpc SubmitRelearnAnswer(SubmitRelearnAnswerRequest) returns (SubmitRelearnAnswerResponse);
   rpc BatchSubmitRelearnAnswers(BatchSubmitRelearnAnswersRequest) returns (BatchSubmitRelearnAnswersResponse);
-  // OverrideRelearnCard reconciles the off-the-record clear marker when the
-  // learner overrides the grader's verdict for a card (e.g. the meaning grader
-  // wrongly marked a correct answer wrong). It is session-only: it records or
-  // removes the relearn_clears marker and NEVER writes a learning log — SM-2
-  // and analytics stay untouched. The client applies the flipped verdict to
-  // the working queue itself.
-  rpc OverrideRelearnCard(OverrideRelearnCardRequest) returns (OverrideRelearnCardResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -700,14 +693,3 @@ message BatchSubmitRelearnAnswersResponse {
   repeated SubmitRelearnAnswerResponse responses = 1;
 }
 
-message OverrideRelearnCardRequest {
-  int64 note_id = 1 [
-    (buf.validate.field).int64.gt = 0
-  ];
-  // mark_correct is the learner's overriding verdict: true records the clear
-  // marker (treat as correct — clear it, keep it out of the next session),
-  // false removes it (treat as wrong — let it come back).
-  bool mark_correct = 2;
-}
-
-message OverrideRelearnCardResponse {}

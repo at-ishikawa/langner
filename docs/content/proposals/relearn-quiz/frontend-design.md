@@ -31,7 +31,7 @@ frontend/src/
     client.ts                    # MODIFY: re-export Relearn request/response types
 ```
 
-The working queue lives in its **own** `relearnStore.ts` rather than in `quizStore.ts`: the loop needs a requeue primitive the linear `currentIndex` store lacks, and isolating it keeps the existing store (and its tests) untouched. The feedback verdict is a small self-contained block in the session page rather than a reuse of `QuizResultCard` — the Relearn response has no `learned_at`/`next_review_date`, so a dedicated banner is simpler than mapping to a `ResultItem`. It carries a **session-only** Mark-as-Correct/Incorrect override (see below) that affects the working queue and the off-the-record clear marker, never learning history.
+The working queue lives in its **own** `relearnStore.ts` rather than in `quizStore.ts`: the loop needs a requeue primitive the linear `currentIndex` store lacks, and isolating it keeps the existing store (and its tests) untouched. The feedback verdict is a small self-contained block in the session page rather than a reuse of `QuizResultCard` — the Relearn response has no `learned_at`/`next_review_date`, so a dedicated banner is simpler than mapping to a `ResultItem`. It carries a **client-side-only** Mark-as-Correct/Incorrect override (see below) that reshapes the working queue and nothing else — Relearn persists no state.
 
 ## How Relearn Slots Into the Existing Modes
 
@@ -97,7 +97,7 @@ Because the loop is entirely client-side, leaving the page just discards the que
 
 The feedback verdict is a small self-contained block in the session page: a green/red banner (`✓ Correct` / `✗ Incorrect`), the expression, its meaning, and the grader's reason. It is **not** a reuse of `QuizResultCard` (the Relearn response carries no `learned_at` / next-review date, so there is no schedule to show).
 
-It **does** carry a **Mark as Correct / Mark as Incorrect** toggle — because the OpenAI meaning grader is imperfect and can mark a correct answer wrong. But unlike the normal quizzes, where that button edits the learning log and reschedules SM-2, here it is **session-only**: it flips the verdict the working queue uses (`resolveFront`) so the learner isn't forced to re-drill a word they know, and it calls `quizClient.overrideRelearnCard({ noteId, markCorrect })` to record/remove the off-the-record clear marker for the *next* session. It writes **no** learning history. The banner reflects the effective (post-override) verdict and shows an "(overridden)" tag; the override RPC is called on **Next** only when the learner actually flipped the grader's verdict.
+It **does** carry a **Mark as Correct / Mark as Incorrect** toggle — because the OpenAI meaning grader is imperfect and can mark a correct answer wrong. But unlike the normal quizzes, where that button edits the learning log and reschedules SM-2, here it is **purely client-side**: it flips the verdict the working queue uses (`resolveFront`) so the learner isn't forced to re-drill a word they know within this session. It calls **no** RPC and writes **nothing** — Relearn persists no state, so there is nothing on the backend to reconcile. The banner reflects the effective (post-override) verdict and shows an "(overridden)" tag; on **Next**, the effective verdict simply decides whether `resolveFront` drops the word or moves it to the back of the queue.
 
 ### Learn-page context block (the distinguishing feature)
 

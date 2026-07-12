@@ -38,14 +38,13 @@ type RelearnContextScene struct {
 //	QuizTypeEtymologyReverse  show Meaning, ask Entry (origin)
 //
 // A word failed in several quiz types yields one card per type. Nothing about a
-// RelearnCard is ever written to learning history; ClearKey is the only value
-// that leaves the session, and only into the relearn_clears marker store.
+// RelearnCard is ever persisted — the Relearn Quiz writes no learning history
+// and no other state.
 type RelearnCard struct {
 	Format       notebook.QuizType
 	Entry        string
 	Meaning      string
 	NotebookName string
-	ClearKey     string
 
 	// Etymology display extras (empty for vocab cards).
 	OriginType string
@@ -77,20 +76,10 @@ func (c RelearnCard) IsEtymology() bool {
 	return c.Format == notebook.QuizTypeEtymologyStandard || c.Format == notebook.QuizTypeEtymologyReverse
 }
 
-// relearnKeySep separates the fields of a relearn clear_key. It is the ASCII
-// Unit Separator (0x1F): a valid UTF-8 byte that cannot appear in notebook
-// names or expressions. A NUL byte (0x00) must NOT be used — Postgres rejects
-// NUL in text/varchar values ("invalid byte sequence for encoding UTF8: 0x00"),
-// which would silently fail the relearn_clears insert.
+// relearnKeySep separates the fields of the internal de-dup key ((format,
+// notebook, expression)). It is the ASCII Unit Separator (0x1F), which cannot
+// appear in notebook names or expressions.
 const relearnKeySep = "\x1f"
-
-// RelearnClearKey builds the stable key identifying one relearn card in the
-// relearn_clears marker store. The Format is part of the key so a word failed
-// in several quiz types clears each format independently — recovering the
-// recognition card does not clear the reverse card for the same word.
-func RelearnClearKey(format notebook.QuizType, notebookName, expression string) string {
-	return string(format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expression))
-}
 
 // relearnCandidate is an intermediate per-format wrong-word record before it is
 // resolved to a gradeable card.
@@ -104,18 +93,16 @@ type relearnCandidate struct {
 // LoadRelearnPool builds the Relearn Quiz pool: for every learning-log series
 // (recognition, reverse, etymology breakdown, etymology assembly) whose
 // most-recent log within [windowStart, now] has status "misunderstood", it
-// emits one card that mirrors that series' quiz type — minus series already
-// cleared more recently. A word failed in several types produces several cards.
+// emits one card that mirrors that series' quiz type. A word failed in several
+// types produces several cards.
 //
 // It reads the YAML learning histories directly — the source of truth and the
 // only place etymology-origin results are stored — so the pool spans both
 // vocabulary and etymology words regardless of whether a database is
-// configured. It writes nothing.
-//
-// clears maps a RelearnClearKey to the time that (word, format) was last
-// recovered; it is excluded when its clear time is not before its most-recent
-// in-window wrong log.
-func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.Time) ([]RelearnCard, error) {
+// configured. It writes nothing, and persists nothing: every in-window wrong
+// word appears in every session until it ages out of the window or is answered
+// correctly in a real quiz, so the learner can re-drill it as often as needed.
+func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) {
 	histories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
@@ -133,7 +120,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 			if latest.LearnedAt.Before(windowStart) || latest.Status != notebook.LearnedStatusMisunderstood {
 				continue
 			}
-			key := RelearnClearKey(sp.format, notebookName, expr.Expression)
+			key := string(sp.format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expr.Expression))
 			if existing, ok := candidates[key]; ok && !latest.LearnedAt.After(existing.latestWrong) {
 				continue
 			}
@@ -158,17 +145,8 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 		}
 	}
 
-	// Drop series already recovered in a later Relearn session.
 	candidatesFound := len(candidates)
-	for key, c := range candidates {
-		if clearedAt, ok := clears[key]; ok && !clearedAt.Before(c.latestWrong) {
-			delete(candidates, key)
-		}
-	}
-	afterClears := len(candidates)
-	if len(candidates) == 0 {
-		slog.Info("relearn pool empty",
-			"in_window_misunderstood", candidatesFound, "after_clears", afterClears, "clears_in_store", len(clears))
+	if candidatesFound == 0 {
 		return nil, nil
 	}
 
@@ -182,7 +160,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 	}
 
 	cards := make([]RelearnCard, 0, len(candidates))
-	for key, c := range candidates {
+	for _, c := range candidates {
 		if c.format == notebook.QuizTypeEtymologyStandard || c.format == notebook.QuizTypeEtymologyReverse {
 			sense, ok := etymByOrigin[strings.ToLower(strings.TrimSpace(c.expression))]
 			if !ok {
@@ -190,7 +168,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 			}
 			cards = append(cards, RelearnCard{
 				Format: c.format, Entry: c.expression, Meaning: sense.Meaning, NotebookName: c.notebookName,
-				ClearKey: key, OriginType: sense.Type, Language: sense.Language, etymologyCard: sense,
+				OriginType: sense.Type, Language: sense.Language, etymologyCard: sense,
 			})
 			continue
 		}
@@ -203,7 +181,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 		}
 		card := RelearnCard{
 			Format: c.format, Entry: c.expression, Meaning: fc.Meaning, NotebookName: c.notebookName,
-			ClearKey: key, WordDetail: fc.WordDetail, Images: fc.Images,
+			WordDetail: fc.WordDetail, Images: fc.Images,
 			ContextScenes: relearnScenesFromCard(fc),
 		}
 		if c.format == notebook.QuizTypeReverse {
@@ -224,12 +202,9 @@ func (s *Service) LoadRelearnPool(windowStart time.Time, clears map[string]time.
 		}
 		cards = append(cards, card)
 	}
-	// One line so an empty/short pool can be diagnosed from the server log:
-	// how many wrong words were in the window, how many survived the clear
-	// markers, and how many matched a gradeable card.
-	slog.Info("relearn pool built",
-		"in_window_misunderstood", candidatesFound, "after_clears", afterClears,
-		"matched_cards", len(cards), "clears_in_store", len(clears))
+	// One line so a short pool can be diagnosed from the server log: how many
+	// wrong words were in the window vs. how many matched a gradeable card.
+	slog.Info("relearn pool built", "in_window_misunderstood", candidatesFound, "matched_cards", len(cards))
 	return cards, nil
 }
 

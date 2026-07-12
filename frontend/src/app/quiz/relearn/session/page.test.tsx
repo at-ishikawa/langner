@@ -6,11 +6,9 @@ import { useRelearnStore } from "@/store/relearnStore";
 import type { RelearnCard } from "@/lib/client";
 
 const submitRelearnAnswer = vi.fn();
-const overrideRelearnCard = vi.fn();
 vi.mock("@/lib/client", () => ({
   quizClient: {
     submitRelearnAnswer: (...args: unknown[]) => submitRelearnAnswer(...args),
-    overrideRelearnCard: (...args: unknown[]) => overrideRelearnCard(...args),
   },
   QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, FREEFORM: 3, ETYMOLOGY_STANDARD: 4, ETYMOLOGY_REVERSE: 5, ETYMOLOGY_FREEFORM: 6 },
 }));
@@ -39,8 +37,6 @@ const reverseCard = (entry: string, meaning: string): RelearnCard =>
 describe("RelearnSessionPage", () => {
   beforeEach(() => {
     submitRelearnAnswer.mockReset();
-    overrideRelearnCard.mockReset();
-    overrideRelearnCard.mockResolvedValue({});
     pushMock.mockReset();
     useRelearnStore.getState().reset();
   });
@@ -60,24 +56,12 @@ describe("RelearnSessionPage", () => {
     expect(screen.getByText("(overridden)")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    // The override reshapes only the working queue — relearn persists nothing,
+    // so no RPC is involved. alpha clears despite the wrong grade; beta is next.
     await waitFor(() =>
-      expect(overrideRelearnCard).toHaveBeenCalledWith(expect.objectContaining({ markCorrect: true })),
+      expect(useRelearnStore.getState().queue.map((c) => c.entry)).toEqual(["beta"]),
     );
-    // alpha cleared despite the wrong grade; beta is next.
-    expect(useRelearnStore.getState().queue.map((c) => c.entry)).toEqual(["beta"]);
     expect(useRelearnStore.getState().clearedCount).toBe(1);
-  });
-
-  it("does not call the override RPC when the grader's verdict is accepted", async () => {
-    useRelearnStore.getState().seedQueue([card("alpha")]);
-    submitRelearnAnswer.mockResolvedValue({ correct: true, meaning: "the first", reason: "ok" });
-    renderPage();
-    fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "the first" } });
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
-    await screen.findByText("✓ Correct");
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
-    await waitFor(() => expect(useRelearnStore.getState().clearedCount).toBe(1));
-    expect(overrideRelearnCard).not.toHaveBeenCalled();
   });
 
   it("redirects to start when the queue is empty and nothing was answered", async () => {

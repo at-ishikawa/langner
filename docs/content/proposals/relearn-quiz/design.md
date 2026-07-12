@@ -141,7 +141,7 @@ Following the existing optimistic-transition pattern, the layout switches to the
 ```
 
 - Reuses the existing quiz result card: green/red banner, the expression, the canonical meaning, the learner's answer, and the grader's reason.
-- **The card shows NO "next review date" and NO Change-Review-Date action** — there is no schedule to move. It **does** show a **Mark as Correct / Mark as Incorrect** toggle, because the meaning grader is imperfect; but that override is **session-only** — it flips the verdict the working queue uses and records/removes the off-the-record clear marker, and writes **no** learning history (unlike the normal quizzes, where the same button edits the log and SM-2).
+- **The card shows NO "next review date" and NO Change-Review-Date action** — there is no schedule to move. It **does** show a **Mark as Correct / Mark as Incorrect** toggle, because the meaning grader is imperfect; but that override is **session-only** — it flips the verdict the working queue uses and writes **no** state at all (unlike the normal quizzes, where the same button edits the log and SM-2). Relearn persists nothing, so there is nothing for the override to reconcile.
 
 ### R3b: Learn-page context (below the result card)
 
@@ -197,9 +197,9 @@ Shown when the working queue is empty — every word has been answered correctly
 └─────────────────────────────────────┘
 ```
 
-- **Summary**: number of distinct words cleared, and the total number of answers given (which can exceed the word count because wrong/skipped words looped back).
+- **Summary**: number of distinct words answered correctly, and the total number of answers given (which can exceed the word count because wrong/skipped words looped back).
 - **Reassurance line**: restates that nothing was saved — the defining property of this quiz.
-- **"Relearn again"**: re-fetches the pool for the same window. Words cleared in the session just finished are excluded (via the relearn-clear markers), so a second run only surfaces anything the learner *newly* got wrong elsewhere in the meantime — usually the empty state.
+- **"Relearn again"**: re-fetches the pool for the same window. Relearn stores nothing, so the same in-window words come back — a second run lets the learner drill them again, plus anything they *newly* got wrong in the meantime. Words only drop off once they age out of the window or are fixed in a real quiz.
 - **"Quiz Hub"**: returns to the hub.
 - Unlike the other quizzes' Session Complete screen, there is **no per-word result list with Override / Change-Date actions**, because there is no history to act on.
 
@@ -209,7 +209,7 @@ The core interaction that differs from every existing quiz: the session is a **l
 
 | Event | Effect on the working queue |
 |-------|-----------------------------|
-| Answer **correct** | The word is removed from the queue and never asked again this session. A relearn-clear marker is recorded for it. |
+| Answer **correct** | The word is removed from the queue and never asked again *this session*. Nothing is persisted, so it is still in the pool next session. |
 | Answer **wrong** | The word is moved to the **back** of the queue; it will come around again later this session. |
 | **Skip** | Same as wrong: moved to the back of the queue. |
 | Queue becomes **empty** | The session ends and navigates to the Complete screen. |
@@ -243,7 +243,7 @@ Because the Relearn Quiz never writes history, several familiar quiz surfaces ar
 - **No Session Complete result list** with per-word history actions.
 - **No appearance in Quiz Analytics** — a Relearn session leaves no trace on the Day List or Day Detail pages.
 
-The Mark-as-Correct/Incorrect toggle **is** present, but re-scoped: it corrects the grader's verdict for *this session's loop* and the off-the-record clear marker only, never the learning log or SM-2. These absences (and the one re-scoped control) are the visible expression of the invariant that the Relearn Quiz is off the record.
+The Mark-as-Correct/Incorrect toggle **is** present, but re-scoped: it corrects the grader's verdict for *this session's loop* only, never the learning log or SM-2 — and, because Relearn persists nothing, there is no relearn-local state for it to touch either. These absences (and the one re-scoped control) are the visible expression of the invariant that the Relearn Quiz is off the record.
 
 ## Accessibility
 

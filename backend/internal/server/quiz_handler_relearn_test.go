@@ -159,8 +159,8 @@ func TestRelearn_WordFailedInTwoTypesYieldsTwoCards(t *testing.T) {
 func TestRelearn_ReverseCardIsGradedByTheWordNotTheMeaning(t *testing.T) {
 	// The mock reverse grader marks correct only when the answer matches the
 	// expected WORD (same_word). Typing the meaning must be wrong — this is the
-	// bug the mirror rework fixes. Each answer uses a fresh handler so the reverse
-	// card is not cleared by a prior correct answer.
+	// bug the mirror rework fixes. Each answer uses a fresh handler so the two
+	// submissions stay independent.
 	submitDelta := func(ans string) bool {
 		h, _ := newRelearnTestHandler(t)
 		id := relearnByEntryType(startRelearn(t, h, 24))["delta/QUIZ_TYPE_REVERSE"].GetNoteId()
@@ -206,7 +206,7 @@ func TestRelearn_ZeroWindowUsesDefault(t *testing.T) {
 	assert.Contains(t, zero, "alpha")
 }
 
-func TestRelearn_CorrectAnswerClearsWordAndWritesNoHistory(t *testing.T) {
+func TestRelearn_CorrectAnswerWritesNoHistoryAndWordIsRepeatable(t *testing.T) {
 	h, learningDir := newRelearnTestHandler(t)
 	historyPath := filepath.Join(learningDir, "test-vocab.yml")
 	before, err := os.ReadFile(historyPath)
@@ -232,13 +232,15 @@ func TestRelearn_CorrectAnswerClearsWordAndWritesNoHistory(t *testing.T) {
 	assert.Equal(t, string(before), string(after),
 		"a relearn answer must not write any learning history")
 
-	// The cleared word drops out of the next session; delta remains.
+	// Relearn is repeatable: a correct answer persists no state, so the word is
+	// still in the pool next session (it ages out of the window or is fixed in a
+	// real quiz — not here).
 	next := relearnEntries(startRelearn(t, h, 24))
-	assert.NotContains(t, next, "alpha", "a correctly relearned word is cleared from the next session")
+	assert.Contains(t, next, "alpha", "a relearned word must reappear — relearn stores no clear state")
 	assert.Contains(t, next, "delta")
 }
 
-func TestRelearn_WrongAndSkippedDoNotClear(t *testing.T) {
+func TestRelearn_WrongAndSkippedKeepWordInPool(t *testing.T) {
 	h, _ := newRelearnTestHandler(t)
 
 	first := relearnEntries(startRelearn(t, h, 24))
@@ -257,10 +259,10 @@ func TestRelearn_WrongAndSkippedDoNotClear(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, skipResp.Msg.GetCorrect())
 
-	// Neither is cleared: both still appear next session.
+	// Relearn persists nothing, so both still appear next session.
 	next := relearnEntries(startRelearn(t, h, 24))
-	assert.Contains(t, next, "alpha", "a wrong answer must not clear the word")
-	assert.Contains(t, next, "delta", "a skip must not clear the word")
+	assert.Contains(t, next, "alpha", "a wrong answer leaves the word in the pool")
+	assert.Contains(t, next, "delta", "a skip leaves the word in the pool")
 }
 
 func TestRelearn_BatchSubmit(t *testing.T) {
@@ -279,48 +281,10 @@ func TestRelearn_BatchSubmit(t *testing.T) {
 	assert.True(t, resp.Msg.GetResponses()[0].GetCorrect())
 	assert.False(t, resp.Msg.GetResponses()[1].GetCorrect())
 
-	// alpha cleared (correct), delta not (wrong).
+	// A batch persists nothing either: both words remain in the pool.
 	next := relearnEntries(startRelearn(t, h, 24))
-	assert.NotContains(t, next, "alpha")
+	assert.Contains(t, next, "alpha")
 	assert.Contains(t, next, "delta")
-}
-
-func TestRelearn_OverrideMarkCorrectClearsWithoutWritingHistory(t *testing.T) {
-	h, learningDir := newRelearnTestHandler(t)
-	before, err := os.ReadFile(filepath.Join(learningDir, "test-vocab.yml"))
-	require.NoError(t, err)
-
-	// alpha was wrong; the learner overrides it to correct.
-	alpha := relearnByEntryType(startRelearn(t, h, 24))["alpha/QUIZ_TYPE_STANDARD"]
-	_, err = h.OverrideRelearnCard(context.Background(),
-		connect.NewRequest(&apiv1.OverrideRelearnCardRequest{NoteId: alpha.GetNoteId(), MarkCorrect: true}))
-	require.NoError(t, err)
-
-	// It is now cleared from the next session, and no learning history changed.
-	next := relearnByEntryType(startRelearn(t, h, 24))
-	assert.NotContains(t, next, "alpha/QUIZ_TYPE_STANDARD", "mark-correct clears the word from the next session")
-	after, err := os.ReadFile(filepath.Join(learningDir, "test-vocab.yml"))
-	require.NoError(t, err)
-	assert.Equal(t, string(before), string(after), "an override must not write learning history")
-}
-
-func TestRelearn_OverrideMarkIncorrectUnclears(t *testing.T) {
-	h, _ := newRelearnTestHandler(t)
-
-	// Answer alpha correctly (records the clear marker), then — without
-	// re-starting, so the card is still in the session store — override it back
-	// to incorrect. It should return to the next session's pool.
-	alpha := relearnByEntryType(startRelearn(t, h, 24))["alpha/QUIZ_TYPE_STANDARD"]
-	_, err := h.SubmitRelearnAnswer(context.Background(),
-		connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: alpha.GetNoteId(), Answer: "the first thing"}))
-	require.NoError(t, err)
-
-	_, err = h.OverrideRelearnCard(context.Background(),
-		connect.NewRequest(&apiv1.OverrideRelearnCardRequest{NoteId: alpha.GetNoteId(), MarkCorrect: false}))
-	require.NoError(t, err)
-
-	assert.Contains(t, relearnByEntryType(startRelearn(t, h, 24)), "alpha/QUIZ_TYPE_STANDARD",
-		"mark-incorrect unclears the word so it returns to the pool")
 }
 
 func TestRelearn_SubmitUnknownCardIsNotFound(t *testing.T) {

@@ -37,8 +37,9 @@ export default function RelearnSessionPage() {
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<SubmitRelearnAnswerResponse | null>(null);
   // override holds the learner's overriding verdict for the current card, or
-  // null when they accept the grader's. It only affects this session (the
-  // working queue) and the off-the-record clear marker — never learning history.
+  // null when they accept the grader's. It only affects this session's working
+  // queue — relearn persists nothing, so there is no learning history, and no
+  // relearn-local state, to reconcile.
   const [override, setOverride] = useState<boolean | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,19 +100,10 @@ export default function RelearnSessionPage() {
     }
   };
 
-  const handleNext = async () => {
-    const graded = feedback?.correct ?? false;
-    const effective = override ?? graded;
-    // When the learner flipped the verdict, reconcile the off-the-record clear
-    // marker (records or removes it). Non-fatal: the queue already reflects the
-    // override; only the next session's suppression could be stale.
-    if (override !== null && override !== graded) {
-      try {
-        await quizClient.overrideRelearnCard({ noteId: current.noteId, markCorrect: override });
-      } catch {
-        // ignore — session behavior is unaffected
-      }
-    }
+  const handleNext = () => {
+    const effective = override ?? feedback?.correct ?? false;
+    // The override only reshapes this session's working queue — relearn writes
+    // no state, so there is nothing to reconcile with the backend.
     setAnswer("");
     setFeedback(null);
     setOverride(null);
@@ -189,7 +181,7 @@ export default function RelearnSessionPage() {
           ) : (
             // Same feedback actions (banner + Mark-as-Correct/Incorrect + Next)
             // the other quizzes use, so the UI is consistent. The override here
-            // is session-only — see handleNext / OverrideRelearnCard.
+            // is session-only — see handleNext (it persists nothing).
             <FeedbackActions
               isCorrect={override ?? feedback.correct}
               noteId={current.noteId}
