@@ -90,6 +90,15 @@ const (
 	// QuizServiceSubmitEtymologyFreeformAnswerProcedure is the fully-qualified name of the
 	// QuizService's SubmitEtymologyFreeformAnswer RPC.
 	QuizServiceSubmitEtymologyFreeformAnswerProcedure = "/api.v1.QuizService/SubmitEtymologyFreeformAnswer"
+	// QuizServiceStartRelearnQuizProcedure is the fully-qualified name of the QuizService's
+	// StartRelearnQuiz RPC.
+	QuizServiceStartRelearnQuizProcedure = "/api.v1.QuizService/StartRelearnQuiz"
+	// QuizServiceSubmitRelearnAnswerProcedure is the fully-qualified name of the QuizService's
+	// SubmitRelearnAnswer RPC.
+	QuizServiceSubmitRelearnAnswerProcedure = "/api.v1.QuizService/SubmitRelearnAnswer"
+	// QuizServiceBatchSubmitRelearnAnswersProcedure is the fully-qualified name of the QuizService's
+	// BatchSubmitRelearnAnswers RPC.
+	QuizServiceBatchSubmitRelearnAnswersProcedure = "/api.v1.QuizService/BatchSubmitRelearnAnswers"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -114,6 +123,13 @@ type QuizServiceClient interface {
 	BatchSubmitEtymologyReverseAnswers(context.Context, *connect.Request[v1.BatchSubmitEtymologyReverseAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyReverseAnswersResponse], error)
 	StartEtymologyFreeformQuiz(context.Context, *connect.Request[v1.StartEtymologyFreeformQuizRequest]) (*connect.Response[v1.StartEtymologyFreeformQuizResponse], error)
 	SubmitEtymologyFreeformAnswer(context.Context, *connect.Request[v1.SubmitEtymologyFreeformAnswerRequest]) (*connect.Response[v1.SubmitEtymologyFreeformAnswerResponse], error)
+	// Relearn Quiz — a practice-only quiz over recently-missed words. It writes
+	// NOTHING to learning history: Submit calls only the pure meaning graders,
+	// never any Save/UpdateLog path, and the responses carry no next_review_date
+	// or learned_at. See docs/content/proposals/relearn-quiz.
+	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
+	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
+	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -247,6 +263,24 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyFreeformAnswer")),
 			connect.WithClientOptions(opts...),
 		),
+		startRelearnQuiz: connect.NewClient[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse](
+			httpClient,
+			baseURL+QuizServiceStartRelearnQuizProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("StartRelearnQuiz")),
+			connect.WithClientOptions(opts...),
+		),
+		submitRelearnAnswer: connect.NewClient[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse](
+			httpClient,
+			baseURL+QuizServiceSubmitRelearnAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SubmitRelearnAnswer")),
+			connect.WithClientOptions(opts...),
+		),
+		batchSubmitRelearnAnswers: connect.NewClient[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse](
+			httpClient,
+			baseURL+QuizServiceBatchSubmitRelearnAnswersProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -272,6 +306,9 @@ type quizServiceClient struct {
 	batchSubmitEtymologyReverseAnswers  *connect.Client[v1.BatchSubmitEtymologyReverseAnswersRequest, v1.BatchSubmitEtymologyReverseAnswersResponse]
 	startEtymologyFreeformQuiz          *connect.Client[v1.StartEtymologyFreeformQuizRequest, v1.StartEtymologyFreeformQuizResponse]
 	submitEtymologyFreeformAnswer       *connect.Client[v1.SubmitEtymologyFreeformAnswerRequest, v1.SubmitEtymologyFreeformAnswerResponse]
+	startRelearnQuiz                    *connect.Client[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse]
+	submitRelearnAnswer                 *connect.Client[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse]
+	batchSubmitRelearnAnswers           *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -374,6 +411,21 @@ func (c *quizServiceClient) SubmitEtymologyFreeformAnswer(ctx context.Context, r
 	return c.submitEtymologyFreeformAnswer.CallUnary(ctx, req)
 }
 
+// StartRelearnQuiz calls api.v1.QuizService.StartRelearnQuiz.
+func (c *quizServiceClient) StartRelearnQuiz(ctx context.Context, req *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error) {
+	return c.startRelearnQuiz.CallUnary(ctx, req)
+}
+
+// SubmitRelearnAnswer calls api.v1.QuizService.SubmitRelearnAnswer.
+func (c *quizServiceClient) SubmitRelearnAnswer(ctx context.Context, req *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error) {
+	return c.submitRelearnAnswer.CallUnary(ctx, req)
+}
+
+// BatchSubmitRelearnAnswers calls api.v1.QuizService.BatchSubmitRelearnAnswers.
+func (c *quizServiceClient) BatchSubmitRelearnAnswers(ctx context.Context, req *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error) {
+	return c.batchSubmitRelearnAnswers.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -396,6 +448,13 @@ type QuizServiceHandler interface {
 	BatchSubmitEtymologyReverseAnswers(context.Context, *connect.Request[v1.BatchSubmitEtymologyReverseAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyReverseAnswersResponse], error)
 	StartEtymologyFreeformQuiz(context.Context, *connect.Request[v1.StartEtymologyFreeformQuizRequest]) (*connect.Response[v1.StartEtymologyFreeformQuizResponse], error)
 	SubmitEtymologyFreeformAnswer(context.Context, *connect.Request[v1.SubmitEtymologyFreeformAnswerRequest]) (*connect.Response[v1.SubmitEtymologyFreeformAnswerResponse], error)
+	// Relearn Quiz — a practice-only quiz over recently-missed words. It writes
+	// NOTHING to learning history: Submit calls only the pure meaning graders,
+	// never any Save/UpdateLog path, and the responses carry no next_review_date
+	// or learned_at. See docs/content/proposals/relearn-quiz.
+	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
+	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
+	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -525,6 +584,24 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyFreeformAnswer")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceStartRelearnQuizHandler := connect.NewUnaryHandler(
+		QuizServiceStartRelearnQuizProcedure,
+		svc.StartRelearnQuiz,
+		connect.WithSchema(quizServiceMethods.ByName("StartRelearnQuiz")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceSubmitRelearnAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceSubmitRelearnAnswerProcedure,
+		svc.SubmitRelearnAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("SubmitRelearnAnswer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceBatchSubmitRelearnAnswersHandler := connect.NewUnaryHandler(
+		QuizServiceBatchSubmitRelearnAnswersProcedure,
+		svc.BatchSubmitRelearnAnswers,
+		connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -567,6 +644,12 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceStartEtymologyFreeformQuizHandler.ServeHTTP(w, r)
 		case QuizServiceSubmitEtymologyFreeformAnswerProcedure:
 			quizServiceSubmitEtymologyFreeformAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceStartRelearnQuizProcedure:
+			quizServiceStartRelearnQuizHandler.ServeHTTP(w, r)
+		case QuizServiceSubmitRelearnAnswerProcedure:
+			quizServiceSubmitRelearnAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceBatchSubmitRelearnAnswersProcedure:
+			quizServiceBatchSubmitRelearnAnswersHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -654,4 +737,16 @@ func (UnimplementedQuizServiceHandler) StartEtymologyFreeformQuiz(context.Contex
 
 func (UnimplementedQuizServiceHandler) SubmitEtymologyFreeformAnswer(context.Context, *connect.Request[v1.SubmitEtymologyFreeformAnswerRequest]) (*connect.Response[v1.SubmitEtymologyFreeformAnswerResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitEtymologyFreeformAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartRelearnQuiz is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitRelearnAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.BatchSubmitRelearnAnswers is not implemented"))
 }

@@ -58,6 +58,15 @@ func buildDSN(cfg config.DatabaseConfig) string {
 	if cfg.TLS {
 		q.Set("sslmode", "require")
 	}
+	// Default to pgx's unnamed-prepared-statement exec mode instead of its
+	// named statement cache. The cache breaks behind transaction-pooling
+	// connection poolers (e.g. PgBouncer) and after pooled server-connection
+	// reuse, surfacing as `prepared statement "stmtcache_..." already exists`
+	// (SQLSTATE 42P05). The exec mode keeps the extended protocol (proper
+	// typing / binary results) but uses no persistent server-side statements,
+	// so there is nothing to collide. Overridable via
+	// database.params.default_query_exec_mode (e.g. "simple_protocol").
+	q.Set("default_query_exec_mode", "exec")
 	for k, v := range cfg.Params {
 		q.Set(k, v)
 	}

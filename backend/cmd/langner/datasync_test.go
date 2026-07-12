@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -144,28 +145,41 @@ func TestClearAllDataTablesCoversAllSchemaTables(t *testing.T) {
 }
 
 // tablesFromMigrations parses every up-migration in the given
-// directory and returns the set of table names introduced by
-// CREATE TABLE statements. The matcher is permissive: it accepts
+// directory and returns the set of table names that make up the
+// canonical schema. The CREATE matcher is permissive: it accepts
 // "CREATE TABLE", "CREATE TABLE IF NOT EXISTS", optional backticks,
-// and the table name in either bare or quoted form. Down-migrations
+// and the table name in either bare or quoted form. A later up-migration
+// that DROPs a table removes it from the set, so a table that was added
+// and then dropped does not need to appear in dataTablesInDeletionOrder.
+// Migrations are processed in filename order (they are numerically
+// prefixed) so the drop is always seen after the create. Down-migrations
 // are ignored — they describe rollbacks, not the canonical schema.
 func tablesFromMigrations(dir string) (map[string]bool, error) {
-	pattern := regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?` + "`?" + `(\w+)` + "`?")
+	createPattern := regexp.MustCompile(`(?i)CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?` + "`?" + `(\w+)` + "`?")
+	dropPattern := regexp.MustCompile(`(?i)DROP\s+TABLE\s+(?:IF\s+EXISTS\s+)?` + "`?" + `(\w+)` + "`?")
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]bool)
+	names := make([]string, 0, len(entries))
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".up.sql") {
 			continue
 		}
-		body, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		names = append(names, e.Name())
+	}
+	sort.Strings(names)
+	out := make(map[string]bool)
+	for _, name := range names {
+		body, err := os.ReadFile(filepath.Join(dir, name))
 		if err != nil {
 			return nil, err
 		}
-		for _, m := range pattern.FindAllStringSubmatch(string(body), -1) {
+		for _, m := range createPattern.FindAllStringSubmatch(string(body), -1) {
 			out[m[1]] = true
+		}
+		for _, m := range dropPattern.FindAllStringSubmatch(string(body), -1) {
+			delete(out, m[1])
 		}
 	}
 	return out, nil

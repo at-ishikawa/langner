@@ -35,6 +35,7 @@ type QuizHandler struct {
 	etymologyOriginStore map[int64]quiz.EtymologyOriginCard
 	etymologyOriginCards []quiz.EtymologyOriginCard
 	etymologyQuizMode    apiv1.EtymologyQuizMode
+	relearnStore   map[int64]quiz.RelearnCard
 	nextID         int64
 }
 
@@ -46,6 +47,7 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		reverseStore:         make(map[int64]quiz.ReverseCard),
 		freeformStore:        make(map[int64]quiz.FreeformCard),
 		etymologyOriginStore: make(map[int64]quiz.EtymologyOriginCard),
+		relearnStore:         make(map[int64]quiz.RelearnCard),
 		nextID:               1,
 	}
 }

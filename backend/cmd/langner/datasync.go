@@ -145,6 +145,33 @@ the database from YAML when divergence is found, run "migrate sync-db".`,
 	return cmd
 }
 
+func newMigrateSchemaCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "schema",
+		Short: "Apply pending schema migrations only (no data import)",
+		Long: `Apply all pending schema migrations to the database configured in the
+config file. Unlike "import-db", this runs ONLY the embedded schema
+migrations — it does not import or reconcile any notebook data.
+
+The database connection is read from --config, so no DATABASE_URL is
+needed. Idempotent: a no-op when the schema is already up to date.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			_, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
+			fmt.Println("Schema migrations applied (or already up to date).")
+			return nil
+		},
+	}
+	return cmd
+}
+
 func newSyncDBCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync-db",

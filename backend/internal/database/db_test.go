@@ -109,6 +109,20 @@ func TestBuildDSN(t *testing.T) {
 		assert.Contains(t, dsn, "sslmode=verify-full")
 		assert.NotContains(t, dsn, "sslmode=disable")
 	})
+	t.Run("defaults to pgx exec mode to stay pooler-safe", func(t *testing.T) {
+		dsn := buildDSN(config.DatabaseConfig{
+			Host: "h", Port: 5432, Database: "db", Username: "u", Password: "p",
+		})
+		assert.Contains(t, dsn, "default_query_exec_mode=exec")
+	})
+	t.Run("Params override the exec mode", func(t *testing.T) {
+		dsn := buildDSN(config.DatabaseConfig{
+			Host: "h", Port: 5432, Database: "db", Username: "u", Password: "p",
+			Params: map[string]string{"default_query_exec_mode": "simple_protocol"},
+		})
+		assert.Contains(t, dsn, "default_query_exec_mode=simple_protocol")
+		assert.NotContains(t, dsn, "default_query_exec_mode=exec")
+	})
 }
 
 func TestBuildMultiRowInsert(t *testing.T) {
