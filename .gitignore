@@ -19,3 +19,10 @@ frontend/playwright-report/
 frontend/test-results/
 frontend/tsconfig.tsbuildinfo
 langner-server
+
+# Browser extension
+browser/node_modules/
+browser/.output/
+browser/.wxt/
+browser/test-results/
+browser/playwright-report/
