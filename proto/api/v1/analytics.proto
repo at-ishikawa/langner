@@ -21,6 +21,108 @@ service AnalyticsService {
   // attempt. Used when the user expands a word card on the Day Detail
   // page.
   rpc GetWordHistory(GetWordHistoryRequest) returns (GetWordHistoryResponse);
+
+  // GetTrends returns the activity metrics over time for the Trends
+  // overview: one bucket per day / week / month in the requested range,
+  // each split into series by the chosen dimension, plus the range totals
+  // and the end-of-range backlog snapshot.
+  rpc GetTrends(GetTrendsRequest) returns (GetTrendsResponse);
+}
+
+// Granularity is the width of one Trends bucket.
+enum Granularity {
+  GRANULARITY_UNSPECIFIED = 0;
+  GRANULARITY_DAY = 1;
+  GRANULARITY_WEEK = 2;
+  GRANULARITY_MONTH = 3;
+  GRANULARITY_YEAR = 4;
+}
+
+// TrendGroupBy is the dimension each bucket's stack is split by. LEVEL
+// groups every attempt by the spaced-repetition box it landed in (1, 7,
+// 30, 90, … day intervals) — pairing it with the level_ups metric is how
+// the UI shows "level-ups per box".
+enum TrendGroupBy {
+  TREND_GROUP_BY_UNSPECIFIED = 0; // no split — one series per bucket
+  TREND_GROUP_BY_QUIZ_TYPE = 1;
+  TREND_GROUP_BY_NOTEBOOK = 2;
+  TREND_GROUP_BY_STATUS = 3;
+  TREND_GROUP_BY_LEVEL = 4;
+}
+
+message GetTrendsRequest {
+  Granularity granularity = 1;
+  // start_date / end_date bound the window in YYYY-MM-DD (inclusive).
+  // Empty start_date means "from the first attempt"; empty end_date means
+  // "through today".
+  string start_date = 2;
+  string end_date = 3;
+  TrendGroupBy group_by = 4;
+  AnalyticsFilters filters = 5;
+}
+
+message GetTrendsResponse {
+  // buckets are chronological, oldest first, one per period that had
+  // activity in the range.
+  repeated TrendBucket buckets = 1;
+  // summary carries the range totals. Distinct-count metrics (words_tested,
+  // words_learned) are de-duplicated over the WHOLE range, so they do not
+  // equal the sum of the per-bucket values — a word tested in two months
+  // is two bucket entries but one word in the range total.
+  TrendsSummary summary = 2;
+  // backlog is a point-in-time snapshot at the end of the range, not a
+  // flow over it.
+  BacklogSnapshot backlog = 3;
+}
+
+// TrendBucket is one period (day / week / month) of activity.
+message TrendBucket {
+  // period is the bucket's start date in YYYY-MM-DD.
+  string period = 1;
+  repeated TrendSeries series = 2;
+}
+
+// TrendSeries is one split of a bucket. When group_by is UNSPECIFIED the
+// bucket has a single series with an empty group_key.
+message TrendSeries {
+  // group_key is the raw key (quiz type, notebook id, status, or box
+  // interval in days as a string). Empty for the no-split series.
+  string group_key = 1;
+  // group_label is the human-readable label (notebook title, "7-day box", …).
+  string group_label = 2;
+  // attempts is every quiz answer in this bucket+series.
+  int32 attempts = 3;
+  // words_tested is the distinct words answered in this bucket+series — a
+  // word drilled ten times counts once.
+  int32 words_tested = 4;
+  // words_learned is the distinct words that crossed up into a retained
+  // status (understood / usable / intuitive) in this bucket+series.
+  int32 words_learned = 5;
+  // level_ups / lapses count spaced-repetition box transitions landing in
+  // this bucket+series (a lapse is a box drop after a wrong answer).
+  int32 level_ups = 6;
+  int32 lapses = 7;
+}
+
+// TrendsSummary is the range total for each metric (see GetTrendsResponse
+// on why distinct metrics don't sum the buckets).
+message TrendsSummary {
+  int32 attempts = 1;
+  int32 words_tested = 2;
+  int32 words_learned = 3;
+  int32 level_ups = 4;
+  int32 lapses = 5;
+}
+
+// BacklogSnapshot is the state of the user's words at the end of the
+// range — where things stand today, not what flowed over the period.
+message BacklogSnapshot {
+  // never_correct is words with attempts but no correct answer yet.
+  int32 never_correct = 1;
+  // in_progress is words being learned but not yet mastered.
+  int32 in_progress = 2;
+  // mastered is words whose latest status is usable or intuitive.
+  int32 mastered = 3;
 }
 
 // AnalyticsFilters carries the optional notebook + quiz-type filters used

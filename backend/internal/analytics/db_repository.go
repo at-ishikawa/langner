@@ -383,6 +383,65 @@ func (r *DBRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistor
 	}, nil
 }
 
+// trendRow is the projection used to feed ComputeTrends.
+type trendRow struct {
+	Expression   string    `db:"expression"`
+	NotebookID   string    `db:"notebook_id"`
+	QuizType     string    `db:"quiz_type"`
+	Status       string    `db:"status"`
+	Quality      int       `db:"quality"`
+	IntervalDays int       `db:"interval_days"`
+	LearnedAt    time.Time `db:"learned_at"`
+}
+
+// Trends loads every attempt matching the notebook/quiz filters (across all
+// time — the aggregation needs prior state) and delegates to ComputeTrends,
+// so the DB and YAML paths produce identical numbers.
+func (r *DBRepository) Trends(ctx context.Context, q TrendsQuery) (TrendsResult, error) {
+	pb := &placeholderBuilder{}
+	conds := []string{}
+	if q.Filters.NotebookID != "" {
+		conds = append(conds, "ll.source_notebook_id = "+pb.next(q.Filters.NotebookID))
+	}
+	if q.Filters.QuizType != "" {
+		conds = append(conds, "ll.quiz_type = "+pb.next(q.Filters.QuizType))
+	}
+	where := ""
+	if len(conds) > 0 {
+		where = "WHERE " + strings.Join(conds, " AND ")
+	}
+	query := `
+		SELECT
+			n."usage" AS expression,
+			COALESCE(ll.source_notebook_id, '') AS notebook_id,
+			ll.quiz_type,
+			ll.status,
+			ll.quality,
+			COALESCE(ll.interval_days, 0) AS interval_days,
+			ll.learned_at
+		FROM learning_logs ll
+		JOIN notes n ON n.id = ll.note_id
+		` + where
+	var rows []trendRow
+	if err := r.db.SelectContext(ctx, &rows, query, pb.args...); err != nil {
+		return TrendsResult{}, fmt.Errorf("trends: %w", err)
+	}
+	attempts := make([]TrendAttempt, len(rows))
+	for i, row := range rows {
+		attempts[i] = TrendAttempt{
+			Expression:    row.Expression,
+			NotebookID:    row.NotebookID,
+			NotebookTitle: row.NotebookID,
+			QuizType:      row.QuizType,
+			Status:        row.Status,
+			Quality:       row.Quality,
+			IntervalDays:  row.IntervalDays,
+			LearnedAt:     row.LearnedAt,
+		}
+	}
+	return ComputeTrends(attempts, q), nil
+}
+
 func splitCSV(s string) []string {
 	if s == "" {
 		return nil

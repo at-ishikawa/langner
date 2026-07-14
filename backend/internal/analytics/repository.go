@@ -25,6 +25,13 @@ type Repository interface {
 	// WordHistory returns every attempt for one (note × quiz_type) pair
 	// across all time, newest-first.
 	WordHistory(ctx context.Context, ref WordRef) (WordHistory, error)
+
+	// Trends returns the activity metrics over time for the Trends
+	// overview: per-bucket series, range totals, and the end-of-range
+	// backlog snapshot. Implementations load every in-scope attempt and
+	// delegate the aggregation to ComputeTrends so the YAML and DB paths
+	// stay identical.
+	Trends(ctx context.Context, q TrendsQuery) (TrendsResult, error)
 }
 
 // DayDetail bundles the response of Repository.DayDetail.

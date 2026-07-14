@@ -104,4 +104,12 @@ export type {
   GetWordHistoryRequest,
   GetWordHistoryResponse,
   AttemptEntry,
+  GetTrendsRequest,
+  GetTrendsResponse,
+  TrendBucket,
+  TrendSeries,
+  TrendsSummary,
+  BacklogSnapshot,
 } from "@/gen-protos/api/v1/analytics_pb";
+
+export { Granularity, TrendGroupBy } from "@/gen-protos/api/v1/analytics_pb";

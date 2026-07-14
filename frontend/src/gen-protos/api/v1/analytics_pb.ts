@@ -2,8 +2,8 @@
 // @generated from file api/v1/analytics.proto (package api.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import { file_buf_validate_validate } from "../../buf/validate/validate_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -11,7 +11,254 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file api/v1/analytics.proto.
  */
 export const file_api_v1_analytics: GenFile = /*@__PURE__*/
-  fileDesc("ChZhcGkvdjEvYW5hbHl0aWNzLnByb3RvEgZhcGkudjEiOgoQQW5hbHl0aWNzRmlsdGVycxITCgtub3RlYm9va19pZBgBIAEoCRIRCglxdWl6X3R5cGUYAiABKAkiYgoYR2V0RGFpbHlTdW1tYXJpZXNSZXF1ZXN0EhsKCnJhbmdlX2RheXMYASABKAVCB7pIBBoCKAASKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIj8KGUdldERhaWx5U3VtbWFyaWVzUmVzcG9uc2USIgoEZGF5cxgBIAMoCzIULmFwaS52MS5EYWlseVN1bW1hcnkicgoMRGFpbHlTdW1tYXJ5EgwKBGRhdGUYASABKAkSEwoLd3JvbmdfY291bnQYAiABKAUSEwoLdG90YWxfY291bnQYAyABKAUSFgoObm90ZWJvb2tfY291bnQYBCABKAUSEgoKcXVpel90eXBlcxgFIAMoCSJXChNHZXREYXlEZXRhaWxSZXF1ZXN0EhUKBGRhdGUYASABKAlCB7pIBHICEAESKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIo8BChRHZXREYXlEZXRhaWxSZXNwb25zZRIlCgdzdW1tYXJ5GAEgASgLMhQuYXBpLnYxLkRhaWx5U3VtbWFyeRImCgt3cm9uZ193b3JkcxgCIAMoCzIRLmFwaS52MS5Xcm9uZ1dvcmQSFQoNcHJldmlvdXNfZGF0ZRgDIAEoCRIRCgluZXh0X2RhdGUYBCABKAki9QIKCVdyb25nV29yZBIPCgdub3RlX2lkGAEgASgDEhIKCmV4cHJlc3Npb24YAiABKAkSEwoLbm90ZWJvb2tfaWQYAyABKAkSFgoObm90ZWJvb2tfdGl0bGUYBCABKAkSEwoLc2NlbmVfdGl0bGUYBSABKAkSEQoJcXVpel90eXBlGAYgASgJEhYKDnJlY2VudF9wYXR0ZXJuGAcgAygJEhwKFGN1cnJlbnRfd3Jvbmdfc3RyZWFrGAggASgFEh8KF3ByZXZpb3VzX2NvcnJlY3Rfc3RyZWFrGAkgASgFEhYKDmN1cnJlbnRfc3RhdHVzGAogASgJEg8KB21lYW5pbmcYCyABKAkSGAoQZXhhbXBsZV9zZW50ZW5jZRgMIAEoCRIVCg1ub3RlYm9va19raW5kGA0gASgJEg8KB3NraXBwZWQYDiABKAgSLAoOcmVsYXRlZF9ncm91cHMYDyADKAsyFC5hcGkudjEuUmVsYXRlZEdyb3VwIjwKDFJlbGF0ZWRHcm91cBIMCgRraW5kGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB21lbWJlcnMYAyADKAkidgoVR2V0V29yZEhpc3RvcnlSZXF1ZXN0Eg8KB25vdGVfaWQYASABKAMSEwoLbm90ZWJvb2tfaWQYAiABKAkSGwoKZXhwcmVzc2lvbhgDIAEoCUIHukgEcgIQARIaCglxdWl6X3R5cGUYBCABKAlCB7pIBHICEAEitwEKFkdldFdvcmRIaXN0b3J5UmVzcG9uc2USEgoKZXhwcmVzc2lvbhgBIAEoCRITCgtub3RlYm9va19pZBgCIAEoCRIWCg5ub3RlYm9va190aXRsZRgDIAEoCRIWCg5jdXJyZW50X3N0YXR1cxgEIAEoCRIcChRjdXJyZW50X3dyb25nX3N0cmVhaxgFIAEoBRImCghhdHRlbXB0cxgGIAMoCzIULmFwaS52MS5BdHRlbXB0RW50cnkijAEKDEF0dGVtcHRFbnRyeRIMCgRkYXRlGAEgASgJEhEKCXF1aXpfdHlwZRgCIAEoCRIOCgZyZXN1bHQYAyABKAkSDwoHcXVhbGl0eRgEIAEoBRIbChNzdHJlYWtfYmVmb3JlX3dyb25nGAUgASgFEh0KFXN0cmVha19iZWZvcmVfY29ycmVjdBgGIAEoBTKIAgoQQW5hbHl0aWNzU2VydmljZRJYChFHZXREYWlseVN1bW1hcmllcxIgLmFwaS52MS5HZXREYWlseVN1bW1hcmllc1JlcXVlc3QaIS5hcGkudjEuR2V0RGFpbHlTdW1tYXJpZXNSZXNwb25zZRJJCgxHZXREYXlEZXRhaWwSGy5hcGkudjEuR2V0RGF5RGV0YWlsUmVxdWVzdBocLmFwaS52MS5HZXREYXlEZXRhaWxSZXNwb25zZRJPCg5HZXRXb3JkSGlzdG9yeRIdLmFwaS52MS5HZXRXb3JkSGlzdG9yeVJlcXVlc3QaHi5hcGkudjEuR2V0V29yZEhpc3RvcnlSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
+  fileDesc("ChZhcGkvdjEvYW5hbHl0aWNzLnByb3RvEgZhcGkudjEitQEKEEdldFRyZW5kc1JlcXVlc3QSKAoLZ3JhbnVsYXJpdHkYASABKA4yEy5hcGkudjEuR3JhbnVsYXJpdHkSEgoKc3RhcnRfZGF0ZRgCIAEoCRIQCghlbmRfZGF0ZRgDIAEoCRImCghncm91cF9ieRgEIAEoDjIULmFwaS52MS5UcmVuZEdyb3VwQnkSKQoHZmlsdGVycxgFIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIosBChFHZXRUcmVuZHNSZXNwb25zZRIkCgdidWNrZXRzGAEgAygLMhMuYXBpLnYxLlRyZW5kQnVja2V0EiYKB3N1bW1hcnkYAiABKAsyFS5hcGkudjEuVHJlbmRzU3VtbWFyeRIoCgdiYWNrbG9nGAMgASgLMhcuYXBpLnYxLkJhY2tsb2dTbmFwc2hvdCJCCgtUcmVuZEJ1Y2tldBIOCgZwZXJpb2QYASABKAkSIwoGc2VyaWVzGAIgAygLMhMuYXBpLnYxLlRyZW5kU2VyaWVzIpcBCgtUcmVuZFNlcmllcxIRCglncm91cF9rZXkYASABKAkSEwoLZ3JvdXBfbGFiZWwYAiABKAkSEAoIYXR0ZW1wdHMYAyABKAUSFAoMd29yZHNfdGVzdGVkGAQgASgFEhUKDXdvcmRzX2xlYXJuZWQYBSABKAUSEQoJbGV2ZWxfdXBzGAYgASgFEg4KBmxhcHNlcxgHIAEoBSJxCg1UcmVuZHNTdW1tYXJ5EhAKCGF0dGVtcHRzGAEgASgFEhQKDHdvcmRzX3Rlc3RlZBgCIAEoBRIVCg13b3Jkc19sZWFybmVkGAMgASgFEhEKCWxldmVsX3VwcxgEIAEoBRIOCgZsYXBzZXMYBSABKAUiTwoPQmFja2xvZ1NuYXBzaG90EhUKDW5ldmVyX2NvcnJlY3QYASABKAUSEwoLaW5fcHJvZ3Jlc3MYAiABKAUSEAoIbWFzdGVyZWQYAyABKAUiOgoQQW5hbHl0aWNzRmlsdGVycxITCgtub3RlYm9va19pZBgBIAEoCRIRCglxdWl6X3R5cGUYAiABKAkiYgoYR2V0RGFpbHlTdW1tYXJpZXNSZXF1ZXN0EhsKCnJhbmdlX2RheXMYASABKAVCB7pIBBoCKAASKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIj8KGUdldERhaWx5U3VtbWFyaWVzUmVzcG9uc2USIgoEZGF5cxgBIAMoCzIULmFwaS52MS5EYWlseVN1bW1hcnkicgoMRGFpbHlTdW1tYXJ5EgwKBGRhdGUYASABKAkSEwoLd3JvbmdfY291bnQYAiABKAUSEwoLdG90YWxfY291bnQYAyABKAUSFgoObm90ZWJvb2tfY291bnQYBCABKAUSEgoKcXVpel90eXBlcxgFIAMoCSJXChNHZXREYXlEZXRhaWxSZXF1ZXN0EhUKBGRhdGUYASABKAlCB7pIBHICEAESKQoHZmlsdGVycxgCIAEoCzIYLmFwaS52MS5BbmFseXRpY3NGaWx0ZXJzIo8BChRHZXREYXlEZXRhaWxSZXNwb25zZRIlCgdzdW1tYXJ5GAEgASgLMhQuYXBpLnYxLkRhaWx5U3VtbWFyeRImCgt3cm9uZ193b3JkcxgCIAMoCzIRLmFwaS52MS5Xcm9uZ1dvcmQSFQoNcHJldmlvdXNfZGF0ZRgDIAEoCRIRCgluZXh0X2RhdGUYBCABKAki9QIKCVdyb25nV29yZBIPCgdub3RlX2lkGAEgASgDEhIKCmV4cHJlc3Npb24YAiABKAkSEwoLbm90ZWJvb2tfaWQYAyABKAkSFgoObm90ZWJvb2tfdGl0bGUYBCABKAkSEwoLc2NlbmVfdGl0bGUYBSABKAkSEQoJcXVpel90eXBlGAYgASgJEhYKDnJlY2VudF9wYXR0ZXJuGAcgAygJEhwKFGN1cnJlbnRfd3Jvbmdfc3RyZWFrGAggASgFEh8KF3ByZXZpb3VzX2NvcnJlY3Rfc3RyZWFrGAkgASgFEhYKDmN1cnJlbnRfc3RhdHVzGAogASgJEg8KB21lYW5pbmcYCyABKAkSGAoQZXhhbXBsZV9zZW50ZW5jZRgMIAEoCRIVCg1ub3RlYm9va19raW5kGA0gASgJEg8KB3NraXBwZWQYDiABKAgSLAoOcmVsYXRlZF9ncm91cHMYDyADKAsyFC5hcGkudjEuUmVsYXRlZEdyb3VwIjwKDFJlbGF0ZWRHcm91cBIMCgRraW5kGAEgASgJEg0KBWxhYmVsGAIgASgJEg8KB21lbWJlcnMYAyADKAkidgoVR2V0V29yZEhpc3RvcnlSZXF1ZXN0Eg8KB25vdGVfaWQYASABKAMSEwoLbm90ZWJvb2tfaWQYAiABKAkSGwoKZXhwcmVzc2lvbhgDIAEoCUIHukgEcgIQARIaCglxdWl6X3R5cGUYBCABKAlCB7pIBHICEAEitwEKFkdldFdvcmRIaXN0b3J5UmVzcG9uc2USEgoKZXhwcmVzc2lvbhgBIAEoCRITCgtub3RlYm9va19pZBgCIAEoCRIWCg5ub3RlYm9va190aXRsZRgDIAEoCRIWCg5jdXJyZW50X3N0YXR1cxgEIAEoCRIcChRjdXJyZW50X3dyb25nX3N0cmVhaxgFIAEoBRImCghhdHRlbXB0cxgGIAMoCzIULmFwaS52MS5BdHRlbXB0RW50cnkijAEKDEF0dGVtcHRFbnRyeRIMCgRkYXRlGAEgASgJEhEKCXF1aXpfdHlwZRgCIAEoCRIOCgZyZXN1bHQYAyABKAkSDwoHcXVhbGl0eRgEIAEoBRIbChNzdHJlYWtfYmVmb3JlX3dyb25nGAUgASgFEh0KFXN0cmVha19iZWZvcmVfY29ycmVjdBgGIAEoBSqCAQoLR3JhbnVsYXJpdHkSGwoXR1JBTlVMQVJJVFlfVU5TUEVDSUZJRUQQABITCg9HUkFOVUxBUklUWV9EQVkQARIUChBHUkFOVUxBUklUWV9XRUVLEAISFQoRR1JBTlVMQVJJVFlfTU9OVEgQAxIUChBHUkFOVUxBUklUWV9ZRUFSEAQqngEKDFRyZW5kR3JvdXBCeRIeChpUUkVORF9HUk9VUF9CWV9VTlNQRUNJRklFRBAAEhwKGFRSRU5EX0dST1VQX0JZX1FVSVpfVFlQRRABEhsKF1RSRU5EX0dST1VQX0JZX05PVEVCT09LEAISGQoVVFJFTkRfR1JPVVBfQllfU1RBVFVTEAMSGAoUVFJFTkRfR1JPVVBfQllfTEVWRUwQBDLKAgoQQW5hbHl0aWNzU2VydmljZRJYChFHZXREYWlseVN1bW1hcmllcxIgLmFwaS52MS5HZXREYWlseVN1bW1hcmllc1JlcXVlc3QaIS5hcGkudjEuR2V0RGFpbHlTdW1tYXJpZXNSZXNwb25zZRJJCgxHZXREYXlEZXRhaWwSGy5hcGkudjEuR2V0RGF5RGV0YWlsUmVxdWVzdBocLmFwaS52MS5HZXREYXlEZXRhaWxSZXNwb25zZRJPCg5HZXRXb3JkSGlzdG9yeRIdLmFwaS52MS5HZXRXb3JkSGlzdG9yeVJlcXVlc3QaHi5hcGkudjEuR2V0V29yZEhpc3RvcnlSZXNwb25zZRJACglHZXRUcmVuZHMSGC5hcGkudjEuR2V0VHJlbmRzUmVxdWVzdBoZLmFwaS52MS5HZXRUcmVuZHNSZXNwb25zZUI4WjZnaXRodWIuY29tL2F0LWlzaGlrYXdhL2xhbmduZXIvZ2VuLXByb3Rvcy9hcGkvdjE7YXBpdjFiBnByb3RvMw", [file_buf_validate_validate]);
+
+/**
+ * @generated from message api.v1.GetTrendsRequest
+ */
+export type GetTrendsRequest = Message<"api.v1.GetTrendsRequest"> & {
+  /**
+   * @generated from field: api.v1.Granularity granularity = 1;
+   */
+  granularity: Granularity;
+
+  /**
+   * start_date / end_date bound the window in YYYY-MM-DD (inclusive).
+   * Empty start_date means "from the first attempt"; empty end_date means
+   * "through today".
+   *
+   * @generated from field: string start_date = 2;
+   */
+  startDate: string;
+
+  /**
+   * @generated from field: string end_date = 3;
+   */
+  endDate: string;
+
+  /**
+   * @generated from field: api.v1.TrendGroupBy group_by = 4;
+   */
+  groupBy: TrendGroupBy;
+
+  /**
+   * @generated from field: api.v1.AnalyticsFilters filters = 5;
+   */
+  filters?: AnalyticsFilters;
+};
+
+/**
+ * Describes the message api.v1.GetTrendsRequest.
+ * Use `create(GetTrendsRequestSchema)` to create a new message.
+ */
+export const GetTrendsRequestSchema: GenMessage<GetTrendsRequest> = /*@__PURE__*/
+  messageDesc(file_api_v1_analytics, 0);
+
+/**
+ * @generated from message api.v1.GetTrendsResponse
+ */
+export type GetTrendsResponse = Message<"api.v1.GetTrendsResponse"> & {
+  /**
+   * buckets are chronological, oldest first, one per period that had
+   * activity in the range.
+   *
+   * @generated from field: repeated api.v1.TrendBucket buckets = 1;
+   */
+  buckets: TrendBucket[];
+
+  /**
+   * summary carries the range totals. Distinct-count metrics (words_tested,
+   * words_learned) are de-duplicated over the WHOLE range, so they do not
+   * equal the sum of the per-bucket values — a word tested in two months
+   * is two bucket entries but one word in the range total.
+   *
+   * @generated from field: api.v1.TrendsSummary summary = 2;
+   */
+  summary?: TrendsSummary;
+
+  /**
+   * backlog is a point-in-time snapshot at the end of the range, not a
+   * flow over it.
+   *
+   * @generated from field: api.v1.BacklogSnapshot backlog = 3;
+   */
+  backlog?: BacklogSnapshot;
+};
+
+/**
+ * Describes the message api.v1.GetTrendsResponse.
+ * Use `create(GetTrendsResponseSchema)` to create a new message.
+ */
+export const GetTrendsResponseSchema: GenMessage<GetTrendsResponse> = /*@__PURE__*/
+  messageDesc(file_api_v1_analytics, 1);
+
+/**
+ * TrendBucket is one period (day / week / month) of activity.
+ *
+ * @generated from message api.v1.TrendBucket
+ */
+export type TrendBucket = Message<"api.v1.TrendBucket"> & {
+  /**
+   * period is the bucket's start date in YYYY-MM-DD.
+   *
+   * @generated from field: string period = 1;
+   */
+  period: string;
+
+  /**
+   * @generated from field: repeated api.v1.TrendSeries series = 2;
+   */
+  series: TrendSeries[];
+};
+
+/**
+ * Describes the message api.v1.TrendBucket.
+ * Use `create(TrendBucketSchema)` to create a new message.
+ */
+export const TrendBucketSchema: GenMessage<TrendBucket> = /*@__PURE__*/
+  messageDesc(file_api_v1_analytics, 2);
+
+/**
+ * TrendSeries is one split of a bucket. When group_by is UNSPECIFIED the
+ * bucket has a single series with an empty group_key.
+ *
+ * @generated from message api.v1.TrendSeries
+ */
+export type TrendSeries = Message<"api.v1.TrendSeries"> & {
+  /**
+   * group_key is the raw key (quiz type, notebook id, status, or box
+   * interval in days as a string). Empty for the no-split series.
+   *
+   * @generated from field: string group_key = 1;
+   */
+  groupKey: string;
+
+  /**
+   * group_label is the human-readable label (notebook title, "7-day box", …).
+   *
+   * @generated from field: string group_label = 2;
+   */
+  groupLabel: string;
+
+  /**
+   * attempts is every quiz answer in this bucket+series.
+   *
+   * @generated from field: int32 attempts = 3;
+   */
+  attempts: number;
+
+  /**
+   * words_tested is the distinct words answered in this bucket+series — a
+   * word drilled ten times counts once.
+   *
+   * @generated from field: int32 words_tested = 4;
+   */
+  wordsTested: number;
+
+  /**
+   * words_learned is the distinct words that crossed up into a retained
+   * status (understood / usable / intuitive) in this bucket+series.
+   *
+   * @generated from field: int32 words_learned = 5;
+   */
+  wordsLearned: number;
+
+  /**
+   * level_ups / lapses count spaced-repetition box transitions landing in
+   * this bucket+series (a lapse is a box drop after a wrong answer).
+   *
+   * @generated from field: int32 level_ups = 6;
+   */
+  levelUps: number;
+
+  /**
+   * @generated from field: int32 lapses = 7;
+   */
+  lapses: number;
+};
+
+/**
+ * Describes the message api.v1.TrendSeries.
+ * Use `create(TrendSeriesSchema)` to create a new message.
+ */
+export const TrendSeriesSchema: GenMessage<TrendSeries> = /*@__PURE__*/
+  messageDesc(file_api_v1_analytics, 3);
+
+/**
+ * TrendsSummary is the range total for each metric (see GetTrendsResponse
+ * on why distinct metrics don't sum the buckets).
+ *
+ * @generated from message api.v1.TrendsSummary
+ */
+export type TrendsSummary = Message<"api.v1.TrendsSummary"> & {
+  /**
+   * @generated from field: int32 attempts = 1;
+   */
+  attempts: number;
+
+  /**
+   * @generated from field: int32 words_tested = 2;
+   */
+  wordsTested: number;
+
+  /**
+   * @generated from field: int32 words_learned = 3;
+   */
+  wordsLearned: number;
+
+  /**
+   * @generated from field: int32 level_ups = 4;
+   */
+  levelUps: number;
+
+  /**
+   * @generated from field: int32 lapses = 5;
+   */
+  lapses: number;
+};
+
+/**
+ * Describes the message api.v1.TrendsSummary.
+ * Use `create(TrendsSummarySchema)` to create a new message.
+ */
+export const TrendsSummarySchema: GenMessage<TrendsSummary> = /*@__PURE__*/
+  messageDesc(file_api_v1_analytics, 4);
+
+/**
+ * BacklogSnapshot is the state of the user's words at the end of the
+ * range — where things stand today, not what flowed over the period.
+ *
+ * @generated from message api.v1.BacklogSnapshot
+ */
+export type BacklogSnapshot = Message<"api.v1.BacklogSnapshot"> & {
+  /**
+   * never_correct is words with attempts but no correct answer yet.
+   *
+   * @generated from field: int32 never_correct = 1;
+   */
+  neverCorrect: number;
+
+  /**
+   * in_progress is words being learned but not yet mastered.
+   *
+   * @generated from field: int32 in_progress = 2;
+   */
+  inProgress: number;
+
+  /**
+   * mastered is words whose latest status is usable or intuitive.
+   *
+   * @generated from field: int32 mastered = 3;
+   */
+  mastered: number;
+};
+
+/**
+ * Describes the message api.v1.BacklogSnapshot.
+ * Use `create(BacklogSnapshotSchema)` to create a new message.
+ */
+export const BacklogSnapshotSchema: GenMessage<BacklogSnapshot> = /*@__PURE__*/
+  messageDesc(file_api_v1_analytics, 5);
 
 /**
  * AnalyticsFilters carries the optional notebook + quiz-type filters used
@@ -41,7 +288,7 @@ export type AnalyticsFilters = Message<"api.v1.AnalyticsFilters"> & {
  * Use `create(AnalyticsFiltersSchema)` to create a new message.
  */
 export const AnalyticsFiltersSchema: GenMessage<AnalyticsFilters> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 0);
+  messageDesc(file_api_v1_analytics, 6);
 
 /**
  * @generated from message api.v1.GetDailySummariesRequest
@@ -66,7 +313,7 @@ export type GetDailySummariesRequest = Message<"api.v1.GetDailySummariesRequest"
  * Use `create(GetDailySummariesRequestSchema)` to create a new message.
  */
 export const GetDailySummariesRequestSchema: GenMessage<GetDailySummariesRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 1);
+  messageDesc(file_api_v1_analytics, 7);
 
 /**
  * @generated from message api.v1.GetDailySummariesResponse
@@ -83,7 +330,7 @@ export type GetDailySummariesResponse = Message<"api.v1.GetDailySummariesRespons
  * Use `create(GetDailySummariesResponseSchema)` to create a new message.
  */
 export const GetDailySummariesResponseSchema: GenMessage<GetDailySummariesResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 2);
+  messageDesc(file_api_v1_analytics, 8);
 
 /**
  * DailySummary is one row on the Day List.
@@ -127,7 +374,7 @@ export type DailySummary = Message<"api.v1.DailySummary"> & {
  * Use `create(DailySummarySchema)` to create a new message.
  */
 export const DailySummarySchema: GenMessage<DailySummary> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 3);
+  messageDesc(file_api_v1_analytics, 9);
 
 /**
  * @generated from message api.v1.GetDayDetailRequest
@@ -151,7 +398,7 @@ export type GetDayDetailRequest = Message<"api.v1.GetDayDetailRequest"> & {
  * Use `create(GetDayDetailRequestSchema)` to create a new message.
  */
 export const GetDayDetailRequestSchema: GenMessage<GetDayDetailRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 4);
+  messageDesc(file_api_v1_analytics, 10);
 
 /**
  * @generated from message api.v1.GetDayDetailResponse
@@ -187,7 +434,7 @@ export type GetDayDetailResponse = Message<"api.v1.GetDayDetailResponse"> & {
  * Use `create(GetDayDetailResponseSchema)` to create a new message.
  */
 export const GetDayDetailResponseSchema: GenMessage<GetDayDetailResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 5);
+  messageDesc(file_api_v1_analytics, 11);
 
 /**
  * WrongWord is one (word × quiz_type) attempt the user got wrong on the
@@ -322,7 +569,7 @@ export type WrongWord = Message<"api.v1.WrongWord"> & {
  * Use `create(WrongWordSchema)` to create a new message.
  */
 export const WrongWordSchema: GenMessage<WrongWord> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 6);
+  messageDesc(file_api_v1_analytics, 12);
 
 /**
  * RelatedGroup is one cluster of related entries surfaced on the
@@ -370,7 +617,7 @@ export type RelatedGroup = Message<"api.v1.RelatedGroup"> & {
  * Use `create(RelatedGroupSchema)` to create a new message.
  */
 export const RelatedGroupSchema: GenMessage<RelatedGroup> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 7);
+  messageDesc(file_api_v1_analytics, 13);
 
 /**
  * @generated from message api.v1.GetWordHistoryRequest
@@ -402,7 +649,7 @@ export type GetWordHistoryRequest = Message<"api.v1.GetWordHistoryRequest"> & {
  * Use `create(GetWordHistoryRequestSchema)` to create a new message.
  */
 export const GetWordHistoryRequestSchema: GenMessage<GetWordHistoryRequest> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 8);
+  messageDesc(file_api_v1_analytics, 14);
 
 /**
  * @generated from message api.v1.GetWordHistoryResponse
@@ -444,7 +691,7 @@ export type GetWordHistoryResponse = Message<"api.v1.GetWordHistoryResponse"> & 
  * Use `create(GetWordHistoryResponseSchema)` to create a new message.
  */
 export const GetWordHistoryResponseSchema: GenMessage<GetWordHistoryResponse> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 9);
+  messageDesc(file_api_v1_analytics, 15);
 
 /**
  * AttemptEntry is a single past attempt with the streak context just
@@ -497,7 +744,88 @@ export type AttemptEntry = Message<"api.v1.AttemptEntry"> & {
  * Use `create(AttemptEntrySchema)` to create a new message.
  */
 export const AttemptEntrySchema: GenMessage<AttemptEntry> = /*@__PURE__*/
-  messageDesc(file_api_v1_analytics, 10);
+  messageDesc(file_api_v1_analytics, 16);
+
+/**
+ * Granularity is the width of one Trends bucket.
+ *
+ * @generated from enum api.v1.Granularity
+ */
+export enum Granularity {
+  /**
+   * @generated from enum value: GRANULARITY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: GRANULARITY_DAY = 1;
+   */
+  DAY = 1,
+
+  /**
+   * @generated from enum value: GRANULARITY_WEEK = 2;
+   */
+  WEEK = 2,
+
+  /**
+   * @generated from enum value: GRANULARITY_MONTH = 3;
+   */
+  MONTH = 3,
+
+  /**
+   * @generated from enum value: GRANULARITY_YEAR = 4;
+   */
+  YEAR = 4,
+}
+
+/**
+ * Describes the enum api.v1.Granularity.
+ */
+export const GranularitySchema: GenEnum<Granularity> = /*@__PURE__*/
+  enumDesc(file_api_v1_analytics, 0);
+
+/**
+ * TrendGroupBy is the dimension each bucket's stack is split by. LEVEL
+ * groups every attempt by the spaced-repetition box it landed in (1, 7,
+ * 30, 90, … day intervals) — pairing it with the level_ups metric is how
+ * the UI shows "level-ups per box".
+ *
+ * @generated from enum api.v1.TrendGroupBy
+ */
+export enum TrendGroupBy {
+  /**
+   * no split — one series per bucket
+   *
+   * @generated from enum value: TREND_GROUP_BY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: TREND_GROUP_BY_QUIZ_TYPE = 1;
+   */
+  QUIZ_TYPE = 1,
+
+  /**
+   * @generated from enum value: TREND_GROUP_BY_NOTEBOOK = 2;
+   */
+  NOTEBOOK = 2,
+
+  /**
+   * @generated from enum value: TREND_GROUP_BY_STATUS = 3;
+   */
+  STATUS = 3,
+
+  /**
+   * @generated from enum value: TREND_GROUP_BY_LEVEL = 4;
+   */
+  LEVEL = 4,
+}
+
+/**
+ * Describes the enum api.v1.TrendGroupBy.
+ */
+export const TrendGroupBySchema: GenEnum<TrendGroupBy> = /*@__PURE__*/
+  enumDesc(file_api_v1_analytics, 1);
 
 /**
  * @generated from service api.v1.AnalyticsService
@@ -538,6 +866,19 @@ export const AnalyticsService: GenService<{
     methodKind: "unary";
     input: typeof GetWordHistoryRequestSchema;
     output: typeof GetWordHistoryResponseSchema;
+  },
+  /**
+   * GetTrends returns the activity metrics over time for the Trends
+   * overview: one bucket per day / week / month in the requested range,
+   * each split into series by the chosen dimension, plus the range totals
+   * and the end-of-range backlog snapshot.
+   *
+   * @generated from rpc api.v1.AnalyticsService.GetTrends
+   */
+  getTrends: {
+    methodKind: "unary";
+    input: typeof GetTrendsRequestSchema;
+    output: typeof GetTrendsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_api_v1_analytics, 0);

@@ -42,6 +42,9 @@ const (
 	// AnalyticsServiceGetWordHistoryProcedure is the fully-qualified name of the AnalyticsService's
 	// GetWordHistory RPC.
 	AnalyticsServiceGetWordHistoryProcedure = "/api.v1.AnalyticsService/GetWordHistory"
+	// AnalyticsServiceGetTrendsProcedure is the fully-qualified name of the AnalyticsService's
+	// GetTrends RPC.
+	AnalyticsServiceGetTrendsProcedure = "/api.v1.AnalyticsService/GetTrends"
 )
 
 // AnalyticsServiceClient is a client for the api.v1.AnalyticsService service.
@@ -58,6 +61,11 @@ type AnalyticsServiceClient interface {
 	// attempt. Used when the user expands a word card on the Day Detail
 	// page.
 	GetWordHistory(context.Context, *connect.Request[v1.GetWordHistoryRequest]) (*connect.Response[v1.GetWordHistoryResponse], error)
+	// GetTrends returns the activity metrics over time for the Trends
+	// overview: one bucket per day / week / month in the requested range,
+	// each split into series by the chosen dimension, plus the range totals
+	// and the end-of-range backlog snapshot.
+	GetTrends(context.Context, *connect.Request[v1.GetTrendsRequest]) (*connect.Response[v1.GetTrendsResponse], error)
 }
 
 // NewAnalyticsServiceClient constructs a client for the api.v1.AnalyticsService service. By
@@ -89,6 +97,12 @@ func NewAnalyticsServiceClient(httpClient connect.HTTPClient, baseURL string, op
 			connect.WithSchema(analyticsServiceMethods.ByName("GetWordHistory")),
 			connect.WithClientOptions(opts...),
 		),
+		getTrends: connect.NewClient[v1.GetTrendsRequest, v1.GetTrendsResponse](
+			httpClient,
+			baseURL+AnalyticsServiceGetTrendsProcedure,
+			connect.WithSchema(analyticsServiceMethods.ByName("GetTrends")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -97,6 +111,7 @@ type analyticsServiceClient struct {
 	getDailySummaries *connect.Client[v1.GetDailySummariesRequest, v1.GetDailySummariesResponse]
 	getDayDetail      *connect.Client[v1.GetDayDetailRequest, v1.GetDayDetailResponse]
 	getWordHistory    *connect.Client[v1.GetWordHistoryRequest, v1.GetWordHistoryResponse]
+	getTrends         *connect.Client[v1.GetTrendsRequest, v1.GetTrendsResponse]
 }
 
 // GetDailySummaries calls api.v1.AnalyticsService.GetDailySummaries.
@@ -114,6 +129,11 @@ func (c *analyticsServiceClient) GetWordHistory(ctx context.Context, req *connec
 	return c.getWordHistory.CallUnary(ctx, req)
 }
 
+// GetTrends calls api.v1.AnalyticsService.GetTrends.
+func (c *analyticsServiceClient) GetTrends(ctx context.Context, req *connect.Request[v1.GetTrendsRequest]) (*connect.Response[v1.GetTrendsResponse], error) {
+	return c.getTrends.CallUnary(ctx, req)
+}
+
 // AnalyticsServiceHandler is an implementation of the api.v1.AnalyticsService service.
 type AnalyticsServiceHandler interface {
 	// GetDailySummaries returns one row per day with quiz activity in the
@@ -128,6 +148,11 @@ type AnalyticsServiceHandler interface {
 	// attempt. Used when the user expands a word card on the Day Detail
 	// page.
 	GetWordHistory(context.Context, *connect.Request[v1.GetWordHistoryRequest]) (*connect.Response[v1.GetWordHistoryResponse], error)
+	// GetTrends returns the activity metrics over time for the Trends
+	// overview: one bucket per day / week / month in the requested range,
+	// each split into series by the chosen dimension, plus the range totals
+	// and the end-of-range backlog snapshot.
+	GetTrends(context.Context, *connect.Request[v1.GetTrendsRequest]) (*connect.Response[v1.GetTrendsResponse], error)
 }
 
 // NewAnalyticsServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -155,6 +180,12 @@ func NewAnalyticsServiceHandler(svc AnalyticsServiceHandler, opts ...connect.Han
 		connect.WithSchema(analyticsServiceMethods.ByName("GetWordHistory")),
 		connect.WithHandlerOptions(opts...),
 	)
+	analyticsServiceGetTrendsHandler := connect.NewUnaryHandler(
+		AnalyticsServiceGetTrendsProcedure,
+		svc.GetTrends,
+		connect.WithSchema(analyticsServiceMethods.ByName("GetTrends")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.AnalyticsService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case AnalyticsServiceGetDailySummariesProcedure:
@@ -163,6 +194,8 @@ func NewAnalyticsServiceHandler(svc AnalyticsServiceHandler, opts ...connect.Han
 			analyticsServiceGetDayDetailHandler.ServeHTTP(w, r)
 		case AnalyticsServiceGetWordHistoryProcedure:
 			analyticsServiceGetWordHistoryHandler.ServeHTTP(w, r)
+		case AnalyticsServiceGetTrendsProcedure:
+			analyticsServiceGetTrendsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -182,4 +215,8 @@ func (UnimplementedAnalyticsServiceHandler) GetDayDetail(context.Context, *conne
 
 func (UnimplementedAnalyticsServiceHandler) GetWordHistory(context.Context, *connect.Request[v1.GetWordHistoryRequest]) (*connect.Response[v1.GetWordHistoryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.AnalyticsService.GetWordHistory is not implemented"))
+}
+
+func (UnimplementedAnalyticsServiceHandler) GetTrends(context.Context, *connect.Request[v1.GetTrendsRequest]) (*connect.Response[v1.GetTrendsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.AnalyticsService.GetTrends is not implemented"))
 }

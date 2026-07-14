@@ -4,7 +4,7 @@ Feature: Quiz Analytics
   only show up in DB mode (sql_mode quirks, missing JOIN columns, etc.) by
   asserting the pages do NOT render the "Failed to load…" error banner.
 
-  Scenario: Open the Analytics Day List from home
+  Scenario: Open the Analytics overview from home
     Given I am on the home page
     When I follow the "Analytics" link
     Then I should be on the Analytics page

@@ -119,6 +119,46 @@ func TestYAMLRepository_DayDetail(t *testing.T) {
 	}
 }
 
+// TestYAMLRepository_TrendsGroupsByNotebookFile guards the fix for the
+// "notebook split shows episode titles" bug: a story's episode title
+// (Metadata.Title) must NOT become the notebook group — the notebook
+// dimension is the learning-history filename.
+func TestYAMLRepository_TrendsGroupsByNotebookFile(t *testing.T) {
+	dir := t.TempDir()
+	storyYAML := `- metadata:
+    id: friends
+    title: "Episode 1 - The Pilot"
+  scenes:
+    - metadata:
+        title: "Central Perk"
+      expressions:
+        - expression: break the ice
+          learned_logs:
+            - status: understood
+              learned_at: "2026-06-05"
+              quality: 4
+              quiz_type: notebook
+`
+	if err := os.WriteFile(filepath.Join(dir, "friends.yml"), []byte(storyYAML), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	repo := NewYAMLRepository(dir)
+	res, err := repo.Trends(context.Background(), TrendsQuery{
+		Granularity: GranularityMonth,
+		GroupBy:     TrendGroupByNotebook,
+	})
+	if err != nil {
+		t.Fatalf("Trends: %v", err)
+	}
+	if len(res.Buckets) != 1 || len(res.Buckets[0].Series) != 1 {
+		t.Fatalf("got %d buckets", len(res.Buckets))
+	}
+	s := res.Buckets[0].Series[0]
+	if s.GroupKey != "friends" || s.GroupLabel != "friends" {
+		t.Errorf("notebook group: got key=%q label=%q, want the filename \"friends\" (not the episode title)", s.GroupKey, s.GroupLabel)
+	}
+}
+
 func TestYAMLRepository_WordHistory(t *testing.T) {
 	dir := writeSampleHistory(t)
 	repo := NewYAMLRepository(dir)

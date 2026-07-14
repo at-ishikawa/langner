@@ -20,7 +20,9 @@ Then("I should be on the Analytics Day Detail page", async ({ page }) => {
 // so we assert that text is not visible. This is the assertion that would
 // have failed when the only_full_group_by query bug was present.
 Then("the Analytics page is not in an error state", async ({ page }) => {
-  await expect(page.getByText("Failed to load analytics:")).toHaveCount(0);
+  // /analytics is the Overview (trends); the Day List lives at /analytics/days.
+  // Either surface reports failure as "Failed to load <thing>:", so guard both.
+  await expect(page.getByText(/Failed to load (analytics|trends):/)).toHaveCount(0);
 });
 
 Then("the Day Detail page is not in an error state", async ({ page }) => {

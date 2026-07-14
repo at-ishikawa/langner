@@ -22,6 +22,569 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Granularity is the width of one Trends bucket.
+type Granularity int32
+
+const (
+	Granularity_GRANULARITY_UNSPECIFIED Granularity = 0
+	Granularity_GRANULARITY_DAY         Granularity = 1
+	Granularity_GRANULARITY_WEEK        Granularity = 2
+	Granularity_GRANULARITY_MONTH       Granularity = 3
+	Granularity_GRANULARITY_YEAR        Granularity = 4
+)
+
+// Enum value maps for Granularity.
+var (
+	Granularity_name = map[int32]string{
+		0: "GRANULARITY_UNSPECIFIED",
+		1: "GRANULARITY_DAY",
+		2: "GRANULARITY_WEEK",
+		3: "GRANULARITY_MONTH",
+		4: "GRANULARITY_YEAR",
+	}
+	Granularity_value = map[string]int32{
+		"GRANULARITY_UNSPECIFIED": 0,
+		"GRANULARITY_DAY":         1,
+		"GRANULARITY_WEEK":        2,
+		"GRANULARITY_MONTH":       3,
+		"GRANULARITY_YEAR":        4,
+	}
+)
+
+func (x Granularity) Enum() *Granularity {
+	p := new(Granularity)
+	*p = x
+	return p
+}
+
+func (x Granularity) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Granularity) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_v1_analytics_proto_enumTypes[0].Descriptor()
+}
+
+func (Granularity) Type() protoreflect.EnumType {
+	return &file_api_v1_analytics_proto_enumTypes[0]
+}
+
+func (x Granularity) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Granularity.Descriptor instead.
+func (Granularity) EnumDescriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{0}
+}
+
+// TrendGroupBy is the dimension each bucket's stack is split by. LEVEL
+// groups every attempt by the spaced-repetition box it landed in (1, 7,
+// 30, 90, … day intervals) — pairing it with the level_ups metric is how
+// the UI shows "level-ups per box".
+type TrendGroupBy int32
+
+const (
+	TrendGroupBy_TREND_GROUP_BY_UNSPECIFIED TrendGroupBy = 0 // no split — one series per bucket
+	TrendGroupBy_TREND_GROUP_BY_QUIZ_TYPE   TrendGroupBy = 1
+	TrendGroupBy_TREND_GROUP_BY_NOTEBOOK    TrendGroupBy = 2
+	TrendGroupBy_TREND_GROUP_BY_STATUS      TrendGroupBy = 3
+	TrendGroupBy_TREND_GROUP_BY_LEVEL       TrendGroupBy = 4
+)
+
+// Enum value maps for TrendGroupBy.
+var (
+	TrendGroupBy_name = map[int32]string{
+		0: "TREND_GROUP_BY_UNSPECIFIED",
+		1: "TREND_GROUP_BY_QUIZ_TYPE",
+		2: "TREND_GROUP_BY_NOTEBOOK",
+		3: "TREND_GROUP_BY_STATUS",
+		4: "TREND_GROUP_BY_LEVEL",
+	}
+	TrendGroupBy_value = map[string]int32{
+		"TREND_GROUP_BY_UNSPECIFIED": 0,
+		"TREND_GROUP_BY_QUIZ_TYPE":   1,
+		"TREND_GROUP_BY_NOTEBOOK":    2,
+		"TREND_GROUP_BY_STATUS":      3,
+		"TREND_GROUP_BY_LEVEL":       4,
+	}
+)
+
+func (x TrendGroupBy) Enum() *TrendGroupBy {
+	p := new(TrendGroupBy)
+	*p = x
+	return p
+}
+
+func (x TrendGroupBy) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (TrendGroupBy) Descriptor() protoreflect.EnumDescriptor {
+	return file_api_v1_analytics_proto_enumTypes[1].Descriptor()
+}
+
+func (TrendGroupBy) Type() protoreflect.EnumType {
+	return &file_api_v1_analytics_proto_enumTypes[1]
+}
+
+func (x TrendGroupBy) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use TrendGroupBy.Descriptor instead.
+func (TrendGroupBy) EnumDescriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{1}
+}
+
+type GetTrendsRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Granularity Granularity            `protobuf:"varint,1,opt,name=granularity,proto3,enum=api.v1.Granularity" json:"granularity,omitempty"`
+	// start_date / end_date bound the window in YYYY-MM-DD (inclusive).
+	// Empty start_date means "from the first attempt"; empty end_date means
+	// "through today".
+	StartDate     string            `protobuf:"bytes,2,opt,name=start_date,json=startDate,proto3" json:"start_date,omitempty"`
+	EndDate       string            `protobuf:"bytes,3,opt,name=end_date,json=endDate,proto3" json:"end_date,omitempty"`
+	GroupBy       TrendGroupBy      `protobuf:"varint,4,opt,name=group_by,json=groupBy,proto3,enum=api.v1.TrendGroupBy" json:"group_by,omitempty"`
+	Filters       *AnalyticsFilters `protobuf:"bytes,5,opt,name=filters,proto3" json:"filters,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTrendsRequest) Reset() {
+	*x = GetTrendsRequest{}
+	mi := &file_api_v1_analytics_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTrendsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTrendsRequest) ProtoMessage() {}
+
+func (x *GetTrendsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_analytics_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTrendsRequest.ProtoReflect.Descriptor instead.
+func (*GetTrendsRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *GetTrendsRequest) GetGranularity() Granularity {
+	if x != nil {
+		return x.Granularity
+	}
+	return Granularity_GRANULARITY_UNSPECIFIED
+}
+
+func (x *GetTrendsRequest) GetStartDate() string {
+	if x != nil {
+		return x.StartDate
+	}
+	return ""
+}
+
+func (x *GetTrendsRequest) GetEndDate() string {
+	if x != nil {
+		return x.EndDate
+	}
+	return ""
+}
+
+func (x *GetTrendsRequest) GetGroupBy() TrendGroupBy {
+	if x != nil {
+		return x.GroupBy
+	}
+	return TrendGroupBy_TREND_GROUP_BY_UNSPECIFIED
+}
+
+func (x *GetTrendsRequest) GetFilters() *AnalyticsFilters {
+	if x != nil {
+		return x.Filters
+	}
+	return nil
+}
+
+type GetTrendsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// buckets are chronological, oldest first, one per period that had
+	// activity in the range.
+	Buckets []*TrendBucket `protobuf:"bytes,1,rep,name=buckets,proto3" json:"buckets,omitempty"`
+	// summary carries the range totals. Distinct-count metrics (words_tested,
+	// words_learned) are de-duplicated over the WHOLE range, so they do not
+	// equal the sum of the per-bucket values — a word tested in two months
+	// is two bucket entries but one word in the range total.
+	Summary *TrendsSummary `protobuf:"bytes,2,opt,name=summary,proto3" json:"summary,omitempty"`
+	// backlog is a point-in-time snapshot at the end of the range, not a
+	// flow over it.
+	Backlog       *BacklogSnapshot `protobuf:"bytes,3,opt,name=backlog,proto3" json:"backlog,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTrendsResponse) Reset() {
+	*x = GetTrendsResponse{}
+	mi := &file_api_v1_analytics_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTrendsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTrendsResponse) ProtoMessage() {}
+
+func (x *GetTrendsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_analytics_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTrendsResponse.ProtoReflect.Descriptor instead.
+func (*GetTrendsResponse) Descriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *GetTrendsResponse) GetBuckets() []*TrendBucket {
+	if x != nil {
+		return x.Buckets
+	}
+	return nil
+}
+
+func (x *GetTrendsResponse) GetSummary() *TrendsSummary {
+	if x != nil {
+		return x.Summary
+	}
+	return nil
+}
+
+func (x *GetTrendsResponse) GetBacklog() *BacklogSnapshot {
+	if x != nil {
+		return x.Backlog
+	}
+	return nil
+}
+
+// TrendBucket is one period (day / week / month) of activity.
+type TrendBucket struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// period is the bucket's start date in YYYY-MM-DD.
+	Period        string         `protobuf:"bytes,1,opt,name=period,proto3" json:"period,omitempty"`
+	Series        []*TrendSeries `protobuf:"bytes,2,rep,name=series,proto3" json:"series,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrendBucket) Reset() {
+	*x = TrendBucket{}
+	mi := &file_api_v1_analytics_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrendBucket) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrendBucket) ProtoMessage() {}
+
+func (x *TrendBucket) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_analytics_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrendBucket.ProtoReflect.Descriptor instead.
+func (*TrendBucket) Descriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TrendBucket) GetPeriod() string {
+	if x != nil {
+		return x.Period
+	}
+	return ""
+}
+
+func (x *TrendBucket) GetSeries() []*TrendSeries {
+	if x != nil {
+		return x.Series
+	}
+	return nil
+}
+
+// TrendSeries is one split of a bucket. When group_by is UNSPECIFIED the
+// bucket has a single series with an empty group_key.
+type TrendSeries struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// group_key is the raw key (quiz type, notebook id, status, or box
+	// interval in days as a string). Empty for the no-split series.
+	GroupKey string `protobuf:"bytes,1,opt,name=group_key,json=groupKey,proto3" json:"group_key,omitempty"`
+	// group_label is the human-readable label (notebook title, "7-day box", …).
+	GroupLabel string `protobuf:"bytes,2,opt,name=group_label,json=groupLabel,proto3" json:"group_label,omitempty"`
+	// attempts is every quiz answer in this bucket+series.
+	Attempts int32 `protobuf:"varint,3,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	// words_tested is the distinct words answered in this bucket+series — a
+	// word drilled ten times counts once.
+	WordsTested int32 `protobuf:"varint,4,opt,name=words_tested,json=wordsTested,proto3" json:"words_tested,omitempty"`
+	// words_learned is the distinct words that crossed up into a retained
+	// status (understood / usable / intuitive) in this bucket+series.
+	WordsLearned int32 `protobuf:"varint,5,opt,name=words_learned,json=wordsLearned,proto3" json:"words_learned,omitempty"`
+	// level_ups / lapses count spaced-repetition box transitions landing in
+	// this bucket+series (a lapse is a box drop after a wrong answer).
+	LevelUps      int32 `protobuf:"varint,6,opt,name=level_ups,json=levelUps,proto3" json:"level_ups,omitempty"`
+	Lapses        int32 `protobuf:"varint,7,opt,name=lapses,proto3" json:"lapses,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrendSeries) Reset() {
+	*x = TrendSeries{}
+	mi := &file_api_v1_analytics_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrendSeries) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrendSeries) ProtoMessage() {}
+
+func (x *TrendSeries) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_analytics_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrendSeries.ProtoReflect.Descriptor instead.
+func (*TrendSeries) Descriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TrendSeries) GetGroupKey() string {
+	if x != nil {
+		return x.GroupKey
+	}
+	return ""
+}
+
+func (x *TrendSeries) GetGroupLabel() string {
+	if x != nil {
+		return x.GroupLabel
+	}
+	return ""
+}
+
+func (x *TrendSeries) GetAttempts() int32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
+func (x *TrendSeries) GetWordsTested() int32 {
+	if x != nil {
+		return x.WordsTested
+	}
+	return 0
+}
+
+func (x *TrendSeries) GetWordsLearned() int32 {
+	if x != nil {
+		return x.WordsLearned
+	}
+	return 0
+}
+
+func (x *TrendSeries) GetLevelUps() int32 {
+	if x != nil {
+		return x.LevelUps
+	}
+	return 0
+}
+
+func (x *TrendSeries) GetLapses() int32 {
+	if x != nil {
+		return x.Lapses
+	}
+	return 0
+}
+
+// TrendsSummary is the range total for each metric (see GetTrendsResponse
+// on why distinct metrics don't sum the buckets).
+type TrendsSummary struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Attempts      int32                  `protobuf:"varint,1,opt,name=attempts,proto3" json:"attempts,omitempty"`
+	WordsTested   int32                  `protobuf:"varint,2,opt,name=words_tested,json=wordsTested,proto3" json:"words_tested,omitempty"`
+	WordsLearned  int32                  `protobuf:"varint,3,opt,name=words_learned,json=wordsLearned,proto3" json:"words_learned,omitempty"`
+	LevelUps      int32                  `protobuf:"varint,4,opt,name=level_ups,json=levelUps,proto3" json:"level_ups,omitempty"`
+	Lapses        int32                  `protobuf:"varint,5,opt,name=lapses,proto3" json:"lapses,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TrendsSummary) Reset() {
+	*x = TrendsSummary{}
+	mi := &file_api_v1_analytics_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TrendsSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TrendsSummary) ProtoMessage() {}
+
+func (x *TrendsSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_analytics_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TrendsSummary.ProtoReflect.Descriptor instead.
+func (*TrendsSummary) Descriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *TrendsSummary) GetAttempts() int32 {
+	if x != nil {
+		return x.Attempts
+	}
+	return 0
+}
+
+func (x *TrendsSummary) GetWordsTested() int32 {
+	if x != nil {
+		return x.WordsTested
+	}
+	return 0
+}
+
+func (x *TrendsSummary) GetWordsLearned() int32 {
+	if x != nil {
+		return x.WordsLearned
+	}
+	return 0
+}
+
+func (x *TrendsSummary) GetLevelUps() int32 {
+	if x != nil {
+		return x.LevelUps
+	}
+	return 0
+}
+
+func (x *TrendsSummary) GetLapses() int32 {
+	if x != nil {
+		return x.Lapses
+	}
+	return 0
+}
+
+// BacklogSnapshot is the state of the user's words at the end of the
+// range — where things stand today, not what flowed over the period.
+type BacklogSnapshot struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// never_correct is words with attempts but no correct answer yet.
+	NeverCorrect int32 `protobuf:"varint,1,opt,name=never_correct,json=neverCorrect,proto3" json:"never_correct,omitempty"`
+	// in_progress is words being learned but not yet mastered.
+	InProgress int32 `protobuf:"varint,2,opt,name=in_progress,json=inProgress,proto3" json:"in_progress,omitempty"`
+	// mastered is words whose latest status is usable or intuitive.
+	Mastered      int32 `protobuf:"varint,3,opt,name=mastered,proto3" json:"mastered,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BacklogSnapshot) Reset() {
+	*x = BacklogSnapshot{}
+	mi := &file_api_v1_analytics_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BacklogSnapshot) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BacklogSnapshot) ProtoMessage() {}
+
+func (x *BacklogSnapshot) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_analytics_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BacklogSnapshot.ProtoReflect.Descriptor instead.
+func (*BacklogSnapshot) Descriptor() ([]byte, []int) {
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *BacklogSnapshot) GetNeverCorrect() int32 {
+	if x != nil {
+		return x.NeverCorrect
+	}
+	return 0
+}
+
+func (x *BacklogSnapshot) GetInProgress() int32 {
+	if x != nil {
+		return x.InProgress
+	}
+	return 0
+}
+
+func (x *BacklogSnapshot) GetMastered() int32 {
+	if x != nil {
+		return x.Mastered
+	}
+	return 0
+}
+
 // AnalyticsFilters carries the optional notebook + quiz-type filters used
 // on both the Day List and Day Detail pages.
 type AnalyticsFilters struct {
@@ -37,7 +600,7 @@ type AnalyticsFilters struct {
 
 func (x *AnalyticsFilters) Reset() {
 	*x = AnalyticsFilters{}
-	mi := &file_api_v1_analytics_proto_msgTypes[0]
+	mi := &file_api_v1_analytics_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49,7 +612,7 @@ func (x *AnalyticsFilters) String() string {
 func (*AnalyticsFilters) ProtoMessage() {}
 
 func (x *AnalyticsFilters) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[0]
+	mi := &file_api_v1_analytics_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +625,7 @@ func (x *AnalyticsFilters) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AnalyticsFilters.ProtoReflect.Descriptor instead.
 func (*AnalyticsFilters) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{0}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *AnalyticsFilters) GetNotebookId() string {
@@ -91,7 +654,7 @@ type GetDailySummariesRequest struct {
 
 func (x *GetDailySummariesRequest) Reset() {
 	*x = GetDailySummariesRequest{}
-	mi := &file_api_v1_analytics_proto_msgTypes[1]
+	mi := &file_api_v1_analytics_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -103,7 +666,7 @@ func (x *GetDailySummariesRequest) String() string {
 func (*GetDailySummariesRequest) ProtoMessage() {}
 
 func (x *GetDailySummariesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[1]
+	mi := &file_api_v1_analytics_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -116,7 +679,7 @@ func (x *GetDailySummariesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDailySummariesRequest.ProtoReflect.Descriptor instead.
 func (*GetDailySummariesRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{1}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetDailySummariesRequest) GetRangeDays() int32 {
@@ -142,7 +705,7 @@ type GetDailySummariesResponse struct {
 
 func (x *GetDailySummariesResponse) Reset() {
 	*x = GetDailySummariesResponse{}
-	mi := &file_api_v1_analytics_proto_msgTypes[2]
+	mi := &file_api_v1_analytics_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -154,7 +717,7 @@ func (x *GetDailySummariesResponse) String() string {
 func (*GetDailySummariesResponse) ProtoMessage() {}
 
 func (x *GetDailySummariesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[2]
+	mi := &file_api_v1_analytics_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -167,7 +730,7 @@ func (x *GetDailySummariesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDailySummariesResponse.ProtoReflect.Descriptor instead.
 func (*GetDailySummariesResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{2}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetDailySummariesResponse) GetDays() []*DailySummary {
@@ -194,7 +757,7 @@ type DailySummary struct {
 
 func (x *DailySummary) Reset() {
 	*x = DailySummary{}
-	mi := &file_api_v1_analytics_proto_msgTypes[3]
+	mi := &file_api_v1_analytics_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +769,7 @@ func (x *DailySummary) String() string {
 func (*DailySummary) ProtoMessage() {}
 
 func (x *DailySummary) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[3]
+	mi := &file_api_v1_analytics_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +782,7 @@ func (x *DailySummary) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DailySummary.ProtoReflect.Descriptor instead.
 func (*DailySummary) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{3}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DailySummary) GetDate() string {
@@ -268,7 +831,7 @@ type GetDayDetailRequest struct {
 
 func (x *GetDayDetailRequest) Reset() {
 	*x = GetDayDetailRequest{}
-	mi := &file_api_v1_analytics_proto_msgTypes[4]
+	mi := &file_api_v1_analytics_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +843,7 @@ func (x *GetDayDetailRequest) String() string {
 func (*GetDayDetailRequest) ProtoMessage() {}
 
 func (x *GetDayDetailRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[4]
+	mi := &file_api_v1_analytics_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +856,7 @@ func (x *GetDayDetailRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDayDetailRequest.ProtoReflect.Descriptor instead.
 func (*GetDayDetailRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{4}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetDayDetailRequest) GetDate() string {
@@ -325,7 +888,7 @@ type GetDayDetailResponse struct {
 
 func (x *GetDayDetailResponse) Reset() {
 	*x = GetDayDetailResponse{}
-	mi := &file_api_v1_analytics_proto_msgTypes[5]
+	mi := &file_api_v1_analytics_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -337,7 +900,7 @@ func (x *GetDayDetailResponse) String() string {
 func (*GetDayDetailResponse) ProtoMessage() {}
 
 func (x *GetDayDetailResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[5]
+	mi := &file_api_v1_analytics_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -350,7 +913,7 @@ func (x *GetDayDetailResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDayDetailResponse.ProtoReflect.Descriptor instead.
 func (*GetDayDetailResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{5}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetDayDetailResponse) GetSummary() *DailySummary {
@@ -440,7 +1003,7 @@ type WrongWord struct {
 
 func (x *WrongWord) Reset() {
 	*x = WrongWord{}
-	mi := &file_api_v1_analytics_proto_msgTypes[6]
+	mi := &file_api_v1_analytics_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -452,7 +1015,7 @@ func (x *WrongWord) String() string {
 func (*WrongWord) ProtoMessage() {}
 
 func (x *WrongWord) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[6]
+	mi := &file_api_v1_analytics_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -465,7 +1028,7 @@ func (x *WrongWord) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WrongWord.ProtoReflect.Descriptor instead.
 func (*WrongWord) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{6}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *WrongWord) GetNoteId() int64 {
@@ -601,7 +1164,7 @@ type RelatedGroup struct {
 
 func (x *RelatedGroup) Reset() {
 	*x = RelatedGroup{}
-	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	mi := &file_api_v1_analytics_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -613,7 +1176,7 @@ func (x *RelatedGroup) String() string {
 func (*RelatedGroup) ProtoMessage() {}
 
 func (x *RelatedGroup) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[7]
+	mi := &file_api_v1_analytics_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -626,7 +1189,7 @@ func (x *RelatedGroup) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelatedGroup.ProtoReflect.Descriptor instead.
 func (*RelatedGroup) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{7}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RelatedGroup) GetKind() string {
@@ -662,7 +1225,7 @@ type GetWordHistoryRequest struct {
 
 func (x *GetWordHistoryRequest) Reset() {
 	*x = GetWordHistoryRequest{}
-	mi := &file_api_v1_analytics_proto_msgTypes[8]
+	mi := &file_api_v1_analytics_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -674,7 +1237,7 @@ func (x *GetWordHistoryRequest) String() string {
 func (*GetWordHistoryRequest) ProtoMessage() {}
 
 func (x *GetWordHistoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[8]
+	mi := &file_api_v1_analytics_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -687,7 +1250,7 @@ func (x *GetWordHistoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWordHistoryRequest.ProtoReflect.Descriptor instead.
 func (*GetWordHistoryRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{8}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *GetWordHistoryRequest) GetNoteId() int64 {
@@ -732,7 +1295,7 @@ type GetWordHistoryResponse struct {
 
 func (x *GetWordHistoryResponse) Reset() {
 	*x = GetWordHistoryResponse{}
-	mi := &file_api_v1_analytics_proto_msgTypes[9]
+	mi := &file_api_v1_analytics_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -744,7 +1307,7 @@ func (x *GetWordHistoryResponse) String() string {
 func (*GetWordHistoryResponse) ProtoMessage() {}
 
 func (x *GetWordHistoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[9]
+	mi := &file_api_v1_analytics_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -757,7 +1320,7 @@ func (x *GetWordHistoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetWordHistoryResponse.ProtoReflect.Descriptor instead.
 func (*GetWordHistoryResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{9}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *GetWordHistoryResponse) GetExpression() string {
@@ -823,7 +1386,7 @@ type AttemptEntry struct {
 
 func (x *AttemptEntry) Reset() {
 	*x = AttemptEntry{}
-	mi := &file_api_v1_analytics_proto_msgTypes[10]
+	mi := &file_api_v1_analytics_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -835,7 +1398,7 @@ func (x *AttemptEntry) String() string {
 func (*AttemptEntry) ProtoMessage() {}
 
 func (x *AttemptEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_analytics_proto_msgTypes[10]
+	mi := &file_api_v1_analytics_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -848,7 +1411,7 @@ func (x *AttemptEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AttemptEntry.ProtoReflect.Descriptor instead.
 func (*AttemptEntry) Descriptor() ([]byte, []int) {
-	return file_api_v1_analytics_proto_rawDescGZIP(), []int{10}
+	return file_api_v1_analytics_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *AttemptEntry) GetDate() string {
@@ -897,7 +1460,41 @@ var File_api_v1_analytics_proto protoreflect.FileDescriptor
 
 const file_api_v1_analytics_proto_rawDesc = "" +
 	"\n" +
-	"\x16api/v1/analytics.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"P\n" +
+	"\x16api/v1/analytics.proto\x12\x06api.v1\x1a\x1bbuf/validate/validate.proto\"\xe8\x01\n" +
+	"\x10GetTrendsRequest\x125\n" +
+	"\vgranularity\x18\x01 \x01(\x0e2\x13.api.v1.GranularityR\vgranularity\x12\x1d\n" +
+	"\n" +
+	"start_date\x18\x02 \x01(\tR\tstartDate\x12\x19\n" +
+	"\bend_date\x18\x03 \x01(\tR\aendDate\x12/\n" +
+	"\bgroup_by\x18\x04 \x01(\x0e2\x14.api.v1.TrendGroupByR\agroupBy\x122\n" +
+	"\afilters\x18\x05 \x01(\v2\x18.api.v1.AnalyticsFiltersR\afilters\"\xa6\x01\n" +
+	"\x11GetTrendsResponse\x12-\n" +
+	"\abuckets\x18\x01 \x03(\v2\x13.api.v1.TrendBucketR\abuckets\x12/\n" +
+	"\asummary\x18\x02 \x01(\v2\x15.api.v1.TrendsSummaryR\asummary\x121\n" +
+	"\abacklog\x18\x03 \x01(\v2\x17.api.v1.BacklogSnapshotR\abacklog\"R\n" +
+	"\vTrendBucket\x12\x16\n" +
+	"\x06period\x18\x01 \x01(\tR\x06period\x12+\n" +
+	"\x06series\x18\x02 \x03(\v2\x13.api.v1.TrendSeriesR\x06series\"\xe4\x01\n" +
+	"\vTrendSeries\x12\x1b\n" +
+	"\tgroup_key\x18\x01 \x01(\tR\bgroupKey\x12\x1f\n" +
+	"\vgroup_label\x18\x02 \x01(\tR\n" +
+	"groupLabel\x12\x1a\n" +
+	"\battempts\x18\x03 \x01(\x05R\battempts\x12!\n" +
+	"\fwords_tested\x18\x04 \x01(\x05R\vwordsTested\x12#\n" +
+	"\rwords_learned\x18\x05 \x01(\x05R\fwordsLearned\x12\x1b\n" +
+	"\tlevel_ups\x18\x06 \x01(\x05R\blevelUps\x12\x16\n" +
+	"\x06lapses\x18\a \x01(\x05R\x06lapses\"\xa8\x01\n" +
+	"\rTrendsSummary\x12\x1a\n" +
+	"\battempts\x18\x01 \x01(\x05R\battempts\x12!\n" +
+	"\fwords_tested\x18\x02 \x01(\x05R\vwordsTested\x12#\n" +
+	"\rwords_learned\x18\x03 \x01(\x05R\fwordsLearned\x12\x1b\n" +
+	"\tlevel_ups\x18\x04 \x01(\x05R\blevelUps\x12\x16\n" +
+	"\x06lapses\x18\x05 \x01(\x05R\x06lapses\"s\n" +
+	"\x0fBacklogSnapshot\x12#\n" +
+	"\rnever_correct\x18\x01 \x01(\x05R\fneverCorrect\x12\x1f\n" +
+	"\vin_progress\x18\x02 \x01(\x05R\n" +
+	"inProgress\x12\x1a\n" +
+	"\bmastered\x18\x03 \x01(\x05R\bmastered\"P\n" +
 	"\x10AnalyticsFilters\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x1b\n" +
@@ -975,11 +1572,24 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\x06result\x18\x03 \x01(\tR\x06result\x12\x18\n" +
 	"\aquality\x18\x04 \x01(\x05R\aquality\x12.\n" +
 	"\x13streak_before_wrong\x18\x05 \x01(\x05R\x11streakBeforeWrong\x122\n" +
-	"\x15streak_before_correct\x18\x06 \x01(\x05R\x13streakBeforeCorrect2\x88\x02\n" +
+	"\x15streak_before_correct\x18\x06 \x01(\x05R\x13streakBeforeCorrect*\x82\x01\n" +
+	"\vGranularity\x12\x1b\n" +
+	"\x17GRANULARITY_UNSPECIFIED\x10\x00\x12\x13\n" +
+	"\x0fGRANULARITY_DAY\x10\x01\x12\x14\n" +
+	"\x10GRANULARITY_WEEK\x10\x02\x12\x15\n" +
+	"\x11GRANULARITY_MONTH\x10\x03\x12\x14\n" +
+	"\x10GRANULARITY_YEAR\x10\x04*\x9e\x01\n" +
+	"\fTrendGroupBy\x12\x1e\n" +
+	"\x1aTREND_GROUP_BY_UNSPECIFIED\x10\x00\x12\x1c\n" +
+	"\x18TREND_GROUP_BY_QUIZ_TYPE\x10\x01\x12\x1b\n" +
+	"\x17TREND_GROUP_BY_NOTEBOOK\x10\x02\x12\x19\n" +
+	"\x15TREND_GROUP_BY_STATUS\x10\x03\x12\x18\n" +
+	"\x14TREND_GROUP_BY_LEVEL\x10\x042\xca\x02\n" +
 	"\x10AnalyticsService\x12X\n" +
 	"\x11GetDailySummaries\x12 .api.v1.GetDailySummariesRequest\x1a!.api.v1.GetDailySummariesResponse\x12I\n" +
 	"\fGetDayDetail\x12\x1b.api.v1.GetDayDetailRequest\x1a\x1c.api.v1.GetDayDetailResponse\x12O\n" +
-	"\x0eGetWordHistory\x12\x1d.api.v1.GetWordHistoryRequest\x1a\x1e.api.v1.GetWordHistoryResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x0eGetWordHistory\x12\x1d.api.v1.GetWordHistoryRequest\x1a\x1e.api.v1.GetWordHistoryResponse\x12@\n" +
+	"\tGetTrends\x12\x18.api.v1.GetTrendsRequest\x1a\x19.api.v1.GetTrendsResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_analytics_proto_rawDescOnce sync.Once
@@ -993,39 +1603,57 @@ func file_api_v1_analytics_proto_rawDescGZIP() []byte {
 	return file_api_v1_analytics_proto_rawDescData
 }
 
-var file_api_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_api_v1_analytics_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_api_v1_analytics_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_api_v1_analytics_proto_goTypes = []any{
-	(*AnalyticsFilters)(nil),          // 0: api.v1.AnalyticsFilters
-	(*GetDailySummariesRequest)(nil),  // 1: api.v1.GetDailySummariesRequest
-	(*GetDailySummariesResponse)(nil), // 2: api.v1.GetDailySummariesResponse
-	(*DailySummary)(nil),              // 3: api.v1.DailySummary
-	(*GetDayDetailRequest)(nil),       // 4: api.v1.GetDayDetailRequest
-	(*GetDayDetailResponse)(nil),      // 5: api.v1.GetDayDetailResponse
-	(*WrongWord)(nil),                 // 6: api.v1.WrongWord
-	(*RelatedGroup)(nil),              // 7: api.v1.RelatedGroup
-	(*GetWordHistoryRequest)(nil),     // 8: api.v1.GetWordHistoryRequest
-	(*GetWordHistoryResponse)(nil),    // 9: api.v1.GetWordHistoryResponse
-	(*AttemptEntry)(nil),              // 10: api.v1.AttemptEntry
+	(Granularity)(0),                  // 0: api.v1.Granularity
+	(TrendGroupBy)(0),                 // 1: api.v1.TrendGroupBy
+	(*GetTrendsRequest)(nil),          // 2: api.v1.GetTrendsRequest
+	(*GetTrendsResponse)(nil),         // 3: api.v1.GetTrendsResponse
+	(*TrendBucket)(nil),               // 4: api.v1.TrendBucket
+	(*TrendSeries)(nil),               // 5: api.v1.TrendSeries
+	(*TrendsSummary)(nil),             // 6: api.v1.TrendsSummary
+	(*BacklogSnapshot)(nil),           // 7: api.v1.BacklogSnapshot
+	(*AnalyticsFilters)(nil),          // 8: api.v1.AnalyticsFilters
+	(*GetDailySummariesRequest)(nil),  // 9: api.v1.GetDailySummariesRequest
+	(*GetDailySummariesResponse)(nil), // 10: api.v1.GetDailySummariesResponse
+	(*DailySummary)(nil),              // 11: api.v1.DailySummary
+	(*GetDayDetailRequest)(nil),       // 12: api.v1.GetDayDetailRequest
+	(*GetDayDetailResponse)(nil),      // 13: api.v1.GetDayDetailResponse
+	(*WrongWord)(nil),                 // 14: api.v1.WrongWord
+	(*RelatedGroup)(nil),              // 15: api.v1.RelatedGroup
+	(*GetWordHistoryRequest)(nil),     // 16: api.v1.GetWordHistoryRequest
+	(*GetWordHistoryResponse)(nil),    // 17: api.v1.GetWordHistoryResponse
+	(*AttemptEntry)(nil),              // 18: api.v1.AttemptEntry
 }
 var file_api_v1_analytics_proto_depIdxs = []int32{
-	0,  // 0: api.v1.GetDailySummariesRequest.filters:type_name -> api.v1.AnalyticsFilters
-	3,  // 1: api.v1.GetDailySummariesResponse.days:type_name -> api.v1.DailySummary
-	0,  // 2: api.v1.GetDayDetailRequest.filters:type_name -> api.v1.AnalyticsFilters
-	3,  // 3: api.v1.GetDayDetailResponse.summary:type_name -> api.v1.DailySummary
-	6,  // 4: api.v1.GetDayDetailResponse.wrong_words:type_name -> api.v1.WrongWord
-	7,  // 5: api.v1.WrongWord.related_groups:type_name -> api.v1.RelatedGroup
-	10, // 6: api.v1.GetWordHistoryResponse.attempts:type_name -> api.v1.AttemptEntry
-	1,  // 7: api.v1.AnalyticsService.GetDailySummaries:input_type -> api.v1.GetDailySummariesRequest
-	4,  // 8: api.v1.AnalyticsService.GetDayDetail:input_type -> api.v1.GetDayDetailRequest
-	8,  // 9: api.v1.AnalyticsService.GetWordHistory:input_type -> api.v1.GetWordHistoryRequest
-	2,  // 10: api.v1.AnalyticsService.GetDailySummaries:output_type -> api.v1.GetDailySummariesResponse
-	5,  // 11: api.v1.AnalyticsService.GetDayDetail:output_type -> api.v1.GetDayDetailResponse
-	9,  // 12: api.v1.AnalyticsService.GetWordHistory:output_type -> api.v1.GetWordHistoryResponse
-	10, // [10:13] is the sub-list for method output_type
-	7,  // [7:10] is the sub-list for method input_type
-	7,  // [7:7] is the sub-list for extension type_name
-	7,  // [7:7] is the sub-list for extension extendee
-	0,  // [0:7] is the sub-list for field type_name
+	0,  // 0: api.v1.GetTrendsRequest.granularity:type_name -> api.v1.Granularity
+	1,  // 1: api.v1.GetTrendsRequest.group_by:type_name -> api.v1.TrendGroupBy
+	8,  // 2: api.v1.GetTrendsRequest.filters:type_name -> api.v1.AnalyticsFilters
+	4,  // 3: api.v1.GetTrendsResponse.buckets:type_name -> api.v1.TrendBucket
+	6,  // 4: api.v1.GetTrendsResponse.summary:type_name -> api.v1.TrendsSummary
+	7,  // 5: api.v1.GetTrendsResponse.backlog:type_name -> api.v1.BacklogSnapshot
+	5,  // 6: api.v1.TrendBucket.series:type_name -> api.v1.TrendSeries
+	8,  // 7: api.v1.GetDailySummariesRequest.filters:type_name -> api.v1.AnalyticsFilters
+	11, // 8: api.v1.GetDailySummariesResponse.days:type_name -> api.v1.DailySummary
+	8,  // 9: api.v1.GetDayDetailRequest.filters:type_name -> api.v1.AnalyticsFilters
+	11, // 10: api.v1.GetDayDetailResponse.summary:type_name -> api.v1.DailySummary
+	14, // 11: api.v1.GetDayDetailResponse.wrong_words:type_name -> api.v1.WrongWord
+	15, // 12: api.v1.WrongWord.related_groups:type_name -> api.v1.RelatedGroup
+	18, // 13: api.v1.GetWordHistoryResponse.attempts:type_name -> api.v1.AttemptEntry
+	9,  // 14: api.v1.AnalyticsService.GetDailySummaries:input_type -> api.v1.GetDailySummariesRequest
+	12, // 15: api.v1.AnalyticsService.GetDayDetail:input_type -> api.v1.GetDayDetailRequest
+	16, // 16: api.v1.AnalyticsService.GetWordHistory:input_type -> api.v1.GetWordHistoryRequest
+	2,  // 17: api.v1.AnalyticsService.GetTrends:input_type -> api.v1.GetTrendsRequest
+	10, // 18: api.v1.AnalyticsService.GetDailySummaries:output_type -> api.v1.GetDailySummariesResponse
+	13, // 19: api.v1.AnalyticsService.GetDayDetail:output_type -> api.v1.GetDayDetailResponse
+	17, // 20: api.v1.AnalyticsService.GetWordHistory:output_type -> api.v1.GetWordHistoryResponse
+	3,  // 21: api.v1.AnalyticsService.GetTrends:output_type -> api.v1.GetTrendsResponse
+	18, // [18:22] is the sub-list for method output_type
+	14, // [14:18] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_analytics_proto_init() }
@@ -1038,13 +1666,14 @@ func file_api_v1_analytics_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_analytics_proto_rawDesc), len(file_api_v1_analytics_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   11,
+			NumEnums:      2,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_api_v1_analytics_proto_goTypes,
 		DependencyIndexes: file_api_v1_analytics_proto_depIdxs,
+		EnumInfos:         file_api_v1_analytics_proto_enumTypes,
 		MessageInfos:      file_api_v1_analytics_proto_msgTypes,
 	}.Build()
 	File_api_v1_analytics_proto = out.File

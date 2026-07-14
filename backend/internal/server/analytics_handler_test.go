@@ -30,6 +30,8 @@ type fakeRepo struct {
 	gotFilt   analytics.Filters
 	dayDetErr error
 	dayCalls  int
+	trends    analytics.TrendsResult
+	gotTrends analytics.TrendsQuery
 }
 
 func (f *fakeRepo) DailySummaries(_ context.Context, rangeDays int, filters analytics.Filters) ([]analytics.DailySummary, error) {
@@ -49,6 +51,11 @@ func (f *fakeRepo) DayDetail(_ context.Context, _ time.Time, _ analytics.Filters
 
 func (f *fakeRepo) WordHistory(_ context.Context, _ analytics.WordRef) (analytics.WordHistory, error) {
 	return f.history, nil
+}
+
+func (f *fakeRepo) Trends(_ context.Context, q analytics.TrendsQuery) (analytics.TrendsResult, error) {
+	f.gotTrends = q
+	return f.trends, nil
 }
 
 func TestAnalyticsHandler_GetDailySummaries(t *testing.T) {
@@ -129,6 +136,9 @@ func (emptyDBRepo) DayDetail(context.Context, time.Time, analytics.Filters) (ana
 func (emptyDBRepo) WordHistory(context.Context, analytics.WordRef) (analytics.WordHistory, error) {
 	return analytics.WordHistory{}, nil
 }
+func (emptyDBRepo) Trends(context.Context, analytics.TrendsQuery) (analytics.TrendsResult, error) {
+	return analytics.TrendsResult{}, nil
+}
 
 // writeEtymologyLearningHistory lays out one YAML learning history file
 // with an etymology breakdown log marked misunderstood on the requested
@@ -178,6 +188,46 @@ func TestAnalyticsHandler_GetDayDetail_EtymologyMissingFromDB(t *testing.T) {
 	w := resp.Msg.WrongWords[0]
 	assert.Equal(t, "logos", w.Expression)
 	assert.Equal(t, "etymology_breakdown", w.QuizType)
+}
+
+func TestAnalyticsHandler_GetTrends(t *testing.T) {
+	period, _ := time.Parse("2006-01-02", "2026-06-01")
+	repo := &fakeRepo{
+		trends: analytics.TrendsResult{
+			Buckets: []analytics.TrendBucket{{
+				Period: period,
+				Series: []analytics.TrendSeries{
+					{GroupKey: "notebook", GroupLabel: "Notebook", Attempts: 12, WordsTested: 8, WordsLearned: 3, LevelUps: 2},
+				},
+			}},
+			Summary: analytics.TrendsSummary{Attempts: 12, WordsTested: 8, WordsLearned: 3, LevelUps: 2},
+			Backlog: analytics.Backlog{NeverCorrect: 4, InProgress: 10, Mastered: 20},
+		},
+	}
+	h := NewAnalyticsHandler(repo)
+	resp, err := h.GetTrends(context.Background(), connect.NewRequest(&apiv1.GetTrendsRequest{
+		Granularity: apiv1.Granularity_GRANULARITY_MONTH,
+		GroupBy:     apiv1.TrendGroupBy_TREND_GROUP_BY_QUIZ_TYPE,
+		StartDate:   "2026-01-01",
+		EndDate:     "2026-06-30",
+		Filters:     &apiv1.AnalyticsFilters{NotebookId: "flashcards"},
+	}))
+	require.NoError(t, err)
+	// Request was decoded into the domain query.
+	assert.Equal(t, analytics.GranularityMonth, repo.gotTrends.Granularity)
+	assert.Equal(t, analytics.TrendGroupByQuizType, repo.gotTrends.GroupBy)
+	assert.Equal(t, "flashcards", repo.gotTrends.Filters.NotebookID)
+	assert.Equal(t, "2026-01-01", repo.gotTrends.Start.Format("2006-01-02"))
+	assert.Equal(t, "2026-06-30", repo.gotTrends.End.Format("2006-01-02"))
+	// Response carries buckets, summary and backlog.
+	require.Len(t, resp.Msg.Buckets, 1)
+	assert.Equal(t, "2026-06-01", resp.Msg.Buckets[0].Period)
+	require.Len(t, resp.Msg.Buckets[0].Series, 1)
+	assert.Equal(t, "Notebook", resp.Msg.Buckets[0].Series[0].GroupLabel)
+	assert.EqualValues(t, 8, resp.Msg.Buckets[0].Series[0].WordsTested)
+	assert.EqualValues(t, 3, resp.Msg.Summary.WordsLearned)
+	assert.EqualValues(t, 20, resp.Msg.Backlog.Mastered)
+	assert.EqualValues(t, 4, resp.Msg.Backlog.NeverCorrect)
 }
 
 func TestAnalyticsHandler_GetWordHistory(t *testing.T) {

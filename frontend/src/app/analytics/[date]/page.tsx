@@ -79,7 +79,7 @@ export default function DayDetailPage() {
   return (
     <Box maxW="md" mx="auto" p={4} pb={20}>
       <Link
-        href={`/analytics${backQuery ? `?${backQuery}` : ""}`}
+        href={`/analytics/days${backQuery ? `?${backQuery}` : ""}`}
         aria-label="Back to all days"
       >
         <Text fontSize="sm" mb={2}>◀ Back to all days</Text>
