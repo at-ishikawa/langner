@@ -310,6 +310,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 				tc.sceneTitle,
 				tc.expression,
 				tc.originalExpression,
+				"",
 				tc.isCorrect,
 				tc.isKnownWord,
 				tc.quality,
@@ -874,6 +875,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 				tc.sceneTitle,
 				tc.expression,
 				tc.originalExpression,
+				"",
 				tc.isCorrect,
 				tc.isKnownWord,
 				tc.quality,
@@ -1041,4 +1043,64 @@ func TestUpdateOrCreateExpressionForEtymology_WritesToExistingScene(t *testing.T
 	assert.Equal(t, "demo-root", exp.Expression)
 	assert.Len(t, exp.EtymologyBreakdownLogs, 2,
 		"the new log must be appended onto the existing entry's logs")
+}
+
+// TestLearningHistoryUpdater_PartOfSpeechSenses covers the sense
+// discriminator: two same-spelling notes with different part_of_speech
+// keep independent series, and a legacy (empty-sense) entry is upgraded in
+// place on the first sense-tagged answer instead of forking.
+func TestLearningHistoryUpdater_PartOfSpeechSenses(t *testing.T) {
+	t.Run("two senses of one spelling stay independent", func(t *testing.T) {
+		updater := NewLearningHistoryUpdater(nil, nil)
+
+		// Answer the noun sense (correct), then the verb sense (wrong).
+		updater.UpdateOrCreateExpressionWithQuality(
+			"nb", "flashcards", "", "record", "", "noun",
+			true, true, int(QualityCorrect), 5000, QuizTypeNotebook)
+		updater.UpdateOrCreateExpressionWithQuality(
+			"nb", "flashcards", "", "record", "", "verb",
+			false, true, int(QualityWrong), 5000, QuizTypeNotebook)
+
+		history := updater.GetHistory()
+		require.Len(t, history, 1)
+		exprs := history[0].Expressions
+		require.Len(t, exprs, 2, "each sense must get its own entry")
+
+		bySense := make(map[string]LearningHistoryExpression)
+		for _, e := range exprs {
+			assert.Equal(t, "record", e.Expression)
+			bySense[e.PartOfSpeech] = e
+		}
+		require.Contains(t, bySense, "noun")
+		require.Contains(t, bySense, "verb")
+		require.Len(t, bySense["noun"].LearnedLogs, 1)
+		require.Len(t, bySense["verb"].LearnedLogs, 1)
+		assert.Equal(t, LearnedStatusUnderstood, bySense["noun"].LearnedLogs[0].Status)
+		assert.Equal(t, LearnedStatusMisunderstood, bySense["verb"].LearnedLogs[0].Status)
+	})
+
+	t.Run("legacy empty-sense entry is upgraded in place", func(t *testing.T) {
+		updater := NewLearningHistoryUpdater([]LearningHistory{
+			{
+				Metadata: LearningHistoryMetadata{NotebookID: "nb", Title: "flashcards", Type: "flashcard"},
+				Expressions: []LearningHistoryExpression{
+					{
+						Expression:  "record",
+						LearnedLogs: []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: NewDate(), Quality: 4}},
+					},
+				},
+			},
+		}, nil)
+
+		updater.UpdateOrCreateExpressionWithQuality(
+			"nb", "flashcards", "", "record", "", "noun",
+			true, true, int(QualityCorrect), 5000, QuizTypeNotebook)
+
+		history := updater.GetHistory()
+		require.Len(t, history, 1)
+		exprs := history[0].Expressions
+		require.Len(t, exprs, 1, "the legacy entry must be upgraded, not forked")
+		assert.Equal(t, "noun", exprs[0].PartOfSpeech, "legacy entry gets stamped with the answered sense")
+		assert.Len(t, exprs[0].LearnedLogs, 2, "logs accrue on the same entry")
+	})
 }

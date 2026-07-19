@@ -140,13 +140,13 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook
 	// must not invent a fake "quality 5" review log just because the user
 	// skipped the word.
 	for _, expr := range expressions {
-		updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, expr)
+		updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, expr, "")
 	}
 
 	skippedAt := time.Now().Format(time.RFC3339)
 	for _, expr := range expressions {
 		for _, qt := range quizTypes {
-			if !updater.SetSkippedAt(expr, qt, skippedAt) {
+			if !updater.SetSkippedAt(expr, "", qt, skippedAt) {
 				return fmt.Errorf("failed to record skip for expression %q (%s) in notebook %q", expr, qt, info.NotebookName)
 			}
 		}
@@ -194,7 +194,7 @@ func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error
 	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
 	for _, expr := range s.conceptMembersOrSelf(info.NotebookName, info.Expression) {
 		for _, qt := range quizTypes {
-			updater.ClearSkippedAt(expr, qt)
+			updater.ClearSkippedAt(expr, "", qt)
 		}
 	}
 

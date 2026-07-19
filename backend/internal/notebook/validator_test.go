@@ -2040,6 +2040,10 @@ func TestValidator_Fix_PreservesEveryPersistableField(t *testing.T) {
 		// correctly dropped by fixConsistency. Round-tripping with
 		// other data populated is exercised by the migration tests.
 		"Type": "discriminator field, not 'data' that keeps an entry alive",
+		// PartOfSpeech is a sense discriminator (noun vs verb), not data.
+		// An entry whose only data is PartOfSpeech is empty by intent and
+		// is correctly dropped by fixConsistency, mirroring Type.
+		"PartOfSpeech": "discriminator field, not 'data' that keeps an entry alive",
 	}
 
 	rt := reflect.TypeOf(LearningHistoryExpression{})

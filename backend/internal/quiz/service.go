@@ -397,6 +397,7 @@ func (s *Service) loadStoryCards(
 					Contexts:      contexts,
 					WordDetail:    buildWordDetail(&definition, originMap),
 					Images:        definition.Images,
+					PartOfSpeech:  definition.PartOfSpeech,
 				})
 			}
 		}
@@ -453,6 +454,7 @@ func (s *Service) loadFlashcardCards(
 				Examples:      examples,
 				WordDetail:    buildWordDetail(&card, originMap),
 				Images:        card.Images,
+				PartOfSpeech:  card.PartOfSpeech,
 			})
 		}
 	}
@@ -513,7 +515,7 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
 		Expression: expression, OriginalExpression: originalExpression,
-		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
+		PartOfSpeech: card.PartOfSpeech, IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
@@ -782,6 +784,7 @@ type ReverseCard struct {
 	AltForm      string // alternate inflected form (Note.Definition when set), used for masking
 	WordDetail   WordDetail
 	Images       []string
+	PartOfSpeech string // sense discriminator; selects the per-sense learning-log series
 
 	// ConceptHead, ConceptMembers, ConceptMeaning carry concept context when
 	// this card represents a definitions-side concept (see Card for details).
@@ -976,6 +979,7 @@ func (s *Service) loadStoryReverseCards(
 					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&definition, originMap),
 					Images:       definition.Images,
+					PartOfSpeech: definition.PartOfSpeech,
 				})
 			}
 		}
@@ -1055,6 +1059,7 @@ func (s *Service) loadFlashcardReverseCards(
 				AltForm:      altForm,
 				WordDetail:   buildWordDetail(&card, originMap),
 				Images:       card.Images,
+				PartOfSpeech: card.PartOfSpeech,
 			})
 		}
 	}
@@ -1279,7 +1284,7 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
 		Expression: expression, OriginalExpression: expression,
-		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
+		PartOfSpeech: card.PartOfSpeech, IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
@@ -1298,6 +1303,7 @@ type FreeformCard struct {
 	Contexts           []inference.Context
 	WordDetail         WordDetail
 	Images             []string
+	PartOfSpeech       string // sense discriminator; selects the per-sense learning-log series
 	// ConceptHead, when non-empty, names the concept head this card maps
 	// to. SaveFreeformResult writes the log under the head so per-member
 	// freeform answers (e.g. typing "misanthropist") consolidate into
@@ -1387,6 +1393,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 					Contexts:           contexts,
 					WordDetail:         buildWordDetail(&definition, originMap),
 					Images:             definition.Images,
+					PartOfSpeech:       definition.PartOfSpeech,
 				})
 			}
 		}
@@ -1436,6 +1443,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 				Contexts:     contexts,
 				WordDetail:   buildWordDetail(&card, originMap),
 				Images:       card.Images,
+				PartOfSpeech: card.PartOfSpeech,
 			})
 		}
 	}
@@ -1549,7 +1557,7 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
 		Expression: expression, OriginalExpression: expression,
-		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
+		PartOfSpeech: card.PartOfSpeech, IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
@@ -1670,14 +1678,14 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 
 // GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log
 // of a given expression in a specific notebook.
-func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
+func (s *Service) GetLatestLearnedInfo(notebookName, expression, partOfSpeech string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return "", ""
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.calculator)
-	expr := updater.FindExpressionByName(expression)
+	expr := updater.FindExpressionBySense(partOfSpeech, expression)
 	if expr == nil {
 		return "", ""
 	}
@@ -1704,7 +1712,7 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note, quizType notebook.QuizType, conceptHeads map[string]string) bool {
 	expr := canonicalDefinitionExpression(def.Expression, conceptHeads)
 	defn := canonicalDefinitionExpression(def.Definition, conceptHeads)
-	return notebook.IsExpressionSkipped(histories, event, sceneTitle, expr, defn, quizType)
+	return notebook.IsExpressionSkipped(histories, event, sceneTitle, expr, defn, def.PartOfSpeech, quizType)
 }
 
 // definitionsSectionSummaries returns per-session counts for a
@@ -1920,6 +1928,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 					OriginalEntry: originalEntry,
 					Meaning:       note.Meaning,
 					WordDetail:    buildWordDetail(&note, originMap),
+					PartOfSpeech:  note.PartOfSpeech,
 				}
 				// Decorate via byMember so non-head members of non-family
 				// concepts still get ConceptMembers / ConceptMeaning for
@@ -1992,6 +2001,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					Expression:   expression,
 					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&note, originMap),
+					PartOfSpeech: note.PartOfSpeech,
 				}
 				if info, ok := byMember[note.Expression]; ok {
 					card.ConceptMeaning = info.Meaning
@@ -2045,6 +2055,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					OriginalExpression: note.Expression,
 					Meaning:            note.Meaning,
 					WordDetail:         buildWordDetail(&note, originMap),
+					PartOfSpeech:       note.PartOfSpeech,
 				}
 				if head, ok := conceptHeads[note.Expression]; ok && head != "" {
 					card.ConceptHead = head

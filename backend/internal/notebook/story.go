@@ -720,5 +720,5 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 // isExpressionSkipped checks if a definition is excluded from the given quiz
 // type in the learning history.
 func isExpressionSkipped(learningHistory []LearningHistory, event, sceneTitle string, def Note, quizType QuizType) bool {
-	return IsExpressionSkipped(learningHistory, event, sceneTitle, def.Expression, def.Definition, quizType)
+	return IsExpressionSkipped(learningHistory, event, sceneTitle, def.Expression, def.Definition, def.PartOfSpeech, quizType)
 }

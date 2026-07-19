@@ -14,3 +14,4 @@ Feature proposals for Langner. Each proposal includes product requirements and t
 - [Web Frontend UI]({{< relref "web-frontend-ui" >}}) - Mobile-friendly web UI for the notebook recognition quiz
 - [Quiz Analytics]({{< relref "quiz-analytics" >}}) - Surface which words the learner gets wrong most so they can focus extra practice
 - [Relearn Quiz]({{< relref "relearn-quiz" >}}) - Off-the-record session that re-drills every word you recently got wrong, looping until each is correct
+- [Homograph Senses]({{< relref "homograph-senses" >}}) - Give same-spelling / different-sense words (noun vs verb) an independent learning-log series each via a part_of_speech discriminator

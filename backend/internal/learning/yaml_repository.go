@@ -425,12 +425,12 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	// and reverse quizzes pass isKnownWord=true for "understood".
 	isKnownWord := quizType != notebook.QuizTypeFreeform
 	if quizType == notebook.QuizTypeReverse {
-		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeReverse)
+		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.PartOfSpeech, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeReverse)
 	} else {
-		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), quizType)
+		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.PartOfSpeech, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), quizType)
 		// Freeform quiz tests word recall (similar to reverse), so also update reverse logs
 		if quizType == notebook.QuizTypeFreeform {
-			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeFreeform)
+			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.PartOfSpeech, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeFreeform)
 		}
 	}
 	notePath := filepath.Join(dir, log.NotebookName+".yml")

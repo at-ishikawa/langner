@@ -48,6 +48,9 @@ func (h LearningHistory) GetLogs(
 			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
 				continue
 			}
+			if !MatchesSense(&expression, definition.PartOfSpeech) {
+				continue
+			}
 			if len(expression.LearnedLogs) > 0 {
 				return expression.LearnedLogs
 			}
@@ -65,6 +68,9 @@ func (h LearningHistory) GetLogs(
 		// Search through expressions in this scene
 		for _, expression := range scene.Expressions {
 			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+				continue
+			}
+			if !MatchesSense(&expression, definition.PartOfSpeech) {
 				continue
 			}
 			if len(expression.LearnedLogs) > 0 {
@@ -90,6 +96,9 @@ func (h LearningHistory) GetReverseLogs(
 			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
 				continue
 			}
+			if !MatchesSense(&expression, definition.PartOfSpeech) {
+				continue
+			}
 			return expression.ReverseLogs
 		}
 		return nil
@@ -102,6 +111,9 @@ func (h LearningHistory) GetReverseLogs(
 		}
 		for _, expression := range scene.Expressions {
 			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+				continue
+			}
+			if !MatchesSense(&expression, definition.PartOfSpeech) {
 				continue
 			}
 			return expression.ReverseLogs
@@ -121,17 +133,17 @@ type LearningSceneMetadata struct {
 
 // LearningRecord represents a single learning event for an expression
 type LearningRecord struct {
-	Status         LearnedStatus `yaml:"status,omitempty"`
-	LearnedAt      Date          `yaml:"learned_at,omitempty"`
-	Quality        int           `yaml:"quality,omitempty"`          // 0-5 grade
-	ResponseTimeMs int64         `yaml:"response_time_ms,omitempty"` // milliseconds
-	QuizType       string        `yaml:"quiz_type,omitempty"`        // "freeform" or "notebook"
-	IntervalDays     int           `yaml:"interval_days,omitempty"`      // days until next review
+	Status           LearnedStatus `yaml:"status,omitempty"`
+	LearnedAt        Date          `yaml:"learned_at,omitempty"`
+	Quality          int           `yaml:"quality,omitempty"`           // 0-5 grade
+	ResponseTimeMs   int64         `yaml:"response_time_ms,omitempty"`  // milliseconds
+	QuizType         string        `yaml:"quiz_type,omitempty"`         // "freeform" or "notebook"
+	IntervalDays     int           `yaml:"interval_days,omitempty"`     // days until next review
 	OverrideInterval int           `yaml:"override_interval,omitempty"` // manually-set interval (non-zero = user override)
 }
 
 type LearningHistoryExpression struct {
-	Expression     string           `yaml:"expression"`
+	Expression string `yaml:"expression"`
 	// Type distinguishes vocabulary entries from etymology-origin entries
 	// when their `expression` strings collide. "" or "vocabulary" means a
 	// regular vocab entry; "origin" means an etymology origin. Without
@@ -140,7 +152,11 @@ type LearningHistoryExpression struct {
 	// and the YAML would be ambiguous about which is being tracked.
 	// Backward-compatible: legacy entries without Type are treated as
 	// vocabulary by all readers.
-	Type           string           `yaml:"type,omitempty"`
+	Type string `yaml:"type,omitempty"`
+	// PartOfSpeech separates two vocabulary entries sharing a spelling but
+	// a different sense (e.g. "record" noun vs verb). Empty = unspecified/
+	// legacy sense. With Expression+Type it forms the canonical series key.
+	PartOfSpeech   string           `yaml:"part_of_speech,omitempty"`
 	LearnedLogs    []LearningRecord `yaml:"learned_logs"`
 	EasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
@@ -200,6 +216,24 @@ func MatchesExpressionType(expr *LearningHistoryExpression, target string) bool 
 	default:
 		return expr.Type == "" || expr.Type == LearningExpressionTypeVocabulary
 	}
+}
+
+// normalizePartOfSpeech is the canonical sense token: trimmed + lowercased.
+func normalizePartOfSpeech(pos string) string { return strings.ToLower(strings.TrimSpace(pos)) }
+
+// MatchesSense reports whether entry serves the given sense. A legacy
+// entry with empty PartOfSpeech serves ANY sense (back-compat for
+// pre-discriminator data and single-sense words); a sense-tagged entry
+// serves only its exact sense. This fallback is why existing YAML keeps
+// working before the migration tags it.
+func MatchesSense(entry *LearningHistoryExpression, partOfSpeech string) bool {
+	if entry == nil {
+		return false
+	}
+	if entry.PartOfSpeech == "" {
+		return true
+	}
+	return normalizePartOfSpeech(entry.PartOfSpeech) == normalizePartOfSpeech(partOfSpeech)
 }
 
 // SkippedAtMap maps a quiz type string (e.g. "reverse", "etymology_freeform")
@@ -670,16 +704,20 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 // IsExpressionSkipped checks whether a note is excluded from the given quiz
 // type. Per-type skips replaced the old "skipped from everything" string —
 // each call site supplies the quiz mode it's filtering for.
-func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition string, quizType QuizType) bool {
+func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition, partOfSpeech string, quizType QuizType) bool {
 	for _, hist := range histories {
 		if hist.Metadata.Title != event {
 			continue
 		}
 		if hist.Metadata.Type == "flashcard" {
 			for _, expr := range hist.Expressions {
-				if expr.Expression == expression || expr.Expression == definition {
-					return expr.SkippedAt.IsSkipped(quizType)
+				if expr.Expression != expression && expr.Expression != definition {
+					continue
 				}
+				if !MatchesSense(&expr, partOfSpeech) {
+					continue
+				}
+				return expr.SkippedAt.IsSkipped(quizType)
 			}
 			continue
 		}
@@ -688,9 +726,13 @@ func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, 
 				continue
 			}
 			for _, expr := range scene.Expressions {
-				if expr.Expression == expression || expr.Expression == definition {
-					return expr.SkippedAt.IsSkipped(quizType)
+				if expr.Expression != expression && expr.Expression != definition {
+					continue
 				}
+				if !MatchesSense(&expr, partOfSpeech) {
+					continue
+				}
+				return expr.SkippedAt.IsSkipped(quizType)
 			}
 		}
 	}
@@ -795,20 +837,24 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 			}
 		}
 
-		// Check for duplicate expressions in flashcard format
-		expressionSeen := make(map[string]bool)
+		// Check for duplicate expressions in flashcard format. Key on
+		// (expression, part_of_speech) so a legitimate homograph (e.g.
+		// "record" noun vs verb) is not flagged as a duplicate.
+		type flashKey struct{ name, pos string }
+		expressionSeen := make(map[flashKey]bool)
 		for _, expr := range h.Expressions {
 			expression := strings.TrimSpace(expr.Expression)
 			if expression == "" {
 				continue
 			}
-			if expressionSeen[expression] {
+			key := flashKey{name: expression, pos: normalizePartOfSpeech(expr.PartOfSpeech)}
+			if expressionSeen[key] {
 				errors = append(errors, ValidationError{
 					Location: location,
 					Message:  fmt.Sprintf("duplicate expression %q in flashcard format", expression),
 				})
 			}
-			expressionSeen[expression] = true
+			expressionSeen[key] = true
 		}
 
 		return errors
@@ -834,14 +880,16 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 	// entry that share a name (e.g. vocab "peer" + Latin root "peer") are
 	// allowed to coexist; the rest of the codebase already treats them as
 	// distinct via the same composite key.
-	type exprKey struct{ name, typ string }
+	// Key includes part_of_speech so a legitimate homograph (two senses of
+	// the same spelling) is not reported as a cross-scene duplicate.
+	type exprKey struct{ name, typ, pos string }
 	normaliseType := func(t string) string {
 		if t == LearningExpressionTypeVocabulary {
 			return ""
 		}
 		return t
 	}
-	episodeExpressions := make(map[exprKey][]string) // (name, typ) -> list of scene titles
+	episodeExpressions := make(map[exprKey][]string) // (name, typ, pos) -> list of scene titles
 	for _, scene := range h.Scenes {
 		sceneTitle := strings.TrimSpace(scene.Metadata.Title)
 		for _, expr := range scene.Expressions {
@@ -849,9 +897,8 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 			if expression == "" {
 				continue
 			}
-			episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}] = append(
-				episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}], sceneTitle,
-			)
+			key := exprKey{name: expression, typ: normaliseType(expr.Type), pos: normalizePartOfSpeech(expr.PartOfSpeech)}
+			episodeExpressions[key] = append(episodeExpressions[key], sceneTitle)
 		}
 	}
 

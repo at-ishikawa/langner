@@ -37,6 +37,10 @@ type Card struct {
 	Contexts      []inference.Context
 	WordDetail    WordDetail
 	Images        []string
+	// PartOfSpeech is the note's sense discriminator; combined with the
+	// expression it selects the correct per-sense learning-log series so
+	// two homographs (e.g. "record" noun vs verb) stay independent.
+	PartOfSpeech string
 
 	// ConceptHead names the head expression of the definitions concept this
 	// card belongs to, or "" when the card isn't a concept member. When set,

@@ -11,7 +11,7 @@ type LearningLog struct {
 	Quality        int       `db:"quality"`
 	ResponseTimeMs int       `db:"response_time_ms"`
 	QuizType       string    `db:"quiz_type"`
-	IntervalDays     int       `db:"interval_days"`
+	IntervalDays   int       `db:"interval_days"`
 	// ConceptKey is the head expression of the definitions concept this
 	// log belongs to (denormalised cache of notes.concept_key). Set at
 	// log-write time so "all logs for a concept" is a single index
@@ -27,6 +27,7 @@ type LearningLog struct {
 	SceneTitle         string `db:"-"`
 	Expression         string `db:"-"`
 	OriginalExpression string `db:"-"`
+	PartOfSpeech       string `db:"-"`
 	IsCorrect          bool   `db:"-"`
 	LearningNotesDir   string `db:"-"`
 }

@@ -92,7 +92,7 @@ func (u *LearningHistoryUpdater) GetHistory() []LearningHistory {
 // expression (e.g., Note.Definition) when a definition is used as the lookup key. If originalExpression
 // is non-empty, both forms are checked when matching existing entries to avoid duplicates.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
-	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
+	notebookID, storyTitle, sceneTitle, expression, originalExpression, partOfSpeech string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -111,6 +111,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
+				if !MatchesSense(&exp, partOfSpeech) {
+					continue
+				}
+				upgradeSense(&exp, partOfSpeech)
 				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
 				return true
@@ -127,6 +131,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
+				if !MatchesSense(&exp, partOfSpeech) {
+					continue
+				}
+				upgradeSense(&exp, partOfSpeech)
 				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
@@ -134,8 +142,20 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 		}
 	}
 
-	u.createNewExpressionWithQuality(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	u.createNewExpressionWithQuality(notebookID, storyTitle, sceneTitle, expression, partOfSpeech, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 	return false
+}
+
+// upgradeSense stamps partOfSpeech onto a legacy (empty-sense) entry the
+// first time a sense-tagged answer lands on it. This keeps single-sense
+// words on one entry and absorbs a homograph's legacy commingled logs into
+// the first-answered sense instead of forking a fresh entry. A legacy
+// entry never coexists with a same-name tagged entry afterwards, so
+// MatchesSense (legacy-or-exact) stays unambiguous.
+func upgradeSense(exp *LearningHistoryExpression, partOfSpeech string) {
+	if exp.PartOfSpeech == "" && partOfSpeech != "" {
+		exp.PartOfSpeech = partOfSpeech
+	}
 }
 
 // UpdateOrCreateExpressionWithQualityForReverse updates or creates an expression with SM-2 quality assessment for reverse quiz.
@@ -143,7 +163,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 // expression (e.g., Note.Definition) when a definition is used as the lookup key. If originalExpression
 // is non-empty, both forms are checked when matching existing entries to avoid duplicates.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
-	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
+	notebookID, storyTitle, sceneTitle, expression, originalExpression, partOfSpeech string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -162,6 +182,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
+				if !MatchesSense(&exp, partOfSpeech) {
+					continue
+				}
+				upgradeSense(&exp, partOfSpeech)
 				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
 				return true
@@ -178,6 +202,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
 					continue
 				}
+				if !MatchesSense(&exp, partOfSpeech) {
+					continue
+				}
+				upgradeSense(&exp, partOfSpeech)
 				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
 				return true
@@ -185,13 +213,13 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 		}
 	}
 
-	u.createNewExpressionWithQualityForReverse(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	u.createNewExpressionWithQualityForReverse(notebookID, storyTitle, sceneTitle, expression, partOfSpeech, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 	return false
 }
 
 // createNewExpressionWithQualityForReverse creates a new expression entry with quality data for reverse quiz
 func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, partOfSpeech string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -204,9 +232,10 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
-		Expression:  expression,
-		LearnedLogs: []LearningRecord{},
-		ReverseLogs: []LearningRecord{},
+		Expression:   expression,
+		PartOfSpeech: partOfSpeech,
+		LearnedLogs:  []LearningRecord{},
+		ReverseLogs:  []LearningRecord{},
 	}
 	newExpression.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 
@@ -231,7 +260,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 
 // createNewExpressionWithQuality creates a new expression entry with quality data
 func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, partOfSpeech string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -244,8 +273,9 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
-		Expression:  expression,
-		LearnedLogs: []LearningRecord{},
+		Expression:   expression,
+		PartOfSpeech: partOfSpeech,
+		LearnedLogs:  []LearningRecord{},
 	}
 	newExpression.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 
@@ -305,6 +335,35 @@ func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *Learn
 	return nil
 }
 
+// FindExpressionBySense mirrors FindExpressionByAnyName but additionally
+// requires the entry to serve the given sense (MatchesSense). This is the
+// sense-aware lookup used by the read/override/skip paths so a homograph's
+// two senses resolve to their own series. A legacy (empty-sense) entry
+// still matches any sense, keeping pre-migration data readable.
+func (u *LearningHistoryUpdater) FindExpressionBySense(partOfSpeech string, names ...string) *LearningHistoryExpression {
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		for hi := range u.history {
+			h := &u.history[hi]
+			for ei := range h.Expressions {
+				if strings.EqualFold(h.Expressions[ei].Expression, name) && MatchesSense(&h.Expressions[ei], partOfSpeech) {
+					return &h.Expressions[ei]
+				}
+			}
+			for si := range h.Scenes {
+				for ei := range h.Scenes[si].Expressions {
+					if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, name) && MatchesSense(&h.Scenes[si].Expressions[ei], partOfSpeech) {
+						return &h.Scenes[si].Expressions[ei]
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // OverrideLogInput carries everything OverrideLog needs to locate and
 // rewrite a single learning log entry.
 //
@@ -324,6 +383,7 @@ func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *Learn
 type OverrideLogInput struct {
 	Expression         string
 	OriginalExpression string
+	PartOfSpeech       string
 	QuizType           QuizType
 	LearnedAt          string
 	MarkCorrect        *bool
@@ -348,7 +408,7 @@ type OverrideLogResult struct {
 // log lists at submit time — the override is applied to both lists in the
 // same call so the two halves of one logical answer stay in sync.
 func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogResult {
-	expr := u.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	expr := u.FindExpressionBySense(in.PartOfSpeech, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return OverrideLogResult{}
 	}
@@ -387,6 +447,7 @@ func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogRes
 type UndoOverrideLogInput struct {
 	Expression           string
 	OriginalExpression   string
+	PartOfSpeech         string
 	QuizType             QuizType
 	LearnedAt            string
 	OriginalQuality      int
@@ -406,7 +467,7 @@ type UndoOverrideLogResult struct {
 // Like OverrideLog, the freeform variants mirror the restore across
 // both paired log lists.
 func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOverrideLogResult {
-	expr := u.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	expr := u.FindExpressionBySense(in.PartOfSpeech, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return UndoOverrideLogResult{}
 	}
@@ -555,8 +616,8 @@ func setLogsByList(expr *LearningHistoryExpression, list logList, logs []Learnin
 
 // SetSkippedAt records a skip for the given quiz type at the given timestamp.
 // Returns false if the expression isn't found in any history.
-func (u *LearningHistoryUpdater) SetSkippedAt(expression string, quizType QuizType, skippedAt string) bool {
-	expr := u.FindExpressionByName(expression)
+func (u *LearningHistoryUpdater) SetSkippedAt(expression, partOfSpeech string, quizType QuizType, skippedAt string) bool {
+	expr := u.FindExpressionBySense(partOfSpeech, expression)
 	if expr == nil {
 		return false
 	}
@@ -580,12 +641,12 @@ func (u *LearningHistoryUpdater) SetSkippedAt(expression string, quizType QuizTy
 // sceneTitle "" stores the stub at the top-level Expressions list
 // (flashcard-style); a non-empty value nests it under that scene.
 func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, partOfSpeech string,
 ) {
-	if u.FindExpressionByName(expression) != nil {
+	if u.FindExpressionBySense(partOfSpeech, expression) != nil {
 		return
 	}
-	stub := LearningHistoryExpression{Expression: expression}
+	stub := LearningHistoryExpression{Expression: expression, PartOfSpeech: partOfSpeech}
 	if sceneTitle == "" {
 		idx := u.findOrCreateStory(notebookID, storyTitle, "flashcard")
 		u.history[idx].Expressions = append(u.history[idx].Expressions, stub)
@@ -730,8 +791,8 @@ func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, se
 
 // ClearSkippedAt removes the skip for the given quiz type. The expression
 // remains skipped for any other quiz types still set in its SkippedAt map.
-func (u *LearningHistoryUpdater) ClearSkippedAt(expression string, quizType QuizType) bool {
-	expr := u.FindExpressionByName(expression)
+func (u *LearningHistoryUpdater) ClearSkippedAt(expression, partOfSpeech string, quizType QuizType) bool {
+	expr := u.FindExpressionBySense(partOfSpeech, expression)
 	if expr == nil {
 		return false
 	}

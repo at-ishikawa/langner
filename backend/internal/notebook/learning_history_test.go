@@ -1246,3 +1246,34 @@ func TestLearningHistoryExpression_HasAnyCorrectAnswer(t *testing.T) {
 	}
 }
 
+
+// TestLearningHistory_GetLogs_Sense verifies GetLogs returns the logs for
+// the requested sense and does not bleed across senses of a homograph.
+func TestLearningHistory_GetLogs_Sense(t *testing.T) {
+	nounTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	verbTime := time.Date(2025, 2, 2, 0, 0, 0, 0, time.UTC)
+
+	history := LearningHistory{
+		Metadata: LearningHistoryMetadata{Title: "flashcards", Type: "flashcard"},
+		Expressions: []LearningHistoryExpression{
+			{
+				Expression:   "record",
+				PartOfSpeech: "noun",
+				LearnedLogs:  []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: nounTime}}},
+			},
+			{
+				Expression:   "record",
+				PartOfSpeech: "verb",
+				LearnedLogs:  []LearningRecord{{Status: LearnedStatusMisunderstood, LearnedAt: Date{Time: verbTime}}},
+			},
+		},
+	}
+
+	nounLogs := history.GetLogs("flashcards", "", Note{Expression: "record", PartOfSpeech: "noun"})
+	require.Len(t, nounLogs, 1)
+	assert.Equal(t, LearnedStatusUnderstood, nounLogs[0].Status)
+
+	verbLogs := history.GetLogs("flashcards", "", Note{Expression: "record", PartOfSpeech: "verb"})
+	require.Len(t, verbLogs, 1)
+	assert.Equal(t, LearnedStatusMisunderstood, verbLogs[0].Status)
+}
