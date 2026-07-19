@@ -997,6 +997,12 @@ type WrongWord struct {
 	// row under the meaning and the full block in the expanded panel so a
 	// wrong word never reads in isolation.
 	RelatedGroups []*RelatedGroup `protobuf:"bytes,15,rep,name=related_groups,json=relatedGroups,proto3" json:"related_groups,omitempty"`
+	// part_of_speech is the sense discriminator (issue #32). Two
+	// same-spelling entries with different senses (e.g. "record" noun vs
+	// verb) are distinct series; the frontend passes this back on the
+	// word-history drill so the correct sense's history is shown. Empty
+	// for legacy/untagged entries and etymology origins.
+	PartOfSpeech  string `protobuf:"bytes,16,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1136,6 +1142,13 @@ func (x *WrongWord) GetRelatedGroups() []*RelatedGroup {
 	return nil
 }
 
+func (x *WrongWord) GetPartOfSpeech() string {
+	if x != nil {
+		return x.PartOfSpeech
+	}
+	return ""
+}
+
 // RelatedGroup is one cluster of related entries surfaced on the
 // analytics card. The grouping is intentionally flat (kind + label +
 // member strings) so the same shape covers sibling words, sibling
@@ -1214,11 +1227,14 @@ func (x *RelatedGroup) GetMembers() []string {
 }
 
 type GetWordHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	NotebookId    string                 `protobuf:"bytes,2,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
-	Expression    string                 `protobuf:"bytes,3,opt,name=expression,proto3" json:"expression,omitempty"`
-	QuizType      string                 `protobuf:"bytes,4,opt,name=quiz_type,json=quizType,proto3" json:"quiz_type,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	NoteId     int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	NotebookId string                 `protobuf:"bytes,2,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	Expression string                 `protobuf:"bytes,3,opt,name=expression,proto3" json:"expression,omitempty"`
+	QuizType   string                 `protobuf:"bytes,4,opt,name=quiz_type,json=quizType,proto3" json:"quiz_type,omitempty"`
+	// part_of_speech selects the homograph sense (issue #32); empty matches
+	// a legacy/untagged series.
+	PartOfSpeech  string `protobuf:"bytes,5,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1281,6 +1297,13 @@ func (x *GetWordHistoryRequest) GetQuizType() string {
 	return ""
 }
 
+func (x *GetWordHistoryRequest) GetPartOfSpeech() string {
+	if x != nil {
+		return x.PartOfSpeech
+	}
+	return ""
+}
+
 type GetWordHistoryResponse struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Expression         string                 `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
@@ -1289,8 +1312,10 @@ type GetWordHistoryResponse struct {
 	CurrentStatus      string                 `protobuf:"bytes,4,opt,name=current_status,json=currentStatus,proto3" json:"current_status,omitempty"`
 	CurrentWrongStreak int32                  `protobuf:"varint,5,opt,name=current_wrong_streak,json=currentWrongStreak,proto3" json:"current_wrong_streak,omitempty"`
 	Attempts           []*AttemptEntry        `protobuf:"bytes,6,rep,name=attempts,proto3" json:"attempts,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// part_of_speech echoes the resolved sense (issue #32).
+	PartOfSpeech  string `protobuf:"bytes,7,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetWordHistoryResponse) Reset() {
@@ -1363,6 +1388,13 @@ func (x *GetWordHistoryResponse) GetAttempts() []*AttemptEntry {
 		return x.Attempts
 	}
 	return nil
+}
+
+func (x *GetWordHistoryResponse) GetPartOfSpeech() string {
+	if x != nil {
+		return x.PartOfSpeech
+	}
+	return ""
 }
 
 // AttemptEntry is a single past attempt with the streak context just
@@ -1522,7 +1554,7 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\vwrong_words\x18\x02 \x03(\v2\x11.api.v1.WrongWordR\n" +
 	"wrongWords\x12#\n" +
 	"\rprevious_date\x18\x03 \x01(\tR\fpreviousDate\x12\x1b\n" +
-	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xc3\x04\n" +
+	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xe9\x04\n" +
 	"\tWrongWord\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1e\n" +
 	"\n" +
@@ -1543,11 +1575,12 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\x10example_sentence\x18\f \x01(\tR\x0fexampleSentence\x12#\n" +
 	"\rnotebook_kind\x18\r \x01(\tR\fnotebookKind\x12\x18\n" +
 	"\askipped\x18\x0e \x01(\bR\askipped\x12;\n" +
-	"\x0erelated_groups\x18\x0f \x03(\v2\x14.api.v1.RelatedGroupR\rrelatedGroups\"R\n" +
+	"\x0erelated_groups\x18\x0f \x03(\v2\x14.api.v1.RelatedGroupR\rrelatedGroups\x12$\n" +
+	"\x0epart_of_speech\x18\x10 \x01(\tR\fpartOfSpeech\"R\n" +
 	"\fRelatedGroup\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +
-	"\amembers\x18\x03 \x03(\tR\amembers\"\xa0\x01\n" +
+	"\amembers\x18\x03 \x03(\tR\amembers\"\xc6\x01\n" +
 	"\x15GetWordHistoryRequest\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1f\n" +
 	"\vnotebook_id\x18\x02 \x01(\tR\n" +
@@ -1555,7 +1588,8 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\n" +
 	"expression\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"expression\x12$\n" +
-	"\tquiz_type\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bquizType\"\x8b\x02\n" +
+	"\tquiz_type\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bquizType\x12$\n" +
+	"\x0epart_of_speech\x18\x05 \x01(\tR\fpartOfSpeech\"\xb1\x02\n" +
 	"\x16GetWordHistoryResponse\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -1565,7 +1599,8 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\x0enotebook_title\x18\x03 \x01(\tR\rnotebookTitle\x12%\n" +
 	"\x0ecurrent_status\x18\x04 \x01(\tR\rcurrentStatus\x120\n" +
 	"\x14current_wrong_streak\x18\x05 \x01(\x05R\x12currentWrongStreak\x120\n" +
-	"\battempts\x18\x06 \x03(\v2\x14.api.v1.AttemptEntryR\battempts\"\xd5\x01\n" +
+	"\battempts\x18\x06 \x03(\v2\x14.api.v1.AttemptEntryR\battempts\x12$\n" +
+	"\x0epart_of_speech\x18\a \x01(\tR\fpartOfSpeech\"\xd5\x01\n" +
 	"\fAttemptEntry\x12\x12\n" +
 	"\x04date\x18\x01 \x01(\tR\x04date\x12\x1b\n" +
 	"\tquiz_type\x18\x02 \x01(\tR\bquizType\x12\x16\n" +

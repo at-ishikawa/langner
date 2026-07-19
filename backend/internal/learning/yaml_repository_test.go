@@ -617,6 +617,73 @@ func TestYAMLLearningRepository_Create_PreservesSkippedSiblings(t *testing.T) {
 		"sibling-word must have its new learned log persisted")
 }
 
+// TestYAMLLearningRepository_UpdateLog_TargetsSense verifies L2 for
+// homographs: an override carrying part_of_speech lands on that sense's
+// series and leaves the other sense untouched. Two entries share the
+// spelling "record" but differ by sense; overriding the verb must not
+// disturb the noun.
+func TestYAMLLearningRepository_UpdateLog_TargetsSense(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "homographs.yml"), []byte(`- metadata:
+    id: homographs
+    title: "Unit"
+    type: flashcard
+  expressions:
+    - expression: record
+      part_of_speech: noun
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-05-10T00:00:00Z"
+          quality: 1
+          quiz_type: notebook
+          interval_days: 1
+    - expression: record
+      part_of_speech: verb
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-05-10T00:00:00Z"
+          quality: 1
+          quiz_type: notebook
+          interval_days: 1
+`), 0o644))
+
+	repo := NewYAMLLearningRepository(dir, nil)
+	markCorrect := true
+	res, err := repo.UpdateLog(t.Context(), UpdateLogInput{
+		NotebookName: "homographs",
+		Expression:   "record",
+		PartOfSpeech: "verb",
+		QuizType:     string(notebook.QuizTypeNotebook),
+		LearnedAt:    time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC),
+		MarkCorrect:  &markCorrect,
+	})
+	require.NoError(t, err)
+	require.True(t, res.Found, "the verb sense's log must be located and overridden")
+
+	raw, err := os.ReadFile(filepath.Join(dir, "homographs.yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+	require.Len(t, histories, 1)
+
+	var noun, verb *notebook.LearningHistoryExpression
+	for i := range histories[0].Expressions {
+		e := &histories[0].Expressions[i]
+		switch e.PartOfSpeech {
+		case "noun":
+			noun = e
+		case "verb":
+			verb = e
+		}
+	}
+	require.NotNil(t, noun)
+	require.NotNil(t, verb)
+	assert.Equal(t, notebook.LearnedStatus("understood"), verb.LearnedLogs[0].Status,
+		"the verb sense's log flips to understood")
+	assert.Equal(t, notebook.LearnedStatus("misunderstood"), noun.LearnedLogs[0].Status,
+		"the noun sense's log must be untouched (L4: independent series per sense)")
+}
+
 // TestYAMLLearningRepository_WriteAll_RoutesQuizTypesToCorrectSlots pins
 // the round-trip behaviour that validate-db relies on: logs in the DB
 // carry a quiz_type column, and the YAML round-trip must land them in

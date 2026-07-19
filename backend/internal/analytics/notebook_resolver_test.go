@@ -67,20 +67,20 @@ origins:
 	r := NewNotebookMetadataResolver(reader)
 
 	t.Run("vocab", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "vocab", "ephemeral", ExpressionTypeVocabulary, "notebook")
+		got := r.Resolve(context.Background(), "vocab", "ephemeral", ExpressionTypeVocabulary, "", "notebook")
 		assert.Equal(t, "lasting for a very short time", got.Meaning)
 		assert.Equal(t, "Snow on the warm street was ephemeral.", got.ExampleSentence)
 		assert.Equal(t, "flashcard", got.NotebookKind)
 	})
 
 	t.Run("origin", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "wpme", "tele", notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+		got := r.Resolve(context.Background(), "wpme", "tele", notebook.LearningExpressionTypeOrigin, "", "etymology_breakdown")
 		assert.Equal(t, "far", got.Meaning)
 		assert.Equal(t, "etymology", got.NotebookKind)
 	})
 
 	t.Run("miss returns empty", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "vocab", "nosuchword", ExpressionTypeVocabulary, "notebook")
+		got := r.Resolve(context.Background(), "vocab", "nosuchword", ExpressionTypeVocabulary, "", "notebook")
 		assert.Equal(t, WordMetadata{}, got)
 	})
 
@@ -88,12 +88,12 @@ origins:
 		// Learning-history records can drift from the canonical YAML in
 		// case (e.g. "Ephemeral" vs "ephemeral"). The resolver must still
 		// surface the meaning.
-		got := r.Resolve(context.Background(), "vocab", "EPHEMERAL", ExpressionTypeVocabulary, "notebook")
+		got := r.Resolve(context.Background(), "vocab", "EPHEMERAL", ExpressionTypeVocabulary, "", "notebook")
 		assert.Equal(t, "lasting for a very short time", got.Meaning)
 	})
 
 	t.Run("case insensitive origin", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "wpme", "TELE", notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+		got := r.Resolve(context.Background(), "wpme", "TELE", notebook.LearningExpressionTypeOrigin, "", "etymology_breakdown")
 		assert.Equal(t, "far", got.Meaning)
 	})
 }
@@ -195,7 +195,7 @@ notebooks:
 	r := NewNotebookMetadataResolver(reader)
 
 	t.Run("conversation quote with verbatim expression", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "idioms", "break the ice", ExpressionTypeVocabulary, "notebook")
+		got := r.Resolve(context.Background(), "idioms", "break the ice", ExpressionTypeVocabulary, "", "notebook")
 		assert.Equal(t, "to start a conversation in a social setting", got.Meaning)
 		assert.Equal(t, "story", got.NotebookKind)
 		assert.Equal(t, "We were getting ready to break the ice with the new client when the deal fell through.", got.ExampleSentence,
@@ -208,7 +208,7 @@ notebooks:
 		// conjugated form. We exercise the definition-alias path by querying
 		// the canonical "lose one's temper" form; the quote uses "losing my
 		// temper" so plain expression-substring would miss.
-		got := r.Resolve(context.Background(), "idioms", "lose one's temper", ExpressionTypeVocabulary, "notebook")
+		got := r.Resolve(context.Background(), "idioms", "lose one's temper", ExpressionTypeVocabulary, "", "notebook")
 		assert.Equal(t, "to suddenly become very angry", got.Meaning)
 		assert.Equal(t, "story", got.NotebookKind)
 		assert.Contains(t, got.ExampleSentence, "losing my temper",
@@ -216,7 +216,7 @@ notebooks:
 	})
 
 	t.Run("falls back to statements when conversations don't carry the idiom", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "idioms", "spill the beans", ExpressionTypeVocabulary, "notebook")
+		got := r.Resolve(context.Background(), "idioms", "spill the beans", ExpressionTypeVocabulary, "", "notebook")
 		assert.Equal(t, "to reveal a secret", got.Meaning)
 		assert.Equal(t, "The trick was to spill the beans without anyone catching on.", got.ExampleSentence,
 			"narration-only scenes must surface the matching statement as the usage example")
@@ -283,21 +283,21 @@ origins:
 
 	t.Run("vocab quiz returns the English meaning even when expressionType says origin", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "gauche",
-			notebook.LearningExpressionTypeOrigin, "notebook")
+			notebook.LearningExpressionTypeOrigin, "", "notebook")
 		assert.Equal(t, "clumsy, tactless, especially in social situations", got.Meaning,
 			"a vocabulary quiz failure must surface the vocabulary meaning regardless of how the learning-history record was tagged")
 	})
 
 	t.Run("etymology quiz returns the origin meaning", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "gauche",
-			notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+			notebook.LearningExpressionTypeOrigin, "", "etymology_breakdown")
 		assert.Equal(t, "left", got.Meaning,
 			"etymology_* quizzes must continue to return the origin meaning")
 	})
 
 	t.Run("reverse vocab quiz also returns the English meaning", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "gauche",
-			notebook.LearningExpressionTypeOrigin, "reverse")
+			notebook.LearningExpressionTypeOrigin, "", "reverse")
 		assert.Equal(t, "clumsy, tactless, especially in social situations", got.Meaning)
 	})
 }
@@ -333,7 +333,7 @@ notebooks:
 	require.NoError(t, err)
 	r := NewNotebookMetadataResolver(reader)
 
-	got := r.Resolve(context.Background(), "wpme", "geriatrics", ExpressionTypeVocabulary, "notebook")
+	got := r.Resolve(context.Background(), "wpme", "geriatrics", ExpressionTypeVocabulary, "", "notebook")
 	assert.Equal(t, "the medicine of the elderly", got.Meaning)
 	assert.Equal(t, "The clinic specializes in geriatrics.", got.ExampleSentence)
 	assert.Equal(t, "story", got.NotebookKind, "definitions-only notebooks deep-link via the story reader")
@@ -449,7 +449,7 @@ relations:
 
 	t.Run("vocab card: concept + origin family + antonym", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "gauche",
-			notebook.LearningExpressionTypeOrigin, "notebook")
+			notebook.LearningExpressionTypeOrigin, "", "notebook")
 		require.NotEmpty(t, got.RelatedGroups, "vocab card on a notebook with concepts must carry related groups")
 
 		byKind := map[string]RelatedGroup{}
@@ -479,7 +479,7 @@ relations:
 
 	t.Run("origin card: no concept group; origin_family + antonym only", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "gauche",
-			notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+			notebook.LearningExpressionTypeOrigin, "", "etymology_breakdown")
 		require.NotEmpty(t, got.RelatedGroups)
 		for _, g := range got.RelatedGroups {
 			assert.NotEqual(t, "concept", g.Kind,
@@ -489,7 +489,7 @@ relations:
 
 	t.Run("singleton concept does not produce a sibling chip", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "dexterous",
-			ExpressionTypeVocabulary, "notebook")
+			ExpressionTypeVocabulary, "", "notebook")
 		for _, g := range got.RelatedGroups {
 			assert.NotEqual(t, "concept", g.Kind,
 				"a concept whose only member is the word itself contributes no siblings — the empty group must be dropped, not rendered as an empty chip")
@@ -524,6 +524,6 @@ notebooks:
 	require.NoError(t, err)
 	r := NewNotebookMetadataResolver(reader)
 
-	got := r.Resolve(context.Background(), "vocab", "ephemeral", ExpressionTypeVocabulary, "notebook")
+	got := r.Resolve(context.Background(), "vocab", "ephemeral", ExpressionTypeVocabulary, "", "notebook")
 	assert.Empty(t, got.RelatedGroups, "notebooks without concepts must not synthesize related groups")
 }

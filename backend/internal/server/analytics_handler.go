@@ -71,10 +71,11 @@ func (h *AnalyticsHandler) GetWordHistory(
 	req *connect.Request[apiv1.GetWordHistoryRequest],
 ) (*connect.Response[apiv1.GetWordHistoryResponse], error) {
 	hist, err := h.repo.WordHistory(ctx, analytics.WordRef{
-		NoteID:     req.Msg.NoteId,
-		NotebookID: req.Msg.NotebookId,
-		Expression: req.Msg.Expression,
-		QuizType:   req.Msg.QuizType,
+		NoteID:       req.Msg.NoteId,
+		NotebookID:   req.Msg.NotebookId,
+		Expression:   req.Msg.Expression,
+		PartOfSpeech: req.Msg.PartOfSpeech,
+		QuizType:     req.Msg.QuizType,
 	})
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -97,6 +98,7 @@ func (h *AnalyticsHandler) GetWordHistory(
 		CurrentStatus:      hist.CurrentStatus,
 		CurrentWrongStreak: int32(hist.CurrentWrongStreak),
 		Attempts:           attempts,
+		PartOfSpeech:       hist.PartOfSpeech,
 	}), nil
 }
 
@@ -232,6 +234,7 @@ func wrongWordToProto(w analytics.WrongWord) *apiv1.WrongWord {
 		NotebookKind:          w.NotebookKind,
 		Skipped:               w.Skipped,
 		RelatedGroups:         related,
+		PartOfSpeech:          w.PartOfSpeech,
 	}
 }
 

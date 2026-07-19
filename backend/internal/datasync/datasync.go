@@ -18,10 +18,14 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-type noteKey struct{ usage, entry string }
+// noteKey is the note identity used to match a source note against an
+// existing DB note during import. It mirrors the DB unique key
+// (usage, entry, part_of_speech) so two homograph senses of the same
+// spelling classify as two distinct notes rather than colliding into one.
+type noteKey struct{ usage, entry, partOfSpeech string }
 
-func newNoteKey(usage, entry string) noteKey {
-	return noteKey{strings.ToLower(usage), strings.ToLower(entry)}
+func newNoteKey(usage, entry, partOfSpeech string) noteKey {
+	return noteKey{strings.ToLower(usage), strings.ToLower(entry), strings.ToLower(strings.TrimSpace(partOfSpeech))}
 }
 
 type logKey struct {
@@ -348,7 +352,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 
 	// Build caches from DB notes
 	for i := range allNotes {
-		state.noteCache[newNoteKey(allNotes[i].Usage, allNotes[i].Entry)] = &allNotes[i]
+		state.noteCache[newNoteKey(allNotes[i].Usage, allNotes[i].Entry, allNotes[i].PartOfSpeech)] = &allNotes[i]
 		for _, nn := range allNotes[i].NotebookNotes {
 			k := nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
 			state.nnCache[k] = true
@@ -427,7 +431,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 }
 
 func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions, state *classifyState) {
-	key := newNoteKey(src.Usage, src.Entry)
+	key := newNoteKey(src.Usage, src.Entry, src.PartOfSpeech)
 	existing := state.noteCache[key]
 
 	if existing == nil {

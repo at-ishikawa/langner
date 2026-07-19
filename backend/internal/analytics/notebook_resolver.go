@@ -41,7 +41,11 @@ func NewNotebookMetadataResolver(reader *notebook.Reader) MetadataResolver {
 //
 // expressionType is used as a fallback only when the quiz type is
 // missing (legacy callers / no-op resolver).
-func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expression, expressionType, quizType string) WordMetadata {
+//
+// partOfSpeech selects the sense for a homograph on the vocabulary side.
+// Etymology origins carry no part of speech, so it is only threaded into
+// resolveVocab.
+func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expression, expressionType, partOfSpeech, quizType string) WordMetadata {
 	if r == nil || r.reader == nil || notebookID == "" || expression == "" {
 		return WordMetadata{}
 	}
@@ -49,12 +53,12 @@ func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expres
 		if isEtymologyQuizType(quizType) {
 			return r.resolveOrigin(notebookID, expression)
 		}
-		return r.resolveVocab(notebookID, expression)
+		return r.resolveVocab(notebookID, expression, partOfSpeech)
 	}
 	if expressionType == notebook.LearningExpressionTypeOrigin {
 		return r.resolveOrigin(notebookID, expression)
 	}
-	return r.resolveVocab(notebookID, expression)
+	return r.resolveVocab(notebookID, expression, partOfSpeech)
 }
 
 // isEtymologyQuizType identifies the quiz types whose attempt records
@@ -75,13 +79,13 @@ func isEtymologyQuizType(quizType string) bool {
 // the resolver has to walk all four. Matching is case-insensitive as a
 // defensive fallback because the YAML expression can drift in case from the
 // learning-history record.
-func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) WordMetadata {
+func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression, partOfSpeech string) WordMetadata {
 	target := strings.TrimSpace(expression)
 
 	if stories, err := r.reader.ReadStoryNotebooks(notebookID); err == nil {
 		for _, s := range stories {
 			for _, scene := range s.Scenes {
-				if meta, note, ok := findVocabNote(scene.Definitions, target); ok {
+				if meta, note, ok := findVocabNote(scene.Definitions, target, partOfSpeech); ok {
 					meta.NotebookKind = "story"
 					if meta.ExampleSentence == "" {
 						// Story-style notebooks (Speak English Like an American,
@@ -103,7 +107,7 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 	}
 	if flashcards, err := r.reader.ReadFlashcardNotebooks(notebookID); err == nil {
 		for _, fc := range flashcards {
-			if meta, note, ok := findVocabNote(fc.Cards, target); ok {
+			if meta, note, ok := findVocabNote(fc.Cards, target, partOfSpeech); ok {
 				meta.NotebookKind = "flashcard"
 				meta.RelatedGroups = r.computeVocabRelatedGroups(notebookID, note)
 				return meta
@@ -116,7 +120,7 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 	if defs, ok := r.reader.GetDefinitionsNotes(notebookID); ok {
 		for _, sessionDefs := range defs {
 			for _, sceneNotes := range sessionDefs {
-				if meta, note, ok := findVocabNote(sceneNotes, target); ok {
+				if meta, note, ok := findVocabNote(sceneNotes, target, partOfSpeech); ok {
 					// Definitions get merged into the story reader view at
 					// runtime, so a "story" kind here lands the deep link on
 					// /learn/{id} where the word will be highlighted.
@@ -265,18 +269,45 @@ func lookupDefinitionAlias(notes []notebook.Note, expression string) string {
 // can read origin_parts (used to compute the etymology side of the
 // analytics card's Related Words block). The boolean is true when a
 // matching note was found.
-func findVocabNote(notes []notebook.Note, expression string) (WordMetadata, notebook.Note, bool) {
-	for _, n := range notes {
+//
+// Sense resolution is two-pass so a homograph shows its own meaning while
+// legacy (pre-migration) attempts keep resolving exactly as before:
+//
+//   - An exact part-of-speech match wins outright — "record" the verb finds
+//     the verb note even when the noun note appears first.
+//   - Otherwise the first same-spelling note is the fallback. This covers an
+//     empty query sense (a legacy attempt matches any note, today's behavior)
+//     and a sense that has no tagged note yet (unmigrated source data).
+func findVocabNote(notes []notebook.Note, expression, partOfSpeech string) (WordMetadata, notebook.Note, bool) {
+	want := normalizeSense(partOfSpeech)
+	var fallback *notebook.Note
+	for i := range notes {
+		n := notes[i]
 		if !matchExpression(n.Expression, n.Definition, expression) {
 			continue
 		}
-		meta := WordMetadata{Meaning: n.Meaning}
-		if len(n.Examples) > 0 {
-			meta.ExampleSentence = n.Examples[0]
+		if want != "" && normalizeSense(n.PartOfSpeech) == want {
+			return vocabNoteMeta(n), n, true
 		}
-		return meta, n, true
+		if fallback == nil {
+			f := n
+			fallback = &f
+		}
+	}
+	if fallback != nil {
+		return vocabNoteMeta(*fallback), *fallback, true
 	}
 	return WordMetadata{}, notebook.Note{}, false
+}
+
+// vocabNoteMeta builds the metadata surfaced on the analytics card from a
+// source note: its canonical meaning and first example (when present).
+func vocabNoteMeta(n notebook.Note) WordMetadata {
+	meta := WordMetadata{Meaning: n.Meaning}
+	if len(n.Examples) > 0 {
+		meta.ExampleSentence = n.Examples[0]
+	}
+	return meta
 }
 
 // matchExpression compares the target against both the canonical expression

@@ -110,6 +110,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
         noteId: word.noteId,
         notebookId: word.notebookId,
         expression: word.expression,
+        partOfSpeech: word.partOfSpeech,
         quizType: word.quizType,
       });
       setAttempts(resp.attempts);

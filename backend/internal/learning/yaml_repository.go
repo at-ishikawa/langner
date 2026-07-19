@@ -462,6 +462,7 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 		undo := updater.UndoOverrideLog(notebook.UndoOverrideLogInput{
 			Expression:           in.Expression,
 			OriginalExpression:   in.OriginalExpression,
+			PartOfSpeech:         in.PartOfSpeech,
 			QuizType:             notebook.QuizType(in.QuizType),
 			LearnedAt:            formatLearnedAt(in.LearnedAt),
 			OriginalQuality:      in.MirrorValues.Quality,
@@ -483,6 +484,7 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 		res = updater.OverrideLog(notebook.OverrideLogInput{
 			Expression:         in.Expression,
 			OriginalExpression: in.OriginalExpression,
+			PartOfSpeech:       in.PartOfSpeech,
 			QuizType:           notebook.QuizType(in.QuizType),
 			LearnedAt:          formatLearnedAt(in.LearnedAt),
 			MarkCorrect:        in.MarkCorrect,
@@ -500,7 +502,7 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 	// exact bytes onto the secondary store. The updater's result
 	// already carries originals; we re-resolve the expression to read
 	// out the new status/quality/interval that landed on disk.
-	expr := updater.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	expr := updater.FindExpressionBySense(in.PartOfSpeech, in.Expression, in.OriginalExpression)
 	var newStatus string
 	var newQuality, newInterval int
 	if expr != nil {

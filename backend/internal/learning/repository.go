@@ -30,10 +30,14 @@ type UpdateLogInput struct {
 	SceneTitle         string
 	Expression         string
 	OriginalExpression string
-	QuizType           string
-	LearnedAt          time.Time
-	MarkCorrect        *bool
-	MirrorValues       *UpdateLogMirror
+	// PartOfSpeech is the sense discriminator (see issue #32). Passed
+	// through to the YAML/DB lookup so the override targets the right
+	// homograph sense; empty matches a legacy (untagged) entry.
+	PartOfSpeech string
+	QuizType     string
+	LearnedAt    time.Time
+	MarkCorrect  *bool
+	MirrorValues *UpdateLogMirror
 }
 
 // UpdateLogMirror carries the already-computed new values when a
@@ -138,9 +142,9 @@ func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *Learni
 
 	var noteID int64
 	if err := r.db.GetContext(ctx, &noteID, `
-		INSERT INTO notes ("usage", entry, meaning) VALUES ($1, $2, $3)
-		ON CONFLICT ("usage", entry) DO UPDATE SET "usage" = EXCLUDED."usage"
-		RETURNING id`, usage, entry, ""); err != nil {
+		INSERT INTO notes ("usage", entry, meaning, part_of_speech) VALUES ($1, $2, $3, $4)
+		ON CONFLICT ("usage", entry, part_of_speech) DO UPDATE SET "usage" = EXCLUDED."usage"
+		RETURNING id`, usage, entry, "", log.PartOfSpeech); err != nil {
 		return 0, fmt.Errorf("insert note: %w", err)
 	}
 	return noteID, nil
@@ -210,8 +214,8 @@ func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput)
 			entry = in.Expression
 		}
 		if err := r.db.GetContext(ctx, &noteID,
-			`SELECT id FROM notes WHERE "usage" = $1 AND entry = $2`,
-			in.Expression, entry); err != nil {
+			`SELECT id FROM notes WHERE "usage" = $1 AND entry = $2 AND part_of_speech = $3`,
+			in.Expression, entry, in.PartOfSpeech); err != nil {
 			// No note matches — soft no-op.
 			return UpdateLogResult{}, nil
 		}

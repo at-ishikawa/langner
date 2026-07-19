@@ -76,9 +76,10 @@ func (c RelearnCard) IsEtymology() bool {
 	return c.Format == notebook.QuizTypeEtymologyStandard || c.Format == notebook.QuizTypeEtymologyReverse
 }
 
-// relearnKeySep separates the fields of the internal de-dup key ((format,
-// notebook, expression)). It is the ASCII Unit Separator (0x1F), which cannot
-// appear in notebook names or expressions.
+// relearnKeySep separates the fields of the internal de-dup and index keys
+// ((format, notebook, expression, part_of_speech)). It is the ASCII Unit
+// Separator (0x1F), which cannot appear in notebook names, expressions, or
+// parts of speech.
 const relearnKeySep = "\x1f"
 
 // relearnCandidate is an intermediate per-format wrong-word record before it is
@@ -86,6 +87,13 @@ const relearnKeySep = "\x1f"
 type relearnCandidate struct {
 	notebookName string
 	expression   string
+	// partOfSpeech is the sense discriminator copied from the learning-history
+	// entry. It selects which homograph sense (e.g. "record" the noun vs the
+	// verb) this failure belongs to when resolving the card. Empty means a
+	// legacy/unspecified sense (pre-migration entry) and falls back to a
+	// sense-less lookup — mirroring notebook.MatchesSense's legacy-or-exact
+	// semantics.
+	partOfSpeech string
 	format       notebook.QuizType
 	latestWrong  time.Time
 }
@@ -120,13 +128,19 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			if latest.LearnedAt.Before(windowStart) || latest.Status != notebook.LearnedStatusMisunderstood {
 				continue
 			}
-			key := string(sp.format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expr.Expression))
+			// Key includes the entry's part_of_speech so two same-spelling
+			// homograph senses (e.g. "record" noun vs verb) are distinct
+			// candidates rather than colliding under one key.
+			key := string(sp.format) + relearnKeySep + notebookName + relearnKeySep +
+				strings.ToLower(strings.TrimSpace(expr.Expression)) + relearnKeySep +
+				strings.ToLower(strings.TrimSpace(expr.PartOfSpeech))
 			if existing, ok := candidates[key]; ok && !latest.LearnedAt.After(existing.latestWrong) {
 				continue
 			}
 			candidates[key] = relearnCandidate{
 				notebookName: notebookName,
 				expression:   expr.Expression,
+				partOfSpeech: expr.PartOfSpeech,
 				format:       sp.format,
 				latestWrong:  latest.LearnedAt.Time,
 			}
@@ -150,7 +164,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return nil, nil
 	}
 
-	vocabByExpr, vocabByNotebookExpr, err := s.relearnVocabIndex()
+	vocabCards, err := s.relearnVocabIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -172,10 +186,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			})
 			continue
 		}
-		fc, ok := vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]
-		if !ok {
-			fc, ok = vocabByExpr[strings.ToLower(strings.TrimSpace(c.expression))]
-		}
+		fc, ok := vocabCards.resolve(c.notebookName, c.expression, c.partOfSpeech)
 		if !ok {
 			continue // no vocab data to grade/display against
 		}
@@ -228,27 +239,75 @@ func relearnSeries(expr notebook.LearningHistoryExpression) []relearnSeriesSpec 
 	}
 }
 
-// relearnVocabIndex loads every vocabulary word once and indexes it both by
-// (notebook, expression) and by expression alone so the pool can resolve a
-// wrong word to its meaning and context.
-func (s *Service) relearnVocabIndex() (byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard, err error) {
+// relearnVocabCards indexes every vocabulary word for relearn resolution. Cards
+// are keyed both by sense (notebook+expr+part_of_speech and expr+part_of_speech)
+// so two same-spelling homograph senses resolve to their own meaning/context,
+// and by the sense-less keys (notebook+expr and expr, last-write-wins) that
+// serve as a legacy fallback when a wrong word has no recorded sense or when no
+// exact-sense card exists.
+type relearnVocabCards struct {
+	byNotebookExprSense map[string]FreeformCard
+	byExprSense         map[string]FreeformCard
+	byNotebookExpr      map[string]FreeformCard // sense-less fallback
+	byExpr              map[string]FreeformCard // sense-less fallback
+}
+
+// resolve returns the card for a wrong word, preferring the exact sense. It
+// mirrors notebook.MatchesSense's legacy-or-exact semantics: with a known sense
+// it tries (notebook, expr, sense) then (expr, sense) first; a missing sense or
+// an unmatched sense falls back to the sense-less lookup so pre-migration wrong
+// words still resolve.
+func (idx relearnVocabCards) resolve(notebookName, expression, partOfSpeech string) (FreeformCard, bool) {
+	nb := strings.ToLower(notebookName)
+	e := strings.ToLower(strings.TrimSpace(expression))
+	pos := strings.ToLower(strings.TrimSpace(partOfSpeech))
+	if pos != "" {
+		if fc, ok := idx.byNotebookExprSense[nb+relearnKeySep+e+relearnKeySep+pos]; ok {
+			return fc, true
+		}
+		if fc, ok := idx.byExprSense[e+relearnKeySep+pos]; ok {
+			return fc, true
+		}
+	}
+	if fc, ok := idx.byNotebookExpr[nb+relearnKeySep+e]; ok {
+		return fc, true
+	}
+	if fc, ok := idx.byExpr[e]; ok {
+		return fc, true
+	}
+	return FreeformCard{}, false
+}
+
+// relearnVocabIndex loads every vocabulary word once and builds the sense-aware
+// index used to resolve a wrong word to its meaning and context.
+func (s *Service) relearnVocabIndex() (relearnVocabCards, error) {
 	words, err := s.LoadAllWords()
 	if err != nil {
-		return nil, nil, fmt.Errorf("load words for relearn pool: %w", err)
+		return relearnVocabCards{}, fmt.Errorf("load words for relearn pool: %w", err)
 	}
-	byExpr = make(map[string]FreeformCard, len(words))
-	byNotebookExpr = make(map[string]FreeformCard, len(words))
+	idx := relearnVocabCards{
+		byNotebookExprSense: make(map[string]FreeformCard, len(words)),
+		byExprSense:         make(map[string]FreeformCard, len(words)),
+		byNotebookExpr:      make(map[string]FreeformCard, len(words)),
+		byExpr:              make(map[string]FreeformCard, len(words)),
+	}
 	for _, w := range words {
+		nb := strings.ToLower(w.NotebookName)
+		pos := strings.ToLower(strings.TrimSpace(w.PartOfSpeech))
 		for _, e := range []string{w.Expression, w.OriginalExpression} {
 			e = strings.ToLower(strings.TrimSpace(e))
 			if e == "" {
 				continue
 			}
-			byExpr[e] = w
-			byNotebookExpr[strings.ToLower(w.NotebookName)+relearnKeySep+e] = w
+			idx.byExpr[e] = w
+			idx.byNotebookExpr[nb+relearnKeySep+e] = w
+			if pos != "" {
+				idx.byExprSense[e+relearnKeySep+pos] = w
+				idx.byNotebookExprSense[nb+relearnKeySep+e+relearnKeySep+pos] = w
+			}
 		}
 	}
-	return byExpr, byNotebookExpr, nil
+	return idx, nil
 }
 
 // relearnEtymologyIndex loads every etymology origin once and indexes the

@@ -76,6 +76,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 			NextReviewDate: nextReviewDate,
 			LearnedAt:      learnedAt,
 			Images:         cards[i].Images,
+			PartOfSpeech:   cards[i].PartOfSpeech,
 		}
 	}
 
@@ -150,6 +151,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 			NextReviewDate: nextReviewDate,
 			LearnedAt:      learnedAt,
 			Images:         cards[i].Images,
+			PartOfSpeech:   cards[i].PartOfSpeech,
 		}
 	}
 

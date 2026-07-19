@@ -39,6 +39,9 @@ export function useQuizResultActions(quizType: QuizType): QuizResultActions {
         quizType: protoQt,
         learnedAt: item.learnedAt,
         markCorrect: !item.correct,
+        // Echo the sense discriminator so the override targets the correct
+        // sense of a homograph. Empty for single-sense / legacy words.
+        partOfSpeech: item.partOfSpeech,
       });
       overrideResult(item.index, quizType, res.nextReviewDate || "", {
         quality: res.originalQuality,
@@ -65,6 +68,9 @@ export function useQuizResultActions(quizType: QuizType): QuizResultActions {
         originalQuality: original.originalValues.quality,
         originalStatus: original.originalValues.status,
         originalIntervalDays: original.originalValues.intervalDays,
+        // Echo the sense discriminator so the undo targets the same sense
+        // the override wrote. Empty for single-sense / legacy words.
+        partOfSpeech: item.partOfSpeech,
       });
       undoOverrideResult(item.index, quizType, res.correct, res.nextReviewDate || "");
     } catch { /* silently fail */ }

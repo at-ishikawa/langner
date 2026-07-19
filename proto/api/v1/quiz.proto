@@ -184,6 +184,11 @@ message SubmitAnswerResponse {
   string next_review_date = 5;
   string learned_at = 6;
   repeated string images = 7;
+  // part_of_speech is the sense discriminator of the just-written learning
+  // log. The frontend echoes it back on OverrideAnswer/UndoOverrideAnswer so
+  // the override targets the correct sense of a homograph (e.g. "record" the
+  // noun vs the verb). Empty for single-sense / legacy words.
+  string part_of_speech = 8;
 }
 
 message BatchSubmitAnswersRequest {
@@ -261,6 +266,8 @@ message SubmitReverseAnswerResponse {
   string next_review_date = 8;
   string learned_at = 9;
   repeated string images = 10;
+  // part_of_speech: see SubmitAnswerResponse.part_of_speech.
+  string part_of_speech = 11;
 }
 
 message BatchSubmitReverseAnswersRequest {
@@ -309,6 +316,8 @@ message SubmitFreeformAnswerResponse {
   string learned_at = 9;
   int64 note_id = 10;
   repeated string images = 11;
+  // part_of_speech: see SubmitAnswerResponse.part_of_speech.
+  string part_of_speech = 12;
 }
 
 // Override Answer
@@ -322,6 +331,10 @@ message OverrideAnswerRequest {
   ];
   optional bool mark_correct = 4;
   optional string next_review_date = 5;
+  // part_of_speech identifies which sense of a homograph the override
+  // targets. Echoed from the Submit*Response the frontend rendered. Empty
+  // matches the legacy/unspecified sense so pre-change data still overrides.
+  string part_of_speech = 6;
 }
 
 message OverrideAnswerResponse {
@@ -345,6 +358,8 @@ message UndoOverrideAnswerRequest {
   string original_status = 5;
   int32 original_interval_days = 6;
   reserved 7;
+  // part_of_speech: see OverrideAnswerRequest.part_of_speech.
+  string part_of_speech = 8;
 }
 
 message UndoOverrideAnswerResponse {

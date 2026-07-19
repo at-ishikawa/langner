@@ -56,12 +56,23 @@ type WordRef struct {
 	NotebookID string
 	Expression string
 	QuizType   string
+	// PartOfSpeech is the sense discriminator for a homograph (e.g. "record"
+	// the noun vs the verb). Empty means "any sense" — the legacy behavior
+	// that commingles every same-spelling series, so a request that predates
+	// the sense-aware frontend still resolves. With Expression it selects the
+	// one series to return; see MatchesSense in the notebook package.
+	PartOfSpeech string
 }
 
 // WrongWord is the per-card payload on the Day Detail page.
 type WrongWord struct {
-	NoteID                int64
-	Expression            string
+	NoteID     int64
+	Expression string
+	// PartOfSpeech is the sense of the expression (e.g. "noun" / "verb").
+	// Empty for single-sense words and legacy (pre-migration) entries. Two
+	// homograph senses produce two WrongWord cards; the frontend surfaces
+	// this so "record" the noun and "record" the verb read as distinct.
+	PartOfSpeech          string
 	NotebookID            string
 	NotebookTitle         string
 	SceneTitle            string
@@ -132,7 +143,11 @@ const (
 
 // WordHistory is the payload returned by GetWordHistory.
 type WordHistory struct {
-	Expression         string
+	Expression string
+	// PartOfSpeech echoes the resolved sense of the series (empty for
+	// single-sense / legacy words), so the frontend header can disambiguate a
+	// homograph's history from its other sense.
+	PartOfSpeech       string
 	NotebookID         string
 	NotebookTitle      string
 	CurrentStatus      string

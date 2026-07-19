@@ -50,7 +50,12 @@ type TrendsQuery struct {
 // aggregation logic lives in exactly one place — the read side of the L2
 // symmetric-read invariant.
 type TrendAttempt struct {
-	Expression    string
+	Expression string
+	// PartOfSpeech is the sense discriminator. It is part of the series key
+	// and the distinct-word identity so two homograph senses (e.g. "record"
+	// noun vs verb) are tested / learned / charted as two words, not one.
+	// Empty for single-sense / legacy entries.
+	PartOfSpeech  string
 	NotebookID    string
 	NotebookTitle string
 	QuizType      string
@@ -157,9 +162,17 @@ func boxIntervalDays(box int) int {
 // independent progressions; per the L1 invariant a word's logs live under
 // one canonical notebook anyway.
 type seriesKey struct {
-	notebookID string
-	expression string
-	quizType   string
+	notebookID   string
+	expression   string
+	partOfSpeech string
+	quizType     string
+}
+
+// wordIdentity is the distinct-word key for the range/backlog roll-ups: a
+// word is identified by its spelling AND its sense, so a homograph's two
+// senses count as two words (matching the two independent series they form).
+func wordIdentity(a TrendAttempt) string {
+	return a.Expression + "\x00" + normalizeSense(a.PartOfSpeech)
 }
 
 // flaggedAttempt carries an attempt with the per-attempt events derived
@@ -180,7 +193,7 @@ type flaggedAttempt struct {
 func ComputeTrends(attempts []TrendAttempt, q TrendsQuery) TrendsResult {
 	series := map[seriesKey][]TrendAttempt{}
 	for _, a := range attempts {
-		k := seriesKey{a.NotebookID, a.Expression, a.QuizType}
+		k := seriesKey{a.NotebookID, a.Expression, normalizeSense(a.PartOfSpeech), a.QuizType}
 		series[k] = append(series[k], a)
 	}
 
@@ -235,10 +248,11 @@ func computeBacklog(series map[seriesKey][]TrendAttempt, endExcl time.Time, flag
 			if endExcl.IsZero() || a.LearnedAt.Before(endExcl) {
 				sawInRange = true
 				lastStatus = a.Status
-				ws := words[a.Expression]
+				id := wordIdentity(a)
+				ws := words[id]
 				if ws == nil {
 					ws = &wordState{}
-					words[a.Expression] = ws
+					words[id] = ws
 				}
 				ws.hasAttempt = true
 				if isCorrect(a.Status) {
@@ -248,7 +262,7 @@ func computeBacklog(series map[seriesKey][]TrendAttempt, endExcl time.Time, flag
 		}
 		if sawInRange && isMastered(lastStatus) {
 			// list's last in-range status maps to the series' latest word.
-			words[list[len(list)-1].Expression].mastered = true
+			words[wordIdentity(list[len(list)-1])].mastered = true
 		}
 	}
 
@@ -311,13 +325,14 @@ func aggregateBuckets(flags []flaggedAttempt, q TrendsQuery, endExcl time.Time) 
 			g = &seriesAgg{label: label, tested: map[string]struct{}{}, learned: map[string]struct{}{}}
 			groups[key] = g
 		}
+		wordID := wordIdentity(a)
 		g.attempts++
-		g.tested[a.Expression] = struct{}{}
+		g.tested[wordID] = struct{}{}
 		summary.Attempts++
-		sumTested[a.Expression] = struct{}{}
+		sumTested[wordID] = struct{}{}
 		if f.crossing {
-			g.learned[a.Expression] = struct{}{}
-			sumLearned[a.Expression] = struct{}{}
+			g.learned[wordID] = struct{}{}
+			sumLearned[wordID] = struct{}{}
 		}
 		if f.levelUp {
 			g.levelUps++

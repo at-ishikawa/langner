@@ -230,6 +230,12 @@ message WrongWord {
   // row under the meaning and the full block in the expanded panel so a
   // wrong word never reads in isolation.
   repeated RelatedGroup related_groups = 15;
+  // part_of_speech is the sense discriminator (issue #32). Two
+  // same-spelling entries with different senses (e.g. "record" noun vs
+  // verb) are distinct series; the frontend passes this back on the
+  // word-history drill so the correct sense's history is shown. Empty
+  // for legacy/untagged entries and etymology origins.
+  string part_of_speech = 16;
 }
 
 // RelatedGroup is one cluster of related entries surfaced on the
@@ -264,6 +270,9 @@ message GetWordHistoryRequest {
   string quiz_type = 4 [
     (buf.validate.field).string.min_len = 1
   ];
+  // part_of_speech selects the homograph sense (issue #32); empty matches
+  // a legacy/untagged series.
+  string part_of_speech = 5;
 }
 
 message GetWordHistoryResponse {
@@ -273,6 +282,8 @@ message GetWordHistoryResponse {
   string current_status = 4;
   int32 current_wrong_streak = 5;
   repeated AttemptEntry attempts = 6;
+  // part_of_speech echoes the resolved sense (issue #32).
+  string part_of_speech = 7;
 }
 
 // AttemptEntry is a single past attempt with the streak context just

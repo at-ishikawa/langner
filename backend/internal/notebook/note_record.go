@@ -15,6 +15,10 @@ type NoteRecord struct {
 	// ingestion time from the parsed concepts: block; populated only for
 	// definitions-side notes.
 	ConceptKey       string          `db:"concept_key"`
+	// PartOfSpeech is the sense discriminator (see issue #32). Together with
+	// (usage, entry) it forms the note's identity: two homograph senses of
+	// the same spelling are two rows. Empty is the legacy/unspecified sense.
+	PartOfSpeech     string          `db:"part_of_speech"`
 	CreatedAt        time.Time       `db:"created_at"`
 	UpdatedAt        time.Time       `db:"updated_at"`
 	SkippedAt        *time.Time      `db:"skipped_at"`
@@ -25,7 +29,6 @@ type NoteRecord struct {
 	DefinitionsDir string   `db:"-"`
 	NotebookFile   string   `db:"-"`
 	SceneIndex     int      `db:"-"`
-	PartOfSpeech   string   `db:"-"`
 	Examples       []string `db:"-"`
 }
 

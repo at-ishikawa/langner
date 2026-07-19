@@ -472,6 +472,47 @@ func TestImporter_ImportNotes(t *testing.T) {
 			},
 			wantErr: true,
 		},
+		{
+			// Two homograph senses of the same spelling are distinct notes:
+			// the DB already has the noun, so importing noun+verb skips the
+			// noun and creates the verb rather than collapsing them into one
+			// note by (usage, entry) alone.
+			name: "homograph senses classify as separate notes",
+			opts: ImportOptions{},
+			setup: func(noteSource *mock_datasync.MockNoteSource, noteRepo *mock_notebook.MockNoteRepository) {
+				noteSource.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{
+						Usage: "record", Entry: "record", PartOfSpeech: "noun",
+						NotebookNotes: []notebook.NotebookNote{
+							{NotebookType: "flashcard", NotebookID: "vocab", Group: "Unit"},
+						},
+					},
+					{
+						Usage: "record", Entry: "record", PartOfSpeech: "verb",
+						NotebookNotes: []notebook.NotebookNote{
+							{NotebookType: "flashcard", NotebookID: "vocab", Group: "Unit"},
+						},
+					},
+				}, nil)
+				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
+					{ID: 1, Usage: "record", Entry: "record", PartOfSpeech: "noun", NotebookNotes: []notebook.NotebookNote{
+						{NoteID: 1, NotebookType: "flashcard", NotebookID: "vocab", Group: "Unit"},
+					}},
+				}, nil)
+				noteRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, notes []*notebook.NoteRecord) error {
+						require.Len(t, notes, 1)
+						assert.Equal(t, "verb", notes[0].PartOfSpeech, "only the verb sense is new")
+						return nil
+					})
+			},
+			want: &ImportNotesResult{
+				NotesNew:        1,
+				NotesSkipped:    1,
+				NotebookNew:     1,
+				NotebookSkipped: 1,
+			},
+		},
 	}
 
 	for _, tt := range tests {

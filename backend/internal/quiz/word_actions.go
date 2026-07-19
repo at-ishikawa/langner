@@ -47,8 +47,12 @@ type CardInfo struct {
 	SceneTitle         string
 	Expression         string
 	OriginalExpression string
-	LearnedAt          string
-	MarkCorrect        *bool
+	// PartOfSpeech is the sense discriminator (issue #32), set by the
+	// override handler from the request so Mark-as-Correct / Undo target
+	// the correct homograph sense. Empty matches a legacy (untagged) log.
+	PartOfSpeech string
+	LearnedAt    string
+	MarkCorrect  *bool
 	// NoteID is the DB primary key for the note this card represents,
 	// set by the handler when override is routed to a DB-backed repo.
 	// Zero when the card came from a YAML-only deployment (DB-side
@@ -249,6 +253,7 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (Ove
 		SceneTitle:         info.SceneTitle,
 		Expression:         info.Expression,
 		OriginalExpression: info.OriginalExpression,
+		PartOfSpeech:       info.PartOfSpeech,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
 		MarkCorrect:        info.MarkCorrect,
@@ -284,6 +289,7 @@ func (s *Service) UndoOverrideAnswer(info CardInfo, quizType notebook.QuizType) 
 		SceneTitle:         info.SceneTitle,
 		Expression:         info.Expression,
 		OriginalExpression: info.OriginalExpression,
+		PartOfSpeech:       info.PartOfSpeech,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
 		MirrorValues: &learning.UpdateLogMirror{

@@ -136,7 +136,7 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
 		Correct: grade.Correct, Meaning: card.Meaning, Reason: grade.Reason,
 		WordDetail: toProtoWordDetail(card.WordDetail), NextReviewDate: nextReviewDate,
-		LearnedAt: learnedAt, Images: card.Images,
+		LearnedAt: learnedAt, Images: card.Images, PartOfSpeech: card.PartOfSpeech,
 	}), nil
 }
 
@@ -247,7 +247,7 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
 		Correct: grade.Correct, Expression: card.Expression, Meaning: card.Meaning, Reason: grade.Reason,
 		Contexts: contexts, WordDetail: toProtoWordDetail(card.WordDetail), Classification: grade.Classification,
-		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, Images: card.Images,
+		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, Images: card.Images, PartOfSpeech: card.PartOfSpeech,
 	}), nil
 }
 
@@ -288,6 +288,7 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 		WordDetail: func() *apiv1.WordDetail { if grade.MatchedCard != nil { return toProtoWordDetail(grade.MatchedCard.WordDetail) }; return nil }(),
 		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID,
 		Images: func() []string { if grade.MatchedCard != nil { return grade.MatchedCard.Images }; return nil }(),
+		PartOfSpeech: func() string { if grade.MatchedCard != nil { return grade.MatchedCard.PartOfSpeech }; return "" }(),
 	}), nil
 }
 
@@ -585,6 +586,7 @@ func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[a
 	}
 	info.NoteID = req.Msg.GetNoteId()
 	info.LearnedAt = req.Msg.GetLearnedAt()
+	info.PartOfSpeech = req.Msg.GetPartOfSpeech()
 	if req.Msg.MarkCorrect != nil {
 		mc := req.Msg.GetMarkCorrect()
 		info.MarkCorrect = &mc
@@ -612,6 +614,7 @@ func (h *QuizHandler) UndoOverrideAnswer(ctx context.Context, req *connect.Reque
 	}
 	info.NoteID = req.Msg.GetNoteId()
 	info.LearnedAt = req.Msg.GetLearnedAt()
+	info.PartOfSpeech = req.Msg.GetPartOfSpeech()
 	info.OriginalQuality = int(req.Msg.GetOriginalQuality())
 	info.OriginalStatus = req.Msg.GetOriginalStatus()
 	info.OriginalIntervalDays = int(req.Msg.GetOriginalIntervalDays())

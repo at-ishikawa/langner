@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -49,7 +50,12 @@ type yamlAttempt struct {
 	SceneTitle     string
 	Expression     string
 	ExpressionType string
-	QuizType       string
+	// PartOfSpeech is the learning entry's sense discriminator (normalized:
+	// trimmed + lowercased). It is part of the per-word key so two same-
+	// spelling senses (e.g. "record" noun vs verb) count and chart as
+	// separate series. Empty for single-sense / legacy entries.
+	PartOfSpeech string
+	QuizType     string
 	// Skipped is true when the expression's SkippedAt map has a non-empty
 	// timestamp for this attempt's QuizType. Captured at load time so the
 	// per-day detail builder doesn't need to re-walk the history files to
@@ -136,6 +142,7 @@ func appendExpressionAttempts(
 				SceneTitle:     sceneTitle,
 				Expression:     exp.Expression,
 				ExpressionType: exp.Type,
+				PartOfSpeech:   exp.PartOfSpeech,
 				QuizType:       quizType,
 				Skipped:        skipped,
 				IntervalDays:   rec.IntervalDays,
@@ -211,12 +218,18 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 	}
 
 	dayStr := dayKey(day)
-	// Index attempts by (notebookID, expression, quizType) so we can find each
-	// word's full log to compute streak/pattern.
+	// Index attempts by (notebookID, expression, partOfSpeech, quizType) so we
+	// can find each word's full log to compute streak/pattern. The sense is
+	// part of the key so two homograph senses form two independent series and
+	// surface as two cards, each with its own streak/pattern and meaning.
 	type wordKey struct {
-		notebookID string
-		expression string
-		quizType   string
+		notebookID   string
+		expression   string
+		partOfSpeech string
+		quizType     string
+	}
+	keyOf := func(a yamlAttempt) wordKey {
+		return wordKey{a.NotebookID, a.Expression, normalizeSense(a.PartOfSpeech), a.QuizType}
 	}
 	byWord := map[wordKey][]yamlAttempt{}
 	dayHas := map[string]bool{} // YYYY-MM-DD -> seen activity
@@ -227,10 +240,8 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 	for _, a := range attempts {
 		key := dayKey(a.Attempt.LearnedAt)
 		dayHas[key] = true
-		byWord[wordKey{a.NotebookID, a.Expression, a.QuizType}] = append(
-			byWord[wordKey{a.NotebookID, a.Expression, a.QuizType}],
-			a,
-		)
+		wk := keyOf(a)
+		byWord[wk] = append(byWord[wk], a)
 		if key == dayStr {
 			summary.TotalCount++
 			if a.Attempt.IsWrong {
@@ -271,9 +282,10 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 		for i := hitIdx; i < len(records); i++ {
 			fromHit = append(fromHit, records[i].Attempt)
 		}
-		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.Expression, hit.ExpressionType, hit.QuizType)
+		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.Expression, hit.ExpressionType, hit.PartOfSpeech, hit.QuizType)
 		wrong = append(wrong, WrongWord{
 			Expression:            hit.Expression,
+			PartOfSpeech:          hit.PartOfSpeech,
 			NotebookID:            hit.NotebookID,
 			NotebookTitle:         hit.NotebookTitle,
 			SceneTitle:            hit.SceneTitle,
@@ -296,7 +308,10 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 		if !wrong[i].LearnedAt.Equal(wrong[j].LearnedAt) {
 			return wrong[i].LearnedAt.After(wrong[j].LearnedAt)
 		}
-		return wrong[i].Expression < wrong[j].Expression
+		if wrong[i].Expression != wrong[j].Expression {
+			return wrong[i].Expression < wrong[j].Expression
+		}
+		return wrong[i].PartOfSpeech < wrong[j].PartOfSpeech
 	})
 
 	// Find prev/next dates with activity (regardless of correct/wrong) matching filters.
@@ -318,12 +333,19 @@ func (r *YAMLRepository) WordHistory(_ context.Context, ref WordRef) (WordHistor
 	}
 	var matched []yamlAttempt
 	var notebookTitle string
+	var resolvedSense string
 	for _, a := range attempts {
 		if a.Expression != ref.Expression {
 			continue
 		}
+		if !senseMatchesRef(a.PartOfSpeech, ref.PartOfSpeech) {
+			continue
+		}
 		matched = append(matched, a)
 		notebookTitle = a.NotebookTitle
+		if resolvedSense == "" {
+			resolvedSense = a.PartOfSpeech
+		}
 	}
 	sort.Slice(matched, func(i, j int) bool {
 		return matched[i].Attempt.LearnedAt.After(matched[j].Attempt.LearnedAt)
@@ -355,6 +377,7 @@ func (r *YAMLRepository) WordHistory(_ context.Context, ref WordRef) (WordHistor
 	}
 	return WordHistory{
 		Expression:         ref.Expression,
+		PartOfSpeech:       resolvedSense,
 		NotebookID:         ref.NotebookID,
 		NotebookTitle:      notebookTitle,
 		CurrentStatus:      currentStatus,
@@ -376,6 +399,7 @@ func (r *YAMLRepository) Trends(_ context.Context, q TrendsQuery) (TrendsResult,
 	for _, a := range attempts {
 		trendAttempts = append(trendAttempts, TrendAttempt{
 			Expression:    a.Expression,
+			PartOfSpeech:  a.PartOfSpeech,
 			NotebookID:    a.NotebookID,
 			NotebookTitle: a.NotebookTitle,
 			QuizType:      a.QuizType,
@@ -408,6 +432,29 @@ func dayKey(t time.Time) string {
 
 func truncToDay(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// normalizeSense is the canonical sense token used across the analytics
+// package's per-word keys: trimmed + lowercased, matching the notebook
+// package's normalizePartOfSpeech so a series keys identically on both the
+// write and the analytics read side (invariant L2).
+func normalizeSense(pos string) string {
+	return strings.ToLower(strings.TrimSpace(pos))
+}
+
+// senseMatchesRef reports whether a series entry's sense satisfies a
+// WordHistory request's requested sense. An empty requested sense matches
+// any series (the legacy, pre-sense-aware frontend behavior — every
+// same-spelling series is returned commingled). A legacy entry with no
+// sense also satisfies a specific request, so a homograph view never drops
+// pre-migration history. Two distinct tagged senses stay separate.
+func senseMatchesRef(entrySense, refSense string) bool {
+	want := normalizeSense(refSense)
+	if want == "" {
+		return true
+	}
+	got := normalizeSense(entrySense)
+	return got == "" || got == want
 }
 
 func sortedKeys(m map[string]struct{}) []string {

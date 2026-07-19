@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 const sampleHistoryYAML = `- metadata:
@@ -317,6 +319,104 @@ func TestYAMLRepository_DayDetailExposesSkipped(t *testing.T) {
 		"notebook card must carry Skipped=true because skipped_at.notebook is set")
 	require.False(t, bySlot["reverse"].Skipped,
 		"reverse card must carry Skipped=false because skipped_at has no reverse entry — skips are per quiz type")
+}
+
+// TestYAMLRepository_HomographSensesSeparate is the issue #32 reproduction:
+// two same-spelling entries that differ only by part_of_speech (a homograph
+// like "record" the noun vs the verb) must count, list, and resolve as two
+// independent series — not collapse into one. It exercises the full read
+// path: the per-word key splits the two senses into two Day Detail cards,
+// each keeps its own wrong streak, and the sense-aware metadata resolver
+// surfaces each card's own meaning.
+func TestYAMLRepository_HomographSensesSeparate(t *testing.T) {
+	// Learning history: two "record" entries under one flashcard notebook,
+	// distinguished only by part_of_speech. The noun was wrong twice, the
+	// verb once — different streaks prove the series don't commingle.
+	histDir := t.TempDir()
+	history := `- metadata:
+    id: vocab
+    title: Vocab
+    type: flashcard
+  expressions:
+    - expression: record
+      part_of_speech: noun
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-06-10T10:00:00Z"
+          quality: 1
+          quiz_type: notebook
+        - status: misunderstood
+          learned_at: "2026-06-08T10:00:00Z"
+          quality: 1
+          quiz_type: notebook
+    - expression: record
+      part_of_speech: verb
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-06-10T11:00:00Z"
+          quality: 1
+          quiz_type: notebook
+`
+	require.NoError(t, os.WriteFile(filepath.Join(histDir, "vocab.yml"), []byte(history), 0o600))
+
+	// Source flashcards: the two senses carry different meanings so the
+	// resolver has to pick by sense, not by spelling.
+	srcRoot := t.TempDir()
+	flashDir := filepath.Join(srcRoot, "flashcards", "vocab")
+	require.NoError(t, os.MkdirAll(flashDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "index.yml"), []byte(`id: vocab
+name: Vocab
+notebooks:
+  - ./cards.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "cards.yml"), []byte(`- title: Homographs
+  date: 2025-01-01T00:00:00Z
+  cards:
+    - expression: record
+      part_of_speech: noun
+      meaning: a permanent written account
+    - expression: record
+      part_of_speech: verb
+      meaning: to set down for later reference
+`), 0o644))
+
+	reader, err := notebook.NewReader(nil, []string{filepath.Join(srcRoot, "flashcards")}, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	repo := NewYAMLRepository(histDir).WithMetadataResolver(NewNotebookMetadataResolver(reader))
+
+	day, _ := time.Parse("2006-01-02", "2026-06-10")
+	got, err := repo.DayDetail(context.Background(), day, Filters{})
+	require.NoError(t, err)
+
+	require.Len(t, got.WrongWords, 2, "the two senses of 'record' must produce two distinct cards, not one collapsed row")
+
+	bySense := make(map[string]WrongWord, len(got.WrongWords))
+	for _, w := range got.WrongWords {
+		require.Equal(t, "record", w.Expression)
+		bySense[w.PartOfSpeech] = w
+	}
+
+	noun, ok := bySense["noun"]
+	require.True(t, ok, "expected a noun-sense card")
+	require.Equal(t, "a permanent written account", noun.Meaning, "the noun card must show the noun meaning")
+	require.Equal(t, 2, noun.CurrentWrongStreak, "the noun series counts its own two wrong attempts")
+
+	verb, ok := bySense["verb"]
+	require.True(t, ok, "expected a verb-sense card")
+	require.Equal(t, "to set down for later reference", verb.Meaning, "the verb card must show the verb meaning")
+	require.Equal(t, 1, verb.CurrentWrongStreak, "the verb series counts only its own single wrong attempt")
+
+	// Word History for one sense returns only that sense's attempts.
+	nounHist, err := repo.WordHistory(context.Background(), WordRef{
+		NotebookID:   "vocab",
+		Expression:   "record",
+		QuizType:     "notebook",
+		PartOfSpeech: "noun",
+	})
+	require.NoError(t, err)
+	require.Len(t, nounHist.Attempts, 2, "the noun history must not pull in the verb sense's attempt")
+	require.Equal(t, "noun", nounHist.PartOfSpeech)
 }
 
 func TestYAMLRepository_NotebookFilter(t *testing.T) {
