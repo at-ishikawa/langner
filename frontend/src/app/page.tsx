@@ -19,8 +19,14 @@ const features = [
   {
     href: "/analytics",
     title: "Analytics",
-    description: "Review which words you got wrong, day by day",
+    description: "See your learning trends over time",
     icon: "A",
+  },
+  {
+    href: "/history",
+    title: "History",
+    description: "Review which words you got wrong, day by day",
+    icon: "H",
   },
 ];
 

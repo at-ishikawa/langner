@@ -100,6 +100,96 @@ func (h *AnalyticsHandler) GetWordHistory(
 	}), nil
 }
 
+// GetTrends returns the activity metrics over time for the Trends overview.
+func (h *AnalyticsHandler) GetTrends(
+	ctx context.Context,
+	req *connect.Request[apiv1.GetTrendsRequest],
+) (*connect.Response[apiv1.GetTrendsResponse], error) {
+	q := analytics.TrendsQuery{
+		Granularity: granularityFromProto(req.Msg.Granularity),
+		GroupBy:     groupByFromProto(req.Msg.GroupBy),
+		Filters:     unpackFilters(req.Msg.Filters),
+	}
+	if req.Msg.StartDate != "" {
+		start, err := time.Parse("2006-01-02", req.Msg.StartDate)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("start_date: %w", err))
+		}
+		q.Start = start
+	}
+	if req.Msg.EndDate != "" {
+		end, err := time.Parse("2006-01-02", req.Msg.EndDate)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("end_date: %w", err))
+		}
+		q.End = end
+	}
+	res, err := h.repo.Trends(ctx, q)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	buckets := make([]*apiv1.TrendBucket, len(res.Buckets))
+	for i, b := range res.Buckets {
+		series := make([]*apiv1.TrendSeries, len(b.Series))
+		for j, s := range b.Series {
+			series[j] = &apiv1.TrendSeries{
+				GroupKey:     s.GroupKey,
+				GroupLabel:   s.GroupLabel,
+				Attempts:     int32(s.Attempts),
+				WordsTested:  int32(s.WordsTested),
+				WordsLearned: int32(s.WordsLearned),
+				LevelUps:     int32(s.LevelUps),
+				Lapses:       int32(s.Lapses),
+			}
+		}
+		buckets[i] = &apiv1.TrendBucket{Period: formatDate(b.Period), Series: series}
+	}
+	return connect.NewResponse(&apiv1.GetTrendsResponse{
+		Buckets: buckets,
+		Summary: &apiv1.TrendsSummary{
+			Attempts:     int32(res.Summary.Attempts),
+			WordsTested:  int32(res.Summary.WordsTested),
+			WordsLearned: int32(res.Summary.WordsLearned),
+			LevelUps:     int32(res.Summary.LevelUps),
+			Lapses:       int32(res.Summary.Lapses),
+		},
+		Backlog: &apiv1.BacklogSnapshot{
+			NeverCorrect: int32(res.Backlog.NeverCorrect),
+			InProgress:   int32(res.Backlog.InProgress),
+			Mastered:     int32(res.Backlog.Mastered),
+		},
+	}), nil
+}
+
+func granularityFromProto(g apiv1.Granularity) analytics.Granularity {
+	switch g {
+	case apiv1.Granularity_GRANULARITY_WEEK:
+		return analytics.GranularityWeek
+	case apiv1.Granularity_GRANULARITY_MONTH:
+		return analytics.GranularityMonth
+	case apiv1.Granularity_GRANULARITY_YEAR:
+		return analytics.GranularityYear
+	default:
+		return analytics.GranularityDay
+	}
+}
+
+func groupByFromProto(g apiv1.TrendGroupBy) analytics.TrendGroupBy {
+	switch g {
+	case apiv1.TrendGroupBy_TREND_GROUP_BY_QUIZ_TYPE:
+		return analytics.TrendGroupByQuizType
+	case apiv1.TrendGroupBy_TREND_GROUP_BY_NOTEBOOK:
+		return analytics.TrendGroupByNotebook
+	case apiv1.TrendGroupBy_TREND_GROUP_BY_STATUS:
+		return analytics.TrendGroupByStatus
+	case apiv1.TrendGroupBy_TREND_GROUP_BY_LEVEL:
+		return analytics.TrendGroupByLevel
+	default:
+		return analytics.TrendGroupByNone
+	}
+}
+
 func unpackFilters(f *apiv1.AnalyticsFilters) analytics.Filters {
 	if f == nil {
 		return analytics.Filters{}

@@ -63,6 +63,10 @@ func (s *stubRepo) WordHistory(context.Context, analytics.WordRef) (analytics.Wo
 	return analytics.WordHistory{}, nil
 }
 
+func (s *stubRepo) Trends(context.Context, analytics.TrendsQuery) (analytics.TrendsResult, error) {
+	return analytics.TrendsResult{}, nil
+}
+
 func TestWriter_SingleFileWithEveryNotebook(t *testing.T) {
 	day, _ := time.Parse("2006-01-02", "2026-06-16")
 	repo := &stubRepo{

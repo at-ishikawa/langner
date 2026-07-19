@@ -108,7 +108,7 @@ export default function SessionCompletePage() {
         {incorrectCount > 0 && (
           <Box mt={2} textAlign="center">
             <Link
-              href={`/analytics/${localTodayYYYYMMDD()}`}
+              href={`/history/${localTodayYYYYMMDD()}`}
               data-testid="review-wrong-link"
             >
               <Text fontSize="sm" color="blue.500">

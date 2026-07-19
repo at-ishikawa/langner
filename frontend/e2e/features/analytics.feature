@@ -4,13 +4,13 @@ Feature: Quiz Analytics
   only show up in DB mode (sql_mode quirks, missing JOIN columns, etc.) by
   asserting the pages do NOT render the "Failed to load…" error banner.
 
-  Scenario: Open the Analytics Day List from home
+  Scenario: Open the Analytics overview from home
     Given I am on the home page
     When I follow the "Analytics" link
     Then I should be on the Analytics page
     And the Analytics page is not in an error state
 
-  # covers route: /analytics/[date]
+  # covers route: /history/[date]
   Scenario: Open a Day Detail page with seeded wrong words
     Given I open the Analytics Day Detail for "2025-01-02"
     Then I should be on the Analytics Day Detail page

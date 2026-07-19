@@ -55,7 +55,10 @@ type yamlAttempt struct {
 	// per-day detail builder doesn't need to re-walk the history files to
 	// answer "is this card currently excluded".
 	Skipped bool
-	Attempt Attempt
+	// IntervalDays is the record's stored spaced-repetition interval, used
+	// by the Trends level-box aggregation.
+	IntervalDays int
+	Attempt      Attempt
 }
 
 // allAttempts loads every record from every history file, flattens them,
@@ -66,13 +69,17 @@ func (r *YAMLRepository) allAttempts(filters Filters) ([]yamlAttempt, error) {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
 	var out []yamlAttempt
-	for _, list := range histories {
+	// The map key is the learning-history filename (one file per notebook),
+	// which is the canonical notebook identity — the same value the DB path
+	// stores as source_notebook_id. Metadata.Title/id are per-episode
+	// (e.g. "Friends S01E01"), so grouping the analytics "notebook"
+	// dimension on them would split one notebook into many chapters.
+	for notebookName, list := range histories {
+		if filters.NotebookID != "" && filters.NotebookID != notebookName {
+			continue
+		}
 		for _, h := range list {
-			notebookID := h.Metadata.NotebookID
-			if filters.NotebookID != "" && filters.NotebookID != notebookID {
-				continue
-			}
-			collectExpressions(h, notebookID, h.Metadata.Title, filters.QuizType, &out)
+			collectExpressions(h, notebookName, filters.QuizType, &out)
 		}
 	}
 	return out, nil
@@ -80,23 +87,32 @@ func (r *YAMLRepository) allAttempts(filters Filters) ([]yamlAttempt, error) {
 
 func collectExpressions(
 	h notebook.LearningHistory,
-	notebookID, notebookTitle, quizTypeFilter string,
+	notebookName, quizTypeFilter string,
 	out *[]yamlAttempt,
 ) {
-	// Flashcards have expressions at the top level; stories nest them under scenes.
+	// Flashcards have expressions at the top level; stories nest them under
+	// scenes. The episode title (h.Metadata.Title) becomes the scene
+	// breadcrumb for top-level expressions so the per-day card keeps its
+	// context while the notebook dimension stays at the file level.
 	for _, exp := range h.Expressions {
-		appendExpressionAttempts(exp, notebookID, notebookTitle, "", quizTypeFilter, out)
+		appendExpressionAttempts(exp, notebookName, h.Metadata.Title, quizTypeFilter, out)
 	}
 	for _, scene := range h.Scenes {
+		sceneTitle := scene.Metadata.Title
+		if h.Metadata.Title != "" && sceneTitle != "" {
+			sceneTitle = h.Metadata.Title + " / " + sceneTitle
+		} else if sceneTitle == "" {
+			sceneTitle = h.Metadata.Title
+		}
 		for _, exp := range scene.Expressions {
-			appendExpressionAttempts(exp, notebookID, notebookTitle, scene.Metadata.Title, quizTypeFilter, out)
+			appendExpressionAttempts(exp, notebookName, sceneTitle, quizTypeFilter, out)
 		}
 	}
 }
 
 func appendExpressionAttempts(
 	exp notebook.LearningHistoryExpression,
-	notebookID, notebookTitle, sceneTitle, quizTypeFilter string,
+	notebookName, sceneTitle, quizTypeFilter string,
 	out *[]yamlAttempt,
 ) {
 	tracks := map[string][]notebook.LearningRecord{
@@ -115,13 +131,14 @@ func appendExpressionAttempts(
 				continue
 			}
 			*out = append(*out, yamlAttempt{
-				NotebookID:     notebookID,
-				NotebookTitle:  notebookTitle,
+				NotebookID:     notebookName,
+				NotebookTitle:  notebookName,
 				SceneTitle:     sceneTitle,
 				Expression:     exp.Expression,
 				ExpressionType: exp.Type,
 				QuizType:       quizType,
 				Skipped:        skipped,
+				IntervalDays:   rec.IntervalDays,
 				Attempt: Attempt{
 					LearnedAt: rec.LearnedAt.Time,
 					QuizType:  quizType,
@@ -344,6 +361,31 @@ func (r *YAMLRepository) WordHistory(_ context.Context, ref WordRef) (WordHistor
 		CurrentWrongStreak: CurrentWrongStreak(flat),
 		Attempts:           entries,
 	}, nil
+}
+
+// Trends loads every attempt matching the notebook/quiz filters and
+// delegates to ComputeTrends. Attempts are intentionally NOT date-filtered
+// here: the aggregation needs each series' full history to know its state
+// before the range start.
+func (r *YAMLRepository) Trends(_ context.Context, q TrendsQuery) (TrendsResult, error) {
+	attempts, err := r.allAttempts(q.Filters)
+	if err != nil {
+		return TrendsResult{}, err
+	}
+	trendAttempts := make([]TrendAttempt, 0, len(attempts))
+	for _, a := range attempts {
+		trendAttempts = append(trendAttempts, TrendAttempt{
+			Expression:    a.Expression,
+			NotebookID:    a.NotebookID,
+			NotebookTitle: a.NotebookTitle,
+			QuizType:      a.QuizType,
+			Status:        a.Attempt.Status,
+			Quality:       a.Attempt.Quality,
+			IntervalDays:  a.IntervalDays,
+			LearnedAt:     a.Attempt.LearnedAt,
+		})
+	}
+	return ComputeTrends(trendAttempts, q), nil
 }
 
 func rangeCutoff(rangeDays int) time.Time {
