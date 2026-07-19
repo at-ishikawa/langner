@@ -31,7 +31,7 @@ function buildQuery(state: AnalyticsFilterState): string {
   return sp.toString();
 }
 
-export default function AnalyticsDaysPage() {
+export default function HistoryPage() {
   const router = useRouter();
   const params = useSearchParams();
   const [state, setState] = useState<AnalyticsFilterState>(() => parseFilters(params));
@@ -65,7 +65,7 @@ export default function AnalyticsDaysPage() {
     (next: AnalyticsFilterState) => {
       setState(next);
       const q = buildQuery(next);
-      router.replace(`/analytics/days${q ? `?${q}` : ""}`);
+      router.replace(`/history${q ? `?${q}` : ""}`);
     },
     [router],
   );
@@ -75,11 +75,11 @@ export default function AnalyticsDaysPage() {
 
   return (
     <Box maxW="md" mx="auto" p={4} pb={20}>
-      <Link href="/analytics" aria-label="Back to Analytics overview">
-        <Text fontSize="sm" mb={2}>◀ Overview</Text>
+      <Link href="/" aria-label="Back to home">
+        <Text fontSize="sm" mb={2}>◀ Home</Text>
       </Link>
       <Heading size="lg" mb={3}>
-        Day-by-day
+        History
       </Heading>
 
       <AnalyticsFilterBar

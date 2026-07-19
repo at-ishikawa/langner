@@ -10,7 +10,7 @@ Feature: Quiz Analytics
     Then I should be on the Analytics page
     And the Analytics page is not in an error state
 
-  # covers route: /analytics/[date]
+  # covers route: /history/[date]
   Scenario: Open a Day Detail page with seeded wrong words
     Given I open the Analytics Day Detail for "2025-01-02"
     Then I should be on the Analytics Day Detail page

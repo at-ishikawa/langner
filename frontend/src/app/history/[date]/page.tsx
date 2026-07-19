@@ -73,16 +73,16 @@ export default function DayDetailPage() {
   const backQuery = buildBackQuery(state);
 
   function dayLink(target: string): string {
-    return `/analytics/${target}${backQuery ? `?${backQuery}` : ""}`;
+    return `/history/${target}${backQuery ? `?${backQuery}` : ""}`;
   }
 
   return (
     <Box maxW="md" mx="auto" p={4} pb={20}>
       <Link
-        href={`/analytics/days${backQuery ? `?${backQuery}` : ""}`}
-        aria-label="Back to all days"
+        href={`/history${backQuery ? `?${backQuery}` : ""}`}
+        aria-label="Back to history"
       >
-        <Text fontSize="sm" mb={2}>◀ Back to all days</Text>
+        <Text fontSize="sm" mb={2}>◀ History</Text>
       </Link>
       <Heading size="md" mb={1}>
         {formatDayHeader(date)}

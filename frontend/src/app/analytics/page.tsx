@@ -95,7 +95,7 @@ function makeFormatPeriod(granularity: Granularity): (period: string) => string 
   };
 }
 
-function daysQuery(notebookId: string, quizType: string): string {
+function historyQuery(notebookId: string, quizType: string): string {
   const sp = new URLSearchParams();
   sp.set("range", "0"); // all time, so the drilled-in period is present in the list
   if (notebookId) sp.set("notebook", notebookId);
@@ -191,8 +191,8 @@ export default function AnalyticsOverviewPage() {
     };
   }, [granularity, groupBy, start, end, notebookId, quizType]);
 
-  // Clicking a bar drills into the day-by-day detail: a day bucket opens that
-  // exact day; a coarser bucket opens the day list filtered the same way.
+  // Clicking a bar drills into the History detail: a day bucket opens that
+  // exact day; a coarser bucket opens the history list filtered the same way.
   const onBarClick = useCallback(
     (period: string) => {
       if (granularity === Granularity.DAY) {
@@ -200,10 +200,10 @@ export default function AnalyticsOverviewPage() {
         if (notebookId) sp.set("notebook", notebookId);
         if (quizType) sp.set("quiz", quizType);
         const q = sp.toString();
-        router.push(`/analytics/${period}${q ? `?${q}` : ""}`);
+        router.push(`/history/${period}${q ? `?${q}` : ""}`);
         return;
       }
-      router.push(`/analytics/days?${daysQuery(notebookId, quizType)}`);
+      router.push(`/history?${historyQuery(notebookId, quizType)}`);
     },
     [granularity, notebookId, quizType, router],
   );
@@ -354,28 +354,6 @@ export default function AnalyticsOverviewPage() {
           />
         </Box>
       )}
-
-      {/* Drill-down to the detail view: a full-width tappable row (a proper
-          mobile touch target), not a text link. */}
-      <Link href={`/analytics/days?${daysQuery(notebookId, quizType)}`} aria-label="Open day-by-day detail">
-        <Flex
-          mt={5}
-          p={4}
-          borderWidth="1px"
-          borderColor="border"
-          borderRadius="lg"
-          align="center"
-          justify="space-between"
-          _hover={{ bg: "bg.subtle" }}
-          _active={{ bg: "bg.subtle" }}
-        >
-          <Box>
-            <Text fontWeight="semibold" fontSize="sm">Day-by-day detail</Text>
-            <Text fontSize="xs" color="fg.muted">See exactly what you got wrong each day</Text>
-          </Box>
-          <Text fontSize="xl" color="fg.muted" aria-hidden>›</Text>
-        </Flex>
-      </Link>
     </Box>
   );
 }

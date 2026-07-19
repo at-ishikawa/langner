@@ -50,10 +50,17 @@ describe("HomePage", () => {
     expect(link).toHaveAttribute("href", "/analytics");
   });
 
-  it("renders exactly 3 feature cards", () => {
+  it("shows History feature link", () => {
+    renderPage();
+    expect(screen.getByText("History")).toBeInTheDocument();
+    const link = screen.getByText("History").closest("a");
+    expect(link).toHaveAttribute("href", "/history");
+  });
+
+  it("renders exactly 4 feature cards", () => {
     renderPage();
     const links = screen.getAllByRole("link");
-    expect(links).toHaveLength(3);
+    expect(links).toHaveLength(4);
   });
 
   it("renders in dark mode without errors", () => {
@@ -62,6 +69,7 @@ describe("HomePage", () => {
     expect(screen.getByText("Learn")).toBeInTheDocument();
     expect(screen.getByText("Quiz")).toBeInTheDocument();
     expect(screen.getByText("Analytics")).toBeInTheDocument();
-    expect(screen.getAllByRole("link")).toHaveLength(3);
+    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(4);
   });
 });

@@ -20,7 +20,7 @@ function ratePercent(wrong: number, total: number): number {
 
 export function DayCard({ day, queryString }: { day: DailySummary; queryString: string }) {
   const muted = day.wrongCount === 0;
-  const href = `/analytics/${day.date}${queryString ? `?${queryString}` : ""}`;
+  const href = `/history/${day.date}${queryString ? `?${queryString}` : ""}`;
   return (
     <Link href={href} aria-label={`View ${formatDate(day.date)} detail`}>
       <Box
