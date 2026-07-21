@@ -10,10 +10,10 @@ import (
 // computeVocabRelatedGroups builds the concept-graph context for a
 // vocabulary card. It returns groups in this order:
 //
-//   1. The definitions-book concept the word belongs to (sibling
-//      expressions sharing the same umbrella meaning).
-//   2. The etymology concepts the word's origin_parts belong to
-//      (sibling origins), and concepts connected via relations.
+//  1. The definitions-book concept the word belongs to (sibling
+//     expressions sharing the same umbrella meaning).
+//  2. The etymology concepts the word's origin_parts belong to
+//     (sibling origins), and concepts connected via relations.
 //
 // Empty when the notebook declares no concepts or the word has no
 // origin_parts to anchor on. Order matters because the analytics card

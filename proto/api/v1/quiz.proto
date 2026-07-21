@@ -184,6 +184,10 @@ message SubmitAnswerResponse {
   string next_review_date = 5;
   string learned_at = 6;
   repeated string images = 7;
+  // sense_id is the stable source-entry identity of the answered card. The
+  // frontend echoes it back on OverrideAnswer/UndoOverrideAnswer so the
+  // override targets the exact sense the card came from (not the expression).
+  string sense_id = 8;
 }
 
 message BatchSubmitAnswersRequest {
@@ -261,6 +265,8 @@ message SubmitReverseAnswerResponse {
   string next_review_date = 8;
   string learned_at = 9;
   repeated string images = 10;
+  // sense_id — see SubmitAnswerResponse.sense_id.
+  string sense_id = 11;
 }
 
 message BatchSubmitReverseAnswersRequest {
@@ -309,6 +315,8 @@ message SubmitFreeformAnswerResponse {
   string learned_at = 9;
   int64 note_id = 10;
   repeated string images = 11;
+  // sense_id — see SubmitAnswerResponse.sense_id.
+  string sense_id = 12;
 }
 
 // Override Answer
@@ -322,6 +330,11 @@ message OverrideAnswerRequest {
   ];
   optional bool mark_correct = 4;
   optional string next_review_date = 5;
+  // sense_id is the stable source-entry identity of the card being
+  // overridden, echoed from the Submit response. When set the backend
+  // routes the override to that exact sense (falling back to note_id /
+  // expression for legacy id-less data).
+  string sense_id = 6;
 }
 
 message OverrideAnswerResponse {
@@ -345,6 +358,8 @@ message UndoOverrideAnswerRequest {
   string original_status = 5;
   int32 original_interval_days = 6;
   reserved 7;
+  // sense_id — see OverrideAnswerRequest.sense_id.
+  string sense_id = 8;
 }
 
 message UndoOverrideAnswerResponse {

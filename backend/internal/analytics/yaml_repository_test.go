@@ -7,7 +7,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 const sampleHistoryYAML = `- metadata:
@@ -317,6 +320,101 @@ func TestYAMLRepository_DayDetailExposesSkipped(t *testing.T) {
 		"notebook card must carry Skipped=true because skipped_at.notebook is set")
 	require.False(t, bySlot["reverse"].Skipped,
 		"reverse card must carry Skipped=false because skipped_at has no reverse entry — skips are per quiz type")
+}
+
+// TestYAMLRepository_DayDetailDistinctIDsSameExpression pins the note-id
+// identity fix: two source entries that share a spelling AND a
+// part_of_speech but carry different stable ids (the homograph "bank" the
+// riverside vs. "bank" the financial institution) must produce two
+// independent DayDetail rows — their own meaning and their own streak —
+// instead of collapsing into one series keyed by the expression alone.
+func TestYAMLRepository_DayDetailDistinctIDsSameExpression(t *testing.T) {
+	root := t.TempDir()
+
+	// Learning history: two entries, same expression "bank", same
+	// part_of_speech (noun), different ids, with independent attempt runs.
+	// bank-river is wrong twice; bank-money is wrong once after a correct.
+	historyDir := filepath.Join(root, "history")
+	require.NoError(t, os.MkdirAll(historyDir, 0o755))
+	history := `- metadata:
+    id: bankbook
+    title: Bank Book
+    type: flashcard
+  expressions:
+    - id: bank-river
+      expression: bank
+      type: vocabulary
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-06-10T10:00:00Z"
+          quality: 1
+          quiz_type: notebook
+        - status: misunderstood
+          learned_at: "2026-06-02T10:00:00Z"
+          quality: 1
+          quiz_type: notebook
+    - id: bank-money
+      expression: bank
+      type: vocabulary
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-06-10T11:00:00Z"
+          quality: 1
+          quiz_type: notebook
+        - status: understood
+          learned_at: "2026-06-05T11:00:00Z"
+          quality: 4
+          quiz_type: notebook
+`
+	require.NoError(t, os.WriteFile(filepath.Join(historyDir, "bankbook.yml"), []byte(history), 0o600))
+
+	// Source flashcards: two cards sharing the "bank" spelling and the noun
+	// part_of_speech, discriminated only by id + meaning.
+	flashDir := filepath.Join(root, "flashcards", "bankbook")
+	require.NoError(t, os.MkdirAll(flashDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "index.yml"), []byte(`id: bankbook
+name: Bank Book
+notebooks:
+  - ./cards.yml
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(flashDir, "cards.yml"), []byte(`- title: Homographs
+  date: 2025-01-01T00:00:00Z
+  cards:
+    - id: bank-river
+      expression: bank
+      part_of_speech: noun
+      meaning: the land alongside a river
+    - id: bank-money
+      expression: bank
+      part_of_speech: noun
+      meaning: a financial institution
+`), 0o600))
+
+	reader, err := notebook.NewReader(nil, []string{filepath.Join(root, "flashcards")}, nil, nil, nil, nil)
+	require.NoError(t, err)
+	repo := NewYAMLRepository(historyDir).WithMetadataResolver(NewNotebookMetadataResolver(reader))
+
+	day, _ := time.Parse("2006-01-02", "2026-06-10")
+	got, err := repo.DayDetail(context.Background(), day, Filters{})
+	require.NoError(t, err)
+	require.Len(t, got.WrongWords, 2, "two ids sharing a spelling must not collapse into one series")
+
+	byID := make(map[string]WrongWord, len(got.WrongWords))
+	for _, w := range got.WrongWords {
+		require.Equal(t, "bank", w.Expression, "both cards display the shared spelling")
+		byID[w.ID] = w
+	}
+
+	river, ok := byID["bank-river"]
+	require.True(t, ok, "bank-river must surface its own row")
+	assert.Equal(t, "the land alongside a river", river.Meaning, "meaning resolves per-id, not per-spelling")
+	assert.Equal(t, 2, river.CurrentWrongStreak, "bank-river is wrong twice in its own series")
+
+	money, ok := byID["bank-money"]
+	require.True(t, ok, "bank-money must surface its own row")
+	assert.Equal(t, "a financial institution", money.Meaning, "the second id resolves to its own meaning")
+	assert.Equal(t, 1, money.CurrentWrongStreak, "bank-money is wrong once — its series is independent of bank-river's")
+	assert.Equal(t, 1, money.PreviousCorrectStreak, "bank-money had one correct attempt before its failure")
 }
 
 func TestYAMLRepository_NotebookFilter(t *testing.T) {

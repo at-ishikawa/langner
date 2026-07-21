@@ -140,6 +140,23 @@ func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *Learni
 	}
 	usage := log.Expression
 
+	// Id-bearing card: the note's identity is its sense_id, so find-or-create
+	// keyed by sense_id (the partial unique index notes_sense_id_key). Two
+	// distinct ids that share an (usage, entry) spelling stay two rows. The
+	// no-op SET returns the existing row's id whether it was inserted or
+	// already present — same idiom as the legacy branch below.
+	if log.SenseID != "" {
+		var noteID int64
+		if err := r.db.GetContext(ctx, &noteID, `
+			INSERT INTO notes ("usage", entry, meaning, sense_id) VALUES ($1, $2, $3, $4)
+			ON CONFLICT (sense_id) WHERE sense_id <> '' DO UPDATE SET sense_id = EXCLUDED.sense_id
+			RETURNING id`, usage, entry, "", log.SenseID); err != nil {
+			return 0, fmt.Errorf("insert note by sense_id: %w", err)
+		}
+		return noteID, nil
+	}
+
+	// Legacy id-less card: keep the (usage, entry) upsert.
 	var noteID int64
 	if err := r.db.GetContext(ctx, &noteID, `
 		INSERT INTO notes ("usage", entry, meaning) VALUES ($1, $2, $3)
@@ -208,7 +225,15 @@ func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput)
 	// callers that already know the real DB id (rare, but keeps the
 	// API forward-compatible) can still use it.
 	noteID := int64(0)
-	if in.Expression != "" {
+	if in.ID != "" {
+		// Id-bearing override: resolve the note by its stable sense_id so we
+		// target the exact sense the card carried (falls through to a soft
+		// no-op when no row has that id yet — e.g. a fresh import).
+		if err := r.db.GetContext(ctx, &noteID,
+			`SELECT id FROM notes WHERE sense_id = $1`, in.ID); err != nil {
+			return UpdateLogResult{}, nil
+		}
+	} else if in.Expression != "" {
 		entry := in.OriginalExpression
 		if entry == "" {
 			entry = in.Expression

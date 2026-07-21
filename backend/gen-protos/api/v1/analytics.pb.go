@@ -997,6 +997,10 @@ type WrongWord struct {
 	// row under the meaning and the full block in the expanded panel so a
 	// wrong word never reads in isolation.
 	RelatedGroups []*RelatedGroup `protobuf:"bytes,15,rep,name=related_groups,json=relatedGroups,proto3" json:"related_groups,omitempty"`
+	// sense_id is the stable source-entry identity of the word. The frontend
+	// echoes it into GetWordHistory so the drill-down targets the exact sense
+	// (falling back to note_id / expression for legacy id-less data).
+	SenseId       string `protobuf:"bytes,16,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1136,6 +1140,13 @@ func (x *WrongWord) GetRelatedGroups() []*RelatedGroup {
 	return nil
 }
 
+func (x *WrongWord) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
+}
+
 // RelatedGroup is one cluster of related entries surfaced on the
 // analytics card. The grouping is intentionally flat (kind + label +
 // member strings) so the same shape covers sibling words, sibling
@@ -1214,11 +1225,15 @@ func (x *RelatedGroup) GetMembers() []string {
 }
 
 type GetWordHistoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	NotebookId    string                 `protobuf:"bytes,2,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
-	Expression    string                 `protobuf:"bytes,3,opt,name=expression,proto3" json:"expression,omitempty"`
-	QuizType      string                 `protobuf:"bytes,4,opt,name=quiz_type,json=quizType,proto3" json:"quiz_type,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	NoteId     int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	NotebookId string                 `protobuf:"bytes,2,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	Expression string                 `protobuf:"bytes,3,opt,name=expression,proto3" json:"expression,omitempty"`
+	QuizType   string                 `protobuf:"bytes,4,opt,name=quiz_type,json=quizType,proto3" json:"quiz_type,omitempty"`
+	// sense_id is the stable source-entry identity of the word, echoed from
+	// the WrongWord row. When set the history is resolved by sense id (falling
+	// back to note_id / expression for legacy id-less data).
+	SenseId       string `protobuf:"bytes,5,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1281,6 +1296,13 @@ func (x *GetWordHistoryRequest) GetQuizType() string {
 	return ""
 }
 
+func (x *GetWordHistoryRequest) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
+}
+
 type GetWordHistoryResponse struct {
 	state              protoimpl.MessageState `protogen:"open.v1"`
 	Expression         string                 `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
@@ -1289,8 +1311,11 @@ type GetWordHistoryResponse struct {
 	CurrentStatus      string                 `protobuf:"bytes,4,opt,name=current_status,json=currentStatus,proto3" json:"current_status,omitempty"`
 	CurrentWrongStreak int32                  `protobuf:"varint,5,opt,name=current_wrong_streak,json=currentWrongStreak,proto3" json:"current_wrong_streak,omitempty"`
 	Attempts           []*AttemptEntry        `protobuf:"bytes,6,rep,name=attempts,proto3" json:"attempts,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// sense_id — see GetWordHistoryRequest.sense_id. Echoed back so the
+	// frontend can keep the row and its history in sync.
+	SenseId       string `protobuf:"bytes,7,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetWordHistoryResponse) Reset() {
@@ -1363,6 +1388,13 @@ func (x *GetWordHistoryResponse) GetAttempts() []*AttemptEntry {
 		return x.Attempts
 	}
 	return nil
+}
+
+func (x *GetWordHistoryResponse) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
 }
 
 // AttemptEntry is a single past attempt with the streak context just
@@ -1522,7 +1554,7 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\vwrong_words\x18\x02 \x03(\v2\x11.api.v1.WrongWordR\n" +
 	"wrongWords\x12#\n" +
 	"\rprevious_date\x18\x03 \x01(\tR\fpreviousDate\x12\x1b\n" +
-	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xc3\x04\n" +
+	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xde\x04\n" +
 	"\tWrongWord\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1e\n" +
 	"\n" +
@@ -1543,11 +1575,12 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\x10example_sentence\x18\f \x01(\tR\x0fexampleSentence\x12#\n" +
 	"\rnotebook_kind\x18\r \x01(\tR\fnotebookKind\x12\x18\n" +
 	"\askipped\x18\x0e \x01(\bR\askipped\x12;\n" +
-	"\x0erelated_groups\x18\x0f \x03(\v2\x14.api.v1.RelatedGroupR\rrelatedGroups\"R\n" +
+	"\x0erelated_groups\x18\x0f \x03(\v2\x14.api.v1.RelatedGroupR\rrelatedGroups\x12\x19\n" +
+	"\bsense_id\x18\x10 \x01(\tR\asenseId\"R\n" +
 	"\fRelatedGroup\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +
-	"\amembers\x18\x03 \x03(\tR\amembers\"\xa0\x01\n" +
+	"\amembers\x18\x03 \x03(\tR\amembers\"\xbb\x01\n" +
 	"\x15GetWordHistoryRequest\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1f\n" +
 	"\vnotebook_id\x18\x02 \x01(\tR\n" +
@@ -1555,7 +1588,8 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\n" +
 	"expression\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"expression\x12$\n" +
-	"\tquiz_type\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bquizType\"\x8b\x02\n" +
+	"\tquiz_type\x18\x04 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\bquizType\x12\x19\n" +
+	"\bsense_id\x18\x05 \x01(\tR\asenseId\"\xa6\x02\n" +
 	"\x16GetWordHistoryResponse\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -1565,7 +1599,8 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\x0enotebook_title\x18\x03 \x01(\tR\rnotebookTitle\x12%\n" +
 	"\x0ecurrent_status\x18\x04 \x01(\tR\rcurrentStatus\x120\n" +
 	"\x14current_wrong_streak\x18\x05 \x01(\x05R\x12currentWrongStreak\x120\n" +
-	"\battempts\x18\x06 \x03(\v2\x14.api.v1.AttemptEntryR\battempts\"\xd5\x01\n" +
+	"\battempts\x18\x06 \x03(\v2\x14.api.v1.AttemptEntryR\battempts\x12\x19\n" +
+	"\bsense_id\x18\a \x01(\tR\asenseId\"\xd5\x01\n" +
 	"\fAttemptEntry\x12\x12\n" +
 	"\x04date\x18\x01 \x01(\tR\x04date\x12\x1b\n" +
 	"\tquiz_type\x18\x02 \x01(\tR\bquizType\x12\x16\n" +

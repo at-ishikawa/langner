@@ -86,6 +86,7 @@ const relearnKeySep = "\x1f"
 type relearnCandidate struct {
 	notebookName string
 	expression   string
+	id           string // stable source-entry identity of the failed entry; "" for legacy
 	format       notebook.QuizType
 	latestWrong  time.Time
 }
@@ -120,13 +121,16 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			if latest.LearnedAt.Before(windowStart) || latest.Status != notebook.LearnedStatusMisunderstood {
 				continue
 			}
-			key := string(sp.format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expr.Expression))
+			// Key by id when present so same-spelling homographs stay
+			// distinct; legacy id-less entries fall back to the expression.
+			key := string(sp.format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expr.Expression)) + relearnKeySep + expr.ID
 			if existing, ok := candidates[key]; ok && !latest.LearnedAt.After(existing.latestWrong) {
 				continue
 			}
 			candidates[key] = relearnCandidate{
 				notebookName: notebookName,
 				expression:   expr.Expression,
+				id:           expr.ID,
 				format:       sp.format,
 				latestWrong:  latest.LearnedAt.Time,
 			}
@@ -150,7 +154,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return nil, nil
 	}
 
-	vocabByExpr, vocabByNotebookExpr, err := s.relearnVocabIndex()
+	vocabByID, vocabByExpr, vocabByNotebookExpr, err := s.relearnVocabIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +176,20 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			})
 			continue
 		}
-		fc, ok := vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]
+		// Resolve by id first (mirrors MatchesEntry: an id-bearing failed
+		// entry resolves to its own card, so same-spelling homographs never
+		// collide). Fall back to the sense-less expression lookups for
+		// legacy id-less candidates or an id miss.
+		var (
+			fc FreeformCard
+			ok bool
+		)
+		if c.id != "" {
+			fc, ok = vocabByID[c.id]
+		}
+		if !ok {
+			fc, ok = vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]
+		}
 		if !ok {
 			fc, ok = vocabByExpr[strings.ToLower(strings.TrimSpace(c.expression))]
 		}
@@ -228,17 +245,22 @@ func relearnSeries(expr notebook.LearningHistoryExpression) []relearnSeriesSpec 
 	}
 }
 
-// relearnVocabIndex loads every vocabulary word once and indexes it both by
-// (notebook, expression) and by expression alone so the pool can resolve a
-// wrong word to its meaning and context.
-func (s *Service) relearnVocabIndex() (byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard, err error) {
+// relearnVocabIndex loads every vocabulary word once and indexes it by stable
+// id (the canonical key), and — as a legacy fallback for id-less candidates —
+// also by (notebook, expression) and by expression alone, so the pool can
+// resolve a wrong word to its meaning and context.
+func (s *Service) relearnVocabIndex() (byID map[string]FreeformCard, byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard, err error) {
 	words, err := s.LoadAllWords()
 	if err != nil {
-		return nil, nil, fmt.Errorf("load words for relearn pool: %w", err)
+		return nil, nil, nil, fmt.Errorf("load words for relearn pool: %w", err)
 	}
+	byID = make(map[string]FreeformCard, len(words))
 	byExpr = make(map[string]FreeformCard, len(words))
 	byNotebookExpr = make(map[string]FreeformCard, len(words))
 	for _, w := range words {
+		if w.ID != "" {
+			byID[w.ID] = w
+		}
 		for _, e := range []string{w.Expression, w.OriginalExpression} {
 			e = strings.ToLower(strings.TrimSpace(e))
 			if e == "" {
@@ -248,7 +270,7 @@ func (s *Service) relearnVocabIndex() (byExpr map[string]FreeformCard, byNoteboo
 			byNotebookExpr[strings.ToLower(w.NotebookName)+relearnKeySep+e] = w
 		}
 	}
-	return byExpr, byNotebookExpr, nil
+	return byID, byExpr, byNotebookExpr, nil
 }
 
 // relearnEtymologyIndex loads every etymology origin once and indexes the

@@ -71,8 +71,8 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 		// via RETURNING id.
 		for _, n := range notes {
 			if err := tx.GetContext(ctx, &n.ID,
-				`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey); err != nil {
+				`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID); err != nil {
 				return fmt.Errorf("insert note: %w", err)
 			}
 		}
@@ -137,8 +137,8 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		if err := tx.GetContext(ctx, &note.ID,
-			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`,
-			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ConceptKey); err != nil {
+			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
+			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ConceptKey, note.SenseID); err != nil {
 			return fmt.Errorf("insert note: %w", err)
 		}
 
@@ -212,8 +212,8 @@ func (r *DBNoteRepository) BatchUpdate(ctx context.Context, notes []*NoteRecord,
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for _, n := range notes {
 			_, err := tx.ExecContext(ctx,
-				`UPDATE notes SET "usage" = $1, entry = $2, meaning = $3, level = $4, dictionary_number = $5, concept_key = $6 WHERE id = $7`,
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.ID)
+				`UPDATE notes SET "usage" = $1, entry = $2, meaning = $3, level = $4, dictionary_number = $5, concept_key = $6, sense_id = $7 WHERE id = $8`,
+				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID, n.ID)
 			if err != nil {
 				return fmt.Errorf("update note: %w", err)
 			}

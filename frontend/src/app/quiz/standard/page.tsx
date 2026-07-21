@@ -125,6 +125,7 @@ export default function QuizCardPage() {
           contexts: b.card.examples.map((ex) => ex.speaker ? `${ex.speaker}: "${ex.text}"` : `"${ex.text}"`),
           wordDetail: r.wordDetail,
           learnedAt: r.learnedAt || undefined,
+          senseId: r.senseId || undefined,
           images: r.images.length > 0 ? r.images : undefined,
         });
       });

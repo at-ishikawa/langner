@@ -470,6 +470,7 @@ func convertRecordToNote(rec NoteRecord) Note {
 	}
 
 	return Note{
+		ID:               rec.SenseID,
 		Expression:       rec.Usage,
 		Definition:       definition,
 		Meaning:          rec.Meaning,
