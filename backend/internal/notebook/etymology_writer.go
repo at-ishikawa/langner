@@ -162,7 +162,18 @@ func (writer EtymologyNotebookWriter) buildChapters(etymIndex EtymologyIndex) ([
 		wordIsSkipped := func(expression string) bool {
 			return writer.expressionIsSkipped(etymIndex.ID, sessionTitle, expression)
 		}
-		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned, wordIsSkipped, conceptByExpression, conceptByHead)
+		// Words the user is actively failing (latest vocabulary log is
+		// misunderstood) must stay in the export even when every origin
+		// they reference has reached the next-review date — those are
+		// precisely the words the study material exists for. Without this
+		// gate, taxidermy / pedagogy / similar derived words disappeared
+		// from the WPME PDF after the user mastered taxis + derma /
+		// paidos + agogos despite repeated quiz failures on the words
+		// themselves.
+		wordHasPendingMisunderstanding := func(expression string) bool {
+			return writer.expressionHasPendingMisunderstanding(etymIndex.ID, sessionTitle, expression)
+		}
+		defChapters := readDefinitionsFileChapters(defDir, sessionFilename, originMap, needsStudy, wordHasBeenLearned, wordIsSkipped, wordHasPendingMisunderstanding, conceptByExpression, conceptByHead)
 
 		templateConcepts := buildTemplateConcepts(sessionConcepts, sessionRelations, originMap)
 		if len(defChapters) > 0 {
@@ -483,6 +494,40 @@ func (writer EtymologyNotebookWriter) expressionIsSkipped(etymID, sessionTitle, 
 	return false
 }
 
+// expressionHasPendingMisunderstanding returns true when the most recent
+// log on the derived word — across both vocabulary directions
+// (LearnedLogs and ReverseLogs) — has status `misunderstood`. Used by
+// the etymology PDF / markdown so words the user is currently failing
+// remain in the export even when their underlying origins are fully
+// mastered. Without this signal, taxidermy / pedagogy / similar derived
+// words disappeared from the WPME export the moment taxis + derma or
+// paidos + agogos crossed into long SR intervals, even though the user
+// kept failing the words themselves.
+func (writer EtymologyNotebookWriter) expressionHasPendingMisunderstanding(etymID, sessionTitle, expression string) bool {
+	histories := writer.learningHistories[etymID]
+	if len(histories) == 0 {
+		return false
+	}
+	for _, h := range histories {
+		if h.Metadata.Title != sessionTitle {
+			continue
+		}
+		for _, scene := range h.Scenes {
+			for _, expr := range scene.Expressions {
+				if !strings.EqualFold(expr.Expression, expression) {
+					continue
+				}
+				latest, found := latestEtymologyLog(expr.LearnedLogs, expr.ReverseLogs)
+				if !found {
+					return false
+				}
+				return latest.Status == LearnedStatusMisunderstood
+			}
+		}
+	}
+	return false
+}
+
 func (writer EtymologyNotebookWriter) expressionRecentlyLearned(etymID, sessionTitle, expression string) bool {
 	histories := writer.learningHistories[etymID]
 	if len(histories) == 0 {
@@ -568,6 +613,7 @@ func readDefinitionsFileChapters(
 	needsStudy func(origin string) bool,
 	wordHasBeenLearned func(expression string) bool,
 	wordIsSkipped func(expression string) bool,
+	wordHasPendingMisunderstanding func(expression string) bool,
 	conceptByExpression map[string]string,
 	conceptByHead map[string]DefinitionConceptInfo,
 ) []assets.EtymologyChapter {
@@ -600,22 +646,34 @@ func readDefinitionsFileChapters(
 			seenConceptHead := make(map[string]int) // head -> index in sceneWords
 			var sceneWords []assets.EtymologyWordEntry
 			for _, note := range scene.Expressions {
-				if !wordNeedsStudy(note.OriginParts, needsStudy) {
-					continue
-				}
-				// Also skip words the user already knows. Even when
-				// the word's origins still need work, re-reading a
-				// known word's definition doesn't help drill the
-				// origin; the origins block at the top of the chapter
-				// covers that on its own. Mirrors the vocabulary
-				// PDF's needsToLearnInNotebook semantic: "known" iff
-				// either direction has a recent non-misunderstood log
-				// within its SR interval.
-				if wordHasBeenLearned != nil && wordHasBeenLearned(note.Expression) {
-					continue
-				}
+				// Skip is the user saying "stop studying this" — honor
+				// it before every other gate so a skip always wins.
 				if wordIsSkipped != nil && wordIsSkipped(note.Expression) {
 					continue
+				}
+				// A word the user is actively failing (latest vocab log
+				// is misunderstood) must stay in the export regardless
+				// of origin mastery or whether the other direction is
+				// still within its SR window — that's exactly what the
+				// study material is for. This bypasses both gates
+				// below.
+				wordItselfPending := wordHasPendingMisunderstanding != nil && wordHasPendingMisunderstanding(note.Expression)
+				if !wordItselfPending {
+					// Origin-mastery gate: when every origin the word
+					// references has been mastered, the word is just
+					// noise (the chapter's origins block covers them).
+					if !wordNeedsStudy(note.OriginParts, needsStudy) {
+						continue
+					}
+					// Word-mastery gate: even when origins still need
+					// work, re-reading a known word's definition
+					// doesn't help drill the origins. "Known" mirrors
+					// the vocabulary PDF's needsToLearnInNotebook
+					// semantic: either direction has a recent
+					// non-misunderstood log within its SR interval.
+					if wordHasBeenLearned != nil && wordHasBeenLearned(note.Expression) {
+						continue
+					}
 				}
 				word := assets.EtymologyWordEntry{
 					Expression:    note.Expression,
