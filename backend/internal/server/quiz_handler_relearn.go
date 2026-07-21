@@ -3,6 +3,8 @@ package server
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
+	"io"
 	"time"
 
 	"connectrpc.com/connect"
@@ -11,6 +13,26 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
+
+// relearnCardID derives a stable note_id from a relearn card's identity so the
+// same card always gets the same id across StartRelearn calls. Grading looks
+// the card up by this id, so stability is what keeps a client's held id
+// pointing at the card it was shown — even after another StartRelearn. Keyed
+// by (format, notebook, entry, meaning): format separates a word failed in
+// several quiz types, and meaning separates two same-spelling senses
+// (homographs) that share an entry. The sign bit is masked off so the id is a
+// non-negative int64.
+func relearnCardID(card quiz.RelearnCard) int64 {
+	h := fnv.New64a()
+	_, _ = io.WriteString(h, string(card.Format))
+	_, _ = io.WriteString(h, "\x1f")
+	_, _ = io.WriteString(h, card.NotebookName)
+	_, _ = io.WriteString(h, "\x1f")
+	_, _ = io.WriteString(h, card.Entry)
+	_, _ = io.WriteString(h, "\x1f")
+	_, _ = io.WriteString(h, card.Meaning)
+	return int64(h.Sum64() >> 1)
+}
 
 // relearnDefaultWindowHours is used when the request leaves window_hours unset
 // (0). relearnMaxWindowHours caps the look-back at 7 days.
@@ -45,13 +67,11 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load relearn pool: %w", err))
 	}
 
-	localStore := make(map[int64]quiz.RelearnCard, len(cards))
-	var nextID int64 = 1
+	fresh := make(map[int64]quiz.RelearnCard, len(cards))
 	protoCards := make([]*apiv1.RelearnCard, 0, len(cards))
 	for _, card := range cards {
-		noteID := nextID
-		nextID++
-		localStore[noteID] = card
+		noteID := relearnCardID(card)
+		fresh[noteID] = card
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples {
 			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker})
@@ -72,9 +92,23 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 		})
 	}
 
+	// Merge into the shared store rather than replacing it. note_id is now a
+	// stable hash of the card's content (relearnCardID), so a client that is
+	// still holding cards from an earlier StartRelearn — another browser tab,
+	// or re-entering the session within the window — submits an id that still
+	// resolves to the same card. The previous code replaced the store and
+	// handed out sequential ids assigned in random map-iteration order, so a
+	// re-start silently repointed a note_id at a different card: the learner
+	// saw one word's prompt but was graded against, and shown the meaning of,
+	// another. Merging keeps every issued id valid; the pool is small
+	// (recent wrong words) so unbounded growth is not a concern.
 	h.mu.Lock()
-	h.relearnStore = localStore
-	h.nextID = nextID
+	if h.relearnStore == nil {
+		h.relearnStore = make(map[int64]quiz.RelearnCard, len(fresh))
+	}
+	for id, card := range fresh {
+		h.relearnStore[id] = card
+	}
 	h.mu.Unlock()
 
 	return connect.NewResponse(&apiv1.StartRelearnQuizResponse{Cards: protoCards}), nil

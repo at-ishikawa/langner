@@ -173,6 +173,50 @@ func TestRelearn_ReverseCardIsGradedByTheWordNotTheMeaning(t *testing.T) {
 	assert.False(t, submitDelta("a change or difference"), "typing the MEANING is wrong in a reverse card")
 }
 
+// TestRelearn_NoteIDsStableAcrossRestarts guards the card-store desync fix:
+// note_id is a stable hash of the card, so two StartRelearn calls hand the
+// same card the same id. The previous code assigned sequential ids in random
+// map-iteration order, so a re-start silently repointed a note_id at a
+// different card.
+func TestRelearn_NoteIDsStableAcrossRestarts(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+
+	first := relearnByEntryType(startRelearn(t, h, 24))
+	second := relearnByEntryType(startRelearn(t, h, 24))
+
+	require.NotEmpty(t, first)
+	require.Len(t, second, len(first))
+	for key, c1 := range first {
+		c2, ok := second[key]
+		require.True(t, ok, "card %q must appear in both starts", key)
+		assert.Equal(t, c1.GetNoteId(), c2.GetNoteId(),
+			"note_id for %q must be identical across StartRelearn calls", key)
+	}
+}
+
+// TestRelearn_HeldNoteIDGradesTheCardItWasShownFor reproduces the reported bug:
+// a learner starts Relearn, then a second StartRelearn happens within the
+// window (another tab, or re-entering the session). Grading a note_id the
+// client is still holding must resolve to the SAME card it was shown — the
+// meaning returned matches the prompt and a correct answer is graded correct —
+// instead of whatever card a reassigned sequential id happened to land on.
+func TestRelearn_HeldNoteIDGradesTheCardItWasShownFor(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+
+	held := relearnByEntryType(startRelearn(t, h, 24))["alpha/QUIZ_TYPE_STANDARD"]
+	require.NotNil(t, held)
+
+	// A second start replaces/extends the server store (the desync trigger).
+	_ = startRelearn(t, h, 24)
+
+	resp, err := h.SubmitRelearnAnswer(context.Background(),
+		connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: held.GetNoteId(), Answer: "the first thing"}))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetCorrect(), "the held note_id still grades the card it was shown for")
+	assert.Equal(t, held.GetMeaning(), resp.Msg.GetMeaning(),
+		"the graded card's meaning matches the one the learner saw — no cross-card desync")
+}
+
 func TestRelearn_PoolSelectsRecentWrongWordsAcrossTypes(t *testing.T) {
 	h, _ := newRelearnTestHandler(t)
 
