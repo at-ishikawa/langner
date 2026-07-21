@@ -67,8 +67,13 @@ func assignIDs(ctx context.Context, cfg *config.Config, dryRun bool, w io.Writer
 	}
 
 	// Seed the used-set with every existing id across all files first so a new
-	// slug never collides with an id another file already carries.
+	// slug never collides with an id another file already carries. Files that
+	// don't parse as strict YAML (e.g. book chapters whose scenes hold raw
+	// prose with bare colons) carry no assignable `expression:` entries and
+	// can't be surgically edited — skip them with a visible warning rather
+	// than aborting the whole run.
 	used := make(map[string]bool)
+	skipped := make(map[string]bool)
 	for _, f := range files {
 		data, err := os.ReadFile(f)
 		if err != nil {
@@ -76,7 +81,9 @@ func assignIDs(ctx context.Context, cfg *config.Config, dryRun bool, w io.Writer
 		}
 		ids, err := notebook.CollectExistingIDs(data)
 		if err != nil {
-			return fmt.Errorf("scan ids in %s: %w", f, err)
+			skipped[f] = true
+			_, _ = fmt.Fprintf(w, "  skip (unparseable YAML, no entries to id): %s\n", f)
+			continue
 		}
 		for _, id := range ids {
 			used[id] = true
@@ -86,6 +93,9 @@ func assignIDs(ctx context.Context, cfg *config.Config, dryRun bool, w io.Writer
 	// Assign + write ids into the source YAML add-only.
 	totalAdded := 0
 	for _, f := range files {
+		if skipped[f] {
+			continue
+		}
 		data, err := os.ReadFile(f)
 		if err != nil {
 			return fmt.Errorf("read %s: %w", f, err)
