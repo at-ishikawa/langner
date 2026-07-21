@@ -14,3 +14,4 @@ Feature proposals for Langner. Each proposal includes product requirements and t
 - [Web Frontend UI]({{< relref "web-frontend-ui" >}}) - Mobile-friendly web UI for the notebook recognition quiz
 - [Quiz Analytics]({{< relref "quiz-analytics" >}}) - Surface which words the learner gets wrong most so they can focus extra practice
 - [Relearn Quiz]({{< relref "relearn-quiz" >}}) - Off-the-record session that re-drills every word you recently got wrong, looping until each is correct
+- [Note ID Identity]({{< relref "note-id-identity" >}}) - Stable globally-unique id as the primary key for a word's identity, separating every same-spelling collision

@@ -423,8 +423,8 @@ func TestLearningHistoryExpression_NeedsReverseReview(t *testing.T) {
 	// The function calculates elapsed days from the stored timestamp
 	now := time.Now()
 	oneHourAgo := now.Add(-1 * time.Hour)
-	oneDayAgo := now.Add(-25 * time.Hour)   // 25 hours = 1 day elapsed
-	twoDaysAgo := now.Add(-49 * time.Hour)  // 49 hours = 2 days elapsed
+	oneDayAgo := now.Add(-25 * time.Hour)  // 25 hours = 1 day elapsed
+	twoDaysAgo := now.Add(-49 * time.Hour) // 49 hours = 2 days elapsed
 
 	tests := []struct {
 		name       string
@@ -1246,3 +1246,45 @@ func TestLearningHistoryExpression_HasAnyCorrectAnswer(t *testing.T) {
 	}
 }
 
+// TestLearningHistory_GetLogs_IDIsolation verifies that GetLogs routes by the
+// stable id: two entries sharing a spelling but carrying distinct ids return
+// their own log series, never the other's.
+func TestLearningHistory_GetLogs_IDIsolation(t *testing.T) {
+	h := LearningHistory{
+		Metadata: LearningHistoryMetadata{Title: "flashcards", Type: "flashcard"},
+		Expressions: []LearningHistoryExpression{
+			{Expression: "bank", ID: "bank-money", LearnedLogs: []LearningRecord{
+				{Status: LearnedStatusUnderstood, LearnedAt: NewDate(), Quality: 4},
+			}},
+			{Expression: "bank", ID: "bank-river", LearnedLogs: []LearningRecord{
+				{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(), Quality: 1},
+			}},
+		},
+	}
+
+	moneyLogs := h.GetLogs("flashcards", "", Note{ID: "bank-money", Expression: "bank"})
+	require.Len(t, moneyLogs, 1)
+	assert.Equal(t, LearnedStatusUnderstood, moneyLogs[0].Status)
+
+	riverLogs := h.GetLogs("flashcards", "", Note{ID: "bank-river", Expression: "bank"})
+	require.Len(t, riverLogs, 1)
+	assert.Equal(t, LearnedStatusMisunderstood, riverLogs[0].Status)
+
+	// A tagged entry matches ONLY its exact id: an id-less card cannot
+	// resolve tagged senses (the id is authoritative once assigned).
+	legacyLogs := h.GetLogs("flashcards", "", Note{Expression: "bank"})
+	assert.Empty(t, legacyLogs)
+
+	// But legacy id-less ENTRIES still resolve by expression, so pre-migration
+	// data keeps working.
+	legacyHist := LearningHistory{
+		Metadata: LearningHistoryMetadata{Title: "flashcards", Type: "flashcard"},
+		Expressions: []LearningHistoryExpression{
+			{Expression: "tip", LearnedLogs: []LearningRecord{
+				{Status: LearnedStatusUnderstood, LearnedAt: NewDate(), Quality: 4},
+			}},
+		},
+	}
+	tipLogs := legacyHist.GetLogs("flashcards", "", Note{ID: "tip-1", Expression: "tip"})
+	require.Len(t, tipLogs, 1, "id-less legacy entry resolves by expression even when the card carries an id")
+}

@@ -414,9 +414,13 @@ func convertToRecords(logs []LearningLog) []notebook.LearningRecord {
 
 func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) error {
 	dir := log.LearningNotesDir
-	if dir == "" { dir = r.directory }
+	if dir == "" {
+		dir = r.directory
+	}
 	learningHistories, err := notebook.NewLearningHistories(dir)
-	if err != nil { return fmt.Errorf("load learning histories: %w", err) }
+	if err != nil {
+		return fmt.Errorf("load learning histories: %w", err)
+	}
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[log.NotebookName], r.calculator)
 	quizType := notebook.QuizType(log.QuizType)
 	// Freeform requires active recall of both the word and its meaning, so a
@@ -425,16 +429,18 @@ func (r *YAMLLearningRepository) Create(_ context.Context, log *LearningLog) err
 	// and reverse quizzes pass isKnownWord=true for "understood".
 	isKnownWord := quizType != notebook.QuizTypeFreeform
 	if quizType == notebook.QuizTypeReverse {
-		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeReverse)
+		updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.SenseID, log.IsCorrect, true, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeReverse)
 	} else {
-		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), quizType)
+		updater.UpdateOrCreateExpressionWithQuality(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.SenseID, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), quizType)
 		// Freeform quiz tests word recall (similar to reverse), so also update reverse logs
 		if quizType == notebook.QuizTypeFreeform {
-			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeFreeform)
+			updater.UpdateOrCreateExpressionWithQualityForReverse(log.NotebookName, log.StoryTitle, log.SceneTitle, log.Expression, log.OriginalExpression, log.SenseID, log.IsCorrect, isKnownWord, log.Quality, int64(log.ResponseTimeMs), notebook.QuizTypeFreeform)
 		}
 	}
 	notePath := filepath.Join(dir, log.NotebookName+".yml")
-	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil { return fmt.Errorf("write learning history for %q: %w", log.NotebookName, err) }
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return fmt.Errorf("write learning history for %q: %w", log.NotebookName, err)
+	}
 	return nil
 }
 
@@ -460,6 +466,7 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 	var res notebook.OverrideLogResult
 	if in.MirrorValues != nil {
 		undo := updater.UndoOverrideLog(notebook.UndoOverrideLogInput{
+			ID:                   in.ID,
 			Expression:           in.Expression,
 			OriginalExpression:   in.OriginalExpression,
 			QuizType:             notebook.QuizType(in.QuizType),
@@ -481,6 +488,7 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 		}
 	} else {
 		res = updater.OverrideLog(notebook.OverrideLogInput{
+			ID:                 in.ID,
 			Expression:         in.Expression,
 			OriginalExpression: in.OriginalExpression,
 			QuizType:           notebook.QuizType(in.QuizType),
@@ -500,7 +508,7 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 	// exact bytes onto the secondary store. The updater's result
 	// already carries originals; we re-resolve the expression to read
 	// out the new status/quality/interval that landed on disk.
-	expr := updater.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	expr := updater.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
 	var newStatus string
 	var newQuality, newInterval int
 	if expr != nil {

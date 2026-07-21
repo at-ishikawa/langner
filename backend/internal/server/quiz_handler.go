@@ -132,7 +132,7 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Entry, notebook.QuizTypeNotebook)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Entry, notebook.QuizTypeNotebook)
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
 		Correct: grade.Correct, Meaning: card.Meaning, Reason: grade.Reason,
 		WordDetail: toProtoWordDetail(card.WordDetail), NextReviewDate: nextReviewDate,
@@ -243,7 +243,7 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	}
 	var contexts []string
 	for _, c := range card.Contexts { contexts = append(contexts, c.Context) }
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeReverse)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Expression, notebook.QuizTypeReverse)
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
 		Correct: grade.Correct, Expression: card.Expression, Meaning: card.Meaning, Reason: grade.Reason,
 		Contexts: contexts, WordDetail: toProtoWordDetail(card.WordDetail), Classification: grade.Classification,
@@ -279,7 +279,7 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 	}
 	var learnedAt, nextReviewDate string; var noteID int64
 	if grade.MatchedCard != nil {
-		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
+		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.ID, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
 		h.mu.Lock(); noteID = h.nextID; h.nextID++; h.freeformStore[noteID] = *grade.MatchedCard; h.mu.Unlock()
 	}
 	return connect.NewResponse(&apiv1.SubmitFreeformAnswerResponse{
@@ -455,7 +455,7 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyStandard)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, "", card.Origin, notebook.QuizTypeEtymologyStandard)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
 	// Build a graph context for the feedback card — same builder the
 	// reverse mode uses, but with the blank filled in so the just-answered
@@ -484,7 +484,7 @@ func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *con
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyReverse)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, "", card.Origin, notebook.QuizTypeEtymologyReverse)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.SubmitEtymologyReverseAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectOrigin: card.Origin, Type: card.Type, Language: card.Language, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, ExampleWords: h.loadCardExampleWords(card)}), nil
 }
@@ -553,7 +553,7 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *co
 	if err := h.svc.SaveEtymologyOriginResult(*resultSense, bestGrade.Quality, bestGrade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyFreeform, false); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology freeform result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(resultSense.NotebookName, resultSense.Origin, notebook.QuizTypeEtymologyFreeform)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(resultSense.NotebookName, "", resultSense.Origin, notebook.QuizTypeEtymologyFreeform)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = *resultSense; h.mu.Unlock()
 
 	allSenses := make([]*apiv1.EtymologyOriginSense, 0, len(senses))

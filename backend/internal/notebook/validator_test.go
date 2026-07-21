@@ -123,12 +123,12 @@ func TestValidationResult_AddWarning(t *testing.T) {
 
 func TestValidator_validateLearningNotesStructure(t *testing.T) {
 	tests := []struct {
-		name                    string
-		files                   []learningHistoryFile
-		expectedErrorCount      int
-		expectedWarningCount    int
-		errorMessageContains    []string
-		warningMessageContains  []string
+		name                   string
+		files                  []learningHistoryFile
+		expectedErrorCount     int
+		expectedWarningCount   int
+		errorMessageContains   []string
+		warningMessageContains []string
 	}{
 		{
 			name: "valid learning notes",
@@ -663,7 +663,6 @@ func TestValidator_validateDictionaryReferences(t *testing.T) {
 	}
 }
 
-
 func TestValidator_validateDefinitionsInConversations(t *testing.T) {
 	tests := []struct {
 		name                 string
@@ -1100,7 +1099,7 @@ func TestValidator_Fix(t *testing.T) {
 // containing two top-level LearningHistory entries whose Metadata.Title
 // values differ ONLY in apostrophe encoding (one uses U+2019 RIGHT SINGLE
 // QUOTATION MARK, the other an ASCII apostrophe, which YAML serialises as
-// 'It''s'). The reader treats them as two episodes, so a vocabulary word
+// 'It”s'). The reader treats them as two episodes, so a vocabulary word
 // recorded in both keeps reappearing in daily quizzes — the SR algorithm
 // finds the stale shorter-interval entry and marks the word due even
 // after the user has answered it correctly weeks apart in the merged
@@ -1690,7 +1689,7 @@ func TestValidator_FixMismatchedScenes(t *testing.T) {
 								},
 							},
 							{
-								Metadata: LearningSceneMetadata{Title: "Scene B"},
+								Metadata:    LearningSceneMetadata{Title: "Scene B"},
 								Expressions: []LearningHistoryExpression{},
 							},
 						},
@@ -2030,8 +2029,8 @@ func TestValidator_Fix_PreservesEveryPersistableField(t *testing.T) {
 	// Fields the fix pass is allowed to mutate or drop. Each entry must
 	// document why; an empty list keeps the guard tight.
 	skip := map[string]string{
-		"Expression":     "the identifier itself, always set",
-		"EasinessFactor": `yaml:"-" — derived on the fly`,
+		"Expression":                       "the identifier itself, always set",
+		"EasinessFactor":                   `yaml:"-" — derived on the fly`,
 		"ReverseEasinessFactor":            `yaml:"-" — derived`,
 		"EtymologyBreakdownEasinessFactor": `yaml:"-" — derived`,
 		"EtymologyAssemblyEasinessFactor":  `yaml:"-" — derived`,
@@ -2040,6 +2039,11 @@ func TestValidator_Fix_PreservesEveryPersistableField(t *testing.T) {
 		// correctly dropped by fixConsistency. Round-tripping with
 		// other data populated is exercised by the migration tests.
 		"Type": "discriminator field, not 'data' that keeps an entry alive",
+		// ID is the stable identity tag, like Type: an entry whose only
+		// content is an ID (no logs, no skip) carries no learning data and
+		// is correctly dropped by fixConsistency. When the entry has real
+		// data the ID rides along on the whole struct and round-trips.
+		"ID": "identity tag, not 'data' that keeps an entry alive",
 	}
 
 	rt := reflect.TypeOf(LearningHistoryExpression{})
@@ -2400,7 +2404,7 @@ func TestValidator_Fix_WithDictionaryReferences(t *testing.T) {
 	storyPath := filepath.Join(storiesDir, "test.yml")
 	require.NoError(t, WriteYamlFile(storyPath, []StoryNotebook{
 		{
-			Event: "Episode 1",
+			Event:    "Episode 1",
 			Metadata: Metadata{Series: "Test Show", Season: 1, Episode: 1},
 			Scenes: []StoryScene{
 				{
@@ -2452,7 +2456,7 @@ func TestValidator_Fix_WithMismatchedScenes(t *testing.T) {
 	// Create story
 	require.NoError(t, WriteYamlFile(filepath.Join(storiesDir, "test.yml"), []StoryNotebook{
 		{
-			Event: "Episode 1",
+			Event:    "Episode 1",
 			Metadata: Metadata{Series: "Test Show", Season: 1, Episode: 1},
 			Scenes: []StoryScene{
 				{Title: "Scene A", Definitions: []Note{{Expression: "eager", Meaning: "wanting to do something"}}},
@@ -2558,7 +2562,7 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 								Metadata: LearningSceneMetadata{Title: "Scene A"},
 								Expressions: []LearningHistoryExpression{
 									{
-										Expression:     "break the ice",
+										Expression: "break the ice",
 										LearnedLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2598,7 +2602,7 @@ func TestValidator_FixLearningNotesStructure_SameSceneMergeReverseLogs(t *testin
 								Metadata: LearningSceneMetadata{Title: "Scene A"},
 								Expressions: []LearningHistoryExpression{
 									{
-										Expression:            "lose one's temper",
+										Expression: "lose one's temper",
 										ReverseLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2693,7 +2697,7 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 								Metadata: LearningSceneMetadata{Title: "Scene A"},
 								Expressions: []LearningHistoryExpression{
 									{
-										Expression:     "break the ice",
+										Expression: "break the ice",
 										LearnedLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2743,7 +2747,7 @@ func TestValidator_FixLearningNotesStructure_CrossSceneMergeReverseLogs(t *testi
 								Metadata: LearningSceneMetadata{Title: "Scene A"},
 								Expressions: []LearningHistoryExpression{
 									{
-										Expression:            "lose one's temper",
+										Expression: "lose one's temper",
 										ReverseLogs: []LearningRecord{
 											{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)), Quality: 4},
 										},
@@ -2929,7 +2933,7 @@ func TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots(t *testing.T) {
 
 	require.NoError(t, WriteYamlFile(filepath.Join(storiesDir, "demo.yml"), []StoryNotebook{
 		{
-			Event: "Demo Episode",
+			Event:    "Demo Episode",
 			Metadata: Metadata{Series: "Demo", Season: 1, Episode: 1},
 			Scenes: []StoryScene{
 				{

@@ -67,7 +67,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 		if err := h.svc.SaveResult(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].Entry, notebook.QuizTypeNotebook)
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Entry, notebook.QuizTypeNotebook)
 		responses[i] = &apiv1.SubmitAnswerResponse{
 			Correct:        grades[i].Correct,
 			Meaning:        cards[i].Meaning,
@@ -138,7 +138,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		for _, c := range cards[i].Contexts {
 			contexts = append(contexts, c.Context)
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].Expression, notebook.QuizTypeReverse)
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Expression, notebook.QuizTypeReverse)
 		responses[i] = &apiv1.SubmitReverseAnswerResponse{
 			Correct:        grades[i].Correct,
 			Expression:     cards[i].Expression,
@@ -218,7 +218,7 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 		if err := h.svc.SaveEtymologyOriginResult(cards[i], grades[i].Quality, grades[i].Correct, answers[i].GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].Origin, notebook.QuizTypeEtymologyStandard)
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, "", cards[i].Origin, notebook.QuizTypeEtymologyStandard)
 		h.mu.Lock()
 		noteID := h.nextID
 		h.nextID++
@@ -286,7 +286,7 @@ func (h *QuizHandler) BatchSubmitEtymologyReverseAnswers(
 		if err := h.svc.SaveEtymologyOriginResult(cards[i], grades[i].Quality, grades[i].Correct, answers[i].GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, true); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].Origin, notebook.QuizTypeEtymologyReverse)
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, "", cards[i].Origin, notebook.QuizTypeEtymologyReverse)
 		h.mu.Lock()
 		noteID := h.nextID
 		h.nextID++

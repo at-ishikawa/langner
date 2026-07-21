@@ -24,7 +24,11 @@ import (
 // inside — used by MultiLearningRepository so the secondary store
 // applies the same bytes the primary just wrote.
 type UpdateLogInput struct {
-	NoteID             int64
+	NoteID int64
+	// ID is the stable source-entry identity of the target card. When set,
+	// the YAML repository resolves the entry by id (falling back to
+	// Expression for legacy id-less data).
+	ID                 string
 	NotebookName       string
 	StoryTitle         string
 	SceneTitle         string
