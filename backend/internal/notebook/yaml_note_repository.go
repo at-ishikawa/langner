@@ -228,8 +228,13 @@ func convertNoteToRecord(note Note, notebookType, notebookID, group, subgroup st
 		Meaning:          note.Meaning,
 		Level:            string(note.Level),
 		DictionaryNumber: note.DictionaryNumber,
-		Images:           images,
-		References:       references,
+		// PartOfSpeech is the sense discriminator (issue #32). It must be
+		// carried onto the record so both the DB import (notes identity)
+		// and the backfill-senses migration can see which sense a note
+		// declares — without it every record looks sense-less.
+		PartOfSpeech: note.PartOfSpeech,
+		Images:       images,
+		References:   references,
 		NotebookNotes: []NotebookNote{
 			{NotebookType: notebookType, NotebookID: notebookID, Group: group, Subgroup: subgroup},
 		},

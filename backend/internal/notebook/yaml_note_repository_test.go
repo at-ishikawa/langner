@@ -304,6 +304,7 @@ notebooks:
         title: "tele (far)"
       expressions:
         - expression: "telegraph"
+          part_of_speech: "noun"
           meaning: "long-distance message device"
         - expression: "telescope"
           meaning: "instrument for viewing distant objects"
@@ -323,6 +324,10 @@ notebooks:
 			assert.Equal(t, "vocab-book", n.NotebookNotes[0].NotebookID)
 			assert.Equal(t, "Roots Chapter 1", n.NotebookNotes[0].Group)
 			assert.Equal(t, "tele (far)", n.NotebookNotes[0].Subgroup)
+			// part_of_speech must survive the Note -> NoteRecord conversion:
+			// the DB import (notes identity) and backfill-senses migration
+			// both key on it, and dropping it made backfill a no-op (#32).
+			assert.Equal(t, "noun", n.PartOfSpeech, "FindAll must carry part_of_speech onto the record")
 		}
 		if n.Usage == "telescope" {
 			foundTelescope = true
