@@ -1,6 +1,7 @@
 package notebook
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -64,13 +65,12 @@ func mergeIDLessInList(list *[]LearningHistoryExpression, calculator IntervalCal
 			continue
 		}
 		target := &exprs[g.idIdx[0]]
-		mergedAny := false
 		for _, j := range g.idlessIdx {
 			src := exprs[j]
-			target.LearnedLogs = append(target.LearnedLogs, src.LearnedLogs...)
-			target.ReverseLogs = append(target.ReverseLogs, src.ReverseLogs...)
-			target.EtymologyBreakdownLogs = append(target.EtymologyBreakdownLogs, src.EtymologyBreakdownLogs...)
-			target.EtymologyAssemblyLogs = append(target.EtymologyAssemblyLogs, src.EtymologyAssemblyLogs...)
+			target.LearnedLogs = mergeSeries(target.LearnedLogs, src.LearnedLogs, calculator)
+			target.ReverseLogs = mergeSeries(target.ReverseLogs, src.ReverseLogs, calculator)
+			target.EtymologyBreakdownLogs = mergeSeries(target.EtymologyBreakdownLogs, src.EtymologyBreakdownLogs, calculator)
+			target.EtymologyAssemblyLogs = mergeSeries(target.EtymologyAssemblyLogs, src.EtymologyAssemblyLogs, calculator)
 			for qt, at := range src.SkippedAt {
 				if at == "" {
 					continue
@@ -83,19 +83,6 @@ func mergeIDLessInList(list *[]LearningHistoryExpression, calculator IntervalCal
 				}
 			}
 			remove[j] = true
-			mergedAny = true
-		}
-		if mergedAny {
-			// Replay each series oldest->newest so the merged-in logs get an
-			// interval computed against the FULL combined history, not the
-			// empty history of the forked entry they were written on (a
-			// forked "correct" answer had a first-attempt interval; the real
-			// streak yields a much longer one). RecalculateAll preserves
-			// manual OverrideInterval entries and returns storage order.
-			_, target.LearnedLogs = calculator.RecalculateAll(target.LearnedLogs)
-			_, target.ReverseLogs = calculator.RecalculateAll(target.ReverseLogs)
-			_, target.EtymologyBreakdownLogs = calculator.RecalculateAll(target.EtymologyBreakdownLogs)
-			_, target.EtymologyAssemblyLogs = calculator.RecalculateAll(target.EtymologyAssemblyLogs)
 		}
 	}
 
@@ -111,4 +98,34 @@ func mergeIDLessInList(list *[]LearningHistoryExpression, calculator IntervalCal
 	}
 	*list = kept
 	return len(remove)
+}
+
+// mergeSeries folds the forked entry's logs (added) into the surviving
+// series (existing) and computes an interval for each ADDED log against the
+// real history — the empty history of the fork gave a correct answer a
+// first-attempt interval; the true streak yields a much longer one. Existing
+// (historical) intervals are left exactly as stored: a full RecalculateAll
+// replay would rewrite them, and this data's stored intervals diverge from a
+// fresh replay, so only the newly merged-in logs are recomputed.
+func mergeSeries(existing, added []LearningRecord, calc IntervalCalculator) []LearningRecord {
+	if len(added) == 0 {
+		return existing
+	}
+	merged := make([]LearningRecord, len(existing), len(existing)+len(added))
+	copy(merged, existing)
+	for _, a := range added {
+		if a.OverrideInterval == 0 {
+			prior := make([]LearningRecord, 0, len(merged))
+			for _, m := range merged {
+				if m.LearnedAt.Before(a.LearnedAt.Time) {
+					prior = append(prior, m)
+				}
+			}
+			sort.SliceStable(prior, func(i, j int) bool { return prior[i].LearnedAt.After(prior[j].LearnedAt.Time) })
+			a.IntervalDays, _ = calc.NextIntervalForWrite(prior, a)
+		}
+		merged = append(merged, a)
+	}
+	sort.SliceStable(merged, func(i, j int) bool { return merged[i].LearnedAt.After(merged[j].LearnedAt.Time) })
+	return merged
 }

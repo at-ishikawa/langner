@@ -60,12 +60,16 @@ func TestMergeIDLessDuplicates(t *testing.T) {
 	assert.Equal(t, "taxidermy", tax.ID, "the surviving entry keeps its id")
 	require.Len(t, tax.LearnedLogs, 3, "all logs are merged onto the id-bearing entry")
 	assert.True(t, tax.LearnedLogs[0].LearnedAt.After(tax.LearnedLogs[1].LearnedAt.Time),
-		"logs stay newest-first after the replay")
-	// The consistency fix: today's log is the 3rd consecutive correct answer,
-	// so replaying the full streak must give it an interval well above the
-	// fork's first-attempt value of 1 — the schedule now reflects real history.
+		"logs stay newest-first after the merge")
+	// The merged-in (today's) log is the 3rd consecutive correct answer, so it
+	// is recomputed against the real streak — well above the fork's
+	// first-attempt value of 1.
 	assert.Greater(t, tax.LearnedLogs[0].IntervalDays, 1,
-		"the merged-in interval is recomputed against the full streak, not left at the fork's 1")
+		"the merged-in interval reflects the full streak, not the fork's 1")
+	// The historical intervals must be left EXACTLY as stored — recomputing
+	// the whole chain would rewrite the learner's real schedule.
+	assert.Equal(t, 6, tax.LearnedLogs[1].IntervalDays, "historical interval is preserved")
+	assert.Equal(t, 1, tax.LearnedLogs[2].IntervalDays, "historical interval is preserved")
 	assert.Equal(t, 2, banks, "the homograph pair is left untouched")
 	assert.Equal(t, 1, orphans, "a pure-legacy id-less entry is left untouched")
 }
