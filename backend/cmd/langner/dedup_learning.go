@@ -59,10 +59,15 @@ func dedupLearningIDs(cfg *config.Config, dryRun bool, w io.Writer) error {
 	}
 	sort.Strings(names)
 
+	// Use the learner's configured algorithm so the merged-in logs get an
+	// interval computed the same way the live quiz would (e.g. a fixed
+	// schedule, not SM-2).
+	calc := notebook.NewIntervalCalculator(cfg.Quiz.Algorithm, cfg.Quiz.FixedIntervals)
+
 	total := 0
 	for _, name := range names {
 		list := histories[name]
-		n := notebook.MergeIDLessDuplicates(list, nil)
+		n := notebook.MergeIDLessDuplicates(list, calc)
 		if n == 0 {
 			continue
 		}
