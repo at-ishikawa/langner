@@ -1270,10 +1270,13 @@ func TestLearningHistory_GetLogs_IDIsolation(t *testing.T) {
 	require.Len(t, riverLogs, 1)
 	assert.Equal(t, LearnedStatusMisunderstood, riverLogs[0].Status)
 
-	// A tagged entry matches ONLY its exact id: an id-less card cannot
-	// resolve tagged senses (the id is authoritative once assigned).
+	// An id-less query — a concept write redirected to the head expression,
+	// or pre-migration data — resolves by expression to the first matching
+	// entry, so it lands on an existing series instead of forking a new
+	// id-less duplicate. It is never used to tell two tagged senses apart
+	// (those queries always carry an id, exercised above).
 	legacyLogs := h.GetLogs("flashcards", "", Note{Expression: "bank"})
-	assert.Empty(t, legacyLogs)
+	require.Len(t, legacyLogs, 1, "an id-less query resolves by expression (concept/legacy fallback)")
 
 	// But legacy id-less ENTRIES still resolve by expression, so pre-migration
 	// data keeps working.

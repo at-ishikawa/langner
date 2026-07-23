@@ -118,10 +118,23 @@ func MatchesEntry(e *LearningHistoryExpression, id, expression, originalExpressi
 	if e == nil {
 		return false
 	}
-	if e.ID != "" {
-		return id != "" && e.ID == id
+	matchesExpr := e.Expression == expression || (originalExpression != "" && e.Expression == originalExpression)
+	if id == "" {
+		// An id-less query — a concept write redirected to the head
+		// expression (SaveResult clears the member id), or pre-migration data
+		// — matches by expression even against an id-bearing entry, so it
+		// lands on the migrated series instead of forking a new id-less
+		// duplicate. A genuine homograph always carries an id on the query
+		// side, so this never merges two real senses.
+		return matchesExpr
 	}
-	return e.Expression == expression || (originalExpression != "" && e.Expression == originalExpression)
+	// An id-bearing query matches a tagged entry only on exact id (keeping
+	// homograph senses apart) and adopts a legacy id-less entry by expression
+	// (the updater then upgrades that entry in place).
+	if e.ID != "" {
+		return e.ID == id
+	}
+	return matchesExpr
 }
 
 type LearningScene struct {

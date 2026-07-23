@@ -1100,4 +1100,32 @@ func TestLearningHistoryUpdater_IDRouting(t *testing.T) {
 		assert.Equal(t, "hello-1", got[0].ID, "the legacy entry is upgraded in place")
 		assert.Len(t, got[0].LearnedLogs, 2, "the new log is appended onto the existing series")
 	})
+
+	t.Run("id-less write lands on an id-bearing entry instead of forking", func(t *testing.T) {
+		// A definitions concept card clears its member id and routes by the
+		// head expression (SaveResult). The head's learning entry already
+		// carries an id from the assign-ids migration, so an id-less write
+		// must match it by expression rather than fork a new id-less
+		// duplicate — the regression the user hit (e.g. "taxidermy").
+		history := []LearningHistory{{
+			Metadata: LearningHistoryMetadata{NotebookID: "nb", Title: "flashcards", Type: "flashcard"},
+			Expressions: []LearningHistoryExpression{
+				{Expression: "taxidermy", ID: "taxidermy", LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(), Quality: 4},
+				}},
+			},
+		}}
+		updater := NewLearningHistoryUpdater(history, nil)
+
+		found := updater.UpdateOrCreateExpressionWithQuality(
+			"nb", "flashcards", "", "taxidermy", "", "", // id-less (concept redirect)
+			false, false, 1, 0, QuizTypeNotebook,
+		)
+		assert.True(t, found, "the id-less write must find the id-bearing entry")
+
+		got := updater.GetHistory()[0].Expressions
+		require.Len(t, got, 1, "must not fork a new id-less duplicate")
+		assert.Equal(t, "taxidermy", got[0].ID, "the existing id is preserved")
+		assert.Len(t, got[0].LearnedLogs, 2, "the new log is appended onto the existing series")
+	})
 }
