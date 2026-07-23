@@ -1,8 +1,8 @@
 package notebook
 
 import (
-	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -128,32 +128,54 @@ func AddIDsToSourceYAML(data []byte, used map[string]bool) ([]byte, int, error) 
 		}
 	}
 
-	added := 0
+	// Plan one insertion per id-less entry, anchored on its `expression` key
+	// line. The new `id:` line is spliced into the ORIGINAL text verbatim
+	// (never re-encoded), so every other byte — quote styles, blank lines,
+	// comments, block scalars — is preserved exactly. yaml.Node is used only
+	// to locate entries and their line/column; encoding whole documents with
+	// yaml.v3 reformats hand-authored files, which is not acceptable here.
+	type insertion struct {
+		afterLine int // 1-based source line to insert after
+		indent    int // leading spaces for the new line = key column - 1
+		id        string
+	}
+	var plan []insertion
 	for _, m := range entries {
 		if mappingHasKey(m, "id") {
 			continue
 		}
-		expr := mappingScalarValue(m, "expression")
-		slug := nextUniqueSlug(Slugify(expr), used)
+		exprKey := mappingKeyNode(m, "expression")
+		if exprKey == nil {
+			continue
+		}
+		base := Slugify(mappingScalarValue(m, "expression"))
+		if base == "" {
+			continue // no sluggable expression — leave id-less
+		}
+		slug := nextUniqueSlug(base, used)
 		used[slug] = true
-		insertMappingKeyFirst(m, "id", slug)
-		added++
+		plan = append(plan, insertion{afterLine: exprKey.Line, indent: exprKey.Column - 1, id: slug})
 	}
 
-	if added == 0 {
+	if len(plan) == 0 {
 		return data, 0, nil
 	}
 
-	var buf bytes.Buffer
-	enc := yaml.NewEncoder(&buf)
-	enc.SetIndent(2)
-	if err := enc.Encode(&doc); err != nil {
-		return nil, 0, fmt.Errorf("encode source yaml: %w", err)
+	// Apply bottom-to-top so earlier line numbers stay valid as lines shift.
+	sort.Slice(plan, func(i, j int) bool { return plan[i].afterLine > plan[j].afterLine })
+	lines := strings.Split(string(data), "\n")
+	for _, ins := range plan {
+		if ins.afterLine < 1 || ins.afterLine > len(lines) {
+			continue
+		}
+		newLine := strings.Repeat(" ", ins.indent) + "id: " + ins.id
+		out := make([]string, 0, len(lines)+1)
+		out = append(out, lines[:ins.afterLine]...)
+		out = append(out, newLine)
+		out = append(out, lines[ins.afterLine:]...)
+		lines = out
 	}
-	if err := enc.Close(); err != nil {
-		return nil, 0, fmt.Errorf("close yaml encoder: %w", err)
-	}
-	return buf.Bytes(), added, nil
+	return []byte(strings.Join(lines, "\n")), len(plan), nil
 }
 
 // CollectExistingIDs returns the ids already present on entries in one source
@@ -222,12 +244,18 @@ func mappingScalarValue(m *yaml.Node, key string) string {
 	return ""
 }
 
-// insertMappingKeyFirst prepends a scalar key/value pair to a mapping node so
-// the id renders as the entry's first line.
-func insertMappingKeyFirst(m *yaml.Node, key, value string) {
-	keyNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key}
-	valNode := &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value}
-	m.Content = append([]*yaml.Node{keyNode, valNode}, m.Content...)
+// mappingKeyNode returns the scalar key node for key in mapping m (nil if
+// absent). Its Line/Column locate where to splice the new id line.
+func mappingKeyNode(m *yaml.Node, key string) *yaml.Node {
+	if m.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(m.Content); i += 2 {
+		if m.Content[i].Value == key {
+			return m.Content[i]
+		}
+	}
+	return nil
 }
 
 // RekeyLearningHistories best-effort stamps ids onto id-less learning-history

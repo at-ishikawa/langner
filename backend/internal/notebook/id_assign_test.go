@@ -46,17 +46,26 @@ func TestAssignSourceIDs_DedupsGlobally(t *testing.T) {
 // ids into hand-authored source YAML changes ONLY by adding `id:` lines. Every
 // other line must be byte-identical to the original.
 func TestAddIDsToSourceYAML_AddOnly(t *testing.T) {
-	src := `notes:
-  - expression: bank
-    meaning: the land alongside a river
-    examples:
-      - we sat on the bank
-  - expression: bank
-    meaning: a financial institution
-  - id: keep-existing
-    expression: keep
-    meaning: to retain
-`
+	// Deliberately non-canonical, hand-authored formatting: a leading comment,
+	// a single-quoted value, a blank line between entries, and a block scalar.
+	// A whole-document yaml re-encode would mangle all of these; line-based
+	// insertion must leave every original byte untouched and only add id lines.
+	src := "# Vocabulary for the river chapter\n" +
+		"notes:\n" +
+		"  - expression: bank\n" +
+		"    part_of_speech: noun\n" +
+		"    meaning: 'the land alongside a river'\n" +
+		"    examples:\n" +
+		"      - we sat on the bank\n" +
+		"\n" +
+		"  - expression: bank\n" +
+		"    meaning: |\n" +
+		"      a financial\n" +
+		"      institution\n" +
+		"  - id: keep-existing\n" +
+		"    expression: keep\n" +
+		"    meaning: to retain\n"
+
 	used := make(map[string]bool)
 	out, added, err := AddIDsToSourceYAML([]byte(src), used)
 	if err != nil {
@@ -66,19 +75,23 @@ func TestAddIDsToSourceYAML_AddOnly(t *testing.T) {
 		t.Fatalf("added = %d, want 2 (the two id-less entries)", added)
 	}
 
-	// The only permitted change is the insertion of an `id:` line (rendered
-	// inline with the sequence dash) as each id-less entry's first key. Assert
-	// the output is byte-for-byte the source with exactly those insertions —
-	// no reformatting of any other line.
-	want := "notes:\n" +
-		"  - id: bank\n" +
-		"    expression: bank\n" +
-		"    meaning: the land alongside a river\n" +
+	// The output must be byte-for-byte the source with an `id:` line inserted
+	// right after each id-less entry's `expression:` line (aligned with the
+	// sibling keys) — comment, quotes, blank line, and block scalar preserved.
+	want := "# Vocabulary for the river chapter\n" +
+		"notes:\n" +
+		"  - expression: bank\n" +
+		"    id: bank\n" +
+		"    part_of_speech: noun\n" +
+		"    meaning: 'the land alongside a river'\n" +
 		"    examples:\n" +
 		"      - we sat on the bank\n" +
-		"  - id: bank-2\n" +
-		"    expression: bank\n" +
-		"    meaning: a financial institution\n" +
+		"\n" +
+		"  - expression: bank\n" +
+		"    id: bank-2\n" +
+		"    meaning: |\n" +
+		"      a financial\n" +
+		"      institution\n" +
 		"  - id: keep-existing\n" +
 		"    expression: keep\n" +
 		"    meaning: to retain\n"
