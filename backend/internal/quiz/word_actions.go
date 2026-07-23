@@ -47,8 +47,12 @@ type CardInfo struct {
 	SceneTitle         string
 	Expression         string
 	OriginalExpression string
-	LearnedAt          string
-	MarkCorrect        *bool
+	// ID is the note's stable sense id (issue #32), set by the override
+	// handler from the request so Mark-as-Correct / Undo target the exact
+	// entry. Empty resolves by expression (legacy, pre-migration).
+	ID          string
+	LearnedAt   string
+	MarkCorrect *bool
 	// NoteID is the DB primary key for the note this card represents,
 	// set by the handler when override is routed to a DB-backed repo.
 	// Zero when the card came from a YAML-only deployment (DB-side
@@ -140,13 +144,13 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook
 	// must not invent a fake "quality 5" review log just because the user
 	// skipped the word.
 	for _, expr := range expressions {
-		updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, expr)
+		updater.EnsureExpressionStubForSkip(info.NotebookName, info.StoryTitle, info.SceneTitle, expr, "")
 	}
 
 	skippedAt := time.Now().Format(time.RFC3339)
 	for _, expr := range expressions {
 		for _, qt := range quizTypes {
-			if !updater.SetSkippedAt(expr, qt, skippedAt) {
+			if !updater.SetSkippedAt(expr, "", qt, skippedAt) {
 				return fmt.Errorf("failed to record skip for expression %q (%s) in notebook %q", expr, qt, info.NotebookName)
 			}
 		}
@@ -194,7 +198,7 @@ func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error
 	updater := notebook.NewLearningHistoryUpdater(history, s.calculator)
 	for _, expr := range s.conceptMembersOrSelf(info.NotebookName, info.Expression) {
 		for _, qt := range quizTypes {
-			updater.ClearSkippedAt(expr, qt)
+			updater.ClearSkippedAt(expr, "", qt)
 		}
 	}
 
@@ -249,6 +253,7 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (Ove
 		SceneTitle:         info.SceneTitle,
 		Expression:         info.Expression,
 		OriginalExpression: info.OriginalExpression,
+		ID:                 info.ID,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
 		MarkCorrect:        info.MarkCorrect,
@@ -284,6 +289,7 @@ func (s *Service) UndoOverrideAnswer(info CardInfo, quizType notebook.QuizType) 
 		SceneTitle:         info.SceneTitle,
 		Expression:         info.Expression,
 		OriginalExpression: info.OriginalExpression,
+		ID:                 info.ID,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
 		MirrorValues: &learning.UpdateLogMirror{

@@ -14,6 +14,7 @@ type notebookKey struct {
 	notebookType string
 	notebookID   string
 }
+
 // noteWithNN pairs a converted Note with its NotebookNote metadata.
 type noteWithNN struct {
 	note Note
@@ -66,7 +67,11 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		return nil, fmt.Errorf("read all flashcard notebooks: %w", err)
 	}
 
-	type noteKey struct{ usage, entry string }
+	// Dedup key includes the sense id: a note with a non-empty id dedups by
+	// that id, so two ids sharing an (usage, entry) spelling produce two
+	// records. Id-less legacy notes keep deduping by (usage, entry) because
+	// their id component is "".
+	type noteKey struct{ id, usage, entry string }
 	type nnKey struct{ notebookType, notebookID, group, subgroup string }
 	noteMap := make(map[noteKey]*NoteRecord)
 	nnSeen := make(map[noteKey]map[nnKey]bool)
@@ -75,7 +80,7 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 	addNote := func(note Note, notebookType, notebookID, group, subgroup, conceptKey string) {
 		rec := convertNoteToRecord(note, notebookType, notebookID, group, subgroup)
 		rec.ConceptKey = conceptKey
-		key := noteKey{rec.Usage, rec.Entry}
+		key := noteKey{rec.SenseID, rec.Usage, rec.Entry}
 
 		existing, ok := noteMap[key]
 		if !ok {
@@ -223,6 +228,7 @@ func convertNoteToRecord(note Note, notebookType, notebookID, group, subgroup st
 	}
 
 	return NoteRecord{
+		SenseID:          note.ID,
 		Usage:            note.Expression,
 		Entry:            entry,
 		Meaning:          note.Meaning,
@@ -464,6 +470,7 @@ func convertRecordToNote(rec NoteRecord) Note {
 	}
 
 	return Note{
+		ID:               rec.SenseID,
 		Expression:       rec.Usage,
 		Definition:       definition,
 		Meaning:          rec.Meaning,
@@ -476,24 +483,38 @@ func convertRecordToNote(rec NoteRecord) Note {
 
 func (r *YAMLNoteRepository) Create(_ context.Context, note *NoteRecord) error {
 	defsDir := note.DefinitionsDir
-	if defsDir == "" { defsDir = r.defsDir }
+	if defsDir == "" {
+		defsDir = r.defsDir
+	}
 	notebookID := ""
-	if len(note.NotebookNotes) > 0 { notebookID = note.NotebookNotes[0].NotebookID }
-	if defsDir == "" || notebookID == "" { return fmt.Errorf("DefinitionsDir and NotebookID required") }
+	if len(note.NotebookNotes) > 0 {
+		notebookID = note.NotebookNotes[0].NotebookID
+	}
+	if defsDir == "" || notebookID == "" {
+		return fmt.Errorf("DefinitionsDir and NotebookID required")
+	}
 	filePath := filepath.Join(defsDir, filepath.FromSlash(notebookID)+".yml")
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil { return fmt.Errorf("create dir: %w", err) }
+	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+		return fmt.Errorf("create dir: %w", err)
+	}
 	newNote := Note{Expression: note.Usage, Meaning: note.Meaning, PartOfSpeech: note.PartOfSpeech, Examples: note.Examples}
 	var definitions []Definitions
 	if data, err := os.ReadFile(filePath); err == nil && len(data) > 0 {
 		existing, err := ReadDefinitionsFromBytes(data)
-		if err != nil { return fmt.Errorf("read existing definitions: %w", err) }
+		if err != nil {
+			return fmt.Errorf("read existing definitions: %w", err)
+		}
 		definitions = existing
 	}
 	found := false
 	for i, def := range definitions {
 		key := def.Metadata.Notebook
-		if key == "" { key = def.Metadata.Title }
-		if key != note.NotebookFile { continue }
+		if key == "" {
+			key = def.Metadata.Title
+		}
+		if key != note.NotebookFile {
+			continue
+		}
 		found = true
 		sceneFound := false
 		for j, scene := range def.Scenes {
@@ -503,35 +524,62 @@ func (r *YAMLNoteRepository) Create(_ context.Context, note *NoteRecord) error {
 				break
 			}
 		}
-		if !sceneFound { definitions[i].Scenes = append(definitions[i].Scenes, DefinitionsScene{Metadata: DefinitionsSceneMetadata{Index: note.SceneIndex}, Expressions: []Note{newNote}}) }
+		if !sceneFound {
+			definitions[i].Scenes = append(definitions[i].Scenes, DefinitionsScene{Metadata: DefinitionsSceneMetadata{Index: note.SceneIndex}, Expressions: []Note{newNote}})
+		}
 		break
 	}
-	if !found { definitions = append(definitions, Definitions{Metadata: DefinitionsMetadata{Notebook: note.NotebookFile}, Scenes: []DefinitionsScene{{Metadata: DefinitionsSceneMetadata{Index: note.SceneIndex}, Expressions: []Note{newNote}}}}) }
-	if err := WriteYamlFile(filePath, definitions); err != nil { return fmt.Errorf("write definitions: %w", err) }
+	if !found {
+		definitions = append(definitions, Definitions{Metadata: DefinitionsMetadata{Notebook: note.NotebookFile}, Scenes: []DefinitionsScene{{Metadata: DefinitionsSceneMetadata{Index: note.SceneIndex}, Expressions: []Note{newNote}}}})
+	}
+	if err := WriteYamlFile(filePath, definitions); err != nil {
+		return fmt.Errorf("write definitions: %w", err)
+	}
 	return nil
 }
 
 func (r *YAMLNoteRepository) Delete(_ context.Context, notebookID string, expression string) error {
-	if r.defsDir == "" { return fmt.Errorf("definitions directory not configured") }
+	if r.defsDir == "" {
+		return fmt.Errorf("definitions directory not configured")
+	}
 	filePath := filepath.Join(r.defsDir, filepath.FromSlash(notebookID)+".yml")
 	data, err := os.ReadFile(filePath)
-	if err != nil { if os.IsNotExist(err) { return nil }; return fmt.Errorf("read definitions: %w", err) }
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("read definitions: %w", err)
+	}
 	definitions, err := ReadDefinitionsFromBytes(data)
-	if err != nil { return fmt.Errorf("read definitions: %w", err) }
+	if err != nil {
+		return fmt.Errorf("read definitions: %w", err)
+	}
 	for i := range definitions {
 		for j := range definitions[i].Scenes {
 			var remaining []Note
 			for _, n := range definitions[i].Scenes[j].Expressions {
-				if !strings.EqualFold(n.Expression, expression) { remaining = append(remaining, n) }
+				if !strings.EqualFold(n.Expression, expression) {
+					remaining = append(remaining, n)
+				}
 			}
 			definitions[i].Scenes[j].Expressions = remaining
 		}
 	}
-	if err := WriteYamlFile(filePath, definitions); err != nil { return fmt.Errorf("write definitions: %w", err) }
+	if err := WriteYamlFile(filePath, definitions); err != nil {
+		return fmt.Errorf("write definitions: %w", err)
+	}
 	return nil
 }
 
-func (r *YAMLNoteRepository) BatchCreate(_ context.Context, _ []*NoteRecord) error { return fmt.Errorf("not supported") }
-func (r *YAMLNoteRepository) BatchUpdate(_ context.Context, _ []*NoteRecord, _ []NotebookNote) error { return fmt.Errorf("not supported") }
-func (r *YAMLNoteRepository) BatchDeleteNotes(_ context.Context, _ []int64) error { return fmt.Errorf("not supported") }
-func (r *YAMLNoteRepository) BatchDeleteNotebookNotes(_ context.Context, _ []int64) error { return fmt.Errorf("not supported") }
+func (r *YAMLNoteRepository) BatchCreate(_ context.Context, _ []*NoteRecord) error {
+	return fmt.Errorf("not supported")
+}
+func (r *YAMLNoteRepository) BatchUpdate(_ context.Context, _ []*NoteRecord, _ []NotebookNote) error {
+	return fmt.Errorf("not supported")
+}
+func (r *YAMLNoteRepository) BatchDeleteNotes(_ context.Context, _ []int64) error {
+	return fmt.Errorf("not supported")
+}
+func (r *YAMLNoteRepository) BatchDeleteNotebookNotes(_ context.Context, _ []int64) error {
+	return fmt.Errorf("not supported")
+}

@@ -60,7 +60,12 @@ type MetadataResolver interface {
 	// adjective meaning "clumsy" AND a French origin meaning "left").
 	// expressionType comes from the learning-history record's `type`
 	// field and is the fallback signal when quizType is ambiguous.
-	Resolve(ctx context.Context, notebookID, expression, expressionType, quizType string) WordMetadata
+	//
+	// id is the entry's stable source-entry identity (notebook.Note.ID).
+	// When present, the resolver selects the source note whose .ID equals
+	// it so two same-spelling senses resolve to their own meaning; empty
+	// falls back to matching by expression (legacy).
+	Resolve(ctx context.Context, notebookID, id, expression, expressionType, quizType string) WordMetadata
 }
 
 // noMetadataResolver is the default no-op resolver. The handler uses it
@@ -73,6 +78,6 @@ type noMetadataResolver struct{}
 // fixtures needed to populate meanings.
 func NoMetadataResolver() MetadataResolver { return noMetadataResolver{} }
 
-func (noMetadataResolver) Resolve(_ context.Context, _, _, _, _ string) WordMetadata {
+func (noMetadataResolver) Resolve(_ context.Context, _, _, _, _, _ string) WordMetadata {
 	return WordMetadata{}
 }

@@ -20,6 +20,10 @@ export interface ResultItem {
   correct: boolean;
   contexts?: string[];
   noteId?: bigint;
+  /** senseId is the stable source-entry identity echoed from the Submit
+   * response. Threaded back into OverrideAnswer/UndoOverrideAnswer so the
+   * override targets the exact sense the card came from. */
+  senseId?: string;
   learnedAt?: string;
   isOverridden?: boolean;
   isSkipped?: boolean;

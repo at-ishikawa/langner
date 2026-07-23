@@ -44,9 +44,13 @@ func (r *YAMLRepository) WithMetadataResolver(m MetadataResolver) *YAMLRepositor
 // to filter by notebook/quiz type and look up the parent expression for
 // the per-day detail view.
 type yamlAttempt struct {
-	NotebookID     string
-	NotebookTitle  string
-	SceneTitle     string
+	NotebookID    string
+	NotebookTitle string
+	SceneTitle    string
+	// ID is the learning entry's stable source-entry id (see
+	// LearningHistoryExpression.ID). Empty for legacy id-less entries, which
+	// fall back to keying by Expression exactly as before.
+	ID             string
 	Expression     string
 	ExpressionType string
 	QuizType       string
@@ -116,10 +120,10 @@ func appendExpressionAttempts(
 	out *[]yamlAttempt,
 ) {
 	tracks := map[string][]notebook.LearningRecord{
-		string(notebook.QuizTypeNotebook):           exp.LearnedLogs,
-		string(notebook.QuizTypeReverse):            exp.ReverseLogs,
-		string(notebook.QuizTypeEtymologyStandard):  exp.EtymologyBreakdownLogs,
-		string(notebook.QuizTypeEtymologyReverse):   exp.EtymologyAssemblyLogs,
+		string(notebook.QuizTypeNotebook):          exp.LearnedLogs,
+		string(notebook.QuizTypeReverse):           exp.ReverseLogs,
+		string(notebook.QuizTypeEtymologyStandard): exp.EtymologyBreakdownLogs,
+		string(notebook.QuizTypeEtymologyReverse):  exp.EtymologyAssemblyLogs,
 	}
 	for quizType, records := range tracks {
 		if quizTypeFilter != "" && quizTypeFilter != quizType {
@@ -134,6 +138,7 @@ func appendExpressionAttempts(
 				NotebookID:     notebookName,
 				NotebookTitle:  notebookName,
 				SceneTitle:     sceneTitle,
+				ID:             exp.ID,
 				Expression:     exp.Expression,
 				ExpressionType: exp.Type,
 				QuizType:       quizType,
@@ -149,6 +154,47 @@ func appendExpressionAttempts(
 			})
 		}
 	}
+}
+
+// wordKey identifies one word × mode log series for the per-day grouping.
+// The discriminator field holds the entry's stable id when present, else
+// its expression — so two same-spelling ids stay in separate series while
+// legacy id-less entries group by spelling exactly as before.
+type wordKey struct {
+	notebookID    string
+	discriminator string
+	quizType      string
+}
+
+// attemptSeriesKey returns the canonical grouping key for an attempt: keyed
+// by id when the entry carries one, otherwise by expression (legacy).
+func attemptSeriesKey(a yamlAttempt) wordKey {
+	return wordKey{
+		notebookID:    a.NotebookID,
+		discriminator: seriesDiscriminator(a.ID, a.Expression),
+		quizType:      a.QuizType,
+	}
+}
+
+// attemptMatchesRef reports whether an attempt belongs to the series a
+// WordRef identifies. When the ref carries an id, match id exactly; else
+// fall back to the expression (legacy id-less lookups).
+func attemptMatchesRef(a yamlAttempt, ref WordRef) bool {
+	if ref.ID != "" {
+		return a.ID == ref.ID
+	}
+	return a.Expression == ref.Expression
+}
+
+// seriesDiscriminator is the single rule mapping (id, expression) to the
+// per-series discriminator: the id when present, else the expression. Used
+// on both the analytics read grouping and the Trends word-identity keys so
+// the id-vs-expression fallback lives in one place.
+func seriesDiscriminator(id, expression string) string {
+	if id != "" {
+		return id
+	}
+	return expression
 }
 
 // DailySummaries aggregates per-day rollups. rangeDays == 0 means
@@ -211,13 +257,11 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 	}
 
 	dayStr := dayKey(day)
-	// Index attempts by (notebookID, expression, quizType) so we can find each
-	// word's full log to compute streak/pattern.
-	type wordKey struct {
-		notebookID string
-		expression string
-		quizType   string
-	}
+	// Index attempts by (notebookID, id-or-expression, quizType) so we can
+	// find each word's full log to compute streak/pattern. Two entries that
+	// share a spelling but carry different ids form two independent series;
+	// legacy id-less entries fall back to keying by expression exactly as
+	// before (see attemptSeriesKey).
 	byWord := map[wordKey][]yamlAttempt{}
 	dayHas := map[string]bool{} // YYYY-MM-DD -> seen activity
 	summary := DailySummary{Date: truncToDay(day)}
@@ -227,10 +271,8 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 	for _, a := range attempts {
 		key := dayKey(a.Attempt.LearnedAt)
 		dayHas[key] = true
-		byWord[wordKey{a.NotebookID, a.Expression, a.QuizType}] = append(
-			byWord[wordKey{a.NotebookID, a.Expression, a.QuizType}],
-			a,
-		)
+		wk := attemptSeriesKey(a)
+		byWord[wk] = append(byWord[wk], a)
 		if key == dayStr {
 			summary.TotalCount++
 			if a.Attempt.IsWrong {
@@ -271,8 +313,9 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 		for i := hitIdx; i < len(records); i++ {
 			fromHit = append(fromHit, records[i].Attempt)
 		}
-		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.Expression, hit.ExpressionType, hit.QuizType)
+		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.ID, hit.Expression, hit.ExpressionType, hit.QuizType)
 		wrong = append(wrong, WrongWord{
+			ID:                    hit.ID,
 			Expression:            hit.Expression,
 			NotebookID:            hit.NotebookID,
 			NotebookTitle:         hit.NotebookTitle,
@@ -319,7 +362,7 @@ func (r *YAMLRepository) WordHistory(_ context.Context, ref WordRef) (WordHistor
 	var matched []yamlAttempt
 	var notebookTitle string
 	for _, a := range attempts {
-		if a.Expression != ref.Expression {
+		if !attemptMatchesRef(a, ref) {
 			continue
 		}
 		matched = append(matched, a)
@@ -350,10 +393,15 @@ func (r *YAMLRepository) WordHistory(_ context.Context, ref WordRef) (WordHistor
 	}
 
 	currentStatus := ""
+	resultID := ref.ID
 	if len(matched) > 0 {
 		currentStatus = matched[0].Attempt.Status
+		if resultID == "" {
+			resultID = matched[0].ID
+		}
 	}
 	return WordHistory{
+		ID:                 resultID,
 		Expression:         ref.Expression,
 		NotebookID:         ref.NotebookID,
 		NotebookTitle:      notebookTitle,
@@ -375,6 +423,7 @@ func (r *YAMLRepository) Trends(_ context.Context, q TrendsQuery) (TrendsResult,
 	trendAttempts := make([]TrendAttempt, 0, len(attempts))
 	for _, a := range attempts {
 		trendAttempts = append(trendAttempts, TrendAttempt{
+			ID:            a.ID,
 			Expression:    a.Expression,
 			NotebookID:    a.NotebookID,
 			NotebookTitle: a.NotebookTitle,

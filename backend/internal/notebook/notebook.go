@@ -47,7 +47,11 @@ const (
 type Note struct {
 	notebookDate time.Time `yaml:"-"`
 
-	ID         uint   `yaml:"id,omitempty"`
+	// ID is the stable, globally-unique identity of this source vocabulary
+	// entry (a readable slug, e.g. "bank-river"). It is the canonical key
+	// for the word's learning-log identity; empty on legacy pre-migration
+	// entries, which resolve by expression instead.
+	ID         string `yaml:"id,omitempty"`
 	Expression string `yaml:"expression,omitempty"`
 	Definition string `yaml:"definition,omitempty"`
 

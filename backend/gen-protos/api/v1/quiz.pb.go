@@ -1086,8 +1086,12 @@ type SubmitAnswerResponse struct {
 	NextReviewDate string                 `protobuf:"bytes,5,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,6,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	Images         []string               `protobuf:"bytes,7,rep,name=images,proto3" json:"images,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// sense_id is the stable source-entry identity of the answered card. The
+	// frontend echoes it back on OverrideAnswer/UndoOverrideAnswer so the
+	// override targets the exact sense the card came from (not the expression).
+	SenseId       string `protobuf:"bytes,8,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitAnswerResponse) Reset() {
@@ -1167,6 +1171,13 @@ func (x *SubmitAnswerResponse) GetImages() []string {
 		return x.Images
 	}
 	return nil
+}
+
+func (x *SubmitAnswerResponse) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
 }
 
 type BatchSubmitAnswersRequest struct {
@@ -1632,8 +1643,10 @@ type SubmitReverseAnswerResponse struct {
 	NextReviewDate string                 `protobuf:"bytes,8,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	Images         []string               `protobuf:"bytes,10,rep,name=images,proto3" json:"images,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// sense_id — see SubmitAnswerResponse.sense_id.
+	SenseId       string `protobuf:"bytes,11,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitReverseAnswerResponse) Reset() {
@@ -1734,6 +1747,13 @@ func (x *SubmitReverseAnswerResponse) GetImages() []string {
 		return x.Images
 	}
 	return nil
+}
+
+func (x *SubmitReverseAnswerResponse) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
 }
 
 type BatchSubmitReverseAnswersRequest struct {
@@ -1993,8 +2013,10 @@ type SubmitFreeformAnswerResponse struct {
 	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	NoteId         int64                  `protobuf:"varint,10,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
 	Images         []string               `protobuf:"bytes,11,rep,name=images,proto3" json:"images,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// sense_id — see SubmitAnswerResponse.sense_id.
+	SenseId       string `protobuf:"bytes,12,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SubmitFreeformAnswerResponse) Reset() {
@@ -2104,6 +2126,13 @@ func (x *SubmitFreeformAnswerResponse) GetImages() []string {
 	return nil
 }
 
+func (x *SubmitFreeformAnswerResponse) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
+}
+
 // Override Answer
 type OverrideAnswerRequest struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -2112,8 +2141,13 @@ type OverrideAnswerRequest struct {
 	LearnedAt      string                 `protobuf:"bytes,3,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
 	MarkCorrect    *bool                  `protobuf:"varint,4,opt,name=mark_correct,json=markCorrect,proto3,oneof" json:"mark_correct,omitempty"`
 	NextReviewDate *string                `protobuf:"bytes,5,opt,name=next_review_date,json=nextReviewDate,proto3,oneof" json:"next_review_date,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// sense_id is the stable source-entry identity of the card being
+	// overridden, echoed from the Submit response. When set the backend
+	// routes the override to that exact sense (falling back to note_id /
+	// expression for legacy id-less data).
+	SenseId       string `protobuf:"bytes,6,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *OverrideAnswerRequest) Reset() {
@@ -2177,6 +2211,13 @@ func (x *OverrideAnswerRequest) GetMarkCorrect() bool {
 func (x *OverrideAnswerRequest) GetNextReviewDate() string {
 	if x != nil && x.NextReviewDate != nil {
 		return *x.NextReviewDate
+	}
+	return ""
+}
+
+func (x *OverrideAnswerRequest) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
 	}
 	return ""
 }
@@ -2258,8 +2299,10 @@ type UndoOverrideAnswerRequest struct {
 	OriginalQuality      int32                  `protobuf:"varint,4,opt,name=original_quality,json=originalQuality,proto3" json:"original_quality,omitempty"`
 	OriginalStatus       string                 `protobuf:"bytes,5,opt,name=original_status,json=originalStatus,proto3" json:"original_status,omitempty"`
 	OriginalIntervalDays int32                  `protobuf:"varint,6,opt,name=original_interval_days,json=originalIntervalDays,proto3" json:"original_interval_days,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// sense_id — see OverrideAnswerRequest.sense_id.
+	SenseId       string `protobuf:"bytes,8,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UndoOverrideAnswerRequest) Reset() {
@@ -2332,6 +2375,13 @@ func (x *UndoOverrideAnswerRequest) GetOriginalIntervalDays() int32 {
 		return x.OriginalIntervalDays
 	}
 	return 0
+}
+
+func (x *UndoOverrideAnswerRequest) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
 }
 
 type UndoOverrideAnswerResponse struct {
@@ -4597,7 +4647,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xf8\x01\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\x93\x02\n" +
 	"\x14SubmitAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -4607,7 +4657,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10next_review_date\x18\x05 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
 	"learned_at\x18\x06 \x01(\tR\tlearnedAt\x12\x16\n" +
-	"\x06images\x18\a \x03(\tR\x06images\"\\\n" +
+	"\x06images\x18\a \x03(\tR\x06images\x12\x19\n" +
+	"\bsense_id\x18\b \x01(\tR\asenseId\"\\\n" +
 	"\x19BatchSubmitAnswersRequest\x12?\n" +
 	"\aanswers\x18\x01 \x03(\v2\x1b.api.v1.SubmitAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"X\n" +
 	"\x1aBatchSubmitAnswersResponse\x12:\n" +
@@ -4642,7 +4693,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x129\n" +
 	"\x19accept_synonym_as_correct\x18\x04 \x01(\bR\x16acceptSynonymAsCorrect\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x05 \x01(\bR\tisSkipped\"\xe3\x02\n" +
+	"is_skipped\x18\x05 \x01(\bR\tisSkipped\"\xfe\x02\n" +
 	"\x1bSubmitReverseAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x1e\n" +
 	"\n" +
@@ -4658,7 +4709,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
 	"learned_at\x18\t \x01(\tR\tlearnedAt\x12\x16\n" +
 	"\x06images\x18\n" +
-	" \x03(\tR\x06images\"j\n" +
+	" \x03(\tR\x06images\x12\x19\n" +
+	"\bsense_id\x18\v \x01(\tR\asenseId\"j\n" +
 	" BatchSubmitReverseAnswersRequest\x12F\n" +
 	"\aanswers\x18\x01 \x03(\v2\".api.v1.SubmitReverseAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"f\n" +
 	"!BatchSubmitReverseAnswersResponse\x12A\n" +
@@ -4675,7 +4727,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x1bSubmitFreeformAnswerRequest\x12\x1f\n" +
 	"\x04word\x18\x01 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\x04word\x12%\n" +
 	"\ameaning\x18\x02 \x01(\tB\v\xbaH\br\x06\x10\x012\x02\\SR\ameaning\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\xec\x02\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\"\x87\x03\n" +
 	"\x1cSubmitFreeformAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x12\n" +
 	"\x04word\x18\x02 \x01(\tR\x04word\x12\x18\n" +
@@ -4690,7 +4742,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"learned_at\x18\t \x01(\tR\tlearnedAt\x12\x17\n" +
 	"\anote_id\x18\n" +
 	" \x01(\x03R\x06noteId\x12\x16\n" +
-	"\x06images\x18\v \x03(\tR\x06images\"\x8d\x02\n" +
+	"\x06images\x18\v \x03(\tR\x06images\x12\x19\n" +
+	"\bsense_id\x18\f \x01(\tR\asenseId\"\xa8\x02\n" +
 	"\x15OverrideAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
 	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\x12&\n" +
@@ -4698,14 +4751,15 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"learned_at\x18\x03 \x01(\tB\a\xbaH\x04r\x02\x10\n" +
 	"R\tlearnedAt\x12&\n" +
 	"\fmark_correct\x18\x04 \x01(\bH\x00R\vmarkCorrect\x88\x01\x01\x12-\n" +
-	"\x10next_review_date\x18\x05 \x01(\tH\x01R\x0enextReviewDate\x88\x01\x01B\x0f\n" +
+	"\x10next_review_date\x18\x05 \x01(\tH\x01R\x0enextReviewDate\x88\x01\x01\x12\x19\n" +
+	"\bsense_id\x18\x06 \x01(\tR\asenseIdB\x0f\n" +
 	"\r_mark_correctB\x13\n" +
 	"\x11_next_review_date\"\xd2\x01\n" +
 	"\x16OverrideAnswerResponse\x12(\n" +
 	"\x10next_review_date\x18\x01 \x01(\tR\x0enextReviewDate\x12)\n" +
 	"\x10original_quality\x18\x02 \x01(\x05R\x0foriginalQuality\x12'\n" +
 	"\x0foriginal_status\x18\x03 \x01(\tR\x0eoriginalStatus\x124\n" +
-	"\x16original_interval_days\x18\x04 \x01(\x05R\x14originalIntervalDaysJ\x04\b\x05\x10\x06\"\xa4\x02\n" +
+	"\x16original_interval_days\x18\x04 \x01(\x05R\x14originalIntervalDaysJ\x04\b\x05\x10\x06\"\xbf\x02\n" +
 	"\x19UndoOverrideAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12-\n" +
 	"\tquiz_type\x18\x02 \x01(\x0e2\x10.api.v1.QuizTypeR\bquizType\x12&\n" +
@@ -4714,7 +4768,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"R\tlearnedAt\x12)\n" +
 	"\x10original_quality\x18\x04 \x01(\x05R\x0foriginalQuality\x12'\n" +
 	"\x0foriginal_status\x18\x05 \x01(\tR\x0eoriginalStatus\x124\n" +
-	"\x16original_interval_days\x18\x06 \x01(\x05R\x14originalIntervalDaysJ\x04\b\a\x10\b\"`\n" +
+	"\x16original_interval_days\x18\x06 \x01(\x05R\x14originalIntervalDays\x12\x19\n" +
+	"\bsense_id\x18\b \x01(\tR\asenseIdJ\x04\b\a\x10\b\"`\n" +
 	"\x1aUndoOverrideAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12(\n" +
 	"\x10next_review_date\x18\x02 \x01(\tR\x0enextReviewDate\"\x9e\x01\n" +

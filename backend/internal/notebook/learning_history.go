@@ -45,7 +45,7 @@ func (h LearningHistory) GetLogs(
 	// For flashcard type, search in expressions directly
 	if h.Metadata.Type == "flashcard" {
 		for _, expression := range h.Expressions {
-			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+			if !MatchesEntry(&expression, definition.ID, definition.Expression, definition.Definition) {
 				continue
 			}
 			if len(expression.LearnedLogs) > 0 {
@@ -64,7 +64,7 @@ func (h LearningHistory) GetLogs(
 
 		// Search through expressions in this scene
 		for _, expression := range scene.Expressions {
-			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+			if !MatchesEntry(&expression, definition.ID, definition.Expression, definition.Definition) {
 				continue
 			}
 			if len(expression.LearnedLogs) > 0 {
@@ -87,7 +87,7 @@ func (h LearningHistory) GetReverseLogs(
 
 	if h.Metadata.Type == "flashcard" {
 		for _, expression := range h.Expressions {
-			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+			if !MatchesEntry(&expression, definition.ID, definition.Expression, definition.Definition) {
 				continue
 			}
 			return expression.ReverseLogs
@@ -101,13 +101,40 @@ func (h LearningHistory) GetReverseLogs(
 			continue
 		}
 		for _, expression := range scene.Expressions {
-			if expression.Expression != definition.Expression && expression.Expression != definition.Definition {
+			if !MatchesEntry(&expression, definition.ID, definition.Expression, definition.Definition) {
 				continue
 			}
 			return expression.ReverseLogs
 		}
 	}
 	return nil
+}
+
+// MatchesEntry reports whether a learning-history entry is the one for a
+// card identified by (id, expression, originalExpression). A tagged entry
+// (non-empty ID) matches ONLY its exact id. A legacy entry (empty ID)
+// matches by expression, so pre-migration id-less data still resolves.
+func MatchesEntry(e *LearningHistoryExpression, id, expression, originalExpression string) bool {
+	if e == nil {
+		return false
+	}
+	matchesExpr := e.Expression == expression || (originalExpression != "" && e.Expression == originalExpression)
+	if id == "" {
+		// An id-less query — a concept write redirected to the head
+		// expression (SaveResult clears the member id), or pre-migration data
+		// — matches by expression even against an id-bearing entry, so it
+		// lands on the migrated series instead of forking a new id-less
+		// duplicate. A genuine homograph always carries an id on the query
+		// side, so this never merges two real senses.
+		return matchesExpr
+	}
+	// An id-bearing query matches a tagged entry only on exact id (keeping
+	// homograph senses apart) and adopts a legacy id-less entry by expression
+	// (the updater then upgrades that entry in place).
+	if e.ID != "" {
+		return e.ID == id
+	}
+	return matchesExpr
 }
 
 type LearningScene struct {
@@ -121,17 +148,22 @@ type LearningSceneMetadata struct {
 
 // LearningRecord represents a single learning event for an expression
 type LearningRecord struct {
-	Status         LearnedStatus `yaml:"status,omitempty"`
-	LearnedAt      Date          `yaml:"learned_at,omitempty"`
-	Quality        int           `yaml:"quality,omitempty"`          // 0-5 grade
-	ResponseTimeMs int64         `yaml:"response_time_ms,omitempty"` // milliseconds
-	QuizType       string        `yaml:"quiz_type,omitempty"`        // "freeform" or "notebook"
-	IntervalDays     int           `yaml:"interval_days,omitempty"`      // days until next review
+	Status           LearnedStatus `yaml:"status,omitempty"`
+	LearnedAt        Date          `yaml:"learned_at,omitempty"`
+	Quality          int           `yaml:"quality,omitempty"`           // 0-5 grade
+	ResponseTimeMs   int64         `yaml:"response_time_ms,omitempty"`  // milliseconds
+	QuizType         string        `yaml:"quiz_type,omitempty"`         // "freeform" or "notebook"
+	IntervalDays     int           `yaml:"interval_days,omitempty"`     // days until next review
 	OverrideInterval int           `yaml:"override_interval,omitempty"` // manually-set interval (non-zero = user override)
 }
 
 type LearningHistoryExpression struct {
-	Expression     string           `yaml:"expression"`
+	Expression string `yaml:"expression"`
+	// ID is the stable identity of the source entry this log series belongs
+	// to. When set, lookups match on ID exactly; when empty (legacy
+	// pre-migration data) they fall back to the expression string. See
+	// MatchesEntry.
+	ID string `yaml:"id,omitempty"`
 	// Type distinguishes vocabulary entries from etymology-origin entries
 	// when their `expression` strings collide. "" or "vocabulary" means a
 	// regular vocab entry; "origin" means an etymology origin. Without
@@ -670,14 +702,14 @@ func (exp *LearningHistoryExpression) AddRecordWithQuality(
 // IsExpressionSkipped checks whether a note is excluded from the given quiz
 // type. Per-type skips replaced the old "skipped from everything" string —
 // each call site supplies the quiz mode it's filtering for.
-func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition string, quizType QuizType) bool {
+func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, expression, definition, id string, quizType QuizType) bool {
 	for _, hist := range histories {
 		if hist.Metadata.Title != event {
 			continue
 		}
 		if hist.Metadata.Type == "flashcard" {
 			for _, expr := range hist.Expressions {
-				if expr.Expression == expression || expr.Expression == definition {
+				if MatchesEntry(&expr, id, expression, definition) {
 					return expr.SkippedAt.IsSkipped(quizType)
 				}
 			}
@@ -688,7 +720,7 @@ func IsExpressionSkipped(histories []LearningHistory, event, sceneTitle string, 
 				continue
 			}
 			for _, expr := range scene.Expressions {
-				if expr.Expression == expression || expr.Expression == definition {
+				if MatchesEntry(&expr, id, expression, definition) {
 					return expr.SkippedAt.IsSkipped(quizType)
 				}
 			}
@@ -795,20 +827,25 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 			}
 		}
 
-		// Check for duplicate expressions in flashcard format
-		expressionSeen := make(map[string]bool)
+		// Check for duplicate expressions in flashcard format. Key by
+		// (expression, id) so two entries that share a spelling but carry
+		// distinct ids (e.g. two senses of "bank") are NOT flagged as
+		// duplicates — they are separate log series.
+		type flashcardKey struct{ expression, id string }
+		expressionSeen := make(map[flashcardKey]bool)
 		for _, expr := range h.Expressions {
 			expression := strings.TrimSpace(expr.Expression)
 			if expression == "" {
 				continue
 			}
-			if expressionSeen[expression] {
+			key := flashcardKey{expression, expr.ID}
+			if expressionSeen[key] {
 				errors = append(errors, ValidationError{
 					Location: location,
 					Message:  fmt.Sprintf("duplicate expression %q in flashcard format", expression),
 				})
 			}
-			expressionSeen[expression] = true
+			expressionSeen[key] = true
 		}
 
 		return errors
@@ -834,14 +871,18 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 	// entry that share a name (e.g. vocab "peer" + Latin root "peer") are
 	// allowed to coexist; the rest of the codebase already treats them as
 	// distinct via the same composite key.
-	type exprKey struct{ name, typ string }
+	// Key by (name, type, id) so two entries that share a spelling but
+	// carry distinct ids are allowed to coexist across scenes; only
+	// genuinely same-identity duplicates (same name+type and same id, or
+	// both id-less legacy) are reported.
+	type exprKey struct{ name, typ, id string }
 	normaliseType := func(t string) string {
 		if t == LearningExpressionTypeVocabulary {
 			return ""
 		}
 		return t
 	}
-	episodeExpressions := make(map[exprKey][]string) // (name, typ) -> list of scene titles
+	episodeExpressions := make(map[exprKey][]string) // (name, typ, id) -> list of scene titles
 	for _, scene := range h.Scenes {
 		sceneTitle := strings.TrimSpace(scene.Metadata.Title)
 		for _, expr := range scene.Expressions {
@@ -849,8 +890,8 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 			if expression == "" {
 				continue
 			}
-			episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}] = append(
-				episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type)}], sceneTitle,
+			episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type), id: expr.ID}] = append(
+				episodeExpressions[exprKey{name: expression, typ: normaliseType(expr.Type), id: expr.ID}], sceneTitle,
 			)
 		}
 	}

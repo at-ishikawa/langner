@@ -132,11 +132,11 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Entry, notebook.QuizTypeNotebook)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Entry, notebook.QuizTypeNotebook)
 	return connect.NewResponse(&apiv1.SubmitAnswerResponse{
 		Correct: grade.Correct, Meaning: card.Meaning, Reason: grade.Reason,
 		WordDetail: toProtoWordDetail(card.WordDetail), NextReviewDate: nextReviewDate,
-		LearnedAt: learnedAt, Images: card.Images,
+		LearnedAt: learnedAt, Images: card.Images, SenseId: card.ID,
 	}), nil
 }
 
@@ -243,11 +243,11 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	}
 	var contexts []string
 	for _, c := range card.Contexts { contexts = append(contexts, c.Context) }
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeReverse)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.ID, card.Expression, notebook.QuizTypeReverse)
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
 		Correct: grade.Correct, Expression: card.Expression, Meaning: card.Meaning, Reason: grade.Reason,
 		Contexts: contexts, WordDetail: toProtoWordDetail(card.WordDetail), Classification: grade.Classification,
-		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, Images: card.Images,
+		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, Images: card.Images, SenseId: card.ID,
 	}), nil
 }
 
@@ -277,16 +277,17 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
-	var learnedAt, nextReviewDate string; var noteID int64
+	var learnedAt, nextReviewDate, senseID string; var noteID int64
 	if grade.MatchedCard != nil {
-		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
+		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.ID, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
+		senseID = grade.MatchedCard.ID
 		h.mu.Lock(); noteID = h.nextID; h.nextID++; h.freeformStore[noteID] = *grade.MatchedCard; h.mu.Unlock()
 	}
 	return connect.NewResponse(&apiv1.SubmitFreeformAnswerResponse{
 		Correct: grade.Correct, Word: grade.Word, Meaning: grade.Meaning, Reason: grade.Reason,
 		Context: grade.Context, NotebookName: grade.NotebookName,
 		WordDetail: func() *apiv1.WordDetail { if grade.MatchedCard != nil { return toProtoWordDetail(grade.MatchedCard.WordDetail) }; return nil }(),
-		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID,
+		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, SenseId: senseID,
 		Images: func() []string { if grade.MatchedCard != nil { return grade.MatchedCard.Images }; return nil }(),
 	}), nil
 }
@@ -455,7 +456,7 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyStandard)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, "", card.Origin, notebook.QuizTypeEtymologyStandard)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
 	// Build a graph context for the feedback card — same builder the
 	// reverse mode uses, but with the blank filled in so the just-answered
@@ -484,7 +485,7 @@ func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *con
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyReverse)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, "", card.Origin, notebook.QuizTypeEtymologyReverse)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
 	return connect.NewResponse(&apiv1.SubmitEtymologyReverseAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectOrigin: card.Origin, Type: card.Type, Language: card.Language, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, ExampleWords: h.loadCardExampleWords(card)}), nil
 }
@@ -553,7 +554,7 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *co
 	if err := h.svc.SaveEtymologyOriginResult(*resultSense, bestGrade.Quality, bestGrade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyFreeform, false); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology freeform result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(resultSense.NotebookName, resultSense.Origin, notebook.QuizTypeEtymologyFreeform)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(resultSense.NotebookName, "", resultSense.Origin, notebook.QuizTypeEtymologyFreeform)
 	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = *resultSense; h.mu.Unlock()
 
 	allSenses := make([]*apiv1.EtymologyOriginSense, 0, len(senses))
@@ -584,6 +585,7 @@ func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[a
 		return nil, err
 	}
 	info.NoteID = req.Msg.GetNoteId()
+	info.ID = req.Msg.GetSenseId()
 	info.LearnedAt = req.Msg.GetLearnedAt()
 	if req.Msg.MarkCorrect != nil {
 		mc := req.Msg.GetMarkCorrect()
@@ -611,6 +613,7 @@ func (h *QuizHandler) UndoOverrideAnswer(ctx context.Context, req *connect.Reque
 		return nil, err
 	}
 	info.NoteID = req.Msg.GetNoteId()
+	info.ID = req.Msg.GetSenseId()
 	info.LearnedAt = req.Msg.GetLearnedAt()
 	info.OriginalQuality = int(req.Msg.GetOriginalQuality())
 	info.OriginalStatus = req.Msg.GetOriginalStatus()

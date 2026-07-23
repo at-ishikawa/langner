@@ -108,6 +108,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
     try {
       const resp = await analyticsClient.getWordHistory({
         noteId: word.noteId,
+        senseId: word.senseId,
         notebookId: word.notebookId,
         expression: word.expression,
         quizType: word.quizType,

@@ -36,6 +36,7 @@ export function useQuizResultActions(quizType: QuizType): QuizResultActions {
     try {
       const res = await quizClient.overrideAnswer({
         noteId: item.noteId,
+        senseId: item.senseId,
         quizType: protoQt,
         learnedAt: item.learnedAt,
         markCorrect: !item.correct,
@@ -60,6 +61,7 @@ export function useQuizResultActions(quizType: QuizType): QuizResultActions {
     try {
       const res = await quizClient.undoOverrideAnswer({
         noteId: item.noteId,
+        senseId: item.senseId,
         quizType: protoQt,
         learnedAt: item.learnedAt,
         originalQuality: original.originalValues.quality,
