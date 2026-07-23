@@ -1,7 +1,6 @@
 package notebook
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -18,18 +17,21 @@ import (
 // Groups with two or more distinct ids (genuine homographs) or with no
 // id-bearing entry (untouched legacy data) are left alone. Returns the number
 // of id-less entries merged away.
-func MergeIDLessDuplicates(histories []LearningHistory) int {
+func MergeIDLessDuplicates(histories []LearningHistory, calculator IntervalCalculator) int {
+	if calculator == nil {
+		calculator = &SM2Calculator{}
+	}
 	total := 0
 	for hi := range histories {
-		total += mergeIDLessInList(&histories[hi].Expressions)
+		total += mergeIDLessInList(&histories[hi].Expressions, calculator)
 		for si := range histories[hi].Scenes {
-			total += mergeIDLessInList(&histories[hi].Scenes[si].Expressions)
+			total += mergeIDLessInList(&histories[hi].Scenes[si].Expressions, calculator)
 		}
 	}
 	return total
 }
 
-func mergeIDLessInList(list *[]LearningHistoryExpression) int {
+func mergeIDLessInList(list *[]LearningHistoryExpression, calculator IntervalCalculator) int {
 	exprs := *list
 	type group struct {
 		idIdx     []int
@@ -62,12 +64,13 @@ func mergeIDLessInList(list *[]LearningHistoryExpression) int {
 			continue
 		}
 		target := &exprs[g.idIdx[0]]
+		mergedAny := false
 		for _, j := range g.idlessIdx {
 			src := exprs[j]
-			target.LearnedLogs = mergeLearningRecords(target.LearnedLogs, src.LearnedLogs)
-			target.ReverseLogs = mergeLearningRecords(target.ReverseLogs, src.ReverseLogs)
-			target.EtymologyBreakdownLogs = mergeLearningRecords(target.EtymologyBreakdownLogs, src.EtymologyBreakdownLogs)
-			target.EtymologyAssemblyLogs = mergeLearningRecords(target.EtymologyAssemblyLogs, src.EtymologyAssemblyLogs)
+			target.LearnedLogs = append(target.LearnedLogs, src.LearnedLogs...)
+			target.ReverseLogs = append(target.ReverseLogs, src.ReverseLogs...)
+			target.EtymologyBreakdownLogs = append(target.EtymologyBreakdownLogs, src.EtymologyBreakdownLogs...)
+			target.EtymologyAssemblyLogs = append(target.EtymologyAssemblyLogs, src.EtymologyAssemblyLogs...)
 			for qt, at := range src.SkippedAt {
 				if at == "" {
 					continue
@@ -80,6 +83,19 @@ func mergeIDLessInList(list *[]LearningHistoryExpression) int {
 				}
 			}
 			remove[j] = true
+			mergedAny = true
+		}
+		if mergedAny {
+			// Replay each series oldest->newest so the merged-in logs get an
+			// interval computed against the FULL combined history, not the
+			// empty history of the forked entry they were written on (a
+			// forked "correct" answer had a first-attempt interval; the real
+			// streak yields a much longer one). RecalculateAll preserves
+			// manual OverrideInterval entries and returns storage order.
+			_, target.LearnedLogs = calculator.RecalculateAll(target.LearnedLogs)
+			_, target.ReverseLogs = calculator.RecalculateAll(target.ReverseLogs)
+			_, target.EtymologyBreakdownLogs = calculator.RecalculateAll(target.EtymologyBreakdownLogs)
+			_, target.EtymologyAssemblyLogs = calculator.RecalculateAll(target.EtymologyAssemblyLogs)
 		}
 	}
 
@@ -95,19 +111,4 @@ func mergeIDLessInList(list *[]LearningHistoryExpression) int {
 	}
 	*list = kept
 	return len(remove)
-}
-
-// mergeLearningRecords concatenates b into a and re-sorts newest-first, the
-// order the rest of the code relies on (logs[0] is the latest attempt).
-func mergeLearningRecords(a, b []LearningRecord) []LearningRecord {
-	if len(b) == 0 {
-		return a
-	}
-	out := make([]LearningRecord, 0, len(a)+len(b))
-	out = append(out, a...)
-	out = append(out, b...)
-	sort.SliceStable(out, func(i, j int) bool {
-		return out[i].LearnedAt.After(out[j].LearnedAt.Time)
-	})
-	return out
 }

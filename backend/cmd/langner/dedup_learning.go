@@ -62,7 +62,7 @@ func dedupLearningIDs(cfg *config.Config, dryRun bool, w io.Writer) error {
 	total := 0
 	for _, name := range names {
 		list := histories[name]
-		n := notebook.MergeIDLessDuplicates(list)
+		n := notebook.MergeIDLessDuplicates(list, nil)
 		if n == 0 {
 			continue
 		}
