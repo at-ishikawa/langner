@@ -11,13 +11,14 @@ import (
 )
 
 type Reader struct {
-	indexes           map[string]Index
-	flashcardIndexes  map[string]FlashcardIndex
-	etymologyIndexes  map[string]EtymologyIndex
-	dictionaryMap     map[string]rapidapi.Response
-	definitionsMap    DefinitionsMap
-	definitionsRaw    map[string][]Definitions
-	definitionsDates  map[string]time.Time
+	indexes          map[string]Index
+	flashcardIndexes map[string]FlashcardIndex
+	etymologyIndexes map[string]EtymologyIndex
+	journalIndexes   map[string]JournalIndex
+	dictionaryMap    map[string]rapidapi.Response
+	definitionsMap   DefinitionsMap
+	definitionsRaw   map[string][]Definitions
+	definitionsDates map[string]time.Time
 }
 
 // walkIndexFiles walks a directory and loads index.yml files into the provided map
@@ -121,6 +122,7 @@ func NewReader(
 		indexes:          indexes,
 		flashcardIndexes: flashcardIndexes,
 		etymologyIndexes: etymologyIndexes,
+		journalIndexes:   make(map[string]JournalIndex),
 		dictionaryMap:    dictionaryMap,
 		definitionsMap:   definitionsMap,
 		definitionsRaw:   definitionsRaw,

@@ -43,6 +43,11 @@ notebooks:
   etymology_directories:
     - examples/etymology
 
+  # Directories containing journal notebooks (free-text entries with grammar
+  # mistake annotations, drilled by the grammar quiz)
+  journal_directories:
+    - examples/journal
+
   # Directory containing learning notes/history
   learning_notes_directory: examples/learning_notes
 

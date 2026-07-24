@@ -99,6 +99,15 @@ const (
 	// QuizServiceBatchSubmitRelearnAnswersProcedure is the fully-qualified name of the QuizService's
 	// BatchSubmitRelearnAnswers RPC.
 	QuizServiceBatchSubmitRelearnAnswersProcedure = "/api.v1.QuizService/BatchSubmitRelearnAnswers"
+	// QuizServiceStartGrammarQuizProcedure is the fully-qualified name of the QuizService's
+	// StartGrammarQuiz RPC.
+	QuizServiceStartGrammarQuizProcedure = "/api.v1.QuizService/StartGrammarQuiz"
+	// QuizServiceSubmitGrammarAnswerProcedure is the fully-qualified name of the QuizService's
+	// SubmitGrammarAnswer RPC.
+	QuizServiceSubmitGrammarAnswerProcedure = "/api.v1.QuizService/SubmitGrammarAnswer"
+	// QuizServiceBatchSubmitGrammarAnswersProcedure is the fully-qualified name of the QuizService's
+	// BatchSubmitGrammarAnswers RPC.
+	QuizServiceBatchSubmitGrammarAnswersProcedure = "/api.v1.QuizService/BatchSubmitGrammarAnswers"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -130,6 +139,13 @@ type QuizServiceClient interface {
 	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
 	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
 	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
+	// Grammar Quiz — corrects grammar mistakes annotated in journal notebooks.
+	// Each card shows a sentence with an incorrect span; the user types the fix,
+	// which is AI-graded and recorded in the notebook's learning history keyed by
+	// the mistake id. See docs/content/proposals/grammar-quiz.
+	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
+	SubmitGrammarAnswer(context.Context, *connect.Request[v1.SubmitGrammarAnswerRequest]) (*connect.Response[v1.SubmitGrammarAnswerResponse], error)
+	BatchSubmitGrammarAnswers(context.Context, *connect.Request[v1.BatchSubmitGrammarAnswersRequest]) (*connect.Response[v1.BatchSubmitGrammarAnswersResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -281,6 +297,24 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
 			connect.WithClientOptions(opts...),
 		),
+		startGrammarQuiz: connect.NewClient[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse](
+			httpClient,
+			baseURL+QuizServiceStartGrammarQuizProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("StartGrammarQuiz")),
+			connect.WithClientOptions(opts...),
+		),
+		submitGrammarAnswer: connect.NewClient[v1.SubmitGrammarAnswerRequest, v1.SubmitGrammarAnswerResponse](
+			httpClient,
+			baseURL+QuizServiceSubmitGrammarAnswerProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarAnswer")),
+			connect.WithClientOptions(opts...),
+		),
+		batchSubmitGrammarAnswers: connect.NewClient[v1.BatchSubmitGrammarAnswersRequest, v1.BatchSubmitGrammarAnswersResponse](
+			httpClient,
+			baseURL+QuizServiceBatchSubmitGrammarAnswersProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("BatchSubmitGrammarAnswers")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -309,6 +343,9 @@ type quizServiceClient struct {
 	startRelearnQuiz                    *connect.Client[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse]
 	submitRelearnAnswer                 *connect.Client[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse]
 	batchSubmitRelearnAnswers           *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
+	startGrammarQuiz                    *connect.Client[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse]
+	submitGrammarAnswer                 *connect.Client[v1.SubmitGrammarAnswerRequest, v1.SubmitGrammarAnswerResponse]
+	batchSubmitGrammarAnswers           *connect.Client[v1.BatchSubmitGrammarAnswersRequest, v1.BatchSubmitGrammarAnswersResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -426,6 +463,21 @@ func (c *quizServiceClient) BatchSubmitRelearnAnswers(ctx context.Context, req *
 	return c.batchSubmitRelearnAnswers.CallUnary(ctx, req)
 }
 
+// StartGrammarQuiz calls api.v1.QuizService.StartGrammarQuiz.
+func (c *quizServiceClient) StartGrammarQuiz(ctx context.Context, req *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error) {
+	return c.startGrammarQuiz.CallUnary(ctx, req)
+}
+
+// SubmitGrammarAnswer calls api.v1.QuizService.SubmitGrammarAnswer.
+func (c *quizServiceClient) SubmitGrammarAnswer(ctx context.Context, req *connect.Request[v1.SubmitGrammarAnswerRequest]) (*connect.Response[v1.SubmitGrammarAnswerResponse], error) {
+	return c.submitGrammarAnswer.CallUnary(ctx, req)
+}
+
+// BatchSubmitGrammarAnswers calls api.v1.QuizService.BatchSubmitGrammarAnswers.
+func (c *quizServiceClient) BatchSubmitGrammarAnswers(ctx context.Context, req *connect.Request[v1.BatchSubmitGrammarAnswersRequest]) (*connect.Response[v1.BatchSubmitGrammarAnswersResponse], error) {
+	return c.batchSubmitGrammarAnswers.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -455,6 +507,13 @@ type QuizServiceHandler interface {
 	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
 	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
 	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
+	// Grammar Quiz — corrects grammar mistakes annotated in journal notebooks.
+	// Each card shows a sentence with an incorrect span; the user types the fix,
+	// which is AI-graded and recorded in the notebook's learning history keyed by
+	// the mistake id. See docs/content/proposals/grammar-quiz.
+	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
+	SubmitGrammarAnswer(context.Context, *connect.Request[v1.SubmitGrammarAnswerRequest]) (*connect.Response[v1.SubmitGrammarAnswerResponse], error)
+	BatchSubmitGrammarAnswers(context.Context, *connect.Request[v1.BatchSubmitGrammarAnswersRequest]) (*connect.Response[v1.BatchSubmitGrammarAnswersResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -602,6 +661,24 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceStartGrammarQuizHandler := connect.NewUnaryHandler(
+		QuizServiceStartGrammarQuizProcedure,
+		svc.StartGrammarQuiz,
+		connect.WithSchema(quizServiceMethods.ByName("StartGrammarQuiz")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceSubmitGrammarAnswerHandler := connect.NewUnaryHandler(
+		QuizServiceSubmitGrammarAnswerProcedure,
+		svc.SubmitGrammarAnswer,
+		connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarAnswer")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceBatchSubmitGrammarAnswersHandler := connect.NewUnaryHandler(
+		QuizServiceBatchSubmitGrammarAnswersProcedure,
+		svc.BatchSubmitGrammarAnswers,
+		connect.WithSchema(quizServiceMethods.ByName("BatchSubmitGrammarAnswers")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -650,6 +727,12 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceSubmitRelearnAnswerHandler.ServeHTTP(w, r)
 		case QuizServiceBatchSubmitRelearnAnswersProcedure:
 			quizServiceBatchSubmitRelearnAnswersHandler.ServeHTTP(w, r)
+		case QuizServiceStartGrammarQuizProcedure:
+			quizServiceStartGrammarQuizHandler.ServeHTTP(w, r)
+		case QuizServiceSubmitGrammarAnswerProcedure:
+			quizServiceSubmitGrammarAnswerHandler.ServeHTTP(w, r)
+		case QuizServiceBatchSubmitGrammarAnswersProcedure:
+			quizServiceBatchSubmitGrammarAnswersHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -749,4 +832,16 @@ func (UnimplementedQuizServiceHandler) SubmitRelearnAnswer(context.Context, *con
 
 func (UnimplementedQuizServiceHandler) BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.BatchSubmitRelearnAnswers is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartGrammarQuiz is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) SubmitGrammarAnswer(context.Context, *connect.Request[v1.SubmitGrammarAnswerRequest]) (*connect.Response[v1.SubmitGrammarAnswerResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitGrammarAnswer is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) BatchSubmitGrammarAnswers(context.Context, *connect.Request[v1.BatchSubmitGrammarAnswersRequest]) (*connect.Response[v1.BatchSubmitGrammarAnswersResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.BatchSubmitGrammarAnswers is not implemented"))
 }

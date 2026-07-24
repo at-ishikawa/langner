@@ -1,0 +1,4 @@
+id: journal
+name: "English Journal"
+notebooks:
+  - ./2026-07.yml

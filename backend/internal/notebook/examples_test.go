@@ -124,6 +124,33 @@ func TestExamples_ReadEtymologyNotebook(t *testing.T) {
 	assert.Contains(t, types, "suffix", "should have suffix origins")
 }
 
+func TestExamples_ReadJournalNotebooks(t *testing.T) {
+	examples := examplesDir(t)
+
+	reader, err := notebook.NewReader(nil, nil, nil, nil, nil, nil)
+	require.NoError(t, err)
+
+	err = reader.LoadJournalNotebooks([]string{filepath.Join(examples, "journal")})
+	require.NoError(t, err)
+
+	notebooks, err := reader.ReadJournalNotebooks("journal")
+	require.NoError(t, err)
+	require.NotEmpty(t, notebooks)
+
+	// Entries carry the free text, and mistakes annotate spans within it.
+	assert.NotEmpty(t, notebooks[0].Entries)
+	firstEntry := notebooks[0].Entries[0]
+	assert.NotEmpty(t, firstEntry.Text)
+	assert.NotEmpty(t, firstEntry.Mistakes)
+
+	// The example notebook must validate and every incorrect span must be
+	// locatable in its entry text.
+	for _, nb := range notebooks {
+		nb := nb
+		assert.Empty(t, nb.Validate("journal"))
+	}
+}
+
 func TestExamples_LearningHistories(t *testing.T) {
 	examples := examplesDir(t)
 

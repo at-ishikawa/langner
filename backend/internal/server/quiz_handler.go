@@ -25,18 +25,22 @@ import (
 type QuizHandler struct {
 	apiv1connect.UnimplementedQuizServiceHandler
 
-	svc            *quiz.Service
-	noteRepository notebook.NoteRepository
-	mu             sync.Mutex
-	noteStore      map[int64]quiz.Card
-	reverseStore   map[int64]quiz.ReverseCard
-	freeformCards  []quiz.FreeformCard
-	freeformStore  map[int64]quiz.FreeformCard
+	svc                  *quiz.Service
+	noteRepository       notebook.NoteRepository
+	mu                   sync.Mutex
+	noteStore            map[int64]quiz.Card
+	reverseStore         map[int64]quiz.ReverseCard
+	freeformCards        []quiz.FreeformCard
+	freeformStore        map[int64]quiz.FreeformCard
 	etymologyOriginStore map[int64]quiz.EtymologyOriginCard
 	etymologyOriginCards []quiz.EtymologyOriginCard
 	etymologyQuizMode    apiv1.EtymologyQuizMode
-	relearnStore   map[int64]quiz.RelearnCard
-	nextID         int64
+	relearnStore         map[int64]quiz.RelearnCard
+	// grammarStore holds the in-flight grammar cards for the current session,
+	// keyed by notebookID+"\x00"+cardID so Submit can re-grade against the
+	// reference correction without reloading the notebook.
+	grammarStore map[string]quiz.GrammarCard
+	nextID       int64
 }
 
 // NewQuizHandler creates a new QuizHandler.
@@ -48,6 +52,7 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		freeformStore:        make(map[int64]quiz.FreeformCard),
 		etymologyOriginStore: make(map[int64]quiz.EtymologyOriginCard),
 		relearnStore:         make(map[int64]quiz.RelearnCard),
+		grammarStore:         make(map[string]quiz.GrammarCard),
 		nextID:               1,
 	}
 }
@@ -63,7 +68,9 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 	}
 	sort.Slice(summaries, func(i, j int) bool {
 		di, dj := summaries[i].LatestDate, summaries[j].LatestDate
-		if !di.Equal(dj) { return di.After(dj) }
+		if !di.Equal(dj) {
+			return di.After(dj)
+		}
 		return summaries[i].NotebookID < summaries[j].NotebookID
 	})
 	protoSummaries := make([]*apiv1.NotebookSummary, 0, len(summaries))
@@ -83,6 +90,7 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 			Kind: s.Kind, ReverseReviewCount: int32(s.ReverseReviewCount),
 			EtymologyReviewCount:        int32(s.EtymologyReviewCount),
 			EtymologyReverseReviewCount: int32(s.EtymologyReverseReviewCount),
+			GrammarReviewCount:          int32(s.GrammarReviewCount),
 			HasContent:                  s.HasContent,
 			Sections:                    sections,
 		})
@@ -91,43 +99,64 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 }
 
 func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.StartQuizRequest]) (*connect.Response[apiv1.StartQuizResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetNotebookIds(), req.Msg.GetNotebookSections())
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	cards, err := h.svc.LoadCards(notebookIDs, req.Msg.GetIncludeUnstudied(), sectionTitles)
 	if err != nil {
 		var notFoundErr *quiz.NotFoundError
-		if errors.As(err, &notFoundErr) { return nil, connect.NewError(connect.CodeNotFound, err) }
+		if errors.As(err, &notFoundErr) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load cards: %w", err))
 	}
 	localStore := make(map[int64]quiz.Card)
 	var nextID int64 = 1
 	var flashcards []*apiv1.Flashcard
 	for _, card := range cards {
-		noteID := nextID; nextID++; localStore[noteID] = card
+		noteID := nextID
+		nextID++
+		localStore[noteID] = card
 		var examples []*apiv1.Example
-		for _, ex := range card.Examples { examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker}) }
+		for _, ex := range card.Examples {
+			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker})
+		}
 		flashcards = append(flashcards, &apiv1.Flashcard{
 			NoteId: noteID, Entry: card.Entry, Examples: examples, OriginalEntry: card.OriginalEntry,
 			ConceptHead: card.ConceptHead, ConceptMembers: card.ConceptMembers, ConceptMeaning: card.ConceptMeaning,
 		})
 	}
-	h.mu.Lock(); h.noteStore = localStore; h.nextID = nextID; h.mu.Unlock()
+	h.mu.Lock()
+	h.noteStore = localStore
+	h.nextID = nextID
+	h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartQuizResponse{Flashcards: flashcards}), nil
 }
 
 func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitAnswerRequest]) (*connect.Response[apiv1.SubmitAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	noteID := req.Msg.GetNoteId()
-	h.mu.Lock(); card, ok := h.noteStore[noteID]; h.mu.Unlock()
-	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID)) }
+	h.mu.Lock()
+	card, ok := h.noteStore[noteID]
+	h.mu.Unlock()
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID))
+	}
 	var grade quiz.GradeResult
 	var err error
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
 		grade, err = h.svc.GradeNotebookAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err)) }
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+		}
 	}
 	if err := h.svc.SaveResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
@@ -141,7 +170,9 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 }
 
 func toProtoWordDetail(wd quiz.WordDetail) *apiv1.WordDetail {
-	if wd.Origin == "" && wd.Pronunciation == "" && wd.PartOfSpeech == "" && len(wd.Synonyms) == 0 && len(wd.Antonyms) == 0 && wd.Memo == "" && len(wd.OriginParts) == 0 { return nil }
+	if wd.Origin == "" && wd.Pronunciation == "" && wd.PartOfSpeech == "" && len(wd.Synonyms) == 0 && len(wd.Antonyms) == 0 && wd.Memo == "" && len(wd.OriginParts) == 0 {
+		return nil
+	}
 	var parts []*apiv1.WordOriginPart
 	for _, p := range wd.OriginParts {
 		parts = append(parts, &apiv1.WordOriginPart{Origin: p.Origin, Type: p.Type, Language: p.Language, Meaning: p.Meaning})
@@ -164,7 +195,9 @@ func resolveNotebookSections(notebookIDs []string, notebookSections []*apiv1.Not
 		filter := make(map[string][]string, len(notebookSections))
 		for _, sec := range notebookSections {
 			id := sec.GetNotebookId()
-			if id == "" { continue }
+			if id == "" {
+				continue
+			}
 			ids = append(ids, id)
 			if titles := sec.GetSectionTitles(); len(titles) > 0 {
 				filter[id] = titles
@@ -190,7 +223,9 @@ func validateRequest(msg proto.Message) *connect.Error {
 			for _, v := range valErr.Violations {
 				fieldViolations = append(fieldViolations, &errdetails.BadRequest_FieldViolation{Field: protovalidate.FieldPathString(v.Proto.GetField()), Description: v.Proto.GetMessage()})
 			}
-			if detail, detailErr := connect.NewErrorDetail(&errdetails.BadRequest{FieldViolations: fieldViolations}); detailErr == nil { connectErr.AddDetail(detail) }
+			if detail, detailErr := connect.NewErrorDetail(&errdetails.BadRequest{FieldViolations: fieldViolations}); detailErr == nil {
+				connectErr.AddDetail(detail)
+			}
 		}
 		return connectErr
 	}
@@ -198,43 +233,65 @@ func validateRequest(msg proto.Message) *connect.Error {
 }
 
 func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request[apiv1.StartReverseQuizRequest]) (*connect.Response[apiv1.StartReverseQuizResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetNotebookIds(), req.Msg.GetNotebookSections())
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	cards, err := h.svc.LoadReverseCards(notebookIDs, req.Msg.GetListMissingContext(), req.Msg.GetIncludeUnstudied(), sectionTitles)
 	if err != nil {
 		var notFoundErr *quiz.NotFoundError
-		if errors.As(err, &notFoundErr) { return nil, connect.NewError(connect.CodeNotFound, err) }
+		if errors.As(err, &notFoundErr) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load reverse cards: %w", err))
 	}
-	localStore := make(map[int64]quiz.ReverseCard); var nextID int64 = 1
+	localStore := make(map[int64]quiz.ReverseCard)
+	var nextID int64 = 1
 	var flashcards []*apiv1.ReverseFlashcard
 	for _, card := range cards {
-		noteID := nextID; nextID++; localStore[noteID] = card
+		noteID := nextID
+		nextID++
+		localStore[noteID] = card
 		var contexts []*apiv1.ContextSentence
-		for _, c := range card.Contexts { contexts = append(contexts, &apiv1.ContextSentence{Context: c.Context, MaskedContext: c.MaskedContext}) }
+		for _, c := range card.Contexts {
+			contexts = append(contexts, &apiv1.ContextSentence{Context: c.Context, MaskedContext: c.MaskedContext})
+		}
 		flashcards = append(flashcards, &apiv1.ReverseFlashcard{
 			NoteId: noteID, Meaning: card.Meaning, Contexts: contexts,
 			NotebookName: card.NotebookName, StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
 			ConceptHead: card.ConceptHead, ConceptMembers: card.ConceptMembers, ConceptMeaning: card.ConceptMeaning,
 		})
 	}
-	h.mu.Lock(); h.reverseStore = localStore; h.nextID = nextID; h.mu.Unlock()
+	h.mu.Lock()
+	h.reverseStore = localStore
+	h.nextID = nextID
+	h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartReverseQuizResponse{Flashcards: flashcards}), nil
 }
 
 func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitReverseAnswerRequest]) (*connect.Response[apiv1.SubmitReverseAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	noteID := req.Msg.GetNoteId()
-	h.mu.Lock(); card, ok := h.reverseStore[noteID]; h.mu.Unlock()
-	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID)) }
+	h.mu.Lock()
+	card, ok := h.reverseStore[noteID]
+	h.mu.Unlock()
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found", noteID))
+	}
 	var grade quiz.GradeResult
 	var err error
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
 		grade, err = h.svc.GradeReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err)) }
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+		}
 	}
 	if grade.Classification != string(inference.ClassificationSynonym) {
 		if err := h.svc.SaveReverseResult(ctx, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
@@ -242,7 +299,9 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 		}
 	}
 	var contexts []string
-	for _, c := range card.Contexts { contexts = append(contexts, c.Context) }
+	for _, c := range card.Contexts {
+		contexts = append(contexts, c.Context)
+	}
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Expression, notebook.QuizTypeReverse)
 	return connect.NewResponse(&apiv1.SubmitReverseAnswerResponse{
 		Correct: grade.Correct, Expression: card.Expression, Meaning: card.Meaning, Reason: grade.Reason,
@@ -253,49 +312,96 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 
 func (h *QuizHandler) StartFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartFreeformQuizRequest]) (*connect.Response[apiv1.StartFreeformQuizResponse], error) {
 	cards, err := h.svc.LoadAllWords()
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load all words: %w", err)) }
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load all words: %w", err))
+	}
 	nextReviewDates, err := h.svc.GetFreeformNextReviewDates(cards)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get next review dates: %w", err)) }
-	h.mu.Lock(); h.freeformCards = cards; h.mu.Unlock()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get next review dates: %w", err))
+	}
+	h.mu.Lock()
+	h.freeformCards = cards
+	h.mu.Unlock()
 	seen := make(map[string]struct{}, len(cards)*2)
 	expressions := make([]string, 0, len(cards))
 	addExpr := func(expr string) {
 		lower := strings.ToLower(expr)
-		if expr != "" { if _, ok := seen[lower]; !ok { seen[lower] = struct{}{}; expressions = append(expressions, expr) } }
+		if expr != "" {
+			if _, ok := seen[lower]; !ok {
+				seen[lower] = struct{}{}
+				expressions = append(expressions, expr)
+			}
+		}
 	}
-	for _, card := range cards { addExpr(card.Expression); addExpr(card.OriginalExpression) }
+	for _, card := range cards {
+		addExpr(card.Expression)
+		addExpr(card.OriginalExpression)
+	}
 	return connect.NewResponse(&apiv1.StartFreeformQuizResponse{WordCount: int32(len(cards)), Expressions: expressions, ExpressionNextReviewDate: nextReviewDates}), nil
 }
 
 func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitFreeformAnswerRequest]) (*connect.Response[apiv1.SubmitFreeformAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	h.mu.Lock(); cards := h.freeformCards; h.mu.Unlock()
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	h.mu.Lock()
+	cards := h.freeformCards
+	h.mu.Unlock()
 	grade, err := h.svc.GradeFreeformAnswer(ctx, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err)) }
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+	}
 	if grade.MatchedCard != nil {
 		if err := h.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("update learning history: %w", err))
 		}
 	}
-	var learnedAt, nextReviewDate string; var noteID int64
+	var learnedAt, nextReviewDate string
+	var noteID int64
 	if grade.MatchedCard != nil {
 		learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(grade.MatchedCard.NotebookName, grade.MatchedCard.Expression, notebook.QuizTypeFreeform)
-		h.mu.Lock(); noteID = h.nextID; h.nextID++; h.freeformStore[noteID] = *grade.MatchedCard; h.mu.Unlock()
+		h.mu.Lock()
+		noteID = h.nextID
+		h.nextID++
+		h.freeformStore[noteID] = *grade.MatchedCard
+		h.mu.Unlock()
 	}
 	return connect.NewResponse(&apiv1.SubmitFreeformAnswerResponse{
 		Correct: grade.Correct, Word: grade.Word, Meaning: grade.Meaning, Reason: grade.Reason,
 		Context: grade.Context, NotebookName: grade.NotebookName,
-		WordDetail: func() *apiv1.WordDetail { if grade.MatchedCard != nil { return toProtoWordDetail(grade.MatchedCard.WordDetail) }; return nil }(),
+		WordDetail: func() *apiv1.WordDetail {
+			if grade.MatchedCard != nil {
+				return toProtoWordDetail(grade.MatchedCard.WordDetail)
+			}
+			return nil
+		}(),
 		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID,
-		Images: func() []string { if grade.MatchedCard != nil { return grade.MatchedCard.Images }; return nil }(),
+		Images: func() []string {
+			if grade.MatchedCard != nil {
+				return grade.MatchedCard.Images
+			}
+			return nil
+		}(),
 	}), nil
 }
 
 func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.CardInfo, error) {
 	h.mu.Lock()
-	if card, ok := h.noteStore[noteID]; ok { h.mu.Unlock(); info := quiz.CardInfoFromCard(card); return &info, nil }
-	if card, ok := h.reverseStore[noteID]; ok { h.mu.Unlock(); info := quiz.CardInfoFromReverseCard(card); return &info, nil }
-	if fcard, ok := h.freeformStore[noteID]; ok { h.mu.Unlock(); info := quiz.CardInfoFromFreeformCard(fcard); return &info, nil }
+	if card, ok := h.noteStore[noteID]; ok {
+		h.mu.Unlock()
+		info := quiz.CardInfoFromCard(card)
+		return &info, nil
+	}
+	if card, ok := h.reverseStore[noteID]; ok {
+		h.mu.Unlock()
+		info := quiz.CardInfoFromReverseCard(card)
+		return &info, nil
+	}
+	if fcard, ok := h.freeformStore[noteID]; ok {
+		h.mu.Unlock()
+		info := quiz.CardInfoFromFreeformCard(fcard)
+		return &info, nil
+	}
 	if ecard, found := h.etymologyOriginStore[noteID]; found {
 		h.mu.Unlock()
 		// Learning histories are keyed by SessionTitle at the top level
@@ -316,31 +422,52 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found: no active quiz session and no database configured", noteID))
 	}
 	noteRecord, err := h.noteRepository.FindByID(ctx, noteID)
-	if err != nil { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in database: %w", noteID, err)) }
+	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found in database: %w", noteID, err))
+	}
 	var notebookName, group, subgroup string
-	if len(noteRecord.NotebookNotes) > 0 { nn := noteRecord.NotebookNotes[0]; notebookName = nn.NotebookID; group = nn.Group; subgroup = nn.Subgroup }
-	if notebookName == "" { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d has no linked notebook", noteID)) }
+	if len(noteRecord.NotebookNotes) > 0 {
+		nn := noteRecord.NotebookNotes[0]
+		notebookName = nn.NotebookID
+		group = nn.Group
+		subgroup = nn.Subgroup
+	}
+	if notebookName == "" {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d has no linked notebook", noteID))
+	}
 	expression := noteRecord.Entry
-	if expression == "" { expression = noteRecord.Usage }
+	if expression == "" {
+		expression = noteRecord.Usage
+	}
 	info := quiz.CardInfo{NotebookName: notebookName, StoryTitle: group, SceneTitle: subgroup, Expression: expression}
 	return &info, nil
 }
 
 func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
 	switch qt {
-	case apiv1.QuizType_QUIZ_TYPE_REVERSE: return notebook.QuizTypeReverse
-	case apiv1.QuizType_QUIZ_TYPE_FREEFORM: return notebook.QuizTypeFreeform
-	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_STANDARD: return notebook.QuizTypeEtymologyStandard
-	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_REVERSE: return notebook.QuizTypeEtymologyReverse
-	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM: return notebook.QuizTypeEtymologyFreeform
-	default: return notebook.QuizTypeNotebook
+	case apiv1.QuizType_QUIZ_TYPE_REVERSE:
+		return notebook.QuizTypeReverse
+	case apiv1.QuizType_QUIZ_TYPE_FREEFORM:
+		return notebook.QuizTypeFreeform
+	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_STANDARD:
+		return notebook.QuizTypeEtymologyStandard
+	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_REVERSE:
+		return notebook.QuizTypeEtymologyReverse
+	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM:
+		return notebook.QuizTypeEtymologyFreeform
+	default:
+		return notebook.QuizTypeNotebook
 	}
 }
 
 func (h *QuizHandler) SkipWord(ctx context.Context, req *connect.Request[apiv1.SkipWordRequest]) (*connect.Response[apiv1.SkipWordResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	quizTypes := protoQuizTypesToNotebook(req.Msg.GetQuizTypes())
 	if err := h.svc.SkipWord(*info, req.Msg.GetSkipUntil(), quizTypes); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("skip word: %w", err))
@@ -349,9 +476,13 @@ func (h *QuizHandler) SkipWord(ctx context.Context, req *connect.Request[apiv1.S
 }
 
 func (h *QuizHandler) ResumeWord(ctx context.Context, req *connect.Request[apiv1.ResumeWordRequest]) (*connect.Response[apiv1.ResumeWordResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	info, err := h.resolveCardInfo(ctx, req.Msg.GetNoteId())
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	quizTypes := protoQuizTypesToNotebook(req.Msg.GetQuizTypes())
 	if err := h.svc.ResumeWord(*info, quizTypes); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume word: %w", err))
@@ -371,17 +502,25 @@ func protoQuizTypesToNotebook(qts []apiv1.QuizType) []notebook.QuizType {
 }
 
 func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyQuizRequest]) (*connect.Response[apiv1.StartEtymologyQuizResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	loadQuizType := notebook.QuizTypeEtymologyStandard
 	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
 		loadQuizType = notebook.QuizTypeEtymologyReverse
 	}
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetNotebookSections())
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, req.Msg.GetIncludeUnstudied(), false, loadQuizType, sectionTitles)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err))
+	}
 	examples, err := h.svc.LoadEtymologyExampleWords(cards)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err)) }
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err))
+	}
 	// Build the per-notebook concept map once for graph-prompt construction
 	// so each reverse card reuses the same in-memory YAML scan instead of
 	// re-reading session files per card. The reader itself is reused too so
@@ -397,10 +536,13 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 		}
 	}
 
-	localStore := make(map[int64]quiz.EtymologyOriginCard); var nextID int64 = 1
+	localStore := make(map[int64]quiz.EtymologyOriginCard)
+	var nextID int64 = 1
 	var protoCards []*apiv1.EtymologyQuizCard
 	for _, card := range cards {
-		cardID := nextID; nextID++; localStore[cardID] = card
+		cardID := nextID
+		nextID++
+		localStore[cardID] = card
 		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle + "\x00" + card.Sense
 		var graphPrompt *apiv1.GraphPrompt
 		if graphReader != nil {
@@ -422,7 +564,11 @@ func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Reque
 	// for standard mode (graphPrompt is nil there).
 	maskEtymologyGraphFutureAnswers(protoCards)
 
-	h.mu.Lock(); h.etymologyOriginStore = localStore; h.etymologyQuizMode = req.Msg.GetMode(); h.nextID = nextID; h.mu.Unlock()
+	h.mu.Lock()
+	h.etymologyOriginStore = localStore
+	h.etymologyQuizMode = req.Msg.GetMode()
+	h.nextID = nextID
+	h.mu.Unlock()
 	return connect.NewResponse(&apiv1.StartEtymologyQuizResponse{Cards: protoCards}), nil
 }
 
@@ -440,23 +586,35 @@ func (h *QuizHandler) loadCardExampleWords(card quiz.EtymologyOriginCard) []stri
 }
 
 func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyStandardAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyStandardAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	cardID := req.Msg.GetCardId()
-	h.mu.Lock(); card, ok := h.etymologyOriginStore[cardID]; h.mu.Unlock()
-	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID)) }
+	h.mu.Lock()
+	card, ok := h.etymologyOriginStore[cardID]
+	h.mu.Unlock()
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID))
+	}
 	var grade quiz.GradeResult
 	var err error
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
 		grade, err = h.svc.GradeEtymologyStandardAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology standard: %w", err)) }
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology standard: %w", err))
+		}
 	}
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyStandard)
-	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
+	h.mu.Lock()
+	noteID := h.nextID
+	h.nextID++
+	h.etymologyOriginStore[noteID] = card
+	h.mu.Unlock()
 	// Build a graph context for the feedback card — same builder the
 	// reverse mode uses, but with the blank filled in so the just-answered
 	// origin is visible. Failures here don't block the answer response.
@@ -469,52 +627,83 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 }
 
 func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyReverseAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	cardID := req.Msg.GetCardId()
-	h.mu.Lock(); card, ok := h.etymologyOriginStore[cardID]; h.mu.Unlock()
-	if !ok { return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID)) }
+	h.mu.Lock()
+	card, ok := h.etymologyOriginStore[cardID]
+	h.mu.Unlock()
+	if !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID))
+	}
 	var grade quiz.GradeResult
 	var err error
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
 		grade, err = h.svc.GradeEtymologyReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-		if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology reverse: %w", err)) }
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology reverse: %w", err))
+		}
 	}
 	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, card.Origin, notebook.QuizTypeEtymologyReverse)
-	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = card; h.mu.Unlock()
+	h.mu.Lock()
+	noteID := h.nextID
+	h.nextID++
+	h.etymologyOriginStore[noteID] = card
+	h.mu.Unlock()
 	return connect.NewResponse(&apiv1.SubmitEtymologyReverseAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectOrigin: card.Origin, Type: card.Type, Language: card.Language, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, ExampleWords: h.loadCardExampleWords(card)}), nil
 }
 
 func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest]) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), nil)
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	// Freeform pulls EVERY origin into the cards list, not just due
 	// ones. The frontend gates redrilling via the "Not until $date"
 	// banner driven by NextReviewDates (computed below); filtering the
 	// cards list here would break that UX by making typed origins read
 	// as "Origin not found in notebooks" instead of "Not until $date".
 	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, true, true, notebook.QuizTypeEtymologyFreeform, sectionTitles)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err)) }
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err))
+	}
 	nextReviewDates, err := h.svc.GetEtymologyOriginNextReviewDates(cards)
-	if err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err)) }
-	h.mu.Lock(); h.etymologyOriginCards = cards; h.mu.Unlock()
-	seen := make(map[string]struct{}); var origins []string
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err))
+	}
+	h.mu.Lock()
+	h.etymologyOriginCards = cards
+	h.mu.Unlock()
+	seen := make(map[string]struct{})
+	var origins []string
 	for _, card := range cards {
 		lower := strings.ToLower(card.Origin)
-		if _, ok := seen[lower]; !ok { seen[lower] = struct{}{}; origins = append(origins, card.Origin) }
+		if _, ok := seen[lower]; !ok {
+			seen[lower] = struct{}{}
+			origins = append(origins, card.Origin)
+		}
 	}
 	return connect.NewResponse(&apiv1.StartEtymologyFreeformQuizResponse{Origins: origins, NextReviewDates: nextReviewDates}), nil
 }
 
 func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyFreeformAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyFreeformAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	h.mu.Lock(); cards := h.etymologyOriginCards; h.mu.Unlock()
-	origin := req.Msg.GetOrigin(); meaning := req.Msg.GetMeaning()
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	h.mu.Lock()
+	cards := h.etymologyOriginCards
+	h.mu.Unlock()
+	origin := req.Msg.GetOrigin()
+	meaning := req.Msg.GetMeaning()
 	senses := h.svc.LoadEtymologyOriginSenses(cards, origin)
 	if len(senses) == 0 {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("origin %q not found", origin))
@@ -554,7 +743,11 @@ func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *co
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology freeform result: %w", err))
 	}
 	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(resultSense.NotebookName, resultSense.Origin, notebook.QuizTypeEtymologyFreeform)
-	h.mu.Lock(); noteID := h.nextID; h.nextID++; h.etymologyOriginStore[noteID] = *resultSense; h.mu.Unlock()
+	h.mu.Lock()
+	noteID := h.nextID
+	h.nextID++
+	h.etymologyOriginStore[noteID] = *resultSense
+	h.mu.Unlock()
 
 	allSenses := make([]*apiv1.EtymologyOriginSense, 0, len(senses))
 	for _, sense := range senses {
