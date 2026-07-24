@@ -3,6 +3,7 @@ package quiz
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -121,7 +122,11 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 	for id, index := range reader.GetJournalIndexes() {
 		notebooks, err := reader.ReadJournalNotebooks(id)
 		if err != nil {
-			return nil, fmt.Errorf("ReadJournalNotebooks(%s) > %w", id, err)
+			// A single malformed journal notebook must not take down the whole
+			// quiz-options page (which lists every notebook kind). Skip it with
+			// a warning; `langner validate` surfaces the underlying problem.
+			slog.Warn("skipping journal notebook in summaries", "notebook", id, "error", err)
+			continue
 		}
 		expByMistake := grammarExpressionsByID(learningHistories[id])
 
