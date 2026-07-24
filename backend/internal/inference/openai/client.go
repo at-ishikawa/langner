@@ -1062,3 +1062,123 @@ Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTi
 
 	return decoded, nil
 }
+
+func (client *Client) GradeCorrection(
+	ctx context.Context,
+	params inference.GradeCorrectionRequest,
+) (inference.GradeCorrectionResponse, error) {
+	var result inference.GradeCorrectionResponse
+	if err := retry.Do(
+		func() error {
+			response, err := client.gradeCorrection(ctx, params)
+			if err != nil {
+				if !isRetryableError(err) {
+					return retry.Unrecoverable(err)
+				}
+				return err
+			}
+			result = response
+			return nil
+		},
+		retry.Context(ctx),
+		retry.Attempts(client.maxRetryAttempts+1),
+		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
+			return retry.BackOffDelay(n, err, config)
+		}),
+	); err != nil {
+		return inference.GradeCorrectionResponse{}, err
+	}
+	return result, nil
+}
+
+func (client *Client) gradeCorrection(
+	ctx context.Context,
+	params inference.GradeCorrectionRequest,
+) (inference.GradeCorrectionResponse, error) {
+	systemPrompt := `You are a grammar quiz grader.
+
+The user was shown a sentence containing a grammar mistake and asked to correct it.
+Their answer may be just the corrected phrase or the whole rewritten sentence.
+
+GRADING RULES:
+- Mark "correct": true when the user's answer fixes the specific mistake, i.e. it no
+  longer contains the error and applies the same correction as the reference (or an
+  equally valid alternative). Ignore differences in casing, surrounding words, and
+  trailing punctuation. Accept the corrected phrase alone or inside a full sentence.
+- Mark "correct": false when the answer still contains the original mistake, introduces
+  a new grammatical error, or does not address the mistake.
+- Do NOT require an exact string match with the reference correction; accept any answer
+  that is grammatically correct and resolves the same mistake.
+
+QUALITY ASSESSMENT (1-5):
+- If incorrect: quality = 1
+- If correct, judge response time: fast = 5, normal = 4, slow = 3.
+
+OUTPUT FORMAT (JSON only):
+{
+  "correct": true | false,
+  "reason": "<brief explanation>",
+  "quality": <1-5>
+}
+
+Do NOT include any text outside the JSON.`
+
+	noteInfo := ""
+	if params.Note != "" {
+		noteInfo = fmt.Sprintf("\nGrammar note: %s", params.Note)
+	}
+	responseTimeInfo := ""
+	if params.ResponseTimeMs > 0 {
+		responseTimeInfo = fmt.Sprintf("\nResponse time: %dms", params.ResponseTimeMs)
+	}
+
+	userMessage := fmt.Sprintf(`Sentence: %s
+Incorrect part: %s
+Reference correction: %s%s%s
+User's answer: %s
+
+Grade this correction.`, params.Sentence, params.Incorrect, params.Correct, noteInfo, responseTimeInfo, params.UserAnswer)
+
+	requestBody := ChatCompletionRequest{
+		Model:       client.model,
+		Temperature: 0.1,
+		Messages: []Message{
+			{Role: RoleSystem, Content: systemPrompt},
+			{Role: RoleUser, Content: userMessage},
+		},
+	}
+
+	response, err := client.httpClient.R().
+		SetContext(ctx).
+		SetBody(requestBody).
+		SetResult(&ChatCompletionResponse{}).
+		Post("/chat/completions")
+	if err != nil {
+		return inference.GradeCorrectionResponse{}, fmt.Errorf("httpClient.Post > %w", err)
+	}
+	if response.IsError() {
+		return inference.GradeCorrectionResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+	}
+
+	responseBody := response.Result().(*ChatCompletionResponse)
+	if responseBody == nil || len(responseBody.Choices) == 0 {
+		return inference.GradeCorrectionResponse{}, fmt.Errorf("empty response body or choices: %s", response.String())
+	}
+
+	content := responseBody.Choices[0].Message.Content
+	if content == "" {
+		return inference.GradeCorrectionResponse{}, fmt.Errorf("empty response content: %s", response.String())
+	}
+
+	slog.Default().Debug("gradeCorrection response",
+		"request", requestBody,
+		"response", content,
+	)
+
+	var decoded inference.GradeCorrectionResponse
+	if err := json.NewDecoder(strings.NewReader(content)).Decode(&decoded); err != nil {
+		return inference.GradeCorrectionResponse{}, fmt.Errorf("json.Unmarshal(%s) > %w", content, err)
+	}
+
+	return decoded, nil
+}

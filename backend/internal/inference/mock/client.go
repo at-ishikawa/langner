@@ -69,6 +69,32 @@ func (c *Client) AnswerMeanings(_ context.Context, params inference.AnswerMeanin
 	return inference.AnswerMeaningsResponse{Answers: answers}, nil
 }
 
+// GradeCorrection deterministically grades a grammar correction: the answer is
+// correct when it contains the reference correction and no longer contains the
+// incorrect span (case-insensitively), or when the answer equals the correction.
+// The wrong-answer sentinels still force an incorrect result.
+func (c *Client) GradeCorrection(_ context.Context, params inference.GradeCorrectionRequest) (inference.GradeCorrectionResponse, error) {
+	answer := strings.ToLower(strings.TrimSpace(params.UserAnswer))
+	correct := strings.ToLower(strings.TrimSpace(params.Correct))
+	incorrect := strings.ToLower(strings.TrimSpace(params.Incorrect))
+
+	isCorrect := !isWrongAnswer(params.UserAnswer) &&
+		strings.Contains(answer, correct) &&
+		(incorrect == "" || !strings.Contains(answer, incorrect))
+
+	reason := "mock grader: answer resolves the mistake"
+	quality := 3
+	if !isCorrect {
+		reason = "mock grader: answer does not resolve the mistake"
+		quality = 1
+	}
+	return inference.GradeCorrectionResponse{
+		Correct: isCorrect,
+		Reason:  reason,
+		Quality: quality,
+	}, nil
+}
+
 func (c *Client) ValidateWordForm(_ context.Context, params inference.ValidateWordFormRequest) (inference.ValidateWordFormResponse, error) {
 	user := strings.ToLower(strings.TrimSpace(params.UserAnswer))
 	expected := strings.ToLower(strings.TrimSpace(params.Expected))

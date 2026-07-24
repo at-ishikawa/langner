@@ -19,6 +19,9 @@ enum QuizType {
   // It is NEVER written to a learning_logs row or a YAML quiz_type field —
   // the Relearn Quiz records no learning history at all.
   QUIZ_TYPE_RELEARN = 7;
+  // QUIZ_TYPE_GRAMMAR drills grammar mistakes annotated in journal notebooks:
+  // the user is shown a sentence with an incorrect span and types the fix.
+  QUIZ_TYPE_GRAMMAR = 8;
 }
 
 enum EtymologyQuizMode {
@@ -56,6 +59,14 @@ service QuizService {
   rpc StartRelearnQuiz(StartRelearnQuizRequest) returns (StartRelearnQuizResponse);
   rpc SubmitRelearnAnswer(SubmitRelearnAnswerRequest) returns (SubmitRelearnAnswerResponse);
   rpc BatchSubmitRelearnAnswers(BatchSubmitRelearnAnswersRequest) returns (BatchSubmitRelearnAnswersResponse);
+
+  // Grammar Quiz — corrects grammar mistakes annotated in journal notebooks.
+  // Each card shows a sentence with an incorrect span; the user types the fix,
+  // which is AI-graded and recorded in the notebook's learning history keyed by
+  // the mistake id. See docs/content/proposals/grammar-quiz.
+  rpc StartGrammarQuiz(StartGrammarQuizRequest) returns (StartGrammarQuizResponse);
+  rpc SubmitGrammarAnswer(SubmitGrammarAnswerRequest) returns (SubmitGrammarAnswerResponse);
+  rpc BatchSubmitGrammarAnswers(BatchSubmitGrammarAnswersRequest) returns (BatchSubmitGrammarAnswersResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -91,6 +102,9 @@ message NotebookSummary {
   // The two can differ because the same origin can be due in one mode and
   // not in the other (each mode tracks its own SR interval and skip flag).
   int32 etymology_reverse_review_count = 9;
+  // grammar_review_count is the per-notebook due count for the grammar quiz
+  // (journal notebooks). Zero for non-journal notebooks.
+  int32 grammar_review_count = 10;
 }
 
 // NotebookSectionSummary holds the display title and per-mode review counts
@@ -691,5 +705,70 @@ message BatchSubmitRelearnAnswersRequest {
 
 message BatchSubmitRelearnAnswersResponse {
   repeated SubmitRelearnAnswerResponse responses = 1;
+}
+
+message StartGrammarQuizRequest {
+  repeated string notebook_ids = 1;
+  // include_unstudied has no effect yet for grammar (all not-yet-mastered
+  // mistakes are due); reserved for parity with the other quiz start requests.
+  bool include_unstudied = 2;
+}
+
+message StartGrammarQuizResponse {
+  repeated GrammarCard cards = 1;
+}
+
+// GrammarCard is one grammar-correction card. It deliberately does NOT carry
+// the reference correction so the answer isn't leaked to the client; the
+// backend re-derives it by (notebook_id, card_id) at submit time.
+message GrammarCard {
+  string notebook_id = 1;
+  // card_id is the stable mistake id from the journal notebook.
+  string card_id = 2;
+  string entry_id = 3;
+  // sentence is the full journal entry text shown to the user.
+  string sentence = 4;
+  // incorrect is the erroneous span within sentence, for highlighting.
+  string incorrect = 5;
+  string category = 6;
+  string note = 7;
+  // status is the current learned status (e.g. "", "misunderstood",
+  // "understood", "usable", "intuitive").
+  string status = 8;
+}
+
+message SubmitGrammarAnswerRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string card_id = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  // answer is the user's correction. When is_skipped is true it is ignored and
+  // the result is recorded as incorrect without grading.
+  string answer = 3;
+  int64 response_time_ms = 4;
+  bool is_skipped = 5;
+}
+
+message SubmitGrammarAnswerResponse {
+  bool correct = 1;
+  // correct_answer is the reference correction, revealed after grading.
+  string correct_answer = 2;
+  string reason = 3;
+  // incorrect echoes the erroneous span so the UI can show a before/after.
+  string incorrect = 4;
+  string next_review_date = 5;
+  string learned_at = 6;
+}
+
+message BatchSubmitGrammarAnswersRequest {
+  repeated SubmitGrammarAnswerRequest answers = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+}
+
+message BatchSubmitGrammarAnswersResponse {
+  repeated SubmitGrammarAnswerResponse responses = 1;
 }
 
