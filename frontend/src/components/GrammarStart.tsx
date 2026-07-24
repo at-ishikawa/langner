@@ -22,7 +22,11 @@ export default function GrammarStart() {
     quizClient
       .getQuizOptions({})
       .then((res) => setNotebooks((res.notebooks ?? []).filter((n) => n.kind === "Journal")))
-      .catch(() => setError("Failed to load journals"))
+      .catch((e) =>
+        setError(
+          e instanceof Error ? `Failed to load journals: ${e.message}` : "Failed to load journals",
+        ),
+      )
       .finally(() => setLoading(false));
   }, []);
 

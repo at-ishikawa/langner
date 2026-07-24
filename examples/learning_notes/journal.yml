@@ -1,0 +1,12 @@
+- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - expression: 2026-07-05-party-the-john
+      learned_logs:
+        - status: understood
+          learned_at: "2026-07-24T18:37:05Z"
+          quality: 3
+          quiz_type: grammar
+          interval_days: 3
