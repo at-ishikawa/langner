@@ -1,0 +1,46 @@
+# A journal notebook: the content is the free-text entries themselves.
+# Grammar mistakes are annotations on spans inside each entry. Every mistake
+# carries a free-form `category` so the app can rank which kinds of mistakes
+# occur most, and a stable `id` so its learning history is tracked per mistake.
+- title: "July 2026"
+  description: "Daily English journal with grammar corrections"
+  date: 2026-07-31T00:00:00Z
+  entries:
+    - id: 2026-07-05-party
+      date: 2026-07-05T00:00:00Z
+      text: |
+        Yesterday the John invited me to a party. I was in school until five,
+        so I arrived late. He suggested to play a board game, and it was fun.
+      mistakes:
+        - id: 2026-07-05-party-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          note: "No definite article before a personal name."
+        - id: 2026-07-05-party-in-school
+          incorrect: "in school"
+          correct: "at school"
+          category: preposition
+          note: "Use 'at school' when referring to the activity or institution."
+        - id: 2026-07-05-party-suggested-to-play
+          incorrect: "suggested to play"
+          correct: "suggested playing"
+          category: verb-pattern
+          note: "'suggest' takes a gerund, not a to-infinitive."
+
+    - id: 2026-07-12-weather
+      date: 2026-07-12T00:00:00Z
+      text: |
+        It was raining hard, so I stayed in home all day. My sister call me
+        in the evening to break the ice after our argument.
+      mistakes:
+        - id: 2026-07-12-weather-in-home
+          incorrect: "in home"
+          correct: "at home"
+          category: preposition
+          note: "The fixed expression is 'at home'."
+        - id: 2026-07-12-weather-sister-call
+          incorrect: "My sister call me"
+          correct: "My sister called me"
+          category: tense
+          note: "Past narration needs the past tense 'called'."

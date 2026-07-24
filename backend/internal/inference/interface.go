@@ -11,6 +11,27 @@ type Client interface {
 	AnswerMeanings(ctx context.Context, params AnswerMeaningsRequest) (AnswerMeaningsResponse, error)
 	ValidateWordForm(ctx context.Context, params ValidateWordFormRequest) (ValidateWordFormResponse, error)
 	LookupWord(ctx context.Context, params LookupWordRequest) (LookupWordResponse, error)
+	GradeCorrection(ctx context.Context, params GradeCorrectionRequest) (GradeCorrectionResponse, error)
+}
+
+// GradeCorrectionRequest holds parameters for grading a grammar correction.
+// The user is shown a sentence containing an incorrect span and asked to fix
+// it; their answer may be just the corrected span or the whole rewritten
+// sentence.
+type GradeCorrectionRequest struct {
+	Sentence       string `json:"sentence"`                   // full entry text shown to the user
+	Incorrect      string `json:"incorrect"`                  // the erroneous span
+	Correct        string `json:"correct"`                    // the expected corrected span
+	UserAnswer     string `json:"user_answer"`                // the user's correction
+	Note           string `json:"note,omitempty"`             // optional grammar explanation
+	ResponseTimeMs int64  `json:"response_time_ms,omitempty"` // for quality assessment
+}
+
+// GradeCorrectionResponse holds the result of grading a grammar correction.
+type GradeCorrectionResponse struct {
+	Correct bool   `json:"correct"` // whether the user's answer fixes the mistake
+	Reason  string `json:"reason"`  // brief explanation of the grade
+	Quality int    `json:"quality"` // 1-5 SM-2 quality based on correctness + response time
 }
 
 // LookupWordRequest holds parameters for looking up a word definition
@@ -83,10 +104,10 @@ const (
 
 // ValidateWordFormRequest holds parameters for validating a word form in reverse quiz
 type ValidateWordFormRequest struct {
-	Expected       string `json:"expected"`                  // The expected word
-	UserAnswer     string `json:"user_answer"`               // The user's answer
-	Meaning        string `json:"meaning"`                   // The meaning that was shown to the user
-	Context        string `json:"context"`                   // Optional context sentence
+	Expected       string `json:"expected"`                   // The expected word
+	UserAnswer     string `json:"user_answer"`                // The user's answer
+	Meaning        string `json:"meaning"`                    // The meaning that was shown to the user
+	Context        string `json:"context"`                    // Optional context sentence
 	ResponseTimeMs int64  `json:"response_time_ms,omitempty"` // Response time for quality assessment
 }
 

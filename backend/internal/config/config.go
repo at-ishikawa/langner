@@ -62,6 +62,7 @@ type NotebooksConfig struct {
 	BooksDirectories       []string `mapstructure:"books_directories"`
 	DefinitionsDirectories []string `mapstructure:"definitions_directories"`
 	EtymologyDirectories   []string `mapstructure:"etymology_directories"`
+	JournalDirectories     []string `mapstructure:"journal_directories"`
 }
 
 type TemplatesConfig struct {
@@ -159,6 +160,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("notebooks.books_directories", []string{filepath.Join("notebooks", "books")})
 	v.SetDefault("notebooks.definitions_directories", []string{filepath.Join("notebooks", "definitions")})
 	v.SetDefault("notebooks.etymology_directories", []string{filepath.Join("notebooks", "etymology")})
+	v.SetDefault("notebooks.journal_directories", []string{filepath.Join("notebooks", "journal")})
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")

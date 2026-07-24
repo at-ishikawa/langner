@@ -36,7 +36,11 @@ type QuizHandler struct {
 	etymologyOriginCards []quiz.EtymologyOriginCard
 	etymologyQuizMode    apiv1.EtymologyQuizMode
 	relearnStore   map[int64]quiz.RelearnCard
-	nextID         int64
+	// grammarStore holds the in-flight grammar cards for the current session,
+	// keyed by notebookID+"\x00"+cardID so Submit can re-grade against the
+	// reference correction without reloading the notebook.
+	grammarStore map[string]quiz.GrammarCard
+	nextID       int64
 }
 
 // NewQuizHandler creates a new QuizHandler.
@@ -48,6 +52,7 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		freeformStore:        make(map[int64]quiz.FreeformCard),
 		etymologyOriginStore: make(map[int64]quiz.EtymologyOriginCard),
 		relearnStore:         make(map[int64]quiz.RelearnCard),
+		grammarStore:         make(map[string]quiz.GrammarCard),
 		nextID:               1,
 	}
 }
@@ -83,6 +88,7 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 			Kind: s.Kind, ReverseReviewCount: int32(s.ReverseReviewCount),
 			EtymologyReviewCount:        int32(s.EtymologyReviewCount),
 			EtymologyReverseReviewCount: int32(s.EtymologyReverseReviewCount),
+			GrammarReviewCount:          int32(s.GrammarReviewCount),
 			HasContent:                  s.HasContent,
 			Sections:                    sections,
 		})

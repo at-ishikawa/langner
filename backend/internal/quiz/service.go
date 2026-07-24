@@ -41,7 +41,7 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
-	return notebook.NewReader(
+	reader, err := notebook.NewReader(
 		s.notebooksConfig.StoriesDirectories,
 		s.notebooksConfig.FlashcardsDirectories,
 		s.notebooksConfig.BooksDirectories,
@@ -49,6 +49,13 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 		s.notebooksConfig.EtymologyDirectories,
 		s.dictionaryMap,
 	)
+	if err != nil {
+		return nil, err
+	}
+	if err := reader.LoadJournalNotebooks(s.notebooksConfig.JournalDirectories); err != nil {
+		return nil, fmt.Errorf("reader.LoadJournalNotebooks() > %w", err)
+	}
+	return reader, nil
 }
 
 // NewReader creates a new notebook reader. Exported for use by handlers
@@ -187,6 +194,13 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		return nil, fmt.Errorf("failed to load etymology notebook summaries: %w", err)
 	}
 	summaries = append(summaries, etymSummaries...)
+
+	// Add journal notebooks (grammar quiz)
+	journalSummaries, err := s.LoadJournalNotebookSummaries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load journal notebook summaries: %w", err)
+	}
+	summaries = append(summaries, journalSummaries...)
 
 	return summaries, nil
 }

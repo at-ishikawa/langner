@@ -71,6 +71,21 @@ func (mr *MockClientMockRecorder) LookupWord(ctx, params any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LookupWord", reflect.TypeOf((*MockClient)(nil).LookupWord), ctx, params)
 }
 
+// GradeCorrection mocks base method.
+func (m *MockClient) GradeCorrection(ctx context.Context, params inference.GradeCorrectionRequest) (inference.GradeCorrectionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GradeCorrection", ctx, params)
+	ret0, _ := ret[0].(inference.GradeCorrectionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GradeCorrection indicates an expected call of GradeCorrection.
+func (mr *MockClientMockRecorder) GradeCorrection(ctx, params any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GradeCorrection", reflect.TypeOf((*MockClient)(nil).GradeCorrection), ctx, params)
+}
+
 // ValidateWordForm mocks base method.
 func (m *MockClient) ValidateWordForm(ctx context.Context, params inference.ValidateWordFormRequest) (inference.ValidateWordFormResponse, error) {
 	m.ctrl.T.Helper()
