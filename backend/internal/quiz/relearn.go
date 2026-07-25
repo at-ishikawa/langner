@@ -163,6 +163,29 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return nil, err
 	}
 
+	// A definitions concept member (e.g. "consummate", grouped with its
+	// derived forms) is shown and graded by the standard quiz under the
+	// concept HEAD and its umbrella meaning. Relearn must do the same, or it
+	// resolves the member by last-write-wins and shows a different meaning
+	// than the quiz it was failed in. Build the same family-concept index the
+	// loaders use, lazily per notebook.
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("init reader for relearn concepts: %w", err)
+	}
+	conceptByNotebook := map[string]map[string]*conceptInfo{}
+	conceptFor := func(notebookName, expression string) *conceptInfo {
+		idx, ok := conceptByNotebook[notebookName]
+		if !ok {
+			idx = buildConceptIndex(reader, notebookName)
+			conceptByNotebook[notebookName] = idx
+		}
+		if idx == nil {
+			return nil
+		}
+		return idx[expression]
+	}
+
 	cards := make([]RelearnCard, 0, len(candidates))
 	for _, c := range candidates {
 		if c.format == notebook.QuizTypeEtymologyStandard || c.format == notebook.QuizTypeEtymologyReverse {
@@ -196,8 +219,18 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		if !ok {
 			continue // no vocab data to grade/display against
 		}
+		// If this word is a family-concept member, present and grade it under
+		// the concept head + umbrella meaning, exactly as the standard quiz
+		// does — so a homograph folded into a concept (e.g. "consummate")
+		// never shows one sense here and another there.
+		displayEntry := c.expression
+		if ci := conceptFor(c.notebookName, c.expression); ci != nil && ci.Head != "" {
+			fc.Meaning = ci.Meaning
+			fc.Expression = ci.Head
+			displayEntry = ci.Head
+		}
 		card := RelearnCard{
-			Format: c.format, Entry: c.expression, Meaning: fc.Meaning, NotebookName: c.notebookName,
+			Format: c.format, Entry: displayEntry, Meaning: fc.Meaning, NotebookName: c.notebookName,
 			WordDetail: fc.WordDetail, Images: fc.Images,
 			ContextScenes: relearnScenesFromCard(fc),
 		}

@@ -1,6 +1,7 @@
 package quiz
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -135,4 +136,75 @@ func TestLoadRelearnPool_ResolvesHomographByID(t *testing.T) {
 		"the first sense (%s) must resolve to its own meaning by id, not the other sense's", firstID)
 	assert.True(t, meanings[secondMean],
 		"the second sense (%s) must resolve to its own meaning by id", secondID)
+}
+
+// TestLoadRelearnPool_ConceptMemberUsesHeadMeaning pins the consummate bug:
+// a word folded into a definitions family-concept must be shown in relearn
+// under the concept HEAD and its umbrella meaning — the same as the standard
+// quiz — not resolved to its own raw sense by last-write-wins. "bank" here has
+// two senses and is a concept member; relearn must show the concept meaning.
+func TestLoadRelearnPool_ConceptMemberUsesHeadMeaning(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(defsDir, "test-book")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: test-book
+notebooks:
+  - ./ch.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "ch.yml"), []byte(`- metadata:
+    title: Chapter 1
+  scenes:
+  - metadata:
+      index: 0
+      title: S1
+    expressions:
+    - expression: bank
+      id: bank
+      meaning: the land beside a river
+    - expression: bank
+      id: bank-2
+      meaning: a place to keep money
+  concepts:
+  - head: bank
+    meaning: umbrella meaning for the bank family
+    expressions:
+    - bank
+`), 0644))
+
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "test-book.yml"), []byte(fmt.Sprintf(`- metadata:
+    notebook_id: test-book
+    title: Chapter 1
+  scenes:
+  - metadata:
+      title: S1
+    expressions:
+    - expression: bank
+      learned_logs:
+      - status: misunderstood
+        learned_at: %q
+        quiz_type: notebook
+`, recent)), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	var found bool
+	for _, c := range cards {
+		if c.Entry == "bank" {
+			found = true
+			assert.Equal(t, "umbrella meaning for the bank family", c.Meaning,
+				"a concept member must show the concept head's meaning, not a raw sense")
+		}
+	}
+	require.True(t, found, "the failed concept member must appear in the relearn pool")
 }
