@@ -121,7 +121,7 @@ func (h *QuizHandler) submitGrammarAnswer(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save grammar result: %w", err))
 	}
 
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookID, card.MistakeID, notebook.QuizTypeGrammar)
+	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookID, card.MistakeID, card.MistakeID, notebook.QuizTypeGrammar)
 	return &apiv1.SubmitGrammarAnswerResponse{
 		Correct:        grade.Correct,
 		CorrectAnswer:  card.Correct,

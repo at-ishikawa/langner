@@ -98,7 +98,14 @@ func grammarExpressionsByID(histories []notebook.LearningHistory) map[string]not
 			continue
 		}
 		for _, exp := range h.Expressions {
-			result[exp.Expression] = exp
+			// Post note-id-identity, a grammar entry is keyed by its stable ID
+			// (the mistake id). Fall back to Expression for any legacy entry
+			// written before ids were stamped.
+			key := exp.ID
+			if key == "" {
+				key = exp.Expression
+			}
+			result[key] = exp
 		}
 	}
 	return result
@@ -198,6 +205,7 @@ func (s *Service) SaveGrammarResult(ctx context.Context, card GrammarCard, resul
 		NotebookName:     card.NotebookID,
 		StoryTitle:       notebook.JournalStoryTitle,
 		Expression:       card.MistakeID,
+		SenseID:          card.MistakeID,
 		IsCorrect:        result.Correct,
 		LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}

@@ -4,9 +4,10 @@
     type: grammar
   expressions:
     - expression: 2026-07-05-party-the-john
+      id: 2026-07-05-party-the-john
       learned_logs:
         - status: understood
-          learned_at: "2026-07-24T18:37:05Z"
+          learned_at: "2026-07-25T22:20:33Z"
           quality: 3
           quiz_type: grammar
           interval_days: 3
