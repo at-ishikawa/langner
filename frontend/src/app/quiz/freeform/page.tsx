@@ -90,6 +90,7 @@ export default function FreeformQuizPage() {
         wordDetail: res.wordDetail,
         learnedAt: res.learnedAt || undefined,
         noteId: res.noteId || undefined,
+        senseId: res.senseId || undefined,
         images: (res.images ?? []).length > 0 ? res.images : undefined,
       });
       setShowFeedback(true);

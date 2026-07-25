@@ -18,10 +18,14 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-type noteKey struct{ usage, entry string }
+// noteKey identifies a note for import dedup/reconcile. It includes the
+// stable sense id so two ids that share an (usage, entry) spelling map to two
+// distinct rows instead of collapsing into one. Legacy id-less notes carry an
+// empty senseID and keep keying by (usage, entry) exactly as before.
+type noteKey struct{ senseID, usage, entry string }
 
-func newNoteKey(usage, entry string) noteKey {
-	return noteKey{strings.ToLower(usage), strings.ToLower(entry)}
+func newNoteKey(senseID, usage, entry string) noteKey {
+	return noteKey{senseID, strings.ToLower(usage), strings.ToLower(entry)}
 }
 
 type logKey struct {
@@ -348,7 +352,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 
 	// Build caches from DB notes
 	for i := range allNotes {
-		state.noteCache[newNoteKey(allNotes[i].Usage, allNotes[i].Entry)] = &allNotes[i]
+		state.noteCache[newNoteKey(allNotes[i].SenseID, allNotes[i].Usage, allNotes[i].Entry)] = &allNotes[i]
 		for _, nn := range allNotes[i].NotebookNotes {
 			k := nnKey{nn.NoteID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup}
 			state.nnCache[k] = true
@@ -427,7 +431,7 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 }
 
 func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions, state *classifyState) {
-	key := newNoteKey(src.Usage, src.Entry)
+	key := newNoteKey(src.SenseID, src.Usage, src.Entry)
 	existing := state.noteCache[key]
 
 	if existing == nil {
@@ -485,6 +489,10 @@ func (imp *Importer) classifyRecord(src *notebook.NoteRecord, opts ImportOptions
 // linked to a specific notebook via NotebookNotes.
 type noteLookup struct {
 	byEntry map[string][]*notebook.NoteRecord
+	// bySenseID resolves a note by its stable sense id. When a learning
+	// entry carries an id, this wins over the expression index so two ids
+	// sharing an entry spelling route their logs to the right note.
+	bySenseID map[string]*notebook.NoteRecord
 }
 
 // buildNoteMap creates a noteLookup from a slice of NoteRecords.
@@ -495,8 +503,14 @@ type noteLookup struct {
 // Usage and Entry are genuinely different expressions (e.g. a note with
 // Usage="looking out for you" / Entry="look out for"), so we don't.
 func buildNoteMap(notes []notebook.NoteRecord) noteLookup {
-	m := noteLookup{byEntry: make(map[string][]*notebook.NoteRecord, len(notes))}
+	m := noteLookup{
+		byEntry:   make(map[string][]*notebook.NoteRecord, len(notes)),
+		bySenseID: make(map[string]*notebook.NoteRecord, len(notes)),
+	}
 	for i := range notes {
+		if notes[i].SenseID != "" {
+			m.bySenseID[notes[i].SenseID] = &notes[i]
+		}
 		key := strings.ToLower(strings.TrimSpace(notes[i].Entry))
 		if key == "" {
 			continue
@@ -504,6 +518,17 @@ func buildNoteMap(notes []notebook.NoteRecord) noteLookup {
 		m.byEntry[key] = append(m.byEntry[key], &notes[i])
 	}
 	return m
+}
+
+// lookupByID resolves a note by its stable sense id, falling back to the
+// notebook-aware expression lookup when the id is empty or unknown.
+func (m noteLookup) lookupByID(senseID, entry, notebookID string) *notebook.NoteRecord {
+	if senseID != "" {
+		if n, ok := m.bySenseID[senseID]; ok {
+			return n
+		}
+	}
+	return m.lookup(entry, notebookID)
 }
 
 // lookup returns the best-matching note for the given entry and notebook ID.
@@ -596,15 +621,20 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 	}
 
-	// First pass: batch-create auto notes for unknown expressions
-	newNoteEntries := make(map[string]bool)
+	// First pass: batch-create auto notes for unknown expressions. The dedup
+	// key includes the sense id so two ids sharing an expression each get
+	// their own auto note; id-less legacy expressions dedup by expression.
+	type newNoteKey struct{ senseID, expr string }
+	newNoteEntries := make(map[newNoteKey]bool)
 	var newNotes []*notebook.NoteRecord
 	for _, expr := range allExpressions {
-		if noteMap.lookup(expr.Expression, expr.notebookID) == nil && !newNoteEntries[expr.Expression] {
-			newNoteEntries[expr.Expression] = true
+		nk := newNoteKey{expr.ID, expr.Expression}
+		if noteMap.lookupByID(expr.ID, expr.Expression, expr.notebookID) == nil && !newNoteEntries[nk] {
+			newNoteEntries[nk] = true
 			n := &notebook.NoteRecord{
-				Usage: expr.Expression,
-				Entry: expr.Expression,
+				SenseID: expr.ID,
+				Usage:   expr.Expression,
+				Entry:   expr.Expression,
 			}
 			newNotes = append(newNotes, n)
 			_, _ = fmt.Fprintf(imp.writer, "  [NEW]  %q (%s)\n", expr.Expression, expr.Expression)
@@ -631,7 +661,7 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 	// Second pass: collect learning logs with correct note IDs
 	var newLogs []*learning.LearningLog
 	for _, expr := range allExpressions {
-		n := noteMap.lookup(expr.Expression, expr.notebookID)
+		n := noteMap.lookupByID(expr.ID, expr.Expression, expr.notebookID)
 		if n == nil {
 			continue
 		}

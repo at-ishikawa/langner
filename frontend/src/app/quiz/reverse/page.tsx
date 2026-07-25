@@ -121,6 +121,7 @@ export default function ReverseQuizPage() {
         contexts: init.contexts ?? [],
         wordDetail: init.wordDetail,
         learnedAt: init.learnedAt || undefined,
+        senseId: init.senseId || undefined,
         images: init.images.length > 0 ? init.images : undefined,
       });
     });

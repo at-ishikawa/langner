@@ -52,7 +52,12 @@ type DailySummary struct {
 // repository to look up. NoteID is used when available; the fallback path
 // uses NotebookID + Expression instead.
 type WordRef struct {
-	NoteID     int64
+	NoteID int64
+	// ID is the stable source-entry identity of the word (see
+	// notebook.Note.ID / LearningHistoryExpression.ID). When set, the YAML
+	// read path selects the series by id so two same-spelling senses stay
+	// distinct; empty falls back to expression (legacy).
+	ID         string
 	NotebookID string
 	Expression string
 	QuizType   string
@@ -60,7 +65,12 @@ type WordRef struct {
 
 // WrongWord is the per-card payload on the Day Detail page.
 type WrongWord struct {
-	NoteID                int64
+	NoteID int64
+	// ID is the stable source-entry identity of the word (see
+	// notebook.Note.ID). Empty for legacy id-less entries. The proto /
+	// handler track surfaces this so per-sense surfaces (override, deep
+	// links) target the right entry rather than the shared spelling.
+	ID                    string
 	Expression            string
 	NotebookID            string
 	NotebookTitle         string
@@ -129,9 +139,11 @@ const (
 	ExpressionTypeOrigin     = "origin"
 )
 
-
 // WordHistory is the payload returned by GetWordHistory.
 type WordHistory struct {
+	// ID is the stable source-entry identity of the word (see
+	// notebook.Note.ID). Empty for legacy id-less entries.
+	ID                 string
 	Expression         string
 	NotebookID         string
 	NotebookTitle      string

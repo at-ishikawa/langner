@@ -78,6 +78,8 @@ func newMigrateCommand() *cobra.Command {
 	migrateCmd.AddCommand(newExtractDefinitionsCommand())
 	migrateCmd.AddCommand(newMigrateMergeConceptsCommand())
 	migrateCmd.AddCommand(newMigrateEtymologyToScenesCommand())
+	migrateCmd.AddCommand(newAssignIDsCommand())
+	migrateCmd.AddCommand(newDedupLearningIDsCommand())
 
 	return migrateCmd
 }

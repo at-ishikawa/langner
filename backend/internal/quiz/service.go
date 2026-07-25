@@ -140,13 +140,13 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			}
 		}
 		summaries = append(summaries, NotebookSummary{
-			NotebookID:            id,
-			Name:                  index.Name,
-			ReviewCount:           countFlashcardCards(filtered),
-			ReverseReviewCount:    reverseCount,
-			EtymologyReviewCount:  etymCount,
-			LatestDate:            latestDate,
-			Sections:              flashcardSectionSummaries(notebooks, filtered, learningHistories[id], includeUnstudied),
+			NotebookID:           id,
+			Name:                 index.Name,
+			ReviewCount:          countFlashcardCards(filtered),
+			ReverseReviewCount:   reverseCount,
+			EtymologyReviewCount: etymCount,
+			LatestDate:           latestDate,
+			Sections:             flashcardSectionSummaries(notebooks, filtered, learningHistories[id], includeUnstudied),
 		})
 	}
 
@@ -387,6 +387,7 @@ func (s *Service) loadStoryCards(
 				examples, contexts := buildFromConversations(&scene, &definition)
 
 				cards = append(cards, Card{
+					ID:            definition.ID,
 					NotebookName:  notebookID,
 					StoryTitle:    story.Event,
 					SceneTitle:    scene.Title,
@@ -445,6 +446,7 @@ func (s *Service) loadFlashcardCards(
 			}
 
 			cards = append(cards, Card{
+				ID:            card.ID,
 				NotebookName:  notebookID,
 				StoryTitle:    "flashcards",
 				Entry:         entry,
@@ -500,19 +502,26 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer str
 // every time a member-named concept card is graded.
 func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
-	if result.Correct { status = "understood" }
+	if result.Correct {
+		status = "understood"
+	}
 	expression := card.Entry
 	originalExpression := card.OriginalEntry
+	senseID := card.ID
 	if card.ConceptHead != "" {
 		expression = card.ConceptHead
 		originalExpression = ""
+		// A concept write is redirected to the head's expression; the
+		// member card's id no longer identifies the target series, so drop
+		// it and let the head resolve by expression (legacy routing).
+		senseID = ""
 	}
 	log := &learning.LearningLog{
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeNotebook),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: expression, OriginalExpression: originalExpression,
+		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
@@ -773,6 +782,7 @@ func extractAnswerResult(result inference.AnswerMeaning) (isCorrect bool, reason
 
 // ReverseCard represents a reverse quiz card.
 type ReverseCard struct {
+	ID           string // stable source-entry identity (Note.ID); "" for legacy
 	NotebookName string
 	StoryTitle   string
 	SceneTitle   string
@@ -967,6 +977,7 @@ func (s *Service) loadStoryReverseCards(
 				}
 
 				cards = append(cards, ReverseCard{
+					ID:           definition.ID,
 					NotebookName: notebookID,
 					StoryTitle:   story.Event,
 					SceneTitle:   scene.Title,
@@ -1046,6 +1057,7 @@ func (s *Service) loadFlashcardReverseCards(
 			}
 
 			cards = append(cards, ReverseCard{
+				ID:           card.ID,
 				NotebookName: notebookID,
 				StoryTitle:   "flashcards",
 				SceneTitle:   "",
@@ -1268,17 +1280,21 @@ func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answ
 // Same head-redirection as SaveResult; see SaveResult for details.
 func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
-	if result.Correct { status = "understood" }
+	if result.Correct {
+		status = "understood"
+	}
 	expression := card.Expression
+	senseID := card.ID
 	if card.ConceptHead != "" {
 		expression = card.ConceptHead
+		senseID = ""
 	}
 	log := &learning.LearningLog{
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeReverse),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: expression, OriginalExpression: expression,
+		Expression: expression, OriginalExpression: expression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
@@ -1289,6 +1305,7 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 
 // FreeformCard represents a freeform quiz card (user inputs word + meaning).
 type FreeformCard struct {
+	ID                 string // stable source-entry identity (Note.ID); "" for legacy
 	NotebookName       string
 	StoryTitle         string
 	SceneTitle         string
@@ -1378,6 +1395,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 				_, contexts := buildFromConversations(&scene, &definition)
 
 				cards = append(cards, FreeformCard{
+					ID:                 definition.ID,
 					NotebookName:       notebookID,
 					StoryTitle:         story.Event,
 					SceneTitle:         scene.Title,
@@ -1428,6 +1446,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 			}
 
 			cards = append(cards, FreeformCard{
+				ID:           card.ID,
 				NotebookName: notebookID,
 				StoryTitle:   "flashcards",
 				SceneTitle:   "",
@@ -1538,17 +1557,21 @@ type FreeformGradeResult struct {
 // Same head-redirection as SaveResult; see SaveResult for details.
 func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, result FreeformGradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
-	if result.Correct { status = "understood" }
+	if result.Correct {
+		status = "understood"
+	}
 	expression := card.Expression
+	senseID := card.ID
 	if card.ConceptHead != "" {
 		expression = card.ConceptHead
+		senseID = ""
 	}
 	log := &learning.LearningLog{
 		Status: status, LearnedAt: time.Now(), Quality: result.Quality,
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeFreeform),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: expression, OriginalExpression: expression,
+		Expression: expression, OriginalExpression: expression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
@@ -1556,7 +1579,6 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 	}
 	return nil
 }
-
 
 // kindFromIndex returns the kind string for a notebook index.
 // Books loaded from books_directories have IsBook=true but an empty Kind field,
@@ -1670,14 +1692,14 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 
 // GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log
 // of a given expression in a specific notebook.
-func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
+func (s *Service) GetLatestLearnedInfo(notebookName, id, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
 		return "", ""
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.calculator)
-	expr := updater.FindExpressionByName(expression)
+	expr := updater.FindExpressionByID(id, expression)
 	if expr == nil {
 		return "", ""
 	}
@@ -1704,7 +1726,7 @@ func (s *Service) GetLatestLearnedInfo(notebookName, expression string, quizType
 func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, sceneTitle string, def *notebook.Note, quizType notebook.QuizType, conceptHeads map[string]string) bool {
 	expr := canonicalDefinitionExpression(def.Expression, conceptHeads)
 	defn := canonicalDefinitionExpression(def.Definition, conceptHeads)
-	return notebook.IsExpressionSkipped(histories, event, sceneTitle, expr, defn, quizType)
+	return notebook.IsExpressionSkipped(histories, event, sceneTitle, expr, defn, def.ID, quizType)
 }
 
 // definitionsSectionSummaries returns per-session counts for a
@@ -1856,18 +1878,18 @@ func shouldIncludeDefinition(
 //
 // Per-kind concept handling:
 //
-//   family       — one card per concept, sourced from the head's own
-//                  note row (head expression + head's meaning). Non-head
-//                  member notes are skipped entirely so the prompt and
-//                  the answer can never refer to different forms with
-//                  different meanings (cardiology / "the medical
-//                  specialty …" rather than the cardiologist row's
-//                  meaning slipping in).
-//   synonym /    — display-only groupings: each member's note becomes
-//   antonym /     its own card with its own meaning. ConceptMembers is
-//   visualization populated for the Family-chip UI, but ConceptHead is
-//                  left empty so SaveResult writes under the member
-//                  (no SR consolidation under the head).
+//	family       — one card per concept, sourced from the head's own
+//	               note row (head expression + head's meaning). Non-head
+//	               member notes are skipped entirely so the prompt and
+//	               the answer can never refer to different forms with
+//	               different meanings (cardiology / "the medical
+//	               specialty …" rather than the cardiologist row's
+//	               meaning slipping in).
+//	synonym /    — display-only groupings: each member's note becomes
+//	antonym /     its own card with its own meaning. ConceptMembers is
+//	visualization populated for the Family-chip UI, but ConceptHead is
+//	               left empty so SaveResult writes under the member
+//	               (no SR consolidation under the head).
 func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistories map[string][]notebook.LearningHistory, originMap map[string]notebook.EtymologyOrigin, sectionFilter []string, includeUnstudied bool) []Card {
 	defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 	if !ok {
@@ -1913,6 +1935,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 					originalEntry = note.Expression
 				}
 				card := Card{
+					ID:            note.ID,
 					NotebookName:  bookID,
 					StoryTitle:    storyTitle,
 					SceneTitle:    sceneTitle,
@@ -1985,6 +2008,7 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					altForm = note.Expression
 				}
 				card := ReverseCard{
+					ID:           note.ID,
 					NotebookName: bookID,
 					StoryTitle:   storyTitle,
 					SceneTitle:   sceneTitle,
@@ -2038,6 +2062,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					expression = note.Definition
 				}
 				card := FreeformCard{
+					ID:                 note.ID,
 					NotebookName:       bookID,
 					StoryTitle:         storyTitle,
 					SceneTitle:         sceneTitle,

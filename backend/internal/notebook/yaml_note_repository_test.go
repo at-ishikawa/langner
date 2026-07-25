@@ -905,3 +905,52 @@ func readYAMLHelper(t *testing.T, path string, dest interface{}) {
 	require.NoError(t, err, "read file %s", path)
 	require.NoError(t, yaml.Unmarshal(data, dest), "unmarshal %s", path)
 }
+
+// TestYAMLNoteRepository_FindAll_DedupsByID verifies the id-as-identity
+// dedup key: two flashcards that share an expression but carry distinct ids
+// produce two separate NoteRecords (each with its own SenseID), while an
+// id-less duplicate still merges by (usage, entry).
+func TestYAMLNoteRepository_FindAll_DedupsByID(t *testing.T) {
+	env := newTestFlashcardEnv(t)
+	flashcardBaseDir := filepath.Join(env.tempDir, "flashcards")
+	require.NoError(t, os.MkdirAll(flashcardBaseDir, 0755))
+	flashcardDir := filepath.Join(flashcardBaseDir, "fc-senses")
+	require.NoError(t, os.MkdirAll(flashcardDir, 0755))
+
+	indexContent := "id: fc-senses\nname: \"Senses\"\nnotebooks:\n  - ./cards.yml\n"
+	require.NoError(t, os.WriteFile(filepath.Join(flashcardDir, "index.yml"), []byte(indexContent), 0644))
+
+	// Two "bank" cards with distinct ids plus a legacy id-less "tip".
+	cardsContent := `- title: "Homographs"
+  cards:
+    - id: bank-money
+      expression: "bank"
+      meaning: "a financial institution"
+    - id: bank-river
+      expression: "bank"
+      meaning: "the land alongside a river"
+    - expression: "tip"
+      meaning: "a small sum of money"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(flashcardDir, "cards.yml"), []byte(cardsContent), 0644))
+
+	reader, err := NewReader(nil, []string{flashcardBaseDir}, nil, nil, nil, nil)
+	require.NoError(t, err)
+	repo := NewYAMLNoteRepository(reader)
+	got, err := repo.FindAll(context.Background())
+	require.NoError(t, err)
+
+	senseIDsForBank := make(map[string]bool)
+	tipCount := 0
+	for _, rec := range got {
+		if rec.Entry == "bank" {
+			senseIDsForBank[rec.SenseID] = true
+		}
+		if rec.Entry == "tip" {
+			tipCount++
+		}
+	}
+	assert.Len(t, senseIDsForBank, 2, "two ids sharing a spelling must yield two records")
+	assert.True(t, senseIDsForBank["bank-money"] && senseIDsForBank["bank-river"])
+	assert.Equal(t, 1, tipCount, "id-less legacy entry still resolves to a single record")
+}

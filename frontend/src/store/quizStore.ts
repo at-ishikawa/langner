@@ -87,6 +87,7 @@ export interface QuizResult {
   wordDetail?: WordDetail;
   nextReviewDate?: string;
   learnedAt?: string;
+  senseId?: string;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
@@ -104,6 +105,7 @@ export interface ReverseQuizResult {
   wordDetail?: WordDetail;
   nextReviewDate?: string;
   learnedAt?: string;
+  senseId?: string;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
@@ -121,6 +123,7 @@ export interface FreeformResult {
   wordDetail?: WordDetail;
   nextReviewDate?: string;
   learnedAt?: string;
+  senseId?: string;
   // noteId is required for per-result override/undo/skip on the
   // complete page and on the batch feedback that freeform now uses.
   // The freeform RPC returns it when the typed word matches a card.
@@ -153,6 +156,7 @@ export interface EtymologyOriginResult {
   notebookName?: string;
   nextReviewDate?: string;
   learnedAt?: string;
+  senseId?: string;
   // graphContext, when set, is a filled-in (no-blank) graph the standard-
   // quiz feedback card renders as elaborative scaffolding right after the
   // user has answered. Same shape vocabulary as the reverse-mode prompt

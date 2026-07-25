@@ -41,7 +41,7 @@ func NewNotebookMetadataResolver(reader *notebook.Reader) MetadataResolver {
 //
 // expressionType is used as a fallback only when the quiz type is
 // missing (legacy callers / no-op resolver).
-func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expression, expressionType, quizType string) WordMetadata {
+func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, id, expression, expressionType, quizType string) WordMetadata {
 	if r == nil || r.reader == nil || notebookID == "" || expression == "" {
 		return WordMetadata{}
 	}
@@ -49,12 +49,12 @@ func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, expres
 		if isEtymologyQuizType(quizType) {
 			return r.resolveOrigin(notebookID, expression)
 		}
-		return r.resolveVocab(notebookID, expression)
+		return r.resolveVocab(notebookID, id, expression)
 	}
 	if expressionType == notebook.LearningExpressionTypeOrigin {
 		return r.resolveOrigin(notebookID, expression)
 	}
-	return r.resolveVocab(notebookID, expression)
+	return r.resolveVocab(notebookID, id, expression)
 }
 
 // isEtymologyQuizType identifies the quiz types whose attempt records
@@ -75,13 +75,13 @@ func isEtymologyQuizType(quizType string) bool {
 // the resolver has to walk all four. Matching is case-insensitive as a
 // defensive fallback because the YAML expression can drift in case from the
 // learning-history record.
-func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) WordMetadata {
+func (r *NotebookMetadataResolver) resolveVocab(notebookID, id, expression string) WordMetadata {
 	target := strings.TrimSpace(expression)
 
 	if stories, err := r.reader.ReadStoryNotebooks(notebookID); err == nil {
 		for _, s := range stories {
 			for _, scene := range s.Scenes {
-				if meta, note, ok := findVocabNote(scene.Definitions, target); ok {
+				if meta, note, ok := findVocabNote(scene.Definitions, id, target); ok {
 					meta.NotebookKind = "story"
 					if meta.ExampleSentence == "" {
 						// Story-style notebooks (Speak English Like an American,
@@ -103,7 +103,7 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 	}
 	if flashcards, err := r.reader.ReadFlashcardNotebooks(notebookID); err == nil {
 		for _, fc := range flashcards {
-			if meta, note, ok := findVocabNote(fc.Cards, target); ok {
+			if meta, note, ok := findVocabNote(fc.Cards, id, target); ok {
 				meta.NotebookKind = "flashcard"
 				meta.RelatedGroups = r.computeVocabRelatedGroups(notebookID, note)
 				return meta
@@ -116,7 +116,7 @@ func (r *NotebookMetadataResolver) resolveVocab(notebookID, expression string) W
 	if defs, ok := r.reader.GetDefinitionsNotes(notebookID); ok {
 		for _, sessionDefs := range defs {
 			for _, sceneNotes := range sessionDefs {
-				if meta, note, ok := findVocabNote(sceneNotes, target); ok {
+				if meta, note, ok := findVocabNote(sceneNotes, id, target); ok {
 					// Definitions get merged into the story reader view at
 					// runtime, so a "story" kind here lands the deep link on
 					// /learn/{id} where the word will be highlighted.
@@ -265,9 +265,13 @@ func lookupDefinitionAlias(notes []notebook.Note, expression string) string {
 // can read origin_parts (used to compute the etymology side of the
 // analytics card's Related Words block). The boolean is true when a
 // matching note was found.
-func findVocabNote(notes []notebook.Note, expression string) (WordMetadata, notebook.Note, bool) {
+//
+// When id is non-empty the note is selected by stable-id equality so two
+// same-spelling senses resolve to their own meaning; an id-less lookup
+// (legacy) falls back to the expression / definition-alias match.
+func findVocabNote(notes []notebook.Note, id, expression string) (WordMetadata, notebook.Note, bool) {
 	for _, n := range notes {
-		if !matchExpression(n.Expression, n.Definition, expression) {
+		if !noteMatches(n, id, expression) {
 			continue
 		}
 		meta := WordMetadata{Meaning: n.Meaning}
@@ -277,6 +281,17 @@ func findVocabNote(notes []notebook.Note, expression string) (WordMetadata, note
 		return meta, n, true
 	}
 	return WordMetadata{}, notebook.Note{}, false
+}
+
+// noteMatches reports whether a source note is the one identified by
+// (id, expression). A non-empty id matches ONLY the note whose stable
+// .ID equals it (per-sense identity); an empty id falls back to the
+// expression / definition-alias match so legacy id-less lookups resolve.
+func noteMatches(n notebook.Note, id, expression string) bool {
+	if id != "" {
+		return n.ID == id
+	}
+	return matchExpression(n.Expression, n.Definition, expression)
 }
 
 // matchExpression compares the target against both the canonical expression

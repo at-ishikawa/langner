@@ -50,6 +50,10 @@ type TrendsQuery struct {
 // aggregation logic lives in exactly one place — the read side of the L2
 // symmetric-read invariant.
 type TrendAttempt struct {
+	// ID is the entry's stable source-entry identity (notebook.Note.ID).
+	// Empty for legacy id-less entries, which fall back to keying by
+	// Expression. Two ids sharing a spelling count as two distinct words.
+	ID            string
 	Expression    string
 	NotebookID    string
 	NotebookTitle string
@@ -158,8 +162,11 @@ func boxIntervalDays(box int) int {
 // one canonical notebook anyway.
 type seriesKey struct {
 	notebookID string
-	expression string
-	quizType   string
+	// discriminator is the entry's stable id when present, else its
+	// expression (see seriesDiscriminator) — so two same-spelling ids form
+	// two series while legacy id-less entries key by spelling as before.
+	discriminator string
+	quizType      string
 }
 
 // flaggedAttempt carries an attempt with the per-attempt events derived
@@ -180,7 +187,7 @@ type flaggedAttempt struct {
 func ComputeTrends(attempts []TrendAttempt, q TrendsQuery) TrendsResult {
 	series := map[seriesKey][]TrendAttempt{}
 	for _, a := range attempts {
-		k := seriesKey{a.NotebookID, a.Expression, a.QuizType}
+		k := seriesKey{a.NotebookID, seriesDiscriminator(a.ID, a.Expression), a.QuizType}
 		series[k] = append(series[k], a)
 	}
 
@@ -235,10 +242,11 @@ func computeBacklog(series map[seriesKey][]TrendAttempt, endExcl time.Time, flag
 			if endExcl.IsZero() || a.LearnedAt.Before(endExcl) {
 				sawInRange = true
 				lastStatus = a.Status
-				ws := words[a.Expression]
+				wid := seriesDiscriminator(a.ID, a.Expression)
+				ws := words[wid]
 				if ws == nil {
 					ws = &wordState{}
-					words[a.Expression] = ws
+					words[wid] = ws
 				}
 				ws.hasAttempt = true
 				if isCorrect(a.Status) {
@@ -248,7 +256,8 @@ func computeBacklog(series map[seriesKey][]TrendAttempt, endExcl time.Time, flag
 		}
 		if sawInRange && isMastered(lastStatus) {
 			// list's last in-range status maps to the series' latest word.
-			words[list[len(list)-1].Expression].mastered = true
+			last := list[len(list)-1]
+			words[seriesDiscriminator(last.ID, last.Expression)].mastered = true
 		}
 	}
 
@@ -311,13 +320,14 @@ func aggregateBuckets(flags []flaggedAttempt, q TrendsQuery, endExcl time.Time) 
 			g = &seriesAgg{label: label, tested: map[string]struct{}{}, learned: map[string]struct{}{}}
 			groups[key] = g
 		}
+		wid := seriesDiscriminator(a.ID, a.Expression)
 		g.attempts++
-		g.tested[a.Expression] = struct{}{}
+		g.tested[wid] = struct{}{}
 		summary.Attempts++
-		sumTested[a.Expression] = struct{}{}
+		sumTested[wid] = struct{}{}
 		if f.crossing {
-			g.learned[a.Expression] = struct{}{}
-			sumLearned[a.Expression] = struct{}{}
+			g.learned[wid] = struct{}{}
+			sumLearned[wid] = struct{}{}
 		}
 		if f.levelUp {
 			g.levelUps++

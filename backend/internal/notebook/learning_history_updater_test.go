@@ -53,6 +53,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 		sceneTitle              string
 		expression              string
 		originalExpression      string
+		id                      string
 		isCorrect               bool
 		isKnownWord             bool
 		quality                 int
@@ -63,17 +64,17 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 		wantSceneExpressionsLen int // if > 0, assert first scene's expressions len
 	}{
 		{
-			name:            "Create new reverse expression in empty history",
-			initialHistory:  []LearningHistory{},
-			notebookID:      "test-notebook",
-			storyTitle:      "Story 1",
-			sceneTitle:      "Scene 1",
-			expression:      "test-word",
-			isCorrect:       true,
-			isKnownWord:     true,
-			quality:         int(QualityCorrect),
-			responseTimeMs:  5000,
-			wantFound:       false,
+			name:           "Create new reverse expression in empty history",
+			initialHistory: []LearningHistory{},
+			notebookID:     "test-notebook",
+			storyTitle:     "Story 1",
+			sceneTitle:     "Scene 1",
+			expression:     "test-word",
+			isCorrect:      true,
+			isKnownWord:    true,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 5000,
+			wantFound:      false,
 		},
 		{
 			name: "Update existing reverse expression in scene",
@@ -88,23 +89,23 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 							Metadata: LearningSceneMetadata{Title: "Scene 1"},
 							Expressions: []LearningHistoryExpression{
 								{
-									Expression:            "test-word",
-									LearnedLogs:           []LearningRecord{},
+									Expression:  "test-word",
+									LearnedLogs: []LearningRecord{},
 								},
 							},
 						},
 					},
 				},
 			},
-			notebookID:      "test-notebook",
-			storyTitle:      "Story 1",
-			sceneTitle:      "Scene 1",
-			expression:      "test-word",
-			isCorrect:       false,
-			isKnownWord:     false,
-			quality:         int(QualityWrong),
-			responseTimeMs:  10000,
-			wantFound:       true,
+			notebookID:     "test-notebook",
+			storyTitle:     "Story 1",
+			sceneTitle:     "Scene 1",
+			expression:     "test-word",
+			isCorrect:      false,
+			isKnownWord:    false,
+			quality:        int(QualityWrong),
+			responseTimeMs: 10000,
+			wantFound:      true,
 		},
 		{
 			name: "Update existing flashcard reverse expression",
@@ -117,34 +118,34 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 					},
 					Expressions: []LearningHistoryExpression{
 						{
-							Expression:            "test-word",
-							LearnedLogs:           []LearningRecord{},
-							},
+							Expression:  "test-word",
+							LearnedLogs: []LearningRecord{},
+						},
 					},
 				},
 			},
-			notebookID:      "test-notebook",
-			storyTitle:      "flashcards",
-			sceneTitle:      "",
-			expression:      "test-word",
-			isCorrect:       true,
-			isKnownWord:     true,
-			quality:         int(QualityCorrect),
-			responseTimeMs:  3000,
-			wantFound:       true,
+			notebookID:     "test-notebook",
+			storyTitle:     "flashcards",
+			sceneTitle:     "",
+			expression:     "test-word",
+			isCorrect:      true,
+			isKnownWord:    true,
+			quality:        int(QualityCorrect),
+			responseTimeMs: 3000,
+			wantFound:      true,
 		},
 		{
-			name:            "Create new flashcard reverse expression",
-			initialHistory:  []LearningHistory{},
-			notebookID:      "test-notebook",
-			storyTitle:      "flashcards",
-			sceneTitle:      "",
-			expression:      "test-word",
-			isCorrect:       true,
-			isKnownWord:     false,
-			quality:         int(QualityCorrectSlow),
-			responseTimeMs:  6000,
-			wantFound:       false,
+			name:           "Create new flashcard reverse expression",
+			initialHistory: []LearningHistory{},
+			notebookID:     "test-notebook",
+			storyTitle:     "flashcards",
+			sceneTitle:     "",
+			expression:     "test-word",
+			isCorrect:      true,
+			isKnownWord:    false,
+			quality:        int(QualityCorrectSlow),
+			responseTimeMs: 6000,
+			wantFound:      false,
 		},
 		{
 			name: "flashcard type matches but expression not found creates new expression",
@@ -157,9 +158,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 					},
 					Expressions: []LearningHistoryExpression{
 						{
-							Expression:            "existing-word",
-							LearnedLogs:           []LearningRecord{},
-							},
+							Expression:  "existing-word",
+							LearnedLogs: []LearningRecord{},
+						},
 					},
 				},
 			},
@@ -187,8 +188,8 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 							Metadata: LearningSceneMetadata{Title: "Scene A"},
 							Expressions: []LearningHistoryExpression{
 								{
-									Expression:            "word-a",
-									LearnedLogs:           []LearningRecord{},
+									Expression:  "word-a",
+									LearnedLogs: []LearningRecord{},
 								},
 							},
 						},
@@ -219,8 +220,8 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 							Metadata: LearningSceneMetadata{Title: "Scene A"},
 							Expressions: []LearningHistoryExpression{
 								{
-									Expression:            "word-a",
-									LearnedLogs:           []LearningRecord{},
+									Expression:  "word-a",
+									LearnedLogs: []LearningRecord{},
 								},
 							},
 						},
@@ -251,9 +252,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 							Metadata: LearningSceneMetadata{Title: "Scene 1"},
 							Expressions: []LearningHistoryExpression{
 								{
-									Expression:            "break the ice",
-									LearnedLogs:           []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-																	},
+									Expression:  "break the ice",
+									LearnedLogs: []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+								},
 							},
 						},
 					},
@@ -281,9 +282,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 					},
 					Expressions: []LearningHistoryExpression{
 						{
-							Expression:            "lose one's temper",
-							LearnedLogs:           []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-														},
+							Expression:  "lose one's temper",
+							LearnedLogs: []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+						},
 					},
 				},
 			},
@@ -310,6 +311,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQualityForReverse(t 
 				tc.sceneTitle,
 				tc.expression,
 				tc.originalExpression,
+				tc.id,
 				tc.isCorrect,
 				tc.isKnownWord,
 				tc.quality,
@@ -393,6 +395,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 		sceneTitle         string
 		expression         string
 		originalExpression string
+		id                 string
 		isCorrect          bool
 		isKnownWord        bool
 		quality            int
@@ -807,9 +810,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 							Metadata: LearningSceneMetadata{Title: "Scene 1"},
 							Expressions: []LearningHistoryExpression{
 								{
-									Expression:     "break the ice",
-									LearnedLogs:    []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-																	},
+									Expression:  "break the ice",
+									LearnedLogs: []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+								},
 							},
 						},
 					},
@@ -841,9 +844,9 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 					},
 					Expressions: []LearningHistoryExpression{
 						{
-							Expression:     "lose one's temper",
-							LearnedLogs:    []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
-													},
+							Expression:  "lose one's temper",
+							LearnedLogs: []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: Date{Time: time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)}}},
+						},
 					},
 				},
 			},
@@ -874,6 +877,7 @@ func TestLearningHistoryUpdater_UpdateOrCreateExpressionWithQuality(t *testing.T
 				tc.sceneTitle,
 				tc.expression,
 				tc.originalExpression,
+				tc.id,
 				tc.isCorrect,
 				tc.isKnownWord,
 				tc.quality,
@@ -1041,4 +1045,87 @@ func TestUpdateOrCreateExpressionForEtymology_WritesToExistingScene(t *testing.T
 	assert.Equal(t, "demo-root", exp.Expression)
 	assert.Len(t, exp.EtymologyBreakdownLogs, 2,
 		"the new log must be appended onto the existing entry's logs")
+}
+
+// TestLearningHistoryUpdater_IDRouting covers the id-as-identity contract:
+// two entries that share a spelling but carry distinct ids form independent
+// log series, and a legacy id-less entry answered with an id upgrades in
+// place instead of forking.
+func TestLearningHistoryUpdater_IDRouting(t *testing.T) {
+	t.Run("two ids same expression stay independent", func(t *testing.T) {
+		history := []LearningHistory{{
+			Metadata: LearningHistoryMetadata{NotebookID: "nb", Title: "flashcards", Type: "flashcard"},
+			Expressions: []LearningHistoryExpression{
+				{Expression: "bank", ID: "bank-money"},
+				{Expression: "bank", ID: "bank-river"},
+			},
+		}}
+		updater := NewLearningHistoryUpdater(history, nil)
+
+		found := updater.UpdateOrCreateExpressionWithQuality(
+			"nb", "flashcards", "", "bank", "", "bank-river",
+			true, true, 4, 0, QuizTypeNotebook,
+		)
+		assert.True(t, found)
+
+		got := updater.GetHistory()[0].Expressions
+		require.Len(t, got, 2, "no new entry must be created")
+		byID := make(map[string]LearningHistoryExpression)
+		for _, e := range got {
+			byID[e.ID] = e
+		}
+		assert.Len(t, byID["bank-river"].LearnedLogs, 1, "answered sense accrues the log")
+		assert.Empty(t, byID["bank-money"].LearnedLogs, "the other sense stays untouched")
+	})
+
+	t.Run("legacy id-less entry upgrades in place", func(t *testing.T) {
+		history := []LearningHistory{{
+			Metadata: LearningHistoryMetadata{NotebookID: "nb", Title: "flashcards", Type: "flashcard"},
+			Expressions: []LearningHistoryExpression{
+				{Expression: "hello", LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(), Quality: 4},
+				}},
+			},
+		}}
+		updater := NewLearningHistoryUpdater(history, nil)
+
+		found := updater.UpdateOrCreateExpressionWithQuality(
+			"nb", "flashcards", "", "hello", "", "hello-1",
+			true, true, 4, 0, QuizTypeNotebook,
+		)
+		assert.True(t, found)
+
+		got := updater.GetHistory()[0].Expressions
+		require.Len(t, got, 1, "the single-sense word must not fork")
+		assert.Equal(t, "hello-1", got[0].ID, "the legacy entry is upgraded in place")
+		assert.Len(t, got[0].LearnedLogs, 2, "the new log is appended onto the existing series")
+	})
+
+	t.Run("id-less write lands on an id-bearing entry instead of forking", func(t *testing.T) {
+		// A definitions concept card clears its member id and routes by the
+		// head expression (SaveResult). The head's learning entry already
+		// carries an id from the assign-ids migration, so an id-less write
+		// must match it by expression rather than fork a new id-less
+		// duplicate — the regression the user hit (e.g. "taxidermy").
+		history := []LearningHistory{{
+			Metadata: LearningHistoryMetadata{NotebookID: "nb", Title: "flashcards", Type: "flashcard"},
+			Expressions: []LearningHistoryExpression{
+				{Expression: "taxidermy", ID: "taxidermy", LearnedLogs: []LearningRecord{
+					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(), Quality: 4},
+				}},
+			},
+		}}
+		updater := NewLearningHistoryUpdater(history, nil)
+
+		found := updater.UpdateOrCreateExpressionWithQuality(
+			"nb", "flashcards", "", "taxidermy", "", "", // id-less (concept redirect)
+			false, false, 1, 0, QuizTypeNotebook,
+		)
+		assert.True(t, found, "the id-less write must find the id-bearing entry")
+
+		got := updater.GetHistory()[0].Expressions
+		require.Len(t, got, 1, "must not fork a new id-less duplicate")
+		assert.Equal(t, "taxidermy", got[0].ID, "the existing id is preserved")
+		assert.Len(t, got[0].LearnedLogs, 2, "the new log is appended onto the existing series")
+	})
 }

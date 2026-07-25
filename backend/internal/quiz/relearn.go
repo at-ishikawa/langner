@@ -86,6 +86,7 @@ const relearnKeySep = "\x1f"
 type relearnCandidate struct {
 	notebookName string
 	expression   string
+	id           string // stable source-entry identity of the failed entry; "" for legacy
 	format       notebook.QuizType
 	latestWrong  time.Time
 }
@@ -120,13 +121,16 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			if latest.LearnedAt.Before(windowStart) || latest.Status != notebook.LearnedStatusMisunderstood {
 				continue
 			}
-			key := string(sp.format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expr.Expression))
+			// Key by id when present so same-spelling homographs stay
+			// distinct; legacy id-less entries fall back to the expression.
+			key := string(sp.format) + relearnKeySep + notebookName + relearnKeySep + strings.ToLower(strings.TrimSpace(expr.Expression)) + relearnKeySep + expr.ID
 			if existing, ok := candidates[key]; ok && !latest.LearnedAt.After(existing.latestWrong) {
 				continue
 			}
 			candidates[key] = relearnCandidate{
 				notebookName: notebookName,
 				expression:   expr.Expression,
+				id:           expr.ID,
 				format:       sp.format,
 				latestWrong:  latest.LearnedAt.Time,
 			}
@@ -150,13 +154,36 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return nil, nil
 	}
 
-	vocabByExpr, vocabByNotebookExpr, err := s.relearnVocabIndex()
+	vocabByID, vocabByExpr, vocabByNotebookExpr, err := s.relearnVocabIndex()
 	if err != nil {
 		return nil, err
 	}
 	etymByOrigin, err := s.relearnEtymologyIndex()
 	if err != nil {
 		return nil, err
+	}
+
+	// A definitions concept member (e.g. "consummate", grouped with its
+	// derived forms) is shown and graded by the standard quiz under the
+	// concept HEAD and its umbrella meaning. Relearn must do the same, or it
+	// resolves the member by last-write-wins and shows a different meaning
+	// than the quiz it was failed in. Build the same family-concept index the
+	// loaders use, lazily per notebook.
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("init reader for relearn concepts: %w", err)
+	}
+	conceptByNotebook := map[string]map[string]*conceptInfo{}
+	conceptFor := func(notebookName, expression string) *conceptInfo {
+		idx, ok := conceptByNotebook[notebookName]
+		if !ok {
+			idx = buildConceptIndex(reader, notebookName)
+			conceptByNotebook[notebookName] = idx
+		}
+		if idx == nil {
+			return nil
+		}
+		return idx[expression]
 	}
 
 	cards := make([]RelearnCard, 0, len(candidates))
@@ -172,15 +199,38 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			})
 			continue
 		}
-		fc, ok := vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]
+		// Resolve by id first (mirrors MatchesEntry: an id-bearing failed
+		// entry resolves to its own card, so same-spelling homographs never
+		// collide). Fall back to the sense-less expression lookups for
+		// legacy id-less candidates or an id miss.
+		var (
+			fc FreeformCard
+			ok bool
+		)
+		if c.id != "" {
+			fc, ok = vocabByID[c.id]
+		}
+		if !ok {
+			fc, ok = vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]
+		}
 		if !ok {
 			fc, ok = vocabByExpr[strings.ToLower(strings.TrimSpace(c.expression))]
 		}
 		if !ok {
 			continue // no vocab data to grade/display against
 		}
+		// If this word is a family-concept member, present and grade it under
+		// the concept head + umbrella meaning, exactly as the standard quiz
+		// does — so a homograph folded into a concept (e.g. "consummate")
+		// never shows one sense here and another there.
+		displayEntry := c.expression
+		if ci := conceptFor(c.notebookName, c.expression); ci != nil && ci.Head != "" {
+			fc.Meaning = ci.Meaning
+			fc.Expression = ci.Head
+			displayEntry = ci.Head
+		}
 		card := RelearnCard{
-			Format: c.format, Entry: c.expression, Meaning: fc.Meaning, NotebookName: c.notebookName,
+			Format: c.format, Entry: displayEntry, Meaning: fc.Meaning, NotebookName: c.notebookName,
 			WordDetail: fc.WordDetail, Images: fc.Images,
 			ContextScenes: relearnScenesFromCard(fc),
 		}
@@ -228,17 +278,22 @@ func relearnSeries(expr notebook.LearningHistoryExpression) []relearnSeriesSpec 
 	}
 }
 
-// relearnVocabIndex loads every vocabulary word once and indexes it both by
-// (notebook, expression) and by expression alone so the pool can resolve a
-// wrong word to its meaning and context.
-func (s *Service) relearnVocabIndex() (byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard, err error) {
+// relearnVocabIndex loads every vocabulary word once and indexes it by stable
+// id (the canonical key), and — as a legacy fallback for id-less candidates —
+// also by (notebook, expression) and by expression alone, so the pool can
+// resolve a wrong word to its meaning and context.
+func (s *Service) relearnVocabIndex() (byID map[string]FreeformCard, byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard, err error) {
 	words, err := s.LoadAllWords()
 	if err != nil {
-		return nil, nil, fmt.Errorf("load words for relearn pool: %w", err)
+		return nil, nil, nil, fmt.Errorf("load words for relearn pool: %w", err)
 	}
+	byID = make(map[string]FreeformCard, len(words))
 	byExpr = make(map[string]FreeformCard, len(words))
 	byNotebookExpr = make(map[string]FreeformCard, len(words))
 	for _, w := range words {
+		if w.ID != "" {
+			byID[w.ID] = w
+		}
 		for _, e := range []string{w.Expression, w.OriginalExpression} {
 			e = strings.ToLower(strings.TrimSpace(e))
 			if e == "" {
@@ -248,7 +303,7 @@ func (s *Service) relearnVocabIndex() (byExpr map[string]FreeformCard, byNoteboo
 			byNotebookExpr[strings.ToLower(w.NotebookName)+relearnKeySep+e] = w
 		}
 	}
-	return byExpr, byNotebookExpr, nil
+	return byID, byExpr, byNotebookExpr, nil
 }
 
 // relearnEtymologyIndex loads every etymology origin once and indexes the

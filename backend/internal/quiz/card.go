@@ -27,6 +27,10 @@ type WordDetail struct {
 
 // Card represents a single quiz card shared between CLI and RPC.
 type Card struct {
+	// ID is the stable source-entry identity (Note.ID) this card was built
+	// from. Routes the learning-log write/read; empty for legacy id-less
+	// source entries.
+	ID            string
 	NotebookName  string
 	StoryTitle    string
 	SceneTitle    string

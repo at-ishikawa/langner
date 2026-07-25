@@ -230,6 +230,10 @@ message WrongWord {
   // row under the meaning and the full block in the expanded panel so a
   // wrong word never reads in isolation.
   repeated RelatedGroup related_groups = 15;
+  // sense_id is the stable source-entry identity of the word. The frontend
+  // echoes it into GetWordHistory so the drill-down targets the exact sense
+  // (falling back to note_id / expression for legacy id-less data).
+  string sense_id = 16;
 }
 
 // RelatedGroup is one cluster of related entries surfaced on the
@@ -264,6 +268,10 @@ message GetWordHistoryRequest {
   string quiz_type = 4 [
     (buf.validate.field).string.min_len = 1
   ];
+  // sense_id is the stable source-entry identity of the word, echoed from
+  // the WrongWord row. When set the history is resolved by sense id (falling
+  // back to note_id / expression for legacy id-less data).
+  string sense_id = 5;
 }
 
 message GetWordHistoryResponse {
@@ -273,6 +281,9 @@ message GetWordHistoryResponse {
   string current_status = 4;
   int32 current_wrong_streak = 5;
   repeated AttemptEntry attempts = 6;
+  // sense_id — see GetWordHistoryRequest.sense_id. Echoed back so the
+  // frontend can keep the row and its history in sync.
+  string sense_id = 7;
 }
 
 // AttemptEntry is a single past attempt with the streak context just

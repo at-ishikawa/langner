@@ -92,7 +92,7 @@ func (u *LearningHistoryUpdater) GetHistory() []LearningHistory {
 // expression (e.g., Note.Definition) when a definition is used as the lookup key. If originalExpression
 // is non-empty, both forms are checked when matching existing entries to avoid duplicates.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
-	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
+	notebookID, storyTitle, sceneTitle, expression, originalExpression, id string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -108,8 +108,14 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 
 		if isFlashcard || h.Metadata.Type == "flashcard" {
 			for ei, exp := range h.Expressions {
-				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
+				if !MatchesEntry(&exp, id, expression, originalExpression) {
 					continue
+				}
+				// Upgrade a matched legacy (id-less) entry in place so a
+				// single-sense word never forks; a duplicate's commingled
+				// legacy history attaches to the first-answered sense.
+				if exp.ID == "" && id != "" {
+					exp.ID = id
 				}
 				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
@@ -124,8 +130,11 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 			}
 
 			for ei, exp := range s.Expressions {
-				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
+				if !MatchesEntry(&exp, id, expression, originalExpression) {
 					continue
+				}
+				if exp.ID == "" && id != "" {
+					exp.ID = id
 				}
 				exp.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
@@ -134,7 +143,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 		}
 	}
 
-	u.createNewExpressionWithQuality(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	u.createNewExpressionWithQuality(notebookID, storyTitle, sceneTitle, expression, id, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 	return false
 }
 
@@ -143,7 +152,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 // expression (e.g., Note.Definition) when a definition is used as the lookup key. If originalExpression
 // is non-empty, both forms are checked when matching existing entries to avoid duplicates.
 func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
-	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
+	notebookID, storyTitle, sceneTitle, expression, originalExpression, id string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -159,8 +168,11 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 
 		if isFlashcard || h.Metadata.Type == "flashcard" {
 			for ei, exp := range h.Expressions {
-				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
+				if !MatchesEntry(&exp, id, expression, originalExpression) {
 					continue
+				}
+				if exp.ID == "" && id != "" {
+					exp.ID = id
 				}
 				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Expressions[ei] = exp
@@ -175,8 +187,11 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 			}
 
 			for ei, exp := range s.Expressions {
-				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
+				if !MatchesEntry(&exp, id, expression, originalExpression) {
 					continue
+				}
+				if exp.ID == "" && id != "" {
+					exp.ID = id
 				}
 				exp.AddRecordWithQualityForReverse(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 				u.history[hi].Scenes[si].Expressions[ei] = exp
@@ -185,13 +200,13 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 		}
 	}
 
-	u.createNewExpressionWithQualityForReverse(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	u.createNewExpressionWithQualityForReverse(notebookID, storyTitle, sceneTitle, expression, id, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
 	return false
 }
 
 // createNewExpressionWithQualityForReverse creates a new expression entry with quality data for reverse quiz
 func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, id string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -205,6 +220,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
+		ID:          id,
 		LearnedLogs: []LearningRecord{},
 		ReverseLogs: []LearningRecord{},
 	}
@@ -231,7 +247,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 
 // createNewExpressionWithQuality creates a new expression entry with quality data
 func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, id string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
@@ -245,6 +261,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 
 	newExpression := LearningHistoryExpression{
 		Expression:  expression,
+		ID:          id,
 		LearnedLogs: []LearningRecord{},
 	}
 	newExpression.AddRecordWithQuality(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
@@ -305,6 +322,32 @@ func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *Learn
 	return nil
 }
 
+// FindExpressionByID resolves an expression preferring the stable id.
+// When id is non-empty it first looks for an entry whose ID matches
+// exactly; if none is found (e.g. a legacy id-less entry that predates
+// the migration) it falls back to matching by name, so pre-migration
+// data still resolves symmetrically with the write path.
+func (u *LearningHistoryUpdater) FindExpressionByID(id string, names ...string) *LearningHistoryExpression {
+	if id != "" {
+		for hi := range u.history {
+			h := &u.history[hi]
+			for ei := range h.Expressions {
+				if h.Expressions[ei].ID == id {
+					return &h.Expressions[ei]
+				}
+			}
+			for si := range h.Scenes {
+				for ei := range h.Scenes[si].Expressions {
+					if h.Scenes[si].Expressions[ei].ID == id {
+						return &h.Scenes[si].Expressions[ei]
+					}
+				}
+			}
+		}
+	}
+	return u.FindExpressionByAnyName(names...)
+}
+
 // OverrideLogInput carries everything OverrideLog needs to locate and
 // rewrite a single learning log entry.
 //
@@ -322,6 +365,10 @@ func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *Learn
 //     here — callers that want toggle should compute it themselves and
 //     pass the desired state, which is what the frontend already does.
 type OverrideLogInput struct {
+	// ID is the stable identity of the target entry. When set it takes
+	// precedence over Expression/OriginalExpression (which remain for the
+	// legacy id-less fallback).
+	ID                 string
 	Expression         string
 	OriginalExpression string
 	QuizType           QuizType
@@ -348,7 +395,7 @@ type OverrideLogResult struct {
 // log lists at submit time — the override is applied to both lists in the
 // same call so the two halves of one logical answer stay in sync.
 func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogResult {
-	expr := u.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return OverrideLogResult{}
 	}
@@ -385,6 +432,7 @@ func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogRes
 
 // UndoOverrideLogInput is the symmetric input for UndoOverrideLog.
 type UndoOverrideLogInput struct {
+	ID                   string
 	Expression           string
 	OriginalExpression   string
 	QuizType             QuizType
@@ -406,7 +454,7 @@ type UndoOverrideLogResult struct {
 // Like OverrideLog, the freeform variants mirror the restore across
 // both paired log lists.
 func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOverrideLogResult {
-	expr := u.FindExpressionByAnyName(in.Expression, in.OriginalExpression)
+	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return UndoOverrideLogResult{}
 	}
@@ -555,8 +603,8 @@ func setLogsByList(expr *LearningHistoryExpression, list logList, logs []Learnin
 
 // SetSkippedAt records a skip for the given quiz type at the given timestamp.
 // Returns false if the expression isn't found in any history.
-func (u *LearningHistoryUpdater) SetSkippedAt(expression string, quizType QuizType, skippedAt string) bool {
-	expr := u.FindExpressionByName(expression)
+func (u *LearningHistoryUpdater) SetSkippedAt(expression, id string, quizType QuizType, skippedAt string) bool {
+	expr := u.FindExpressionByID(id, expression)
 	if expr == nil {
 		return false
 	}
@@ -580,12 +628,12 @@ func (u *LearningHistoryUpdater) SetSkippedAt(expression string, quizType QuizTy
 // sceneTitle "" stores the stub at the top-level Expressions list
 // (flashcard-style); a non-empty value nests it under that scene.
 func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
-	notebookID, storyTitle, sceneTitle, expression string,
+	notebookID, storyTitle, sceneTitle, expression, id string,
 ) {
-	if u.FindExpressionByName(expression) != nil {
+	if u.FindExpressionByID(id, expression) != nil {
 		return
 	}
-	stub := LearningHistoryExpression{Expression: expression}
+	stub := LearningHistoryExpression{Expression: expression, ID: id}
 	if sceneTitle == "" {
 		idx := u.findOrCreateStory(notebookID, storyTitle, "flashcard")
 		u.history[idx].Expressions = append(u.history[idx].Expressions, stub)
@@ -730,8 +778,8 @@ func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, se
 
 // ClearSkippedAt removes the skip for the given quiz type. The expression
 // remains skipped for any other quiz types still set in its SkippedAt map.
-func (u *LearningHistoryUpdater) ClearSkippedAt(expression string, quizType QuizType) bool {
-	expr := u.FindExpressionByName(expression)
+func (u *LearningHistoryUpdater) ClearSkippedAt(expression, id string, quizType QuizType) bool {
+	expr := u.FindExpressionByID(id, expression)
 	if expr == nil {
 		return false
 	}
