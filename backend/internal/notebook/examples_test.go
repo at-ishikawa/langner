@@ -130,25 +130,33 @@ func TestExamples_ReadJournalNotebooks(t *testing.T) {
 	reader, err := notebook.NewReader(nil, nil, nil, nil, nil, nil)
 	require.NoError(t, err)
 
-	err = reader.LoadJournalNotebooks([]string{filepath.Join(examples, "journal")})
+	require.NoError(t, reader.LoadJournalNotebooks([]string{filepath.Join(examples, "journal")}))
+	require.NoError(t, reader.LoadJournalCorrections([]string{filepath.Join(examples, "journal-corrections")}))
+
+	// The journal notebook holds prose posts; corrections are a separate
+	// notebook merged by post id.
+	entries, err := reader.ReadJournalEntries("journal")
 	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+	assert.NotEmpty(t, entries[0].Text)
+	assert.Empty(t, notebook.ValidateJournalEntries(entries, "journal"))
 
-	notebooks, err := reader.ReadJournalNotebooks("journal")
+	corrections, err := reader.ReadJournalCorrections("journal")
 	require.NoError(t, err)
-	require.NotEmpty(t, notebooks)
+	require.NotEmpty(t, corrections)
 
-	// Entries carry the free text, and mistakes annotate spans within it.
-	assert.NotEmpty(t, notebooks[0].Entries)
-	firstEntry := notebooks[0].Entries[0]
-	assert.NotEmpty(t, firstEntry.Text)
-	assert.NotEmpty(t, firstEntry.Mistakes)
-
-	// The example notebook must validate and every incorrect span must be
-	// locatable in its entry text.
-	for _, nb := range notebooks {
-		nb := nb
-		assert.Empty(t, nb.Validate("journal"))
+	// Every post's corrections must validate against that post's text.
+	byID := make(map[string]notebook.JournalEntry, len(entries))
+	for _, e := range entries {
+		byID[e.ID] = e
 	}
+	total := 0
+	for id, set := range corrections {
+		require.Contains(t, byID, id)
+		assert.Empty(t, notebook.ValidateJournalCorrections(set, byID[id].Text, "journal"))
+		total += len(set.Corrections)
+	}
+	assert.Greater(t, total, 0)
 }
 
 func TestExamples_LearningHistories(t *testing.T) {

@@ -95,8 +95,10 @@ func TestMigrateLearningHistory(t *testing.T) {
 }
 
 func TestMigrateLearningHistory_NonexistentDirectory(t *testing.T) {
+	// A nonexistent directory yields no histories (nothing to migrate) rather
+	// than an error, matching NewLearningHistories' missing-dir tolerance.
 	err := MigrateLearningHistory("/nonexistent/directory", false, nil)
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
 
 func TestCalculateLegacyInterval(t *testing.T) {

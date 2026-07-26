@@ -8,19 +8,21 @@ import { AnswerInput } from "@/components/AnswerInput";
 import { quizClient } from "@/lib/client";
 import { useGrammarStore, type GrammarResult } from "@/store/grammarStore";
 
-// highlightIncorrect splits a sentence around the incorrect span so the UI can
-// emphasise exactly what needs fixing. Falls back to the plain sentence when
-// the span isn't found.
-function renderSentence(sentence: string, incorrect: string) {
-  const idx = incorrect ? sentence.indexOf(incorrect) : -1;
-  if (idx < 0) return <Text>{sentence}</Text>;
+// renderPost shows the full journal post with its line breaks preserved and
+// the incorrect span highlighted in place, so the mistake is fixed in context.
+// Falls back to the plain post when the span isn't found.
+function renderPost(post: string, incorrect: string) {
+  const idx = incorrect ? post.indexOf(incorrect) : -1;
+  if (idx < 0) {
+    return <Text whiteSpace="pre-wrap">{post}</Text>;
+  }
   return (
-    <Text>
-      {sentence.slice(0, idx)}
-      <Text as="span" color="red.500" fontWeight="bold" textDecoration="underline">
-        {sentence.slice(idx, idx + incorrect.length)}
+    <Text whiteSpace="pre-wrap">
+      {post.slice(0, idx)}
+      <Text as="span" color="red.600" bg="red.100" _dark={{ color: "red.200", bg: "red.900" }} fontWeight="bold" textDecoration="underline">
+        {post.slice(idx, idx + incorrect.length)}
       </Text>
-      {sentence.slice(idx + incorrect.length)}
+      {post.slice(idx + incorrect.length)}
     </Text>
   );
 }
@@ -117,10 +119,11 @@ export default function GrammarQuizPage() {
               borderColor={r.correct ? "green.300" : "red.300"}
               _dark={{ borderColor: r.correct ? "green.600" : "red.600" }}
             >
-              <Text fontSize="sm" color="gray.500">{r.category}</Text>
-              <Text fontSize="sm">{renderSentence(r.sentence, r.incorrect)}</Text>
-              <Text fontSize="sm" mt={1}>
-                <Text as="span" fontWeight="medium">Fix:</Text> {r.correctAnswer}
+              <Text fontSize="xs" color="gray.500">{r.category}</Text>
+              <Text fontSize="sm">
+                <Text as="span" textDecoration="line-through" color="red.500">{r.incorrect}</Text>
+                {" → "}
+                <Text as="span" color="green.600" _dark={{ color: "green.300" }}>{r.correctAnswer}</Text>
               </Text>
             </Box>
           ))}
@@ -142,8 +145,13 @@ export default function GrammarQuizPage() {
       </Text>
 
       <Box p={4} bg="white" _dark={{ bg: "gray.800" }} borderWidth="1px" borderColor="gray.200" borderRadius="lg" mb={4}>
-        <Text fontSize="xs" color="gray.500" mb={1}>{card.category}</Text>
-        {renderSentence(card.sentence, card.incorrect)}
+        <Box display="flex" justifyContent="space-between" mb={2}>
+          <Text fontSize="xs" color="gray.500">{card.category}</Text>
+          {card.line > 0 && <Text fontSize="xs" color="gray.500">line {card.line}</Text>}
+        </Box>
+        <Box maxH="45vh" overflowY="auto" fontSize="sm">
+          {renderPost(card.sentence, card.incorrect)}
+        </Box>
       </Box>
 
       {feedback ? (
@@ -177,7 +185,7 @@ export default function GrammarQuizPage() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && answer.trim()) handleSubmit(false);
           }}
-          placeholder="Rewrite the fixed sentence or phrase"
+          placeholder="Type just the corrected words for the highlighted part"
         />
       )}
     </Box>

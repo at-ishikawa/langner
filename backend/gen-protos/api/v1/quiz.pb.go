@@ -4697,18 +4697,23 @@ func (x *StartGrammarQuizResponse) GetCards() []*GrammarCard {
 type GrammarCard struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	NotebookId string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
-	// card_id is the stable mistake id from the journal notebook.
-	CardId  string `protobuf:"bytes,2,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	// card_id is the stable correction id.
+	CardId string `protobuf:"bytes,2,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
+	// entry_id is the journal post the correction belongs to.
 	EntryId string `protobuf:"bytes,3,opt,name=entry_id,json=entryId,proto3" json:"entry_id,omitempty"`
-	// sentence is the full journal entry text shown to the user.
+	// sentence holds the FULL journal post text; the UI shows it whole and
+	// highlights `incorrect` in place so the mistake is fixed in context.
 	Sentence string `protobuf:"bytes,4,opt,name=sentence,proto3" json:"sentence,omitempty"`
-	// incorrect is the erroneous span within sentence, for highlighting.
+	// incorrect is the erroneous span within the post, for highlighting.
 	Incorrect string `protobuf:"bytes,5,opt,name=incorrect,proto3" json:"incorrect,omitempty"`
 	Category  string `protobuf:"bytes,6,opt,name=category,proto3" json:"category,omitempty"`
-	Note      string `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
+	// note carries the reason/explanation for the fix.
+	Note string `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
 	// status is the current learned status (e.g. "", "misunderstood",
 	// "understood", "usable", "intuitive").
-	Status        string `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
+	Status string `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
+	// line is the 1-based line number of the mistake in the post (0 if unset).
+	Line          int32 `protobuf:"varint,9,opt,name=line,proto3" json:"line,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4797,6 +4802,13 @@ func (x *GrammarCard) GetStatus() string {
 		return x.Status
 	}
 	return ""
+}
+
+func (x *GrammarCard) GetLine() int32 {
+	if x != nil {
+		return x.Line
+	}
+	return 0
 }
 
 type SubmitGrammarAnswerRequest struct {
@@ -5429,7 +5441,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\fnotebook_ids\x18\x01 \x03(\tR\vnotebookIds\x12+\n" +
 	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"E\n" +
 	"\x18StartGrammarQuizResponse\x12)\n" +
-	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.GrammarCardR\x05cards\"\xe4\x01\n" +
+	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.GrammarCardR\x05cards\"\xf8\x01\n" +
 	"\vGrammarCard\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x17\n" +
@@ -5439,7 +5451,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\tincorrect\x18\x05 \x01(\tR\tincorrect\x12\x1a\n" +
 	"\bcategory\x18\x06 \x01(\tR\bcategory\x12\x12\n" +
 	"\x04note\x18\a \x01(\tR\x04note\x12\x16\n" +
-	"\x06status\x18\b \x01(\tR\x06status\"\xc9\x01\n" +
+	"\x06status\x18\b \x01(\tR\x06status\x12\x12\n" +
+	"\x04line\x18\t \x01(\x05R\x04line\"\xc9\x01\n" +
 	"\x1aSubmitGrammarAnswerRequest\x12(\n" +
 	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"notebookId\x12 \n" +

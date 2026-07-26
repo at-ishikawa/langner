@@ -6,100 +6,76 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestJournalNotebook_Validate(t *testing.T) {
-	validEntry := JournalEntry{
-		ID:   "e1",
-		Text: "the John called me and he suggested to play a game",
-		Mistakes: []Mistake{
-			{ID: "m1", Incorrect: "the John", Correct: "John", Category: "article"},
-			{ID: "m2", Incorrect: "suggested to play", Correct: "suggested playing", Category: "verb-pattern"},
+func TestValidateJournalEntries(t *testing.T) {
+	tests := []struct {
+		name         string
+		entries      []JournalEntry
+		wantErrCount int
+	}{
+		{
+			name:         "valid",
+			entries:      []JournalEntry{{ID: "ep1", Text: "some prose"}},
+			wantErrCount: 0,
+		},
+		{
+			name:         "missing id and text",
+			entries:      []JournalEntry{{}},
+			wantErrCount: 2,
+		},
+		{
+			name:         "duplicate id",
+			entries:      []JournalEntry{{ID: "ep1", Text: "a"}, {ID: "ep1", Text: "b"}},
+			wantErrCount: 1,
 		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Len(t, ValidateJournalEntries(tt.entries, "test.yml"), tt.wantErrCount)
+		})
+	}
+}
 
+func TestValidateJournalCorrections(t *testing.T) {
+	text := "the John called me and he suggested to play a game"
 	tests := []struct {
 		name          string
-		notebook      JournalNotebook
+		set           JournalCorrections
 		wantErrCount  int
 		wantErrSubstr string
 	}{
 		{
-			name:         "valid notebook - no errors",
-			notebook:     JournalNotebook{Title: "Journal", Entries: []JournalEntry{validEntry}},
+			name: "valid",
+			set: JournalCorrections{ID: "ep1", Corrections: []Correction{
+				{Line: 1, Incorrect: "the John", Correct: "John"},
+				{Line: 1, Incorrect: "suggested to play", Correct: "suggested playing"},
+			}},
 			wantErrCount: 0,
 		},
 		{
-			name:          "empty title",
-			notebook:      JournalNotebook{Entries: []JournalEntry{validEntry}},
+			name:          "incorrect span not in text",
+			set:           JournalCorrections{ID: "ep1", Corrections: []Correction{{Line: 1, Incorrect: "nonexistent", Correct: "x"}}},
 			wantErrCount:  1,
-			wantErrSubstr: "title is empty",
+			wantErrSubstr: "not found in post text",
 		},
 		{
-			name: "entry missing id and text",
-			notebook: JournalNotebook{
-				Title:   "Journal",
-				Entries: []JournalEntry{{}},
-			},
-			wantErrCount: 2,
-		},
-		{
-			name: "incorrect span not in text",
-			notebook: JournalNotebook{
-				Title: "Journal",
-				Entries: []JournalEntry{{
-					ID:       "e1",
-					Text:     "a clean sentence",
-					Mistakes: []Mistake{{ID: "m1", Incorrect: "the John", Correct: "John"}},
-				}},
-			},
-			wantErrCount:  1,
-			wantErrSubstr: "not found in entry text",
-		},
-		{
-			name: "correct equals incorrect",
-			notebook: JournalNotebook{
-				Title: "Journal",
-				Entries: []JournalEntry{{
-					ID:       "e1",
-					Text:     "the John called",
-					Mistakes: []Mistake{{ID: "m1", Incorrect: "the John", Correct: "the John"}},
-				}},
-			},
+			name:          "correct equals incorrect",
+			set:           JournalCorrections{ID: "ep1", Corrections: []Correction{{Line: 1, Incorrect: "the John", Correct: "the John"}}},
 			wantErrCount:  1,
 			wantErrSubstr: "identical",
 		},
 		{
-			name: "duplicate mistake id",
-			notebook: JournalNotebook{
-				Title: "Journal",
-				Entries: []JournalEntry{{
-					ID:   "e1",
-					Text: "the John called the John",
-					Mistakes: []Mistake{
-						{ID: "dup", Incorrect: "the John", Correct: "John"},
-						{ID: "dup", Incorrect: "the John", Correct: "John"},
-					},
-				}},
-			},
+			name: "duplicate explicit id",
+			set: JournalCorrections{ID: "ep1", Corrections: []Correction{
+				{ID: "dup", Incorrect: "the John", Correct: "John"},
+				{ID: "dup", Incorrect: "the John", Correct: "John"},
+			}},
 			wantErrCount:  1,
-			wantErrSubstr: "duplicate mistake id",
-		},
-		{
-			name: "mistake missing incorrect and correct",
-			notebook: JournalNotebook{
-				Title: "Journal",
-				Entries: []JournalEntry{{
-					ID:       "e1",
-					Text:     "some text",
-					Mistakes: []Mistake{{ID: "m1"}},
-				}},
-			},
-			wantErrCount: 2,
+			wantErrSubstr: "duplicate correction id",
 		},
 	}
-
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := tt.notebook.Validate("test.yml")
+			got := ValidateJournalCorrections(tt.set, text, "test.yml")
 			assert.Len(t, got, tt.wantErrCount)
 			if tt.wantErrSubstr != "" {
 				assert.Contains(t, got[0].Message, tt.wantErrSubstr)
@@ -108,29 +84,26 @@ func TestJournalNotebook_Validate(t *testing.T) {
 	}
 }
 
-func TestCategoryCounts(t *testing.T) {
-	notebooks := []JournalNotebook{
-		{
-			Entries: []JournalEntry{
-				{Mistakes: []Mistake{
-					{ID: "m1", Category: "preposition"},
-					{ID: "m2", Category: "article"},
-					{ID: "m3", Category: "preposition"},
-				}},
-				{Mistakes: []Mistake{
-					{ID: "m4", Category: "preposition"},
-					{ID: "m5", Category: ""},
-				}},
-			},
+func TestCorrection_DerivedID(t *testing.T) {
+	assert.Equal(t, "explicit", Correction{ID: "explicit", Line: 5}.DerivedID("ep1", 1))
+	assert.Equal(t, "ep1-L13-1", Correction{Line: 13}.DerivedID("ep1", 1))
+	assert.Equal(t, "ep1-L13-2", Correction{Line: 13}.DerivedID("ep1", 2))
+}
+
+func TestCorrectionCategoryCounts(t *testing.T) {
+	sets := []JournalCorrections{{
+		ID: "ep1",
+		Corrections: []Correction{
+			{Category: "verb+prep"},
+			{Category: "article"},
+			{Category: "verb+prep"},
+			{Category: ""},
 		},
-	}
-
-	got := CategoryCounts(notebooks)
-
+	}}
 	want := []CategoryCount{
-		{Category: "preposition", Count: 3},
+		{Category: "verb+prep", Count: 2},
 		{Category: "article", Count: 1},
 		{Category: "uncategorized", Count: 1},
 	}
-	assert.Equal(t, want, got)
+	assert.Equal(t, want, CorrectionCategoryCounts(sets))
 }

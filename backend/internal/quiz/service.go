@@ -55,6 +55,9 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 	if err := reader.LoadJournalNotebooks(s.notebooksConfig.JournalDirectories); err != nil {
 		return nil, fmt.Errorf("reader.LoadJournalNotebooks() > %w", err)
 	}
+	if err := reader.LoadJournalCorrections(s.notebooksConfig.JournalCorrectionsDirectories); err != nil {
+		return nil, fmt.Errorf("reader.LoadJournalCorrections() > %w", err)
+	}
 	return reader, nil
 }
 

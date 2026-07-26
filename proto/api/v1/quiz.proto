@@ -738,18 +738,23 @@ message StartGrammarQuizResponse {
 // backend re-derives it by (notebook_id, card_id) at submit time.
 message GrammarCard {
   string notebook_id = 1;
-  // card_id is the stable mistake id from the journal notebook.
+  // card_id is the stable correction id.
   string card_id = 2;
+  // entry_id is the journal post the correction belongs to.
   string entry_id = 3;
-  // sentence is the full journal entry text shown to the user.
+  // sentence holds the FULL journal post text; the UI shows it whole and
+  // highlights `incorrect` in place so the mistake is fixed in context.
   string sentence = 4;
-  // incorrect is the erroneous span within sentence, for highlighting.
+  // incorrect is the erroneous span within the post, for highlighting.
   string incorrect = 5;
   string category = 6;
+  // note carries the reason/explanation for the fix.
   string note = 7;
   // status is the current learned status (e.g. "", "misunderstood",
   // "understood", "usable", "intuitive").
   string status = 8;
+  // line is the 1-based line number of the mistake in the post (0 if unset).
+  int32 line = 9;
 }
 
 message SubmitGrammarAnswerRequest {

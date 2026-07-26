@@ -1,0 +1,32 @@
+# Corrections for the journal posts, keyed by post id. The incorrect span must
+# appear verbatim in the post's text (so the quiz can highlight it in place).
+- id: 2026-07-05-party
+  corrections:
+    - line: 1
+      incorrect: "the John"
+      correct: "John"
+      category: article
+      reason: "No definite article before a personal name."
+    - line: 1
+      incorrect: "in school"
+      correct: "at school"
+      category: preposition
+      reason: "Use 'at school' when you mean the activity/institution."
+    - line: 2
+      incorrect: "suggested to play"
+      correct: "suggested playing"
+      category: verb-pattern
+      reason: "'suggest' takes a gerund, not a to-infinitive."
+
+- id: 2026-07-12-weather
+  corrections:
+    - line: 1
+      incorrect: "in home"
+      correct: "at home"
+      category: preposition
+      reason: "The fixed expression is 'at home'."
+    - line: 1
+      incorrect: "My sister call me"
+      correct: "My sister called me"
+      category: tense
+      reason: "Past narration needs the past tense 'called'."

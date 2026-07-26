@@ -22,11 +22,12 @@ func toProtoGrammarCard(c quiz.GrammarCard) *apiv1.GrammarCard {
 		NotebookId: c.NotebookID,
 		CardId:     c.MistakeID,
 		EntryId:    c.EntryID,
-		Sentence:   c.Sentence,
+		Sentence:   c.Content,
 		Incorrect:  c.Incorrect,
 		Category:   c.Category,
-		Note:       c.Note,
+		Note:       c.Reason,
 		Status:     c.Status,
+		Line:       int32(c.Line),
 	}
 }
 

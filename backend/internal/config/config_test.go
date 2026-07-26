@@ -56,7 +56,8 @@ func TestConfigLoader_Load(t *testing.T) {
 					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
 					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
 					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
-					JournalDirectories:      []string{filepath.Join("notebooks", "journal")},
+					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
+					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -113,7 +114,8 @@ outputs:
 					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
 					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
 					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
-					JournalDirectories:      []string{filepath.Join("notebooks", "journal")},
+					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
+					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -164,7 +166,8 @@ outputs:
 					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
 					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
 					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
-					JournalDirectories:      []string{filepath.Join("notebooks", "journal")},
+					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
+					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{

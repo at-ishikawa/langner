@@ -46,8 +46,10 @@ func TestRunAnalyzeReport(t *testing.T) {
 			wantErr:    false,
 		},
 		{
+			// A nonexistent directory is treated as empty (no data) rather than
+			// an error, matching NewLearningHistories' missing-dir tolerance.
 			name:    "nonexistent directory",
-			wantErr: true,
+			wantErr: false,
 		},
 	}
 
@@ -55,7 +57,7 @@ func TestRunAnalyzeReport(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.name == "nonexistent directory" {
 				err := RunAnalyzeReport("/nonexistent/directory", tt.year, tt.month)
-				assert.Error(t, err)
+				assert.NoError(t, err)
 				return
 			}
 

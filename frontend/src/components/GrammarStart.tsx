@@ -62,6 +62,7 @@ export default function GrammarStart() {
           category: c.category,
           note: c.note,
           status: c.status,
+          line: c.line,
         })),
       );
       router.push("/quiz/grammar");

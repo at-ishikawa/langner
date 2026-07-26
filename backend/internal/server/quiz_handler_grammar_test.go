@@ -22,28 +22,31 @@ import (
 
 func newGrammarHandler(t *testing.T) (*QuizHandler, string) {
 	t.Helper()
-	journalDir := filepath.Join(t.TempDir(), "journal")
+	base := t.TempDir()
+
+	journalDir := filepath.Join(base, "journal")
 	require.NoError(t, os.MkdirAll(journalDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "index.yml"), []byte(
-		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./entries.yml\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "entries.yml"), []byte(
-		`- title: "July"
-  date: 2026-07-01T00:00:00Z
-  entries:
-    - id: e1
-      text: "Yesterday the John called me."
-      mistakes:
-        - id: m1
-          incorrect: "the John"
-          correct: "John"
-          category: article
-`), 0o644))
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "posts.yml"), []byte(
+		"- id: e1\n  text: \"Yesterday the John called me.\"\n"), 0o644))
+
+	correctionsDir := filepath.Join(base, "journal-corrections")
+	require.NoError(t, os.MkdirAll(correctionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(correctionsDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(correctionsDir, "corr.yml"), []byte(
+		"- id: e1\n  corrections:\n    - line: 1\n      incorrect: \"the John\"\n      correct: \"John\"\n      category: article\n"), 0o644))
 
 	learningDir := t.TempDir()
 	quizCfg := config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}}
 	calc := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
 	svc := quiz.NewService(
-		config.NotebooksConfig{JournalDirectories: []string{journalDir}, LearningNotesDirectory: learningDir},
+		config.NotebooksConfig{
+			JournalDirectories:            []string{journalDir},
+			JournalCorrectionsDirectories: []string{correctionsDir},
+			LearningNotesDirectory:        learningDir,
+		},
 		inferencemock.NewClient(),
 		make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, calc),
@@ -56,21 +59,22 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	ctx := context.Background()
 	handler, learningDir := newGrammarHandler(t)
 
-	// Start: one due card, no reference correction leaked to the client.
+	// Start: one due card carrying the full post; no reference correction leaked.
 	start, err := handler.StartGrammarQuiz(ctx, connect.NewRequest(&apiv1.StartGrammarQuizRequest{
 		NotebookIds: []string{"journal"},
 	}))
 	require.NoError(t, err)
 	require.Len(t, start.Msg.GetCards(), 1)
 	card := start.Msg.GetCards()[0]
-	assert.Equal(t, "m1", card.GetCardId())
+	assert.Equal(t, "e1-L1-1", card.GetCardId())
 	assert.Equal(t, "the John", card.GetIncorrect())
 	assert.Contains(t, card.GetSentence(), "the John called me")
+	assert.Equal(t, int32(1), card.GetLine())
 
 	// Submit a correct fix: graded correct, reference correction revealed.
 	sub, err := handler.SubmitGrammarAnswer(ctx, connect.NewRequest(&apiv1.SubmitGrammarAnswerRequest{
 		NotebookId:     "journal",
-		CardId:         "m1",
+		CardId:         "e1-L1-1",
 		Answer:         "John",
 		ResponseTimeMs: 1000,
 	}))
@@ -79,7 +83,7 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	assert.Equal(t, "John", sub.Msg.GetCorrectAnswer())
 	assert.Equal(t, "the John", sub.Msg.GetIncorrect())
 
-	// Persisted under a flat "grammar" history keyed by the mistake id.
+	// Persisted under a flat "grammar" history keyed by the correction id.
 	raw, err := os.ReadFile(filepath.Join(learningDir, "journal.yml"))
 	require.NoError(t, err)
 	var got []notebook.LearningHistory
@@ -87,7 +91,7 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, "grammar", got[0].Metadata.Type)
 	require.Len(t, got[0].Expressions, 1)
-	assert.Equal(t, "m1", got[0].Expressions[0].Expression)
+	assert.Equal(t, "e1-L1-1", got[0].Expressions[0].Expression)
 	require.NotEmpty(t, got[0].Expressions[0].LearnedLogs)
 }
 

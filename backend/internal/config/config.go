@@ -56,13 +56,14 @@ type DatabaseConfig struct {
 }
 
 type NotebooksConfig struct {
-	StoriesDirectories     []string `mapstructure:"stories_directories"`
-	LearningNotesDirectory string   `mapstructure:"learning_notes_directory"`
-	FlashcardsDirectories  []string `mapstructure:"flashcards_directories"`
-	BooksDirectories       []string `mapstructure:"books_directories"`
-	DefinitionsDirectories []string `mapstructure:"definitions_directories"`
-	EtymologyDirectories   []string `mapstructure:"etymology_directories"`
-	JournalDirectories     []string `mapstructure:"journal_directories"`
+	StoriesDirectories            []string `mapstructure:"stories_directories"`
+	LearningNotesDirectory        string   `mapstructure:"learning_notes_directory"`
+	FlashcardsDirectories         []string `mapstructure:"flashcards_directories"`
+	BooksDirectories              []string `mapstructure:"books_directories"`
+	DefinitionsDirectories        []string `mapstructure:"definitions_directories"`
+	EtymologyDirectories          []string `mapstructure:"etymology_directories"`
+	JournalDirectories            []string `mapstructure:"journal_directories"`
+	JournalCorrectionsDirectories []string `mapstructure:"journal_corrections_directories"`
 }
 
 type TemplatesConfig struct {
@@ -161,6 +162,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("notebooks.definitions_directories", []string{filepath.Join("notebooks", "definitions")})
 	v.SetDefault("notebooks.etymology_directories", []string{filepath.Join("notebooks", "etymology")})
 	v.SetDefault("notebooks.journal_directories", []string{filepath.Join("notebooks", "journal")})
+	v.SetDefault("notebooks.journal_corrections_directories", []string{filepath.Join("notebooks", "journal-corrections")})
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")

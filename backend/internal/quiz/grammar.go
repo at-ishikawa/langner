@@ -12,33 +12,40 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// GrammarCard is a single grammar-correction quiz card built from a journal
-// mistake. Sentence is the entry text shown to the user, Incorrect is the span
-// to fix, and Correct is the reference answer used only for grading.
+// GrammarCard is a single grammar-correction quiz card. Content is the full
+// journal post shown to the user, Incorrect is the span to fix within it, and
+// Correct is the reference answer used only for grading. The mistake lives in
+// a separate corrections notebook, merged with the post by id.
 type GrammarCard struct {
 	NotebookID   string
 	NotebookName string
-	EntryID      string
-	MistakeID    string
-	Sentence     string
+	EntryID      string // journal post id
+	MistakeID    string // stable correction id
+	Content      string // full post text (the frontend highlights Incorrect in it)
 	Incorrect    string
 	Correct      string
 	Category     string
-	Note         string
+	Reason       string
+	Line         int
 	Status       string
 }
 
 // LoadGrammarCards loads the due grammar-correction cards for a journal
-// notebook. A mistake is due when it has no learning history yet or its SM-2
-// forward review is due.
+// notebook. It merges each post's prose with its corrections (by post id) and
+// emits one card per correction. A correction is due when it has no learning
+// history yet or its SM-2 forward review is due.
 func (s *Service) LoadGrammarCards(notebookID string) ([]GrammarCard, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	notebooks, err := reader.ReadJournalNotebooks(notebookID)
+	entries, err := reader.ReadJournalEntries(notebookID)
 	if err != nil {
-		return nil, fmt.Errorf("ReadJournalNotebooks(%s) > %w", notebookID, err)
+		return nil, fmt.Errorf("ReadJournalEntries(%s) > %w", notebookID, err)
+	}
+	correctionsByPost, err := reader.ReadJournalCorrections(notebookID)
+	if err != nil {
+		return nil, fmt.Errorf("ReadJournalCorrections(%s) > %w", notebookID, err)
 	}
 
 	name := notebookID
@@ -53,30 +60,37 @@ func (s *Service) LoadGrammarCards(notebookID string) ([]GrammarCard, error) {
 	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
 
 	cards := make([]GrammarCard, 0)
-	for _, nb := range notebooks {
-		for _, entry := range nb.Entries {
-			for _, mistake := range entry.Mistakes {
-				exp, seen := expByMistake[mistake.ID]
-				if !grammarMistakeDue(exp, seen) {
-					continue
-				}
-				status := string(notebook.LearnedStatusLearning)
-				if seen {
-					status = string(exp.GetLatestStatus())
-				}
-				cards = append(cards, GrammarCard{
-					NotebookID:   notebookID,
-					NotebookName: name,
-					EntryID:      entry.ID,
-					MistakeID:    mistake.ID,
-					Sentence:     strings.TrimSpace(entry.Text),
-					Incorrect:    mistake.Incorrect,
-					Correct:      mistake.Correct,
-					Category:     mistake.Category,
-					Note:         mistake.Note,
-					Status:       status,
-				})
+	for _, entry := range entries {
+		set, ok := correctionsByPost[entry.ID]
+		if !ok {
+			continue
+		}
+		content := strings.TrimRight(entry.Text, "\n")
+		perLine := make(map[int]int)
+		for _, c := range set.Corrections {
+			perLine[c.Line]++
+			id := c.DerivedID(entry.ID, perLine[c.Line])
+			exp, seen := expByMistake[id]
+			if !grammarMistakeDue(exp, seen) {
+				continue
 			}
+			status := string(notebook.LearnedStatusLearning)
+			if seen {
+				status = string(exp.GetLatestStatus())
+			}
+			cards = append(cards, GrammarCard{
+				NotebookID:   notebookID,
+				NotebookName: name,
+				EntryID:      entry.ID,
+				MistakeID:    id,
+				Content:      content,
+				Incorrect:    c.Incorrect,
+				Correct:      c.Correct,
+				Category:     c.Category,
+				Reason:       c.Reason,
+				Line:         c.Line,
+				Status:       status,
+			})
 		}
 	}
 	return cards, nil
@@ -127,7 +141,7 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 
 	var summaries []NotebookSummary
 	for id, index := range reader.GetJournalIndexes() {
-		notebooks, err := reader.ReadJournalNotebooks(id)
+		entries, err := reader.ReadJournalEntries(id)
 		if err != nil {
 			// A single malformed journal notebook must not take down the whole
 			// quiz-options page (which lists every notebook kind). Skip it with
@@ -135,20 +149,29 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 			slog.Warn("skipping journal notebook in summaries", "notebook", id, "error", err)
 			continue
 		}
+		correctionsByPost, err := reader.ReadJournalCorrections(id)
+		if err != nil {
+			slog.Warn("skipping journal corrections in summaries", "notebook", id, "error", err)
+			continue
+		}
 		expByMistake := grammarExpressionsByID(learningHistories[id])
 
 		count := 0
 		var latestDate time.Time
-		for _, nb := range notebooks {
-			if nb.Date.After(latestDate) {
-				latestDate = nb.Date
+		for _, entry := range entries {
+			if entry.Date.After(latestDate) {
+				latestDate = entry.Date
 			}
-			for _, entry := range nb.Entries {
-				for _, mistake := range entry.Mistakes {
-					exp, seen := expByMistake[mistake.ID]
-					if grammarMistakeDue(exp, seen) {
-						count++
-					}
+			set, ok := correctionsByPost[entry.ID]
+			if !ok {
+				continue
+			}
+			perLine := make(map[int]int)
+			for _, c := range set.Corrections {
+				perLine[c.Line]++
+				exp, seen := expByMistake[c.DerivedID(entry.ID, perLine[c.Line])]
+				if grammarMistakeDue(exp, seen) {
+					count++
 				}
 			}
 		}
@@ -171,11 +194,11 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 // GradeGrammarAnswer grades a user's correction of a journal mistake.
 func (s *Service) GradeGrammarAnswer(ctx context.Context, card GrammarCard, answer string, responseTimeMs int64) (GradeResult, error) {
 	response, err := s.openaiClient.GradeCorrection(ctx, inference.GradeCorrectionRequest{
-		Sentence:       card.Sentence,
+		Sentence:       card.Content,
 		Incorrect:      card.Incorrect,
 		Correct:        card.Correct,
 		UserAnswer:     answer,
-		Note:           card.Note,
+		Note:           card.Reason,
 		ResponseTimeMs: responseTimeMs,
 	})
 	if err != nil {

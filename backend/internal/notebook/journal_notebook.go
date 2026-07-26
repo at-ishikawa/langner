@@ -9,139 +9,120 @@ import (
 	"time"
 )
 
-// JournalNotebook represents a collection of free-text journal entries.
-// Unlike vocabulary notebooks, the content here is the entry prose itself;
-// grammar mistakes are annotations on spans inside each entry.
-type JournalNotebook struct {
-	Title       string         `yaml:"title"`
-	Description string         `yaml:"description,omitempty"`
-	Date        time.Time      `yaml:"date"`
-	Entries     []JournalEntry `yaml:"entries"`
-}
-
-// JournalEntry is a single dated journal entry with its grammar mistakes.
+// JournalEntry is a single journal post: prose content only. Its grammar
+// mistakes live in a separate corrections notebook, merged by ID — the same
+// way a book's prose lives apart from its definitions.
 type JournalEntry struct {
-	ID       string    `yaml:"id"`
-	Date     time.Time `yaml:"date,omitempty"`
-	Text     string    `yaml:"text"`
-	Mistakes []Mistake `yaml:"mistakes,omitempty"`
+	ID    string    `yaml:"id"`
+	Title string    `yaml:"title,omitempty"`
+	Date  time.Time `yaml:"date,omitempty"`
+	Text  string    `yaml:"text"`
 }
 
-// Mistake is a single grammar mistake annotated on a span of an entry's text.
-// Incorrect is the exact substring of the entry text that is wrong, Correct is
-// its fix, and Category is a free-form label (e.g. "article", "preposition")
-// used to rank which kinds of mistakes occur most. ID is stable so the
-// mistake's spaced-repetition history is tracked independently.
-type Mistake struct {
-	ID        string `yaml:"id"`
+// Correction is one grammar fix on a span of a journal post's text: the
+// incorrect span (an exact substring of the post, so the quiz can highlight
+// it), its fix, a free-form category, and the reason. Line is the 1-based line
+// number in the drafted post, used for display and to disambiguate a span that
+// appears more than once.
+type Correction struct {
+	// ID is the stable spaced-repetition identity. When empty it is derived
+	// as "<postID>-L<line>-<seq>" so history survives as long as the line and
+	// order are stable; set it explicitly to make history edit-proof.
+	ID        string `yaml:"id,omitempty"`
+	Line      int    `yaml:"line,omitempty"`
 	Incorrect string `yaml:"incorrect"`
 	Correct   string `yaml:"correct"`
 	Category  string `yaml:"category,omitempty"`
-	Note      string `yaml:"note,omitempty"`
+	Reason    string `yaml:"reason,omitempty"`
 }
 
-// JournalIndex represents an index file for journal directories.
-// It defines a collection of journal notebooks that can be loaded together.
+// JournalCorrections holds every correction for one journal post, keyed by the
+// post's ID. It is the "definitions" half of the journal/corrections split.
+type JournalCorrections struct {
+	ID          string       `yaml:"id"`
+	Corrections []Correction `yaml:"corrections"`
+}
+
+// JournalIndex represents an index file for a journal directory (either prose
+// or corrections — both use id + notebooks list).
 type JournalIndex struct {
 	ID            string   `yaml:"id"`
-	Name          string   `yaml:"name"`
+	Name          string   `yaml:"name,omitempty"`
 	NotebookPaths []string `yaml:"notebooks"`
 
-	// internal fields (not loaded from YAML)
-	Path      string            `yaml:"-"` // directory containing this index
-	Notebooks []JournalNotebook `yaml:"-"` // loaded notebooks (populated by reader)
+	Path string `yaml:"-"` // directory containing this index (internal)
 }
 
-// Validate validates a JournalNotebook and returns any validation errors.
-// It checks that the notebook has a title, every entry has an id and text,
-// and every mistake has an id, a correct fix, and an incorrect span that
-// actually appears in the entry text (so it can be located for the quiz).
-func (notebook *JournalNotebook) Validate(location string) []ValidationError {
-	var errors []ValidationError
-
-	if strings.TrimSpace(notebook.Title) == "" {
-		errors = append(errors, ValidationError{
-			Location:    location,
-			Message:     "title is empty",
-			Suggestions: []string{"add a title to the journal notebook"},
-		})
+// DerivedID returns the correction's stable id, deriving one from the post id,
+// line, and per-line sequence when no explicit id is set.
+func (c Correction) DerivedID(postID string, seq int) string {
+	if strings.TrimSpace(c.ID) != "" {
+		return c.ID
 	}
+	return fmt.Sprintf("%s-L%d-%d", postID, c.Line, seq)
+}
 
-	seenMistakeIDs := make(map[string]struct{})
-	for entryIdx, entry := range notebook.Entries {
-		entryLocation := fmt.Sprintf("%s -> entry[%d]: %s", location, entryIdx, entry.ID)
-
+// ValidateJournalEntries checks a list of journal posts: each needs a unique id
+// and non-empty text.
+func ValidateJournalEntries(entries []JournalEntry, location string) []ValidationError {
+	var errors []ValidationError
+	seen := make(map[string]struct{})
+	for i, entry := range entries {
+		loc := fmt.Sprintf("%s -> entry[%d]: %s", location, i, entry.ID)
 		if strings.TrimSpace(entry.ID) == "" {
-			errors = append(errors, ValidationError{
-				Location:    entryLocation,
-				Message:     "entry id is empty",
-				Suggestions: []string{"add a unique id to the entry"},
-			})
+			errors = append(errors, ValidationError{Location: loc, Message: "entry id is empty",
+				Suggestions: []string{"add a unique id to the journal post"}})
+		} else if _, ok := seen[entry.ID]; ok {
+			errors = append(errors, ValidationError{Location: loc,
+				Message: fmt.Sprintf("duplicate entry id %q", entry.ID)})
+		} else {
+			seen[entry.ID] = struct{}{}
 		}
 		if strings.TrimSpace(entry.Text) == "" {
-			errors = append(errors, ValidationError{
-				Location:    entryLocation,
-				Message:     "entry text is empty",
-				Suggestions: []string{"add the journal text to the entry"},
-			})
-		}
-
-		for mistakeIdx, mistake := range entry.Mistakes {
-			mistakeLocation := fmt.Sprintf("%s -> mistake[%d]: %s", entryLocation, mistakeIdx, mistake.ID)
-
-			if strings.TrimSpace(mistake.ID) == "" {
-				errors = append(errors, ValidationError{
-					Location:    mistakeLocation,
-					Message:     "mistake id is empty",
-					Suggestions: []string{"add a unique id to the mistake"},
-				})
-			} else if _, ok := seenMistakeIDs[mistake.ID]; ok {
-				errors = append(errors, ValidationError{
-					Location:    mistakeLocation,
-					Message:     fmt.Sprintf("duplicate mistake id %q", mistake.ID),
-					Suggestions: []string{"give each mistake a unique id"},
-				})
-			} else {
-				seenMistakeIDs[mistake.ID] = struct{}{}
-			}
-
-			if strings.TrimSpace(mistake.Incorrect) == "" {
-				errors = append(errors, ValidationError{
-					Location:    mistakeLocation,
-					Message:     "incorrect span is empty",
-					Suggestions: []string{"add the incorrect text from the entry"},
-				})
-			} else if !strings.Contains(entry.Text, mistake.Incorrect) {
-				errors = append(errors, ValidationError{
-					Location:    mistakeLocation,
-					Message:     fmt.Sprintf("incorrect span %q not found in entry text", mistake.Incorrect),
-					Suggestions: []string{"make the incorrect span an exact substring of the entry text"},
-				})
-			}
-
-			if strings.TrimSpace(mistake.Correct) == "" {
-				errors = append(errors, ValidationError{
-					Location:    mistakeLocation,
-					Message:     "correct fix is empty",
-					Suggestions: []string{"add the corrected text"},
-				})
-			} else if mistake.Correct == mistake.Incorrect {
-				errors = append(errors, ValidationError{
-					Location:    mistakeLocation,
-					Message:     "correct fix is identical to the incorrect span",
-					Suggestions: []string{"the correction must differ from the mistake"},
-				})
-			}
+			errors = append(errors, ValidationError{Location: loc, Message: "entry text is empty",
+				Suggestions: []string{"add the post text to the entry"}})
 		}
 	}
-
 	return errors
 }
 
-// walkJournalIndexFiles walks a directory tree and loads every journal
-// index.yml into indexMap, keyed by index ID. It mirrors
-// walkEtymologyIndexFiles: journal directories are a distinct domain loaded
-// separately from story/flashcard notebooks.
+// ValidateJournalCorrections checks a corrections set against its post's text:
+// every incorrect span must appear in the text, the fix must differ, and each
+// derived id must be unique.
+func ValidateJournalCorrections(set JournalCorrections, text, location string) []ValidationError {
+	var errors []ValidationError
+	seen := make(map[string]struct{})
+	perLine := make(map[int]int)
+	for i, c := range set.Corrections {
+		loc := fmt.Sprintf("%s -> correction[%d] (line %d)", location, i, c.Line)
+		perLine[c.Line]++
+		id := c.DerivedID(set.ID, perLine[c.Line])
+		if _, ok := seen[id]; ok {
+			errors = append(errors, ValidationError{Location: loc,
+				Message:     fmt.Sprintf("duplicate correction id %q", id),
+				Suggestions: []string{"set an explicit unique id, or a distinct line"}})
+		} else {
+			seen[id] = struct{}{}
+		}
+		if strings.TrimSpace(c.Incorrect) == "" {
+			errors = append(errors, ValidationError{Location: loc, Message: "incorrect span is empty"})
+		} else if text != "" && !strings.Contains(text, c.Incorrect) {
+			errors = append(errors, ValidationError{Location: loc,
+				Message:     fmt.Sprintf("incorrect span %q not found in post text", c.Incorrect),
+				Suggestions: []string{"make the incorrect span an exact substring of the post"}})
+		}
+		if strings.TrimSpace(c.Correct) == "" {
+			errors = append(errors, ValidationError{Location: loc, Message: "correct fix is empty"})
+		} else if c.Correct == c.Incorrect {
+			errors = append(errors, ValidationError{Location: loc,
+				Message: "correct fix is identical to the incorrect span"})
+		}
+	}
+	return errors
+}
+
+// walkJournalIndexFiles walks a directory tree and loads every index.yml into
+// indexMap, keyed by index ID. Shared by the prose and corrections domains.
 func walkJournalIndexFiles(rootDir string, indexMap map[string]JournalIndex) error {
 	if rootDir == "" {
 		return nil
@@ -149,18 +130,13 @@ func walkJournalIndexFiles(rootDir string, indexMap map[string]JournalIndex) err
 	if _, err := os.Stat(rootDir); os.IsNotExist(err) {
 		return nil
 	}
-
 	return filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() {
+		if info.IsDir() || filepath.Base(path) != "index.yml" {
 			return nil
 		}
-		if filepath.Base(path) != "index.yml" {
-			return nil
-		}
-
 		index, err := readYamlFile[JournalIndex](path)
 		if err != nil {
 			return err
@@ -171,9 +147,8 @@ func walkJournalIndexFiles(rootDir string, indexMap map[string]JournalIndex) err
 	})
 }
 
-// LoadJournalNotebooks scans the given directories for journal index files
-// and registers them on the reader. It is called separately from NewReader so
-// journal support is opt-in and callers that don't need it are unaffected.
+// LoadJournalNotebooks registers journal prose index files from the given
+// directories. Opt-in, like the other domain loaders.
 func (f Reader) LoadJournalNotebooks(journalDirectories []string) error {
 	for _, dir := range journalDirectories {
 		if err := walkJournalIndexFiles(dir, f.journalIndexes); err != nil {
@@ -183,67 +158,81 @@ func (f Reader) LoadJournalNotebooks(journalDirectories []string) error {
 	return nil
 }
 
-// ReadJournalNotebooks loads all journal notebooks for the given index ID.
-func (f Reader) ReadJournalNotebooks(journalID string) ([]JournalNotebook, error) {
+// LoadJournalCorrections registers journal-correction index files.
+func (f Reader) LoadJournalCorrections(correctionsDirectories []string) error {
+	for _, dir := range correctionsDirectories {
+		if err := walkJournalIndexFiles(dir, f.journalCorrectionIndexes); err != nil {
+			return fmt.Errorf("walkJournalIndexFiles(corrections, %s) > %w", dir, err)
+		}
+	}
+	return nil
+}
+
+// ReadJournalEntries loads all journal posts (prose) for the given index ID.
+func (f Reader) ReadJournalEntries(journalID string) ([]JournalEntry, error) {
 	index, ok := f.journalIndexes[journalID]
 	if !ok {
 		return nil, fmt.Errorf("journal %s not found", journalID)
 	}
-
-	result := make([]JournalNotebook, 0)
+	result := make([]JournalEntry, 0)
 	for _, notebookPath := range index.NotebookPaths {
 		path := filepath.Join(index.Path, notebookPath)
-
-		notebooks, err := readYamlFile[[]JournalNotebook](path)
+		entries, err := readYamlFile[[]JournalEntry](path)
 		if err != nil {
 			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, err)
 		}
-
-		index.Notebooks = append(index.Notebooks, notebooks...)
-		result = append(result, notebooks...)
+		result = append(result, entries...)
 	}
-	f.journalIndexes[journalID] = index
 	return result, nil
 }
 
-// GetJournalIndexes returns the registered journal indexes keyed by ID.
+// ReadJournalCorrections loads all correction sets for the given index ID,
+// returned as a map keyed by post id. A journal index with no matching
+// corrections index yields an empty map (posts simply have no drills yet).
+func (f Reader) ReadJournalCorrections(journalID string) (map[string]JournalCorrections, error) {
+	result := make(map[string]JournalCorrections)
+	index, ok := f.journalCorrectionIndexes[journalID]
+	if !ok {
+		return result, nil
+	}
+	for _, notebookPath := range index.NotebookPaths {
+		path := filepath.Join(index.Path, notebookPath)
+		sets, err := readYamlFile[[]JournalCorrections](path)
+		if err != nil {
+			return nil, fmt.Errorf("readYamlFile(%s) > %w", path, err)
+		}
+		for _, set := range sets {
+			result[set.ID] = set
+		}
+	}
+	return result, nil
+}
+
+// GetJournalIndexes returns the registered journal prose indexes keyed by ID.
 func (f Reader) GetJournalIndexes() map[string]JournalIndex {
 	return f.journalIndexes
 }
 
-// MistakeCard pairs a mistake with the entry context it was found in.
-// It is the unit a grammar quiz drills: the sentence is shown with the
-// incorrect span, and the user must produce the corrected text.
-type MistakeCard struct {
-	NotebookTitle string
-	EntryID       string
-	Mistake       Mistake
-}
-
-// CategoryCount reports how many mistakes fall under a category.
+// CategoryCount reports how many corrections fall under a category.
 type CategoryCount struct {
 	Category string
 	Count    int
 }
 
-// CategoryCounts tallies mistakes by category across the given notebooks,
-// sorted by count descending (ties broken by category name) so callers can
-// show which kinds of mistakes occur most. Mistakes without a category are
-// grouped under "uncategorized".
-func CategoryCounts(notebooks []JournalNotebook) []CategoryCount {
+// CorrectionCategoryCounts tallies corrections by category, most-frequent
+// first (ties broken by name). Corrections without a category are grouped as
+// "uncategorized".
+func CorrectionCategoryCounts(sets []JournalCorrections) []CategoryCount {
 	counts := make(map[string]int)
-	for _, notebook := range notebooks {
-		for _, entry := range notebook.Entries {
-			for _, mistake := range entry.Mistakes {
-				category := mistake.Category
-				if strings.TrimSpace(category) == "" {
-					category = "uncategorized"
-				}
-				counts[category]++
+	for _, set := range sets {
+		for _, c := range set.Corrections {
+			category := c.Category
+			if strings.TrimSpace(category) == "" {
+				category = "uncategorized"
 			}
+			counts[category]++
 		}
 	}
-
 	result := make([]CategoryCount, 0, len(counts))
 	for category, count := range counts {
 		result = append(result, CategoryCount{Category: category, Count: count})

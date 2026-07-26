@@ -9,11 +9,14 @@ export interface GrammarCard {
   notebookId: string;
   cardId: string;
   entryId: string;
+  // sentence holds the FULL journal post; the UI shows it whole and
+  // highlights `incorrect` in place.
   sentence: string;
   incorrect: string;
   category: string;
   note: string;
   status: string;
+  line: number;
 }
 
 export interface GrammarResult {
