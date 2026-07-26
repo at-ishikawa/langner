@@ -413,9 +413,12 @@ func TestNewLearningHistories(t *testing.T) {
 }
 
 func TestNewLearningHistories_NonexistentDirectory(t *testing.T) {
+	// A nonexistent directory yields an empty (non-error) result so a
+	// not-yet-created learning_notes directory can't break callers like
+	// GetQuizOptions.
 	result, err := NewLearningHistories("/nonexistent/directory")
-	assert.Error(t, err)
-	assert.Nil(t, result)
+	assert.NoError(t, err)
+	assert.Empty(t, result)
 }
 
 func TestLearningHistoryExpression_NeedsReverseReview(t *testing.T) {
