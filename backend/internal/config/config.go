@@ -56,6 +56,11 @@ type DatabaseConfig struct {
 }
 
 type NotebooksConfig struct {
+	// BaseDirectory, when set, derives every notebook directory below it
+	// (<base>/stories, <base>/flashcards, <base>/journal, …) so you don't have
+	// to configure each one. An explicitly-set directory overrides its derived
+	// default. Defaults to "notebooks".
+	BaseDirectory                 string   `mapstructure:"base_directory"`
 	StoriesDirectories            []string `mapstructure:"stories_directories"`
 	LearningNotesDirectory        string   `mapstructure:"learning_notes_directory"`
 	FlashcardsDirectories         []string `mapstructure:"flashcards_directories"`
@@ -64,6 +69,41 @@ type NotebooksConfig struct {
 	EtymologyDirectories          []string `mapstructure:"etymology_directories"`
 	JournalDirectories            []string `mapstructure:"journal_directories"`
 	JournalCorrectionsDirectories []string `mapstructure:"journal_corrections_directories"`
+}
+
+// applyBaseDirectory fills any notebook directory left unset with a path
+// derived from BaseDirectory (<base>/<subdir>), so a single base_directory
+// replaces configuring each directory. Explicitly-set directories are kept.
+func (n *NotebooksConfig) applyBaseDirectory() {
+	base := n.BaseDirectory
+	if base == "" {
+		return
+	}
+	sub := func(name string) []string { return []string{filepath.Join(base, name)} }
+	if len(n.StoriesDirectories) == 0 {
+		n.StoriesDirectories = sub("stories")
+	}
+	if len(n.FlashcardsDirectories) == 0 {
+		n.FlashcardsDirectories = sub("flashcards")
+	}
+	if len(n.BooksDirectories) == 0 {
+		n.BooksDirectories = sub("books")
+	}
+	if len(n.DefinitionsDirectories) == 0 {
+		n.DefinitionsDirectories = sub("definitions")
+	}
+	if len(n.EtymologyDirectories) == 0 {
+		n.EtymologyDirectories = sub("etymology")
+	}
+	if len(n.JournalDirectories) == 0 {
+		n.JournalDirectories = sub("journal")
+	}
+	if len(n.JournalCorrectionsDirectories) == 0 {
+		n.JournalCorrectionsDirectories = sub("journal-corrections")
+	}
+	if n.LearningNotesDirectory == "" {
+		n.LearningNotesDirectory = filepath.Join(base, "learning_notes")
+	}
 }
 
 type TemplatesConfig struct {
@@ -146,9 +186,9 @@ func NewConfigLoader(configFile string) (*ConfigLoader, error) {
 func (loader *ConfigLoader) Load() (*Config, error) {
 	v := loader.viper
 
-	v.SetDefault("notebooks.stories_directories", []string{filepath.Join("notebooks", "stories")})
-	v.SetDefault("notebooks.learning_notes_directory", filepath.Join("notebooks", "learning_notes"))
-	v.SetDefault("notebooks.flashcards_directories", []string{filepath.Join("notebooks", "flashcards")})
+	// Notebook directories derive from notebooks.base_directory (see
+	// NotebooksConfig.applyBaseDirectory), so they are not defaulted here.
+	v.SetDefault("notebooks.base_directory", "notebooks")
 	v.SetDefault("dictionaries.rapidapi.cache_directory", filepath.Join("dictionaries", "rapidapi"))
 	// Template is optional - if not specified, will use embedded fallback template
 	v.SetDefault("templates.story_notebook_template", "")
@@ -158,11 +198,6 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("outputs.flashcard_directory", filepath.Join("outputs", "flashcard"))
 	v.SetDefault("outputs.etymology_directory", filepath.Join("outputs", "etymology"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
-	v.SetDefault("notebooks.books_directories", []string{filepath.Join("notebooks", "books")})
-	v.SetDefault("notebooks.definitions_directories", []string{filepath.Join("notebooks", "definitions")})
-	v.SetDefault("notebooks.etymology_directories", []string{filepath.Join("notebooks", "etymology")})
-	v.SetDefault("notebooks.journal_directories", []string{filepath.Join("notebooks", "journal")})
-	v.SetDefault("notebooks.journal_corrections_directories", []string{filepath.Join("notebooks", "journal-corrections")})
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")
@@ -205,6 +240,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("invalid configuration format: %w", err)
 	}
+	cfg.Notebooks.applyBaseDirectory()
 
 	if err := loader.validator.Struct(cfg); err != nil {
 		validationErrors := err.(validator.ValidationErrors)

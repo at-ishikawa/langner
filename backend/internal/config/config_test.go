@@ -32,6 +32,30 @@ func TestNewConfigLoader(t *testing.T) {
 	}
 }
 
+func TestNotebooksConfig_applyBaseDirectory(t *testing.T) {
+	t.Run("derives every directory from base", func(t *testing.T) {
+		n := NotebooksConfig{BaseDirectory: "/data/nb"}
+		n.applyBaseDirectory()
+		assert.Equal(t, []string{filepath.Join("/data/nb", "stories")}, n.StoriesDirectories)
+		assert.Equal(t, []string{filepath.Join("/data/nb", "flashcards")}, n.FlashcardsDirectories)
+		assert.Equal(t, []string{filepath.Join("/data/nb", "journal")}, n.JournalDirectories)
+		assert.Equal(t, []string{filepath.Join("/data/nb", "journal-corrections")}, n.JournalCorrectionsDirectories)
+		assert.Equal(t, filepath.Join("/data/nb", "learning_notes"), n.LearningNotesDirectory)
+	})
+	t.Run("an explicit directory overrides its derived default", func(t *testing.T) {
+		n := NotebooksConfig{BaseDirectory: "/data/nb", JournalDirectories: []string{"/custom/journal"}}
+		n.applyBaseDirectory()
+		assert.Equal(t, []string{"/custom/journal"}, n.JournalDirectories)
+		assert.Equal(t, []string{filepath.Join("/data/nb", "stories")}, n.StoriesDirectories)
+	})
+	t.Run("empty base is a no-op", func(t *testing.T) {
+		n := NotebooksConfig{}
+		n.applyBaseDirectory()
+		assert.Empty(t, n.StoriesDirectories)
+		assert.Empty(t, n.LearningNotesDirectory)
+	})
+}
+
 func TestConfigLoader_Load(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -50,12 +74,13 @@ func TestConfigLoader_Load(t *testing.T) {
 					},
 				},
 				Notebooks: NotebooksConfig{
-					StoriesDirectories:      []string{filepath.Join("notebooks", "stories")},
-					LearningNotesDirectory:  filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
-					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
-					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
-					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
+					BaseDirectory:                 "notebooks",
+					StoriesDirectories:            []string{filepath.Join("notebooks", "stories")},
+					LearningNotesDirectory:        filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectories:         []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:              []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories:        []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:          []string{filepath.Join("notebooks", "etymology")},
 					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
 					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
 				},
@@ -84,7 +109,7 @@ func TestConfigLoader_Load(t *testing.T) {
 					TLS:      false,
 				},
 				Quiz: QuizConfig{
-					Algorithm:       "modified_sm2",
+					Algorithm:      "modified_sm2",
 					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
@@ -108,12 +133,13 @@ outputs:
 					},
 				},
 				Notebooks: NotebooksConfig{
-					StoriesDirectories:      []string{"custom/stories"},
-					LearningNotesDirectory:  "custom/learning",
-					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
-					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
-					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
-					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
+					BaseDirectory:                 "notebooks",
+					StoriesDirectories:            []string{"custom/stories"},
+					LearningNotesDirectory:        "custom/learning",
+					FlashcardsDirectories:         []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:              []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories:        []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:          []string{filepath.Join("notebooks", "etymology")},
 					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
 					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
 				},
@@ -142,7 +168,7 @@ outputs:
 					TLS:      false,
 				},
 				Quiz: QuizConfig{
-					Algorithm:       "modified_sm2",
+					Algorithm:      "modified_sm2",
 					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},
@@ -160,12 +186,13 @@ outputs:
 					},
 				},
 				Notebooks: NotebooksConfig{
-					StoriesDirectories:      []string{"partial/stories"},
-					LearningNotesDirectory:  filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectories:   []string{filepath.Join("notebooks", "flashcards")},
-					BooksDirectories:        []string{filepath.Join("notebooks", "books")},
-					DefinitionsDirectories:  []string{filepath.Join("notebooks", "definitions")},
-					EtymologyDirectories:    []string{filepath.Join("notebooks", "etymology")},
+					BaseDirectory:                 "notebooks",
+					StoriesDirectories:            []string{"partial/stories"},
+					LearningNotesDirectory:        filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectories:         []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:              []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories:        []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:          []string{filepath.Join("notebooks", "etymology")},
 					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
 					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
 				},
@@ -194,7 +221,7 @@ outputs:
 					TLS:      false,
 				},
 				Quiz: QuizConfig{
-					Algorithm:       "modified_sm2",
+					Algorithm:      "modified_sm2",
 					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
 			},

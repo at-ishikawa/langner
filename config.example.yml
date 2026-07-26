@@ -23,6 +23,11 @@ database:
   # conn_max_lifetime_seconds: 300
 
 notebooks:
+  # Single base directory: every notebook dir below derives from it
+  # (<base>/stories, <base>/journal, <base>/journal-corrections, …). An
+  # explicit *_directories entry overrides its derived default.
+  base_directory: notebooks
+
   # Directories containing story notebooks (supports multiple directories)
   stories_directories:
     - examples/stories
