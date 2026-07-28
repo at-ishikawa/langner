@@ -36,10 +36,10 @@ type QuizHandler struct {
 	etymologyOriginCards []quiz.EtymologyOriginCard
 	etymologyQuizMode    apiv1.EtymologyQuizMode
 	relearnStore         map[int64]quiz.RelearnCard
-	// grammarStore holds the in-flight grammar cards for the current session,
-	// keyed by notebookID+"\x00"+cardID so Submit can re-grade against the
-	// reference correction without reloading the notebook.
-	grammarStore map[string]quiz.GrammarCard
+	// grammarStore holds the in-flight grammar blanks for the current session,
+	// keyed by the ephemeral note_id (same id scheme as noteStore) so Submit,
+	// Override, and Skip all resolve a blank the same way vocab cards do.
+	grammarStore map[int64]grammarBlankCtx
 	nextID       int64
 }
 
@@ -52,7 +52,7 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		freeformStore:        make(map[int64]quiz.FreeformCard),
 		etymologyOriginStore: make(map[int64]quiz.EtymologyOriginCard),
 		relearnStore:         make(map[int64]quiz.RelearnCard),
-		grammarStore:         make(map[string]quiz.GrammarCard),
+		grammarStore:         make(map[int64]grammarBlankCtx),
 		nextID:               1,
 	}
 }
@@ -415,6 +415,18 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 			StoryTitle:   ecard.SessionTitle,
 			SceneTitle:   ecard.SceneTitle,
 			Expression:   ecard.Origin,
+		}
+		return &info, nil
+	}
+	if bc, ok := h.grammarStore[noteID]; ok {
+		h.mu.Unlock()
+		// Grammar history is a flat "journal"-titled bucket keyed by the
+		// correction id, so Override/Skip target it the same way.
+		info := quiz.CardInfo{
+			NotebookName: bc.notebookID,
+			StoryTitle:   notebook.JournalStoryTitle,
+			Expression:   bc.blank.SenseID,
+			ID:           bc.blank.SenseID,
 		}
 		return &info, nil
 	}

@@ -59,29 +59,34 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	ctx := context.Background()
 	handler, learningDir := newGrammarHandler(t)
 
-	// Start: one due card carrying the full post; no reference correction leaked.
+	// Start: one due post carrying the full text + one blank with a note_id.
 	start, err := handler.StartGrammarQuiz(ctx, connect.NewRequest(&apiv1.StartGrammarQuizRequest{
 		NotebookIds: []string{"journal"},
 	}))
 	require.NoError(t, err)
-	require.Len(t, start.Msg.GetCards(), 1)
-	card := start.Msg.GetCards()[0]
-	assert.Equal(t, "e1-L1-1", card.GetCardId())
-	assert.Equal(t, "the John", card.GetIncorrect())
-	assert.Contains(t, card.GetSentence(), "the John called me")
-	assert.Equal(t, int32(1), card.GetLine())
+	require.Len(t, start.Msg.GetPosts(), 1)
+	post := start.Msg.GetPosts()[0]
+	assert.Contains(t, post.GetPostText(), "the John called me")
+	require.Len(t, post.GetBlanks(), 1)
+	blank := post.GetBlanks()[0]
+	assert.Greater(t, blank.GetNoteId(), int64(0))
+	assert.Equal(t, "e1-L1-1", blank.GetSenseId())
+	assert.Equal(t, "the John", blank.GetIncorrect())
+	assert.Equal(t, int32(1), blank.GetLine())
 
-	// Submit a correct fix: graded correct, reference correction revealed.
-	sub, err := handler.SubmitGrammarAnswer(ctx, connect.NewRequest(&apiv1.SubmitGrammarAnswerRequest{
-		NotebookId:     "journal",
-		CardId:         "e1-L1-1",
-		Answer:         "John",
-		ResponseTimeMs: 1000,
+	// Submit the whole post; correct fix graded correct, reference revealed.
+	sub, err := handler.SubmitGrammarPost(ctx, connect.NewRequest(&apiv1.SubmitGrammarPostRequest{
+		Answers: []*apiv1.GrammarBlankAnswer{
+			{NoteId: blank.GetNoteId(), Answer: "John", ResponseTimeMs: 1000},
+		},
 	}))
 	require.NoError(t, err)
-	assert.True(t, sub.Msg.GetCorrect())
-	assert.Equal(t, "John", sub.Msg.GetCorrectAnswer())
-	assert.Equal(t, "the John", sub.Msg.GetIncorrect())
+	require.Len(t, sub.Msg.GetResults(), 1)
+	res := sub.Msg.GetResults()[0]
+	assert.True(t, res.GetCorrect())
+	assert.Equal(t, "John", res.GetCorrectAnswer())
+	assert.Equal(t, "the John", res.GetIncorrect())
+	assert.Equal(t, blank.GetNoteId(), res.GetNoteId())
 
 	// Persisted under a flat "grammar" history keyed by the correction id.
 	raw, err := os.ReadFile(filepath.Join(learningDir, "journal.yml"))
@@ -95,12 +100,10 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	require.NotEmpty(t, got[0].Expressions[0].LearnedLogs)
 }
 
-func TestQuizHandler_SubmitGrammarAnswer_NotFound(t *testing.T) {
+func TestQuizHandler_SubmitGrammarPost_NotFound(t *testing.T) {
 	handler, _ := newGrammarHandler(t)
-	_, err := handler.SubmitGrammarAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitGrammarAnswerRequest{
-		NotebookId: "journal",
-		CardId:     "does-not-exist",
-		Answer:     "John",
+	_, err := handler.SubmitGrammarPost(context.Background(), connect.NewRequest(&apiv1.SubmitGrammarPostRequest{
+		Answers: []*apiv1.GrammarBlankAnswer{{NoteId: 999999, Answer: "John"}},
 	}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))

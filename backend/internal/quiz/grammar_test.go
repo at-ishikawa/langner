@@ -69,24 +69,25 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := newGrammarService(t, journalDir, correctionsDir, learningDir)
 
-	// 1. A fresh notebook yields one due card carrying the full post + the span.
-	cards, err := svc.LoadGrammarCards("journal")
+	// 1. A fresh notebook yields one due post carrying the full text + a blank.
+	posts, err := svc.LoadGrammarPosts("journal")
 	require.NoError(t, err)
-	require.Len(t, cards, 1)
-	card := cards[0]
-	assert.Equal(t, "e1-L1-1", card.MistakeID)
-	assert.Equal(t, "the John", card.Incorrect)
-	assert.Equal(t, "John", card.Correct)
-	assert.Equal(t, "article", card.Category)
-	assert.Contains(t, card.Content, "the John called me")
-	assert.Equal(t, string(notebook.LearnedStatusLearning), card.Status)
+	require.Len(t, posts, 1)
+	post := posts[0]
+	assert.Contains(t, post.Content, "the John called me")
+	require.Len(t, post.Blanks, 1)
+	blank := post.Blanks[0]
+	assert.Equal(t, "e1-L1-1", blank.SenseID)
+	assert.Equal(t, "the John", blank.Incorrect)
+	assert.Equal(t, "John", blank.Correct)
+	assert.Equal(t, string(notebook.LearnedStatusLearning), blank.Status)
 
 	// 2. A correct fix grades correct and records an "understood" log keyed by
 	// the correction id under a flat "grammar" history.
-	result, err := svc.GradeGrammarAnswer(ctx, card, "John", 1200)
+	result, err := svc.GradeGrammarBlank(ctx, post.Content, blank, "John", 1200)
 	require.NoError(t, err)
 	assert.True(t, result.Correct)
-	require.NoError(t, svc.SaveGrammarResult(ctx, card, result, 1200))
+	require.NoError(t, svc.SaveGrammarBlank(ctx, post.NotebookID, blank.SenseID, result, 1200))
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, "journal.yml"))
 	require.NoError(t, err)
@@ -99,10 +100,10 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	require.NotEmpty(t, got[0].Expressions[0].LearnedLogs)
 	assert.Equal(t, notebook.LearnedStatusUnderstood, got[0].Expressions[0].LearnedLogs[0].Status)
 
-	// 3. Having just been answered correctly, the mistake is no longer due.
-	cards, err = svc.LoadGrammarCards("journal")
+	// 3. Having just been answered correctly, the post has no due blanks.
+	posts, err = svc.LoadGrammarPosts("journal")
 	require.NoError(t, err)
-	assert.Empty(t, cards)
+	assert.Empty(t, posts)
 }
 
 func TestService_LoadJournalNotebookSummaries(t *testing.T) {
@@ -124,19 +125,21 @@ func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := newGrammarService(t, journalDir, correctionsDir, learningDir)
 
-	cards, err := svc.LoadGrammarCards("journal")
+	posts, err := svc.LoadGrammarPosts("journal")
 	require.NoError(t, err)
-	require.Len(t, cards, 1)
+	require.Len(t, posts, 1)
+	blank := posts[0].Blanks[0]
 
 	// The deterministic mock marks answers starting with "wrong" incorrect.
-	result, err := svc.GradeGrammarAnswer(ctx, cards[0], "wrong guess", 900)
+	result, err := svc.GradeGrammarBlank(ctx, posts[0].Content, blank, "wrong guess", 900)
 	require.NoError(t, err)
 	assert.False(t, result.Correct)
-	require.NoError(t, svc.SaveGrammarResult(ctx, cards[0], result, 900))
+	require.NoError(t, svc.SaveGrammarBlank(ctx, posts[0].NotebookID, blank.SenseID, result, 900))
 
 	// A misunderstood mistake remains due on the next load.
-	cards, err = svc.LoadGrammarCards("journal")
+	posts, err = svc.LoadGrammarPosts("journal")
 	require.NoError(t, err)
-	require.Len(t, cards, 1)
-	assert.Equal(t, string(notebook.LearnedStatusMisunderstood), cards[0].Status)
+	require.Len(t, posts, 1)
+	require.Len(t, posts[0].Blanks, 1)
+	assert.Equal(t, string(notebook.LearnedStatusMisunderstood), posts[0].Blanks[0].Status)
 }

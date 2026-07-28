@@ -11,124 +11,115 @@ import (
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
-// grammarKey composes the in-memory store key for a grammar card. Mistake ids
-// are unique within a notebook; the notebook id disambiguates across notebooks.
-func grammarKey(notebookID, cardID string) string {
-	return notebookID + "\x00" + cardID
+// grammarBlankCtx is everything the handler needs to grade, save, and override
+// one blank, kept per ephemeral note_id for the current session.
+type grammarBlankCtx struct {
+	notebookID   string
+	notebookName string
+	entryID      string
+	content      string
+	blank        quiz.GrammarBlank
 }
 
-func toProtoGrammarCard(c quiz.GrammarCard) *apiv1.GrammarCard {
-	return &apiv1.GrammarCard{
-		NotebookId: c.NotebookID,
-		CardId:     c.MistakeID,
-		EntryId:    c.EntryID,
-		Sentence:   c.Content,
-		Incorrect:  c.Incorrect,
-		Category:   c.Category,
-		Note:       c.Reason,
-		Status:     c.Status,
-		Line:       int32(c.Line),
-	}
-}
-
-// StartGrammarQuiz loads the due grammar-correction cards for the requested
-// journal notebooks and caches them for grading.
+// StartGrammarQuiz loads the due journal posts and assigns each blank an
+// ephemeral note_id (the same id scheme as the vocabulary quiz) so Override /
+// Skip reuse the existing RPCs.
 func (h *QuizHandler) StartGrammarQuiz(
 	_ context.Context,
 	req *connect.Request[apiv1.StartGrammarQuizRequest],
 ) (*connect.Response[apiv1.StartGrammarQuizResponse], error) {
-	var cards []quiz.GrammarCard
+	var posts []quiz.GrammarPost
 	for _, notebookID := range req.Msg.GetNotebookIds() {
-		loaded, err := h.svc.LoadGrammarCards(notebookID)
+		loaded, err := h.svc.LoadGrammarPosts(notebookID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load grammar cards for %q: %w", notebookID, err))
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load grammar posts for %q: %w", notebookID, err))
 		}
-		cards = append(cards, loaded...)
+		posts = append(posts, loaded...)
 	}
 
-	protoCards := make([]*apiv1.GrammarCard, 0, len(cards))
+	protoPosts := make([]*apiv1.GrammarPostCard, 0, len(posts))
 	h.mu.Lock()
-	h.grammarStore = make(map[string]quiz.GrammarCard, len(cards))
-	for _, c := range cards {
-		h.grammarStore[grammarKey(c.NotebookID, c.MistakeID)] = c
-		protoCards = append(protoCards, toProtoGrammarCard(c))
+	h.grammarStore = make(map[int64]grammarBlankCtx)
+	for _, post := range posts {
+		protoBlanks := make([]*apiv1.GrammarBlank, 0, len(post.Blanks))
+		for _, blank := range post.Blanks {
+			noteID := h.nextID
+			h.nextID++
+			h.grammarStore[noteID] = grammarBlankCtx{
+				notebookID:   post.NotebookID,
+				notebookName: post.NotebookName,
+				entryID:      post.EntryID,
+				content:      post.Content,
+				blank:        blank,
+			}
+			protoBlanks = append(protoBlanks, &apiv1.GrammarBlank{
+				NoteId:    noteID,
+				SenseId:   blank.SenseID,
+				Incorrect: blank.Incorrect,
+				Line:      int32(blank.Line),
+				Category:  blank.Category,
+				Status:    blank.Status,
+			})
+		}
+		protoPosts = append(protoPosts, &apiv1.GrammarPostCard{
+			NotebookId: post.NotebookID,
+			EntryId:    post.EntryID,
+			Title:      post.Title,
+			PostText:   post.Content,
+			Blanks:     protoBlanks,
+		})
 	}
 	h.mu.Unlock()
 
-	return connect.NewResponse(&apiv1.StartGrammarQuizResponse{Cards: protoCards}), nil
+	return connect.NewResponse(&apiv1.StartGrammarQuizResponse{Posts: protoPosts}), nil
 }
 
-// SubmitGrammarAnswer grades a single grammar correction and records it.
-func (h *QuizHandler) SubmitGrammarAnswer(
+// SubmitGrammarPost grades every blank the user filled for one post at once and
+// records each result. Grading runs sequentially because all blanks in a post
+// write the same notebook's learning-notes file.
+func (h *QuizHandler) SubmitGrammarPost(
 	ctx context.Context,
-	req *connect.Request[apiv1.SubmitGrammarAnswerRequest],
-) (*connect.Response[apiv1.SubmitGrammarAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-	resp, err := h.submitGrammarAnswer(ctx, req.Msg)
-	if err != nil {
-		return nil, err
-	}
-	return connect.NewResponse(resp), nil
-}
-
-// BatchSubmitGrammarAnswers grades a batch sequentially. Grading is graded one
-// at a time on purpose: every submit writes the same notebook's learning-notes
-// YAML, so serialising avoids concurrent-write races on that file.
-func (h *QuizHandler) BatchSubmitGrammarAnswers(
-	ctx context.Context,
-	req *connect.Request[apiv1.BatchSubmitGrammarAnswersRequest],
-) (*connect.Response[apiv1.BatchSubmitGrammarAnswersResponse], error) {
+	req *connect.Request[apiv1.SubmitGrammarPostRequest],
+) (*connect.Response[apiv1.SubmitGrammarPostResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
-	responses := make([]*apiv1.SubmitGrammarAnswerResponse, 0, len(answers))
+	results := make([]*apiv1.GrammarBlankResult, 0, len(answers))
 	for _, a := range answers {
-		resp, err := h.submitGrammarAnswer(ctx, a)
-		if err != nil {
-			return nil, err
+		h.mu.Lock()
+		bc, ok := h.grammarStore[a.GetNoteId()]
+		h.mu.Unlock()
+		if !ok {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("grammar blank %d not found", a.GetNoteId()))
 		}
-		responses = append(responses, resp)
-	}
-	return connect.NewResponse(&apiv1.BatchSubmitGrammarAnswersResponse{Responses: responses}), nil
-}
 
-func (h *QuizHandler) submitGrammarAnswer(
-	ctx context.Context,
-	msg *apiv1.SubmitGrammarAnswerRequest,
-) (*apiv1.SubmitGrammarAnswerResponse, error) {
-	key := grammarKey(msg.GetNotebookId(), msg.GetCardId())
-	h.mu.Lock()
-	card, ok := h.grammarStore[key]
-	h.mu.Unlock()
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("grammar card %q not found", msg.GetCardId()))
-	}
-
-	var grade quiz.GradeResult
-	if msg.GetIsSkipped() {
-		grade = skippedGradeResult()
-	} else {
-		var err error
-		grade, err = h.svc.GradeGrammarAnswer(ctx, card, msg.GetAnswer(), msg.GetResponseTimeMs())
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade grammar answer: %w", err))
+		var grade quiz.GradeResult
+		if a.GetIsSkipped() {
+			grade = skippedGradeResult()
+		} else {
+			var err error
+			grade, err = h.svc.GradeGrammarBlank(ctx, bc.content, bc.blank, a.GetAnswer(), a.GetResponseTimeMs())
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade grammar blank: %w", err))
+			}
 		}
-	}
+		if err := h.svc.SaveGrammarBlank(ctx, bc.notebookID, bc.blank.SenseID, grade, a.GetResponseTimeMs()); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save grammar result: %w", err))
+		}
 
-	if err := h.svc.SaveGrammarResult(ctx, card, grade, msg.GetResponseTimeMs()); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save grammar result: %w", err))
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(bc.notebookID, bc.blank.SenseID, bc.blank.SenseID, notebook.QuizTypeGrammar)
+		results = append(results, &apiv1.GrammarBlankResult{
+			NoteId:         a.GetNoteId(),
+			SenseId:        bc.blank.SenseID,
+			Correct:        grade.Correct,
+			CorrectAnswer:  bc.blank.Correct,
+			Incorrect:      bc.blank.Incorrect,
+			Reason:         bc.blank.Reason,
+			Category:       bc.blank.Category,
+			NextReviewDate: nextReviewDate,
+			LearnedAt:      learnedAt,
+		})
 	}
-
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookID, card.MistakeID, card.MistakeID, notebook.QuizTypeGrammar)
-	return &apiv1.SubmitGrammarAnswerResponse{
-		Correct:        grade.Correct,
-		CorrectAnswer:  card.Correct,
-		Reason:         grade.Reason,
-		Incorrect:      card.Incorrect,
-		NextReviewDate: nextReviewDate,
-		LearnedAt:      learnedAt,
-	}, nil
+	return connect.NewResponse(&apiv1.SubmitGrammarPostResponse{Results: results}), nil
 }

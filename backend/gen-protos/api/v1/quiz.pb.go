@@ -4594,11 +4594,9 @@ func (x *BatchSubmitRelearnAnswersResponse) GetResponses() []*SubmitRelearnAnswe
 }
 
 type StartGrammarQuizRequest struct {
-	state       protoimpl.MessageState `protogen:"open.v1"`
-	NotebookIds []string               `protobuf:"bytes,1,rep,name=notebook_ids,json=notebookIds,proto3" json:"notebook_ids,omitempty"`
-	// include_unstudied has no effect yet for grammar (all not-yet-mastered
-	// mistakes are due); reserved for parity with the other quiz start requests.
-	IncludeUnstudied bool `protobuf:"varint,2,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	NotebookIds      []string               `protobuf:"bytes,1,rep,name=notebook_ids,json=notebookIds,proto3" json:"notebook_ids,omitempty"`
+	IncludeUnstudied bool                   `protobuf:"varint,2,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -4649,7 +4647,7 @@ func (x *StartGrammarQuizRequest) GetIncludeUnstudied() bool {
 
 type StartGrammarQuizResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cards         []*GrammarCard         `protobuf:"bytes,1,rep,name=cards,proto3" json:"cards,omitempty"`
+	Posts         []*GrammarPostCard     `protobuf:"bytes,1,rep,name=posts,proto3" json:"posts,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4684,54 +4682,41 @@ func (*StartGrammarQuizResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_quiz_proto_rawDescGZIP(), []int{64}
 }
 
-func (x *StartGrammarQuizResponse) GetCards() []*GrammarCard {
+func (x *StartGrammarQuizResponse) GetPosts() []*GrammarPostCard {
 	if x != nil {
-		return x.Cards
+		return x.Posts
 	}
 	return nil
 }
 
-// GrammarCard is one grammar-correction card. It deliberately does NOT carry
-// the reference correction so the answer isn't leaked to the client; the
-// backend re-derives it by (notebook_id, card_id) at submit time.
-type GrammarCard struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	NotebookId string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
-	// card_id is the stable correction id.
-	CardId string `protobuf:"bytes,2,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	// entry_id is the journal post the correction belongs to.
-	EntryId string `protobuf:"bytes,3,opt,name=entry_id,json=entryId,proto3" json:"entry_id,omitempty"`
-	// sentence holds the FULL journal post text; the UI shows it whole and
-	// highlights `incorrect` in place so the mistake is fixed in context.
-	Sentence string `protobuf:"bytes,4,opt,name=sentence,proto3" json:"sentence,omitempty"`
-	// incorrect is the erroneous span within the post, for highlighting.
-	Incorrect string `protobuf:"bytes,5,opt,name=incorrect,proto3" json:"incorrect,omitempty"`
-	Category  string `protobuf:"bytes,6,opt,name=category,proto3" json:"category,omitempty"`
-	// note carries the reason/explanation for the fix.
-	Note string `protobuf:"bytes,7,opt,name=note,proto3" json:"note,omitempty"`
-	// status is the current learned status (e.g. "", "misunderstood",
-	// "understood", "usable", "intuitive").
-	Status string `protobuf:"bytes,8,opt,name=status,proto3" json:"status,omitempty"`
-	// line is the 1-based line number of the mistake in the post (0 if unset).
-	Line          int32 `protobuf:"varint,9,opt,name=line,proto3" json:"line,omitempty"`
+// GrammarPostCard is one journal post shown in full, with the due mistakes to
+// fix inline. The reference corrections are NOT sent to the client; the backend
+// re-derives each one (by note_id) at submit time.
+type GrammarPostCard struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NotebookId    string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
+	EntryId       string                 `protobuf:"bytes,2,opt,name=entry_id,json=entryId,proto3" json:"entry_id,omitempty"` // journal post id
+	Title         string                 `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	PostText      string                 `protobuf:"bytes,4,opt,name=post_text,json=postText,proto3" json:"post_text,omitempty"` // the full post, shown whole
+	Blanks        []*GrammarBlank        `protobuf:"bytes,5,rep,name=blanks,proto3" json:"blanks,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GrammarCard) Reset() {
-	*x = GrammarCard{}
+func (x *GrammarPostCard) Reset() {
+	*x = GrammarPostCard{}
 	mi := &file_api_v1_quiz_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GrammarCard) String() string {
+func (x *GrammarPostCard) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GrammarCard) ProtoMessage() {}
+func (*GrammarPostCard) ProtoMessage() {}
 
-func (x *GrammarCard) ProtoReflect() protoreflect.Message {
+func (x *GrammarPostCard) ProtoReflect() protoreflect.Message {
 	mi := &file_api_v1_quiz_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4743,260 +4728,156 @@ func (x *GrammarCard) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GrammarCard.ProtoReflect.Descriptor instead.
-func (*GrammarCard) Descriptor() ([]byte, []int) {
+// Deprecated: Use GrammarPostCard.ProtoReflect.Descriptor instead.
+func (*GrammarPostCard) Descriptor() ([]byte, []int) {
 	return file_api_v1_quiz_proto_rawDescGZIP(), []int{65}
 }
 
-func (x *GrammarCard) GetNotebookId() string {
+func (x *GrammarPostCard) GetNotebookId() string {
 	if x != nil {
 		return x.NotebookId
 	}
 	return ""
 }
 
-func (x *GrammarCard) GetCardId() string {
-	if x != nil {
-		return x.CardId
-	}
-	return ""
-}
-
-func (x *GrammarCard) GetEntryId() string {
+func (x *GrammarPostCard) GetEntryId() string {
 	if x != nil {
 		return x.EntryId
 	}
 	return ""
 }
 
-func (x *GrammarCard) GetSentence() string {
+func (x *GrammarPostCard) GetTitle() string {
 	if x != nil {
-		return x.Sentence
+		return x.Title
 	}
 	return ""
 }
 
-func (x *GrammarCard) GetIncorrect() string {
+func (x *GrammarPostCard) GetPostText() string {
+	if x != nil {
+		return x.PostText
+	}
+	return ""
+}
+
+func (x *GrammarPostCard) GetBlanks() []*GrammarBlank {
+	if x != nil {
+		return x.Blanks
+	}
+	return nil
+}
+
+// GrammarBlank is one mistake to correct within a post. note_id is the
+// ephemeral session id (same scheme as the vocabulary quiz) so Override / Skip
+// reuse the existing RPCs; sense_id is the stable correction id.
+type GrammarBlank struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NoteId        int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	SenseId       string                 `protobuf:"bytes,2,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	Incorrect     string                 `protobuf:"bytes,3,opt,name=incorrect,proto3" json:"incorrect,omitempty"` // the wrong span, highlighted in place in the post
+	Line          int32                  `protobuf:"varint,4,opt,name=line,proto3" json:"line,omitempty"`
+	Category      string                 `protobuf:"bytes,5,opt,name=category,proto3" json:"category,omitempty"`
+	Status        string                 `protobuf:"bytes,6,opt,name=status,proto3" json:"status,omitempty"` // current learned status
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GrammarBlank) Reset() {
+	*x = GrammarBlank{}
+	mi := &file_api_v1_quiz_proto_msgTypes[66]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrammarBlank) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrammarBlank) ProtoMessage() {}
+
+func (x *GrammarBlank) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[66]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrammarBlank.ProtoReflect.Descriptor instead.
+func (*GrammarBlank) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{66}
+}
+
+func (x *GrammarBlank) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *GrammarBlank) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
+}
+
+func (x *GrammarBlank) GetIncorrect() string {
 	if x != nil {
 		return x.Incorrect
 	}
 	return ""
 }
 
-func (x *GrammarCard) GetCategory() string {
-	if x != nil {
-		return x.Category
-	}
-	return ""
-}
-
-func (x *GrammarCard) GetNote() string {
-	if x != nil {
-		return x.Note
-	}
-	return ""
-}
-
-func (x *GrammarCard) GetStatus() string {
-	if x != nil {
-		return x.Status
-	}
-	return ""
-}
-
-func (x *GrammarCard) GetLine() int32 {
+func (x *GrammarBlank) GetLine() int32 {
 	if x != nil {
 		return x.Line
 	}
 	return 0
 }
 
-type SubmitGrammarAnswerRequest struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	NotebookId string                 `protobuf:"bytes,1,opt,name=notebook_id,json=notebookId,proto3" json:"notebook_id,omitempty"`
-	CardId     string                 `protobuf:"bytes,2,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	// answer is the user's correction. When is_skipped is true it is ignored and
-	// the result is recorded as incorrect without grading.
-	Answer         string `protobuf:"bytes,3,opt,name=answer,proto3" json:"answer,omitempty"`
-	ResponseTimeMs int64  `protobuf:"varint,4,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
-	IsSkipped      bool   `protobuf:"varint,5,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SubmitGrammarAnswerRequest) Reset() {
-	*x = SubmitGrammarAnswerRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[66]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubmitGrammarAnswerRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubmitGrammarAnswerRequest) ProtoMessage() {}
-
-func (x *SubmitGrammarAnswerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[66]
+func (x *GrammarBlank) GetCategory() string {
 	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubmitGrammarAnswerRequest.ProtoReflect.Descriptor instead.
-func (*SubmitGrammarAnswerRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{66}
-}
-
-func (x *SubmitGrammarAnswerRequest) GetNotebookId() string {
-	if x != nil {
-		return x.NotebookId
+		return x.Category
 	}
 	return ""
 }
 
-func (x *SubmitGrammarAnswerRequest) GetCardId() string {
+func (x *GrammarBlank) GetStatus() string {
 	if x != nil {
-		return x.CardId
+		return x.Status
 	}
 	return ""
 }
 
-func (x *SubmitGrammarAnswerRequest) GetAnswer() string {
-	if x != nil {
-		return x.Answer
-	}
-	return ""
-}
-
-func (x *SubmitGrammarAnswerRequest) GetResponseTimeMs() int64 {
-	if x != nil {
-		return x.ResponseTimeMs
-	}
-	return 0
-}
-
-func (x *SubmitGrammarAnswerRequest) GetIsSkipped() bool {
-	if x != nil {
-		return x.IsSkipped
-	}
-	return false
-}
-
-type SubmitGrammarAnswerResponse struct {
-	state   protoimpl.MessageState `protogen:"open.v1"`
-	Correct bool                   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
-	// correct_answer is the reference correction, revealed after grading.
-	CorrectAnswer string `protobuf:"bytes,2,opt,name=correct_answer,json=correctAnswer,proto3" json:"correct_answer,omitempty"`
-	Reason        string `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
-	// incorrect echoes the erroneous span so the UI can show a before/after.
-	Incorrect      string `protobuf:"bytes,4,opt,name=incorrect,proto3" json:"incorrect,omitempty"`
-	NextReviewDate string `protobuf:"bytes,5,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
-	LearnedAt      string `protobuf:"bytes,6,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SubmitGrammarAnswerResponse) Reset() {
-	*x = SubmitGrammarAnswerResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[67]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubmitGrammarAnswerResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubmitGrammarAnswerResponse) ProtoMessage() {}
-
-func (x *SubmitGrammarAnswerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[67]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubmitGrammarAnswerResponse.ProtoReflect.Descriptor instead.
-func (*SubmitGrammarAnswerResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{67}
-}
-
-func (x *SubmitGrammarAnswerResponse) GetCorrect() bool {
-	if x != nil {
-		return x.Correct
-	}
-	return false
-}
-
-func (x *SubmitGrammarAnswerResponse) GetCorrectAnswer() string {
-	if x != nil {
-		return x.CorrectAnswer
-	}
-	return ""
-}
-
-func (x *SubmitGrammarAnswerResponse) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
-func (x *SubmitGrammarAnswerResponse) GetIncorrect() string {
-	if x != nil {
-		return x.Incorrect
-	}
-	return ""
-}
-
-func (x *SubmitGrammarAnswerResponse) GetNextReviewDate() string {
-	if x != nil {
-		return x.NextReviewDate
-	}
-	return ""
-}
-
-func (x *SubmitGrammarAnswerResponse) GetLearnedAt() string {
-	if x != nil {
-		return x.LearnedAt
-	}
-	return ""
-}
-
-type BatchSubmitGrammarAnswersRequest struct {
-	state         protoimpl.MessageState        `protogen:"open.v1"`
-	Answers       []*SubmitGrammarAnswerRequest `protobuf:"bytes,1,rep,name=answers,proto3" json:"answers,omitempty"`
+// SubmitGrammarPost submits every blank a user filled for one post at once.
+type SubmitGrammarPostRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Answers       []*GrammarBlankAnswer  `protobuf:"bytes,1,rep,name=answers,proto3" json:"answers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BatchSubmitGrammarAnswersRequest) Reset() {
-	*x = BatchSubmitGrammarAnswersRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[68]
+func (x *SubmitGrammarPostRequest) Reset() {
+	*x = SubmitGrammarPostRequest{}
+	mi := &file_api_v1_quiz_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BatchSubmitGrammarAnswersRequest) String() string {
+func (x *SubmitGrammarPostRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BatchSubmitGrammarAnswersRequest) ProtoMessage() {}
+func (*SubmitGrammarPostRequest) ProtoMessage() {}
 
-func (x *BatchSubmitGrammarAnswersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[68]
+func (x *SubmitGrammarPostRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5007,39 +4888,107 @@ func (x *BatchSubmitGrammarAnswersRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BatchSubmitGrammarAnswersRequest.ProtoReflect.Descriptor instead.
-func (*BatchSubmitGrammarAnswersRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{68}
+// Deprecated: Use SubmitGrammarPostRequest.ProtoReflect.Descriptor instead.
+func (*SubmitGrammarPostRequest) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{67}
 }
 
-func (x *BatchSubmitGrammarAnswersRequest) GetAnswers() []*SubmitGrammarAnswerRequest {
+func (x *SubmitGrammarPostRequest) GetAnswers() []*GrammarBlankAnswer {
 	if x != nil {
 		return x.Answers
 	}
 	return nil
 }
 
-type BatchSubmitGrammarAnswersResponse struct {
-	state         protoimpl.MessageState         `protogen:"open.v1"`
-	Responses     []*SubmitGrammarAnswerResponse `protobuf:"bytes,1,rep,name=responses,proto3" json:"responses,omitempty"`
+type GrammarBlankAnswer struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	Answer         string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
+	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
+	IsSkipped      bool                   `protobuf:"varint,4,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GrammarBlankAnswer) Reset() {
+	*x = GrammarBlankAnswer{}
+	mi := &file_api_v1_quiz_proto_msgTypes[68]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrammarBlankAnswer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrammarBlankAnswer) ProtoMessage() {}
+
+func (x *GrammarBlankAnswer) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[68]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrammarBlankAnswer.ProtoReflect.Descriptor instead.
+func (*GrammarBlankAnswer) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{68}
+}
+
+func (x *GrammarBlankAnswer) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *GrammarBlankAnswer) GetAnswer() string {
+	if x != nil {
+		return x.Answer
+	}
+	return ""
+}
+
+func (x *GrammarBlankAnswer) GetResponseTimeMs() int64 {
+	if x != nil {
+		return x.ResponseTimeMs
+	}
+	return 0
+}
+
+func (x *GrammarBlankAnswer) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
+}
+
+type SubmitGrammarPostResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Results       []*GrammarBlankResult  `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *BatchSubmitGrammarAnswersResponse) Reset() {
-	*x = BatchSubmitGrammarAnswersResponse{}
+func (x *SubmitGrammarPostResponse) Reset() {
+	*x = SubmitGrammarPostResponse{}
 	mi := &file_api_v1_quiz_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BatchSubmitGrammarAnswersResponse) String() string {
+func (x *SubmitGrammarPostResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BatchSubmitGrammarAnswersResponse) ProtoMessage() {}
+func (*SubmitGrammarPostResponse) ProtoMessage() {}
 
-func (x *BatchSubmitGrammarAnswersResponse) ProtoReflect() protoreflect.Message {
+func (x *SubmitGrammarPostResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_api_v1_quiz_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -5051,16 +5000,124 @@ func (x *BatchSubmitGrammarAnswersResponse) ProtoReflect() protoreflect.Message 
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BatchSubmitGrammarAnswersResponse.ProtoReflect.Descriptor instead.
-func (*BatchSubmitGrammarAnswersResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use SubmitGrammarPostResponse.ProtoReflect.Descriptor instead.
+func (*SubmitGrammarPostResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_quiz_proto_rawDescGZIP(), []int{69}
 }
 
-func (x *BatchSubmitGrammarAnswersResponse) GetResponses() []*SubmitGrammarAnswerResponse {
+func (x *SubmitGrammarPostResponse) GetResults() []*GrammarBlankResult {
 	if x != nil {
-		return x.Responses
+		return x.Results
 	}
 	return nil
+}
+
+type GrammarBlankResult struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	NoteId         int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
+	SenseId        string                 `protobuf:"bytes,2,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	Correct        bool                   `protobuf:"varint,3,opt,name=correct,proto3" json:"correct,omitempty"`
+	CorrectAnswer  string                 `protobuf:"bytes,4,opt,name=correct_answer,json=correctAnswer,proto3" json:"correct_answer,omitempty"` // the reference correction, revealed after grading
+	Incorrect      string                 `protobuf:"bytes,5,opt,name=incorrect,proto3" json:"incorrect,omitempty"`
+	Reason         string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	Category       string                 `protobuf:"bytes,7,opt,name=category,proto3" json:"category,omitempty"`
+	NextReviewDate string                 `protobuf:"bytes,8,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
+	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *GrammarBlankResult) Reset() {
+	*x = GrammarBlankResult{}
+	mi := &file_api_v1_quiz_proto_msgTypes[70]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GrammarBlankResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GrammarBlankResult) ProtoMessage() {}
+
+func (x *GrammarBlankResult) ProtoReflect() protoreflect.Message {
+	mi := &file_api_v1_quiz_proto_msgTypes[70]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GrammarBlankResult.ProtoReflect.Descriptor instead.
+func (*GrammarBlankResult) Descriptor() ([]byte, []int) {
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{70}
+}
+
+func (x *GrammarBlankResult) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
+}
+
+func (x *GrammarBlankResult) GetSenseId() string {
+	if x != nil {
+		return x.SenseId
+	}
+	return ""
+}
+
+func (x *GrammarBlankResult) GetCorrect() bool {
+	if x != nil {
+		return x.Correct
+	}
+	return false
+}
+
+func (x *GrammarBlankResult) GetCorrectAnswer() string {
+	if x != nil {
+		return x.CorrectAnswer
+	}
+	return ""
+}
+
+func (x *GrammarBlankResult) GetIncorrect() string {
+	if x != nil {
+		return x.Incorrect
+	}
+	return ""
+}
+
+func (x *GrammarBlankResult) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *GrammarBlankResult) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *GrammarBlankResult) GetNextReviewDate() string {
+	if x != nil {
+		return x.NextReviewDate
+	}
+	return ""
+}
+
+func (x *GrammarBlankResult) GetLearnedAt() string {
+	if x != nil {
+		return x.LearnedAt
+	}
+	return ""
 }
 
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
@@ -5439,40 +5496,44 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\tresponses\x18\x01 \x03(\v2#.api.v1.SubmitRelearnAnswerResponseR\tresponses\"i\n" +
 	"\x17StartGrammarQuizRequest\x12!\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tR\vnotebookIds\x12+\n" +
-	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"E\n" +
-	"\x18StartGrammarQuizResponse\x12)\n" +
-	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.GrammarCardR\x05cards\"\xf8\x01\n" +
-	"\vGrammarCard\x12\x1f\n" +
+	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"I\n" +
+	"\x18StartGrammarQuizResponse\x12-\n" +
+	"\x05posts\x18\x01 \x03(\v2\x17.api.v1.GrammarPostCardR\x05posts\"\xae\x01\n" +
+	"\x0fGrammarPostCard\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
-	"notebookId\x12\x17\n" +
-	"\acard_id\x18\x02 \x01(\tR\x06cardId\x12\x19\n" +
-	"\bentry_id\x18\x03 \x01(\tR\aentryId\x12\x1a\n" +
-	"\bsentence\x18\x04 \x01(\tR\bsentence\x12\x1c\n" +
-	"\tincorrect\x18\x05 \x01(\tR\tincorrect\x12\x1a\n" +
-	"\bcategory\x18\x06 \x01(\tR\bcategory\x12\x12\n" +
-	"\x04note\x18\a \x01(\tR\x04note\x12\x16\n" +
-	"\x06status\x18\b \x01(\tR\x06status\x12\x12\n" +
-	"\x04line\x18\t \x01(\x05R\x04line\"\xc9\x01\n" +
-	"\x1aSubmitGrammarAnswerRequest\x12(\n" +
-	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"notebookId\x12 \n" +
-	"\acard_id\x18\x02 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x06cardId\x12\x16\n" +
-	"\x06answer\x18\x03 \x01(\tR\x06answer\x12(\n" +
-	"\x10response_time_ms\x18\x04 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
+	"notebookId\x12\x19\n" +
+	"\bentry_id\x18\x02 \x01(\tR\aentryId\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1b\n" +
+	"\tpost_text\x18\x04 \x01(\tR\bpostText\x12,\n" +
+	"\x06blanks\x18\x05 \x03(\v2\x14.api.v1.GrammarBlankR\x06blanks\"\xa8\x01\n" +
+	"\fGrammarBlank\x12\x17\n" +
+	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x19\n" +
+	"\bsense_id\x18\x02 \x01(\tR\asenseId\x12\x1c\n" +
+	"\tincorrect\x18\x03 \x01(\tR\tincorrect\x12\x12\n" +
+	"\x04line\x18\x04 \x01(\x05R\x04line\x12\x1a\n" +
+	"\bcategory\x18\x05 \x01(\tR\bcategory\x12\x16\n" +
+	"\x06status\x18\x06 \x01(\tR\x06status\"Z\n" +
+	"\x18SubmitGrammarPostRequest\x12>\n" +
+	"\aanswers\x18\x01 \x03(\v2\x1a.api.v1.GrammarBlankAnswerB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"\x97\x01\n" +
+	"\x12GrammarBlankAnswer\x12 \n" +
+	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
+	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x05 \x01(\bR\tisSkipped\"\xdd\x01\n" +
-	"\x1bSubmitGrammarAnswerResponse\x12\x18\n" +
-	"\acorrect\x18\x01 \x01(\bR\acorrect\x12%\n" +
-	"\x0ecorrect_answer\x18\x02 \x01(\tR\rcorrectAnswer\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1c\n" +
-	"\tincorrect\x18\x04 \x01(\tR\tincorrect\x12(\n" +
-	"\x10next_review_date\x18\x05 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"Q\n" +
+	"\x19SubmitGrammarPostResponse\x124\n" +
+	"\aresults\x18\x01 \x03(\v2\x1a.api.v1.GrammarBlankResultR\aresults\"\xa4\x02\n" +
+	"\x12GrammarBlankResult\x12\x17\n" +
+	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x19\n" +
+	"\bsense_id\x18\x02 \x01(\tR\asenseId\x12\x18\n" +
+	"\acorrect\x18\x03 \x01(\bR\acorrect\x12%\n" +
+	"\x0ecorrect_answer\x18\x04 \x01(\tR\rcorrectAnswer\x12\x1c\n" +
+	"\tincorrect\x18\x05 \x01(\tR\tincorrect\x12\x16\n" +
+	"\x06reason\x18\x06 \x01(\tR\x06reason\x12\x1a\n" +
+	"\bcategory\x18\a \x01(\tR\bcategory\x12(\n" +
+	"\x10next_review_date\x18\b \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
-	"learned_at\x18\x06 \x01(\tR\tlearnedAt\"j\n" +
-	" BatchSubmitGrammarAnswersRequest\x12F\n" +
-	"\aanswers\x18\x01 \x03(\v2\".api.v1.SubmitGrammarAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"f\n" +
-	"!BatchSubmitGrammarAnswersResponse\x12A\n" +
-	"\tresponses\x18\x01 \x03(\v2#.api.v1.SubmitGrammarAnswerResponseR\tresponses*\xff\x01\n" +
+	"learned_at\x18\t \x01(\tR\tlearnedAt*\xff\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +
@@ -5486,7 +5547,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11EtymologyQuizMode\x12#\n" +
 	"\x1fETYMOLOGY_QUIZ_MODE_UNSPECIFIED\x10\x00\x12 \n" +
 	"\x1cETYMOLOGY_QUIZ_MODE_STANDARD\x10\x01\x12\x1f\n" +
-	"\x1bETYMOLOGY_QUIZ_MODE_REVERSE\x10\x022\x9a\x14\n" +
+	"\x1bETYMOLOGY_QUIZ_MODE_REVERSE\x10\x022\xa2\x13\n" +
 	"\vQuizService\x12O\n" +
 	"\x0eGetQuizOptions\x12\x1d.api.v1.GetQuizOptionsRequest\x1a\x1e.api.v1.GetQuizOptionsResponse\x12@\n" +
 	"\tStartQuiz\x12\x18.api.v1.StartQuizRequest\x1a\x19.api.v1.StartQuizResponse\x12I\n" +
@@ -5512,9 +5573,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x10StartRelearnQuiz\x12\x1f.api.v1.StartRelearnQuizRequest\x1a .api.v1.StartRelearnQuizResponse\x12^\n" +
 	"\x13SubmitRelearnAnswer\x12\".api.v1.SubmitRelearnAnswerRequest\x1a#.api.v1.SubmitRelearnAnswerResponse\x12p\n" +
 	"\x19BatchSubmitRelearnAnswers\x12(.api.v1.BatchSubmitRelearnAnswersRequest\x1a).api.v1.BatchSubmitRelearnAnswersResponse\x12U\n" +
-	"\x10StartGrammarQuiz\x12\x1f.api.v1.StartGrammarQuizRequest\x1a .api.v1.StartGrammarQuizResponse\x12^\n" +
-	"\x13SubmitGrammarAnswer\x12\".api.v1.SubmitGrammarAnswerRequest\x1a#.api.v1.SubmitGrammarAnswerResponse\x12p\n" +
-	"\x19BatchSubmitGrammarAnswers\x12(.api.v1.BatchSubmitGrammarAnswersRequest\x1a).api.v1.BatchSubmitGrammarAnswersResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
+	"\x10StartGrammarQuiz\x12\x1f.api.v1.StartGrammarQuizRequest\x1a .api.v1.StartGrammarQuizResponse\x12X\n" +
+	"\x11SubmitGrammarPost\x12 .api.v1.SubmitGrammarPostRequest\x1a!.api.v1.SubmitGrammarPostResponseB8Z6github.com/at-ishikawa/langner/gen-protos/api/v1;apiv1b\x06proto3"
 
 var (
 	file_api_v1_quiz_proto_rawDescOnce sync.Once
@@ -5529,7 +5589,7 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 72)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 73)
 var file_api_v1_quiz_proto_goTypes = []any{
 	(QuizType)(0),                                       // 0: api.v1.QuizType
 	(EtymologyQuizMode)(0),                              // 1: api.v1.EtymologyQuizMode
@@ -5600,13 +5660,14 @@ var file_api_v1_quiz_proto_goTypes = []any{
 	(*BatchSubmitRelearnAnswersResponse)(nil),           // 66: api.v1.BatchSubmitRelearnAnswersResponse
 	(*StartGrammarQuizRequest)(nil),                     // 67: api.v1.StartGrammarQuizRequest
 	(*StartGrammarQuizResponse)(nil),                    // 68: api.v1.StartGrammarQuizResponse
-	(*GrammarCard)(nil),                                 // 69: api.v1.GrammarCard
-	(*SubmitGrammarAnswerRequest)(nil),                  // 70: api.v1.SubmitGrammarAnswerRequest
-	(*SubmitGrammarAnswerResponse)(nil),                 // 71: api.v1.SubmitGrammarAnswerResponse
-	(*BatchSubmitGrammarAnswersRequest)(nil),            // 72: api.v1.BatchSubmitGrammarAnswersRequest
-	(*BatchSubmitGrammarAnswersResponse)(nil),           // 73: api.v1.BatchSubmitGrammarAnswersResponse
-	nil, // 74: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
-	nil, // 75: api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
+	(*GrammarPostCard)(nil),                             // 69: api.v1.GrammarPostCard
+	(*GrammarBlank)(nil),                                // 70: api.v1.GrammarBlank
+	(*SubmitGrammarPostRequest)(nil),                    // 71: api.v1.SubmitGrammarPostRequest
+	(*GrammarBlankAnswer)(nil),                          // 72: api.v1.GrammarBlankAnswer
+	(*SubmitGrammarPostResponse)(nil),                   // 73: api.v1.SubmitGrammarPostResponse
+	(*GrammarBlankResult)(nil),                          // 74: api.v1.GrammarBlankResult
+	nil,                                                 // 75: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	nil,                                                 // 76: api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
 	6,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
@@ -5624,7 +5685,7 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	13, // 12: api.v1.SubmitReverseAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	23, // 13: api.v1.BatchSubmitReverseAnswersRequest.answers:type_name -> api.v1.SubmitReverseAnswerRequest
 	24, // 14: api.v1.BatchSubmitReverseAnswersResponse.responses:type_name -> api.v1.SubmitReverseAnswerResponse
-	74, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	75, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 	13, // 16: api.v1.SubmitFreeformAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	0,  // 17: api.v1.OverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
 	0,  // 18: api.v1.UndoOverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
@@ -5643,7 +5704,7 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	46, // 31: api.v1.BatchSubmitEtymologyStandardAnswersResponse.responses:type_name -> api.v1.SubmitEtymologyStandardAnswerResponse
 	49, // 32: api.v1.BatchSubmitEtymologyReverseAnswersRequest.answers:type_name -> api.v1.SubmitEtymologyReverseAnswerRequest
 	50, // 33: api.v1.BatchSubmitEtymologyReverseAnswersResponse.responses:type_name -> api.v1.SubmitEtymologyReverseAnswerResponse
-	75, // 34: api.v1.StartEtymologyFreeformQuizResponse.next_review_dates:type_name -> api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
+	76, // 34: api.v1.StartEtymologyFreeformQuizResponse.next_review_dates:type_name -> api.v1.StartEtymologyFreeformQuizResponse.NextReviewDatesEntry
 	56, // 35: api.v1.SubmitEtymologyFreeformAnswerResponse.all_senses:type_name -> api.v1.EtymologyOriginSense
 	60, // 36: api.v1.StartRelearnQuizResponse.cards:type_name -> api.v1.RelearnCard
 	0,  // 37: api.v1.RelearnCard.source_quiz_type:type_name -> api.v1.QuizType
@@ -5655,35 +5716,35 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	64, // 43: api.v1.RelearnContextScene.conversations:type_name -> api.v1.RelearnConversationLine
 	61, // 44: api.v1.BatchSubmitRelearnAnswersRequest.answers:type_name -> api.v1.SubmitRelearnAnswerRequest
 	62, // 45: api.v1.BatchSubmitRelearnAnswersResponse.responses:type_name -> api.v1.SubmitRelearnAnswerResponse
-	69, // 46: api.v1.StartGrammarQuizResponse.cards:type_name -> api.v1.GrammarCard
-	70, // 47: api.v1.BatchSubmitGrammarAnswersRequest.answers:type_name -> api.v1.SubmitGrammarAnswerRequest
-	71, // 48: api.v1.BatchSubmitGrammarAnswersResponse.responses:type_name -> api.v1.SubmitGrammarAnswerResponse
-	4,  // 49: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	9,  // 50: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	15, // 51: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	17, // 52: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
-	19, // 53: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	23, // 54: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	25, // 55: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
-	27, // 56: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	29, // 57: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	31, // 58: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	33, // 59: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	35, // 60: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	37, // 61: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	43, // 62: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
-	45, // 63: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
-	47, // 64: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
-	49, // 65: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
-	51, // 66: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
-	53, // 67: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
-	55, // 68: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
-	58, // 69: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
-	61, // 70: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
-	65, // 71: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
-	67, // 72: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
-	70, // 73: api.v1.QuizService.SubmitGrammarAnswer:input_type -> api.v1.SubmitGrammarAnswerRequest
-	72, // 74: api.v1.QuizService.BatchSubmitGrammarAnswers:input_type -> api.v1.BatchSubmitGrammarAnswersRequest
+	69, // 46: api.v1.StartGrammarQuizResponse.posts:type_name -> api.v1.GrammarPostCard
+	70, // 47: api.v1.GrammarPostCard.blanks:type_name -> api.v1.GrammarBlank
+	72, // 48: api.v1.SubmitGrammarPostRequest.answers:type_name -> api.v1.GrammarBlankAnswer
+	74, // 49: api.v1.SubmitGrammarPostResponse.results:type_name -> api.v1.GrammarBlankResult
+	4,  // 50: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	9,  // 51: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	15, // 52: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	17, // 53: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
+	19, // 54: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	23, // 55: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	25, // 56: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
+	27, // 57: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	29, // 58: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	31, // 59: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	33, // 60: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	35, // 61: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	37, // 62: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	43, // 63: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
+	45, // 64: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
+	47, // 65: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
+	49, // 66: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
+	51, // 67: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
+	53, // 68: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
+	55, // 69: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
+	58, // 70: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
+	61, // 71: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
+	65, // 72: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
+	67, // 73: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
+	71, // 74: api.v1.QuizService.SubmitGrammarPost:input_type -> api.v1.SubmitGrammarPostRequest
 	5,  // 75: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
 	10, // 76: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
 	16, // 77: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
@@ -5708,13 +5769,12 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	62, // 96: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
 	66, // 97: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
 	68, // 98: api.v1.QuizService.StartGrammarQuiz:output_type -> api.v1.StartGrammarQuizResponse
-	71, // 99: api.v1.QuizService.SubmitGrammarAnswer:output_type -> api.v1.SubmitGrammarAnswerResponse
-	73, // 100: api.v1.QuizService.BatchSubmitGrammarAnswers:output_type -> api.v1.BatchSubmitGrammarAnswersResponse
-	75, // [75:101] is the sub-list for method output_type
-	49, // [49:75] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	73, // 99: api.v1.QuizService.SubmitGrammarPost:output_type -> api.v1.SubmitGrammarPostResponse
+	75, // [75:100] is the sub-list for method output_type
+	50, // [50:75] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -5729,7 +5789,7 @@ func file_api_v1_quiz_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   72,
+			NumMessages:   73,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

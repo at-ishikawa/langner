@@ -12,29 +12,35 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// GrammarCard is a single grammar-correction quiz card. Content is the full
-// journal post shown to the user, Incorrect is the span to fix within it, and
-// Correct is the reference answer used only for grading. The mistake lives in
-// a separate corrections notebook, merged with the post by id.
-type GrammarCard struct {
+// GrammarPost is one journal post shown in full, carrying the mistakes that are
+// currently due to fix inline. Content is the whole post; each Blank is a
+// mistake within it.
+type GrammarPost struct {
 	NotebookID   string
 	NotebookName string
-	EntryID      string // journal post id
-	MistakeID    string // stable correction id
-	Content      string // full post text (the frontend highlights Incorrect in it)
-	Incorrect    string
-	Correct      string
-	Category     string
-	Reason       string
-	Line         int
-	Status       string
+	EntryID      string
+	Title        string
+	Content      string
+	Blanks       []GrammarBlank
 }
 
-// LoadGrammarCards loads the due grammar-correction cards for a journal
-// notebook. It merges each post's prose with its corrections (by post id) and
-// emits one card per correction. A correction is due when it has no learning
-// history yet or its SM-2 forward review is due.
-func (s *Service) LoadGrammarCards(notebookID string) ([]GrammarCard, error) {
+// GrammarBlank is one mistake to correct within a post. Correct is the
+// reference fix used only for grading (never sent to the client).
+type GrammarBlank struct {
+	SenseID   string // stable correction id
+	Incorrect string
+	Correct   string
+	Category  string
+	Reason    string
+	Line      int
+	Status    string
+}
+
+// LoadGrammarPosts loads the journal posts that have at least one due mistake,
+// each with its due blanks. It merges each post's prose (journal notebook) with
+// its corrections (journal-corrections notebook) by post id, and filters blanks
+// by SM-2 (due when unseen or forward review is due).
+func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
@@ -59,13 +65,13 @@ func (s *Service) LoadGrammarCards(notebookID string) ([]GrammarCard, error) {
 	}
 	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
 
-	cards := make([]GrammarCard, 0)
+	posts := make([]GrammarPost, 0)
 	for _, entry := range entries {
 		set, ok := correctionsByPost[entry.ID]
 		if !ok {
 			continue
 		}
-		content := strings.TrimRight(entry.Text, "\n")
+		blanks := make([]GrammarBlank, 0, len(set.Corrections))
 		perLine := make(map[int]int)
 		for _, c := range set.Corrections {
 			perLine[c.Line]++
@@ -78,22 +84,29 @@ func (s *Service) LoadGrammarCards(notebookID string) ([]GrammarCard, error) {
 			if seen {
 				status = string(exp.GetLatestStatus())
 			}
-			cards = append(cards, GrammarCard{
-				NotebookID:   notebookID,
-				NotebookName: name,
-				EntryID:      entry.ID,
-				MistakeID:    id,
-				Content:      content,
-				Incorrect:    c.Incorrect,
-				Correct:      c.Correct,
-				Category:     c.Category,
-				Reason:       c.Reason,
-				Line:         c.Line,
-				Status:       status,
+			blanks = append(blanks, GrammarBlank{
+				SenseID:   id,
+				Incorrect: c.Incorrect,
+				Correct:   c.Correct,
+				Category:  c.Category,
+				Reason:    c.Reason,
+				Line:      c.Line,
+				Status:    status,
 			})
 		}
+		if len(blanks) == 0 {
+			continue
+		}
+		posts = append(posts, GrammarPost{
+			NotebookID:   notebookID,
+			NotebookName: name,
+			EntryID:      entry.ID,
+			Title:        entry.Title,
+			Content:      strings.TrimRight(entry.Text, "\n"),
+			Blanks:       blanks,
+		})
 	}
-	return cards, nil
+	return posts, nil
 }
 
 // grammarMistakeDue reports whether a mistake is due for review: it is due when
@@ -104,7 +117,7 @@ func grammarMistakeDue(exp notebook.LearningHistoryExpression, seen bool) bool {
 }
 
 // grammarExpressionsByID indexes a journal notebook's flat learning history by
-// mistake id.
+// correction id (falling back to the expression for legacy entries).
 func grammarExpressionsByID(histories []notebook.LearningHistory) map[string]notebook.LearningHistoryExpression {
 	result := make(map[string]notebook.LearningHistoryExpression)
 	for _, h := range histories {
@@ -112,9 +125,6 @@ func grammarExpressionsByID(histories []notebook.LearningHistory) map[string]not
 			continue
 		}
 		for _, exp := range h.Expressions {
-			// Post note-id-identity, a grammar entry is keyed by its stable ID
-			// (the mistake id). Fall back to Expression for any legacy entry
-			// written before ids were stamped.
 			key := exp.ID
 			if key == "" {
 				key = exp.Expression
@@ -126,9 +136,7 @@ func grammarExpressionsByID(histories []notebook.LearningHistory) map[string]not
 }
 
 // LoadJournalNotebookSummaries returns one NotebookSummary per journal
-// notebook, with GrammarReviewCount set to the number of mistakes currently due
-// for the grammar quiz. Kind is "Journal" so the frontend can group these
-// separately from vocabulary and etymology notebooks.
+// notebook, with GrammarReviewCount set to the number of mistakes currently due.
 func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
@@ -144,8 +152,7 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 		entries, err := reader.ReadJournalEntries(id)
 		if err != nil {
 			// A single malformed journal notebook must not take down the whole
-			// quiz-options page (which lists every notebook kind). Skip it with
-			// a warning; `langner validate` surfaces the underlying problem.
+			// quiz-options page (which lists every notebook kind).
 			slog.Warn("skipping journal notebook in summaries", "notebook", id, "error", err)
 			continue
 		}
@@ -191,14 +198,15 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 	return summaries, nil
 }
 
-// GradeGrammarAnswer grades a user's correction of a journal mistake.
-func (s *Service) GradeGrammarAnswer(ctx context.Context, card GrammarCard, answer string, responseTimeMs int64) (GradeResult, error) {
+// GradeGrammarBlank grades a user's correction of one blank, using the full
+// post as grading context.
+func (s *Service) GradeGrammarBlank(ctx context.Context, content string, blank GrammarBlank, answer string, responseTimeMs int64) (GradeResult, error) {
 	response, err := s.openaiClient.GradeCorrection(ctx, inference.GradeCorrectionRequest{
-		Sentence:       card.Content,
-		Incorrect:      card.Incorrect,
-		Correct:        card.Correct,
+		Sentence:       content,
+		Incorrect:      blank.Incorrect,
+		Correct:        blank.Correct,
 		UserAnswer:     answer,
-		Note:           card.Reason,
+		Note:           blank.Reason,
 		ResponseTimeMs: responseTimeMs,
 	})
 	if err != nil {
@@ -211,9 +219,9 @@ func (s *Service) GradeGrammarAnswer(ctx context.Context, card GrammarCard, answ
 	}, nil
 }
 
-// SaveGrammarResult records the grade in the journal notebook's learning
-// history, keyed by mistake id under the flat "journal" bucket.
-func (s *Service) SaveGrammarResult(ctx context.Context, card GrammarCard, result GradeResult, responseTimeMs int64) error {
+// SaveGrammarBlank records the grade for one blank in the notebook's learning
+// history, keyed by the correction id under the flat "journal" bucket.
+func (s *Service) SaveGrammarBlank(ctx context.Context, notebookID, senseID string, result GradeResult, responseTimeMs int64) error {
 	status := "misunderstood"
 	if result.Correct {
 		status = "understood"
@@ -224,16 +232,16 @@ func (s *Service) SaveGrammarResult(ctx context.Context, card GrammarCard, resul
 		Quality:          result.Quality,
 		ResponseTimeMs:   int(responseTimeMs),
 		QuizType:         string(notebook.QuizTypeGrammar),
-		SourceNotebookID: card.NotebookID,
-		NotebookName:     card.NotebookID,
+		SourceNotebookID: notebookID,
+		NotebookName:     notebookID,
 		StoryTitle:       notebook.JournalStoryTitle,
-		Expression:       card.MistakeID,
-		SenseID:          card.MistakeID,
+		Expression:       senseID,
+		SenseID:          senseID,
 		IsCorrect:        result.Correct,
 		LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
-		return fmt.Errorf("save grammar learning log for %q: %w", card.NotebookID, err)
+		return fmt.Errorf("save grammar learning log for %q: %w", notebookID, err)
 	}
 	return nil
 }

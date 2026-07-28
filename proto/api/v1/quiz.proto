@@ -65,8 +65,7 @@ service QuizService {
   // which is AI-graded and recorded in the notebook's learning history keyed by
   // the mistake id. See docs/content/proposals/grammar-quiz.
   rpc StartGrammarQuiz(StartGrammarQuizRequest) returns (StartGrammarQuizResponse);
-  rpc SubmitGrammarAnswer(SubmitGrammarAnswerRequest) returns (SubmitGrammarAnswerResponse);
-  rpc BatchSubmitGrammarAnswers(BatchSubmitGrammarAnswersRequest) returns (BatchSubmitGrammarAnswersResponse);
+  rpc SubmitGrammarPost(SubmitGrammarPostRequest) returns (SubmitGrammarPostResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -724,71 +723,65 @@ message BatchSubmitRelearnAnswersResponse {
 
 message StartGrammarQuizRequest {
   repeated string notebook_ids = 1;
-  // include_unstudied has no effect yet for grammar (all not-yet-mastered
-  // mistakes are due); reserved for parity with the other quiz start requests.
   bool include_unstudied = 2;
 }
 
 message StartGrammarQuizResponse {
-  repeated GrammarCard cards = 1;
+  repeated GrammarPostCard posts = 1;
 }
 
-// GrammarCard is one grammar-correction card. It deliberately does NOT carry
-// the reference correction so the answer isn't leaked to the client; the
-// backend re-derives it by (notebook_id, card_id) at submit time.
-message GrammarCard {
+// GrammarPostCard is one journal post shown in full, with the due mistakes to
+// fix inline. The reference corrections are NOT sent to the client; the backend
+// re-derives each one (by note_id) at submit time.
+message GrammarPostCard {
   string notebook_id = 1;
-  // card_id is the stable correction id.
-  string card_id = 2;
-  // entry_id is the journal post the correction belongs to.
-  string entry_id = 3;
-  // sentence holds the FULL journal post text; the UI shows it whole and
-  // highlights `incorrect` in place so the mistake is fixed in context.
-  string sentence = 4;
-  // incorrect is the erroneous span within the post, for highlighting.
-  string incorrect = 5;
-  string category = 6;
-  // note carries the reason/explanation for the fix.
-  string note = 7;
-  // status is the current learned status (e.g. "", "misunderstood",
-  // "understood", "usable", "intuitive").
-  string status = 8;
-  // line is the 1-based line number of the mistake in the post (0 if unset).
-  int32 line = 9;
+  string entry_id = 2; // journal post id
+  string title = 3;
+  string post_text = 4; // the full post, shown whole
+  repeated GrammarBlank blanks = 5;
 }
 
-message SubmitGrammarAnswerRequest {
-  string notebook_id = 1 [
-    (buf.validate.field).string.min_len = 1
-  ];
-  string card_id = 2 [
-    (buf.validate.field).string.min_len = 1
-  ];
-  // answer is the user's correction. When is_skipped is true it is ignored and
-  // the result is recorded as incorrect without grading.
-  string answer = 3;
-  int64 response_time_ms = 4;
-  bool is_skipped = 5;
+// GrammarBlank is one mistake to correct within a post. note_id is the
+// ephemeral session id (same scheme as the vocabulary quiz) so Override / Skip
+// reuse the existing RPCs; sense_id is the stable correction id.
+message GrammarBlank {
+  int64 note_id = 1;
+  string sense_id = 2;
+  string incorrect = 3; // the wrong span, highlighted in place in the post
+  int32 line = 4;
+  string category = 5;
+  string status = 6; // current learned status
 }
 
-message SubmitGrammarAnswerResponse {
-  bool correct = 1;
-  // correct_answer is the reference correction, revealed after grading.
-  string correct_answer = 2;
-  string reason = 3;
-  // incorrect echoes the erroneous span so the UI can show a before/after.
-  string incorrect = 4;
-  string next_review_date = 5;
-  string learned_at = 6;
-}
-
-message BatchSubmitGrammarAnswersRequest {
-  repeated SubmitGrammarAnswerRequest answers = 1 [
+// SubmitGrammarPost submits every blank a user filled for one post at once.
+message SubmitGrammarPostRequest {
+  repeated GrammarBlankAnswer answers = 1 [
     (buf.validate.field).repeated.min_items = 1
   ];
 }
 
-message BatchSubmitGrammarAnswersResponse {
-  repeated SubmitGrammarAnswerResponse responses = 1;
+message GrammarBlankAnswer {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  string answer = 2;
+  int64 response_time_ms = 3;
+  bool is_skipped = 4;
+}
+
+message SubmitGrammarPostResponse {
+  repeated GrammarBlankResult results = 1;
+}
+
+message GrammarBlankResult {
+  int64 note_id = 1;
+  string sense_id = 2;
+  bool correct = 3;
+  string correct_answer = 4; // the reference correction, revealed after grading
+  string incorrect = 5;
+  string reason = 6;
+  string category = 7;
+  string next_review_date = 8;
+  string learned_at = 9;
 }
 
