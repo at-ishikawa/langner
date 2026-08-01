@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,14 +19,42 @@ import { grammarResultToItem } from "@/lib/grammarResultItems";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
 
-type Phase = "answering" | "grading" | "review";
+type Phase = "answering" | "review";
+
+// Grading is submitted in small chunks so results stream back and pills fill in
+// progressively — the user never waits on the whole post. A few chunks run at
+// once; the server grades each chunk (mostly deterministic, LLM only for
+// answers that differ from the reference).
+const CHUNK_SIZE = 6;
+const CHUNK_CONCURRENCY = 3;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+// Run tasks with a bounded number in flight, preserving no particular order.
+async function mapWithConcurrency<T>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  let cursor = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (cursor < items.length) {
+      const i = cursor++;
+      await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+}
 
 // A post is rendered as an ordered list of plain-text runs and blank tokens so
 // each mistake is corrected in place. Blanks are located by their incorrect
 // span; duplicates map to successive occurrences in blank order. Any blank whose
-// span can't be placed (empty/omission span, or fewer occurrences than blanks)
-// is appended at the end so the rendered set always equals the submitted set —
-// submit, review pills, and the score header never diverge.
+// span can't be placed is appended at the end so the rendered set always equals
+// the submitted set — submit, review pills, and the score header never diverge.
 type Segment =
   | { type: "text"; text: string }
   | { type: "blank"; blank: GrammarBlank };
@@ -51,7 +79,7 @@ function segmentPost(postText: string, blanks: GrammarBlank[]): Segment[] {
   let cursor = 0;
   for (const { blank, pos } of placed) {
     if (pos < cursor) {
-      unplaced.push(blank); // overlapping span — fall back to a trailing token
+      unplaced.push(blank);
       continue;
     }
     if (pos > cursor) segments.push({ type: "text", text: postText.slice(cursor, pos) });
@@ -63,18 +91,23 @@ function segmentPost(postText: string, blanks: GrammarBlank[]): Segment[] {
   return segments;
 }
 
-function pillStatus(
-  r: GrammarResultState | undefined,
-): "correct" | "incorrect" | "skipped" {
-  if (!r || r.isSkipped) return "skipped";
+type PillStatus = "pending" | "correct" | "incorrect" | "skipped";
+
+function pillStatus(r: GrammarResultState | undefined): PillStatus {
+  if (!r) return "pending";
+  if (r.isSkipped) return "skipped";
   return r.correct ? "correct" : "incorrect";
 }
 
-const PILL_STYLES = {
+const PILL_STYLES: Record<
+  PillStatus,
+  { bg: string; darkBg: string; color: string; darkColor: string; glyph: string; label: string }
+> = {
+  pending: { bg: "gray.100", darkBg: "gray.700", color: "gray.500", darkColor: "gray.400", glyph: "…", label: "grading" },
   correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "correct" },
   incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗", label: "incorrect" },
   skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300", glyph: "–", label: "excluded" },
-} as const;
+};
 
 export default function GrammarQuizPage() {
   const router = useRouter();
@@ -86,6 +119,7 @@ export default function GrammarQuizPage() {
   const reviewedKeys = useGrammarStore((s) => s.reviewedKeys);
   const selectedKey = useGrammarStore((s) => s.selectedKey);
   const setInput = useGrammarStore((s) => s.setInput);
+  const markPostSubmitted = useGrammarStore((s) => s.markPostSubmitted);
   const recordPostResults = useGrammarStore((s) => s.recordPostResults);
   const selectBlank = useGrammarStore((s) => s.selectBlank);
   const markReviewed = useGrammarStore((s) => s.markReviewed);
@@ -93,43 +127,30 @@ export default function GrammarQuizPage() {
 
   const actions = useGrammarResultActions();
 
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const errorRef = useRef<HTMLParagraphElement>(null);
   const startTimeRef = useRef<number>(0);
   const pillRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   const post: GrammarPostCard | undefined = posts[currentPostIndex];
   const isLastPost = currentPostIndex + 1 >= posts.length;
-
-  // Phase is derived from the store so navigating between posts needs no
-  // effect-driven setState: a post already graded shows review, otherwise the
-  // answering form (with a transient grading spinner while the RPC is inflight).
-  const phase: Phase = submitting
-    ? "grading"
-    : submittedPostIndices.includes(currentPostIndex)
-      ? "review"
-      : "answering";
+  const phase: Phase = submittedPostIndices.includes(currentPostIndex) ? "review" : "answering";
 
   // Direct navigation without a seeded session → back to the hub.
   useEffect(() => {
     if (posts.length === 0) router.replace("/quiz?tab=grammar");
   }, [posts.length, router]);
 
-  // Restart the response timer whenever the post changes (ref write only — no
-  // render, no cascading setState).
   useEffect(() => {
     startTimeRef.current = Date.now();
   }, [currentPostIndex]);
 
-  // Whatever blank is showing in the sheet counts as reviewed (covers the
-  // auto-selected first-wrong blank, taps, and stepper). markReviewed is
-  // idempotent, so this can't loop.
+  // Whatever blank is showing in the sheet counts as reviewed.
   useEffect(() => {
     if (phase === "review" && selectedKey) markReviewed(selectedKey);
   }, [phase, selectedKey, markReviewed]);
 
-  // Keep the selected pill in view so the highlighted word and the detail sheet
-  // are always visible together, even in a long post.
+  // Keep the selected pill in view so the highlighted word and the sheet are
+  // visible together, even in a long post.
   useEffect(() => {
     if (phase === "review" && selectedKey) {
       pillRefs.current.get(selectedKey)?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -141,7 +162,6 @@ export default function GrammarQuizPage() {
     [post],
   );
 
-  // Blanks in reading order — drives the review pills and the sheet stepper.
   const orderedKeys = useMemo(
     () =>
       segments
@@ -150,8 +170,6 @@ export default function GrammarQuizPage() {
     [segments],
   );
 
-  // Current post's graded blanks, keyed by noteId, with their global index into
-  // the accumulator (needed by the override/skip actions).
   const postResults = useMemo(() => {
     const map = new Map<string, { result: GrammarResultState; globalIndex: number }>();
     results.forEach((r, globalIndex) => {
@@ -175,52 +193,8 @@ export default function GrammarQuizPage() {
   ).length;
   const emptyCount = totalBlanks - filledCount;
 
-  const handleSubmit = async () => {
-    if (phase !== "answering") return;
-    setSubmitting(true);
-    setError(null);
-    const responseTimeMs = responseTimeSince(startTimeRef.current);
-    const answers = post.blanks.map((b) => {
-      const answer = (inputs[b.noteId.toString()] ?? "").trim();
-      return {
-        noteId: b.noteId,
-        answer,
-        responseTimeMs,
-        isSkipped: answer === "",
-      };
-    });
-    try {
-      const res = await quizClient.submitGrammarPost({ answers });
-      const answerByNote = new Map(answers.map((a) => [a.noteId.toString(), a.answer]));
-      const graded: GrammarResultState[] = res.results.map((r) => ({
-        postIndex: currentPostIndex,
-        noteId: r.noteId,
-        senseId: r.senseId,
-        incorrect: r.incorrect,
-        answer: answerByNote.get(r.noteId.toString()) ?? "",
-        correct: r.correct,
-        correctAnswer: r.correctAnswer,
-        reason: r.reason,
-        category: r.category,
-        nextReviewDate: r.nextReviewDate,
-        learnedAt: r.learnedAt,
-      }));
-      recordPostResults(currentPostIndex, graded);
-    } catch {
-      setError("Failed to submit your corrections.");
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const handleNextPost = () => {
-    if (isLastPost) {
-      router.push("/quiz/grammar/complete");
-    } else {
-      nextPost();
-    }
-  };
-
+  const gradedCount = orderedKeys.filter((k) => postResults.has(k)).length;
+  const pendingCount = orderedKeys.length - gradedCount;
   const correctCount = orderedKeys.filter((k) => postResults.get(k)?.result.correct).length;
   const unreviewedWrong = orderedKeys.filter((k) => {
     const r = postResults.get(k)?.result;
@@ -228,6 +202,50 @@ export default function GrammarQuizPage() {
   }).length;
   const selected = selectedKey ? postResults.get(selectedKey) : undefined;
   const selectedPos = selectedKey ? orderedKeys.indexOf(selectedKey) : -1;
+
+  const handleSubmit = () => {
+    if (phase !== "answering") return;
+    markPostSubmitted(currentPostIndex); // → review immediately, pills pending
+    const responseTimeMs = responseTimeSince(startTimeRef.current);
+    const answers = post.blanks.map((b) => {
+      const answer = (inputs[b.noteId.toString()] ?? "").trim();
+      return { noteId: b.noteId, answer, responseTimeMs, isSkipped: answer === "" };
+    });
+    const answerByNote = new Map(answers.map((a) => [a.noteId.toString(), a.answer]));
+
+    void mapWithConcurrency(chunk(answers, CHUNK_SIZE), CHUNK_CONCURRENCY, async (group) => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const res = await quizClient.submitGrammarPost({ answers: group });
+          recordPostResults(
+            res.results.map((r) => ({
+              postIndex: currentPostIndex,
+              noteId: r.noteId,
+              senseId: r.senseId,
+              incorrect: r.incorrect,
+              answer: answerByNote.get(r.noteId.toString()) ?? "",
+              correct: r.correct,
+              correctAnswer: r.correctAnswer,
+              reason: r.reason,
+              category: r.category,
+              nextReviewDate: r.nextReviewDate,
+              learnedAt: r.learnedAt,
+            })),
+          );
+          return;
+        } catch {
+          if (attempt === 1 && errorRef.current) {
+            errorRef.current.textContent = "Some corrections couldn't be graded. Try again.";
+          }
+        }
+      }
+    });
+  };
+
+  const handleNextPost = () => {
+    if (isLastPost) router.push("/quiz/grammar/complete");
+    else nextPost();
+  };
 
   return (
     <Box maxW="sm" mx="auto" p={4} pb={phase === "review" ? 80 : 4} minH="100vh">
@@ -247,6 +265,7 @@ export default function GrammarQuizPage() {
           {phase === "review" && (
             <Text fontSize="sm" aria-live="polite">
               {correctCount} / {orderedKeys.length} correct
+              {pendingCount > 0 ? ` · grading ${pendingCount}…` : ""}
             </Text>
           )}
         </Box>
@@ -299,6 +318,7 @@ export default function GrammarQuizPage() {
             const status = pillStatus(r);
             const c = PILL_STYLES[status];
             const isSel = key === selectedKey;
+            const isPending = status === "pending";
             return (
               <Text
                 as="span"
@@ -307,18 +327,23 @@ export default function GrammarQuizPage() {
                   if (el) pillRefs.current.set(key, el);
                   else pillRefs.current.delete(key);
                 }}
-                role="button"
-                tabIndex={0}
-                aria-pressed={isSel}
+                role={isPending ? undefined : "button"}
+                tabIndex={isPending ? undefined : 0}
+                aria-pressed={isPending ? undefined : isSel}
                 aria-label={`${seg.blank.incorrect || "correction"} — ${c.label}`}
-                onClick={() => selectBlank(key)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    selectBlank(key);
-                  }
-                }}
-                cursor="pointer"
+                onClick={isPending ? undefined : () => selectBlank(key)}
+                onKeyDown={
+                  isPending
+                    ? undefined
+                    : (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          selectBlank(key);
+                        }
+                      }
+                }
+                cursor={isPending ? "default" : "pointer"}
+                opacity={isPending ? 0.7 : 1}
                 mx={0.5}
                 px={1.5}
                 py={0.5}
@@ -335,8 +360,7 @@ export default function GrammarQuizPage() {
             );
           }
 
-          // Answering: wrong span stays visible with a textbox beside it. No
-          // nowrap — a long span + input wraps naturally instead of overflowing.
+          // Answering: wrong span stays visible with a textbox beside it.
           return (
             <Text as="span" key={i}>
               <Text
@@ -358,7 +382,6 @@ export default function GrammarQuizPage() {
                 verticalAlign="baseline"
                 aria-label={`Correction for "${seg.blank.incorrect}"`}
                 placeholder="fix"
-                disabled={phase === "grading"}
                 value={inputs[key] ?? ""}
                 onChange={(e) => setInput(key, e.target.value)}
               />
@@ -367,12 +390,7 @@ export default function GrammarQuizPage() {
         })}
       </Box>
 
-      {phase === "grading" ? (
-        <Box textAlign="center" py={6}>
-          <Spinner size="md" mb={2} />
-          <Text fontSize="sm">Checking your corrections…</Text>
-        </Box>
-      ) : phase === "answering" ? (
+      {phase === "answering" ? (
         <>
           <Button colorPalette="blue" w="full" size="lg" onClick={handleSubmit}>
             Check corrections
@@ -380,11 +398,6 @@ export default function GrammarQuizPage() {
           {emptyCount > 0 && (
             <Text fontSize="xs" color="fg.muted" mt={1} textAlign="center">
               {emptyCount} left blank will be counted as skipped.
-            </Text>
-          )}
-          {error && (
-            <Text color="red.500" mt={2} fontSize="sm">
-              {error}
             </Text>
           )}
         </>
@@ -398,6 +411,7 @@ export default function GrammarQuizPage() {
               {unreviewedWrong} wrong {unreviewedWrong === 1 ? "correction" : "corrections"} not reviewed yet.
             </Text>
           )}
+          <Text ref={errorRef} fontSize="xs" color="red.500" mt={1} textAlign="center" aria-live="assertive" />
         </>
       )}
 

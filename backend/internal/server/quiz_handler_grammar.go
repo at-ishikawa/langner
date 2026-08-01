@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/errgroup"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -74,9 +75,16 @@ func (h *QuizHandler) StartGrammarQuiz(
 	return connect.NewResponse(&apiv1.StartGrammarQuizResponse{Posts: protoPosts}), nil
 }
 
-// SubmitGrammarPost grades every blank the user filled for one post at once and
-// records each result. Grading runs sequentially because all blanks in a post
-// write the same notebook's learning-notes file.
+// grammarGradeConcurrency caps how many blanks in one request are graded at
+// once. Most answers grade deterministically (no network); this only bounds the
+// few that fall back to the LLM so a wrong-heavy post can't fan out unbounded
+// model calls. The client already submits a post in small chunks, so this is a
+// second, per-request ceiling.
+const grammarGradeConcurrency = 8
+
+// SubmitGrammarPost grades the blanks in one request and records each result.
+// Blanks are graded concurrently (bounded) so the handful that need an LLM call
+// don't serialize; results keep request order.
 func (h *QuizHandler) SubmitGrammarPost(
 	ctx context.Context,
 	req *connect.Request[apiv1.SubmitGrammarPostRequest],
@@ -85,41 +93,63 @@ func (h *QuizHandler) SubmitGrammarPost(
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
-	results := make([]*apiv1.GrammarBlankResult, 0, len(answers))
-	for _, a := range answers {
+
+	// Resolve every blank's context up front (guarded map read).
+	ctxs := make([]grammarBlankCtx, len(answers))
+	for i, a := range answers {
 		h.mu.Lock()
 		bc, ok := h.grammarStore[a.GetNoteId()]
 		h.mu.Unlock()
 		if !ok {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("grammar blank %d not found", a.GetNoteId()))
 		}
+		ctxs[i] = bc
+	}
 
-		var grade quiz.GradeResult
+	// Grade concurrently — the only step that may hit the LLM. Deterministic
+	// matches return instantly; the bounded group keeps a wrong-heavy post from
+	// fanning out unbounded model calls. Grading touches no shared state.
+	grades := make([]quiz.GradeResult, len(answers))
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.SetLimit(grammarGradeConcurrency)
+	for i, a := range answers {
 		if a.GetIsSkipped() {
-			grade = skippedGradeResult()
-		} else {
-			var err error
-			grade, err = h.svc.GradeGrammarBlank(ctx, bc.content, bc.blank, a.GetAnswer(), a.GetResponseTimeMs())
-			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade grammar blank: %w", err))
-			}
+			grades[i] = skippedGradeResult()
+			continue
 		}
-		if err := h.svc.SaveGrammarBlank(ctx, bc.notebookID, bc.blank.SenseID, grade, a.GetResponseTimeMs()); err != nil {
+		group.Go(func() error {
+			g, err := h.svc.GradeGrammarBlank(groupCtx, ctxs[i].content, ctxs[i].blank, a.GetAnswer(), a.GetResponseTimeMs())
+			if err != nil {
+				return fmt.Errorf("grade grammar blank: %w", err)
+			}
+			grades[i] = g
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+
+	// Save sequentially — writes go through the learning repository, so keep
+	// them serialized and in order.
+	results := make([]*apiv1.GrammarBlankResult, len(answers))
+	for i, a := range answers {
+		bc := ctxs[i]
+		if err := h.svc.SaveGrammarBlank(ctx, bc.notebookID, bc.blank.SenseID, grades[i], a.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save grammar result: %w", err))
 		}
-
 		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(bc.notebookID, bc.blank.SenseID, bc.blank.SenseID, notebook.QuizTypeGrammar)
-		results = append(results, &apiv1.GrammarBlankResult{
+		results[i] = &apiv1.GrammarBlankResult{
 			NoteId:         a.GetNoteId(),
 			SenseId:        bc.blank.SenseID,
-			Correct:        grade.Correct,
+			Correct:        grades[i].Correct,
 			CorrectAnswer:  bc.blank.Correct,
 			Incorrect:      bc.blank.Incorrect,
 			Reason:         bc.blank.Reason,
 			Category:       bc.blank.Category,
 			NextReviewDate: nextReviewDate,
 			LearnedAt:      learnedAt,
-		})
+		}
 	}
 	return connect.NewResponse(&apiv1.SubmitGrammarPostResponse{Results: results}), nil
 }

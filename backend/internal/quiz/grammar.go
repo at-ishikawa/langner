@@ -200,7 +200,47 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 
 // GradeGrammarBlank grades a user's correction of one blank, using the full
 // post as grading context.
+// normalizeCorrection lowercases, trims surrounding quotes/punctuation, and
+// collapses internal whitespace so a typed answer can be compared to the
+// reference correction without an LLM round-trip.
+func normalizeCorrection(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.Trim(s, ` .,!?;:"'`)
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// deterministicGrammarGrade decides a correction WITHOUT calling the model when
+// the answer plainly applies the reference fix — it matches the correction (or
+// contains it) and no longer contains the original mistake. It only ever
+// returns a *correct* verdict: an answer that doesn't match may still be a valid
+// alternative phrasing, so those fall through to the LLM grader. Returns
+// (result, true) when decided, (zero, false) when the LLM should judge.
+func deterministicGrammarGrade(answer, correct, incorrect string) (GradeResult, bool) {
+	na := normalizeCorrection(answer)
+	if na == "" {
+		return GradeResult{}, false
+	}
+	nc := normalizeCorrection(correct)
+	ni := normalizeCorrection(incorrect)
+	matchesFix := na == nc || (nc != "" && strings.Contains(na, nc))
+	stillWrong := ni != "" && strings.Contains(na, ni)
+	if matchesFix && !stillWrong {
+		return GradeResult{
+			Correct: true,
+			Reason:  "Matches the correction.",
+			Quality: int(notebook.QualityCorrect),
+		}, true
+	}
+	return GradeResult{}, false
+}
+
 func (s *Service) GradeGrammarBlank(ctx context.Context, content string, blank GrammarBlank, answer string, responseTimeMs int64) (GradeResult, error) {
+	// Fast path: most answers match the known reference correction, so grade
+	// them deterministically and skip the LLM entirely. Only answers that
+	// differ (a possible valid alternative) pay for a model call.
+	if result, ok := deterministicGrammarGrade(answer, blank.Correct, blank.Incorrect); ok {
+		return result, nil
+	}
 	response, err := s.openaiClient.GradeCorrection(ctx, inference.GradeCorrectionRequest{
 		Sentence:       content,
 		Incorrect:      blank.Incorrect,

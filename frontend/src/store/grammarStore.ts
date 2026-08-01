@@ -38,7 +38,8 @@ interface GrammarState {
 
   seedPosts: (posts: GrammarPostCard[]) => void;
   setInput: (key: string, value: string) => void;
-  recordPostResults: (postIndex: number, results: GrammarResultState[]) => void;
+  markPostSubmitted: (postIndex: number) => void;
+  recordPostResults: (results: GrammarResultState[]) => void;
   selectBlank: (key: string | null) => void;
   markReviewed: (key: string) => void;
   nextPost: () => void;
@@ -69,13 +70,23 @@ export const useGrammarStore = create<GrammarState>((set) => ({
   ...initialState,
   seedPosts: (posts) => set({ ...initialState, posts: [...posts] }),
   setInput: (key, value) => set((state) => ({ inputs: { ...state.inputs, [key]: value } })),
-  recordPostResults: (postIndex, results) =>
-    set((state) => ({
-      results: [...state.results, ...results],
-      submittedPostIndices: [...state.submittedPostIndices, postIndex],
-      // Auto-select the first wrong blank (or first blank) for review.
-      selectedKey: (results.find((r) => !r.correct) ?? results[0])?.noteId.toString() ?? null,
-    })),
+  // Enter review as soon as the user submits — pills render immediately and
+  // fill in as each chunk of results arrives via recordPostResults.
+  markPostSubmitted: (postIndex) =>
+    set((state) =>
+      state.submittedPostIndices.includes(postIndex)
+        ? {}
+        : { submittedPostIndices: [...state.submittedPostIndices, postIndex] },
+    ),
+  recordPostResults: (results) =>
+    set((state) => {
+      // Auto-select the first wrong blank (or first) once results start landing.
+      const selectedKey =
+        state.selectedKey ??
+        (results.find((r) => !r.correct) ?? results[0])?.noteId.toString() ??
+        null;
+      return { results: [...state.results, ...results], selectedKey };
+    }),
   selectBlank: (selectedKey) => set({ selectedKey }),
   markReviewed: (key) =>
     set((state) =>
