@@ -82,8 +82,9 @@ export default function QuizHubPage() {
   // Open the Relearn tab when arrived at via /quiz?tab=relearn (from the
   // relearn complete screen's "Relearn again", or a session that ended empty).
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("tab") === "relearn") {
-      setTab("relearn");
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "relearn" || t === "grammar") {
+      setTab(t as Tab);
     }
   }, []);
 

@@ -16,7 +16,7 @@ export default function GrammarStart() {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const seedCards = useGrammarStore((s) => s.seedCards);
+  const seedPosts = useGrammarStore((s) => s.seedPosts);
 
   useEffect(() => {
     quizClient
@@ -52,19 +52,7 @@ export default function GrammarStart() {
     setStarting(true);
     try {
       const res = await quizClient.startGrammarQuiz({ notebookIds: Array.from(selectedIds) });
-      seedCards(
-        (res.cards ?? []).map((c) => ({
-          notebookId: c.notebookId,
-          cardId: c.cardId,
-          entryId: c.entryId,
-          sentence: c.sentence,
-          incorrect: c.incorrect,
-          category: c.category,
-          note: c.note,
-          status: c.status,
-          line: c.line,
-        })),
-      );
+      seedPosts(res.posts ?? []);
       router.push("/quiz/grammar");
     } catch {
       setError("Failed to start the grammar quiz.");

@@ -1,56 +1,116 @@
 import { create } from "zustand";
+import type { GrammarPostCard } from "@/lib/client";
+import type { OriginalValues } from "@/store/quizStore";
 
-// The Grammar Quiz drills grammar mistakes annotated in journal notebooks. It
-// is a linear walk over a fixed list of cards (like the standard quiz) but is
-// kept in its own store because grammar cards are string-keyed and don't share
-// the vocabulary quiz's override/skip machinery.
+// The Grammar quiz drills a journal notebook one POST at a time. Each post is
+// shown in full; its due mistakes are corrected inline and submitted together,
+// then reviewed one blank at a time. Results accumulate across every post and
+// feed the shared completion screen.
 
-export interface GrammarCard {
-  notebookId: string;
-  cardId: string;
-  entryId: string;
-  // sentence holds the FULL journal post; the UI shows it whole and
-  // highlights `incorrect` in place.
-  sentence: string;
+// GrammarResultState is one graded blank enriched with the user's answer and
+// mutable override state. It is both the review-sheet data source and the
+// accumulator element the complete screen renders.
+export interface GrammarResultState {
+  postIndex: number; // which post produced it (review filters on this)
+  noteId: bigint; // stable session identity for override/skip
+  senseId: string;
   incorrect: string;
-  category: string;
-  note: string;
-  status: string;
-  line: number;
-}
-
-export interface GrammarResult {
-  cardId: string;
-  sentence: string;
-  incorrect: string;
-  category: string;
-  answer: string;
+  answer: string; // the user's typed correction
   correct: boolean;
   correctAnswer: string;
   reason: string;
+  category: string;
   nextReviewDate: string;
+  learnedAt: string;
+  isOverridden?: boolean;
+  isSkipped?: boolean;
+  originalValues?: OriginalValues;
 }
 
 interface GrammarState {
-  cards: GrammarCard[];
-  currentIndex: number;
-  results: GrammarResult[];
-  seedCards: (cards: GrammarCard[]) => void;
-  submitResult: (result: GrammarResult) => void;
-  nextCard: () => void;
+  posts: GrammarPostCard[];
+  currentPostIndex: number;
+  inputs: Record<string, string>; // key = noteId string; current post only
+  results: GrammarResultState[]; // accumulator across all posts
+  submittedPostIndices: number[]; // posts already graded (drives the phase)
+  reviewedKeys: string[]; // noteId strings reviewed in the current post
+  selectedKey: string | null; // selected blank (noteId string) in review
+
+  seedPosts: (posts: GrammarPostCard[]) => void;
+  setInput: (key: string, value: string) => void;
+  recordPostResults: (postIndex: number, results: GrammarResultState[]) => void;
+  selectBlank: (key: string | null) => void;
+  markReviewed: (key: string) => void;
+  nextPost: () => void;
+
+  overrideResult: (index: number, nextReviewDate: string, originalValues: OriginalValues) => void;
+  undoOverrideResult: (index: number, correct: boolean, nextReviewDate: string) => void;
+  skipResult: (index: number) => void;
+  resumeResult: (index: number) => void;
+
   reset: () => void;
 }
 
 const initialState = {
-  cards: [] as GrammarCard[],
-  currentIndex: 0,
-  results: [] as GrammarResult[],
+  posts: [] as GrammarPostCard[],
+  currentPostIndex: 0,
+  inputs: {} as Record<string, string>,
+  results: [] as GrammarResultState[],
+  submittedPostIndices: [] as number[],
+  reviewedKeys: [] as string[],
+  selectedKey: null as string | null,
 };
+
+function updateArrayItem<T>(arr: T[], index: number, patch: Partial<T>): T[] {
+  return arr.map((item, i) => (i === index ? { ...item, ...patch } : item));
+}
 
 export const useGrammarStore = create<GrammarState>((set) => ({
   ...initialState,
-  seedCards: (cards) => set({ cards: [...cards], currentIndex: 0, results: [] }),
-  submitResult: (result) => set((state) => ({ results: [...state.results, result] })),
-  nextCard: () => set((state) => ({ currentIndex: state.currentIndex + 1 })),
+  seedPosts: (posts) => set({ ...initialState, posts: [...posts] }),
+  setInput: (key, value) => set((state) => ({ inputs: { ...state.inputs, [key]: value } })),
+  recordPostResults: (postIndex, results) =>
+    set((state) => ({
+      results: [...state.results, ...results],
+      submittedPostIndices: [...state.submittedPostIndices, postIndex],
+      // Auto-select the first wrong blank (or first blank) for review.
+      selectedKey: (results.find((r) => !r.correct) ?? results[0])?.noteId.toString() ?? null,
+    })),
+  selectBlank: (selectedKey) => set({ selectedKey }),
+  markReviewed: (key) =>
+    set((state) =>
+      state.reviewedKeys.includes(key) ? {} : { reviewedKeys: [...state.reviewedKeys, key] },
+    ),
+  nextPost: () =>
+    set((state) => ({
+      currentPostIndex: state.currentPostIndex + 1,
+      inputs: {},
+      reviewedKeys: [],
+      selectedKey: null,
+    })),
+
+  overrideResult: (index, nextReviewDate, originalValues) =>
+    set((state) => ({
+      results: updateArrayItem(state.results, index, {
+        correct: !state.results[index].correct,
+        isOverridden: true,
+        nextReviewDate,
+        originalValues,
+      }),
+    })),
+  undoOverrideResult: (index, correct, nextReviewDate) =>
+    set((state) => ({
+      results: updateArrayItem(state.results, index, {
+        correct,
+        isOverridden: false,
+        nextReviewDate,
+        originalValues: undefined,
+      }),
+    })),
+  skipResult: (index) =>
+    set((state) => ({ results: updateArrayItem(state.results, index, { isSkipped: true }) })),
+  resumeResult: (index) =>
+    set((state) => ({ results: updateArrayItem(state.results, index, { isSkipped: false }) })),
+
   reset: () => set(initialState),
 }));
