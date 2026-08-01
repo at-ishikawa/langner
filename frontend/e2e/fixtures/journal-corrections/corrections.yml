@@ -1,0 +1,14 @@
+- id: party-post
+  corrections:
+    - id: party-post-the-john
+      line: 1
+      incorrect: "the John"
+      correct: "John"
+      category: article
+      reason: "No definite article before a personal name."
+    - id: party-post-suggested
+      line: 2
+      incorrect: "suggested to go"
+      correct: "suggested going"
+      category: verb-pattern
+      reason: "'suggest' takes a gerund, not an infinitive."
