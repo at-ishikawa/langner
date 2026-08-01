@@ -32,6 +32,11 @@ notebooks:
   stories_directories:
     - examples/stories
 
+  # Directories containing journal notebooks — the learner's own writing, stored
+  # in the story format but kept apart from stories. Loaded alongside stories.
+  journals_directories:
+    - examples/journals
+
   # Directories containing flashcard notebooks (supports multiple directories)
   flashcards_directories:
     - examples/flashcards

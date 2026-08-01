@@ -130,7 +130,7 @@ func TestExamples_ReadGrammars(t *testing.T) {
 	// A journal is a story; its grammar mistakes are a separate grammars
 	// notebook, matched to each entry by title.
 	reader, err := notebook.NewReader(
-		[]string{filepath.Join(examples, "stories")}, nil, nil, nil, nil, nil,
+		[]string{filepath.Join(examples, "stories"), filepath.Join(examples, "journals")}, nil, nil, nil, nil, nil,
 	)
 	require.NoError(t, err)
 	require.NoError(t, reader.LoadGrammars([]string{filepath.Join(examples, "grammars")}))

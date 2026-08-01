@@ -60,8 +60,12 @@ type NotebooksConfig struct {
 	// (<base>/stories, <base>/flashcards, <base>/journal, …) so you don't have
 	// to configure each one. An explicitly-set directory overrides its derived
 	// default. Defaults to "notebooks".
-	BaseDirectory          string   `mapstructure:"base_directory"`
-	StoriesDirectories     []string `mapstructure:"stories_directories"`
+	BaseDirectory      string   `mapstructure:"base_directory"`
+	StoriesDirectories []string `mapstructure:"stories_directories"`
+	// JournalsDirectories hold the learner's own writing. A journal is stored in
+	// the same format as a story and loaded alongside stories, but kept in its
+	// own directory so it isn't mixed in with story notebooks.
+	JournalsDirectories    []string `mapstructure:"journals_directories"`
 	LearningNotesDirectory string   `mapstructure:"learning_notes_directory"`
 	FlashcardsDirectories  []string `mapstructure:"flashcards_directories"`
 	BooksDirectories       []string `mapstructure:"books_directories"`
@@ -84,6 +88,9 @@ func (n *NotebooksConfig) applyBaseDirectory() {
 	sub := func(name string) []string { return []string{filepath.Join(base, name)} }
 	if len(n.StoriesDirectories) == 0 {
 		n.StoriesDirectories = sub("stories")
+	}
+	if len(n.JournalsDirectories) == 0 {
+		n.JournalsDirectories = sub("journals")
 	}
 	if len(n.FlashcardsDirectories) == 0 {
 		n.FlashcardsDirectories = sub("flashcards")

@@ -41,8 +41,11 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
+	// Journals are stored in the story format but kept in their own directory;
+	// load them alongside stories so the grammar quiz can read them.
+	storyDirectories := append(append([]string{}, s.notebooksConfig.StoriesDirectories...), s.notebooksConfig.JournalsDirectories...)
 	reader, err := notebook.NewReader(
-		s.notebooksConfig.StoriesDirectories,
+		storyDirectories,
 		s.notebooksConfig.FlashcardsDirectories,
 		s.notebooksConfig.BooksDirectories,
 		s.notebooksConfig.DefinitionsDirectories,

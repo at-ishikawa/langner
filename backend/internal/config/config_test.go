@@ -37,6 +37,7 @@ func TestNotebooksConfig_applyBaseDirectory(t *testing.T) {
 		n := NotebooksConfig{BaseDirectory: "/data/nb"}
 		n.applyBaseDirectory()
 		assert.Equal(t, []string{filepath.Join("/data/nb", "stories")}, n.StoriesDirectories)
+		assert.Equal(t, []string{filepath.Join("/data/nb", "journals")}, n.JournalsDirectories)
 		assert.Equal(t, []string{filepath.Join("/data/nb", "flashcards")}, n.FlashcardsDirectories)
 		assert.Equal(t, []string{filepath.Join("/data/nb", "grammars")}, n.GrammarsDirectories)
 		assert.Equal(t, filepath.Join("/data/nb", "learning_notes"), n.LearningNotesDirectory)
@@ -75,6 +76,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				Notebooks: NotebooksConfig{
 					BaseDirectory:          "notebooks",
 					StoriesDirectories:     []string{filepath.Join("notebooks", "stories")},
+					JournalsDirectories:    []string{filepath.Join("notebooks", "journals")},
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
 					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
 					BooksDirectories:       []string{filepath.Join("notebooks", "books")},
@@ -133,6 +135,7 @@ outputs:
 				Notebooks: NotebooksConfig{
 					BaseDirectory:          "notebooks",
 					StoriesDirectories:     []string{"custom/stories"},
+					JournalsDirectories:    []string{filepath.Join("notebooks", "journals")},
 					LearningNotesDirectory: "custom/learning",
 					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
 					BooksDirectories:       []string{filepath.Join("notebooks", "books")},
@@ -185,6 +188,7 @@ outputs:
 				Notebooks: NotebooksConfig{
 					BaseDirectory:          "notebooks",
 					StoriesDirectories:     []string{"partial/stories"},
+					JournalsDirectories:    []string{filepath.Join("notebooks", "journals")},
 					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
 					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
 					BooksDirectories:       []string{filepath.Join("notebooks", "books")},

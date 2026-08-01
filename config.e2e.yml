@@ -22,6 +22,8 @@ quiz:
 notebooks:
   stories_directories:
     - frontend/e2e/fixtures/stories
+  journals_directories:
+    - frontend/e2e/fixtures/journals
   flashcards_directories:
     - frontend/e2e/fixtures/flashcards
   books_directories: []
