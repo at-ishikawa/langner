@@ -73,7 +73,7 @@ function resultPillStatus(r: GrammarResultState): "correct" | "incorrect" | "ski
 function toResult(
   postIndex: number,
   answer: string,
-  r: { noteId: bigint; senseId: string; correct: boolean; correctAnswer: string; incorrect: string; reason: string; category: string; nextReviewDate: string; learnedAt: string },
+  r: { noteId: bigint; senseId: string; correct: boolean; correctAnswer: string; incorrect: string; reason: string; assessment: string; category: string; nextReviewDate: string; learnedAt: string },
 ): GrammarResultState {
   return {
     postIndex,
@@ -84,6 +84,7 @@ function toResult(
     correct: r.correct,
     correctAnswer: r.correctAnswer,
     reason: r.reason,
+    assessment: r.assessment,
     category: r.category,
     nextReviewDate: r.nextReviewDate,
     learnedAt: r.learnedAt,

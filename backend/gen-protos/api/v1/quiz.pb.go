@@ -5019,12 +5019,15 @@ type GrammarBlankResult struct {
 	Correct        bool                   `protobuf:"varint,3,opt,name=correct,proto3" json:"correct,omitempty"`
 	CorrectAnswer  string                 `protobuf:"bytes,4,opt,name=correct_answer,json=correctAnswer,proto3" json:"correct_answer,omitempty"` // the reference correction, revealed after grading
 	Incorrect      string                 `protobuf:"bytes,5,opt,name=incorrect,proto3" json:"incorrect,omitempty"`
-	Reason         string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"`
+	Reason         string                 `protobuf:"bytes,6,opt,name=reason,proto3" json:"reason,omitempty"` // the authored grammar note for the mistake
 	Category       string                 `protobuf:"bytes,7,opt,name=category,proto3" json:"category,omitempty"`
 	NextReviewDate string                 `protobuf:"bytes,8,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
 	LearnedAt      string                 `protobuf:"bytes,9,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// assessment is the grader's per-answer critique — what THIS answer still got
+	// wrong and how to fix it. Empty when the answer was correct or skipped.
+	Assessment    string `protobuf:"bytes,10,opt,name=assessment,proto3" json:"assessment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GrammarBlankResult) Reset() {
@@ -5116,6 +5119,13 @@ func (x *GrammarBlankResult) GetNextReviewDate() string {
 func (x *GrammarBlankResult) GetLearnedAt() string {
 	if x != nil {
 		return x.LearnedAt
+	}
+	return ""
+}
+
+func (x *GrammarBlankResult) GetAssessment() string {
+	if x != nil {
+		return x.Assessment
 	}
 	return ""
 }
@@ -5522,7 +5532,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\n" +
 	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"Q\n" +
 	"\x19SubmitGrammarPostResponse\x124\n" +
-	"\aresults\x18\x01 \x03(\v2\x1a.api.v1.GrammarBlankResultR\aresults\"\xa4\x02\n" +
+	"\aresults\x18\x01 \x03(\v2\x1a.api.v1.GrammarBlankResultR\aresults\"\xc4\x02\n" +
 	"\x12GrammarBlankResult\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x19\n" +
 	"\bsense_id\x18\x02 \x01(\tR\asenseId\x12\x18\n" +
@@ -5533,7 +5543,11 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\bcategory\x18\a \x01(\tR\bcategory\x12(\n" +
 	"\x10next_review_date\x18\b \x01(\tR\x0enextReviewDate\x12\x1d\n" +
 	"\n" +
-	"learned_at\x18\t \x01(\tR\tlearnedAt*\xff\x01\n" +
+	"learned_at\x18\t \x01(\tR\tlearnedAt\x12\x1e\n" +
+	"\n" +
+	"assessment\x18\n" +
+	" \x01(\tR\n" +
+	"assessment*\xff\x01\n" +
 	"\bQuizType\x12\x19\n" +
 	"\x15QUIZ_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12QUIZ_TYPE_STANDARD\x10\x01\x12\x15\n" +

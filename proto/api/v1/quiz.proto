@@ -779,9 +779,12 @@ message GrammarBlankResult {
   bool correct = 3;
   string correct_answer = 4; // the reference correction, revealed after grading
   string incorrect = 5;
-  string reason = 6;
+  string reason = 6; // the authored grammar note for the mistake
   string category = 7;
   string next_review_date = 8;
   string learned_at = 9;
+  // assessment is the grader's per-answer critique — what THIS answer still got
+  // wrong and how to fix it. Empty when the answer was correct or skipped.
+  string assessment = 10;
 }
 

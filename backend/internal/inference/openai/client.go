@@ -1114,6 +1114,15 @@ QUALITY ASSESSMENT (1-5):
 - If incorrect: quality = 1
 - If correct, judge response time: fast = 5, normal = 4, slow = 3.
 
+REASON:
+- When incorrect, write ONE short sentence addressed to the learner ("you") that
+  names exactly what in THEIR answer is still wrong and how to fix it — cite the
+  specific words. Do NOT merely restate the reference correction. If their answer
+  fixed part of the mistake, say what's still left. Focus on grammar; don't fault
+  a proper-noun spelling unless that is the whole point.
+  Example: "You still wrote 'goed'; the past tense of 'go' is 'went'."
+- When correct, a brief confirmation.
+
 OUTPUT FORMAT (JSON only):
 {
   "correct": true | false,

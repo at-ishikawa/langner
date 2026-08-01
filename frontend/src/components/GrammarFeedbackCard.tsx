@@ -152,11 +152,26 @@ export function GrammarFeedbackCard({
         <DiffLine tokens={diff.right} tone="correct" />
       </Box>
 
-      {/* Why — the note on the mistake. */}
+      {/* Why you missed it — the grader's critique of THIS answer (wrong only). */}
+      {result.assessment && (
+        <Box mb={result.reason ? 1 : 3}>
+          <Text fontSize="xs" color="red.600" _dark={{ color: "red.300" }} fontWeight="medium">
+            Why you missed it
+          </Text>
+          <Text fontSize="sm">{result.assessment}</Text>
+        </Box>
+      )}
+
+      {/* Grammar note authored for the mistake. */}
       {result.reason && (
-        <Text fontSize="sm" color="fg.muted" fontStyle="italic" mb={3}>
-          {result.reason}
-        </Text>
+        <Box mb={3}>
+          <Text fontSize="xs" color="fg.muted">
+            {result.assessment ? "Grammar note" : "Why"}
+          </Text>
+          <Text fontSize="sm" color="fg.muted" fontStyle="italic">
+            {result.reason}
+          </Text>
+        </Box>
       )}
 
       {/* Footer actions — mirror QuizResultCard so override/skip reuse the same

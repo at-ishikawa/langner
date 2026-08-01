@@ -139,6 +139,13 @@ func (h *QuizHandler) SubmitGrammarPost(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save grammar result: %w", err))
 		}
 		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(bc.notebookID, bc.blank.SenseID, bc.blank.SenseID, notebook.QuizTypeGrammar)
+		// For a wrong answer, surface the grader's critique of THIS answer as the
+		// assessment; the authored note stays in reason. Correct/skipped answers
+		// carry no assessment.
+		assessment := ""
+		if !a.GetIsSkipped() && !grades[i].Correct {
+			assessment = grades[i].Reason
+		}
 		results[i] = &apiv1.GrammarBlankResult{
 			NoteId:         a.GetNoteId(),
 			SenseId:        bc.blank.SenseID,
@@ -149,6 +156,7 @@ func (h *QuizHandler) SubmitGrammarPost(
 			Category:       bc.blank.Category,
 			NextReviewDate: nextReviewDate,
 			LearnedAt:      learnedAt,
+			Assessment:     assessment,
 		}
 	}
 	return connect.NewResponse(&apiv1.SubmitGrammarPostResponse{Results: results}), nil

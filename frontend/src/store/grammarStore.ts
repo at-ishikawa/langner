@@ -19,7 +19,8 @@ export interface GrammarResultState {
   answer: string; // the user's typed correction
   correct: boolean;
   correctAnswer: string;
-  reason: string;
+  reason: string; // authored grammar note for the mistake
+  assessment: string; // grader's critique of THIS answer (empty if correct/skipped)
   category: string;
   nextReviewDate: string;
   learnedAt: string;
