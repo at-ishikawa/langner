@@ -26,16 +26,16 @@ Then(
   },
 );
 
+// Each box is graded the moment it's committed (Enter), so filling + Enter
+// grades that one blank in place — there is no batch "check" step.
 When(
   "I correct {string} with {string}",
   async ({ page }, incorrect: string, answer: string) => {
-    await page.getByLabel(`Correction for "${incorrect}"`).fill(answer);
+    const box = page.getByLabel(`Correction for "${incorrect}"`);
+    await box.fill(answer);
+    await box.press("Enter");
   },
 );
-
-When("I check the corrections", async ({ page }) => {
-  await page.getByRole("button", { name: "Check corrections", exact: true }).click();
-});
 
 // After grading, each blank becomes a pill whose accessible name carries its
 // status, e.g. `the John — correct`.

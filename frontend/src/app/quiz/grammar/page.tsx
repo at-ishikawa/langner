@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -19,42 +19,11 @@ import { grammarResultToItem } from "@/lib/grammarResultItems";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
 
-type Phase = "answering" | "review";
-
-// Grading is submitted in small chunks so results stream back and pills fill in
-// progressively — the user never waits on the whole post. A few chunks run at
-// once; the server grades each chunk (mostly deterministic, LLM only for
-// answers that differ from the reference).
-const CHUNK_SIZE = 6;
-const CHUNK_CONCURRENCY = 3;
-
-function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
-}
-
-// Run tasks with a bounded number in flight, preserving no particular order.
-async function mapWithConcurrency<T>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<void>,
-): Promise<void> {
-  let cursor = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (cursor < items.length) {
-      const i = cursor++;
-      await fn(items[i]);
-    }
-  });
-  await Promise.all(workers);
-}
-
 // A post is rendered as an ordered list of plain-text runs and blank tokens so
 // each mistake is corrected in place. Blanks are located by their incorrect
 // span; duplicates map to successive occurrences in blank order. Any blank whose
 // span can't be placed is appended at the end so the rendered set always equals
-// the submitted set — submit, review pills, and the score header never diverge.
+// the graded set.
 type Segment =
   | { type: "text"; text: string }
   | { type: "blank"; blank: GrammarBlank };
@@ -91,23 +60,36 @@ function segmentPost(postText: string, blanks: GrammarBlank[]): Segment[] {
   return segments;
 }
 
-type PillStatus = "pending" | "correct" | "incorrect" | "skipped";
+const PILL_STYLES = {
+  correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "correct" },
+  incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗", label: "incorrect" },
+  skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300", glyph: "–", label: "excluded" },
+} as const;
 
-function pillStatus(r: GrammarResultState | undefined): PillStatus {
-  if (!r) return "pending";
+function resultPillStatus(r: GrammarResultState): "correct" | "incorrect" | "skipped" {
   if (r.isSkipped) return "skipped";
   return r.correct ? "correct" : "incorrect";
 }
 
-const PILL_STYLES: Record<
-  PillStatus,
-  { bg: string; darkBg: string; color: string; darkColor: string; glyph: string; label: string }
-> = {
-  pending: { bg: "gray.100", darkBg: "gray.700", color: "gray.500", darkColor: "gray.400", glyph: "…", label: "grading" },
-  correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "correct" },
-  incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗", label: "incorrect" },
-  skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300", glyph: "–", label: "excluded" },
-};
+function toResult(
+  postIndex: number,
+  answer: string,
+  r: { noteId: bigint; senseId: string; correct: boolean; correctAnswer: string; incorrect: string; reason: string; category: string; nextReviewDate: string; learnedAt: string },
+): GrammarResultState {
+  return {
+    postIndex,
+    noteId: r.noteId,
+    senseId: r.senseId,
+    incorrect: r.incorrect,
+    answer,
+    correct: r.correct,
+    correctAnswer: r.correctAnswer,
+    reason: r.reason,
+    category: r.category,
+    nextReviewDate: r.nextReviewDate,
+    learnedAt: r.learnedAt,
+  };
+}
 
 export default function GrammarQuizPage() {
   const router = useRouter();
@@ -115,47 +97,30 @@ export default function GrammarQuizPage() {
   const currentPostIndex = useGrammarStore((s) => s.currentPostIndex);
   const inputs = useGrammarStore((s) => s.inputs);
   const results = useGrammarStore((s) => s.results);
-  const submittedPostIndices = useGrammarStore((s) => s.submittedPostIndices);
+  const gradingKeys = useGrammarStore((s) => s.gradingKeys);
   const reviewedKeys = useGrammarStore((s) => s.reviewedKeys);
   const selectedKey = useGrammarStore((s) => s.selectedKey);
   const setInput = useGrammarStore((s) => s.setInput);
-  const markPostSubmitted = useGrammarStore((s) => s.markPostSubmitted);
-  const recordPostResults = useGrammarStore((s) => s.recordPostResults);
+  const addGrading = useGrammarStore((s) => s.addGrading);
+  const removeGrading = useGrammarStore((s) => s.removeGrading);
+  const recordResults = useGrammarStore((s) => s.recordResults);
   const selectBlank = useGrammarStore((s) => s.selectBlank);
   const markReviewed = useGrammarStore((s) => s.markReviewed);
   const nextPost = useGrammarStore((s) => s.nextPost);
 
   const actions = useGrammarResultActions();
 
-  const errorRef = useRef<HTMLParagraphElement>(null);
-  const startTimeRef = useRef<number>(0);
+  const [error, setError] = useState<string | null>(null);
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const pillRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const focusTimeRef = useRef<Map<string, number>>(new Map());
 
   const post: GrammarPostCard | undefined = posts[currentPostIndex];
   const isLastPost = currentPostIndex + 1 >= posts.length;
-  const phase: Phase = submittedPostIndices.includes(currentPostIndex) ? "review" : "answering";
 
-  // Direct navigation without a seeded session → back to the hub.
   useEffect(() => {
     if (posts.length === 0) router.replace("/quiz?tab=grammar");
   }, [posts.length, router]);
-
-  useEffect(() => {
-    startTimeRef.current = Date.now();
-  }, [currentPostIndex]);
-
-  // Whatever blank is showing in the sheet counts as reviewed.
-  useEffect(() => {
-    if (phase === "review" && selectedKey) markReviewed(selectedKey);
-  }, [phase, selectedKey, markReviewed]);
-
-  // Keep the selected pill in view so the highlighted word and the sheet are
-  // visible together, even in a long post.
-  useEffect(() => {
-    if (phase === "review" && selectedKey) {
-      pillRefs.current.get(selectedKey)?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
-  }, [phase, selectedKey]);
 
   const segments = useMemo(
     () => (post ? segmentPost(post.postText, post.blanks) : []),
@@ -178,6 +143,21 @@ export default function GrammarQuizPage() {
     return map;
   }, [results, currentPostIndex]);
 
+  // Autofocus the first box when a post opens.
+  useEffect(() => {
+    if (orderedKeys.length > 0) {
+      const first = orderedKeys[0];
+      setTimeout(() => inputRefs.current.get(first)?.focus(), 50);
+    }
+  }, [orderedKeys]);
+
+  // Keep the selected pill in view alongside the detail sheet.
+  useEffect(() => {
+    if (selectedKey) {
+      pillRefs.current.get(selectedKey)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [selectedKey]);
+
   if (posts.length === 0 || !post) {
     return (
       <Box maxW="sm" mx="auto" p={4} textAlign="center">
@@ -186,69 +166,91 @@ export default function GrammarQuizPage() {
     );
   }
 
-  const progress = ((currentPostIndex + 1) / posts.length) * 100;
-  const totalBlanks = post.blanks.length;
-  const filledCount = post.blanks.filter(
-    (b) => (inputs[b.noteId.toString()] ?? "").trim() !== "",
-  ).length;
-  const emptyCount = totalBlanks - filledCount;
+  const isDone = (key: string) => postResults.has(key) || gradingKeys.includes(key);
+  const nextUnansweredAfter = (afterIndex: number): string | null => {
+    for (let i = afterIndex + 1; i < orderedKeys.length; i++) {
+      if (!isDone(orderedKeys[i])) return orderedKeys[i];
+    }
+    for (let i = 0; i <= afterIndex; i++) {
+      if (!isDone(orderedKeys[i])) return orderedKeys[i];
+    }
+    return null;
+  };
 
+  const progress = ((currentPostIndex + 1) / posts.length) * 100;
+  const totalBlanks = orderedKeys.length;
   const gradedCount = orderedKeys.filter((k) => postResults.has(k)).length;
-  const pendingCount = orderedKeys.length - gradedCount;
+  const gradingCount = gradingKeys.length;
+  const remainingCount = totalBlanks - gradedCount - gradingCount;
   const correctCount = orderedKeys.filter((k) => postResults.get(k)?.result.correct).length;
   const unreviewedWrong = orderedKeys.filter((k) => {
     const r = postResults.get(k)?.result;
     return r && !r.correct && !r.isSkipped && !reviewedKeys.includes(k);
   }).length;
   const selected = selectedKey ? postResults.get(selectedKey) : undefined;
-  const selectedPos = selectedKey ? orderedKeys.indexOf(selectedKey) : -1;
+  const gradedKeysInOrder = orderedKeys.filter((k) => postResults.has(k));
+  const selectedGradedPos = selectedKey ? gradedKeysInOrder.indexOf(selectedKey) : -1;
 
-  const handleSubmit = () => {
-    if (phase !== "answering") return;
-    markPostSubmitted(currentPostIndex); // → review immediately, pills pending
-    const responseTimeMs = responseTimeSince(startTimeRef.current);
-    const answers = post.blanks.map((b) => {
-      const answer = (inputs[b.noteId.toString()] ?? "").trim();
-      return { noteId: b.noteId, answer, responseTimeMs, isSkipped: answer === "" };
-    });
-    const answerByNote = new Map(answers.map((a) => [a.noteId.toString(), a.answer]));
+  // Grade one blank the moment its box is committed (Enter / blur), and jump the
+  // cursor to the next unanswered box. Deterministic answers come back instantly
+  // from the server; only answers that differ from the reference take a beat.
+  const commitBlank = (blank: GrammarBlank, indexInOrder: number) => {
+    const key = blank.noteId.toString();
+    const value = (inputs[key] ?? "").trim();
+    if (!value || isDone(key)) return;
 
-    void mapWithConcurrency(chunk(answers, CHUNK_SIZE), CHUNK_CONCURRENCY, async (group) => {
+    const nextKey = nextUnansweredAfter(indexInOrder);
+    if (nextKey) setTimeout(() => inputRefs.current.get(nextKey)?.focus(), 0);
+
+    const startedAt = focusTimeRef.current.get(key);
+    const responseTimeMs = startedAt !== undefined ? responseTimeSince(startedAt) : BigInt(0);
+    addGrading(key);
+    void (async () => {
       for (let attempt = 0; attempt < 2; attempt++) {
         try {
-          const res = await quizClient.submitGrammarPost({ answers: group });
-          recordPostResults(
-            res.results.map((r) => ({
-              postIndex: currentPostIndex,
-              noteId: r.noteId,
-              senseId: r.senseId,
-              incorrect: r.incorrect,
-              answer: answerByNote.get(r.noteId.toString()) ?? "",
-              correct: r.correct,
-              correctAnswer: r.correctAnswer,
-              reason: r.reason,
-              category: r.category,
-              nextReviewDate: r.nextReviewDate,
-              learnedAt: r.learnedAt,
-            })),
-          );
-          return;
+          const res = await quizClient.submitGrammarPost({
+            answers: [{ noteId: blank.noteId, answer: value, responseTimeMs, isSkipped: false }],
+          });
+          recordResults(res.results.map((r) => toResult(currentPostIndex, value, r)));
+          setError(null);
+          break;
         } catch {
-          if (attempt === 1 && errorRef.current) {
-            errorRef.current.textContent = "Some corrections couldn't be graded. Try again.";
-          }
+          if (attempt === 1) setError("A correction couldn't be graded. Re-type it to retry.");
         }
       }
-    });
+      removeGrading(key);
+    })();
   };
 
-  const handleNextPost = () => {
+  const focusNextUnanswered = () => {
+    const key = nextUnansweredAfter(-1);
+    if (key) inputRefs.current.get(key)?.focus();
+  };
+
+  // "Next post" is always available: grade any still-empty blanks as skipped
+  // (instant, no model call) so their spaced-repetition schedule advances, then
+  // move on.
+  const handleNextPost = async () => {
+    const remaining = post.blanks.filter((b) => {
+      const k = b.noteId.toString();
+      return !postResults.has(k) && !gradingKeys.includes(k);
+    });
+    if (remaining.length > 0) {
+      try {
+        const res = await quizClient.submitGrammarPost({
+          answers: remaining.map((b) => ({ noteId: b.noteId, answer: "", responseTimeMs: BigInt(0), isSkipped: true })),
+        });
+        recordResults(res.results.map((r) => toResult(currentPostIndex, "", r)));
+      } catch {
+        /* saved server-side on retry next time; don't block navigation */
+      }
+    }
     if (isLastPost) router.push("/quiz/grammar/complete");
     else nextPost();
   };
 
   return (
-    <Box maxW="sm" mx="auto" p={4} pb={phase === "review" ? 80 : 4} minH="100vh">
+    <Box maxW="sm" mx="auto" p={4} pb={selected ? 80 : 4} minH="100vh">
       <Box mb={2}>
         <Link href="/quiz?tab=grammar">
           <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
@@ -262,12 +264,10 @@ export default function GrammarQuizPage() {
           <Text fontSize="sm">
             Post {currentPostIndex + 1} / {posts.length}
           </Text>
-          {phase === "review" && (
-            <Text fontSize="sm" aria-live="polite">
-              {correctCount} / {orderedKeys.length} correct
-              {pendingCount > 0 ? ` · grading ${pendingCount}…` : ""}
-            </Text>
-          )}
+          <Text fontSize="sm" aria-live="polite">
+            {correctCount} / {totalBlanks} correct
+            {gradingCount > 0 ? " · grading…" : ""}
+          </Text>
         </Box>
         <Progress.Root value={progress} size="sm">
           <Progress.Track>
@@ -282,17 +282,9 @@ export default function GrammarQuizPage() {
         </Heading>
       )}
 
-      {phase === "review" ? (
-        <Text fontSize="xs" color="fg.muted" mb={2}>
-          Tap any highlighted word for details.
-        </Text>
-      ) : (
-        totalBlanks > 0 && (
-          <Text fontSize="xs" color="fg.muted" mb={2} aria-live="polite">
-            {filledCount} of {totalBlanks} filled
-          </Text>
-        )
-      )}
+      <Text fontSize="xs" color="fg.muted" mb={2}>
+        Type each fix and press Enter. Tap a graded word for details.
+      </Text>
 
       {/* The full post, mistakes fixed in place. */}
       <Box
@@ -304,119 +296,152 @@ export default function GrammarQuizPage() {
         borderRadius="lg"
         mb={4}
         fontSize="sm"
-        lineHeight="2"
+        lineHeight="2.2"
         whiteSpace="pre-wrap"
         overflowX="hidden"
         wordBreak="break-word"
       >
-        {segments.map((seg, i) => {
-          if (seg.type === "text") return <span key={i}>{seg.text}</span>;
-          const key = seg.blank.noteId.toString();
+        {(() => {
+          return segments.map((seg, i) => {
+            if (seg.type === "text") return <span key={i}>{seg.text}</span>;
+            const key = seg.blank.noteId.toString();
+            const indexInOrder = orderedKeys.indexOf(key);
+            const graded = postResults.get(key)?.result;
+            const grading = gradingKeys.includes(key);
 
-          if (phase === "review") {
-            const r = postResults.get(key)?.result;
-            const status = pillStatus(r);
-            const c = PILL_STYLES[status];
-            const isSel = key === selectedKey;
-            const isPending = status === "pending";
+            // Graded → tappable pill.
+            if (graded) {
+              const c = PILL_STYLES[resultPillStatus(graded)];
+              const isSel = key === selectedKey;
+              return (
+                <Text
+                  as="span"
+                  key={i}
+                  ref={(el: HTMLElement | null) => {
+                    if (el) pillRefs.current.set(key, el);
+                    else pillRefs.current.delete(key);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSel}
+                  aria-label={`${seg.blank.incorrect || "correction"} — ${c.label}`}
+                  onClick={() => {
+                    selectBlank(key);
+                    markReviewed(key);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      selectBlank(key);
+                      markReviewed(key);
+                    }
+                  }}
+                  cursor="pointer"
+                  mx={0.5}
+                  px={1.5}
+                  py={0.5}
+                  borderRadius="md"
+                  fontWeight="bold"
+                  bg={c.bg}
+                  color={c.color}
+                  _dark={{ bg: c.darkBg, color: c.darkColor }}
+                  boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
+                >
+                  <Text as="span" aria-hidden="true">{c.glyph} </Text>
+                  {seg.blank.incorrect}
+                </Text>
+              );
+            }
+
+            // Grading in flight → the wrong span with a small spinner in place.
+            if (grading) {
+              return (
+                <Text as="span" key={i} whiteSpace="nowrap">
+                  <Text
+                    as="span"
+                    fontWeight="bold"
+                    color="blue.600"
+                    _dark={{ color: "blue.300" }}
+                    textDecoration="line-through"
+                  >
+                    {seg.blank.incorrect}
+                  </Text>
+                  <Spinner size="xs" mx={1} verticalAlign="middle" />
+                </Text>
+              );
+            }
+
+            // Not yet graded → the wrong span stays visible with a textbox.
             return (
-              <Text
-                as="span"
-                key={i}
-                ref={(el: HTMLElement | null) => {
-                  if (el) pillRefs.current.set(key, el);
-                  else pillRefs.current.delete(key);
-                }}
-                role={isPending ? undefined : "button"}
-                tabIndex={isPending ? undefined : 0}
-                aria-pressed={isPending ? undefined : isSel}
-                aria-label={`${seg.blank.incorrect || "correction"} — ${c.label}`}
-                onClick={isPending ? undefined : () => selectBlank(key)}
-                onKeyDown={
-                  isPending
-                    ? undefined
-                    : (e) => {
-                        if (e.key === "Enter" || e.key === " ") {
-                          e.preventDefault();
-                          selectBlank(key);
-                        }
-                      }
-                }
-                cursor={isPending ? "default" : "pointer"}
-                opacity={isPending ? 0.7 : 1}
-                mx={0.5}
-                px={1.5}
-                py={0.5}
-                borderRadius="md"
-                fontWeight="bold"
-                bg={c.bg}
-                color={c.color}
-                _dark={{ bg: c.darkBg, color: c.darkColor }}
-                boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
-              >
-                <Text as="span" aria-hidden="true">{c.glyph} </Text>
-                {seg.blank.incorrect}
+              <Text as="span" key={i}>
+                <Text
+                  as="span"
+                  fontWeight="bold"
+                  color="blue.600"
+                  _dark={{ color: "blue.300" }}
+                  textDecoration="line-through"
+                >
+                  {seg.blank.incorrect}
+                </Text>
+                <Input
+                  ref={(el: HTMLInputElement | null) => {
+                    if (el) inputRefs.current.set(key, el);
+                    else inputRefs.current.delete(key);
+                  }}
+                  size="sm"
+                  display="inline-block"
+                  w="auto"
+                  minW="6rem"
+                  maxW="100%"
+                  mx={1}
+                  verticalAlign="baseline"
+                  aria-label={`Correction for "${seg.blank.incorrect}"`}
+                  placeholder="fix"
+                  value={inputs[key] ?? ""}
+                  onFocus={() => focusTimeRef.current.set(key, Date.now())}
+                  onChange={(e) => setInput(key, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitBlank(seg.blank, indexInOrder);
+                    }
+                  }}
+                  onBlur={() => commitBlank(seg.blank, indexInOrder)}
+                />
               </Text>
             );
-          }
-
-          // Answering: wrong span stays visible with a textbox beside it.
-          return (
-            <Text as="span" key={i}>
-              <Text
-                as="span"
-                fontWeight="bold"
-                color="blue.600"
-                _dark={{ color: "blue.300" }}
-                textDecoration="line-through"
-              >
-                {seg.blank.incorrect}
-              </Text>
-              <Input
-                size="sm"
-                display="inline-block"
-                w="auto"
-                minW="6rem"
-                maxW="100%"
-                mx={1}
-                verticalAlign="baseline"
-                aria-label={`Correction for "${seg.blank.incorrect}"`}
-                placeholder="fix"
-                value={inputs[key] ?? ""}
-                onChange={(e) => setInput(key, e.target.value)}
-              />
-            </Text>
-          );
-        })}
+          });
+        })()}
       </Box>
 
-      {phase === "answering" ? (
-        <>
-          <Button colorPalette="blue" w="full" size="lg" onClick={handleSubmit}>
-            Check corrections
-          </Button>
-          {emptyCount > 0 && (
-            <Text fontSize="xs" color="fg.muted" mt={1} textAlign="center">
-              {emptyCount} left blank will be counted as skipped.
-            </Text>
-          )}
-        </>
-      ) : (
-        <>
-          <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
-            {isLastPost ? "See results" : "Next post"}
-          </Button>
-          {unreviewedWrong > 0 && (
-            <Text fontSize="xs" color="orange.600" _dark={{ color: "orange.300" }} mt={1} textAlign="center">
-              {unreviewedWrong} wrong {unreviewedWrong === 1 ? "correction" : "corrections"} not reviewed yet.
-            </Text>
-          )}
-          <Text ref={errorRef} fontSize="xs" color="red.500" mt={1} textAlign="center" aria-live="assertive" />
-        </>
+      <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
+        {isLastPost ? "See results" : "Next post"}
+      </Button>
+      <Box mt={1} textAlign="center" minH="1.25rem">
+        {remainingCount > 0 ? (
+          <Text
+            as="button"
+            fontSize="xs"
+            color="blue.600"
+            _dark={{ color: "blue.300" }}
+            onClick={focusNextUnanswered}
+          >
+            ↓ Next unanswered ({remainingCount})
+          </Text>
+        ) : unreviewedWrong > 0 ? (
+          <Text fontSize="xs" color="orange.600" _dark={{ color: "orange.300" }}>
+            {unreviewedWrong} wrong {unreviewedWrong === 1 ? "correction" : "corrections"} not reviewed yet.
+          </Text>
+        ) : null}
+      </Box>
+      {error && (
+        <Text fontSize="xs" color="red.500" mt={1} textAlign="center" aria-live="assertive">
+          {error}
+        </Text>
       )}
 
-      {/* Review sheet: one blank at a time with details + actions. */}
-      {phase === "review" && selected && (
+      {/* Detail sheet: opens when a graded word is tapped. */}
+      {selected && (
         <Box
           position="fixed"
           bottom={0}
@@ -435,27 +460,37 @@ export default function GrammarQuizPage() {
           boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
         >
           <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-            <Button
-              size="xs"
-              variant="ghost"
-              disabled={selectedPos <= 0}
-              onClick={() => selectBlank(orderedKeys[selectedPos - 1])}
-              aria-label="Previous blank"
-            >
-              ‹
-            </Button>
+            <Box display="flex" alignItems="center" gap={1}>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={selectedGradedPos <= 0}
+                onClick={() => selectBlank(gradedKeysInOrder[selectedGradedPos - 1])}
+                aria-label="Previous graded word"
+              >
+                ‹
+              </Button>
+              <Button
+                size="xs"
+                variant="ghost"
+                disabled={selectedGradedPos < 0 || selectedGradedPos >= gradedKeysInOrder.length - 1}
+                onClick={() => selectBlank(gradedKeysInOrder[selectedGradedPos + 1])}
+                aria-label="Next graded word"
+              >
+                ›
+              </Button>
+            </Box>
             <Text fontSize="xs" color="fg.muted">
-              {selectedPos + 1} / {orderedKeys.length}
+              {selectedGradedPos + 1} / {gradedKeysInOrder.length}
               {selected.result.category ? ` · ${selected.result.category}` : ""}
             </Text>
             <Button
               size="xs"
               variant="ghost"
-              disabled={selectedPos < 0 || selectedPos >= orderedKeys.length - 1}
-              onClick={() => selectBlank(orderedKeys[selectedPos + 1])}
-              aria-label="Next blank"
+              onClick={() => selectBlank(null)}
+              aria-label="Close details"
             >
-              ›
+              ✕
             </Button>
           </Box>
           <QuizResultCard

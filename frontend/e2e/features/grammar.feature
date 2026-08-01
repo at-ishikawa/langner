@@ -16,7 +16,6 @@ Feature: Grammar Quiz
 
     When I correct "the John" with "John"
     And I correct "suggested to go" with "wrong on purpose"
-    And I check the corrections
     Then the graded post marks "the John" as correct
     And the graded post marks "suggested to go" as incorrect
 

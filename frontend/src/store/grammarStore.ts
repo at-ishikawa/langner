@@ -2,13 +2,14 @@ import { create } from "zustand";
 import type { GrammarPostCard } from "@/lib/client";
 import type { OriginalValues } from "@/store/quizStore";
 
-// The Grammar quiz drills a journal notebook one POST at a time. Each post is
-// shown in full; its due mistakes are corrected inline and submitted together,
-// then reviewed one blank at a time. Results accumulate across every post and
-// feed the shared completion screen.
+// The Grammar quiz drills a journal notebook one POST at a time. The whole post
+// is shown; each due mistake has an inline textbox. A box is graded the moment
+// the user commits it (Enter / leaving the field) and the result appears in
+// place — there is no batch submit and no separate review phase. Results
+// accumulate across every post and feed the shared completion screen.
 
 // GrammarResultState is one graded blank enriched with the user's answer and
-// mutable override state. It is both the review-sheet data source and the
+// mutable override state. It is both the detail-sheet data source and the
 // accumulator element the complete screen renders.
 export interface GrammarResultState {
   postIndex: number; // which post produced it (review filters on this)
@@ -32,14 +33,15 @@ interface GrammarState {
   currentPostIndex: number;
   inputs: Record<string, string>; // key = noteId string; current post only
   results: GrammarResultState[]; // accumulator across all posts
-  submittedPostIndices: number[]; // posts already graded (drives the phase)
-  reviewedKeys: string[]; // noteId strings reviewed in the current post
-  selectedKey: string | null; // selected blank (noteId string) in review
+  gradingKeys: string[]; // blanks whose grade is in flight (current post)
+  reviewedKeys: string[]; // noteId strings whose detail sheet was opened
+  selectedKey: string | null; // blank open in the detail sheet, or null
 
   seedPosts: (posts: GrammarPostCard[]) => void;
   setInput: (key: string, value: string) => void;
-  markPostSubmitted: (postIndex: number) => void;
-  recordPostResults: (results: GrammarResultState[]) => void;
+  addGrading: (key: string) => void;
+  removeGrading: (key: string) => void;
+  recordResults: (results: GrammarResultState[]) => void;
   selectBlank: (key: string | null) => void;
   markReviewed: (key: string) => void;
   nextPost: () => void;
@@ -57,7 +59,7 @@ const initialState = {
   currentPostIndex: 0,
   inputs: {} as Record<string, string>,
   results: [] as GrammarResultState[],
-  submittedPostIndices: [] as number[],
+  gradingKeys: [] as string[],
   reviewedKeys: [] as string[],
   selectedKey: null as string | null,
 };
@@ -70,23 +72,13 @@ export const useGrammarStore = create<GrammarState>((set) => ({
   ...initialState,
   seedPosts: (posts) => set({ ...initialState, posts: [...posts] }),
   setInput: (key, value) => set((state) => ({ inputs: { ...state.inputs, [key]: value } })),
-  // Enter review as soon as the user submits — pills render immediately and
-  // fill in as each chunk of results arrives via recordPostResults.
-  markPostSubmitted: (postIndex) =>
+  addGrading: (key) =>
     set((state) =>
-      state.submittedPostIndices.includes(postIndex)
-        ? {}
-        : { submittedPostIndices: [...state.submittedPostIndices, postIndex] },
+      state.gradingKeys.includes(key) ? {} : { gradingKeys: [...state.gradingKeys, key] },
     ),
-  recordPostResults: (results) =>
-    set((state) => {
-      // Auto-select the first wrong blank (or first) once results start landing.
-      const selectedKey =
-        state.selectedKey ??
-        (results.find((r) => !r.correct) ?? results[0])?.noteId.toString() ??
-        null;
-      return { results: [...state.results, ...results], selectedKey };
-    }),
+  removeGrading: (key) =>
+    set((state) => ({ gradingKeys: state.gradingKeys.filter((k) => k !== key) })),
+  recordResults: (results) => set((state) => ({ results: [...state.results, ...results] })),
   selectBlank: (selectedKey) => set({ selectedKey }),
   markReviewed: (key) =>
     set((state) =>
@@ -96,6 +88,7 @@ export const useGrammarStore = create<GrammarState>((set) => ({
     set((state) => ({
       currentPostIndex: state.currentPostIndex + 1,
       inputs: {},
+      gradingKeys: [],
       reviewedKeys: [],
       selectedKey: null,
     })),
