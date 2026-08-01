@@ -23,47 +23,58 @@ type Phase = "answering" | "grading" | "review";
 
 // A post is rendered as an ordered list of plain-text runs and blank tokens so
 // each mistake is corrected in place. Blanks are located by their incorrect
-// span; duplicates map to successive occurrences in blank order.
+// span; duplicates map to successive occurrences in blank order. Any blank whose
+// span can't be placed (empty/omission span, or fewer occurrences than blanks)
+// is appended at the end so the rendered set always equals the submitted set —
+// submit, review pills, and the score header never diverge.
 type Segment =
   | { type: "text"; text: string }
   | { type: "blank"; blank: GrammarBlank };
 
 function segmentPost(postText: string, blanks: GrammarBlank[]): Segment[] {
-  // Assign each blank a position: for repeated spans, advance a per-string
-  // cursor so the Nth blank with a span points at that span's Nth occurrence.
   const cursors = new Map<string, number>();
-  const placed = blanks
-    .map((blank) => {
-      const from = cursors.get(blank.incorrect) ?? 0;
-      const pos = blank.incorrect ? postText.indexOf(blank.incorrect, from) : -1;
-      if (pos >= 0) cursors.set(blank.incorrect, pos + blank.incorrect.length);
-      return { blank, pos };
-    })
-    .filter((p) => p.pos >= 0)
-    .sort((a, b) => a.pos - b.pos);
+  const placed: { blank: GrammarBlank; pos: number }[] = [];
+  const unplaced: GrammarBlank[] = [];
+  for (const blank of blanks) {
+    const from = cursors.get(blank.incorrect) ?? 0;
+    const pos = blank.incorrect ? postText.indexOf(blank.incorrect, from) : -1;
+    if (pos >= 0) {
+      cursors.set(blank.incorrect, pos + blank.incorrect.length);
+      placed.push({ blank, pos });
+    } else {
+      unplaced.push(blank);
+    }
+  }
+  placed.sort((a, b) => a.pos - b.pos);
 
   const segments: Segment[] = [];
   let cursor = 0;
   for (const { blank, pos } of placed) {
-    if (pos < cursor) continue; // overlapping span, skip to keep text intact
+    if (pos < cursor) {
+      unplaced.push(blank); // overlapping span — fall back to a trailing token
+      continue;
+    }
     if (pos > cursor) segments.push({ type: "text", text: postText.slice(cursor, pos) });
     segments.push({ type: "blank", blank });
     cursor = pos + blank.incorrect.length;
   }
   if (cursor < postText.length) segments.push({ type: "text", text: postText.slice(cursor) });
+  for (const blank of unplaced) segments.push({ type: "blank", blank });
   return segments;
 }
 
-function pillColors(r: GrammarResultState | undefined, selected: boolean) {
-  const kind = !r ? "pending" : r.isSkipped ? "skipped" : r.correct ? "correct" : "incorrect";
-  const map = {
-    pending: { bg: "blue.50", darkBg: "blue.950", color: "blue.700", darkColor: "blue.200" },
-    correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200" },
-    incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200" },
-    skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300" },
-  }[kind];
-  return { ...map, selected };
+function pillStatus(
+  r: GrammarResultState | undefined,
+): "correct" | "incorrect" | "skipped" {
+  if (!r || r.isSkipped) return "skipped";
+  return r.correct ? "correct" : "incorrect";
 }
+
+const PILL_STYLES = {
+  correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "correct" },
+  incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗", label: "incorrect" },
+  skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300", glyph: "–", label: "excluded" },
+} as const;
 
 export default function GrammarQuizPage() {
   const router = useRouter();
@@ -72,6 +83,7 @@ export default function GrammarQuizPage() {
   const inputs = useGrammarStore((s) => s.inputs);
   const results = useGrammarStore((s) => s.results);
   const submittedPostIndices = useGrammarStore((s) => s.submittedPostIndices);
+  const reviewedKeys = useGrammarStore((s) => s.reviewedKeys);
   const selectedKey = useGrammarStore((s) => s.selectedKey);
   const setInput = useGrammarStore((s) => s.setInput);
   const recordPostResults = useGrammarStore((s) => s.recordPostResults);
@@ -84,6 +96,7 @@ export default function GrammarQuizPage() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const startTimeRef = useRef<number>(0);
+  const pillRefs = useRef<Map<string, HTMLElement>>(new Map());
 
   const post: GrammarPostCard | undefined = posts[currentPostIndex];
   const isLastPost = currentPostIndex + 1 >= posts.length;
@@ -107,6 +120,21 @@ export default function GrammarQuizPage() {
   useEffect(() => {
     startTimeRef.current = Date.now();
   }, [currentPostIndex]);
+
+  // Whatever blank is showing in the sheet counts as reviewed (covers the
+  // auto-selected first-wrong blank, taps, and stepper). markReviewed is
+  // idempotent, so this can't loop.
+  useEffect(() => {
+    if (phase === "review" && selectedKey) markReviewed(selectedKey);
+  }, [phase, selectedKey, markReviewed]);
+
+  // Keep the selected pill in view so the highlighted word and the detail sheet
+  // are always visible together, even in a long post.
+  useEffect(() => {
+    if (phase === "review" && selectedKey) {
+      pillRefs.current.get(selectedKey)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [phase, selectedKey]);
 
   const segments = useMemo(
     () => (post ? segmentPost(post.postText, post.blanks) : []),
@@ -141,6 +169,11 @@ export default function GrammarQuizPage() {
   }
 
   const progress = ((currentPostIndex + 1) / posts.length) * 100;
+  const totalBlanks = post.blanks.length;
+  const filledCount = post.blanks.filter(
+    (b) => (inputs[b.noteId.toString()] ?? "").trim() !== "",
+  ).length;
+  const emptyCount = totalBlanks - filledCount;
 
   const handleSubmit = async () => {
     if (phase !== "answering") return;
@@ -180,11 +213,6 @@ export default function GrammarQuizPage() {
     }
   };
 
-  const handleSelect = (key: string) => {
-    selectBlank(key);
-    markReviewed(key);
-  };
-
   const handleNextPost = () => {
     if (isLastPost) {
       router.push("/quiz/grammar/complete");
@@ -194,6 +222,10 @@ export default function GrammarQuizPage() {
   };
 
   const correctCount = orderedKeys.filter((k) => postResults.get(k)?.result.correct).length;
+  const unreviewedWrong = orderedKeys.filter((k) => {
+    const r = postResults.get(k)?.result;
+    return r && !r.correct && !r.isSkipped && !reviewedKeys.includes(k);
+  }).length;
   const selected = selectedKey ? postResults.get(selectedKey) : undefined;
   const selectedPos = selectedKey ? orderedKeys.indexOf(selectedKey) : -1;
 
@@ -231,6 +263,18 @@ export default function GrammarQuizPage() {
         </Heading>
       )}
 
+      {phase === "review" ? (
+        <Text fontSize="xs" color="fg.muted" mb={2}>
+          Tap any highlighted word for details.
+        </Text>
+      ) : (
+        totalBlanks > 0 && (
+          <Text fontSize="xs" color="fg.muted" mb={2} aria-live="polite">
+            {filledCount} of {totalBlanks} filled
+          </Text>
+        )
+      )}
+
       {/* The full post, mistakes fixed in place. */}
       <Box
         p={4}
@@ -241,8 +285,10 @@ export default function GrammarQuizPage() {
         borderRadius="lg"
         mb={4}
         fontSize="sm"
-        lineHeight="1.9"
+        lineHeight="2"
         whiteSpace="pre-wrap"
+        overflowX="hidden"
+        wordBreak="break-word"
       >
         {segments.map((seg, i) => {
           if (seg.type === "text") return <span key={i}>{seg.text}</span>;
@@ -250,16 +296,27 @@ export default function GrammarQuizPage() {
 
           if (phase === "review") {
             const r = postResults.get(key)?.result;
-            const c = pillColors(r, key === selectedKey);
+            const status = pillStatus(r);
+            const c = PILL_STYLES[status];
+            const isSel = key === selectedKey;
             return (
               <Text
                 as="span"
                 key={i}
+                ref={(el: HTMLElement | null) => {
+                  if (el) pillRefs.current.set(key, el);
+                  else pillRefs.current.delete(key);
+                }}
                 role="button"
                 tabIndex={0}
-                onClick={() => handleSelect(key)}
+                aria-pressed={isSel}
+                aria-label={`${seg.blank.incorrect || "correction"} — ${c.label}`}
+                onClick={() => selectBlank(key)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") handleSelect(key);
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    selectBlank(key);
+                  }
                 }}
                 cursor="pointer"
                 mx={0.5}
@@ -270,16 +327,18 @@ export default function GrammarQuizPage() {
                 bg={c.bg}
                 color={c.color}
                 _dark={{ bg: c.darkBg, color: c.darkColor }}
-                boxShadow={c.selected ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
+                boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
               >
+                <Text as="span" aria-hidden="true">{c.glyph} </Text>
                 {seg.blank.incorrect}
               </Text>
             );
           }
 
-          // Answering: wrong span stays visible with a textbox beside it.
+          // Answering: wrong span stays visible with a textbox beside it. No
+          // nowrap — a long span + input wraps naturally instead of overflowing.
           return (
-            <Text as="span" key={i} whiteSpace="nowrap">
+            <Text as="span" key={i}>
               <Text
                 as="span"
                 fontWeight="bold"
@@ -290,14 +349,16 @@ export default function GrammarQuizPage() {
                 {seg.blank.incorrect}
               </Text>
               <Input
-                size="xs"
+                size="sm"
                 display="inline-block"
                 w="auto"
                 minW="6rem"
+                maxW="100%"
                 mx={1}
                 verticalAlign="baseline"
                 aria-label={`Correction for "${seg.blank.incorrect}"`}
                 placeholder="fix"
+                disabled={phase === "grading"}
                 value={inputs[key] ?? ""}
                 onChange={(e) => setInput(key, e.target.value)}
               />
@@ -316,6 +377,11 @@ export default function GrammarQuizPage() {
           <Button colorPalette="blue" w="full" size="lg" onClick={handleSubmit}>
             Check corrections
           </Button>
+          {emptyCount > 0 && (
+            <Text fontSize="xs" color="fg.muted" mt={1} textAlign="center">
+              {emptyCount} left blank will be counted as skipped.
+            </Text>
+          )}
           {error && (
             <Text color="red.500" mt={2} fontSize="sm">
               {error}
@@ -323,9 +389,16 @@ export default function GrammarQuizPage() {
           )}
         </>
       ) : (
-        <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
-          {isLastPost ? "See results" : "Next post"}
-        </Button>
+        <>
+          <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
+            {isLastPost ? "See results" : "Next post"}
+          </Button>
+          {unreviewedWrong > 0 && (
+            <Text fontSize="xs" color="orange.600" _dark={{ color: "orange.300" }} mt={1} textAlign="center">
+              {unreviewedWrong} wrong {unreviewedWrong === 1 ? "correction" : "corrections"} not reviewed yet.
+            </Text>
+          )}
+        </>
       )}
 
       {/* Review sheet: one blank at a time with details + actions. */}
@@ -337,6 +410,8 @@ export default function GrammarQuizPage() {
           right={0}
           maxW="sm"
           mx="auto"
+          maxH="60vh"
+          overflowY="auto"
           bg="white"
           _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
           borderTopWidth="1px"
@@ -350,7 +425,7 @@ export default function GrammarQuizPage() {
               size="xs"
               variant="ghost"
               disabled={selectedPos <= 0}
-              onClick={() => handleSelect(orderedKeys[selectedPos - 1])}
+              onClick={() => selectBlank(orderedKeys[selectedPos - 1])}
               aria-label="Previous blank"
             >
               ‹
@@ -363,7 +438,7 @@ export default function GrammarQuizPage() {
               size="xs"
               variant="ghost"
               disabled={selectedPos < 0 || selectedPos >= orderedKeys.length - 1}
-              onClick={() => handleSelect(orderedKeys[selectedPos + 1])}
+              onClick={() => selectBlank(orderedKeys[selectedPos + 1])}
               aria-label="Next blank"
             >
               ›
