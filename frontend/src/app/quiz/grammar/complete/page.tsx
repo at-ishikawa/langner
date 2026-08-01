@@ -1,37 +1,30 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Button, Heading, Text, VStack } from "@chakra-ui/react";
 import { useGrammarStore } from "@/store/grammarStore";
-import { type ResultItem } from "@/components/QuizResultCard";
-import { QuizResultsGroupedList } from "@/components/QuizResultsGroupedList";
-import { grammarResultToItem } from "@/lib/grammarResultItems";
+import { GrammarResultsGroupedList } from "@/components/GrammarResultsGroupedList";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
 
-// Grammar session summary. Mirrors the vocabulary complete screen: every graded
-// blank across all posts is grouped into Incorrect / Correct / Excluded with the
-// same Mark-correct / Undo / Exclude footer, reusing the shared list.
+// Grammar session summary. Every graded blank across all posts is grouped into
+// Incorrect / Correct / Excluded with the labelled+diffed grammar card and the
+// same Mark-correct / Undo / Exclude footer.
 export default function GrammarCompletePage() {
   const router = useRouter();
   const results = useGrammarStore((s) => s.results);
   const reset = useGrammarStore((s) => s.reset);
 
-  const items = useMemo(
-    (): ResultItem[] => results.map((r, i) => grammarResultToItem(r, i)),
-    [results],
-  );
-
   useEffect(() => {
-    if (items.length === 0) router.replace("/quiz?tab=grammar");
-  }, [items.length, router]);
+    if (results.length === 0) router.replace("/quiz?tab=grammar");
+  }, [results.length, router]);
 
   const { handleOverride, handleUndo, handleSkip, handleResume } = useGrammarResultActions();
 
-  if (items.length === 0) return null;
+  if (results.length === 0) return null;
 
-  const correctCount = items.filter((r) => r.correct && !r.isSkipped).length;
-  const incorrectCount = items.filter((r) => !r.correct && !r.isSkipped).length;
+  const correctCount = results.filter((r) => r.correct && !r.isSkipped).length;
+  const incorrectCount = results.filter((r) => !r.correct && !r.isSkipped).length;
 
   const handleBackToStart = () => {
     reset();
@@ -45,7 +38,7 @@ export default function GrammarCompletePage() {
       </Heading>
 
       <VStack align="stretch" gap={3} mb={6}>
-        <Text fontWeight="bold">Total: {items.length} corrections</Text>
+        <Text fontWeight="bold">Total: {results.length} corrections</Text>
         <Text color="green.600" _dark={{ color: "green.300" }} fontWeight="bold">
           Correct: {correctCount}
         </Text>
@@ -55,9 +48,8 @@ export default function GrammarCompletePage() {
       </VStack>
 
       <Box pb={20}>
-        <QuizResultsGroupedList
-          items={items}
-          isEtymology={false}
+        <GrammarResultsGroupedList
+          results={results}
           onOverride={handleOverride}
           onUndo={handleUndo}
           onSkip={handleSkip}

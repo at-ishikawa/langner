@@ -14,8 +14,7 @@ import {
 } from "@chakra-ui/react";
 import { quizClient, type GrammarPostCard, type GrammarBlank } from "@/lib/client";
 import { useGrammarStore, type GrammarResultState } from "@/store/grammarStore";
-import { QuizResultCard } from "@/components/QuizResultCard";
-import { grammarResultToItem } from "@/lib/grammarResultItems";
+import { GrammarFeedbackCard } from "@/components/GrammarFeedbackCard";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
 
@@ -493,9 +492,9 @@ export default function GrammarQuizPage() {
               ✕
             </Button>
           </Box>
-          <QuizResultCard
-            item={grammarResultToItem(selected.result, selected.globalIndex)}
-            isEtymology={false}
+          <GrammarFeedbackCard
+            result={selected.result}
+            index={selected.globalIndex}
             onOverride={actions.handleOverride}
             onUndo={actions.handleUndo}
             onSkip={actions.handleSkip}
