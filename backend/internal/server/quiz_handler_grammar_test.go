@@ -36,7 +36,7 @@ func newGrammarHandler(t *testing.T) (*QuizHandler, string) {
 	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
 		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
-		"- metadata:\n    title: \"Note 1\"\n  corrections:\n    - id: note-the-john\n      incorrect: \"the John\"\n      correct: \"John\"\n      category: article\n"), 0o644))
+		"- metadata:\n    title: \"Note 1\"\n  scenes:\n    - metadata:\n        index: 0\n      corrections:\n        - id: note-the-john\n          incorrect: \"the John\"\n          correct: \"John\"\n          category: article\n"), 0o644))
 
 	learningDir := t.TempDir()
 	quizCfg := config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}}

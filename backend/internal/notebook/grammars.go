@@ -27,15 +27,40 @@ type Correction struct {
 	Reason    string `yaml:"reason,omitempty"`
 }
 
-// GrammarEntry is the set of corrections for one story entry, matched by title.
+// GrammarEntry holds the corrections for one story entry, matched by title, and
+// split by scene — the same shape as a definitions entry (scenes keyed by
+// index), so a multi-scene story maps each scene's corrections to that scene.
 type GrammarEntry struct {
-	Metadata    GrammarMetadata `yaml:"metadata"`
-	Corrections []Correction    `yaml:"corrections"`
+	Metadata GrammarMetadata `yaml:"metadata"`
+	Scenes   []GrammarScene  `yaml:"scenes"`
 }
 
 // GrammarMetadata identifies which story entry the corrections apply to.
 type GrammarMetadata struct {
 	Title string `yaml:"title"` // matches StoryNotebook.Event
+}
+
+// GrammarScene holds the corrections for one scene of a story entry.
+type GrammarScene struct {
+	Metadata    GrammarSceneMetadata `yaml:"metadata"`
+	Corrections []Correction         `yaml:"corrections"`
+}
+
+// GrammarSceneMetadata identifies a scene, mirroring DefinitionsSceneMetadata:
+// index (0-based position in the entry's scenes), an alternative `scene` field,
+// and an optional human-readable title.
+type GrammarSceneMetadata struct {
+	Index int    `yaml:"index"`
+	Scene *int   `yaml:"scene,omitempty"`
+	Title string `yaml:"title,omitempty"`
+}
+
+// GetIndex returns the scene index, preferring Scene if set, otherwise Index.
+func (m GrammarSceneMetadata) GetIndex() int {
+	if m.Scene != nil {
+		return *m.Scene
+	}
+	return m.Index
 }
 
 // grammarsIndex is the index.yml of a grammars directory (id + notebook files).
@@ -45,9 +70,10 @@ type grammarsIndex struct {
 }
 
 // DerivedCorrectionID returns a correction's stable id, deriving one from the
-// story id, entry title, and per-entry sequence when no explicit id is set.
-func DerivedCorrectionID(storyID, title string, seq int) string {
-	return fmt.Sprintf("%s-%s-%d", storyID, slugifyTitle(title), seq)
+// story id, entry title, scene index, and per-scene sequence when no explicit
+// id is set.
+func DerivedCorrectionID(storyID, title string, sceneIndex, seq int) string {
+	return fmt.Sprintf("%s-%s-s%d-%d", storyID, slugifyTitle(title), sceneIndex, seq)
 }
 
 func slugifyTitle(title string) string {
@@ -61,27 +87,28 @@ func slugifyTitle(title string) string {
 	return strings.Trim(strings.ReplaceAll(s, "--", "-"), "-")
 }
 
-// StoryNotebookText renders a story entry as plain text — one statement or
-// spoken quote per line — so the grammar quiz can show it whole and locate each
+// sceneLine renders one statement or spoken quote as a line of plain text.
+func sceneLine(conv Conversation) string {
+	if conv.Speaker != "" {
+		return fmt.Sprintf("%s: %s", conv.Speaker, conv.Quote)
+	}
+	return conv.Quote
+}
+
+// StorySceneText renders one scene as plain text — one statement or spoken quote
+// per line — so the grammar quiz can show that scene whole and locate each
 // incorrect span as a substring.
-func StoryNotebookText(sn StoryNotebook) string {
-	var lines []string
-	for _, scene := range sn.Scenes {
-		lines = append(lines, scene.Statements...)
-		for _, conv := range scene.Conversations {
-			if conv.Speaker != "" {
-				lines = append(lines, fmt.Sprintf("%s: %s", conv.Speaker, conv.Quote))
-			} else {
-				lines = append(lines, conv.Quote)
-			}
-		}
+func StorySceneText(scene StoryScene) string {
+	lines := append([]string{}, scene.Statements...)
+	for _, conv := range scene.Conversations {
+		lines = append(lines, sceneLine(conv))
 	}
 	return strings.Join(lines, "\n")
 }
 
 // LoadGrammars registers grammar-annotation index files from the given
-// directories, keyed by story id then entry title. Opt-in, like the other
-// domain loaders; a missing directory is tolerated.
+// directories, keyed by story id → entry title → scene index → corrections.
+// Opt-in, like the other domain loaders; a missing directory is tolerated.
 func (f Reader) LoadGrammars(grammarsDirectories []string) error {
 	for _, dir := range grammarsDirectories {
 		if dir == "" {
@@ -101,7 +128,7 @@ func (f Reader) LoadGrammars(grammarsDirectories []string) error {
 			if err != nil {
 				return err
 			}
-			byTitle := make(map[string][]Correction)
+			byTitle := make(map[string]map[int][]Correction)
 			for _, notebookPath := range index.Notebooks {
 				full := filepath.Join(filepath.Dir(path), notebookPath)
 				entries, err := readYamlFile[[]GrammarEntry](full)
@@ -109,7 +136,15 @@ func (f Reader) LoadGrammars(grammarsDirectories []string) error {
 					return fmt.Errorf("readYamlFile(%s) > %w", full, err)
 				}
 				for _, e := range entries {
-					byTitle[e.Metadata.Title] = append(byTitle[e.Metadata.Title], e.Corrections...)
+					byScene := byTitle[e.Metadata.Title]
+					if byScene == nil {
+						byScene = make(map[int][]Correction)
+						byTitle[e.Metadata.Title] = byScene
+					}
+					for _, gs := range e.Scenes {
+						idx := gs.Metadata.GetIndex()
+						byScene[idx] = append(byScene[idx], gs.Corrections...)
+					}
 				}
 			}
 			f.grammarsMap[index.ID] = byTitle
@@ -131,12 +166,16 @@ func (f Reader) GrammarStoryIDs() []string {
 	return ids
 }
 
-// CorrectionsForEntry returns the corrections annotated for one story entry
-// (by title), or nil if none.
-func (f Reader) CorrectionsForEntry(storyID, title string) []Correction {
+// CorrectionsForScene returns the corrections annotated for one scene of a
+// story entry (by title + scene index), or nil if none.
+func (f Reader) CorrectionsForScene(storyID, title string, sceneIndex int) []Correction {
 	byTitle, ok := f.grammarsMap[storyID]
 	if !ok {
 		return nil
 	}
-	return byTitle[title]
+	byScene, ok := byTitle[title]
+	if !ok {
+		return nil
+	}
+	return byScene[sceneIndex]
 }

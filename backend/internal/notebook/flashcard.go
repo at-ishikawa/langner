@@ -15,8 +15,9 @@ type Reader struct {
 	flashcardIndexes map[string]FlashcardIndex
 	etymologyIndexes map[string]EtymologyIndex
 	// grammarsMap holds grammar annotations keyed by story id → entry title →
-	// corrections (the parallel of definitionsMap for the grammar quiz).
-	grammarsMap      map[string]map[string][]Correction
+	// scene index → corrections (the parallel of definitionsMap for the grammar
+	// quiz).
+	grammarsMap      map[string]map[string]map[int][]Correction
 	dictionaryMap    map[string]rapidapi.Response
 	definitionsMap   DefinitionsMap
 	definitionsRaw   map[string][]Definitions
@@ -124,7 +125,7 @@ func NewReader(
 		indexes:          indexes,
 		flashcardIndexes: flashcardIndexes,
 		etymologyIndexes: etymologyIndexes,
-		grammarsMap:      make(map[string]map[string][]Correction),
+		grammarsMap:      make(map[string]map[string]map[int][]Correction),
 		dictionaryMap:    dictionaryMap,
 		definitionsMap:   definitionsMap,
 		definitionsRaw:   definitionsRaw,

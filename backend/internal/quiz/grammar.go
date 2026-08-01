@@ -36,12 +36,13 @@ type GrammarBlank struct {
 }
 
 // correctionID returns a correction's stable spaced-repetition id: its explicit
-// id when set, otherwise one derived from the story id, entry title, and order.
-func correctionID(storyID, title string, seq int, c notebook.Correction) string {
+// id when set, otherwise one derived from the story id, entry title, scene
+// index, and order.
+func correctionID(storyID, title string, sceneIndex, seq int, c notebook.Correction) string {
 	if strings.TrimSpace(c.ID) != "" {
 		return c.ID
 	}
-	return notebook.DerivedCorrectionID(storyID, title, seq)
+	return notebook.DerivedCorrectionID(storyID, title, sceneIndex, seq)
 }
 
 // LoadGrammarPosts loads the story entries that have at least one due mistake,
@@ -71,41 +72,47 @@ func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
 
 	posts := make([]GrammarPost, 0)
 	for _, sn := range stories {
-		corrections := reader.CorrectionsForEntry(notebookID, sn.Event)
-		if len(corrections) == 0 {
-			continue
-		}
-		blanks := make([]GrammarBlank, 0, len(corrections))
-		for seq, c := range corrections {
-			id := correctionID(notebookID, sn.Event, seq+1, c)
-			exp, seen := expByMistake[id]
-			if !grammarMistakeDue(exp, seen) {
+		for sceneIdx, scene := range sn.Scenes {
+			corrections := reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx)
+			if len(corrections) == 0 {
 				continue
 			}
-			status := string(notebook.LearnedStatusLearning)
-			if seen {
-				status = string(exp.GetLatestStatus())
+			blanks := make([]GrammarBlank, 0, len(corrections))
+			for seq, c := range corrections {
+				id := correctionID(notebookID, sn.Event, sceneIdx, seq+1, c)
+				exp, seen := expByMistake[id]
+				if !grammarMistakeDue(exp, seen) {
+					continue
+				}
+				status := string(notebook.LearnedStatusLearning)
+				if seen {
+					status = string(exp.GetLatestStatus())
+				}
+				blanks = append(blanks, GrammarBlank{
+					SenseID:   id,
+					Incorrect: c.Incorrect,
+					Correct:   c.Correct,
+					Category:  c.Category,
+					Reason:    c.Reason,
+					Status:    status,
+				})
 			}
-			blanks = append(blanks, GrammarBlank{
-				SenseID:   id,
-				Incorrect: c.Incorrect,
-				Correct:   c.Correct,
-				Category:  c.Category,
-				Reason:    c.Reason,
-				Status:    status,
+			if len(blanks) == 0 {
+				continue
+			}
+			title := sn.Event
+			if scene.Title != "" {
+				title = fmt.Sprintf("%s · %s", sn.Event, scene.Title)
+			}
+			posts = append(posts, GrammarPost{
+				NotebookID:   notebookID,
+				NotebookName: name,
+				EntryID:      fmt.Sprintf("%s#%d", sn.Event, sceneIdx),
+				Title:        title,
+				Content:      notebook.StorySceneText(scene),
+				Blanks:       blanks,
 			})
 		}
-		if len(blanks) == 0 {
-			continue
-		}
-		posts = append(posts, GrammarPost{
-			NotebookID:   notebookID,
-			NotebookName: name,
-			EntryID:      sn.Event,
-			Title:        sn.Event,
-			Content:      notebook.StoryNotebookText(sn),
-			Blanks:       blanks,
-		})
 	}
 	return posts, nil
 }
@@ -167,10 +174,12 @@ func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 			if sn.Date.After(latestDate) {
 				latestDate = sn.Date
 			}
-			for seq, c := range reader.CorrectionsForEntry(id, sn.Event) {
-				exp, seen := expByMistake[correctionID(id, sn.Event, seq+1, c)]
-				if grammarMistakeDue(exp, seen) {
-					count++
+			for sceneIdx := range sn.Scenes {
+				for seq, c := range reader.CorrectionsForScene(id, sn.Event, sceneIdx) {
+					exp, seen := expByMistake[correctionID(id, sn.Event, sceneIdx, seq+1, c)]
+					if grammarMistakeDue(exp, seen) {
+						count++
+					}
 				}
 			}
 		}

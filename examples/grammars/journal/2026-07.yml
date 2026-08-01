@@ -1,36 +1,42 @@
 # Grammar mistakes for the journal story, keyed to each entry by title (matching
-# the story's `event`). The incorrect span must appear verbatim in the entry's
-# text so the quiz can highlight it in place. Each correction has a stable id
-# used as its spaced-repetition key.
+# the story's `event`) and split by scene index — the same shape as a
+# definitions notebook. The incorrect span must appear verbatim in that scene's
+# text. Each correction has a stable id used as its spaced-repetition key.
 - metadata:
     title: "Party"
-  corrections:
-    - id: journal-party-the-john
-      incorrect: "the John"
-      correct: "John"
-      category: article
-      reason: "No definite article before a personal name."
-    - id: journal-party-in-school
-      incorrect: "in school"
-      correct: "at school"
-      category: preposition
-      reason: "Use 'at school' when you mean the activity/institution."
-    - id: journal-party-suggested-to-play
-      incorrect: "suggested to play"
-      correct: "suggested playing"
-      category: verb-pattern
-      reason: "'suggest' takes a gerund, not a to-infinitive."
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: journal-party-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No definite article before a personal name."
+        - id: journal-party-in-school
+          incorrect: "in school"
+          correct: "at school"
+          category: preposition
+          reason: "Use 'at school' when you mean the activity/institution."
+        - id: journal-party-suggested-to-play
+          incorrect: "suggested to play"
+          correct: "suggested playing"
+          category: verb-pattern
+          reason: "'suggest' takes a gerund, not a to-infinitive."
 
 - metadata:
     title: "Rainy day"
-  corrections:
-    - id: journal-rainy-in-home
-      incorrect: "in home"
-      correct: "at home"
-      category: preposition
-      reason: "The fixed expression is 'at home'."
-    - id: journal-rainy-call-me
-      incorrect: "My sister call me"
-      correct: "My sister called me"
-      category: tense
-      reason: "Past narration needs the past tense 'called'."
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: journal-rainy-in-home
+          incorrect: "in home"
+          correct: "at home"
+          category: preposition
+          reason: "The fixed expression is 'at home'."
+        - id: journal-rainy-call-me
+          incorrect: "My sister call me"
+          correct: "My sister called me"
+          category: tense
+          reason: "Past narration needs the past tense 'called'."

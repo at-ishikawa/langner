@@ -139,14 +139,16 @@ func TestExamples_ReadGrammars(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, stories)
 
-	// Every entry's corrections must appear verbatim in that entry's text.
+	// Every scene's corrections must appear verbatim in that scene's text.
 	total := 0
 	for _, sn := range stories {
-		text := notebook.StoryNotebookText(sn)
-		for _, c := range reader.CorrectionsForEntry("journal", sn.Event) {
-			assert.Contains(t, text, c.Incorrect, "correction span must exist in %q", sn.Event)
-			assert.NotEqual(t, c.Incorrect, c.Correct)
-			total += 1
+		for sceneIdx, scene := range sn.Scenes {
+			text := notebook.StorySceneText(scene)
+			for _, c := range reader.CorrectionsForScene("journal", sn.Event, sceneIdx) {
+				assert.Contains(t, text, c.Incorrect, "correction span must exist in %q scene %d", sn.Event, sceneIdx)
+				assert.NotEqual(t, c.Incorrect, c.Correct)
+				total += 1
+			}
 		}
 	}
 	assert.Greater(t, total, 0)

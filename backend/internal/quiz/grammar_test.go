@@ -37,12 +37,15 @@ func writeGrammarNotebook(t *testing.T) (storyDir, grammarsDir string) {
 	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
 		`- metadata:
     title: "Note 1"
-  corrections:
-    - id: note-the-john
-      incorrect: "the John"
-      correct: "John"
-      category: article
-      reason: "No article before a personal name."
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: note-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
 `), 0o644))
 	return filepath.Join(base, "stories"), filepath.Join(base, "grammars")
 }
