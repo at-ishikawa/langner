@@ -67,9 +67,7 @@ func slugifyTitle(title string) string {
 func StoryNotebookText(sn StoryNotebook) string {
 	var lines []string
 	for _, scene := range sn.Scenes {
-		for _, stmt := range scene.Statements {
-			lines = append(lines, stmt)
-		}
+		lines = append(lines, scene.Statements...)
 		for _, conv := range scene.Conversations {
 			if conv.Speaker != "" {
 				lines = append(lines, fmt.Sprintf("%s: %s", conv.Speaker, conv.Quote))
