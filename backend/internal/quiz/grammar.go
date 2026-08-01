@@ -12,9 +12,9 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// GrammarPost is one journal post shown in full, carrying the mistakes that are
-// currently due to fix inline. Content is the whole post; each Blank is a
-// mistake within it.
+// GrammarPost is one story entry shown in full, carrying the mistakes that are
+// currently due to fix inline. Content is the whole entry's text; each Blank is
+// a mistake within it.
 type GrammarPost struct {
 	NotebookID   string
 	NotebookName string
@@ -24,7 +24,7 @@ type GrammarPost struct {
 	Blanks       []GrammarBlank
 }
 
-// GrammarBlank is one mistake to correct within a post. Correct is the
+// GrammarBlank is one mistake to correct within an entry. Correct is the
 // reference fix used only for grading (never sent to the client).
 type GrammarBlank struct {
 	SenseID   string // stable correction id
@@ -32,30 +32,34 @@ type GrammarBlank struct {
 	Correct   string
 	Category  string
 	Reason    string
-	Line      int
 	Status    string
 }
 
-// LoadGrammarPosts loads the journal posts that have at least one due mistake,
-// each with its due blanks. It merges each post's prose (journal notebook) with
-// its corrections (journal-corrections notebook) by post id, and filters blanks
-// by SM-2 (due when unseen or forward review is due).
+// correctionID returns a correction's stable spaced-repetition id: its explicit
+// id when set, otherwise one derived from the story id, entry title, and order.
+func correctionID(storyID, title string, seq int, c notebook.Correction) string {
+	if strings.TrimSpace(c.ID) != "" {
+		return c.ID
+	}
+	return notebook.DerivedCorrectionID(storyID, title, seq)
+}
+
+// LoadGrammarPosts loads the story entries that have at least one due mistake,
+// each with its due blanks. It merges each entry's prose (a story notebook) with
+// its corrections (the grammars notebook) by entry title, and filters blanks by
+// SM-2 (due when unseen or forward review is due).
 func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	entries, err := reader.ReadJournalEntries(notebookID)
+	stories, err := reader.ReadStoryNotebooks(notebookID)
 	if err != nil {
-		return nil, fmt.Errorf("ReadJournalEntries(%s) > %w", notebookID, err)
-	}
-	correctionsByPost, err := reader.ReadJournalCorrections(notebookID)
-	if err != nil {
-		return nil, fmt.Errorf("ReadJournalCorrections(%s) > %w", notebookID, err)
+		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
 	}
 
 	name := notebookID
-	if index, ok := reader.GetJournalIndexes()[notebookID]; ok && index.Name != "" {
+	if index, ok := reader.GetStoryIndexes()[notebookID]; ok && index.Name != "" {
 		name = index.Name
 	}
 
@@ -66,16 +70,14 @@ func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
 	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
 
 	posts := make([]GrammarPost, 0)
-	for _, entry := range entries {
-		set, ok := correctionsByPost[entry.ID]
-		if !ok {
+	for _, sn := range stories {
+		corrections := reader.CorrectionsForEntry(notebookID, sn.Event)
+		if len(corrections) == 0 {
 			continue
 		}
-		blanks := make([]GrammarBlank, 0, len(set.Corrections))
-		perLine := make(map[int]int)
-		for _, c := range set.Corrections {
-			perLine[c.Line]++
-			id := c.DerivedID(entry.ID, perLine[c.Line])
+		blanks := make([]GrammarBlank, 0, len(corrections))
+		for seq, c := range corrections {
+			id := correctionID(notebookID, sn.Event, seq+1, c)
 			exp, seen := expByMistake[id]
 			if !grammarMistakeDue(exp, seen) {
 				continue
@@ -90,7 +92,6 @@ func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
 				Correct:   c.Correct,
 				Category:  c.Category,
 				Reason:    c.Reason,
-				Line:      c.Line,
 				Status:    status,
 			})
 		}
@@ -100,9 +101,9 @@ func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
 		posts = append(posts, GrammarPost{
 			NotebookID:   notebookID,
 			NotebookName: name,
-			EntryID:      entry.ID,
-			Title:        entry.Title,
-			Content:      strings.TrimRight(entry.Text, "\n"),
+			EntryID:      sn.Event,
+			Title:        sn.Event,
+			Content:      notebook.StoryNotebookText(sn),
 			Blanks:       blanks,
 		})
 	}
@@ -135,9 +136,10 @@ func grammarExpressionsByID(histories []notebook.LearningHistory) map[string]not
 	return result
 }
 
-// LoadJournalNotebookSummaries returns one NotebookSummary per journal
-// notebook, with GrammarReviewCount set to the number of mistakes currently due.
-func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
+// LoadGrammarStorySummaries returns one NotebookSummary per story that has a
+// grammars notebook, with GrammarReviewCount set to the number of mistakes
+// currently due.
+func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
@@ -146,52 +148,42 @@ func (s *Service) LoadJournalNotebookSummaries() ([]NotebookSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("NewLearningHistories() > %w", err)
 	}
+	storyIndexes := reader.GetStoryIndexes()
 
 	var summaries []NotebookSummary
-	for id, index := range reader.GetJournalIndexes() {
-		entries, err := reader.ReadJournalEntries(id)
+	for _, id := range reader.GrammarStoryIDs() {
+		stories, err := reader.ReadStoryNotebooks(id)
 		if err != nil {
-			// A single malformed journal notebook must not take down the whole
+			// A single malformed notebook must not take down the whole
 			// quiz-options page (which lists every notebook kind).
-			slog.Warn("skipping journal notebook in summaries", "notebook", id, "error", err)
-			continue
-		}
-		correctionsByPost, err := reader.ReadJournalCorrections(id)
-		if err != nil {
-			slog.Warn("skipping journal corrections in summaries", "notebook", id, "error", err)
+			slog.Warn("skipping grammar story in summaries", "notebook", id, "error", err)
 			continue
 		}
 		expByMistake := grammarExpressionsByID(learningHistories[id])
 
 		count := 0
 		var latestDate time.Time
-		for _, entry := range entries {
-			if entry.Date.After(latestDate) {
-				latestDate = entry.Date
+		for _, sn := range stories {
+			if sn.Date.After(latestDate) {
+				latestDate = sn.Date
 			}
-			set, ok := correctionsByPost[entry.ID]
-			if !ok {
-				continue
-			}
-			perLine := make(map[int]int)
-			for _, c := range set.Corrections {
-				perLine[c.Line]++
-				exp, seen := expByMistake[c.DerivedID(entry.ID, perLine[c.Line])]
+			for seq, c := range reader.CorrectionsForEntry(id, sn.Event) {
+				exp, seen := expByMistake[correctionID(id, sn.Event, seq+1, c)]
 				if grammarMistakeDue(exp, seen) {
 					count++
 				}
 			}
 		}
 
-		name := index.Name
-		if name == "" {
-			name = id
+		name := id
+		if index, ok := storyIndexes[id]; ok && index.Name != "" {
+			name = index.Name
 		}
 		summaries = append(summaries, NotebookSummary{
 			NotebookID:         id,
 			Name:               name,
 			GrammarReviewCount: count,
-			Kind:               "Journal",
+			Kind:               "Grammar",
 			LatestDate:         latestDate,
 		})
 	}

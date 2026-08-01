@@ -38,14 +38,13 @@ func TestNotebooksConfig_applyBaseDirectory(t *testing.T) {
 		n.applyBaseDirectory()
 		assert.Equal(t, []string{filepath.Join("/data/nb", "stories")}, n.StoriesDirectories)
 		assert.Equal(t, []string{filepath.Join("/data/nb", "flashcards")}, n.FlashcardsDirectories)
-		assert.Equal(t, []string{filepath.Join("/data/nb", "journal")}, n.JournalDirectories)
-		assert.Equal(t, []string{filepath.Join("/data/nb", "journal-corrections")}, n.JournalCorrectionsDirectories)
+		assert.Equal(t, []string{filepath.Join("/data/nb", "grammars")}, n.GrammarsDirectories)
 		assert.Equal(t, filepath.Join("/data/nb", "learning_notes"), n.LearningNotesDirectory)
 	})
 	t.Run("an explicit directory overrides its derived default", func(t *testing.T) {
-		n := NotebooksConfig{BaseDirectory: "/data/nb", JournalDirectories: []string{"/custom/journal"}}
+		n := NotebooksConfig{BaseDirectory: "/data/nb", GrammarsDirectories: []string{"/custom/grammars"}}
 		n.applyBaseDirectory()
-		assert.Equal(t, []string{"/custom/journal"}, n.JournalDirectories)
+		assert.Equal(t, []string{"/custom/grammars"}, n.GrammarsDirectories)
 		assert.Equal(t, []string{filepath.Join("/data/nb", "stories")}, n.StoriesDirectories)
 	})
 	t.Run("empty base is a no-op", func(t *testing.T) {
@@ -74,15 +73,14 @@ func TestConfigLoader_Load(t *testing.T) {
 					},
 				},
 				Notebooks: NotebooksConfig{
-					BaseDirectory:                 "notebooks",
-					StoriesDirectories:            []string{filepath.Join("notebooks", "stories")},
-					LearningNotesDirectory:        filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectories:         []string{filepath.Join("notebooks", "flashcards")},
-					BooksDirectories:              []string{filepath.Join("notebooks", "books")},
-					DefinitionsDirectories:        []string{filepath.Join("notebooks", "definitions")},
-					EtymologyDirectories:          []string{filepath.Join("notebooks", "etymology")},
-					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
-					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
+					BaseDirectory:          "notebooks",
+					StoriesDirectories:     []string{filepath.Join("notebooks", "stories")},
+					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:       []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories: []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:   []string{filepath.Join("notebooks", "etymology")},
+					GrammarsDirectories:    []string{filepath.Join("notebooks", "grammars")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -133,15 +131,14 @@ outputs:
 					},
 				},
 				Notebooks: NotebooksConfig{
-					BaseDirectory:                 "notebooks",
-					StoriesDirectories:            []string{"custom/stories"},
-					LearningNotesDirectory:        "custom/learning",
-					FlashcardsDirectories:         []string{filepath.Join("notebooks", "flashcards")},
-					BooksDirectories:              []string{filepath.Join("notebooks", "books")},
-					DefinitionsDirectories:        []string{filepath.Join("notebooks", "definitions")},
-					EtymologyDirectories:          []string{filepath.Join("notebooks", "etymology")},
-					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
-					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
+					BaseDirectory:          "notebooks",
+					StoriesDirectories:     []string{"custom/stories"},
+					LearningNotesDirectory: "custom/learning",
+					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:       []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories: []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:   []string{filepath.Join("notebooks", "etymology")},
+					GrammarsDirectories:    []string{filepath.Join("notebooks", "grammars")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{
@@ -186,15 +183,14 @@ outputs:
 					},
 				},
 				Notebooks: NotebooksConfig{
-					BaseDirectory:                 "notebooks",
-					StoriesDirectories:            []string{"partial/stories"},
-					LearningNotesDirectory:        filepath.Join("notebooks", "learning_notes"),
-					FlashcardsDirectories:         []string{filepath.Join("notebooks", "flashcards")},
-					BooksDirectories:              []string{filepath.Join("notebooks", "books")},
-					DefinitionsDirectories:        []string{filepath.Join("notebooks", "definitions")},
-					EtymologyDirectories:          []string{filepath.Join("notebooks", "etymology")},
-					JournalDirectories:            []string{filepath.Join("notebooks", "journal")},
-					JournalCorrectionsDirectories: []string{filepath.Join("notebooks", "journal-corrections")},
+					BaseDirectory:          "notebooks",
+					StoriesDirectories:     []string{"partial/stories"},
+					LearningNotesDirectory: filepath.Join("notebooks", "learning_notes"),
+					FlashcardsDirectories:  []string{filepath.Join("notebooks", "flashcards")},
+					BooksDirectories:       []string{filepath.Join("notebooks", "books")},
+					DefinitionsDirectories: []string{filepath.Join("notebooks", "definitions")},
+					EtymologyDirectories:   []string{filepath.Join("notebooks", "etymology")},
+					GrammarsDirectories:    []string{filepath.Join("notebooks", "grammars")},
 				},
 				Dictionaries: DictionariesConfig{
 					RapidAPI: RapidAPIConfig{

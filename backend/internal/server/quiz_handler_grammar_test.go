@@ -24,28 +24,28 @@ func newGrammarHandler(t *testing.T) (*QuizHandler, string) {
 	t.Helper()
 	base := t.TempDir()
 
-	journalDir := filepath.Join(base, "journal")
-	require.NoError(t, os.MkdirAll(journalDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "index.yml"), []byte(
+	storyDir := filepath.Join(base, "stories", "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
 		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "posts.yml"), []byte(
-		"- id: e1\n  text: \"Yesterday the John called me.\"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me.\"\n"), 0o644))
 
-	correctionsDir := filepath.Join(base, "journal-corrections")
-	require.NoError(t, os.MkdirAll(correctionsDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(correctionsDir, "index.yml"), []byte(
+	grammarsDir := filepath.Join(base, "grammars", "journal")
+	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
 		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(correctionsDir, "corr.yml"), []byte(
-		"- id: e1\n  corrections:\n    - line: 1\n      incorrect: \"the John\"\n      correct: \"John\"\n      category: article\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
+		"- metadata:\n    title: \"Note 1\"\n  corrections:\n    - id: note-the-john\n      incorrect: \"the John\"\n      correct: \"John\"\n      category: article\n"), 0o644))
 
 	learningDir := t.TempDir()
 	quizCfg := config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}}
 	calc := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
 	svc := quiz.NewService(
 		config.NotebooksConfig{
-			JournalDirectories:            []string{journalDir},
-			JournalCorrectionsDirectories: []string{correctionsDir},
-			LearningNotesDirectory:        learningDir,
+			StoriesDirectories:     []string{filepath.Join(base, "stories")},
+			GrammarsDirectories:    []string{filepath.Join(base, "grammars")},
+			LearningNotesDirectory: learningDir,
 		},
 		inferencemock.NewClient(),
 		make(map[string]rapidapi.Response),
@@ -70,9 +70,8 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	require.Len(t, post.GetBlanks(), 1)
 	blank := post.GetBlanks()[0]
 	assert.Greater(t, blank.GetNoteId(), int64(0))
-	assert.Equal(t, "e1-L1-1", blank.GetSenseId())
+	assert.Equal(t, "note-the-john", blank.GetSenseId())
 	assert.Equal(t, "the John", blank.GetIncorrect())
-	assert.Equal(t, int32(1), blank.GetLine())
 
 	// Submit the whole post; correct fix graded correct, reference revealed.
 	sub, err := handler.SubmitGrammarPost(ctx, connect.NewRequest(&apiv1.SubmitGrammarPostRequest{
@@ -96,7 +95,7 @@ func TestQuizHandler_GrammarQuiz(t *testing.T) {
 	require.Len(t, got, 1)
 	assert.Equal(t, "grammar", got[0].Metadata.Type)
 	require.Len(t, got[0].Expressions, 1)
-	assert.Equal(t, "e1-L1-1", got[0].Expressions[0].Expression)
+	assert.Equal(t, "note-the-john", got[0].Expressions[0].Expression)
 	require.NotEmpty(t, got[0].Expressions[0].LearnedLogs)
 }
 

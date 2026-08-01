@@ -1,0 +1,19 @@
+# A journal is stored as a story (scenes → statements), exactly like a book or a
+# transcript. Its grammar mistakes live in a separate grammars notebook, matched
+# to each entry by title — the same split as a book and its definitions.
+- event: "Party"
+  date: 2026-07-05T00:00:00Z
+  scenes:
+    - scene: ""
+      statements:
+        - "Yesterday the John invited me to a party."
+        - "I was in school until five, so I arrived late."
+        - "He suggested to play a board game, and it was fun."
+
+- event: "Rainy day"
+  date: 2026-07-12T00:00:00Z
+  scenes:
+    - scene: ""
+      statements:
+        - "It was raining hard, so I stayed in home all day."
+        - "My sister call me in the evening to break the ice after our argument."

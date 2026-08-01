@@ -48,10 +48,12 @@ notebooks:
   etymology_directories:
     - examples/etymology
 
-  # Directories containing journal notebooks (free-text entries with grammar
-  # mistake annotations, drilled by the grammar quiz)
-  journal_directories:
-    - examples/journal
+  # Directories containing grammar-annotation notebooks. Each attaches grammar
+  # mistakes to a story (by entry title) — the parallel of definitions — and is
+  # drilled by the grammar quiz. The prose itself is a normal story under
+  # stories_directories (a journal is just a story).
+  grammars_directories:
+    - examples/grammars
 
   # Directory containing learning notes/history
   learning_notes_directory: examples/learning_notes

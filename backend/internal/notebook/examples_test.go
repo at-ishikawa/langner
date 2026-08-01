@@ -124,37 +124,30 @@ func TestExamples_ReadEtymologyNotebook(t *testing.T) {
 	assert.Contains(t, types, "suffix", "should have suffix origins")
 }
 
-func TestExamples_ReadJournalNotebooks(t *testing.T) {
+func TestExamples_ReadGrammars(t *testing.T) {
 	examples := examplesDir(t)
 
-	reader, err := notebook.NewReader(nil, nil, nil, nil, nil, nil)
+	// A journal is a story; its grammar mistakes are a separate grammars
+	// notebook, matched to each entry by title.
+	reader, err := notebook.NewReader(
+		[]string{filepath.Join(examples, "stories")}, nil, nil, nil, nil, nil,
+	)
 	require.NoError(t, err)
+	require.NoError(t, reader.LoadGrammars([]string{filepath.Join(examples, "grammars")}))
 
-	require.NoError(t, reader.LoadJournalNotebooks([]string{filepath.Join(examples, "journal")}))
-	require.NoError(t, reader.LoadJournalCorrections([]string{filepath.Join(examples, "journal-corrections")}))
-
-	// The journal notebook holds prose posts; corrections are a separate
-	// notebook merged by post id.
-	entries, err := reader.ReadJournalEntries("journal")
+	stories, err := reader.ReadStoryNotebooks("journal")
 	require.NoError(t, err)
-	require.NotEmpty(t, entries)
-	assert.NotEmpty(t, entries[0].Text)
-	assert.Empty(t, notebook.ValidateJournalEntries(entries, "journal"))
+	require.NotEmpty(t, stories)
 
-	corrections, err := reader.ReadJournalCorrections("journal")
-	require.NoError(t, err)
-	require.NotEmpty(t, corrections)
-
-	// Every post's corrections must validate against that post's text.
-	byID := make(map[string]notebook.JournalEntry, len(entries))
-	for _, e := range entries {
-		byID[e.ID] = e
-	}
+	// Every entry's corrections must appear verbatim in that entry's text.
 	total := 0
-	for id, set := range corrections {
-		require.Contains(t, byID, id)
-		assert.Empty(t, notebook.ValidateJournalCorrections(set, byID[id].Text, "journal"))
-		total += len(set.Corrections)
+	for _, sn := range stories {
+		text := notebook.StoryNotebookText(sn)
+		for _, c := range reader.CorrectionsForEntry("journal", sn.Event) {
+			assert.Contains(t, text, c.Incorrect, "correction span must exist in %q", sn.Event)
+			assert.NotEqual(t, c.Incorrect, c.Correct)
+			total += 1
+		}
 	}
 	assert.Greater(t, total, 0)
 }

@@ -28,10 +28,8 @@ notebooks:
   definitions_directories: []
   etymology_directories:
     - frontend/e2e/fixtures/etymology
-  journal_directories:
-    - frontend/e2e/fixtures/journal
-  journal_corrections_directories:
-    - frontend/e2e/fixtures/journal-corrections
+  grammars_directories:
+    - frontend/e2e/fixtures/grammars
   learning_notes_directory: frontend/e2e/fixtures/learning_notes
 
 books:

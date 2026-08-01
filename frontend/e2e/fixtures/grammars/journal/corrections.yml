@@ -1,13 +1,12 @@
-- id: party-post
+- metadata:
+    title: "A weekend party"
   corrections:
-    - id: party-post-the-john
-      line: 1
+    - id: party-the-john
       incorrect: "the John"
       correct: "John"
       category: article
       reason: "No definite article before a personal name."
-    - id: party-post-suggested
-      line: 2
+    - id: party-suggested
       incorrect: "suggested to go"
       correct: "suggested going"
       category: verb-pattern

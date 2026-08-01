@@ -60,15 +60,17 @@ type NotebooksConfig struct {
 	// (<base>/stories, <base>/flashcards, <base>/journal, …) so you don't have
 	// to configure each one. An explicitly-set directory overrides its derived
 	// default. Defaults to "notebooks".
-	BaseDirectory                 string   `mapstructure:"base_directory"`
-	StoriesDirectories            []string `mapstructure:"stories_directories"`
-	LearningNotesDirectory        string   `mapstructure:"learning_notes_directory"`
-	FlashcardsDirectories         []string `mapstructure:"flashcards_directories"`
-	BooksDirectories              []string `mapstructure:"books_directories"`
-	DefinitionsDirectories        []string `mapstructure:"definitions_directories"`
-	EtymologyDirectories          []string `mapstructure:"etymology_directories"`
-	JournalDirectories            []string `mapstructure:"journal_directories"`
-	JournalCorrectionsDirectories []string `mapstructure:"journal_corrections_directories"`
+	BaseDirectory          string   `mapstructure:"base_directory"`
+	StoriesDirectories     []string `mapstructure:"stories_directories"`
+	LearningNotesDirectory string   `mapstructure:"learning_notes_directory"`
+	FlashcardsDirectories  []string `mapstructure:"flashcards_directories"`
+	BooksDirectories       []string `mapstructure:"books_directories"`
+	DefinitionsDirectories []string `mapstructure:"definitions_directories"`
+	EtymologyDirectories   []string `mapstructure:"etymology_directories"`
+	// GrammarsDirectories hold grammar-annotation notebooks that attach grammar
+	// mistakes to stories (the parallel of definitions). Journal prose lives in
+	// StoriesDirectories like any other story.
+	GrammarsDirectories []string `mapstructure:"grammars_directories"`
 }
 
 // applyBaseDirectory fills any notebook directory left unset with a path
@@ -95,11 +97,8 @@ func (n *NotebooksConfig) applyBaseDirectory() {
 	if len(n.EtymologyDirectories) == 0 {
 		n.EtymologyDirectories = sub("etymology")
 	}
-	if len(n.JournalDirectories) == 0 {
-		n.JournalDirectories = sub("journal")
-	}
-	if len(n.JournalCorrectionsDirectories) == 0 {
-		n.JournalCorrectionsDirectories = sub("journal-corrections")
+	if len(n.GrammarsDirectories) == 0 {
+		n.GrammarsDirectories = sub("grammars")
 	}
 	if n.LearningNotesDirectory == "" {
 		n.LearningNotesDirectory = filepath.Join(base, "learning_notes")

@@ -52,11 +52,8 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := reader.LoadJournalNotebooks(s.notebooksConfig.JournalDirectories); err != nil {
-		return nil, fmt.Errorf("reader.LoadJournalNotebooks() > %w", err)
-	}
-	if err := reader.LoadJournalCorrections(s.notebooksConfig.JournalCorrectionsDirectories); err != nil {
-		return nil, fmt.Errorf("reader.LoadJournalCorrections() > %w", err)
+	if err := reader.LoadGrammars(s.notebooksConfig.GrammarsDirectories); err != nil {
+		return nil, fmt.Errorf("reader.LoadGrammars() > %w", err)
 	}
 	return reader, nil
 }
@@ -198,12 +195,12 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 	}
 	summaries = append(summaries, etymSummaries...)
 
-	// Add journal notebooks (grammar quiz)
-	journalSummaries, err := s.LoadJournalNotebookSummaries()
+	// Add stories that have grammar annotations (grammar quiz)
+	grammarSummaries, err := s.LoadGrammarStorySummaries()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load journal notebook summaries: %w", err)
+		return nil, fmt.Errorf("failed to load grammar story summaries: %w", err)
 	}
-	summaries = append(summaries, journalSummaries...)
+	summaries = append(summaries, grammarSummaries...)
 
 	return summaries, nil
 }

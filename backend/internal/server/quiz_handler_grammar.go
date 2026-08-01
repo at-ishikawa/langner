@@ -57,7 +57,6 @@ func (h *QuizHandler) StartGrammarQuiz(
 				NoteId:    noteID,
 				SenseId:   blank.SenseID,
 				Incorrect: blank.Incorrect,
-				Line:      int32(blank.Line),
 				Category:  blank.Category,
 				Status:    blank.Status,
 			})

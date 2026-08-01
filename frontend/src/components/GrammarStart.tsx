@@ -21,7 +21,7 @@ export default function GrammarStart() {
   useEffect(() => {
     quizClient
       .getQuizOptions({})
-      .then((res) => setNotebooks((res.notebooks ?? []).filter((n) => n.kind === "Journal")))
+      .then((res) => setNotebooks((res.notebooks ?? []).filter((n) => n.kind === "Grammar")))
       .catch((e) =>
         setError(
           e instanceof Error ? `Failed to load journals: ${e.message}` : "Failed to load journals",
