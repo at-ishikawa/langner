@@ -131,6 +131,64 @@ When(
   },
 );
 
+// Navigates the working queue to the grammar POST holding the due blank for
+// {string} (skipping past any other-format card via its "Don't Know" shortcut),
+// then STOPS on the post without answering — so a following step can exercise
+// the per-blank "Don't know" (skip-for-now) control.
+When(
+  "I open the grammar relearn post for {string}",
+  async ({ page }, incorrect: string) => {
+    const dontKnow = page.getByRole("button", { name: "Don't Know", exact: true });
+    const cardNext = page.getByRole("button", { name: "Next", exact: true });
+    const grammarInput = page.getByLabel(`Correction for "${incorrect}"`);
+
+    let found = false;
+    for (let i = 0; i < 50 && !page.url().includes("/quiz/relearn/complete"); i++) {
+      await page.waitForFunction(
+        () =>
+          location.pathname.includes("/quiz/relearn/complete") ||
+          !!document.querySelector('[data-testid="relearn-grammar-post"]') ||
+          !!document.querySelector('[data-testid="relearn-prompt"]'),
+        undefined,
+        { timeout: 15000 },
+      );
+      if (page.url().includes("/quiz/relearn/complete")) break;
+      if (await grammarInput.isVisible().catch(() => false)) {
+        found = true;
+        break;
+      }
+      await dontKnow.click();
+      await cardNext.waitFor({ state: "visible" });
+      await cardNext.click();
+    }
+    expect(found, `grammar relearn post for "${incorrect}" never appeared`).toBe(true);
+  },
+);
+
+// Taps the PER-BLANK "Don't know" (skip-for-now) control next to the struck
+// span for {string}. This is a SKIP, not an EXCLUDE: the correction must stay
+// due and reappear next session (see .claude/rules/quiz-ui-invariants.md).
+When(
+  "I tap Don't know on the grammar relearn blank for {string}",
+  async ({ page }, incorrect: string) => {
+    await page.getByRole("button", { name: `Don't know: skip "${incorrect}" for now` }).click();
+  },
+);
+
+// The per-blank feedback for a skipped blank must open inline (pinned sheet),
+// label the correction as still due, and NEVER say "Excluded".
+Then(
+  "the grammar relearn feedback shows {string} is still due and not excluded",
+  async ({ page }, incorrect: string) => {
+    const sheet = page.getByTestId("relearn-grammar-feedback");
+    await expect(sheet).toBeVisible();
+    await expect(sheet).toContainText(/still due/i);
+    await expect(sheet).not.toContainText(/Excluded/i);
+    // The graded blank now reads as "don't know", not "excluded".
+    await expect(page.getByRole("button", { name: `${incorrect} — don't know` })).toBeVisible();
+  },
+);
+
 // covers route: /quiz/relearn/complete
 Then("I should be on the Relearn Complete page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz\/relearn\/complete/);

@@ -231,6 +231,69 @@ describe("RelearnSessionPage", () => {
     expect(useRelearnStore.getState().totalAnswers).toBe(2);
   });
 
+  // A per-blank "Don't know" is a SKIP, not an EXCLUDE: it grades the blank as
+  // skipped (is_skipped=true, which the backend persists as nothing so the word
+  // stays due), reveals its feedback, and must never be labelled "Excluded".
+  it("per-blank Don't know skips (not excludes) and reveals feedback", async () => {
+    const post = "Yesterday the John called me.";
+    useRelearnStore.getState().seedQueue([grammarCard(post, "the John", 1)]);
+    submitRelearnAnswer.mockResolvedValue({
+      correct: false,
+      correctAnswer: "John",
+      category: "article",
+      grammarNote: "No article before a personal name.",
+      reason: "",
+    });
+    renderPage();
+
+    fireEvent.mouseDown(screen.getByRole("button", { name: /Don't know: skip "the John"/ }));
+
+    // It grades as a skip through the write-nothing relearn path.
+    await waitFor(() =>
+      expect(submitRelearnAnswer).toHaveBeenCalledWith(
+        expect.objectContaining({ noteId: BigInt(1), isSkipped: true }),
+      ),
+    );
+
+    // Feedback opens automatically in the pinned sheet — no scrolling to the
+    // bottom of a long post — and is labelled "still due", NEVER "Excluded".
+    const sheet = await screen.findByTestId("relearn-grammar-feedback");
+    expect(sheet).toHaveTextContent(/still due/i);
+    expect(sheet).not.toHaveTextContent(/Excluded/i);
+    expect(screen.getByText("Suggested")).toBeInTheDocument();
+
+    // The graded pill reads "don't know", not "excluded".
+    expect(screen.getByRole("button", { name: /the John — don't know/i })).toBeInTheDocument();
+  });
+
+  // A wrong answer auto-reveals its feedback in the pinned sheet (associated
+  // with the blank just graded); a correct answer reveals nothing.
+  it("auto-reveals feedback for a wrong blank but not a correct one", async () => {
+    const post = "Yesterday the John called me and then I go home.";
+    useRelearnStore
+      .getState()
+      .seedQueue([grammarCard(post, "the John", 1), grammarCard(post, "go", 2)]);
+    submitRelearnAnswer.mockImplementation(async (req: { noteId: bigint }) =>
+      req.noteId === BigInt(1)
+        ? { correct: true, correctAnswer: "John", category: "article", grammarNote: "No article.", reason: "" }
+        : { correct: false, correctAnswer: "went", category: "tense", grammarNote: "Past tense.", reason: "not past tense" },
+    );
+    renderPage();
+
+    // Correct blank → graded, but no feedback sheet auto-opens.
+    fireEvent.change(screen.getByLabelText('Correction for "the John"'), { target: { value: "John" } });
+    fireEvent.blur(screen.getByLabelText('Correction for "the John"'));
+    await screen.findByRole("button", { name: /the John — correct/ });
+    expect(screen.queryByTestId("relearn-grammar-feedback")).not.toBeInTheDocument();
+
+    // Wrong blank → feedback sheet auto-opens for THAT blank.
+    fireEvent.change(screen.getByLabelText('Correction for "go"'), { target: { value: "gone" } });
+    fireEvent.blur(screen.getByLabelText('Correction for "go"'));
+    const sheet = await screen.findByTestId("relearn-grammar-feedback");
+    expect(sheet).toHaveTextContent("✗ Incorrect");
+    expect(sheet).toHaveTextContent("went"); // the suggested fix for the go blank
+  });
+
   it("still renders non-grammar relearn cards one per screen", () => {
     useRelearnStore
       .getState()

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Button, Input, Spinner, Text } from "@chakra-ui/react";
 import {
   quizClient,
@@ -23,9 +23,19 @@ import { responseTimeSince } from "@/lib/responseTime";
 // Each blank still grades individually through SubmitRelearnAnswer, keyed by its
 // own note_id — grouping is purely presentation, so the per-correction grading
 // path (and relearn's write-nothing guarantee) is unchanged.
+//
+// "Don't know" is a SKIP, never an EXCLUDE (see .claude/rules/quiz-ui-invariants
+// and [[learning-history-invariants]]). Skipping a blank sends is_skipped=true,
+// which SubmitRelearnAnswer grades as a plain wrong attempt and PERSISTS NOTHING
+// — the correction stays "misunderstood" in the learning history and therefore
+// stays due, reappearing in the next Relearn session. It NEVER calls
+// SkipWord/SetSkippedAt (the deliberate "exclude from quizzes" action), so a
+// skipped blank must not be labelled "Excluded".
 
 interface GradedBlank {
   answer: string;
+  // isSkipped means "Don't know" — the learner passed on this blank for now.
+  // It stays due in Relearn; it is NOT excluded from quizzes.
   isSkipped: boolean;
   res: SubmitRelearnAnswerResponse;
 }
@@ -41,6 +51,14 @@ function pillStatus(g: GradedBlank): "correct" | "incorrect" | "skipped" {
   return g.res.correct ? "correct" : "incorrect";
 }
 
+// pillLabel is the accessible name for a graded pill. A skipped blank reads
+// "don't know" — never "excluded": skipping in Relearn keeps the correction
+// due, it does not exclude it from future quizzes.
+function pillLabel(g: GradedBlank): string {
+  if (g.isSkipped) return "don't know";
+  return g.res.correct ? "correct" : "incorrect";
+}
+
 export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGrammarPostProps) {
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, GradedBlank>>({});
@@ -48,6 +66,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const pillRefs = useRef<Map<string, HTMLElement>>(new Map());
   const focusTimeRef = useRef<Map<string, number>>(new Map());
 
   const segments = useMemo(() => segmentPost(content, blanks), [content, blanks]);
@@ -82,7 +101,19 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
   const selected = selectedKey ? results[selectedKey] : undefined;
   const selectedBlank = selectedKey ? blankByKey.get(selectedKey) : undefined;
 
-  const grade = async (blank: RelearnCard, value: string, isSkipped: boolean) => {
+  // Keep the selected pill scrolled into view alongside the pinned feedback
+  // sheet, so the correction and its mistake/suggested/why are visible together
+  // — never buried at the bottom of a long post below the Next button.
+  useEffect(() => {
+    if (selectedKey) {
+      pillRefs.current.get(selectedKey)?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    }
+  }, [selectedKey]);
+
+  // grade one blank. reveal opens its feedback sheet automatically when the
+  // result is not correct (wrong or "don't know") — a correct answer needs no
+  // feedback, so it never auto-opens.
+  const grade = async (blank: RelearnCard, value: string, isSkipped: boolean, reveal: boolean) => {
     const key = blank.noteId.toString();
     const startedAt = focusTimeRef.current.get(key);
     const responseTimeMs = startedAt !== undefined ? responseTimeSince(startedAt) : BigInt(0);
@@ -96,6 +127,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
       });
       setResults((r) => ({ ...r, [key]: { answer: value, isSkipped, res } }));
       setError(null);
+      if (reveal && (isSkipped || !res.correct)) setSelectedKey(key);
     } catch {
       setError("A correction couldn't be graded. Re-type it to retry.");
     } finally {
@@ -111,14 +143,25 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
     if (!value || isDone(key)) return;
     const nextKey = nextUnansweredAfter(indexInOrder);
     if (nextKey) setTimeout(() => inputRefs.current.get(nextKey)?.focus(), 0);
-    void grade(blank, value, false);
+    void grade(blank, value, false, true);
   };
 
-  // Reveal any still-empty blanks by grading them as skipped, then open the
+  // "Don't know" for a single blank: skip THIS correction only. It is graded as
+  // a plain wrong attempt that persists nothing, so the correction stays due and
+  // returns in a future Relearn session — it is NOT excluded from quizzes.
+  const skipBlank = (blank: RelearnCard, indexInOrder: number) => {
+    const key = blank.noteId.toString();
+    if (isDone(key)) return;
+    const nextKey = nextUnansweredAfter(indexInOrder);
+    if (nextKey) setTimeout(() => inputRefs.current.get(nextKey)?.focus(), 0);
+    void grade(blank, "", true, true);
+  };
+
+  // Reveal any still-empty blanks by grading them as "don't know", then open the
   // first not-correct blank so an answer is visible right away.
   const revealAnswers = async () => {
     const remaining = blanks.filter((b) => !isDone(b.noteId.toString()));
-    await Promise.all(remaining.map((b) => grade(b, "", true)));
+    await Promise.all(remaining.map((b) => grade(b, "", true, false)));
     const firstToShow =
       orderedKeys.find((k) => results[k] && !results[k].res.correct) ?? orderedKeys[0];
     if (firstToShow) setSelectedKey(firstToShow);
@@ -128,7 +171,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
     setInputs((prev) => ({ ...prev, [key]: value }));
 
   return (
-    <Box>
+    <Box pb={selected ? 80 : 0}>
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium">
           Grammar — fix the mistakes
@@ -140,7 +183,8 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
       </Box>
 
       <Text fontSize="xs" color="fg.muted" mb={2}>
-        Type each fix and press Enter. Tap a graded word for details.
+        Type each fix and press Enter, or tap “Don’t know” to pass — passed
+        corrections stay due and return next session. Tap a graded word for details.
       </Text>
 
       {/* The whole post, mistakes fixed in place — one screen, all due blanks. */}
@@ -174,10 +218,14 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
               <Text
                 as="span"
                 key={i}
+                ref={(el: HTMLElement | null) => {
+                  if (el) pillRefs.current.set(key, el);
+                  else pillRefs.current.delete(key);
+                }}
                 role="button"
                 tabIndex={0}
                 aria-pressed={isSel}
-                aria-label={`${seg.blank.incorrect || "correction"} — ${c.label}`}
+                aria-label={`${seg.blank.incorrect || "correction"} — ${pillLabel(graded)}`}
                 onClick={() => setSelectedKey(key)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === " ") {
@@ -222,9 +270,10 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
             );
           }
 
-          // Not yet graded → the wrong span with an inline textbox.
+          // Not yet graded → the wrong span with an inline textbox and a
+          // per-blank "Don't know" (skip-for-now, stays due — never excludes).
           return (
-            <Text as="span" key={i}>
+            <Text as="span" key={i} whiteSpace="nowrap">
               <Text
                 as="span"
                 fontWeight="bold"
@@ -259,6 +308,22 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 }}
                 onBlur={() => commitBlank(seg.blank, indexInOrder)}
               />
+              <Button
+                size="xs"
+                variant="ghost"
+                colorPalette="gray"
+                verticalAlign="baseline"
+                // Use onMouseDown so the click registers before the input's
+                // onBlur commits an empty box (which would no-op anyway) —
+                // keeps "Don't know" a deliberate, single action.
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  skipBlank(seg.blank, indexInOrder);
+                }}
+                aria-label={`Don't know: skip "${seg.blank.incorrect}" for now`}
+              >
+                Don&apos;t know
+              </Button>
             </Text>
           );
         })}
@@ -285,23 +350,47 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
         </Text>
       )}
 
-      {/* Detail: opens when a graded word is tapped — the live grammar quiz's
-          own labelled feedback body (Mistake / You wrote / Suggested / Why you
-          missed it / Grammar note). Session-only: relearn persists nothing, so
-          there is no override-to-history footer. */}
+      <Box mt={2} minH="1rem" textAlign="center">
+        {remainingCount === 0 && gradedCount > 0 && (
+          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
+            Tap any correction above to review it.
+          </Text>
+        )}
+      </Box>
+
+      {/* Feedback for the blank just graded (wrong or "don't know") opens here
+          automatically, and stays PINNED to the bottom of the viewport so it is
+          visible without scrolling past the Next button on a long post — the
+          live grammar quiz's own labelled body (Mistake / You wrote / Suggested
+          / Why you missed it / Grammar note). Session-only: relearn persists
+          nothing, so there is no override-to-history footer. */}
       {selected && selectedBlank && (
         <Box
-          mt={4}
-          p={3}
+          position="fixed"
+          bottom={0}
+          left={0}
+          right={0}
+          maxW="sm"
+          mx="auto"
+          maxH="60vh"
+          overflowY="auto"
           bg="white"
-          _dark={{ bg: "gray.900", borderColor: "gray.700" }}
-          borderWidth="1px"
-          borderColor="gray.200"
-          borderRadius="lg"
+          _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+          borderTopWidth="1px"
+          borderTopColor="gray.200"
+          borderTopRadius="xl"
+          p={3}
+          boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
+          data-testid="relearn-grammar-feedback"
         >
           <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
-            <Text fontSize="xs" fontWeight="bold" color={selected.res.correct ? "green.600" : "red.600"} _dark={{ color: selected.res.correct ? "green.300" : "red.300" }}>
-              {selected.isSkipped ? "– Excluded" : selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
+            <Text
+              fontSize="xs"
+              fontWeight="bold"
+              color={selected.isSkipped ? "gray.600" : selected.res.correct ? "green.600" : "red.600"}
+              _dark={{ color: selected.isSkipped ? "gray.300" : selected.res.correct ? "green.300" : "red.300" }}
+            >
+              {selected.isSkipped ? "– Don't know · still due" : selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
               {selected.res.category ? ` · ${selected.res.category}` : ""}
             </Text>
             <Button size="xs" variant="ghost" onClick={() => setSelectedKey(null)} aria-label="Close details">
@@ -320,14 +409,6 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           />
         </Box>
       )}
-
-      <Box mt={2} minH="1rem" textAlign="center">
-        {remainingCount === 0 && gradedCount > 0 && (
-          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
-            Tap any correction above to review it.
-          </Text>
-        )}
-      </Box>
     </Box>
   );
 }

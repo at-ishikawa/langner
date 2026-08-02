@@ -68,3 +68,30 @@ Feature: Relearn Quiz
     When I find and fix the grammar relearn card for "suggested to go" with "suggested going"
     And I clear every remaining relearn card
     Then I should be on the Relearn Complete page
+
+  # "Don't know" on a grammar relearn blank is a SKIP, not an EXCLUDE: the
+  # learner passes on a correction they can't fix right now, its feedback opens
+  # inline (never buried below Next on a long post), and the correction stays
+  # DUE — it must NOT be excluded from future Relearn sessions. This pins the
+  # skip-vs-exclude conflation documented in
+  # .claude/rules/quiz-ui-invariants.md (see also
+  # .claude/rules/learning-history-invariants.md).
+  Scenario: Don't know on a grammar relearn blank keeps it due, not excluded
+    Given I open the Grammar quiz
+    And I select the "Practice Journal" notebook
+    And I start the grammar quiz
+    Then I see the grammar correction input for "the John"
+
+    When I correct "the John" with "wrong on purpose"
+    And I correct "suggested to go" with "wrong on purpose"
+    Then the graded post marks "the John" as incorrect
+
+    When I finish the grammar post
+    Then I should be on the Grammar Complete page
+
+    When I open the Relearn Quiz
+    Then I see words to relearn
+    When I start the relearn session
+    And I open the grammar relearn post for "the John"
+    And I tap Don't know on the grammar relearn blank for "the John"
+    Then the grammar relearn feedback shows "the John" is still due and not excluded

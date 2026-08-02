@@ -347,6 +347,32 @@ func TestRelearn_SubmitUnknownCardIsNotFound(t *testing.T) {
 // SubmitRelearnAnswer grades it with the same GradeGrammarBlank the live
 // grammar quiz uses, surfacing the reference fix + category on the response.
 func TestRelearn_GrammarCardEndToEnd(t *testing.T) {
+	h, _ := writeGrammarRelearnFixture(t)
+
+	cards := startRelearn(t, h, 24)
+	require.Len(t, cards, 1)
+	card := cards[0]
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
+	assert.Contains(t, card.GetContent(), "the John called me",
+		"the card carries the whole entry, like the live grammar quiz — not a degraded plain-text fallback")
+	assert.Equal(t, "the John", card.GetIncorrect())
+
+	resp, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
+		NoteId: card.GetNoteId(),
+		Answer: "John",
+	}))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetCorrect())
+	assert.Equal(t, "John", resp.Msg.GetCorrectAnswer())
+	assert.Equal(t, "article", resp.Msg.GetCategory())
+}
+
+// writeGrammarRelearnFixture writes the minimal story + grammar + learning
+// files for a single due grammar correction ("the John" → "John", status
+// misunderstood in-window) and returns a handler over them plus the learning
+// history path, so a test can drive Relearn against real YAML.
+func writeGrammarRelearnFixture(t *testing.T) (*QuizHandler, string) {
+	t.Helper()
 	storiesDir := t.TempDir()
 	grammarsDir := t.TempDir()
 	learningDir := t.TempDir()
@@ -395,22 +421,44 @@ func TestRelearn_GrammarCardEndToEnd(t *testing.T) {
 		GrammarsDirectories:    []string{grammarsDir},
 		LearningNotesDirectory: learningDir,
 	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
-	h := NewQuizHandler(svc)
+	return NewQuizHandler(svc), learningDir
+}
+
+// TestRelearn_GrammarDontKnowStaysDueNotExcluded is the regression pin for the
+// grammar-relearn "Don't know" bug: tapping "Don't know" (is_skipped=true) is a
+// SKIP, not an EXCLUDE. It must NOT write the exclude-from-quizzes marker
+// (skipped_at / SkipWord) and the correction must stay due — reappearing in the
+// next Relearn session. See .claude/rules/quiz-ui-invariants.md.
+func TestRelearn_GrammarDontKnowStaysDueNotExcluded(t *testing.T) {
+	h, learningDir := writeGrammarRelearnFixture(t)
+	historyPath := filepath.Join(learningDir, "journal.yml")
+	before, err := os.ReadFile(historyPath)
+	require.NoError(t, err)
 
 	cards := startRelearn(t, h, 24)
-	require.Len(t, cards, 1)
+	require.Len(t, cards, 1, "the missed grammar correction is in the pool")
 	card := cards[0]
-	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
-	assert.Contains(t, card.GetContent(), "the John called me",
-		"the card carries the whole entry, like the live grammar quiz — not a degraded plain-text fallback")
-	assert.Equal(t, "the John", card.GetIncorrect())
+	require.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
 
+	// "Don't know": skip this blank for now.
 	resp, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
-		NoteId: card.GetNoteId(),
-		Answer: "John",
+		NoteId:    card.GetNoteId(),
+		IsSkipped: true,
 	}))
 	require.NoError(t, err)
-	assert.True(t, resp.Msg.GetCorrect())
-	assert.Equal(t, "John", resp.Msg.GetCorrectAnswer())
-	assert.Equal(t, "article", resp.Msg.GetCategory())
+	assert.False(t, resp.Msg.GetCorrect(), "a skip grades as not-correct")
+
+	// Real-state check 1: the learning-history YAML is byte-identical — no
+	// skipped_at written, no log appended. A skip in Relearn persists nothing.
+	after, err := os.ReadFile(historyPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after),
+		"Don't know must not write learning history — and never the skipped_at exclude marker")
+	assert.NotContains(t, string(after), "skipped_at",
+		"the correction must NOT be excluded from quizzes")
+
+	// Real-state check 2: reload the pool — the correction is still due.
+	next := startRelearn(t, h, 24)
+	require.Len(t, next, 1, "a skipped correction stays in the Relearn pool for a future session")
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, next[0].GetSourceQuizType())
 }
