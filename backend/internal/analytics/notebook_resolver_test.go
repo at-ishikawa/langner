@@ -74,7 +74,7 @@ origins:
 	})
 
 	t.Run("origin", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "wpme", "", "tele", notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+		got := r.Resolve(context.Background(), "wpme", "", "tele", notebook.LearningExpressionTypeOrigin, "etymology_origin")
 		assert.Equal(t, "far", got.Meaning)
 		assert.Equal(t, "etymology", got.NotebookKind)
 	})
@@ -93,7 +93,7 @@ origins:
 	})
 
 	t.Run("case insensitive origin", func(t *testing.T) {
-		got := r.Resolve(context.Background(), "wpme", "", "TELE", notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+		got := r.Resolve(context.Background(), "wpme", "", "TELE", notebook.LearningExpressionTypeOrigin, "etymology_origin")
 		assert.Equal(t, "far", got.Meaning)
 	})
 }
@@ -290,7 +290,7 @@ origins:
 
 	t.Run("etymology quiz returns the origin meaning", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "", "gauche",
-			notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+			notebook.LearningExpressionTypeOrigin, "etymology_origin")
 		assert.Equal(t, "left", got.Meaning,
 			"etymology_* quizzes must continue to return the origin meaning")
 	})
@@ -479,7 +479,7 @@ relations:
 
 	t.Run("origin card: no concept group; origin_family + antonym only", func(t *testing.T) {
 		got := r.Resolve(context.Background(), "wpme", "", "gauche",
-			notebook.LearningExpressionTypeOrigin, "etymology_breakdown")
+			notebook.LearningExpressionTypeOrigin, "etymology_origin")
 		require.NotEmpty(t, got.RelatedGroups)
 		for _, g := range got.RelatedGroups {
 			assert.NotEqual(t, "concept", g.Kind,

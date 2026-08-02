@@ -3015,15 +3015,15 @@ func TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots(t *testing.T) {
 	}
 
 	// The pass must emit one warning per recalculated log so audits show
-	// what changed. 4 slots × 2 logs each = 8 expected warnings (at minimum).
+	// what changed. 3 slots × 2 logs each = 6 expected warnings (at minimum).
 	recalcCount := 0
 	for _, w := range result.Warnings {
 		if strings.Contains(w.Message, "Recalculated interval_days") {
 			recalcCount++
 		}
 	}
-	assert.GreaterOrEqual(t, recalcCount, 8,
-		"expected at least one warning per recalculated log across all four slots")
+	assert.GreaterOrEqual(t, recalcCount, 6,
+		"expected at least one warning per recalculated log across all three slots")
 }
 
 // readYAMLForTest is a tiny helper used by the recalc test so it does
@@ -3237,7 +3237,7 @@ notebooks:
 	require.Len(t, histories, 1)
 
 	// gamos must appear under exactly ONE scene now — the canonical
-	// "gamos (marriage)" — with both breakdown logs merged in.
+	// "gamos (marriage)" — with both origin logs merged in.
 	var gamosScenes []string
 	var gamosLogCount int
 	for _, scene := range histories[0].Scenes {
@@ -3252,7 +3252,7 @@ notebooks:
 	assert.Equal(t, "gamos (marriage)", gamosScenes[0],
 		"consolidation target must be the canonically-derived scene")
 	assert.Equal(t, 2, gamosLogCount,
-		"both scenes' breakdown logs must be unioned onto the surviving entry")
+		"both scenes' etymology origin logs must be unioned onto the surviving entry")
 
 	// The now-empty "misein (to hate)" scene must be dropped.
 	for _, scene := range histories[0].Scenes {

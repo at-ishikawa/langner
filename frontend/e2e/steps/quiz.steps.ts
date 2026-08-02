@@ -56,8 +56,7 @@ When("I select the {string} notebook", async ({ page }, name: string) => {
 });
 
 // Starting a quiz navigates to one of the per-mode pages:
-//   /quiz/standard, /quiz/reverse, /quiz/freeform,
-//   /quiz/etymology-standard, /quiz/etymology-reverse, /quiz/etymology-freeform
+//   /quiz/standard, /quiz/reverse, /quiz/freeform, /quiz/etymology-origin
 When("I start the quiz", async ({ page }) => {
   await page.getByRole("button", { name: /^start$/i }).click();
 });
@@ -79,22 +78,10 @@ When("I type the word {string}", async ({ page }, word: string) => {
   await page.getByPlaceholder(/e\.g\., hit the hay/i).fill(word);
 });
 
-When("I type the origin {string}", async ({ page }, originText: string) => {
-  // /quiz/etymology-freeform: Origin <Input> with placeholder "e.g., spect".
-  await page.getByPlaceholder(/e\.g\., spect/i).fill(originText);
-});
-
 When("I type the meaning {string}", async ({ page }, meaning: string) => {
-  // Two pages use a "Meaning" input: vocabulary freeform (placeholder "e.g.,
-  // to go to bed; to sleep") and etymology freeform (placeholder "e.g., to
-  // look or see"). Each scenario only exposes one of them at a time, so we
-  // try both.
-  const vocab = page.getByPlaceholder(/e\.g\., to go to bed/i);
-  if (await vocab.first().isVisible().catch(() => false)) {
-    await vocab.first().fill(meaning);
-    return;
-  }
-  await page.getByPlaceholder(/e\.g\., to look or see/i).fill(meaning);
+  // Vocabulary freeform's "Meaning" input (placeholder "e.g., to go to bed;
+  // to sleep").
+  await page.getByPlaceholder(/e\.g\., to go to bed/i).first().fill(meaning);
 });
 
 When("I submit my answer", async ({ page }) => {
@@ -289,15 +276,11 @@ Then("I see a freeform answer form", async ({ page }) => {
 });
 
 Then("I see an etymology prompt", async ({ page }) => {
-  // Etymology standard placeholder: "type the meaning..."
-  // Etymology reverse placeholder:  "type the origin..."
-  // Etymology freeform: separate Origin + Meaning inputs (placeholders
-  // "e.g., spect" / "e.g., to look or see").
-  const anyPrompt = page
-    .getByPlaceholder(/type the meaning\.\.\./i)
-    .or(page.getByPlaceholder(/type the origin\.\.\./i))
-    .or(page.getByPlaceholder(/e\.g\., spect/i));
-  await expect(anyPrompt.first()).toBeVisible();
+  // The Etymology Origin page renders one "type the meaning..." input per
+  // derived family word under the origin header.
+  await expect(
+    page.getByPlaceholder(/type the meaning\.\.\./i).first(),
+  ).toBeVisible();
 });
 
 Then(

@@ -205,11 +205,11 @@ func TestYAMLRepository_DayBoundaryLocalZone(t *testing.T) {
       expressions:
         - expression: tele
           type: origin
-          etymology_assembly_logs:
+          etymology_origin_logs:
             - status: misunderstood
               learned_at: "2026-06-08T17:30:00-07:00"
               quality: 1
-              quiz_type: etymology_assembly
+              quiz_type: etymology_origin
               interval_days: 0
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "word-power-made-easy.yml"), []byte(body), 0o600))
@@ -229,17 +229,16 @@ func TestYAMLRepository_DayBoundaryLocalZone(t *testing.T) {
 	require.Empty(t, tueDetail.WrongWords, "Monday-local entries must not leak into Tuesday UTC")
 }
 
-// TestYAMLRepository_EtymologyReverseToday is the reproduction for the bug
-// reported when a user answers an etymology reverse quiz and then opens
-// Analytics: the failure should show up under today's date. Etymology
-// reverse writes to etymology_assembly_logs with quiz_type=etymology_assembly;
-// the repo must include that track in DailySummaries / DayDetail.
-func TestYAMLRepository_EtymologyReverseToday(t *testing.T) {
+// TestYAMLRepository_EtymologyOriginToday is the reproduction for the bug
+// reported when a user answers an etymology quiz and then opens Analytics:
+// the failure should show up under today's date. Etymology writes to
+// etymology_origin_logs with quiz_type=etymology_origin; the repo must
+// include that track in DailySummaries / DayDetail.
+func TestYAMLRepository_EtymologyOriginToday(t *testing.T) {
 	dir := t.TempDir()
 	today := time.Now().UTC().Format("2006-01-02")
 	// Fixture mirrors what AddRecordWithQualityForEtymology writes for a
-	// misunderstood etymology reverse answer on the word-power-made-easy
-	// notebook.
+	// misunderstood etymology answer on the word-power-made-easy notebook.
 	body := `- metadata:
     id: word-power-made-easy
     title: "Word Power Made Easy"
@@ -249,11 +248,11 @@ func TestYAMLRepository_EtymologyReverseToday(t *testing.T) {
       expressions:
         - expression: tele
           type: origin
-          etymology_assembly_logs:
+          etymology_origin_logs:
             - status: misunderstood
               learned_at: "` + today + `T15:30:00Z"
               quality: 1
-              quiz_type: etymology_assembly
+              quiz_type: etymology_origin
               interval_days: 0
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "word-power-made-easy.yml"), []byte(body), 0o600))
@@ -274,7 +273,7 @@ func TestYAMLRepository_EtymologyReverseToday(t *testing.T) {
 	require.Len(t, detail.WrongWords, 1, "expected the etymology origin to appear under today")
 	w := detail.WrongWords[0]
 	require.Equal(t, "tele", w.Expression)
-	require.Equal(t, "etymology_assembly", w.QuizType)
+	require.Equal(t, "etymology_origin", w.QuizType)
 }
 
 // TestYAMLRepository_DayDetailExposesSkipped pins the analytics-card

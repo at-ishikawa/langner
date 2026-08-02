@@ -19,9 +19,9 @@ vi.mock("@/lib/client", () => ({
     STANDARD: 1,
     REVERSE: 2,
     FREEFORM: 3,
-    ETYMOLOGY_STANDARD: 4,
-    ETYMOLOGY_REVERSE: 5,
-    ETYMOLOGY_FREEFORM: 6,
+    ETYMOLOGY_ORIGIN: 4,
+    RELEARN: 7,
+    GRAMMAR: 8,
   },
 }));
 
