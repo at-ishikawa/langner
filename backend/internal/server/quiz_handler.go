@@ -431,6 +431,26 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 		}
 		return &info, nil
 	}
+	if rc, ok := h.relearnStore[noteID]; ok {
+		h.mu.Unlock()
+		// A grammar blank drilled in Relearn can be deliberately Excluded via
+		// the same SkipWord RPC as everywhere else. The relearn store is keyed
+		// by the stable relearnCardID hash, so resolve it here to the same
+		// flat "journal" bucket keyed by the correction id the live grammar
+		// quiz uses — the skip lands on the identical (notebook, senseID)
+		// learning-history slot.
+		if rc.IsGrammar() {
+			info := quiz.CardInfo{
+				NotebookName: rc.NotebookName,
+				StoryTitle:   notebook.JournalStoryTitle,
+				Expression:   rc.GrammarCard().SenseID,
+				ID:           rc.GrammarCard().SenseID,
+			}
+			return &info, nil
+		}
+		info := quiz.CardInfo{NotebookName: rc.NotebookName, Expression: rc.Entry}
+		return &info, nil
+	}
 	h.mu.Unlock()
 	if h.noteRepository == nil {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("note %d not found: no active quiz session and no database configured", noteID))

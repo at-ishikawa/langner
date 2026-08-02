@@ -248,7 +248,9 @@ func TestLoadRelearnPool_GrammarMiss(t *testing.T) {
 	assert.Equal(t, notebook.QuizTypeGrammar, card.Format)
 	assert.Contains(t, card.Content, "the John called me", "the card carries the whole entry, like the live grammar quiz")
 	assert.Equal(t, "the John", card.Incorrect)
-	assert.Equal(t, "English Journal", card.NotebookName)
+	// NotebookName carries the notebook ID (not the display name) so a
+	// deliberate Exclude (SkipWord) resolves to the correct <id>.yml.
+	assert.Equal(t, "journal", card.NotebookName)
 
 	// The card must grade like the live quiz: GradeGrammarBlank against the
 	// card's own grading inputs (GrammarCard(), never sent to the client).

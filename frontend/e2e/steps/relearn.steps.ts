@@ -132,9 +132,10 @@ When(
 );
 
 // Navigates the working queue to the grammar POST holding the due blank for
-// {string} (skipping past any other-format card via its "Don't Know" shortcut),
+// {string} (skipping past any other-format card via its "Don't Know" shortcut,
+// which on a single vocab/etymology card is a skip-for-now, not an exclude),
 // then STOPS on the post without answering — so a following step can exercise
-// the per-blank "Don't know" (skip-for-now) control.
+// "See answers" or the per-blank Exclude control.
 When(
   "I open the grammar relearn post for {string}",
   async ({ page }, incorrect: string) => {
@@ -165,27 +166,49 @@ When(
   },
 );
 
-// Taps the PER-BLANK "Don't know" (skip-for-now) control next to the struck
-// span for {string}. This is a SKIP, not an EXCLUDE: the correction must stay
-// due and reappear next session (see .claude/rules/quiz-ui-invariants.md).
+// Reveals every remaining blank on the grammar relearn post. Unanswered blanks
+// are graded INCORRECT (a normal miss), never skipped and never excluded.
 When(
-  "I tap Don't know on the grammar relearn blank for {string}",
-  async ({ page }, incorrect: string) => {
-    await page.getByRole("button", { name: `Don't know: skip "${incorrect}" for now` }).click();
+  "I tap See answers on the grammar relearn post",
+  async ({ page }) => {
+    await page.getByRole("button", { name: /See answers/ }).click();
   },
 );
 
-// The per-blank feedback for a skipped blank must open inline (pinned sheet),
-// label the correction as still due, and NEVER say "Excluded".
+// The per-blank feedback for an unanswered (revealed) blank must open inline
+// (pinned sheet), read INCORRECT, and NEVER say "Excluded".
 Then(
-  "the grammar relearn feedback shows {string} is still due and not excluded",
+  "the grammar relearn feedback shows {string} is incorrect and not excluded",
   async ({ page }, incorrect: string) => {
     const sheet = page.getByTestId("relearn-grammar-feedback");
     await expect(sheet).toBeVisible();
-    await expect(sheet).toContainText(/still due/i);
+    await expect(sheet).toContainText("✗ Incorrect");
     await expect(sheet).not.toContainText(/Excluded/i);
-    // The graded blank now reads as "don't know", not "excluded".
-    await expect(page.getByRole("button", { name: `${incorrect} — don't know` })).toBeVisible();
+    // The graded blank reads as "incorrect", never "excluded".
+    await expect(page.getByRole("button", { name: `${incorrect} — incorrect` })).toBeVisible();
+  },
+);
+
+// Taps the PER-BLANK Exclude control next to the struck span for {string}. This
+// is the ONLY deliberate exclusion — it calls SkipWord (SetSkippedAt) and
+// removes the correction from future quizzes (see quiz-ui-invariants.md).
+When(
+  "I tap Exclude on the grammar relearn blank for {string}",
+  async ({ page }, incorrect: string) => {
+    await page.getByRole("button", { name: `Exclude "${incorrect}" from quizzes` }).click();
+  },
+);
+
+// After Exclude, the blank leaves the active post and reads "excluded" — it is
+// neither answered nor marked incorrect.
+Then(
+  "the grammar relearn blank for {string} is excluded",
+  async ({ page }, incorrect: string) => {
+    const post = page.getByTestId("relearn-grammar-post");
+    await expect(post).toContainText(/excluded/i);
+    // The blank is no longer an answerable input and is not a graded pill.
+    await expect(page.getByLabel(`Correction for "${incorrect}"`)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: `${incorrect} — incorrect` })).toHaveCount(0);
   },
 );
 

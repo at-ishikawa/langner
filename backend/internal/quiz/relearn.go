@@ -222,7 +222,13 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 				continue // no due grammar post/blank to grade/display against
 			}
 			cards = append(cards, RelearnCard{
-				Format: c.format, Entry: c.expression, NotebookName: entry.post.NotebookName,
+				// NotebookName carries the notebook ID (c.notebookName, from the
+				// learning-history metadata) — not the display name — so a
+				// deliberate Exclude (SkipWord) resolves to the correct
+				// <notebookID>.yml, matching the live grammar quiz's grammarStore
+				// (which also skips by notebook ID). The frontend never shows a
+				// notebook name on a grammar relearn post.
+				Format: c.format, Entry: c.expression, NotebookName: c.notebookName,
 				Content: entry.post.Content, Incorrect: entry.blank.Incorrect,
 				grammarCard: entry.blank,
 			})

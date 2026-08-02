@@ -122,8 +122,14 @@ func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]G
 
 // grammarMistakeDue reports whether a mistake is due for review: it is due when
 // it has no learning history yet (seen == false) or its SM-2 forward review is
-// due.
+// due. A correction the learner deliberately Excluded from the grammar quiz
+// (skipped_at set via SkipWord) is never due — this is the loader-side filter
+// that makes Exclude remove the correction from both the live grammar quiz and
+// the Relearn pool (see .claude/rules/quiz-ui-invariants.md).
 func grammarMistakeDue(exp notebook.LearningHistoryExpression, seen bool) bool {
+	if seen && exp.SkippedAt.IsSkipped(notebook.QuizTypeGrammar) {
+		return false
+	}
 	return !seen || exp.NeedsForwardReview()
 }
 
@@ -231,7 +237,15 @@ func normalizeCorrection(s string) string {
 func deterministicGrammarGrade(answer, correct, incorrect string) (GradeResult, bool) {
 	na := normalizeCorrection(answer)
 	if na == "" {
-		return GradeResult{}, false
+		// An empty answer can never be the correction — grade it wrong
+		// deterministically (no LLM call). This is the "unanswered → incorrect"
+		// path: revealing answers for a blank the learner never typed records
+		// the same miss a wrong typed answer would, never a skip.
+		return GradeResult{
+			Correct: false,
+			Reason:  "No answer provided.",
+			Quality: int(notebook.QualityWrong),
+		}, true
 	}
 	nc := normalizeCorrection(correct)
 	ni := normalizeCorrection(incorrect)

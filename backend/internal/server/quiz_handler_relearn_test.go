@@ -424,12 +424,13 @@ func writeGrammarRelearnFixture(t *testing.T) (*QuizHandler, string) {
 	return NewQuizHandler(svc), learningDir
 }
 
-// TestRelearn_GrammarDontKnowStaysDueNotExcluded is the regression pin for the
-// grammar-relearn "Don't know" bug: tapping "Don't know" (is_skipped=true) is a
-// SKIP, not an EXCLUDE. It must NOT write the exclude-from-quizzes marker
-// (skipped_at / SkipWord) and the correction must stay due — reappearing in the
-// next Relearn session. See .claude/rules/quiz-ui-invariants.md.
-func TestRelearn_GrammarDontKnowStaysDueNotExcluded(t *testing.T) {
+// TestRelearn_GrammarUnansweredIsIncorrectNotExcluded pins the final model: a
+// grammar blank the learner never answered (revealed via "See answers", sent as
+// an empty answer) is graded INCORRECT — a normal miss, never a skip and never
+// an exclude. It must NOT write the exclude-from-quizzes marker (skipped_at)
+// and the correction must stay due — reappearing in the next Relearn session.
+// See .claude/rules/quiz-ui-invariants.md.
+func TestRelearn_GrammarUnansweredIsIncorrectNotExcluded(t *testing.T) {
 	h, learningDir := writeGrammarRelearnFixture(t)
 	historyPath := filepath.Join(learningDir, "journal.yml")
 	before, err := os.ReadFile(historyPath)
@@ -440,25 +441,59 @@ func TestRelearn_GrammarDontKnowStaysDueNotExcluded(t *testing.T) {
 	card := cards[0]
 	require.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
 
-	// "Don't know": skip this blank for now.
+	// "See answers" for an unanswered blank sends an empty answer (is_skipped is
+	// never set in grammar relearn) — it is graded incorrect deterministically.
 	resp, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
-		NoteId:    card.GetNoteId(),
-		IsSkipped: true,
+		NoteId: card.GetNoteId(),
+		Answer: "",
 	}))
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.GetCorrect(), "a skip grades as not-correct")
+	assert.False(t, resp.Msg.GetCorrect(), "an unanswered blank grades as incorrect")
 
 	// Real-state check 1: the learning-history YAML is byte-identical — no
-	// skipped_at written, no log appended. A skip in Relearn persists nothing.
+	// skipped_at written, no log appended. A relearn answer persists nothing.
 	after, err := os.ReadFile(historyPath)
 	require.NoError(t, err)
 	assert.Equal(t, string(before), string(after),
-		"Don't know must not write learning history — and never the skipped_at exclude marker")
+		"an incorrect answer must not write learning history — and never the skipped_at exclude marker")
 	assert.NotContains(t, string(after), "skipped_at",
-		"the correction must NOT be excluded from quizzes")
+		"an incorrect/unanswered blank must NOT be excluded from quizzes")
 
 	// Real-state check 2: reload the pool — the correction is still due.
 	next := startRelearn(t, h, 24)
-	require.Len(t, next, 1, "a skipped correction stays in the Relearn pool for a future session")
+	require.Len(t, next, 1, "an incorrect correction stays in the Relearn pool for a future session")
 	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, next[0].GetSourceQuizType())
+}
+
+// TestRelearn_GrammarExcludeSetsSkippedAtAndRemovesFromPool pins the deliberate
+// Exclude action: the per-blank Exclude button calls the same SkipWord RPC every
+// other card uses. Excluding a grammar correction MUST write the skipped_at
+// exclude marker on its (notebook, senseID) learning-history slot and remove it
+// from the Relearn pool on reload — the opposite of an incorrect answer.
+func TestRelearn_GrammarExcludeSetsSkippedAtAndRemovesFromPool(t *testing.T) {
+	h, learningDir := writeGrammarRelearnFixture(t)
+	historyPath := filepath.Join(learningDir, "journal.yml")
+
+	cards := startRelearn(t, h, 24)
+	require.Len(t, cards, 1, "the missed grammar correction is in the pool")
+	card := cards[0]
+	require.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
+
+	// Exclude this blank: the same SkipWord RPC the vocab/etymology cards use,
+	// resolved from the relearn store to the grammar correction's senseID.
+	_, err := h.SkipWord(context.Background(), connect.NewRequest(&apiv1.SkipWordRequest{
+		NoteId:    card.GetNoteId(),
+		QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_GRAMMAR},
+	}))
+	require.NoError(t, err)
+
+	// Real-state check 1: skipped_at IS now written for this correction.
+	after, err := os.ReadFile(historyPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(after), "skipped_at",
+		"Exclude must write the skipped_at exclude marker")
+
+	// Real-state check 2: reload the pool — the correction is gone.
+	next := startRelearn(t, h, 24)
+	assert.Empty(t, next, "an excluded correction must not appear in the Relearn pool")
 }

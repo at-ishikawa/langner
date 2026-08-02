@@ -6,9 +6,11 @@ import { useRelearnStore } from "@/store/relearnStore";
 import type { RelearnCard } from "@/lib/client";
 
 const submitRelearnAnswer = vi.fn();
+const skipWord = vi.fn();
 vi.mock("@/lib/client", () => ({
   quizClient: {
     submitRelearnAnswer: (...args: unknown[]) => submitRelearnAnswer(...args),
+    skipWord: (...args: unknown[]) => skipWord(...args),
   },
   QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, FREEFORM: 3, ETYMOLOGY_STANDARD: 4, ETYMOLOGY_REVERSE: 5, ETYMOLOGY_FREEFORM: 6, RELEARN: 7, GRAMMAR: 8 },
 }));
@@ -58,6 +60,8 @@ const entries = () =>
 describe("RelearnSessionPage", () => {
   beforeEach(() => {
     submitRelearnAnswer.mockReset();
+    skipWord.mockReset();
+    skipWord.mockResolvedValue({});
     pushMock.mockReset();
     useRelearnStore.getState().reset();
   });
@@ -231,39 +235,82 @@ describe("RelearnSessionPage", () => {
     expect(useRelearnStore.getState().totalAnswers).toBe(2);
   });
 
-  // A per-blank "Don't know" is a SKIP, not an EXCLUDE: it grades the blank as
-  // skipped (is_skipped=true, which the backend persists as nothing so the word
-  // stays due), reveals its feedback, and must never be labelled "Excluded".
-  it("per-blank Don't know skips (not excludes) and reveals feedback", async () => {
+  // The model has NO skip / "Don't know" control (see quiz-ui-invariants).
+  it("has no Don't know / skip control on a grammar blank", () => {
     const post = "Yesterday the John called me.";
     useRelearnStore.getState().seedQueue([grammarCard(post, "the John", 1)]);
-    submitRelearnAnswer.mockResolvedValue({
-      correct: false,
-      correctAnswer: "John",
-      category: "article",
-      grammarNote: "No article before a personal name.",
-      reason: "",
-    });
+    renderPage();
+    expect(screen.queryByRole("button", { name: /don't know/i })).not.toBeInTheDocument();
+    // Every ungraded blank offers an Exclude control instead.
+    expect(screen.getByRole("button", { name: /Exclude "the John" from quizzes/i })).toBeInTheDocument();
+  });
+
+  // "See answers" grades every UNANSWERED blank as INCORRECT (a normal miss —
+  // empty answer, is_skipped=false), never a skip. Answered blanks keep their
+  // grade; excluded blanks are left alone.
+  it("See answers marks unanswered blanks incorrect, not skipped", async () => {
+    const post = "Yesterday the John called me and then I go home.";
+    useRelearnStore
+      .getState()
+      .seedQueue([grammarCard(post, "the John", 1), grammarCard(post, "go", 2)]);
+    submitRelearnAnswer.mockImplementation(async (req: { noteId: bigint; answer: string }) =>
+      req.noteId === BigInt(1)
+        ? { correct: true, correctAnswer: "John", category: "article", grammarNote: "No article.", reason: "" }
+        : { correct: false, correctAnswer: "went", category: "tense", grammarNote: "Past tense.", reason: "no answer" },
+    );
     renderPage();
 
-    fireEvent.mouseDown(screen.getByRole("button", { name: /Don't know: skip "the John"/ }));
+    // Answer the first blank correctly, leave the second unanswered.
+    fireEvent.change(screen.getByLabelText('Correction for "the John"'), { target: { value: "John" } });
+    fireEvent.blur(screen.getByLabelText('Correction for "the John"'));
+    await screen.findByRole("button", { name: /the John — correct/ });
 
-    // It grades as a skip through the write-nothing relearn path.
-    await waitFor(() =>
-      expect(submitRelearnAnswer).toHaveBeenCalledWith(
-        expect.objectContaining({ noteId: BigInt(1), isSkipped: true }),
-      ),
+    // Reveal the rest: the unanswered blank is graded with an EMPTY answer and
+    // is_skipped=false (an incorrect miss), never is_skipped=true.
+    fireEvent.click(screen.getByRole("button", { name: /See answers/ }));
+    await screen.findByRole("button", { name: /go — incorrect/ });
+    expect(submitRelearnAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: BigInt(2), answer: "", isSkipped: false }),
     );
+    // No submission in this flow ever sets is_skipped=true.
+    for (const call of submitRelearnAnswer.mock.calls) {
+      expect(call[0].isSkipped).toBe(false);
+    }
 
-    // Feedback opens automatically in the pinned sheet — no scrolling to the
-    // bottom of a long post — and is labelled "still due", NEVER "Excluded".
+    // The answered blank keeps its correct grade; the revealed one is incorrect.
+    expect(screen.getByRole("button", { name: /the John — correct/ })).toBeInTheDocument();
     const sheet = await screen.findByTestId("relearn-grammar-feedback");
-    expect(sheet).toHaveTextContent(/still due/i);
+    expect(sheet).toHaveTextContent("✗ Incorrect");
     expect(sheet).not.toHaveTextContent(/Excluded/i);
-    expect(screen.getByText("Suggested")).toBeInTheDocument();
+  });
 
-    // The graded pill reads "don't know", not "excluded".
-    expect(screen.getByRole("button", { name: /the John — don't know/i })).toBeInTheDocument();
+  // A per-blank Exclude is the ONLY thing that excludes: it calls the SkipWord
+  // RPC (the same path every other card uses) for the blank's note_id + GRAMMAR
+  // quiz type, and drops the blank from the post's active blanks. It never
+  // grades the blank incorrect (no submitRelearnAnswer for it).
+  it("per-blank Exclude calls skipWord and removes the blank", async () => {
+    const post = "Yesterday the John called me and then I go home.";
+    useRelearnStore
+      .getState()
+      .seedQueue([grammarCard(post, "the John", 1), grammarCard(post, "go", 2)]);
+    renderPage();
+
+    // Two due blanks → denominator is 2.
+    expect(screen.getByText(/0 \/ 2 correct/)).toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByRole("button", { name: /Exclude "the John" from quizzes/i }));
+
+    await waitFor(() =>
+      expect(skipWord).toHaveBeenCalledWith({ noteId: BigInt(1), quizTypes: [8] }),
+    );
+    // Excluding never grades the blank.
+    expect(submitRelearnAnswer).not.toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: BigInt(1) }),
+    );
+    // The excluded blank leaves the active set → denominator drops to 1, and the
+    // blank reads "excluded" (not "incorrect").
+    await waitFor(() => expect(screen.getByText(/0 \/ 1 correct/)).toBeInTheDocument());
+    expect(screen.getByTestId("relearn-grammar-post")).toHaveTextContent(/excluded/i);
   });
 
   // A wrong answer auto-reveals its feedback in the pinned sheet (associated
