@@ -48,8 +48,16 @@ func correctionID(storyID, title string, sceneIndex, seq int, c notebook.Correct
 // LoadGrammarPosts loads the story entries that have at least one due mistake,
 // each with its due blanks. It merges each entry's prose (a story notebook) with
 // its corrections (the grammars notebook) by entry title, and filters blanks by
-// SM-2 (due when unseen or forward review is due).
-func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
+// SM-2 (due when unseen or forward review is due). When entryTitles is non-empty
+// only those entries (by title) are included; empty means every entry.
+func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]GrammarPost, error) {
+	var entryFilter map[string]struct{}
+	if len(entryTitles) > 0 {
+		entryFilter = make(map[string]struct{}, len(entryTitles))
+		for _, t := range entryTitles {
+			entryFilter[t] = struct{}{}
+		}
+	}
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
@@ -72,6 +80,11 @@ func (s *Service) LoadGrammarPosts(notebookID string) ([]GrammarPost, error) {
 
 	posts := make([]GrammarPost, 0)
 	for _, sn := range stories {
+		if entryFilter != nil {
+			if _, ok := entryFilter[sn.Event]; !ok {
+				continue
+			}
+		}
 		for sceneIdx, scene := range sn.Scenes {
 			corrections := reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx)
 			if len(corrections) == 0 {
@@ -170,17 +183,25 @@ func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 
 		count := 0
 		var latestDate time.Time
+		var sections []NotebookSectionSummary
 		for _, sn := range stories {
 			if sn.Date.After(latestDate) {
 				latestDate = sn.Date
 			}
+			entryDue := 0
 			for sceneIdx := range sn.Scenes {
 				for seq, c := range reader.CorrectionsForScene(id, sn.Event, sceneIdx) {
 					exp, seen := expByMistake[correctionID(id, sn.Event, sceneIdx, seq+1, c)]
 					if grammarMistakeDue(exp, seen) {
-						count++
+						entryDue++
 					}
 				}
+			}
+			count += entryDue
+			// One section per entry (e.g. w16, w17) so the start screen can
+			// narrow to individual entries within a journal.
+			if entryDue > 0 {
+				sections = append(sections, NotebookSectionSummary{Title: sn.Event, GrammarReviewCount: entryDue})
 			}
 		}
 
@@ -194,6 +215,7 @@ func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 			GrammarReviewCount: count,
 			Kind:               "Grammar",
 			LatestDate:         latestDate,
+			Sections:           sections,
 		})
 	}
 	return summaries, nil

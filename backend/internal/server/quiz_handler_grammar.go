@@ -29,9 +29,15 @@ func (h *QuizHandler) StartGrammarQuiz(
 	_ context.Context,
 	req *connect.Request[apiv1.StartGrammarQuizRequest],
 ) (*connect.Response[apiv1.StartGrammarQuizResponse], error) {
+	// Narrow to specific entries (e.g. w16, w17) when notebook_sections is set;
+	// otherwise every entry of each notebook is included.
+	notebookIDs, entryTitlesByID, err := resolveNotebookSections(req.Msg.GetNotebookIds(), req.Msg.GetNotebookSections())
+	if err != nil {
+		return nil, err
+	}
 	var posts []quiz.GrammarPost
-	for _, notebookID := range req.Msg.GetNotebookIds() {
-		loaded, err := h.svc.LoadGrammarPosts(notebookID)
+	for _, notebookID := range notebookIDs {
+		loaded, err := h.svc.LoadGrammarPosts(notebookID, entryTitlesByID[notebookID])
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load grammar posts for %q: %w", notebookID, err))
 		}

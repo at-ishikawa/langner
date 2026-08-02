@@ -481,6 +481,7 @@ type NotebookSectionSummary struct {
 	ReverseReviewCount          int32                  `protobuf:"varint,3,opt,name=reverse_review_count,json=reverseReviewCount,proto3" json:"reverse_review_count,omitempty"`
 	EtymologyReviewCount        int32                  `protobuf:"varint,4,opt,name=etymology_review_count,json=etymologyReviewCount,proto3" json:"etymology_review_count,omitempty"`
 	EtymologyReverseReviewCount int32                  `protobuf:"varint,5,opt,name=etymology_reverse_review_count,json=etymologyReverseReviewCount,proto3" json:"etymology_reverse_review_count,omitempty"`
+	GrammarReviewCount          int32                  `protobuf:"varint,6,opt,name=grammar_review_count,json=grammarReviewCount,proto3" json:"grammar_review_count,omitempty"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
 }
@@ -546,6 +547,13 @@ func (x *NotebookSectionSummary) GetEtymologyReviewCount() int32 {
 func (x *NotebookSectionSummary) GetEtymologyReverseReviewCount() int32 {
 	if x != nil {
 		return x.EtymologyReverseReviewCount
+	}
+	return 0
+}
+
+func (x *NotebookSectionSummary) GetGrammarReviewCount() int32 {
+	if x != nil {
+		return x.GrammarReviewCount
 	}
 	return 0
 }
@@ -4597,6 +4605,10 @@ type StartGrammarQuizRequest struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	NotebookIds      []string               `protobuf:"bytes,1,rep,name=notebook_ids,json=notebookIds,proto3" json:"notebook_ids,omitempty"`
 	IncludeUnstudied bool                   `protobuf:"varint,2,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
+	// notebook_sections narrows the quiz to specific entries within a journal
+	// (each section title is a story entry / event). When empty, every entry of
+	// the selected notebook_ids is included.
+	NotebookSections []*NotebookSection `protobuf:"bytes,3,rep,name=notebook_sections,json=notebookSections,proto3" json:"notebook_sections,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
 }
@@ -4643,6 +4655,13 @@ func (x *StartGrammarQuizRequest) GetIncludeUnstudied() bool {
 		return x.IncludeUnstudied
 	}
 	return false
+}
+
+func (x *StartGrammarQuizRequest) GetNotebookSections() []*NotebookSection {
+	if x != nil {
+		return x.NotebookSections
+	}
+	return nil
 }
 
 type StartGrammarQuizResponse struct {
@@ -5152,13 +5171,14 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\bsections\x18\b \x03(\v2\x1e.api.v1.NotebookSectionSummaryR\bsections\x12C\n" +
 	"\x1eetymology_reverse_review_count\x18\t \x01(\x05R\x1betymologyReverseReviewCount\x120\n" +
 	"\x14grammar_review_count\x18\n" +
-	" \x01(\x05R\x12grammarReviewCount\"\xfe\x01\n" +
+	" \x01(\x05R\x12grammarReviewCount\"\xb0\x02\n" +
 	"\x16NotebookSectionSummary\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12!\n" +
 	"\freview_count\x18\x02 \x01(\x05R\vreviewCount\x120\n" +
 	"\x14reverse_review_count\x18\x03 \x01(\x05R\x12reverseReviewCount\x124\n" +
 	"\x16etymology_review_count\x18\x04 \x01(\x05R\x14etymologyReviewCount\x12C\n" +
-	"\x1eetymology_reverse_review_count\x18\x05 \x01(\x05R\x1betymologyReverseReviewCount\"b\n" +
+	"\x1eetymology_reverse_review_count\x18\x05 \x01(\x05R\x1betymologyReverseReviewCount\x120\n" +
+	"\x14grammar_review_count\x18\x06 \x01(\x05R\x12grammarReviewCount\"b\n" +
 	"\x0fNotebookSection\x12(\n" +
 	"\vnotebook_id\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
 	"notebookId\x12%\n" +
@@ -5503,10 +5523,11 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	" BatchSubmitRelearnAnswersRequest\x12F\n" +
 	"\aanswers\x18\x01 \x03(\v2\".api.v1.SubmitRelearnAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"f\n" +
 	"!BatchSubmitRelearnAnswersResponse\x12A\n" +
-	"\tresponses\x18\x01 \x03(\v2#.api.v1.SubmitRelearnAnswerResponseR\tresponses\"i\n" +
+	"\tresponses\x18\x01 \x03(\v2#.api.v1.SubmitRelearnAnswerResponseR\tresponses\"\xaf\x01\n" +
 	"\x17StartGrammarQuizRequest\x12!\n" +
 	"\fnotebook_ids\x18\x01 \x03(\tR\vnotebookIds\x12+\n" +
-	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\"I\n" +
+	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\x12D\n" +
+	"\x11notebook_sections\x18\x03 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\"I\n" +
 	"\x18StartGrammarQuizResponse\x12-\n" +
 	"\x05posts\x18\x01 \x03(\v2\x17.api.v1.GrammarPostCardR\x05posts\"\xae\x01\n" +
 	"\x0fGrammarPostCard\x12\x1f\n" +
@@ -5730,65 +5751,66 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	64, // 43: api.v1.RelearnContextScene.conversations:type_name -> api.v1.RelearnConversationLine
 	61, // 44: api.v1.BatchSubmitRelearnAnswersRequest.answers:type_name -> api.v1.SubmitRelearnAnswerRequest
 	62, // 45: api.v1.BatchSubmitRelearnAnswersResponse.responses:type_name -> api.v1.SubmitRelearnAnswerResponse
-	69, // 46: api.v1.StartGrammarQuizResponse.posts:type_name -> api.v1.GrammarPostCard
-	70, // 47: api.v1.GrammarPostCard.blanks:type_name -> api.v1.GrammarBlank
-	72, // 48: api.v1.SubmitGrammarPostRequest.answers:type_name -> api.v1.GrammarBlankAnswer
-	74, // 49: api.v1.SubmitGrammarPostResponse.results:type_name -> api.v1.GrammarBlankResult
-	4,  // 50: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	9,  // 51: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	15, // 52: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	17, // 53: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
-	19, // 54: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	23, // 55: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	25, // 56: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
-	27, // 57: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	29, // 58: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	31, // 59: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	33, // 60: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	35, // 61: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	37, // 62: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	43, // 63: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
-	45, // 64: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
-	47, // 65: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
-	49, // 66: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
-	51, // 67: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
-	53, // 68: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
-	55, // 69: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
-	58, // 70: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
-	61, // 71: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
-	65, // 72: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
-	67, // 73: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
-	71, // 74: api.v1.QuizService.SubmitGrammarPost:input_type -> api.v1.SubmitGrammarPostRequest
-	5,  // 75: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	10, // 76: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	16, // 77: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	18, // 78: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
-	20, // 79: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	24, // 80: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	26, // 81: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
-	28, // 82: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	30, // 83: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	32, // 84: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
-	34, // 85: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
-	36, // 86: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
-	38, // 87: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
-	44, // 88: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
-	46, // 89: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
-	48, // 90: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
-	50, // 91: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
-	52, // 92: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
-	54, // 93: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
-	57, // 94: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
-	59, // 95: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
-	62, // 96: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
-	66, // 97: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
-	68, // 98: api.v1.QuizService.StartGrammarQuiz:output_type -> api.v1.StartGrammarQuizResponse
-	73, // 99: api.v1.QuizService.SubmitGrammarPost:output_type -> api.v1.SubmitGrammarPostResponse
-	75, // [75:100] is the sub-list for method output_type
-	50, // [50:75] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	8,  // 46: api.v1.StartGrammarQuizRequest.notebook_sections:type_name -> api.v1.NotebookSection
+	69, // 47: api.v1.StartGrammarQuizResponse.posts:type_name -> api.v1.GrammarPostCard
+	70, // 48: api.v1.GrammarPostCard.blanks:type_name -> api.v1.GrammarBlank
+	72, // 49: api.v1.SubmitGrammarPostRequest.answers:type_name -> api.v1.GrammarBlankAnswer
+	74, // 50: api.v1.SubmitGrammarPostResponse.results:type_name -> api.v1.GrammarBlankResult
+	4,  // 51: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	9,  // 52: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	15, // 53: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	17, // 54: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
+	19, // 55: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	23, // 56: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	25, // 57: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
+	27, // 58: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	29, // 59: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	31, // 60: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	33, // 61: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	35, // 62: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	37, // 63: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	43, // 64: api.v1.QuizService.StartEtymologyQuiz:input_type -> api.v1.StartEtymologyQuizRequest
+	45, // 65: api.v1.QuizService.SubmitEtymologyStandardAnswer:input_type -> api.v1.SubmitEtymologyStandardAnswerRequest
+	47, // 66: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:input_type -> api.v1.BatchSubmitEtymologyStandardAnswersRequest
+	49, // 67: api.v1.QuizService.SubmitEtymologyReverseAnswer:input_type -> api.v1.SubmitEtymologyReverseAnswerRequest
+	51, // 68: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:input_type -> api.v1.BatchSubmitEtymologyReverseAnswersRequest
+	53, // 69: api.v1.QuizService.StartEtymologyFreeformQuiz:input_type -> api.v1.StartEtymologyFreeformQuizRequest
+	55, // 70: api.v1.QuizService.SubmitEtymologyFreeformAnswer:input_type -> api.v1.SubmitEtymologyFreeformAnswerRequest
+	58, // 71: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
+	61, // 72: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
+	65, // 73: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
+	67, // 74: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
+	71, // 75: api.v1.QuizService.SubmitGrammarPost:input_type -> api.v1.SubmitGrammarPostRequest
+	5,  // 76: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	10, // 77: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	16, // 78: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	18, // 79: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
+	20, // 80: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	24, // 81: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	26, // 82: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
+	28, // 83: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	30, // 84: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	32, // 85: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	34, // 86: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	36, // 87: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	38, // 88: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	44, // 89: api.v1.QuizService.StartEtymologyQuiz:output_type -> api.v1.StartEtymologyQuizResponse
+	46, // 90: api.v1.QuizService.SubmitEtymologyStandardAnswer:output_type -> api.v1.SubmitEtymologyStandardAnswerResponse
+	48, // 91: api.v1.QuizService.BatchSubmitEtymologyStandardAnswers:output_type -> api.v1.BatchSubmitEtymologyStandardAnswersResponse
+	50, // 92: api.v1.QuizService.SubmitEtymologyReverseAnswer:output_type -> api.v1.SubmitEtymologyReverseAnswerResponse
+	52, // 93: api.v1.QuizService.BatchSubmitEtymologyReverseAnswers:output_type -> api.v1.BatchSubmitEtymologyReverseAnswersResponse
+	54, // 94: api.v1.QuizService.StartEtymologyFreeformQuiz:output_type -> api.v1.StartEtymologyFreeformQuizResponse
+	57, // 95: api.v1.QuizService.SubmitEtymologyFreeformAnswer:output_type -> api.v1.SubmitEtymologyFreeformAnswerResponse
+	59, // 96: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
+	62, // 97: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
+	66, // 98: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
+	68, // 99: api.v1.QuizService.StartGrammarQuiz:output_type -> api.v1.StartGrammarQuizResponse
+	73, // 100: api.v1.QuizService.SubmitGrammarPost:output_type -> api.v1.SubmitGrammarPostResponse
+	76, // [76:101] is the sub-list for method output_type
+	51, // [51:76] is the sub-list for method input_type
+	51, // [51:51] is the sub-list for extension type_name
+	51, // [51:51] is the sub-list for extension extendee
+	0,  // [0:51] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }

@@ -83,6 +83,7 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 				ReverseReviewCount:          int32(sec.ReverseReviewCount),
 				EtymologyReviewCount:        int32(sec.EtymologyReviewCount),
 				EtymologyReverseReviewCount: int32(sec.EtymologyReverseReviewCount),
+				GrammarReviewCount:          int32(sec.GrammarReviewCount),
 			})
 		}
 		protoSummaries = append(protoSummaries, &apiv1.NotebookSummary{

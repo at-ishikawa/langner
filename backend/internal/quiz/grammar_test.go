@@ -74,7 +74,7 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
 	// 1. A fresh notebook yields one due entry carrying the full text + a blank.
-	posts, err := svc.LoadGrammarPosts("journal")
+	posts, err := svc.LoadGrammarPosts("journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	post := posts[0]
@@ -105,7 +105,7 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	assert.Equal(t, notebook.LearnedStatusUnderstood, got[0].Expressions[0].LearnedLogs[0].Status)
 
 	// 3. Having just been answered correctly, the entry has no due blanks.
-	posts, err = svc.LoadGrammarPosts("journal")
+	posts, err = svc.LoadGrammarPosts("journal", nil)
 	require.NoError(t, err)
 	assert.Empty(t, posts)
 }
@@ -122,6 +122,9 @@ func TestService_LoadGrammarStorySummaries(t *testing.T) {
 	assert.Equal(t, "Grammar", summaries[0].Kind)
 	assert.Equal(t, "English Journal", summaries[0].Name)
 	assert.Equal(t, 1, summaries[0].GrammarReviewCount)
+	require.Len(t, summaries[0].Sections, 1)
+	assert.Equal(t, "Note 1", summaries[0].Sections[0].Title)
+	assert.Equal(t, 1, summaries[0].Sections[0].GrammarReviewCount)
 }
 
 func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
@@ -130,7 +133,7 @@ func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
-	posts, err := svc.LoadGrammarPosts("journal")
+	posts, err := svc.LoadGrammarPosts("journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	blank := posts[0].Blanks[0]
@@ -142,7 +145,7 @@ func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
 	require.NoError(t, svc.SaveGrammarBlank(ctx, posts[0].NotebookID, blank.SenseID, result, 900))
 
 	// A misunderstood mistake remains due on the next load.
-	posts, err = svc.LoadGrammarPosts("journal")
+	posts, err = svc.LoadGrammarPosts("journal", nil)
 	require.NoError(t, err)
 	require.Len(t, posts, 1)
 	require.Len(t, posts[0].Blanks, 1)

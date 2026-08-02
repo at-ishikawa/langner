@@ -114,6 +114,7 @@ message NotebookSectionSummary {
   int32 reverse_review_count = 3;
   int32 etymology_review_count = 4;
   int32 etymology_reverse_review_count = 5;
+  int32 grammar_review_count = 6;
 }
 
 // NotebookSection narrows a quiz request to specific sections within a single
@@ -724,6 +725,10 @@ message BatchSubmitRelearnAnswersResponse {
 message StartGrammarQuizRequest {
   repeated string notebook_ids = 1;
   bool include_unstudied = 2;
+  // notebook_sections narrows the quiz to specific entries within a journal
+  // (each section title is a story entry / event). When empty, every entry of
+  // the selected notebook_ids is included.
+  repeated NotebookSection notebook_sections = 3;
 }
 
 message StartGrammarQuizResponse {

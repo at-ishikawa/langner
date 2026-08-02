@@ -87,6 +87,7 @@ type NotebookSectionSummary struct {
 	ReverseReviewCount          int
 	EtymologyReviewCount        int
 	EtymologyReverseReviewCount int
+	GrammarReviewCount          int
 }
 
 // GradeResult holds the outcome of grading a user's answer.
