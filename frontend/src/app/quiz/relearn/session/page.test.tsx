@@ -34,13 +34,13 @@ const card = (entry: string): RelearnCard =>
 const reverseCard = (entry: string, meaning: string): RelearnCard =>
   ({ entry, noteId: BigInt(entry.length), sourceQuizType: 2, meaning, examples: [], contexts: [] }) as RelearnCard;
 
-// A grammar-format card: the whole journal entry, with the mistaken span
-// (incorrect) shown struck through in place — mirrors the live grammar
-// quiz's inline-correction card, not a plain-text word/meaning prompt.
-const grammarCard = (content: string, incorrect: string): RelearnCard =>
+// A grammar-format card: one due correction within a journal post. All
+// corrections of a post carry the SAME full post text (content); each has its
+// own note_id and mistaken span (incorrect).
+const grammarCard = (content: string, incorrect: string, noteId: number): RelearnCard =>
   ({
     entry: incorrect,
-    noteId: BigInt(content.length),
+    noteId: BigInt(noteId),
     sourceQuizType: 8,
     meaning: "",
     examples: [],
@@ -48,6 +48,12 @@ const grammarCard = (content: string, incorrect: string): RelearnCard =>
     content,
     incorrect,
   }) as RelearnCard;
+
+// entries reads the single-card screens' entries; post screens map to undefined.
+const entries = () =>
+  useRelearnStore
+    .getState()
+    .queue.map((it) => (it.kind === "card" ? it.card.entry : undefined));
 
 describe("RelearnSessionPage", () => {
   beforeEach(() => {
@@ -74,7 +80,7 @@ describe("RelearnSessionPage", () => {
     // The override reshapes only the working queue — relearn persists nothing,
     // so no RPC is involved. alpha clears despite the wrong grade; beta is next.
     await waitFor(() =>
-      expect(useRelearnStore.getState().queue.map((c) => c.entry)).toEqual(["beta"]),
+      expect(entries()).toEqual(["beta"]),
     );
     expect(useRelearnStore.getState().clearedCount).toBe(1);
   });
@@ -114,7 +120,7 @@ describe("RelearnSessionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     // alpha cleared, beta now current.
-    expect(useRelearnStore.getState().queue.map((c) => c.entry)).toEqual(["beta"]);
+    expect(entries()).toEqual(["beta"]);
     expect(useRelearnStore.getState().clearedCount).toBe(1);
     expect(screen.getByText("beta")).toBeInTheDocument();
   });
@@ -134,7 +140,7 @@ describe("RelearnSessionPage", () => {
     expect(screen.getByText("bad guess")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
-    expect(useRelearnStore.getState().queue.map((c) => c.entry)).toEqual(["beta", "alpha"]);
+    expect(entries()).toEqual(["beta", "alpha"]);
     expect(useRelearnStore.getState().clearedCount).toBe(0);
   });
 
@@ -171,39 +177,69 @@ describe("RelearnSessionPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Grading failed");
   });
 
-  // A missed grammar correction must reuse the live grammar quiz's own
-  // inline-correction card — the whole entry with the mistake struck
-  // through and an inline box to type the fix — not a degraded plain-text
-  // fallback, and the feedback must show the labelled Mistake/You wrote/
-  // Suggested body the live grammar quiz shows.
-  it("renders a grammar card inline and grades it via the grammar feedback body", async () => {
+  // A journal post's due grammar corrections must be presented like the LIVE
+  // grammar quiz: the whole entry shown ONCE, every due blank drilled in place,
+  // each graded progressively (per-blank feedback the moment it is committed),
+  // then a single Next to advance — not one-blank-per-card with the whole post
+  // repeated, and not a single submit-then-reveal.
+  it("presents a post once and drills its due blanks progressively", async () => {
+    const post = "Yesterday the John called me and then I go home.";
     useRelearnStore
       .getState()
-      .seedQueue([grammarCard("Yesterday the John called me.", "the John")]);
-    submitRelearnAnswer.mockResolvedValue({
-      correct: true,
-      correctAnswer: "John",
-      category: "article",
-      grammarNote: "No article before a personal name.",
-      reason: "Matches the correction.",
-    });
+      .seedQueue([grammarCard(post, "the John", 1), grammarCard(post, "go", 2)]);
+    submitRelearnAnswer.mockImplementation(async (req: { noteId: bigint }) =>
+      req.noteId === BigInt(1)
+        ? { correct: true, correctAnswer: "John", category: "article", grammarNote: "No article before a personal name.", reason: "" }
+        : { correct: true, correctAnswer: "went", category: "tense", grammarNote: "Past tense for a past event.", reason: "" },
+    );
     renderPage();
 
-    // The prompt shows the whole entry with the mistake struck through in
-    // place, and an inline input — not a separate word/meaning prompt.
-    const prompt = screen.getByTestId("relearn-prompt");
-    expect(prompt).toHaveTextContent("Yesterday the John called me.");
+    // The whole post is shown once, as a single screen, with an inline box per
+    // due correction — not a plain word/meaning prompt.
+    const postBox = screen.getByTestId("relearn-grammar-post");
+    expect(postBox).toHaveTextContent("Yesterday");
+    expect(postBox).toHaveTextContent("called me and then");
+    const firstInput = screen.getByLabelText('Correction for "the John"');
+    const secondInput = screen.getByLabelText('Correction for "go"');
     expect(screen.getByText(/Grammar/)).toBeInTheDocument();
-    const inlineInput = screen.getByTestId("relearn-grammar-input");
 
-    fireEvent.change(inlineInput, { target: { value: "John" } });
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    // Commit the first blank → it is graded on its own and turns into a pill in
+    // place, while the second blank is still an open textbox (progressive).
+    fireEvent.change(firstInput, { target: { value: "John" } });
+    fireEvent.blur(firstInput);
+    const firstPill = await screen.findByRole("button", { name: /the John — correct/ });
+    expect(submitRelearnAnswer).toHaveBeenCalledWith(expect.objectContaining({ noteId: BigInt(1), answer: "John" }));
+    expect(screen.getByLabelText('Correction for "go"')).toBeInTheDocument();
 
-    expect(await screen.findByText("✓ Correct")).toBeInTheDocument();
-    // The grammar feedback body's labelled lines, not the generic
-    // word/meaning summary.
+    // Commit the second blank → now all blanks are graded and Next appears.
+    fireEvent.change(secondInput, { target: { value: "went" } });
+    fireEvent.blur(secondInput);
+    await screen.findByRole("button", { name: /go — correct/ });
+    expect(submitRelearnAnswer).toHaveBeenCalledWith(expect.objectContaining({ noteId: BigInt(2), answer: "went" }));
+
+    // Tapping a graded correction shows the live grammar quiz's labelled
+    // feedback body (Mistake / Suggested / grammar note).
+    fireEvent.click(firstPill);
     expect(screen.getByText("Mistake")).toBeInTheDocument();
     expect(screen.getByText("Suggested")).toBeInTheDocument();
     expect(screen.getByText("No article before a personal name.")).toBeInTheDocument();
+
+    // One Next advances past the whole post; with nothing left, the session ends.
+    fireEvent.click(screen.getByTestId("relearn-grammar-next"));
+    await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/quiz/relearn/complete"));
+    expect(useRelearnStore.getState().clearedCount).toBe(2);
+    expect(useRelearnStore.getState().totalAnswers).toBe(2);
+  });
+
+  it("still renders non-grammar relearn cards one per screen", () => {
+    useRelearnStore
+      .getState()
+      .seedQueue([card("alpha"), grammarCard("A the John post.", "the John", 3)]);
+    renderPage();
+    // The vocab card is its own screen and comes first; the post is a separate
+    // screen behind it (not merged into the vocab card).
+    expect(screen.getByTestId("relearn-prompt")).toHaveTextContent("alpha");
+    expect(screen.queryByTestId("relearn-grammar-post")).not.toBeInTheDocument();
+    expect(screen.getByText("2 words left")).toBeInTheDocument();
   });
 });

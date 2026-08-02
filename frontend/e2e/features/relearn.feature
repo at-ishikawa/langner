@@ -35,12 +35,15 @@ Feature: Relearn Quiz
     When I clear every remaining relearn card
     Then I should be on the Relearn Complete page
 
-  # A grammar miss must resurface in Relearn using the SAME inline-correction
-  # card the live Grammar quiz shows (the whole entry, the mistaken span
-  # struck through, an inline box for the fix) — not a plain-text word/meaning
-  # fallback. See docs/content/proposals/relearn-quiz and
+  # A grammar miss must resurface in Relearn presented like the LIVE Grammar
+  # quiz: the whole journal post shown ONCE, its due blanks drilled in place and
+  # graded progressively (per-blank feedback the moment each is committed) — not
+  # one-blank-per-card with the whole post repeated, and not a plain-text
+  # word/meaning fallback. Only the DUE correction is asked ("suggested to go"
+  # was missed; "the John" was fixed, so it stays plain text in the post). See
+  # docs/content/proposals/relearn-quiz and
   # .claude/rules/learning-history-invariants.md (grammar's storage key, the
-  # correction's stable id, is unchanged end to end).
+  # correction's stable id, is unchanged end to end — grouping is presentation).
   Scenario: Relearn a grammar correction missed moments ago
     Given I open the Grammar quiz
     And I select the "Practice Journal" notebook

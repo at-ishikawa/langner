@@ -23,7 +23,11 @@ When("I start the relearn session", async ({ page }) => {
 
 Then("I see a relearn card", async ({ page }) => {
   await expect(page.getByText(/words? left/i)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Submit", exact: true })).toBeVisible();
+  // A screen is either a single-item card (Submit) or a grammar post (the whole
+  // entry with inline blanks, drilled progressively like the live grammar quiz).
+  const submit = page.getByRole("button", { name: "Submit", exact: true });
+  const post = page.getByTestId("relearn-grammar-post");
+  await expect(submit.or(post)).toBeVisible();
 });
 
 // Loops through the working queue until it empties and the session lands on the
@@ -64,49 +68,64 @@ When("I clear every remaining relearn card", async ({ page }) => {
   }
 });
 
-// Finds the grammar-format relearn card wherever it falls in the queue —
-// the pool can also hold leftover words from earlier scenarios in the same
-// window, so this doesn't assume the grammar card is first. Every
-// other-format card is skipped past via "Don't Know" (which every Relearn
-// format renders) until the grammar card's own struck-through-span input
-// (aria-label "Correction for ...", the same labelling the live Grammar
-// quiz uses) is found; then it's filled with the exact reference correction,
-// which GradeGrammarBlank's deterministic fast path grades correct without
-// needing the mock LLM. Leaves the session wherever it lands next so
-// "I clear every remaining relearn card" can drain the rest of the pool.
+// Finds the grammar-format relearn POST wherever it falls in the queue — the
+// pool can also hold leftover words from earlier scenarios in the same window,
+// so this doesn't assume the grammar post is first. Every other-format card is
+// skipped past via "Don't Know" (which every single-item Relearn format
+// renders) until the post's due blank — its struck-through-span input
+// (aria-label "Correction for ...", the same labelling the live Grammar quiz
+// uses) — appears. Grammar relearn now mirrors the live grammar quiz: the whole
+// entry is shown once and each blank is graded progressively the moment it is
+// committed (blur/Enter), with no per-card Submit; the reference correction hits
+// GradeGrammarBlank's deterministic fast path (correct without the mock LLM).
+// After the blank turns into a "correct" pill, one "Next" advances past the
+// whole post so "I clear every remaining relearn card" can drain the rest.
 When(
   "I find and fix the grammar relearn card for {string} with {string}",
   async ({ page }, incorrect: string, answer: string) => {
-    const submit = page.getByRole("button", { name: "Submit", exact: true });
     const dontKnow = page.getByRole("button", { name: "Don't Know", exact: true });
-    const next = page.getByRole("button", { name: "Next", exact: true });
+    const cardNext = page.getByRole("button", { name: "Next", exact: true });
     const grammarInput = page.getByLabel(`Correction for "${incorrect}"`);
+    const grammarNext = page.getByTestId("relearn-grammar-next");
 
     let found = false;
     for (let i = 0; i < 50 && !page.url().includes("/quiz/relearn/complete"); i++) {
-      await submit.waitFor({ state: "visible" });
-      if (await grammarInput.isVisible().catch(() => false)) {
-        found = true;
-        await grammarInput.fill(answer);
-        await submit.click();
-        await expect(page.getByText("✓ Correct")).toBeVisible();
-        await next.click();
-        break;
-      }
-      // Some other-format card — skip past it (wrong is fine; it just
-      // requeues to the back) and keep looking.
-      await dontKnow.click();
-      await next.waitFor({ state: "visible" });
-      await next.click();
+      // A screen is up once a grammar post or a single-card prompt is present.
       await page.waitForFunction(
         () =>
           location.pathname.includes("/quiz/relearn/complete") ||
+          !!document.querySelector('[data-testid="relearn-grammar-post"]') ||
+          !!document.querySelector('[data-testid="relearn-prompt"]'),
+        undefined,
+        { timeout: 15000 },
+      );
+      if (page.url().includes("/quiz/relearn/complete")) break;
+
+      if (await grammarInput.isVisible().catch(() => false)) {
+        found = true;
+        // Commit the fix in place (blur), like the live grammar quiz — no
+        // Submit; the blank grades progressively and becomes a "correct" pill.
+        await grammarInput.fill(answer);
+        await grammarInput.blur();
+        await expect(page.getByRole("button", { name: `${incorrect} — correct` })).toBeVisible();
+        await grammarNext.click();
+        break;
+      }
+      // Some other-format card — skip past it (wrong is fine; it just requeues
+      // to the back) and keep looking.
+      await dontKnow.click();
+      await cardNext.waitFor({ state: "visible" });
+      await cardNext.click();
+      await page.waitForFunction(
+        () =>
+          location.pathname.includes("/quiz/relearn/complete") ||
+          !!document.querySelector('[data-testid="relearn-grammar-post"]') ||
           !!document.querySelector("input"),
         undefined,
         { timeout: 15000 },
       );
     }
-    expect(found, `grammar relearn card for "${incorrect}" never appeared in the pool`).toBe(
+    expect(found, `grammar relearn post for "${incorrect}" never appeared in the pool`).toBe(
       true,
     );
   },
