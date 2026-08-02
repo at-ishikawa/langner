@@ -94,7 +94,9 @@ When("I submit my answer", async ({ page }) => {
 });
 
 // AnswerInput renders a secondary "Don't Know" button next to Submit when its
-// onSkip handler is wired (Standard, Reverse, Etymology Standard/Reverse).
+// onSkip handler is wired (Standard and Reverse vocabulary quizzes). The
+// Etymology Origin quiz has no skip control — a blank word graded incorrect on
+// Submit is its equivalent — so this step is not used by etymology scenarios.
 When("I skip the card", async ({ page }) => {
   await page.getByRole("button", { name: /^don'?t know$/i }).first().click();
 });
@@ -333,31 +335,7 @@ Then(
   },
 );
 
-// The per-word "Skip" button on the answering screen carries an aria-label
-// naming the word ("Skip <word>"), distinct from the whole-card "Don't Know"
-// button, so a scenario can skip ONE derived family word while still typing
-// an answer for its sibling on the same card. See EtymologyOriginPage.
-When(
-  "I skip the family word {string}",
-  async ({ page }, word: string) => {
-    await page.getByRole("button", { name: `Skip ${word}` }).click();
-  },
-);
-
-// Bug-1 regression: a family word the learner tapped "Skip" for on the
-// answering screen must render as skipped on the feedback screen — neither
-// correct nor incorrect — via the "(skipped)" annotation next to its name.
-// See QuizResultCard.tsx.
-Then(
-  "I see the family word {string} marked as skipped",
-  async ({ page }, word: string) => {
-    await expect(
-      page.getByText(new RegExp(`^${word}\\s*\\(skipped\\)`)),
-    ).toBeVisible();
-  },
-);
-
-// Bug-1/UX regression: the etymology-origin feedback screen never renders
+// UX regression: the etymology-origin feedback screen never renders
 // the origin-level "Excluded"/"Resume" state or the "Excluded from Quizzes"
 // bucket — excluding an origin from future quizzes is a distinct, explicit
 // action (the removed origin-level Exclude button) that a per-word "Skip"

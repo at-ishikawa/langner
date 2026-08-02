@@ -13,9 +13,10 @@ Feature: Etymology Origin quiz
     And I start the quiz
     Then I see an etymology prompt
 
-  # "Don't Know" skips the whole origin screen (recorded as one wrong result)
-  # so the flow can be exercised without depending on the derived word family.
-  Scenario: Finish the Etymology Origin quiz by skipping each origin
+  # There is no skip control: submitting a card with every word left blank
+  # records one wrong result, so the flow can be exercised without depending on
+  # the derived word family's meanings.
+  Scenario: Finish the Etymology Origin quiz by submitting blank origins
     Given I am on the Quiz page
     When I switch to the "Etymology" tab
     And I choose the "Etymology Origin" quiz mode
@@ -24,9 +25,9 @@ Feature: Etymology Origin quiz
     And I start the quiz
     Then I see an etymology prompt
 
-    When I skip the card
+    When I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
@@ -47,12 +48,12 @@ Feature: Etymology Origin quiz
     And I type "wrong" for the family word "autograph"
     And I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
     And I continue to the next card
     When I type "wrong" for the family word "synopsis"
     And I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
 
     Then I see the family word "photograph" marked incorrect
     And I see the family word "autograph" marked incorrect
@@ -74,23 +75,23 @@ Feature: Etymology Origin quiz
     And I start the quiz
     Then I see an etymology prompt
 
-    When I skip the card
+    When I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
     And I continue to the next card
     When I type "a brief summary or overview" for the family word "synopsis"
     And I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
 
     Then I do not see the concept-cluster block
 
-  # Bug-1 regression: tapping "Don't Know" for one derived family word must
-  # not affect grading for a sibling word answered on the same card, and
-  # must never mark the origin as excluded from future quizzes — excluding
-  # an origin is a distinct, explicit action that a per-word skip never
-  # triggers as a side effect.
-  Scenario: Skip one family word while answering its sibling, without excluding the origin
+  # Leaving one derived family word blank must not affect grading for a sibling
+  # word answered on the same card: the answered word is graded on its own
+  # merits and the blank word is graded incorrect (a normal miss), never a
+  # distinct "skipped" state and never marking the origin as excluded from
+  # future quizzes (that stays a distinct, explicit action).
+  Scenario: Leaving one family word blank grades it incorrect without excluding the origin
     Given I am on the Quiz page
     When I switch to the "Etymology" tab
     And I choose the "Etymology Origin" quiz mode
@@ -100,15 +101,14 @@ Feature: Etymology Origin quiz
     Then I see an etymology prompt
 
     When I type "a picture made with light" for the family word "photograph"
-    And I skip the family word "autograph"
     And I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
     And I continue to the next card
-    And I skip the card
+    And I submit my answer
 
     Then I see the family word "photograph" marked correct
-    And I see the family word "autograph" marked as skipped
+    And I see the family word "autograph" marked incorrect
     And I do not see the origin marked excluded

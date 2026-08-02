@@ -320,13 +320,11 @@ func TestOverrideEtymologyWordResult_FlipsOnlyThatWordWithinTheOneRecord(t *test
 		"a word-level override must not change the origin's own aggregate quality")
 }
 
-// TestOverrideEtymologyWordResult_ClearsSkippedFlag verifies that overriding
-// a word's correctness also clears its Skipped flag: once the learner
-// deliberately marks a "Don't Know" word correct/incorrect it is no longer
-// ungraded, so a word can never display as both "skipped" and "correct"/
-// "incorrect" at once (invariant L3: displayed status must match stored
-// status).
-func TestOverrideEtymologyWordResult_ClearsSkippedFlag(t *testing.T) {
+// TestOverrideEtymologyWordResult_BlankGradedIncorrect verifies that a word
+// the learner left blank (recorded incorrect — there is no "skipped" state)
+// can be flipped to correct on the feedback screen via the per-word override,
+// landing on the origin's ONE stored record (invariant L1).
+func TestOverrideEtymologyWordResult_BlankGradedIncorrect(t *testing.T) {
 	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
 
 	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
@@ -334,16 +332,17 @@ func TestOverrideEtymologyWordResult_ClearsSkippedFlag(t *testing.T) {
 	require.Len(t, cards, 1)
 	card := cards[0]
 
-	// "inscribe" was skipped ("Don't Know"); "describe" was graded correct.
+	// "describe" was answered correctly; "inscribe" was left blank, so it is
+	// recorded as a normal miss (Correct=false) — not a distinct skipped state.
 	wordResults := []notebook.EtymologyWordLog{
 		{Expression: "describe", Correct: true},
-		{Expression: "inscribe", Skipped: true},
+		{Expression: "inscribe", Correct: false},
 	}
-	require.NoError(t, svc.SaveEtymologyOriginResult(card, 5, true, 1000, true, wordResults))
+	require.NoError(t, svc.SaveEtymologyOriginResult(card, 1, false, 1000, true, wordResults))
 	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
 	require.NotEmpty(t, learnedAt)
 
-	// The learner later reconsiders and marks the skipped word correct.
+	// The learner later reconsiders and marks the missed word correct.
 	correct := true
 	require.NoError(t, svc.OverrideEtymologyWordResult(
 		card.NotebookName, card.SessionTitle, card.Origin, card.Sense, learnedAt, "inscribe",
@@ -363,7 +362,6 @@ func TestOverrideEtymologyWordResult_ClearsSkippedFlag(t *testing.T) {
 		byExpr[w.Expression] = w
 	}
 	assert.True(t, byExpr["inscribe"].Correct, "override must flip the word to correct")
-	assert.False(t, byExpr["inscribe"].Skipped, "override must clear the skipped flag once graded")
 }
 
 // TestOverrideEtymologyWordResult_UnknownWord_NotFound verifies the override

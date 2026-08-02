@@ -54,12 +54,25 @@ describe("EtymologyOriginPage", () => {
     useQuizStore.getState().setEtymologyOriginCards([fourWordCard]);
   });
 
-  // Regression test for the exact user-reported repro: type real answers for
-  // 2 of 4 family words, leave 2 blank, tap the whole-card "Don't Know"
-  // button. Before the fix, handleSkip discarded every typed answer
-  // (answers: {}) and force-skipped all 4 words, so the 2 typed answers
-  // never reached grading and the feedback screen showed all 4 as skipped.
-  it("grades typed words normally and only skips the blank ones when Don't Know is tapped", async () => {
+  // The answering screen has no skip affordance: there is no whole-card
+  // "Don't Know" button and no per-word "Skip" toggle. Leaving a word blank
+  // and tapping Submit is the only way to record "I don't know this one",
+  // and the backend grades it incorrect.
+  it("has no Skip toggle and no Don't Know button on the answering screen", () => {
+    renderPage();
+
+    expect(screen.getByRole("button", { name: "Submit" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /don'?t know/i })).not.toBeInTheDocument();
+    for (const w of fourWordCard.words) {
+      expect(screen.queryByRole("button", { name: `Skip ${w.expression}` })).not.toBeInTheDocument();
+    }
+  });
+
+  // Type real answers for 2 of 4 words, leave 2 blank, tap Submit. Each typed
+  // word is sent with its real answer; each blank word is sent with an empty
+  // answer (no "skipped" field) so the backend grades it incorrect. The
+  // feedback screen shows the blank words as incorrect, never as "(skipped)".
+  it("submits typed answers as-is and blanks as empty answers graded incorrect", async () => {
     batchSubmitEtymologyOriginAnswers.mockResolvedValue({
       responses: [
         {
@@ -68,13 +81,13 @@ describe("EtymologyOriginPage", () => {
           meaning: "to write",
           correct: false,
           nextReviewDate: "",
-          learnedAt: "",
+          learnedAt: "2026-08-02",
           senseId: "",
           results: [
-            { wordId: BigInt(1), expression: "photograph", correct: true, correctMeaning: "light writing", reason: "", skipped: false },
-            { wordId: BigInt(2), expression: "autograph", correct: false, correctMeaning: "self writing", reason: "not quite", skipped: false },
-            { wordId: BigInt(3), expression: "telegraph", correct: false, correctMeaning: "distant writing", reason: "skipped by user", skipped: true },
-            { wordId: BigInt(4), expression: "paragraph", correct: false, correctMeaning: "beside writing", reason: "skipped by user", skipped: true },
+            { wordId: BigInt(1), expression: "photograph", correct: true, correctMeaning: "light writing", reason: "" },
+            { wordId: BigInt(2), expression: "autograph", correct: false, correctMeaning: "self writing", reason: "not quite" },
+            { wordId: BigInt(3), expression: "telegraph", correct: false, correctMeaning: "distant writing", reason: "not answered" },
+            { wordId: BigInt(4), expression: "paragraph", correct: false, correctMeaning: "beside writing", reason: "not answered" },
           ],
         },
       ],
@@ -86,39 +99,23 @@ describe("EtymologyOriginPage", () => {
     fireEvent.change(screen.getByLabelText("Meaning of autograph"), { target: { value: "a guess" } });
     // telegraph and paragraph are left blank.
 
-    fireEvent.click(screen.getByRole("button", { name: "Don't Know" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
     await waitFor(() => expect(batchSubmitEtymologyOriginAnswers).toHaveBeenCalledTimes(1));
     const request = batchSubmitEtymologyOriginAnswers.mock.calls[0][0];
-    const wordAnswers = request.answers[0].answers as {
-      wordId: bigint;
-      answer: string;
-      skipped: boolean;
-    }[];
+    const wordAnswers = request.answers[0].answers as { wordId: bigint; answer: string }[];
 
-    // The 2 typed words must be sent with their real answers and
-    // skipped:false so the backend grades them independently.
-    expect(wordAnswers.find((w) => w.wordId === BigInt(1))).toMatchObject({
-      answer: "light writing",
-      skipped: false,
-    });
-    expect(wordAnswers.find((w) => w.wordId === BigInt(2))).toMatchObject({
-      answer: "a guess",
-      skipped: false,
-    });
-    // Only the 2 blank words are sent as skipped.
-    expect(wordAnswers.find((w) => w.wordId === BigInt(3))).toMatchObject({
-      skipped: true,
-    });
-    expect(wordAnswers.find((w) => w.wordId === BigInt(4))).toMatchObject({
-      skipped: true,
-    });
+    expect(wordAnswers.find((w) => w.wordId === BigInt(1))?.answer).toBe("light writing");
+    expect(wordAnswers.find((w) => w.wordId === BigInt(2))?.answer).toBe("a guess");
+    expect(wordAnswers.find((w) => w.wordId === BigInt(3))?.answer).toBe("");
+    expect(wordAnswers.find((w) => w.wordId === BigInt(4))?.answer).toBe("");
+    // The request must not carry any skip flag.
+    expect(wordAnswers.every((w) => !("skipped" in w))).toBe(true);
 
-    // The feedback screen reflects independent per-word grading, not
-    // "all skipped".
+    // The feedback screen shows the blank words graded incorrect, not skipped.
     expect(await screen.findByText("photograph")).toBeInTheDocument();
-    expect(screen.getByText("autograph")).toBeInTheDocument();
-    expect(screen.getAllByText(/\(skipped\)/)).toHaveLength(2);
+    expect(screen.getByText("telegraph")).toBeInTheDocument();
+    expect(screen.queryByText(/\(skipped\)/)).not.toBeInTheDocument();
   });
 
   // Study-context card (roots-book support): carries origin english_forms +
@@ -157,7 +154,9 @@ describe("EtymologyOriginPage", () => {
     expect(screen.getByLabelText("Meaning of facsimile")).toHaveValue("");
   });
 
-  it("still marks every word skipped when Don't Know is tapped with nothing typed", async () => {
+  // Submitting with nothing typed grades every word incorrect: the request
+  // carries an empty answer for each word (no skip flag).
+  it("submits all-empty answers when Submit is tapped with nothing typed", async () => {
     batchSubmitEtymologyOriginAnswers.mockResolvedValue({
       responses: [
         {
@@ -166,26 +165,26 @@ describe("EtymologyOriginPage", () => {
           meaning: "to write",
           correct: false,
           nextReviewDate: "",
-          learnedAt: "",
+          learnedAt: "2026-08-02",
           senseId: "",
           results: fourWordCard.words.map((w) => ({
             wordId: w.wordId,
             expression: w.expression,
             correct: false,
             correctMeaning: "",
-            reason: "skipped by user",
-            skipped: true,
+            reason: "not answered",
           })),
         },
       ],
     });
 
     renderPage();
-    fireEvent.click(screen.getByRole("button", { name: "Don't Know" }));
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
     await waitFor(() => expect(batchSubmitEtymologyOriginAnswers).toHaveBeenCalledTimes(1));
     const request = batchSubmitEtymologyOriginAnswers.mock.calls[0][0];
-    const wordAnswers = request.answers[0].answers as { skipped: boolean }[];
-    expect(wordAnswers.every((w) => w.skipped)).toBe(true);
+    const wordAnswers = request.answers[0].answers as { answer: string }[];
+    expect(wordAnswers.every((w) => w.answer === "")).toBe(true);
+    expect(wordAnswers.every((w) => !("skipped" in w))).toBe(true);
   });
 });

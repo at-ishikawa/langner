@@ -199,19 +199,13 @@ type LearningRecord struct {
 // Correct and Excluded are overridden in place by
 // LearningHistoryUpdater.OverrideEtymologyWordResult — never by appending a
 // new record for the word — so a word-level correction can never fork into a
-// parallel log series (learning-history invariant L1).
-//
-// Skipped marks a word the learner tapped "Don't Know" for: it was never
-// graded (Correct stays false but carries no meaning), it does not count
-// toward the origin's own aggregate Status/Quality, and it must never be
-// confused with the origin-level "excluded from quizzes" state (SkippedAt on
-// the origin's LearningHistoryExpression) — a per-word skip is display-only
-// data on this one word within the origin's single stored record.
+// parallel log series (learning-history invariant L1). A word the learner
+// left blank while answering is recorded as Correct=false (a normal miss),
+// not as a distinct "skipped"/ungraded state.
 type EtymologyWordLog struct {
 	Expression string `yaml:"expression"`
 	Correct    bool   `yaml:"correct"`
 	Excluded   bool   `yaml:"excluded,omitempty"`
-	Skipped    bool   `yaml:"skipped,omitempty"`
 }
 
 type LearningHistoryExpression struct {

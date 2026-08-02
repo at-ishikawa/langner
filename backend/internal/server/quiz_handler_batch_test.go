@@ -193,13 +193,14 @@ func newTestEtymologyHandler(t *testing.T, openaiClient inference.Client) (*Quiz
 	return NewQuizHandler(svc), learningDir
 }
 
-// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip is the bug-1
-// regression: tapping "Don't Know" on ONE derived family word must not affect
-// grading for sibling words the user DID answer, and must never force the
-// origin's own learning-log record into an excluded state — excluding the
-// origin from future quizzes is a distinct, explicit action (SkipWord) that a
-// per-word skip never triggers (learning-history invariants L1/L4).
-func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip(t *testing.T) {
+// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_BlankWordGradedIncorrect
+// pins the answering model: there is no "skip"/"don't know" control, so a word
+// the learner leaves blank is graded INCORRECT — a normal miss that counts
+// against the origin's aggregate and keeps it due — while sibling words the
+// learner typed are graded independently on their own merits. The blank word
+// must never mark the origin as excluded from future quizzes (that stays a
+// distinct, explicit SkipWord action; learning-history invariants L1/L4).
+func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_BlankWordGradedIncorrect(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
 	handler, learningDir := newTestEtymologyHandler(t, mockClient)
@@ -219,8 +220,8 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip(t *testing.T)
 	handler.etymologyOriginStore[1] = card
 
 	// describe and transcribe are answered with exact matches (short-circuits
-	// ValidateWordForm, so no mock expectation is needed for them); inscribe
-	// is marked "Don't Know". No OpenAI call should happen at all.
+	// ValidateWordForm, so no mock expectation is needed); inscribe is left
+	// blank. No OpenAI call should happen at all.
 	resp, err := handler.BatchSubmitEtymologyOriginAnswers(
 		context.Background(),
 		connect.NewRequest(&apiv1.BatchSubmitEtymologyOriginAnswersRequest{
@@ -228,7 +229,7 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip(t *testing.T)
 				CardId: 1,
 				Answers: []*apiv1.EtymologyWordAnswer{
 					{WordId: 1, Answer: "to represent in words"},
-					{WordId: 2, Skipped: true},
+					{WordId: 2, Answer: ""},
 					{WordId: 3, Answer: "to write out in full"},
 				},
 				ResponseTimeMs: 500,
@@ -243,16 +244,12 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip(t *testing.T)
 	results := got.GetResults()
 	require.Len(t, results, 3)
 	assert.True(t, results[0].GetCorrect(), "describe: the sibling word actually answered must be graded correctly")
-	assert.False(t, results[0].GetSkipped())
-	assert.True(t, results[1].GetSkipped(), "inscribe: Don't Know must mark the word skipped, not incorrect")
-	assert.False(t, results[1].GetCorrect())
-	assert.True(t, results[2].GetCorrect(), "transcribe: unaffected by the sibling's skip")
-	assert.False(t, results[2].GetSkipped())
+	assert.False(t, results[1].GetCorrect(), "inscribe: left blank, so graded incorrect")
+	assert.True(t, results[2].GetCorrect(), "transcribe: unaffected by the blank sibling")
 
-	// The origin's aggregate is graded on the two ANSWERED words only, both
-	// correct, so the origin itself is recorded as correct — a skipped
-	// sibling must not drag it down.
-	assert.True(t, got.GetCorrect(), "aggregate must reflect only the graded words")
+	// One blank word makes the aggregate incorrect; the origin is recorded as
+	// a normal miss and stays due — not excluded.
+	assert.False(t, got.GetCorrect(), "a blank word counts against the aggregate")
 	require.NotEmpty(t, got.GetLearnedAt())
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, notebookName+".yml"))
@@ -263,20 +260,21 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip(t *testing.T)
 	expr := notebook.FindOriginExpression(histories, "Session 1", "scribo", "")
 	require.NotNil(t, expr)
 	assert.False(t, expr.SkippedAt.IsSkippedAny(),
-		"bug-1: a per-word Don't Know must never mark the origin as excluded from quizzes")
+		"a blank answer must never mark the origin as excluded from quizzes")
 	require.Len(t, expr.EtymologyOriginLogs, 1)
 	log := expr.EtymologyOriginLogs[0]
-	assert.Equal(t, notebook.LearnedStatusUnderstood, log.Status)
+	assert.Equal(t, notebook.LearnedStatusMisunderstood, log.Status)
+	assert.True(t, expr.NeedsEtymologyReview(notebook.QuizTypeEtymologyOrigin),
+		"a missed origin must stay due for review")
 	require.Len(t, log.WordResults, 3)
-	assert.True(t, log.WordResults[1].Skipped, "the skipped word's per-word log entry must record Skipped")
-	assert.False(t, log.WordResults[1].Correct)
+	assert.False(t, log.WordResults[1].Correct, "the blank word's per-word log entry must record a miss")
 }
 
-// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllWordsSkipped verifies
-// that skipping every derived word still records ONE normal wrong attempt
+// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllBlank verifies that
+// leaving every derived word blank records ONE normal wrong attempt
 // (misunderstood) for the origin — never an excluded one — so the origin
 // resurfaces for review instead of silently disappearing from the quiz.
-func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllWordsSkipped(t *testing.T) {
+func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllBlank(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
 	handler, learningDir := newTestEtymologyHandler(t, mockClient)
@@ -298,7 +296,7 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllWordsSkipped(t *testin
 		connect.NewRequest(&apiv1.BatchSubmitEtymologyOriginAnswersRequest{
 			Answers: []*apiv1.SubmitEtymologyOriginAnswerRequest{{
 				CardId:         1,
-				Answers:        []*apiv1.EtymologyWordAnswer{{WordId: 1, Skipped: true}},
+				Answers:        []*apiv1.EtymologyWordAnswer{{WordId: 1, Answer: ""}},
 				ResponseTimeMs: 500,
 			}},
 		}),
@@ -316,26 +314,19 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllWordsSkipped(t *testin
 	expr := notebook.FindOriginExpression(histories, "Session 1", "scribo", "")
 	require.NotNil(t, expr)
 	assert.False(t, expr.SkippedAt.IsSkippedAny(),
-		"skipping every word must not exclude the origin from future quizzes")
+		"leaving every word blank must not exclude the origin from future quizzes")
 	require.Len(t, expr.EtymologyOriginLogs, 1)
 	assert.Equal(t, notebook.LearnedStatusMisunderstood, expr.EtymologyOriginLogs[0].Status,
-		"a fully-skipped attempt is recorded as a normal miss, not an exclusion")
+		"an all-blank attempt is recorded as a normal miss, not an exclusion")
 }
 
-// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped is
-// the regression coverage for the exact user-reported repro: a 4-word family
-// where the learner typed real answers for 2 words and left the other 2
-// blank+skipped in the SAME submission (the frontend's whole-card "Don't
-// Know" button, tapped after partially typing). Every previous backend test
-// only exercised a SINGLE skipped word alongside answered siblings
-// (TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip has 2
-// answered + 1 skipped); that gap let a frontend bug ship where tapping
-// "Don't Know" discarded every typed answer and force-skipped all 4 words
-// before the request ever reached this handler — a bug this backend-only
-// test can't see, but it still pins the contract the frontend must satisfy:
-// 2 answered words graded independently (one right, one wrong) and 2 skipped
-// words recorded as skipped/ungraded, never dragging each other down.
-func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped(t *testing.T) {
+// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoBlank pins
+// independent per-word grading in a single submission: a 4-word family where
+// the learner typed answers for 2 words (one right, one wrong) and left the
+// other 2 blank. Each answered word is graded on its own merits, each blank
+// word is graded incorrect (not a distinct "skipped" state), and none of them
+// exclude the origin from future quizzes.
+func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoBlank(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
 	handler, learningDir := newTestEtymologyHandler(t, mockClient)
@@ -357,7 +348,7 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped(t *
 
 	// photograph: answered with an exact match (correct, no OpenAI call).
 	// autograph: answered but wrong (needs a mocked OpenAI classification).
-	// telegraph, paragraph: both skipped in the same request.
+	// telegraph, paragraph: both left blank in the same request (no OpenAI).
 	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(
 		inference.ValidateWordFormResponse{
 			Classification: inference.ClassificationWrong,
@@ -374,8 +365,8 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped(t *
 				Answers: []*apiv1.EtymologyWordAnswer{
 					{WordId: 1, Answer: "light writing"},
 					{WordId: 2, Answer: "a wrong guess"},
-					{WordId: 3, Skipped: true},
-					{WordId: 4, Skipped: true},
+					{WordId: 3, Answer: ""},
+					{WordId: 4, Answer: ""},
 				},
 				ResponseTimeMs: 500,
 			}},
@@ -389,17 +380,10 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped(t *
 	results := got.GetResults()
 	require.Len(t, results, 4)
 	assert.True(t, results[0].GetCorrect(), "photograph: typed answer must be graded correct on its own merits")
-	assert.False(t, results[0].GetSkipped())
 	assert.False(t, results[1].GetCorrect(), "autograph: typed answer must be graded, and graded wrong here")
-	assert.False(t, results[1].GetSkipped(), "autograph: answered, so it must NOT be reported as skipped")
-	assert.True(t, results[2].GetSkipped(), "telegraph: left blank, marked Don't Know")
-	assert.False(t, results[2].GetCorrect())
-	assert.True(t, results[3].GetSkipped(), "paragraph: left blank, marked Don't Know")
-	assert.False(t, results[3].GetCorrect())
+	assert.False(t, results[2].GetCorrect(), "telegraph: left blank, graded incorrect")
+	assert.False(t, results[3].GetCorrect(), "paragraph: left blank, graded incorrect")
 
-	// The aggregate reflects only the two GRADED (non-skipped) words; since
-	// one of them (autograph) is wrong, the origin is recorded as incorrect —
-	// but photograph's own per-word result must still show correct:true.
 	assert.False(t, got.GetCorrect())
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, notebookName+".yml"))
@@ -410,16 +394,14 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped(t *
 	expr := notebook.FindOriginExpression(histories, "Session 1", "graph", "")
 	require.NotNil(t, expr)
 	assert.False(t, expr.SkippedAt.IsSkippedAny(),
-		"2 per-word skips alongside 2 answers must never exclude the origin from future quizzes")
+		"2 blank words alongside 2 answers must never exclude the origin from future quizzes")
 	require.Len(t, expr.EtymologyOriginLogs, 1)
 	log := expr.EtymologyOriginLogs[0]
 	require.Len(t, log.WordResults, 4)
 	assert.True(t, log.WordResults[0].Correct, "photograph's stored log entry must be correct")
-	assert.False(t, log.WordResults[0].Skipped)
 	assert.False(t, log.WordResults[1].Correct, "autograph's stored log entry must be incorrect")
-	assert.False(t, log.WordResults[1].Skipped)
-	assert.True(t, log.WordResults[2].Skipped, "telegraph's stored log entry must be skipped")
-	assert.True(t, log.WordResults[3].Skipped, "paragraph's stored log entry must be skipped")
+	assert.False(t, log.WordResults[2].Correct, "telegraph's stored log entry (blank) must be a miss")
+	assert.False(t, log.WordResults[3].Correct, "paragraph's stored log entry (blank) must be a miss")
 }
 
 // TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence documents the

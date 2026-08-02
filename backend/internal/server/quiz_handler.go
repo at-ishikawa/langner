@@ -578,19 +578,17 @@ func (h *QuizHandler) SubmitEtymologyOriginAnswer(ctx context.Context, req *conn
 	return connect.NewResponse(resp), nil
 }
 
-// gradeAndSaveEtymologyOrigin grades every family word the user typed, records
-// ONE learning-log entry for the origin's (session, sense) series, and
-// assembles the feedback response with per-word results.
+// gradeAndSaveEtymologyOrigin grades every family word, records ONE
+// learning-log entry for the origin's (session, sense) series, and assembles
+// the feedback response with per-word results.
 //
-// "Don't Know" is a PER-WORD choice (EtymologyWordAnswer.Skipped), not a
-// whole-origin one: a skipped word is recorded as skipped/ungraded and is
-// excluded from the aggregate correctness/quality computation entirely, so it
-// can never drag down grading for sibling words the user DID answer. The
-// origin's aggregate is correct only when every GRADED (non-skipped) word is
-// correct; if nothing was graded (every word skipped, or none answered), the
-// origin is recorded as a normal wrong attempt (misunderstood) — never as
-// excluded. Excluding the origin from future quizzes remains a distinct,
-// explicit action (SkipWord) that this grading path never triggers.
+// There is no "skip"/"don't know" control: a word the learner left blank is
+// graded INCORRECT — a normal miss that counts against the aggregate and keeps
+// the origin due — exactly like a wrong typed answer. The origin's aggregate
+// is correct only when every family word is correct; a card with no words is
+// recorded as a wrong attempt rather than a fabricated pass. Excluding the
+// origin from future quizzes remains a distinct, explicit action (SkipWord)
+// that this grading path never triggers.
 func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 	ctx context.Context,
 	card quiz.EtymologyOriginCard,
@@ -604,7 +602,6 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 
 	aggregateCorrect := true
 	quality := 5
-	gradedCount := 0
 	var results []*apiv1.EtymologyWordResult
 	wordResults := make([]notebook.EtymologyWordLog, 0, len(card.Words))
 	for i, w := range card.Words {
@@ -613,25 +610,15 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 			WordId: wordID, Expression: w.Expression, CorrectMeaning: w.Meaning,
 			Pronunciation: w.Pronunciation, Examples: w.Examples, Literal: w.Literal,
 		}
-		a := answerByWordID[wordID]
 
-		if a.GetSkipped() {
-			result.Skipped = true
-			result.Reason = "skipped by user"
-			results = append(results, result)
-			wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Skipped: true})
-			continue
-		}
-
-		answer := strings.TrimSpace(a.GetAnswer())
+		answer := strings.TrimSpace(answerByWordID[wordID].GetAnswer())
 		if answer == "" {
-			// Left blank without an explicit "Don't Know": still graded, and
-			// still counts against the aggregate — unlike a per-word skip.
+			// Left blank: graded incorrect (a normal miss), counting against
+			// the aggregate so the origin stays due.
 			result.Correct = false
 			result.Reason = "not answered"
 			aggregateCorrect = false
 			quality = 1
-			gradedCount++
 			results = append(results, result)
 			wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: false})
 			continue
@@ -649,13 +636,11 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 		} else if grade.Quality < quality {
 			quality = grade.Quality
 		}
-		gradedCount++
 		results = append(results, result)
 		wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: grade.Correct})
 	}
-	if gradedCount == 0 {
-		// No word was actually graded (every word skipped, or the card has no
-		// words) — record as a normal wrong attempt, not a fabricated pass.
+	if len(card.Words) == 0 {
+		// A card with no words can't be a pass — record a wrong attempt.
 		aggregateCorrect = false
 		quality = 1
 	}

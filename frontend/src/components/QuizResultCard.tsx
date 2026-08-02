@@ -65,10 +65,6 @@ export interface ResultItem {
     userAnswer: string;
     originalCorrect?: boolean;
     isExcluded?: boolean;
-    /** skipped is true when the learner tapped "Don't Know" for this word;
-     * it is neither correct nor incorrect and didn't affect sibling grading
-     * or the origin's own aggregate result. */
-    skipped?: boolean;
     /** pronunciation, examples, and literal are per-word study context shown
      * on the feedback screen alongside the graded meaning. */
     pronunciation?: string;
@@ -421,11 +417,11 @@ export function QuizResultCard({
               const wordOverridden = w.originalCorrect !== undefined && w.originalCorrect !== w.correct;
               const canOverrideWord = Boolean(onOverrideWord && item.noteId && item.learnedAt);
               const canExcludeWord = Boolean(onExcludeWord && item.noteId && item.learnedAt);
-              const borderColor = w.skipped ? "gray.200" : w.correct ? "green.200" : "red.200";
-              const darkBorderColor = w.skipped ? "gray.600" : w.correct ? "green.800" : "red.800";
-              const glyphColor = w.skipped ? "gray.500" : w.correct ? "green.600" : "red.600";
-              const darkGlyphColor = w.skipped ? "gray.400" : w.correct ? "green.300" : "red.300";
-              const glyph = w.skipped ? "—" : w.correct ? "✓" : "✗";
+              const borderColor = w.correct ? "green.200" : "red.200";
+              const darkBorderColor = w.correct ? "green.800" : "red.800";
+              const glyphColor = w.correct ? "green.600" : "red.600";
+              const darkGlyphColor = w.correct ? "green.300" : "red.300";
+              const glyph = w.correct ? "✓" : "✗";
               return (
                 <Box
                   key={i}
@@ -435,7 +431,7 @@ export function QuizResultCard({
                   borderRadius="md"
                   px={2}
                   py={1}
-                  opacity={w.isExcluded || w.skipped ? 0.7 : 1}
+                  opacity={w.isExcluded ? 0.7 : 1}
                 >
                   <Box display="flex" alignItems="center" gap={2}>
                     <Text as="span" fontSize="xs" fontWeight="bold" color={glyphColor} _dark={{ color: darkGlyphColor }}>
@@ -443,11 +439,6 @@ export function QuizResultCard({
                     </Text>
                     <Text as="span" fontSize="sm" fontWeight="medium" flex="1" minW={0}>
                       {w.expression}
-                      {w.skipped && (
-                        <Text as="span" fontSize="xs" color="fg.muted" fontStyle="italic" fontWeight="normal">
-                          {" "}(skipped)
-                        </Text>
-                      )}
                       {wordOverridden && (
                         <Text as="span" fontSize="xs" color="fg.muted" fontStyle="italic" fontWeight="normal">
                           {" "}(overridden)

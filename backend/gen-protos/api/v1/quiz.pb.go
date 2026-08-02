@@ -3177,17 +3177,13 @@ func (x *StartEtymologyOriginQuizResponse) GetCards() []*EtymologyOriginCard {
 }
 
 // EtymologyWordAnswer is the user's typed meaning for one family word on the
-// card, keyed by the word_id echoed from EtymologyFamilyWord. skipped is true
-// when the learner tapped "Don't Know" for THIS word specifically — it is
-// recorded as skipped/ungraded and never counted toward the origin's
-// aggregate correctness, while sibling words with an answer are graded
-// normally and independently (bug: a per-word "Don't Know" must not affect
-// sibling grading or force the origin into an excluded state).
+// card, keyed by the word_id echoed from EtymologyFamilyWord. There is no
+// "skip"/"don't know" control: a word the learner leaves blank is graded
+// INCORRECT (a normal miss that stays due), exactly like a wrong typed answer.
 type EtymologyWordAnswer struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	WordId        int64                  `protobuf:"varint,1,opt,name=word_id,json=wordId,proto3" json:"word_id,omitempty"`
 	Answer        string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	Skipped       bool                   `protobuf:"varint,3,opt,name=skipped,proto3" json:"skipped,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3236,20 +3232,11 @@ func (x *EtymologyWordAnswer) GetAnswer() string {
 	return ""
 }
 
-func (x *EtymologyWordAnswer) GetSkipped() bool {
-	if x != nil {
-		return x.Skipped
-	}
-	return false
-}
-
 type SubmitEtymologyOriginAnswerRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	CardId int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	// answers holds one entry per family word: either a typed answer or
-	// skipped=true. Removed the old request-level is_skipped (whole-origin
-	// skip) in favor of per-word skipped — "don't know" is now a per-word
-	// choice, not an all-or-nothing one.
+	// answers holds one entry per family word, each carrying the typed meaning
+	// (empty answer = graded incorrect). There is no per-word or whole-card skip.
 	Answers        []*EtymologyWordAnswer `protobuf:"bytes,2,rep,name=answers,proto3" json:"answers,omitempty"`
 	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
 	unknownFields  protoimpl.UnknownFields
@@ -3309,9 +3296,8 @@ func (x *SubmitEtymologyOriginAnswerRequest) GetResponseTimeMs() int64 {
 
 // EtymologyWordResult is the per-word feedback for one family word. It is
 // display-only — the origin carries a single learning-log series, not one per
-// word. skipped is true when the learner tapped "Don't Know" for this word;
-// such a word is neither correct nor incorrect and does not affect the
-// origin's aggregate grading.
+// word. A word the learner left blank comes back as incorrect (correct=false),
+// not as a distinct "skipped" state.
 type EtymologyWordResult struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
 	WordId         int64                  `protobuf:"varint,1,opt,name=word_id,json=wordId,proto3" json:"word_id,omitempty"`
@@ -3319,7 +3305,6 @@ type EtymologyWordResult struct {
 	Correct        bool                   `protobuf:"varint,3,opt,name=correct,proto3" json:"correct,omitempty"`
 	CorrectMeaning string                 `protobuf:"bytes,4,opt,name=correct_meaning,json=correctMeaning,proto3" json:"correct_meaning,omitempty"`
 	Reason         string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
-	Skipped        bool                   `protobuf:"varint,6,opt,name=skipped,proto3" json:"skipped,omitempty"`
 	// pronunciation, examples, and literal are per-word study context revealed
 	// on the feedback screen alongside the graded meaning. examples (example
 	// sentences) and literal (the assembled literal gloss, e.g.
@@ -3395,13 +3380,6 @@ func (x *EtymologyWordResult) GetReason() string {
 		return x.Reason
 	}
 	return ""
-}
-
-func (x *EtymologyWordResult) GetSkipped() bool {
-	if x != nil {
-		return x.Skipped
-	}
-	return false
 }
 
 func (x *EtymologyWordResult) GetPronunciation() string {
@@ -5017,16 +4995,15 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\x12D\n" +
 	"\x11notebook_sections\x18\x03 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\"U\n" +
 	" StartEtymologyOriginQuizResponse\x121\n" +
-	"\x05cards\x18\x01 \x03(\v2\x1b.api.v1.EtymologyOriginCardR\x05cards\"`\n" +
+	"\x05cards\x18\x01 \x03(\v2\x1b.api.v1.EtymologyOriginCardR\x05cards\"U\n" +
 	"\x13EtymologyWordAnswer\x12\x17\n" +
 	"\aword_id\x18\x01 \x01(\x03R\x06wordId\x12\x16\n" +
-	"\x06answer\x18\x02 \x01(\tR\x06answer\x12\x18\n" +
-	"\askipped\x18\x03 \x01(\bR\askipped\"\xb9\x01\n" +
+	"\x06answer\x18\x02 \x01(\tR\x06answerJ\x04\b\x03\x10\x04R\askipped\"\xb9\x01\n" +
 	"\"SubmitEtymologyOriginAnswerRequest\x12 \n" +
 	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x125\n" +
 	"\aanswers\x18\x02 \x03(\v2\x1b.api.v1.EtymologyWordAnswerR\aanswers\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMsJ\x04\b\x04\x10\x05R\n" +
-	"is_skipped\"\x9f\x02\n" +
+	"is_skipped\"\x94\x02\n" +
 	"\x13EtymologyWordResult\x12\x17\n" +
 	"\aword_id\x18\x01 \x01(\x03R\x06wordId\x12\x1e\n" +
 	"\n" +
@@ -5034,11 +5011,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"expression\x12\x18\n" +
 	"\acorrect\x18\x03 \x01(\bR\acorrect\x12'\n" +
 	"\x0fcorrect_meaning\x18\x04 \x01(\tR\x0ecorrectMeaning\x12\x16\n" +
-	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x18\n" +
-	"\askipped\x18\x06 \x01(\bR\askipped\x12$\n" +
+	"\x06reason\x18\x05 \x01(\tR\x06reason\x12$\n" +
 	"\rpronunciation\x18\a \x01(\tR\rpronunciation\x12\x1a\n" +
 	"\bexamples\x18\b \x03(\tR\bexamples\x12\x18\n" +
-	"\aliteral\x18\t \x01(\tR\aliteral\"\xba\x02\n" +
+	"\aliteral\x18\t \x01(\tR\aliteralJ\x04\b\x06\x10\aR\askipped\"\xba\x02\n" +
 	"#SubmitEtymologyOriginAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x18\n" +
