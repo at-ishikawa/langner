@@ -28,11 +28,11 @@ import (
 // fragmented records — exactly the bug the user reported in
 // word-power-made-easy.yml.
 //
-// SKIPPED today because the etymology quiz writer diverges from
-// standard/reverse/freeform: etymology writes (notebook_name, session_title)
-// while the others write (story_event, scene_title). Re-enable this test
-// once the canonical shape is unified — see PR description for the deferred
-// migration plan. Removing t.Skip is the first step of that migration.
+// The etymology writer uses its own canonical shape (a flat, session-titled
+// metadata.type=etymology block keyed by (origin, sense)) distinct from the
+// vocabulary writers' (story_event, scene_title) shape, but each writer still
+// converges every (notebook_id, expression) onto exactly ONE on-disk location
+// — which is what this test pins.
 //
 // Writer matrix — every "live" code path that mutates a learning_notes YAML
 // for a single notebook ID. Adding a new writer must add a row below or
@@ -153,14 +153,14 @@ origins:
 		Expression: vocabExpr, Meaning: "a quiet person",
 	}, FreeformGradeResult{Correct: true, Quality: 4}, 1000))
 
-	// 4. etymology answer — Service.SaveEtymologyOriginResult writes
-	// canonical Shape B: top-level title=session, scene from the
-	// EtymologyOriginCard's SceneTitle.
+	// 4. etymology answer — Service.SaveEtymologyOriginResult writes the
+	// flat etymology shape: a session-titled block (metadata.type=etymology)
+	// with the origin at the top level, keyed by (origin, sense).
 	require.NoError(t, svc.SaveEtymologyOriginResult(EtymologyOriginCard{
 		NotebookName: notebookID, NotebookTitle: "Dual Notebook",
-		SessionTitle: "Session 8", SceneTitle: "psyche + intro",
-		Origin: etymExpr, Meaning: "into",
-	}, 4, true, 1000, notebook.QuizTypeEtymologyStandard, true))
+		SessionTitle: "Session 8",
+		Origin:       etymExpr, Meaning: "into",
+	}, 4, true, 1000, true))
 
 	// 5. per-type skip — Service.SkipWord (vocab side)
 	require.NoError(t, svc.SkipWord(CardInfo{
@@ -222,12 +222,26 @@ origins:
 		etymExpr, locationsOf(etymExpr),
 	)
 
-	// Shape fingerprint: no top-level block carries the legacy
-	// metadata.type=etymology shape.
+	// Shape fingerprint: the etymology origin is a TOP-LEVEL expression tagged
+	// Type=origin under the session-titled block, carrying exactly ONE origin
+	// log series (invariants L1/L4) — never nested in a scene, never split.
+	var foundEtym bool
 	for _, h := range got {
-		assert.NotEqualf(t, "etymology", h.Metadata.Type,
-			"legacy etymology-shape block (title=%q) survived Validator.Fix", h.Metadata.Title)
+		if h.Metadata.Title != "Session 8" {
+			continue
+		}
+		for _, expr := range h.Expressions {
+			if expr.Expression != etymExpr {
+				continue
+			}
+			assert.Equal(t, notebook.LearningExpressionTypeOrigin, expr.Type,
+				"etymology origin entry must be Type=origin")
+			assert.Len(t, expr.EtymologyOriginLogs, 1,
+				"etymology origin must carry exactly one origin-log entry")
+			foundEtym = true
+		}
 	}
+	assert.True(t, foundEtym, "etymology origin must be a top-level Type=origin entry")
 }
 
 // TestLearningHistory_ReadWriteRoundtrip_AcrossAllWriters is the third

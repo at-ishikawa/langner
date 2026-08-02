@@ -6,9 +6,7 @@ import type { ResultItem } from "@/components/QuizResultCard";
 function toProtoQuizType(qt: QuizType): ProtoQuizType {
   if (qt === "reverse") return ProtoQuizType.REVERSE;
   if (qt === "freeform") return ProtoQuizType.FREEFORM;
-  if (qt === "etymology-standard") return ProtoQuizType.ETYMOLOGY_STANDARD;
-  if (qt === "etymology-reverse") return ProtoQuizType.ETYMOLOGY_REVERSE;
-  if (qt === "etymology-freeform") return ProtoQuizType.ETYMOLOGY_FREEFORM;
+  if (qt === "etymology-origin") return ProtoQuizType.ETYMOLOGY_ORIGIN;
   return ProtoQuizType.STANDARD;
 }
 

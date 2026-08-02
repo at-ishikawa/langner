@@ -1,6 +1,6 @@
 "use client";
 
-import { Box, Button, Text } from "@chakra-ui/react";
+import { Box, Button, Text, VStack } from "@chakra-ui/react";
 import type { WordDetail } from "@/store/quizStore";
 import { WordDetailView } from "./WordDetailView";
 import { RelationGraph } from "./RelationGraph";
@@ -43,11 +43,22 @@ export interface ResultItem {
    * after the user has answered. Uses the same RelationGraph component
    * as the reverse-mode prompt — but with no blank node. */
   graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
-  /** exampleWords lists a handful of English vocabulary entries that
-   * derive from this origin. Rendered as a chip row in the etymology
-   * feedback card so learners can anchor an abstract root to concrete
-   * words. Server-side capped. */
-  exampleWords?: string[];
+  /** etymologyForms are the origin's principal parts (e.g. "facio",
+   * "facere", "feci", "factum"). Rendered joined under the origin header
+   * on the etymology feedback card. */
+  etymologyForms?: string[];
+  /** etymologyWords are the per-word results for an etymology-origin card:
+   * each derived family word, whether the typed meaning was correct, the
+   * correct meaning, and the reason. Rendered as a list on the feedback
+   * card so the learner sees every word's outcome even though the origin
+   * is graded as one aggregate result. */
+  etymologyWords?: {
+    expression: string;
+    correct: boolean;
+    correctMeaning: string;
+    reason: string;
+    userAnswer: string;
+  }[];
 }
 
 function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
@@ -341,32 +352,56 @@ export function QuizResultCard({
         </Box>
       )}
 
-      {/* Example English vocabulary derived from this origin. Helps
-          the learner anchor an abstract Latin/Greek root to words they
-          already know. Etymology-only — vocabulary quizzes have their
-          own etymology section above. Server caps the list so we don't
-          need to slice here. */}
-      {isEtymology && item.exampleWords && item.exampleWords.length > 0 && (
+      {/* Origin principal parts (e.g. "facio, facere, feci, factum").
+          Etymology-only context echoed from the card. */}
+      {isEtymology && item.etymologyForms && item.etymologyForms.length > 0 && (
+        <Text fontSize="xs" color="fg.muted" mb={2} fontStyle="italic">
+          {item.etymologyForms.join(", ")}
+        </Text>
+      )}
+
+      {/* Per-word results for an etymology-origin card. The origin is graded
+          as one aggregate result, but every derived family word's outcome is
+          shown so the learner can see which words they missed. */}
+      {isEtymology && item.etymologyWords && item.etymologyWords.length > 0 && (
         <Box mb={2}>
-          <Text fontSize="xs" color="fg.muted" mb={1}>Example words</Text>
-          <Box display="flex" gap={1} flexWrap="wrap">
-            {item.exampleWords.map((w, i) => (
+          <Text fontSize="xs" color="fg.muted" mb={1}>Words</Text>
+          <VStack align="stretch" gap={1}>
+            {item.etymologyWords.map((w, i) => (
               <Box
                 key={i}
-                px={2}
-                py={0.5}
-                borderRadius="full"
-                bg="blue.50"
-                _dark={{ bg: "blue.950", borderColor: "blue.800" }}
                 borderWidth="1px"
-                borderColor="blue.200"
+                borderColor={w.correct ? "green.200" : "red.200"}
+                _dark={{ borderColor: w.correct ? "green.800" : "red.800" }}
+                borderRadius="md"
+                px={2}
+                py={1}
               >
-                <Text fontSize="xs" color="blue.700" _dark={{ color: "blue.200" }}>
-                  {w}
+                <Box display="flex" alignItems="center" gap={2}>
+                  <Text as="span" fontSize="xs" fontWeight="bold" color={w.correct ? "green.600" : "red.600"} _dark={{ color: w.correct ? "green.300" : "red.300" }}>
+                    {w.correct ? "✓" : "✗"}
+                  </Text>
+                  <Text as="span" fontSize="sm" fontWeight="medium" flex="1" minW={0}>
+                    {w.expression}
+                  </Text>
+                </Box>
+                <Text fontSize="sm" color="fg.muted">
+                  {w.correctMeaning}
+                  {w.reason && (
+                    <Text as="span" fontStyle="italic">
+                      {" — "}
+                      {w.reason}
+                    </Text>
+                  )}
                 </Text>
+                {w.userAnswer && (
+                  <Text fontSize="xs" color="fg.muted">
+                    your answer · &ldquo;{w.userAnswer}&rdquo;
+                  </Text>
+                )}
               </Box>
             ))}
-          </Box>
+          </VStack>
         </Box>
       )}
 
