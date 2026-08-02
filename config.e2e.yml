@@ -27,7 +27,8 @@ notebooks:
   flashcards_directories:
     - frontend/e2e/fixtures/flashcards
   books_directories: []
-  definitions_directories: []
+  definitions_directories:
+    - frontend/e2e/fixtures/definitions
   etymology_directories:
     - frontend/e2e/fixtures/etymology
   grammars_directories:

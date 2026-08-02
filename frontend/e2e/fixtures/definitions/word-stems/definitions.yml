@@ -1,0 +1,27 @@
+# Derived-word family for the Word Stems etymology origins. Each origin
+# (scribo, dico) gets at least one referencing definition so both appear as
+# grouped Etymology Origin cards. Book `id` (word-stems) and session
+# `title` ("Word Stems") match the etymology notebook.
+- metadata:
+    title: "Word Stems"
+  scenes:
+    - metadata:
+        index: 0
+        title: "Word Stems"
+      expressions:
+        - expression: describe
+          meaning: to represent something in words
+          origin_parts:
+            - origin: scribo
+        - expression: inscribe
+          meaning: to write or carve on a surface
+          origin_parts:
+            - origin: scribo
+        - expression: dictate
+          meaning: to say words aloud to be written down
+          origin_parts:
+            - origin: dico
+        - expression: predict
+          meaning: to say what will happen before it does
+          origin_parts:
+            - origin: dico
