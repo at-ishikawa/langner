@@ -32,19 +32,15 @@ actual navigation).
 | `/quiz`                             | quiz-reverse      | Finish a Reverse quiz across two cards                  |
 | `/quiz`                             | quiz-reverse      | Reverse quiz with the "List words missing context" filter |
 | `/quiz`                             | quiz-freeform     | Submit one freeform answer and finish                   |
-| `/quiz`                             | quiz-etymology    | Finish an etymology quiz in Freeform mode               |
-| `/quiz`                             | quiz-etymology    | Finish an etymology quiz in Standard mode               |
-| `/quiz`                             | quiz-etymology    | Finish an etymology quiz in Reverse mode                |
+| `/quiz`                             | quiz-etymology    | Start the Etymology Origin quiz and see an origin prompt |
 | `/quiz/standard`                    | quiz-standard     | (all 5 standard scenarios)                              |
 | `/quiz/reverse`                     | quiz-reverse      | (both reverse scenarios)                                |
 | `/quiz/freeform`                    | quiz-freeform     | Submit one freeform answer and finish                   |
-| `/quiz/etymology-standard`          | quiz-etymology    | Finish an etymology quiz in Standard mode               |
-| `/quiz/etymology-reverse`           | quiz-etymology    | Finish an etymology quiz in Reverse mode                |
-| `/quiz/etymology-freeform`          | quiz-etymology    | Finish an etymology quiz in Freeform mode               |
+| `/quiz/etymology-origin`            | quiz-etymology    | Start the Etymology Origin quiz and see an origin prompt |
 | `/quiz/complete`                    | quiz-standard     | (all 5 standard scenarios reach it)                     |
 | `/quiz/complete`                    | quiz-reverse      | (both reverse scenarios reach it)                       |
 | `/quiz/complete`                    | quiz-freeform     | Submit one freeform answer and finish                   |
-| `/quiz/complete`                    | quiz-etymology    | (all 3 etymology scenarios reach it)                    |
+| `/quiz/complete`                    | quiz-etymology    | Finish the Etymology Origin quiz by skipping each origin |
 | `/quiz/relearn/session`             | relearn           | Relearn a word missed moments ago in a Standard quiz    |
 | `/quiz/relearn/complete`            | relearn           | Relearn a word missed moments ago in a Standard quiz    |
 | `/analytics`                        | analytics         | Open the Analytics Day List from home                   |
@@ -133,27 +129,11 @@ Tick the box when at least one scenario hits the interaction.
 - [x] Type a word, type a meaning, click Submit
 - [x] Click "See Results" → navigate to `/quiz/complete`
 
-### `/quiz/etymology-standard`
+### `/quiz/etymology-origin`
 
-- [x] See the current origin and "type the meaning..." input
-- [x] Type a meaning and click Submit, twice
-- [x] See the "your answer" chip on the BatchFeedback card for a correct result
+- [x] See the origin header and one "type the meaning..." input per derived family word
+- [x] Skip an origin screen with "Don't Know" and continue
 - [x] Reach `/quiz/complete`
-
-### `/quiz/etymology-reverse`
-
-- [x] See the current meaning and "type the origin..." input
-- [x] Type an origin and click Submit, twice
-- [x] See the "your answer" chip on the BatchFeedback card for a correct result
-- [x] Reach `/quiz/complete`
-
-### `/quiz/etymology-freeform`
-
-- [x] See separate Origin (`e.g., spect`) and Meaning (`e.g., to look or see`) inputs
-- [x] Type both, click Submit, then click "See Results"
-- [x] See the "your answer" chip on the FeedbackActions card for a correct result
-- [x] Submit stays enabled when the origin is "due now" (seed sets
-      `interval_days: 0` for the etymology_freeform log)
 
 ### `/quiz/complete`
 

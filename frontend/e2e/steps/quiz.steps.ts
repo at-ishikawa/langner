@@ -85,7 +85,7 @@ When("I type the meaning {string}", async ({ page }, meaning: string) => {
 });
 
 When("I submit my answer", async ({ page }) => {
-  // The submit button is rendered as "Submit" (AnswerInput, etymology-freeform)
+  // The submit button is rendered as "Submit" (AnswerInput / Etymology Origin)
   // or "Check Answer" (vocabulary freeform). Match either one.
   await page
     .getByRole("button", { name: /^(submit|check answer)$/i })
