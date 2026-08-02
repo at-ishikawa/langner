@@ -40,3 +40,15 @@ Given(
     await page.goto(`/history/${date}?range=0`);
   },
 );
+
+// WrongWordCard's root carries data-testid=`wrong-word-${expression}-${quizType}`
+// (see frontend/src/components/WrongWordCard.tsx), so this directly pins the
+// record's LABELLED quiz type — the exact thing the appendExpressionAttempts
+// slot-based mislabeling bug got wrong (every grammar/freeform attempt showed
+// up stamped with its shared slot's default type instead of its own).
+Then(
+  "the word {string} is labeled the {string} quiz type",
+  async ({ page }, expression: string, quizType: string) => {
+    await expect(page.getByTestId(`wrong-word-${expression}-${quizType}`)).toBeVisible();
+  },
+);

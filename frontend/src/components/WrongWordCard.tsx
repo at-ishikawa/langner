@@ -92,6 +92,14 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
   const [attempts, setAttempts] = useState<AttemptEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // displayExpression carries a human-readable headline when word.expression
+  // itself isn't display text — a grammar attempt's expression is the
+  // opaque correction id (the canonical storage/lookup key, per L1/L2); the
+  // resolver fills displayExpression with e.g. "the John → John" instead.
+  // Every other quiz type leaves it empty (L3: expression already IS the
+  // display text there), so this falls back to word.expression.
+  const headline = word.displayExpression || word.expression;
+
   // Reverse and freeform quizzes prompt with the meaning; rendering the
   // meaning as the headline reproduces the original cognitive task.
   const meaningIsPrompt = word.quizType === "reverse" || word.quizType === "etymology_assembly" || word.quizType.endsWith("_freeform");
@@ -142,7 +150,7 @@ export function WrongWordCard({ word }: { word: WrongWord }) {
             ✗
           </Text>
           <Text fontWeight="bold" fontSize="lg">
-            {word.expression}
+            {headline}
           </Text>
           {word.skipped && (
             <Badge

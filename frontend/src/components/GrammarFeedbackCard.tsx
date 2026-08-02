@@ -4,14 +4,15 @@ import { Box, Button, Text } from "@chakra-ui/react";
 import type { GrammarResultState } from "@/store/grammarStore";
 import type { ResultItem } from "@/components/QuizResultCard";
 import { grammarResultToItem } from "@/lib/grammarResultItems";
-import { wordDiff, type DiffToken } from "@/lib/wordDiff";
+import { GrammarCorrectionBody } from "@/components/GrammarCorrectionBody";
 
 // GrammarFeedbackCard replaces the shared vocabulary card for grammar results.
 // The vocabulary card shows a short word + meaning; grammar answers are full
 // sentences that differ from the correction by only a word or two, so three
 // unlabeled near-identical lines were impossible to tell apart. This card
-// labels each line (Mistake / You wrote / Suggested / Why) and diff-highlights
-// exactly the words that differ, so the reader sees what still needs fixing.
+// adds the status header + override/skip footer around GrammarCorrectionBody,
+// which does the labelled-lines + diff rendering (shared with the Relearn
+// Quiz's grammar card).
 
 const STATUS = {
   correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "Correct", border: "green.200", darkBorder: "green.700" },
@@ -22,38 +23,6 @@ const STATUS = {
 function statusOf(r: GrammarResultState): keyof typeof STATUS {
   if (r.isSkipped) return "skipped";
   return r.correct ? "correct" : "incorrect";
-}
-
-// Render diffed tokens; changed words get a tinted background so they stand out.
-function DiffLine({ tokens, tone }: { tokens: DiffToken[]; tone: "user" | "correct" }) {
-  const changedBg = tone === "user" ? "red.100" : "green.100";
-  const changedDarkBg = tone === "user" ? "red.900" : "green.900";
-  const changedColor = tone === "user" ? "red.700" : "green.700";
-  const changedDarkColor = tone === "user" ? "red.200" : "green.200";
-  return (
-    <Text fontSize="sm" wordBreak="break-word">
-      {tokens.map((t, i) => (
-        <Text as="span" key={i}>
-          {i > 0 ? " " : ""}
-          {t.changed ? (
-            <Text
-              as="span"
-              px={1}
-              borderRadius="sm"
-              fontWeight="bold"
-              bg={changedBg}
-              color={changedColor}
-              _dark={{ bg: changedDarkBg, color: changedDarkColor }}
-            >
-              {t.text}
-            </Text>
-          ) : (
-            t.text
-          )}
-        </Text>
-      ))}
-    </Text>
-  );
 }
 
 interface GrammarFeedbackCardProps {
@@ -75,9 +44,6 @@ export function GrammarFeedbackCard({
 }: GrammarFeedbackCardProps) {
   const s = STATUS[statusOf(result)];
   const item = grammarResultToItem(result, index);
-  // Diff the user's answer against the suggested correction so each side
-  // highlights the words the other is missing.
-  const diff = wordDiff(result.answer, result.correctAnswer);
 
   return (
     <Box
@@ -120,59 +86,15 @@ export function GrammarFeedbackCard({
         )}
       </Box>
 
-      {/* Mistake (original), muted — also the anchor for the wrong span. */}
-      <Box display="flex" gap={2} mb={1}>
-        <Text fontSize="xs" color="fg.muted" flexShrink={0} w="4.5rem">
-          Mistake
-        </Text>
-        <Text fontSize="sm" color="fg.muted" textDecoration="line-through" wordBreak="break-word">
-          {result.incorrect}
-        </Text>
-      </Box>
-
-      {/* You wrote — changed words vs the correction highlighted. */}
-      <Box display="flex" gap={2} mb={1}>
-        <Text fontSize="xs" color="fg.muted" flexShrink={0} w="4.5rem">
-          You wrote
-        </Text>
-        {result.answer.trim() ? (
-          <DiffLine tokens={diff.left} tone="user" />
-        ) : (
-          <Text fontSize="sm" color="fg.muted" fontStyle="italic">
-            (skipped)
-          </Text>
-        )}
-      </Box>
-
-      {/* Suggested — the words you still needed highlighted. */}
-      <Box display="flex" gap={2} mb={2}>
-        <Text fontSize="xs" color="fg.muted" flexShrink={0} w="4.5rem">
-          Suggested
-        </Text>
-        <DiffLine tokens={diff.right} tone="correct" />
-      </Box>
-
-      {/* Why you missed it — the grader's critique of THIS answer (wrong only). */}
-      {result.assessment && (
-        <Box mb={result.reason ? 1 : 3}>
-          <Text fontSize="xs" color="red.600" _dark={{ color: "red.300" }} fontWeight="medium">
-            Why you missed it
-          </Text>
-          <Text fontSize="sm">{result.assessment}</Text>
-        </Box>
-      )}
-
-      {/* Grammar note authored for the mistake. */}
-      {result.reason && (
-        <Box mb={3}>
-          <Text fontSize="xs" color="fg.muted">
-            {result.assessment ? "Grammar note" : "Why"}
-          </Text>
-          <Text fontSize="sm" color="fg.muted" fontStyle="italic">
-            {result.reason}
-          </Text>
-        </Box>
-      )}
+      <GrammarCorrectionBody
+        incorrect={result.incorrect}
+        answer={result.answer}
+        correctAnswer={result.correctAnswer}
+        correct={result.correct}
+        isSkipped={result.isSkipped}
+        assessment={result.assessment}
+        grammarNote={result.reason}
+      />
 
       {/* Footer actions — mirror QuizResultCard so override/skip reuse the same
           RPCs. */}

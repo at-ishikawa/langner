@@ -666,6 +666,13 @@ message RelearnCard {
   repeated ContextSentence contexts = 6;  // reverse hint (masked)
   string type = 7;                        // etymology origin type (root/prefix/suffix)
   string language = 8;                    // etymology origin language
+
+  // Grammar display extras (empty for vocab/etymology cards). Populated when
+  // source_quiz_type is QUIZ_TYPE_GRAMMAR: the live grammar quiz's inline-
+  // correction card is reused to present these — the full entry text with
+  // the missed span struck through and an inline box for the fix.
+  string content = 9;    // the journal entry's full text (grammar)
+  string incorrect = 10; // the mistaken span to correct, struck through in content
 }
 
 message SubmitRelearnAnswerRequest {
@@ -691,6 +698,16 @@ message SubmitRelearnAnswerResponse {
   repeated RelearnContextScene context_scenes = 6;
   GraphPrompt graph_context = 7;
   repeated string example_words = 8;
+
+  // Grammar feedback extras (empty for vocab/etymology cards), populated
+  // when the graded card's source_quiz_type was QUIZ_TYPE_GRAMMAR — mirrors
+  // what the live grammar quiz's feedback card shows (see
+  // GrammarFeedbackCard.tsx): the reference fix, the mistake's category,
+  // and the authored grammar note (separate from `reason`, which here
+  // carries the grader's critique of THIS answer).
+  string correct_answer = 9;
+  string category = 10;
+  string grammar_note = 11;
 
   // NOTE: intentionally NO next_review_date and NO learned_at. The Relearn
   // Quiz writes no learning history, so there is no schedule to show and no

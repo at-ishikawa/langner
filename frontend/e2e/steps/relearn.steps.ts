@@ -64,6 +64,54 @@ When("I clear every remaining relearn card", async ({ page }) => {
   }
 });
 
+// Finds the grammar-format relearn card wherever it falls in the queue —
+// the pool can also hold leftover words from earlier scenarios in the same
+// window, so this doesn't assume the grammar card is first. Every
+// other-format card is skipped past via "Don't Know" (which every Relearn
+// format renders) until the grammar card's own struck-through-span input
+// (aria-label "Correction for ...", the same labelling the live Grammar
+// quiz uses) is found; then it's filled with the exact reference correction,
+// which GradeGrammarBlank's deterministic fast path grades correct without
+// needing the mock LLM. Leaves the session wherever it lands next so
+// "I clear every remaining relearn card" can drain the rest of the pool.
+When(
+  "I find and fix the grammar relearn card for {string} with {string}",
+  async ({ page }, incorrect: string, answer: string) => {
+    const submit = page.getByRole("button", { name: "Submit", exact: true });
+    const dontKnow = page.getByRole("button", { name: "Don't Know", exact: true });
+    const next = page.getByRole("button", { name: "Next", exact: true });
+    const grammarInput = page.getByLabel(`Correction for "${incorrect}"`);
+
+    let found = false;
+    for (let i = 0; i < 50 && !page.url().includes("/quiz/relearn/complete"); i++) {
+      await submit.waitFor({ state: "visible" });
+      if (await grammarInput.isVisible().catch(() => false)) {
+        found = true;
+        await grammarInput.fill(answer);
+        await submit.click();
+        await expect(page.getByText("✓ Correct")).toBeVisible();
+        await next.click();
+        break;
+      }
+      // Some other-format card — skip past it (wrong is fine; it just
+      // requeues to the back) and keep looking.
+      await dontKnow.click();
+      await next.waitFor({ state: "visible" });
+      await next.click();
+      await page.waitForFunction(
+        () =>
+          location.pathname.includes("/quiz/relearn/complete") ||
+          !!document.querySelector("input"),
+        undefined,
+        { timeout: 15000 },
+      );
+    }
+    expect(found, `grammar relearn card for "${incorrect}" never appeared in the pool`).toBe(
+      true,
+    );
+  },
+);
+
 // covers route: /quiz/relearn/complete
 Then("I should be on the Relearn Complete page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz\/relearn\/complete/);

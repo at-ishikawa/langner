@@ -34,3 +34,34 @@ Feature: Relearn Quiz
     Then I see a relearn card
     When I clear every remaining relearn card
     Then I should be on the Relearn Complete page
+
+  # A grammar miss must resurface in Relearn using the SAME inline-correction
+  # card the live Grammar quiz shows (the whole entry, the mistaken span
+  # struck through, an inline box for the fix) — not a plain-text word/meaning
+  # fallback. See docs/content/proposals/relearn-quiz and
+  # .claude/rules/learning-history-invariants.md (grammar's storage key, the
+  # correction's stable id, is unchanged end to end).
+  Scenario: Relearn a grammar correction missed moments ago
+    Given I open the Grammar quiz
+    And I select the "Practice Journal" notebook
+    And I start the grammar quiz
+    Then I see the grammar correction input for "the John"
+
+    When I correct "the John" with "John"
+    And I correct "suggested to go" with "wrong on purpose"
+    Then the graded post marks "the John" as correct
+    And the graded post marks "suggested to go" as incorrect
+
+    When I finish the grammar post
+    Then I should be on the Grammar Complete page
+
+    When I open the Relearn Quiz
+    Then I see words to relearn
+    When I start the relearn session
+    # The pool may also hold leftover words from earlier scenarios in this
+    # window, so this finds the grammar card wherever it falls in the queue
+    # (skipping past any other-format card first), fixes it correctly, and
+    # then drains whatever else remains.
+    When I find and fix the grammar relearn card for "suggested to go" with "suggested going"
+    And I clear every remaining relearn card
+    Then I should be on the Relearn Complete page

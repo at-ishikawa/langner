@@ -1,11 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
+import { Box, Button, Heading, Input, Spinner, Text } from "@chakra-ui/react";
 import { quizClient, QuizType, type SubmitRelearnAnswerResponse } from "@/lib/client";
 import { AnswerInput } from "@/components/AnswerInput";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { GrammarCorrectionBody } from "@/components/GrammarCorrectionBody";
+import { segmentPost } from "@/lib/grammarSegments";
 import { useRelearnStore } from "@/store/relearnStore";
 import RelearnContext from "@/components/RelearnContext";
 
@@ -19,6 +21,8 @@ function sourceLabel(source: QuizType): string {
       return "Etymology — recall the meaning";
     case QuizType.ETYMOLOGY_REVERSE:
       return "Etymology — recall the origin";
+    case QuizType.GRAMMAR:
+      return "Grammar — fix the mistake";
     default:
       return "Recognition — recall the meaning";
   }
@@ -58,6 +62,19 @@ export default function RelearnSessionPage() {
     startRef.current = Date.now();
   }, [current?.noteId]);
 
+  // Grammar cards reuse the live grammar quiz's own inline-correction
+  // rendering: the whole entry's text, with the missed span struck through
+  // in place, via the same segmentPost matching algorithm the grammar quiz
+  // uses for its (multi-blank) post view — here there is always exactly one
+  // blank, the card's own Incorrect span.
+  const grammarSegments = useMemo(
+    () =>
+      current && current.sourceQuizType === QuizType.GRAMMAR
+        ? segmentPost(current.content, [{ incorrect: current.incorrect }])
+        : [],
+    [current],
+  );
+
   if (!current) {
     return null;
   }
@@ -71,6 +88,7 @@ export default function RelearnSessionPage() {
   const isEtymology =
     current.sourceQuizType === QuizType.ETYMOLOGY_STANDARD ||
     current.sourceQuizType === QuizType.ETYMOLOGY_REVERSE;
+  const isGrammar = current.sourceQuizType === QuizType.GRAMMAR;
   const promptText = isReverse ? current.meaning : current.entry;
   const answerLabel = isReverse ? (isEtymology ? "The origin" : "The word") : "Your meaning";
   const answerPlaceholder = isReverse
@@ -122,50 +140,122 @@ export default function RelearnSessionPage() {
         <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium" mb={2}>
           {sourceLabel(current.sourceQuizType)}
         </Text>
-        <Heading size="lg" textAlign="center" data-testid="relearn-prompt">
-          {promptText}
-        </Heading>
-        {isEtymology && etymologyBadge && (
-          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center" mt={1}>
-            {etymologyBadge}
-          </Text>
-        )}
 
-        {/* Hints: examples for recognition, masked contexts for reverse. */}
-        {!isReverse && current.examples.length > 0 && (
-          <Box mt={3} display="flex" flexDirection="column" gap={1}>
-            {current.examples.map((ex, i) => (
-              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
-                {ex.speaker ? `${ex.speaker}: ` : ""}
-                {ex.text}
-              </Text>
-            ))}
+        {isGrammar ? (
+          // The live grammar quiz's inline-correction card: the whole entry,
+          // the mistaken span struck through, with an inline box to type the
+          // fix in place — not a plain-text prompt/answer pair.
+          <Box
+            fontSize="md"
+            lineHeight="2.2"
+            whiteSpace="pre-wrap"
+            wordBreak="break-word"
+            data-testid="relearn-prompt"
+          >
+            {grammarSegments.map((seg, i) =>
+              seg.type === "text" ? (
+                <Text as="span" key={i}>
+                  {seg.text}
+                </Text>
+              ) : (
+                <Text as="span" key={i}>
+                  <Text
+                    as="span"
+                    fontWeight="bold"
+                    color="blue.600"
+                    _dark={{ color: "blue.300" }}
+                    textDecoration="line-through"
+                  >
+                    {seg.blank.incorrect}
+                  </Text>
+                  {phase === "answering" && (
+                    <Input
+                      size="sm"
+                      display="inline-block"
+                      w="auto"
+                      minW="6rem"
+                      maxW="100%"
+                      mx={1}
+                      verticalAlign="baseline"
+                      aria-label={`Correction for "${seg.blank.incorrect}"`}
+                      placeholder="fix"
+                      value={answer}
+                      onChange={(e) => setAnswer(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && answer.trim()) void submit(false);
+                      }}
+                      data-testid="relearn-grammar-input"
+                    />
+                  )}
+                </Text>
+              ),
+            )}
           </Box>
-        )}
-        {isReverse && !isEtymology && current.contexts.length > 0 && (
-          <Box mt={3} display="flex" flexDirection="column" gap={1}>
-            {current.contexts.map((c, i) => (
-              <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
-                {c.maskedContext || c.context}
+        ) : (
+          <>
+            <Heading size="lg" textAlign="center" data-testid="relearn-prompt">
+              {promptText}
+            </Heading>
+            {isEtymology && etymologyBadge && (
+              <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center" mt={1}>
+                {etymologyBadge}
               </Text>
-            ))}
-          </Box>
+            )}
+
+            {/* Hints: examples for recognition, masked contexts for reverse. */}
+            {!isReverse && current.examples.length > 0 && (
+              <Box mt={3} display="flex" flexDirection="column" gap={1}>
+                {current.examples.map((ex, i) => (
+                  <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+                    {ex.speaker ? `${ex.speaker}: ` : ""}
+                    {ex.text}
+                  </Text>
+                ))}
+              </Box>
+            )}
+            {isReverse && !isEtymology && current.contexts.length > 0 && (
+              <Box mt={3} display="flex" flexDirection="column" gap={1}>
+                {current.contexts.map((c, i) => (
+                  <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
+                    {c.maskedContext || c.context}
+                  </Text>
+                ))}
+              </Box>
+            )}
+          </>
         )}
       </Box>
 
       {phase === "answering" ? (
         <Box display="flex" flexDirection="column" gap={3}>
-          <AnswerInput
-            label={answerLabel}
-            value={answer}
-            onChange={setAnswer}
-            onSubmit={() => void submit(false)}
-            onSkip={() => void submit(true)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && answer.trim()) void submit(false);
-            }}
-            placeholder={answerPlaceholder}
-          />
+          {isGrammar ? (
+            <Box display="flex" gap={2}>
+              <Button
+                flex="1"
+                colorPalette="blue"
+                size="lg"
+                disabled={!answer.trim()}
+                onClick={() => void submit(false)}
+              >
+                Submit
+              </Button>
+              <Button flex="1" variant="outline" size="lg" onClick={() => void submit(true)}>
+                Don&apos;t Know
+              </Button>
+            </Box>
+          ) : (
+            <AnswerInput
+              label={answerLabel}
+              value={answer}
+              onChange={setAnswer}
+              onSubmit={() => void submit(false)}
+              onSkip={() => void submit(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && answer.trim()) void submit(false);
+              }}
+              placeholder={answerPlaceholder}
+            />
+          )}
           {error && (
             <Text color="red.500" fontSize="sm" role="alert">
               {error}
@@ -192,40 +282,57 @@ export default function RelearnSessionPage() {
               onOverride={() => setOverride(!feedback.correct)}
               onUndo={() => setOverride(null)}
             >
-              {/* Show the word, its correct meaning, and what the learner typed
-                  so they can see exactly what was off. */}
-              <Box display="flex" flexDirection="column" gap={1}>
-                <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
-                  {current.entry}
-                </Text>
-                <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>
-                  <Text as="span" fontWeight="semibold">Meaning: </Text>
-                  <Text as="span" data-testid={isReverse ? undefined : "relearn-answer"}>
-                    {feedback.meaning || current.meaning}
-                  </Text>
-                </Text>
-                {answer.trim() && (
-                  <Text
-                    fontSize="sm"
-                    color={(override ?? feedback.correct) ? "gray.500" : "red.600"}
-                    _dark={{ color: (override ?? feedback.correct) ? "gray.400" : "red.300" }}
-                  >
-                    <Text as="span" fontWeight="semibold">Your answer: </Text>
-                    {answer}
-                  </Text>
-                )}
-              </Box>
-              {feedback.reason && (
-                <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
-                  {feedback.reason}
-                </Text>
+              {isGrammar ? (
+                // The live grammar quiz's own feedback body (Mistake / You
+                // wrote / Suggested / Why you missed it / Grammar note) —
+                // shared via GrammarCorrectionBody, not a re-typed summary.
+                <GrammarCorrectionBody
+                  incorrect={current.incorrect}
+                  answer={answer}
+                  correctAnswer={feedback.correctAnswer}
+                  correct={override ?? feedback.correct}
+                  assessment={feedback.reason}
+                  grammarNote={feedback.grammarNote}
+                  correctAnswerTestId="relearn-answer"
+                />
+              ) : (
+                <>
+                  {/* Show the word, its correct meaning, and what the learner
+                      typed so they can see exactly what was off. */}
+                  <Box display="flex" flexDirection="column" gap={1}>
+                    <Text fontWeight="bold" data-testid={isReverse ? "relearn-answer" : undefined}>
+                      {current.entry}
+                    </Text>
+                    <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>
+                      <Text as="span" fontWeight="semibold">Meaning: </Text>
+                      <Text as="span" data-testid={isReverse ? undefined : "relearn-answer"}>
+                        {feedback.meaning || current.meaning}
+                      </Text>
+                    </Text>
+                    {answer.trim() && (
+                      <Text
+                        fontSize="sm"
+                        color={(override ?? feedback.correct) ? "gray.500" : "red.600"}
+                        _dark={{ color: (override ?? feedback.correct) ? "gray.400" : "red.300" }}
+                      >
+                        <Text as="span" fontWeight="semibold">Your answer: </Text>
+                        {answer}
+                      </Text>
+                    )}
+                  </Box>
+                  {feedback.reason && (
+                    <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }}>
+                      {feedback.reason}
+                    </Text>
+                  )}
+                  <RelearnContext
+                    entry={current.entry}
+                    scenes={feedback.contextScenes ?? []}
+                    exampleWords={feedback.exampleWords ?? []}
+                    graphContext={feedback.graphContext}
+                  />
+                </>
               )}
-              <RelearnContext
-                entry={current.entry}
-                scenes={feedback.contextScenes ?? []}
-                exampleWords={feedback.exampleWords ?? []}
-                graphContext={feedback.graphContext}
-              />
             </FeedbackActions>
           )}
         </Box>

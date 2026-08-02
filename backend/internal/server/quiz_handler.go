@@ -469,6 +469,8 @@ func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
 		return notebook.QuizTypeEtymologyReverse
 	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM:
 		return notebook.QuizTypeEtymologyFreeform
+	case apiv1.QuizType_QUIZ_TYPE_GRAMMAR:
+		return notebook.QuizTypeGrammar
 	default:
 		return notebook.QuizTypeNotebook
 	}

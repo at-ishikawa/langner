@@ -17,53 +17,9 @@ import { useGrammarStore, type GrammarResultState } from "@/store/grammarStore";
 import { GrammarFeedbackCard } from "@/components/GrammarFeedbackCard";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
+import { segmentPost, PILL_STYLES, type PostSegment } from "@/lib/grammarSegments";
 
-// A post is rendered as an ordered list of plain-text runs and blank tokens so
-// each mistake is corrected in place. Blanks are located by their incorrect
-// span; duplicates map to successive occurrences in blank order. Any blank whose
-// span can't be placed is appended at the end so the rendered set always equals
-// the graded set.
-type Segment =
-  | { type: "text"; text: string }
-  | { type: "blank"; blank: GrammarBlank };
-
-function segmentPost(postText: string, blanks: GrammarBlank[]): Segment[] {
-  const cursors = new Map<string, number>();
-  const placed: { blank: GrammarBlank; pos: number }[] = [];
-  const unplaced: GrammarBlank[] = [];
-  for (const blank of blanks) {
-    const from = cursors.get(blank.incorrect) ?? 0;
-    const pos = blank.incorrect ? postText.indexOf(blank.incorrect, from) : -1;
-    if (pos >= 0) {
-      cursors.set(blank.incorrect, pos + blank.incorrect.length);
-      placed.push({ blank, pos });
-    } else {
-      unplaced.push(blank);
-    }
-  }
-  placed.sort((a, b) => a.pos - b.pos);
-
-  const segments: Segment[] = [];
-  let cursor = 0;
-  for (const { blank, pos } of placed) {
-    if (pos < cursor) {
-      unplaced.push(blank);
-      continue;
-    }
-    if (pos > cursor) segments.push({ type: "text", text: postText.slice(cursor, pos) });
-    segments.push({ type: "blank", blank });
-    cursor = pos + blank.incorrect.length;
-  }
-  if (cursor < postText.length) segments.push({ type: "text", text: postText.slice(cursor) });
-  for (const blank of unplaced) segments.push({ type: "blank", blank });
-  return segments;
-}
-
-const PILL_STYLES = {
-  correct: { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓", label: "correct" },
-  incorrect: { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗", label: "incorrect" },
-  skipped: { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300", glyph: "–", label: "excluded" },
-} as const;
+type Segment = PostSegment<GrammarBlank>;
 
 function resultPillStatus(r: GrammarResultState): "correct" | "incorrect" | "skipped" {
   if (r.isSkipped) return "skipped";

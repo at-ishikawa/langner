@@ -339,3 +339,78 @@ func TestRelearn_SubmitUnknownCardIsNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
+
+// TestRelearn_GrammarCardEndToEnd is the full-stack pin for Part A: a missed
+// grammar correction reaches StartRelearnQuiz as a QUIZ_TYPE_GRAMMAR card
+// carrying the entry's content and the mistaken span (the live grammar
+// quiz's own inline-correction display data — no plain-text fallback), and
+// SubmitRelearnAnswer grades it with the same GradeGrammarBlank the live
+// grammar quiz uses, surfacing the reference fix + category on the response.
+func TestRelearn_GrammarCardEndToEnd(t *testing.T) {
+	storiesDir := t.TempDir()
+	grammarsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(storiesDir, "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me.\"\n"), 0644))
+
+	grammarNotebookDir := filepath.Join(grammarsDir, "journal")
+	require.NoError(t, os.MkdirAll(grammarNotebookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarNotebookDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarNotebookDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: note-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+`), 0644))
+
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: note-the-john
+      expression: note-the-john
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent)), 0644))
+
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		GrammarsDirectories:    []string{grammarsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	h := NewQuizHandler(svc)
+
+	cards := startRelearn(t, h, 24)
+	require.Len(t, cards, 1)
+	card := cards[0]
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
+	assert.Contains(t, card.GetContent(), "the John called me",
+		"the card carries the whole entry, like the live grammar quiz — not a degraded plain-text fallback")
+	assert.Equal(t, "the John", card.GetIncorrect())
+
+	resp, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
+		NoteId: card.GetNoteId(),
+		Answer: "John",
+	}))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetCorrect())
+	assert.Equal(t, "John", resp.Msg.GetCorrectAnswer())
+	assert.Equal(t, "article", resp.Msg.GetCategory())
+}

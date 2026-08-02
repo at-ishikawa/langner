@@ -1,6 +1,7 @@
 package quiz
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 func TestRelearnRecognitionContexts_GuaranteesOneAnchoredContext(t *testing.T) {
@@ -207,4 +209,50 @@ notebooks:
 		}
 	}
 	require.True(t, found, "the failed concept member must appear in the relearn pool")
+}
+
+// TestLoadRelearnPool_GrammarMiss pins Part A of the grammar/Relearn fix: a
+// missed grammar correction (a "misunderstood" log under the flat "grammar"
+// learning-history bucket) must resurface in the Relearn pool as a
+// QuizTypeGrammar card carrying the entry's full content and the mistaken
+// span — not be silently dropped because relearnSeries mislabeled it
+// QuizTypeNotebook and it then failed vocab resolution (the pre-fix bug).
+func TestLoadRelearnPool_GrammarMiss(t *testing.T) {
+	storiesDir, grammarsDir := writeGrammarNotebook(t)
+	learningDir := t.TempDir()
+
+	// A learning history entry for the correction, written the same way
+	// SaveGrammarBlank writes it: flat "grammar" bucket, Expression == ID ==
+	// the correction's stable senseID, status misunderstood.
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: note-the-john
+      expression: note-the-john
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent)), 0o644))
+
+	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
+
+	cards, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	require.Len(t, cards, 1, "the missed correction must yield exactly one relearn card")
+
+	card := cards[0]
+	assert.Equal(t, notebook.QuizTypeGrammar, card.Format)
+	assert.Contains(t, card.Content, "the John called me", "the card carries the whole entry, like the live grammar quiz")
+	assert.Equal(t, "the John", card.Incorrect)
+	assert.Equal(t, "English Journal", card.NotebookName)
+
+	// The card must grade like the live quiz: GradeGrammarBlank against the
+	// card's own grading inputs (GrammarCard(), never sent to the client).
+	result, err := svc.GradeGrammarBlank(context.Background(), card.Content, card.GrammarCard(), "John", 1200)
+	require.NoError(t, err)
+	assert.True(t, result.Correct)
 }

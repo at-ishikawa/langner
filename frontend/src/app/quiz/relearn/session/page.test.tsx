@@ -10,7 +10,7 @@ vi.mock("@/lib/client", () => ({
   quizClient: {
     submitRelearnAnswer: (...args: unknown[]) => submitRelearnAnswer(...args),
   },
-  QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, FREEFORM: 3, ETYMOLOGY_STANDARD: 4, ETYMOLOGY_REVERSE: 5, ETYMOLOGY_FREEFORM: 6 },
+  QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, FREEFORM: 3, ETYMOLOGY_STANDARD: 4, ETYMOLOGY_REVERSE: 5, ETYMOLOGY_FREEFORM: 6, RELEARN: 7, GRAMMAR: 8 },
 }));
 
 const pushMock = vi.fn();
@@ -33,6 +33,21 @@ const card = (entry: string): RelearnCard =>
 // A reverse-format card: shown meaning, asks for the word.
 const reverseCard = (entry: string, meaning: string): RelearnCard =>
   ({ entry, noteId: BigInt(entry.length), sourceQuizType: 2, meaning, examples: [], contexts: [] }) as RelearnCard;
+
+// A grammar-format card: the whole journal entry, with the mistaken span
+// (incorrect) shown struck through in place — mirrors the live grammar
+// quiz's inline-correction card, not a plain-text word/meaning prompt.
+const grammarCard = (content: string, incorrect: string): RelearnCard =>
+  ({
+    entry: incorrect,
+    noteId: BigInt(content.length),
+    sourceQuizType: 8,
+    meaning: "",
+    examples: [],
+    contexts: [],
+    content,
+    incorrect,
+  }) as RelearnCard;
 
 describe("RelearnSessionPage", () => {
   beforeEach(() => {
@@ -154,5 +169,41 @@ describe("RelearnSessionPage", () => {
     fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "x" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Grading failed");
+  });
+
+  // A missed grammar correction must reuse the live grammar quiz's own
+  // inline-correction card — the whole entry with the mistake struck
+  // through and an inline box to type the fix — not a degraded plain-text
+  // fallback, and the feedback must show the labelled Mistake/You wrote/
+  // Suggested body the live grammar quiz shows.
+  it("renders a grammar card inline and grades it via the grammar feedback body", async () => {
+    useRelearnStore
+      .getState()
+      .seedQueue([grammarCard("Yesterday the John called me.", "the John")]);
+    submitRelearnAnswer.mockResolvedValue({
+      correct: true,
+      correctAnswer: "John",
+      category: "article",
+      grammarNote: "No article before a personal name.",
+      reason: "Matches the correction.",
+    });
+    renderPage();
+
+    // The prompt shows the whole entry with the mistake struck through in
+    // place, and an inline input — not a separate word/meaning prompt.
+    const prompt = screen.getByTestId("relearn-prompt");
+    expect(prompt).toHaveTextContent("Yesterday the John called me.");
+    expect(screen.getByText(/Grammar/)).toBeInTheDocument();
+    const inlineInput = screen.getByTestId("relearn-grammar-input");
+
+    fireEvent.change(inlineInput, { target: { value: "John" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect(await screen.findByText("✓ Correct")).toBeInTheDocument();
+    // The grammar feedback body's labelled lines, not the generic
+    // word/meaning summary.
+    expect(screen.getByText("Mistake")).toBeInTheDocument();
+    expect(screen.getByText("Suggested")).toBeInTheDocument();
+    expect(screen.getByText("No article before a personal name.")).toBeInTheDocument();
   });
 });
