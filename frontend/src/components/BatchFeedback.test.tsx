@@ -178,6 +178,47 @@ describe("BatchFeedback etymology-origin feedback screen", () => {
     expect(screen.queryByRole("button", { name: "Mark as Incorrect" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
   });
+
+  // Study context (roots-book support): the feedback card renders the origin's
+  // english_forms + note and each word's pronunciation, example sentence, and
+  // literal gloss. None of these are graded — only the meaning is.
+  const contextItems: ResultItem[] = [
+    {
+      index: 0,
+      key: "20",
+      entry: "facere",
+      meaning: "to make, to do",
+      correct: false,
+      originalCorrect: false,
+      noteId: BigInt(20),
+      learnedAt: "2026-03-16T00:00:00Z",
+      etymologyEnglishForms: ["fac", "fic", "fect"],
+      etymologyNote: "Watch for fic and fect.",
+      etymologyWords: [
+        {
+          expression: "facsimile",
+          correct: false,
+          correctMeaning: "an exact copy",
+          reason: "",
+          userAnswer: "fax",
+          pronunciation: "fak-SIM-uh-lee",
+          literal: 'fac "make" + simile "like" = "make similar"',
+          examples: ["The museum displayed a facsimile of the manuscript."],
+        },
+      ],
+    },
+  ];
+
+  it("renders origin english_forms, origin note, and per-word pronunciation/example/literal", () => {
+    renderComponent({ items: contextItems, isEtymology: true });
+    expect(screen.getByText("fac")).toBeInTheDocument();
+    expect(screen.getByText("fic")).toBeInTheDocument();
+    expect(screen.getByText("fect")).toBeInTheDocument();
+    expect(screen.getByText("Watch for fic and fect.")).toBeInTheDocument();
+    expect(screen.getByText("/fak-SIM-uh-lee/")).toBeInTheDocument();
+    expect(screen.getByText('fac "make" + simile "like" = "make similar"')).toBeInTheDocument();
+    expect(screen.getByText(/The museum displayed a facsimile of the manuscript\./)).toBeInTheDocument();
+  });
 });
 
 // Non-etymology quiz modes keep the root-level Mark as Correct/Exclude

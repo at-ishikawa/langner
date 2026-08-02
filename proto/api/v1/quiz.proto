@@ -436,6 +436,12 @@ message ResumeWordResponse {}
 message EtymologyFamilyWord {
   int64 word_id = 1;
   string expression = 2;
+  // pronunciation is per-word study context shown as a hint while the learner
+  // types the meaning. It does not reveal the meaning, so it is safe on the
+  // answering screen. Example sentences and the literal gloss are deliberately
+  // NOT carried on the card (they'd leak the answer); they are returned on the
+  // feedback response instead (see EtymologyWordResult).
+  string pronunciation = 3;
 }
 
 // EtymologyOriginCard is one screen: a single (origin, sense) shown with the
@@ -457,6 +463,14 @@ message EtymologyOriginCard {
   repeated EtymologyOriginForm forms = 9;
   // words is the full session-scoped word family to give meanings for.
   repeated EtymologyFamilyWord words = 10;
+  // english_forms are the English combining-form spellings this origin
+  // surfaces as inside English words (e.g. facere → fac, fic, fect). Study
+  // context shown in the origin header; distinct from `forms` (the origin's
+  // source-language principal parts). Never quizzed.
+  repeated string english_forms = 11;
+  // note is the origin's free-text pedagogical hint (e.g. "Be on the lookout
+  // for words with fic, fect, and fy…"). Study context; never quizzed.
+  string note = 12;
 }
 
 // GraphPrompt is a small subgraph. In the etymology-origin quiz it is served
@@ -563,6 +577,14 @@ message EtymologyWordResult {
   string correct_meaning = 4;
   string reason = 5;
   bool skipped = 6;
+  // pronunciation, examples, and literal are per-word study context revealed
+  // on the feedback screen alongside the graded meaning. examples (example
+  // sentences) and literal (the assembled literal gloss, e.g.
+  // `de "down" + facere = "made down"`) are returned here rather than on the
+  // card so they never leak the answer while the learner is typing.
+  string pronunciation = 7;
+  repeated string examples = 8;
+  string literal = 9;
 }
 
 message SubmitEtymologyOriginAnswerResponse {

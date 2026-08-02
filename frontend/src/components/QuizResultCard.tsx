@@ -41,6 +41,14 @@ export interface ResultItem {
    * "facere", "feci", "factum"). Rendered joined under the origin header
    * on the etymology feedback card. */
   etymologyForms?: string[];
+  /** etymologyEnglishForms are the English combining-form spellings the
+   * origin surfaces as inside English words (e.g. "fac", "fic", "fect").
+   * Study context, distinct from etymologyForms. Rendered as chips on the
+   * etymology feedback card. */
+  etymologyEnglishForms?: string[];
+  /** etymologyNote is the origin's free-text pedagogical hint, shown under
+   * the origin header on the etymology feedback card. */
+  etymologyNote?: string;
   /** etymologyWords are the per-word results for an etymology-origin card:
    * each derived family word, whether the typed meaning was correct, the
    * correct meaning, and the reason. Rendered as a list on the feedback
@@ -61,6 +69,11 @@ export interface ResultItem {
      * it is neither correct nor incorrect and didn't affect sibling grading
      * or the origin's own aggregate result. */
     skipped?: boolean;
+    /** pronunciation, examples, and literal are per-word study context shown
+     * on the feedback screen alongside the graded meaning. */
+    pronunciation?: string;
+    examples?: string[];
+    literal?: string;
   }[];
 }
 
@@ -375,6 +388,25 @@ export function QuizResultCard({
         </Text>
       )}
 
+      {/* English combining forms (e.g. "fac", "fic", "fect") as chips —
+          study context distinct from the source-language principal parts. */}
+      {isEtymology && item.etymologyEnglishForms && item.etymologyEnglishForms.length > 0 && (
+        <Box display="flex" flexWrap="wrap" gap={1.5} mb={2}>
+          {item.etymologyEnglishForms.map((ef) => (
+            <Box key={ef} px={2} py={0.5} borderRadius="md" bg="teal.100" _dark={{ bg: "teal.900" }}>
+              <Text fontSize="xs" fontFamily="mono" color="teal.700" _dark={{ color: "teal.200" }}>{ef}</Text>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {/* Origin note: free-text pedagogical hint about the root. */}
+      {isEtymology && item.etymologyNote && (
+        <Text fontSize="xs" color="fg.muted" mb={2} fontStyle="italic">
+          {item.etymologyNote}
+        </Text>
+      )}
+
       {/* Per-word results for an etymology-origin card. The origin is graded
           as one aggregate result, but every derived family word's outcome is
           shown so the learner can see which words they missed. Mark as
@@ -428,6 +460,9 @@ export function QuizResultCard({
                       )}
                     </Text>
                   </Box>
+                  {w.pronunciation && (
+                    <Text fontSize="xs" color="fg.muted">/{w.pronunciation}/</Text>
+                  )}
                   <Text fontSize="sm" color="fg.muted">
                     {w.correctMeaning}
                     {w.reason && (
@@ -437,6 +472,22 @@ export function QuizResultCard({
                       </Text>
                     )}
                   </Text>
+                  {/* Literal gloss (e.g. `de "down" + facere = "made down"`)
+                      revealed only here on feedback, not while answering. */}
+                  {w.literal && (
+                    <Text fontSize="xs" color="fg.muted" fontStyle="italic">{w.literal}</Text>
+                  )}
+                  {/* Example sentence(s) — also feedback-only to avoid leaking
+                      the meaning on the answering screen. */}
+                  {w.examples && w.examples.length > 0 && (
+                    <VStack align="stretch" gap={0.5} mt={0.5}>
+                      {w.examples.map((ex, ei) => (
+                        <Text key={ei} fontSize="xs" color="fg.muted">
+                          &ldquo;{ex}&rdquo;
+                        </Text>
+                      ))}
+                    </VStack>
+                  )}
                   {w.userAnswer && (
                     <Text fontSize="xs" color="fg.muted">
                       your answer · &ldquo;{w.userAnswer}&rdquo;

@@ -108,6 +108,8 @@ export function etymologyResultToItem(r: EtymologyOriginResult, index: number): 
       type: r.type,
     }],
     etymologyForms: r.forms?.map((f) => f.form).filter(Boolean),
+    etymologyEnglishForms: r.englishForms,
+    etymologyNote: r.note,
     etymologyWords: r.words,
   };
 }

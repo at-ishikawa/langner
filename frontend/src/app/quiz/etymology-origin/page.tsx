@@ -118,6 +118,8 @@ export default function EtymologyOriginPage() {
           type: b.card.type,
           language: b.card.language,
           forms: b.card.forms,
+          englishForms: b.card.englishForms,
+          note: b.card.note,
           correct: r.correct,
           words: r.results.map((wr) => ({
             wordId: wr.wordId,
@@ -127,6 +129,9 @@ export default function EtymologyOriginPage() {
             reason: wr.reason,
             userAnswer: b.answers[wr.wordId.toString()] ?? "",
             skipped: wr.skipped,
+            pronunciation: wr.pronunciation,
+            examples: wr.examples,
+            literal: wr.literal,
           })),
           notebookName: b.card.notebookName,
           nextReviewDate: r.nextReviewDate || undefined,
@@ -257,6 +262,23 @@ export default function EtymologyOriginPage() {
                 {card.meaning}
               </Text>
             )}
+            {/* English combining forms (e.g. fac, fic, fect) as chips — study
+                context, distinct from the source-language principal parts. */}
+            {card.englishForms && card.englishForms.length > 0 && (
+              <Box display="flex" gap={1.5} justifyContent="center" mt={3} flexWrap="wrap">
+                {card.englishForms.map((ef) => (
+                  <Box key={ef} px={2} py={0.5} borderRadius="md" bg="teal.100" _dark={{ bg: "teal.900" }}>
+                    <Text fontSize="xs" color="teal.700" _dark={{ color: "teal.200" }} fontFamily="mono">{ef}</Text>
+                  </Box>
+                ))}
+              </Box>
+            )}
+            {/* Origin note: free-text pedagogical hint about the root. */}
+            {card.note && (
+              <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mt={3} fontStyle="italic">
+                {card.note}
+              </Text>
+            )}
           </Box>
 
           {/* One input per derived family word, each with its own "Skip"
@@ -273,7 +295,17 @@ export default function EtymologyOriginPage() {
                 return (
                   <Box key={key}>
                     <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-                      <Text fontSize="sm" fontWeight="semibold">{w.expression}</Text>
+                      <Box minW={0}>
+                        <Text fontSize="sm" fontWeight="semibold">{w.expression}</Text>
+                        {/* Pronunciation is a safe hint — it doesn't reveal the
+                            meaning. Example sentence + literal gloss are held
+                            back until the feedback screen. */}
+                        {w.pronunciation && (
+                          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
+                            /{w.pronunciation}/
+                          </Text>
+                        )}
+                      </Box>
                       <Button
                         size="xs"
                         variant={skipped ? "solid" : "outline"}

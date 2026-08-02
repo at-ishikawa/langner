@@ -121,6 +121,42 @@ describe("EtymologyOriginPage", () => {
     expect(screen.getAllByText(/\(skipped\)/)).toHaveLength(2);
   });
 
+  // Study-context card (roots-book support): carries origin english_forms +
+  // note and a word with pronunciation. The answering screen shows the safe
+  // hints (pronunciation, english_forms, origin note) but must NOT leak the
+  // graded meaning or the answer-adjacent example/literal.
+  const contextCard: EtymologyOriginCard = {
+    cardId: BigInt(1),
+    origin: "facere",
+    type: "root",
+    language: "Latin",
+    meaning: "to make, to do",
+    notebookName: "roots",
+    sessionTitle: "session-1",
+    sense: "",
+    forms: [],
+    englishForms: ["fac", "fic", "fect"],
+    note: "Watch for fic and fect.",
+    words: [{ wordId: BigInt(1), expression: "facsimile", pronunciation: "fak-SIM-uh-lee" }],
+  };
+
+  it("shows english_forms, origin note, and pronunciation while answering but never the meaning", () => {
+    useQuizStore.getState().setEtymologyOriginCards([contextCard]);
+    renderPage();
+
+    // Safe study context is visible while typing.
+    expect(screen.getByText("fac")).toBeInTheDocument();
+    expect(screen.getByText("fic")).toBeInTheDocument();
+    expect(screen.getByText("fect")).toBeInTheDocument();
+    expect(screen.getByText("Watch for fic and fect.")).toBeInTheDocument();
+    expect(screen.getByText("/fak-SIM-uh-lee/")).toBeInTheDocument();
+
+    // The word's meaning is the graded answer — it must not appear anywhere on
+    // the answering screen (only the origin's own gloss "to make, to do" does).
+    expect(screen.queryByText("an exact copy")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Meaning of facsimile")).toHaveValue("");
+  });
+
   it("still marks every word skipped when Don't Know is tapped with nothing typed", async () => {
     batchSubmitEtymologyOriginAnswers.mockResolvedValue({
       responses: [

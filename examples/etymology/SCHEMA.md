@@ -22,6 +22,8 @@ origins:
     type: prefix | suffix          # optional
     sense: ...                     # optional, see "Same-session multi-sense"
     forms: [...]                   # optional, see "Forms"
+    english_forms: [...]           # optional, see "English forms"
+    note: ...                      # optional, see "Origin note"
 
 concepts:                          # optional, see "Concepts"
   - key: ...
@@ -105,8 +107,47 @@ reference via `from_form`:
       from_form: dictum   # must match one of forms[].form on the referenced origin
 ```
 
-`from_form` is optional. When set, the validator checks that it matches a
-form declared on the referenced origin within the same session.
+`from_form` is optional. When set, the validator checks that it matches
+EITHER a source-language `forms[].form` OR one of the origin's
+`english_forms` (see "English forms") declared on the referenced origin
+within the same session. A derived word often surfaces its origin through
+its English combining spelling (e.g. `deficient` surfaces `facere` via the
+English form `fic`), so `english_forms` is a legitimate source of
+`from_form` values.
+
+## English forms
+
+`english_forms` is an optional list of the English combining-form spellings
+a Latin/Greek origin surfaces as inside English words. They are distinct
+from `forms` (which holds the source-language inflectional variants, e.g.
+the Latin principal parts) and are NOT aliases of the origin — they are
+purely how the origin shows up in English derivations. Study context only;
+never quizzed.
+
+```yaml
+- origin: facere
+  language: Latin
+  meaning: "to make, to do"
+  forms:
+    - { form: facio,  role: present_active_indicative }
+    - { form: facere, role: present_active_infinitive }
+    - { form: factum, role: supine }
+  english_forms: [fac, fic, fect, fy]   # how it appears in English words
+```
+
+## Origin note
+
+`note` (at the origin level) is an optional free-text pedagogical hint
+about the origin — e.g. a reminder of which English spellings to watch for.
+Study context only; never quizzed. (This is the origin-level counterpart of
+the concept-level `note`.)
+
+```yaml
+- origin: facere
+  language: Latin
+  meaning: "to make, to do"
+  note: "Be on the lookout for words with fic, fect, and fy."
+```
 
 ## Concepts
 
@@ -170,5 +211,5 @@ notebooks that don't carry these fields continue to validate cleanly:
   the same key agree on `meaning` and `note`; each member resolves to an
   origin in the same session.
 - Relations: exactly one of `between` / `from`+`to`; endpoints resolve.
-- `from_form`: matches a form declared on the referenced origin in the
-  same session.
+- `from_form`: matches a `forms[].form` OR an `english_forms` entry
+  declared on the referenced origin in the same session.

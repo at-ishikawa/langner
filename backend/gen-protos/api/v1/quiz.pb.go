@@ -2628,9 +2628,15 @@ func (*ResumeWordResponse) Descriptor() ([]byte, []int) {
 // the ephemeral id the client echoes back on submit; expression is the word
 // whose meaning the user is asked to type.
 type EtymologyFamilyWord struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WordId        int64                  `protobuf:"varint,1,opt,name=word_id,json=wordId,proto3" json:"word_id,omitempty"`
-	Expression    string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	WordId     int64                  `protobuf:"varint,1,opt,name=word_id,json=wordId,proto3" json:"word_id,omitempty"`
+	Expression string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
+	// pronunciation is per-word study context shown as a hint while the learner
+	// types the meaning. It does not reveal the meaning, so it is safe on the
+	// answering screen. Example sentences and the literal gloss are deliberately
+	// NOT carried on the card (they'd leak the answer); they are returned on the
+	// feedback response instead (see EtymologyWordResult).
+	Pronunciation string `protobuf:"bytes,3,opt,name=pronunciation,proto3" json:"pronunciation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2679,6 +2685,13 @@ func (x *EtymologyFamilyWord) GetExpression() string {
 	return ""
 }
 
+func (x *EtymologyFamilyWord) GetPronunciation() string {
+	if x != nil {
+		return x.Pronunciation
+	}
+	return ""
+}
+
 // EtymologyOriginCard is one screen: a single (origin, sense) shown with the
 // full session-scoped family of words that derive from it. The user types each
 // family word's meaning while the origin and family stay visible as context.
@@ -2698,7 +2711,15 @@ type EtymologyOriginCard struct {
 	Sense string                 `protobuf:"bytes,8,opt,name=sense,proto3" json:"sense,omitempty"`
 	Forms []*EtymologyOriginForm `protobuf:"bytes,9,rep,name=forms,proto3" json:"forms,omitempty"`
 	// words is the full session-scoped word family to give meanings for.
-	Words         []*EtymologyFamilyWord `protobuf:"bytes,10,rep,name=words,proto3" json:"words,omitempty"`
+	Words []*EtymologyFamilyWord `protobuf:"bytes,10,rep,name=words,proto3" json:"words,omitempty"`
+	// english_forms are the English combining-form spellings this origin
+	// surfaces as inside English words (e.g. facere → fac, fic, fect). Study
+	// context shown in the origin header; distinct from `forms` (the origin's
+	// source-language principal parts). Never quizzed.
+	EnglishForms []string `protobuf:"bytes,11,rep,name=english_forms,json=englishForms,proto3" json:"english_forms,omitempty"`
+	// note is the origin's free-text pedagogical hint (e.g. "Be on the lookout
+	// for words with fic, fect, and fy…"). Study context; never quizzed.
+	Note          string `protobuf:"bytes,12,opt,name=note,proto3" json:"note,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2801,6 +2822,20 @@ func (x *EtymologyOriginCard) GetWords() []*EtymologyFamilyWord {
 		return x.Words
 	}
 	return nil
+}
+
+func (x *EtymologyOriginCard) GetEnglishForms() []string {
+	if x != nil {
+		return x.EnglishForms
+	}
+	return nil
+}
+
+func (x *EtymologyOriginCard) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
 }
 
 // GraphPrompt is a small subgraph. In the etymology-origin quiz it is served
@@ -3285,8 +3320,16 @@ type EtymologyWordResult struct {
 	CorrectMeaning string                 `protobuf:"bytes,4,opt,name=correct_meaning,json=correctMeaning,proto3" json:"correct_meaning,omitempty"`
 	Reason         string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
 	Skipped        bool                   `protobuf:"varint,6,opt,name=skipped,proto3" json:"skipped,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// pronunciation, examples, and literal are per-word study context revealed
+	// on the feedback screen alongside the graded meaning. examples (example
+	// sentences) and literal (the assembled literal gloss, e.g.
+	// `de "down" + facere = "made down"`) are returned here rather than on the
+	// card so they never leak the answer while the learner is typing.
+	Pronunciation string   `protobuf:"bytes,7,opt,name=pronunciation,proto3" json:"pronunciation,omitempty"`
+	Examples      []string `protobuf:"bytes,8,rep,name=examples,proto3" json:"examples,omitempty"`
+	Literal       string   `protobuf:"bytes,9,opt,name=literal,proto3" json:"literal,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EtymologyWordResult) Reset() {
@@ -3359,6 +3402,27 @@ func (x *EtymologyWordResult) GetSkipped() bool {
 		return x.Skipped
 	}
 	return false
+}
+
+func (x *EtymologyWordResult) GetPronunciation() string {
+	if x != nil {
+		return x.Pronunciation
+	}
+	return ""
+}
+
+func (x *EtymologyWordResult) GetExamples() []string {
+	if x != nil {
+		return x.Examples
+	}
+	return nil
+}
+
+func (x *EtymologyWordResult) GetLiteral() string {
+	if x != nil {
+		return x.Literal
+	}
+	return ""
 }
 
 type SubmitEtymologyOriginAnswerResponse struct {
@@ -4899,12 +4963,13 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x129\n" +
 	"\n" +
 	"quiz_types\x18\x03 \x03(\x0e2\x10.api.v1.QuizTypeB\b\xbaH\x05\x92\x01\x02\b\x01R\tquizTypesJ\x04\b\x02\x10\x03R\tquiz_type\"\x14\n" +
-	"\x12ResumeWordResponse\"N\n" +
+	"\x12ResumeWordResponse\"t\n" +
 	"\x13EtymologyFamilyWord\x12\x17\n" +
 	"\aword_id\x18\x01 \x01(\x03R\x06wordId\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x02 \x01(\tR\n" +
-	"expression\"\xd6\x02\n" +
+	"expression\x12$\n" +
+	"\rpronunciation\x18\x03 \x01(\tR\rpronunciation\"\x8f\x03\n" +
 	"\x13EtymologyOriginCard\x12\x17\n" +
 	"\acard_id\x18\x01 \x01(\x03R\x06cardId\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x12\n" +
@@ -4916,7 +4981,9 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x05sense\x18\b \x01(\tR\x05sense\x121\n" +
 	"\x05forms\x18\t \x03(\v2\x1b.api.v1.EtymologyOriginFormR\x05forms\x121\n" +
 	"\x05words\x18\n" +
-	" \x03(\v2\x1b.api.v1.EtymologyFamilyWordR\x05words\"\x84\x02\n" +
+	" \x03(\v2\x1b.api.v1.EtymologyFamilyWordR\x05words\x12#\n" +
+	"\renglish_forms\x18\v \x03(\tR\fenglishForms\x12\x12\n" +
+	"\x04note\x18\f \x01(\tR\x04note\"\x84\x02\n" +
 	"\vGraphPrompt\x12/\n" +
 	"\x05shape\x18\x01 \x01(\x0e2\x19.api.v1.GraphPrompt.ShapeR\x05shape\x12'\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x11.api.v1.GraphNodeR\x05nodes\x12'\n" +
@@ -4959,7 +5026,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x125\n" +
 	"\aanswers\x18\x02 \x03(\v2\x1b.api.v1.EtymologyWordAnswerR\aanswers\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMsJ\x04\b\x04\x10\x05R\n" +
-	"is_skipped\"\xc3\x01\n" +
+	"is_skipped\"\x9f\x02\n" +
 	"\x13EtymologyWordResult\x12\x17\n" +
 	"\aword_id\x18\x01 \x01(\x03R\x06wordId\x12\x1e\n" +
 	"\n" +
@@ -4968,7 +5035,10 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\acorrect\x18\x03 \x01(\bR\acorrect\x12'\n" +
 	"\x0fcorrect_meaning\x18\x04 \x01(\tR\x0ecorrectMeaning\x12\x16\n" +
 	"\x06reason\x18\x05 \x01(\tR\x06reason\x12\x18\n" +
-	"\askipped\x18\x06 \x01(\bR\askipped\"\xba\x02\n" +
+	"\askipped\x18\x06 \x01(\bR\askipped\x12$\n" +
+	"\rpronunciation\x18\a \x01(\tR\rpronunciation\x12\x1a\n" +
+	"\bexamples\x18\b \x03(\tR\bexamples\x12\x18\n" +
+	"\aliteral\x18\t \x01(\tR\aliteral\"\xba\x02\n" +
 	"#SubmitEtymologyOriginAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
 	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x18\n" +

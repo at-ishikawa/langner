@@ -108,6 +108,57 @@ func TestLoadEtymologyOriginCards_GroupsFamily(t *testing.T) {
 	}, gotWords)
 }
 
+// TestLoadEtymologyOriginCards_CarriesStudyContext verifies the additive study
+// context flows onto the card: origin-level english_forms + note, and per-word
+// pronunciation, example sentences, and literal gloss (the latter read from the
+// derived word's free-text note field). None of these are quizzed — only the
+// word meaning is graded — but the card must carry them for the UI to render.
+func TestLoadEtymologyOriginCards_CarriesStudyContext(t *testing.T) {
+	const etymYAML = `metadata:
+  title: "Session 1"
+origins:
+  - origin: "facere"
+    type: root
+    language: Latin
+    meaning: "to make, to do"
+    english_forms: [fac, fic, fect]
+    note: "Watch for fic and fect."
+`
+	const defsYAML = `- metadata:
+    title: "Session 1"
+  scenes:
+  - metadata:
+      index: 0
+      title: S1
+    expressions:
+    - expression: facsimile
+      meaning: an exact copy
+      pronunciation: fak-SIM-uh-lee
+      note: 'fac "make" + simile "like" = "make similar"'
+      examples:
+        - The museum displayed a facsimile of the manuscript.
+      origin_parts:
+      - origin: facere
+`
+	svc, bookID, _ := etymologyFixture(t, etymYAML, defsYAML)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+
+	card := cards[0]
+	assert.Equal(t, []string{"fac", "fic", "fect"}, card.EnglishForms)
+	assert.Equal(t, "Watch for fic and fect.", card.Note)
+
+	require.Len(t, card.Words, 1)
+	w := card.Words[0]
+	assert.Equal(t, "facsimile", w.Expression)
+	assert.Equal(t, "an exact copy", w.Meaning) // still the only graded field
+	assert.Equal(t, "fak-SIM-uh-lee", w.Pronunciation)
+	assert.Equal(t, `fac "make" + simile "like" = "make similar"`, w.Literal)
+	assert.Equal(t, []string{"The museum displayed a facsimile of the manuscript."}, w.Examples)
+}
+
 // TestSaveEtymologyOriginResult_OneSeriesPerOrigin verifies L1/L4: two answers
 // on the same origin append to ONE origin series (not one per family word),
 // the read path sees them via the same canonical key (L2), and the derived

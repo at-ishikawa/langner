@@ -362,7 +362,11 @@ export default function QuizHubPage() {
             notebookName: c.notebookName, sessionTitle: c.sessionTitle,
             sense: c.sense,
             forms: (c.forms ?? []).map((f) => ({ form: f.form, role: f.role, note: f.note })),
-            words: (c.words ?? []).map((w) => ({ wordId: w.wordId, expression: w.expression })),
+            englishForms: c.englishForms ?? [],
+            note: c.note,
+            words: (c.words ?? []).map((w) => ({
+              wordId: w.wordId, expression: w.expression, pronunciation: w.pronunciation,
+            })),
           })),
         );
         router.push("/quiz/etymology-origin");

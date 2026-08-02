@@ -59,6 +59,10 @@ export interface EtymologyOriginForm {
 export interface EtymologyFamilyWord {
   wordId: bigint;
   expression: string;
+  // pronunciation is per-word study context shown as a hint while answering.
+  // Example sentences and the literal gloss are NOT carried on the card (they
+  // would leak the meaning); they arrive on the feedback result instead.
+  pronunciation?: string;
 }
 
 // EtymologyOriginCard is one quiz screen: a single origin (e.g. Latin
@@ -80,6 +84,12 @@ export interface EtymologyOriginCard {
   // forms are the origin's principal parts (e.g. facio / facere / feci /
   // factum). Rendered as context under the origin header.
   forms: EtymologyOriginForm[];
+  // englishForms are the English combining-form spellings the origin surfaces
+  // as inside English words (e.g. fac, fic, fect). Shown in the origin header
+  // as study context; distinct from `forms` (source-language principal parts).
+  englishForms?: string[];
+  // note is the origin's free-text pedagogical hint. Study context.
+  note?: string;
   // words is the full session-scoped word family the user gives meanings for.
   words: EtymologyFamilyWord[];
 }
@@ -177,6 +187,12 @@ export interface EtymologyWordResult {
   // result — distinct from the origin-level `isSkipped` on
   // EtymologyOriginResult (which means "excluded from future quizzes").
   skipped?: boolean;
+  // pronunciation, examples, and literal are per-word study context revealed
+  // on the feedback screen alongside the graded meaning (examples and literal
+  // are held back from the card so they don't leak the answer while typing).
+  pronunciation?: string;
+  examples?: string[];
+  literal?: string;
 }
 
 // EtymologyOriginResult is the graded result of one origin screen. The origin
@@ -194,6 +210,10 @@ export interface EtymologyOriginResult {
   // forms are the origin's principal parts, echoed from the card so the
   // feedback surface can still show them.
   forms?: EtymologyOriginForm[];
+  // englishForms and note are the origin's study context, echoed from the
+  // card so the feedback surface can show them next to the graded origin.
+  englishForms?: string[];
+  note?: string;
   // correct is the aggregate origin result.
   correct: boolean;
   // words holds the per-word results shown on the feedback card.

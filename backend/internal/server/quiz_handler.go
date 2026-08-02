@@ -548,12 +548,15 @@ func toProtoEtymologyOriginCard(cardID int64, card quiz.EtymologyOriginCard) *ap
 	}
 	var words []*apiv1.EtymologyFamilyWord
 	for i, w := range card.Words {
-		words = append(words, &apiv1.EtymologyFamilyWord{WordId: int64(i + 1), Expression: w.Expression})
+		words = append(words, &apiv1.EtymologyFamilyWord{
+			WordId: int64(i + 1), Expression: w.Expression, Pronunciation: w.Pronunciation,
+		})
 	}
 	return &apiv1.EtymologyOriginCard{
 		CardId: cardID, Origin: card.Origin, Type: card.Type, Language: card.Language,
 		Meaning: card.Meaning, NotebookName: card.NotebookName, SessionTitle: card.SessionTitle,
 		Sense: card.Sense, Forms: forms, Words: words,
+		EnglishForms: card.EnglishForms, Note: card.Note,
 	}
 }
 
@@ -606,7 +609,10 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 	wordResults := make([]notebook.EtymologyWordLog, 0, len(card.Words))
 	for i, w := range card.Words {
 		wordID := int64(i + 1)
-		result := &apiv1.EtymologyWordResult{WordId: wordID, Expression: w.Expression, CorrectMeaning: w.Meaning}
+		result := &apiv1.EtymologyWordResult{
+			WordId: wordID, Expression: w.Expression, CorrectMeaning: w.Meaning,
+			Pronunciation: w.Pronunciation, Examples: w.Examples, Literal: w.Literal,
+		}
 		a := answerByWordID[wordID]
 
 		if a.GetSkipped() {

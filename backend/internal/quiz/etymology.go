@@ -12,10 +12,18 @@ import (
 )
 
 // EtymologyFamilyWord is one derived word shown on an origin card. The user
-// types Meaning; Expression is the word displayed as context.
+// types Meaning; Expression is the word displayed as context. Pronunciation,
+// Examples, and Literal are per-word study context (never quizzed):
+// Pronunciation is shown as a typing hint; Examples (example sentences) and
+// Literal (the assembled literal gloss, e.g. `de "down" + facere = "made
+// down"`) are revealed only on the feedback screen so they don't leak the
+// meaning while answering.
 type EtymologyFamilyWord struct {
-	Expression string
-	Meaning    string
+	Expression    string
+	Meaning       string
+	Pronunciation string
+	Examples      []string
+	Literal       string
 }
 
 // EtymologyOriginCard is one screen of the etymology-origin quiz: a single
@@ -40,6 +48,12 @@ type EtymologyOriginCard struct {
 	// Forms records inflectional / morphological variants of the origin
 	// (e.g. the Latin principal parts), shown in the origin header.
 	Forms []notebook.EtymologyOriginForm
+	// EnglishForms are the English combining-form spellings the origin
+	// surfaces as in English words (e.g. fac, fic, fect). Study context
+	// shown in the origin header — never quizzed.
+	EnglishForms []string
+	// Note is the origin's free-text pedagogical hint. Study context.
+	Note string
 	// Words is the full session-scoped family of derived words the user is
 	// asked to give meanings for.
 	Words []EtymologyFamilyWord
@@ -122,6 +136,8 @@ func (s *Service) LoadEtymologyOriginCards(
 				Language:      o.Language,
 				Meaning:       o.Meaning,
 				Forms:         o.Forms,
+				EnglishForms:  o.EnglishForms,
+				Note:          o.Note,
 				Words:         words,
 			})
 		}
@@ -166,7 +182,15 @@ func buildOriginFamilies(reader *notebook.Reader) map[string][]EtymologyFamilyWo
 					if expr == "" {
 						continue
 					}
-					word := EtymologyFamilyWord{Expression: expr, Meaning: note.Meaning}
+					word := EtymologyFamilyWord{
+						Expression:    expr,
+						Meaning:       note.Meaning,
+						Pronunciation: note.Pronunciation,
+						Examples:      note.Examples,
+						// Literal is the assembled literal gloss the converter
+						// stores in the word's free-text note field (Note.Note).
+						Literal: note.Note,
+					}
 					for _, ref := range note.OriginParts {
 						key := originFamilyKey(bookID, sessionTitle, ref.Sense, ref.Origin)
 						result[key] = append(result[key], word)
