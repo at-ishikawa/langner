@@ -186,6 +186,24 @@ type LearningRecord struct {
 	QuizType         string        `yaml:"quiz_type,omitempty"`         // "freeform" or "notebook"
 	IntervalDays     int           `yaml:"interval_days,omitempty"`     // days until next review
 	OverrideInterval int           `yaml:"override_interval,omitempty"` // manually-set interval (non-zero = user override)
+	// WordResults records this etymology-origin attempt's per-derived-word
+	// outcome. The origin still carries exactly ONE log entry regardless of
+	// family size (invariants L1/L4); WordResults is inline data on that one
+	// entry, never a separate log series per word. Empty for non-etymology
+	// records. See EtymologyWordLog.
+	WordResults []EtymologyWordLog `yaml:"word_results,omitempty"`
+}
+
+// EtymologyWordLog is one derived family word's outcome within an etymology
+// origin's single learning-log entry (see LearningRecord.WordResults).
+// Correct and Excluded are overridden in place by
+// LearningHistoryUpdater.OverrideEtymologyWordResult — never by appending a
+// new record for the word — so a word-level correction can never fork into a
+// parallel log series (learning-history invariant L1).
+type EtymologyWordLog struct {
+	Expression string `yaml:"expression"`
+	Correct    bool   `yaml:"correct"`
+	Excluded   bool   `yaml:"excluded,omitempty"`
 }
 
 type LearningHistoryExpression struct {
@@ -496,13 +514,17 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 	exp.ReverseLogs = append([]LearningRecord{tentative}, exp.ReverseLogs...)
 }
 
-// AddRecordWithQualityForEtymology adds a new learning record for etymology quiz with SM-2 quality data
+// AddRecordWithQualityForEtymology adds a new learning record for etymology
+// quiz with SM-2 quality data. wordResults carries this attempt's per-word
+// grading outcome (see LearningRecord.WordResults) — inline data on the one
+// record created here, not a separate record per word.
 func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	calculator IntervalCalculator,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
 	quizType QuizType,
+	wordResults []EtymologyWordLog,
 ) {
 	status := LearnedStatusMisunderstood
 	if isCorrect {
@@ -519,6 +541,7 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 		Quality:        quality,
 		ResponseTimeMs: responseTimeMs,
 		QuizType:       string(quizType),
+		WordResults:    wordResults,
 	}
 	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.EtymologyOriginLogs, tentative)
 	exp.EtymologyOriginLogs = append([]LearningRecord{tentative}, exp.EtymologyOriginLogs...)

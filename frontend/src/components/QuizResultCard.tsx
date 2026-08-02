@@ -3,7 +3,6 @@
 import { Box, Button, Text, VStack } from "@chakra-ui/react";
 import type { WordDetail } from "@/store/quizStore";
 import { WordDetailView } from "./WordDetailView";
-import { RelationGraph } from "./RelationGraph";
 
 export interface OriginPartDisplay {
   origin: string;
@@ -38,11 +37,6 @@ export interface ResultItem {
    * are rendered via originBreakdown — the wordDetail passed to
    * WordDetailView has its originParts stripped to avoid duplication. */
   wordDetail?: WordDetail;
-  /** graphContext, when set, renders the cluster / antonym pair / form
-   * branch graph the standard-mode quiz returns as elaborative scaffold
-   * after the user has answered. Uses the same RelationGraph component
-   * as the reverse-mode prompt — but with no blank node. */
-  graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
   /** etymologyForms are the origin's principal parts (e.g. "facio",
    * "facere", "feci", "factum"). Rendered joined under the origin header
    * on the etymology feedback card. */
@@ -51,15 +45,25 @@ export interface ResultItem {
    * each derived family word, whether the typed meaning was correct, the
    * correct meaning, and the reason. Rendered as a list on the feedback
    * card so the learner sees every word's outcome even though the origin
-   * is graded as one aggregate result. */
+   * is graded as one aggregate result. Correct/excluded are overridable
+   * per word via onOverrideWord/onExcludeWord — the override flips inline
+   * data on the origin's ONE stored record, never a second record per word
+   * (learning-history invariants L1/L4). */
   etymologyWords?: {
     expression: string;
     correct: boolean;
     correctMeaning: string;
     reason: string;
     userAnswer: string;
+    originalCorrect?: boolean;
+    isExcluded?: boolean;
   }[];
 }
+
+/** EtymologyWordItem is the shape QuizResultCard.etymologyWords carries per
+ * derived family word — pulled out so onOverrideWord/onExcludeWord can share
+ * one parameter type. */
+export type EtymologyWordItem = NonNullable<ResultItem["etymologyWords"]>[number];
 
 function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
   switch (type.toLowerCase()) {
@@ -136,6 +140,11 @@ interface QuizResultCardProps {
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
   onResume: (item: ResultItem) => void;
+  /** onOverrideWord/onExcludeWord flip ONE derived family word's
+   * correct/excluded flag within the origin's existing record — only
+   * rendered when isEtymology and item.etymologyWords are set. */
+  onOverrideWord?: (item: ResultItem, word: EtymologyWordItem) => void;
+  onExcludeWord?: (item: ResultItem, word: EtymologyWordItem) => void;
 }
 
 export function QuizResultCard({
@@ -145,6 +154,8 @@ export function QuizResultCard({
   onUndo,
   onSkip,
   onResume,
+  onOverrideWord,
+  onExcludeWord,
 }: QuizResultCardProps) {
   const statusKind: "correct" | "incorrect" | "skipped" = item.isSkipped
     ? "skipped"
@@ -362,63 +373,91 @@ export function QuizResultCard({
 
       {/* Per-word results for an etymology-origin card. The origin is graded
           as one aggregate result, but every derived family word's outcome is
-          shown so the learner can see which words they missed. */}
+          shown so the learner can see which words they missed. Mark as
+          Correct/Incorrect and Exclude here flip that word's flags inline on
+          the origin's ONE stored record (invariants L1/L4) — they never
+          create a second record for the word. */}
       {isEtymology && item.etymologyWords && item.etymologyWords.length > 0 && (
         <Box mb={2}>
           <Text fontSize="xs" color="fg.muted" mb={1}>Words</Text>
           <VStack align="stretch" gap={1}>
-            {item.etymologyWords.map((w, i) => (
-              <Box
-                key={i}
-                borderWidth="1px"
-                borderColor={w.correct ? "green.200" : "red.200"}
-                _dark={{ borderColor: w.correct ? "green.800" : "red.800" }}
-                borderRadius="md"
-                px={2}
-                py={1}
-              >
-                <Box display="flex" alignItems="center" gap={2}>
-                  <Text as="span" fontSize="xs" fontWeight="bold" color={w.correct ? "green.600" : "red.600"} _dark={{ color: w.correct ? "green.300" : "red.300" }}>
-                    {w.correct ? "✓" : "✗"}
+            {item.etymologyWords.map((w, i) => {
+              const wordOverridden = w.originalCorrect !== undefined && w.originalCorrect !== w.correct;
+              const canOverrideWord = Boolean(onOverrideWord && item.noteId && item.learnedAt);
+              const canExcludeWord = Boolean(onExcludeWord && item.noteId && item.learnedAt);
+              return (
+                <Box
+                  key={i}
+                  borderWidth="1px"
+                  borderColor={w.correct ? "green.200" : "red.200"}
+                  _dark={{ borderColor: w.correct ? "green.800" : "red.800" }}
+                  borderRadius="md"
+                  px={2}
+                  py={1}
+                  opacity={w.isExcluded ? 0.7 : 1}
+                >
+                  <Box display="flex" alignItems="center" gap={2}>
+                    <Text as="span" fontSize="xs" fontWeight="bold" color={w.correct ? "green.600" : "red.600"} _dark={{ color: w.correct ? "green.300" : "red.300" }}>
+                      {w.correct ? "✓" : "✗"}
+                    </Text>
+                    <Text as="span" fontSize="sm" fontWeight="medium" flex="1" minW={0}>
+                      {w.expression}
+                      {wordOverridden && (
+                        <Text as="span" fontSize="xs" color="fg.muted" fontStyle="italic" fontWeight="normal">
+                          {" "}(overridden)
+                        </Text>
+                      )}
+                      {w.isExcluded && (
+                        <Text as="span" fontSize="xs" color="fg.muted" fontStyle="italic" fontWeight="normal">
+                          {" "}(excluded)
+                        </Text>
+                      )}
+                    </Text>
+                  </Box>
+                  <Text fontSize="sm" color="fg.muted">
+                    {w.correctMeaning}
+                    {w.reason && (
+                      <Text as="span" fontStyle="italic">
+                        {" — "}
+                        {w.reason}
+                      </Text>
+                    )}
                   </Text>
-                  <Text as="span" fontSize="sm" fontWeight="medium" flex="1" minW={0}>
-                    {w.expression}
-                  </Text>
-                </Box>
-                <Text fontSize="sm" color="fg.muted">
-                  {w.correctMeaning}
-                  {w.reason && (
-                    <Text as="span" fontStyle="italic">
-                      {" — "}
-                      {w.reason}
+                  {w.userAnswer && (
+                    <Text fontSize="xs" color="fg.muted">
+                      your answer · &ldquo;{w.userAnswer}&rdquo;
                     </Text>
                   )}
-                </Text>
-                {w.userAnswer && (
-                  <Text fontSize="xs" color="fg.muted">
-                    your answer · &ldquo;{w.userAnswer}&rdquo;
-                  </Text>
-                )}
-              </Box>
-            ))}
+                  {(canOverrideWord || canExcludeWord) && (
+                    <Box display="flex" flexWrap="wrap" gap={2} mt={1}>
+                      {canOverrideWord && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          colorPalette={w.correct ? "red" : "blue"}
+                          aria-label={`Mark ${w.expression} as ${w.correct ? "incorrect" : "correct"}`}
+                          onClick={() => onOverrideWord?.(item, w)}
+                        >
+                          {w.correct ? "Mark as Incorrect" : "Mark as Correct"}
+                        </Button>
+                      )}
+                      {canExcludeWord && (
+                        <Button
+                          size="xs"
+                          variant="outline"
+                          colorPalette="gray"
+                          aria-label={`${w.isExcluded ? "Include" : "Exclude"} ${w.expression}`}
+                          onClick={() => onExcludeWord?.(item, w)}
+                        >
+                          {w.isExcluded ? "Include" : "Exclude"}
+                        </Button>
+                      )}
+                    </Box>
+                  )}
+                </Box>
+              );
+            })}
           </VStack>
-        </Box>
-      )}
-
-      {/* Graph context (cluster / antonym pair / form branch) shown as
-          elaborative scaffold after standard-mode etymology answers. The
-          card's origin appears filled-in (no blank). Read-only — we pass
-          a noop value/onValueChange because RelationGraph renders the
-          static structure when blankNodeId is empty. */}
-      {item.graphContext && (
-        <Box mb={3}>
-          <RelationGraph
-            prompt={item.graphContext}
-            value=""
-            onValueChange={() => {}}
-            disabled
-            compact
-          />
         </Box>
       )}
 

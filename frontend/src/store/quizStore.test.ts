@@ -253,4 +253,38 @@ describe("useQuizStore", () => {
     expect(state.etymologyOriginCards).toEqual([]);
     expect(state.etymologyOriginResults).toEqual([]);
   });
+
+  it("submitEtymologyOriginResult captures each word's originalCorrect", () => {
+    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
+    const words = useQuizStore.getState().etymologyOriginResults[0].words;
+    expect(words[0].originalCorrect).toBe(true);
+    expect(words[1].originalCorrect).toBe(true);
+  });
+
+  it("overrideEtymologyWord flips only the targeted word's correct flag (L1/L4)", () => {
+    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
+
+    useQuizStore.getState().overrideEtymologyWord(0, "biology", false);
+
+    const result = useQuizStore.getState().etymologyOriginResults[0];
+    const biology = result.words.find((w) => w.expression === "biology");
+    const biopsy = result.words.find((w) => w.expression === "biopsy");
+    expect(biology?.correct).toBe(false);
+    expect(biology?.originalCorrect).toBe(true); // as-graded value preserved
+    expect(biopsy?.correct).toBe(true); // sibling word untouched
+    // The origin's own aggregate result is untouched by a word-level override.
+    expect(result.correct).toBe(true);
+  });
+
+  it("excludeEtymologyWord flips only the targeted word's isExcluded flag", () => {
+    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
+
+    useQuizStore.getState().excludeEtymologyWord(0, "biology", true);
+
+    const result = useQuizStore.getState().etymologyOriginResults[0];
+    const biology = result.words.find((w) => w.expression === "biology");
+    const biopsy = result.words.find((w) => w.expression === "biopsy");
+    expect(biology?.isExcluded).toBe(true);
+    expect(biopsy?.isExcluded).toBeUndefined();
+  });
 });

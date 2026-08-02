@@ -109,6 +109,5 @@ export function etymologyResultToItem(r: EtymologyOriginResult, index: number): 
     }],
     etymologyForms: r.forms?.map((f) => f.form).filter(Boolean),
     etymologyWords: r.words,
-    graphContext: r.graphContext,
   };
 }

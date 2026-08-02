@@ -1047,7 +1047,7 @@ func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T
 				quality = 1
 			}
 
-			exp.AddRecordWithQualityForEtymology(&SM2Calculator{}, tt.isCorrect, true, quality, 5000, QuizTypeEtymologyOrigin)
+			exp.AddRecordWithQualityForEtymology(&SM2Calculator{}, tt.isCorrect, true, quality, 5000, QuizTypeEtymologyOrigin, nil)
 
 			logs := exp.GetLogsForQuizType(QuizTypeEtymologyOrigin)
 			require.Len(t, logs, 1)

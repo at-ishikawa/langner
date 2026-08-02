@@ -1015,7 +1015,7 @@ func TestUpdateOrCreateExpressionForEtymology_WritesToExistingEntry(t *testing.T
 	// entry, not fork a new one.
 	found := updater.UpdateOrCreateExpressionWithQualityForEtymology(
 		"demo-notebook", "Session X", "demo-root", "",
-		true, true, 5, 2000,
+		true, true, 5, 2000, nil,
 	)
 	assert.True(t, found, "must find the existing origin entry, not create a duplicate")
 

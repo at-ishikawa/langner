@@ -283,6 +283,65 @@ Then("I see an etymology prompt", async ({ page }) => {
   ).toBeVisible();
 });
 
+// Each family word's meaning input carries aria-label "Meaning of <word>" (see
+// EtymologyOriginPage), letting a scenario target one specific word on a
+// multi-word origin card instead of relying on input order.
+When(
+  "I type {string} for the family word {string}",
+  async ({ page }, meaning: string, word: string) => {
+    await page.getByLabel(`Meaning of ${word}`).fill(meaning);
+  },
+);
+
+// QuizResultCard's per-word override button carries an aria-label naming the
+// word ("Mark <word> as correct/incorrect"), distinct from the origin's own
+// root-level "Mark as Correct"/"Mark as Incorrect" button, so a card with
+// several family words can be targeted precisely. See QuizResultCard.tsx.
+When(
+  "I mark the family word {string} as correct",
+  async ({ page }, word: string) => {
+    await page.getByRole("button", { name: `Mark ${word} as correct` }).click();
+  },
+);
+
+When(
+  "I mark the family word {string} as incorrect",
+  async ({ page }, word: string) => {
+    await page.getByRole("button", { name: `Mark ${word} as incorrect` }).click();
+  },
+);
+
+// A word's per-word button label is the inverse of its current correctness —
+// "Mark as Incorrect" is shown when the word IS currently correct, and vice
+// versa — so asserting on the button's presence doubles as asserting the
+// word's displayed status (learning-history invariant L3: display == stored).
+Then(
+  "I see the family word {string} marked correct",
+  async ({ page }, word: string) => {
+    await expect(
+      page.getByRole("button", { name: `Mark ${word} as incorrect` }),
+    ).toBeVisible();
+  },
+);
+
+Then(
+  "I see the family word {string} marked incorrect",
+  async ({ page }, word: string) => {
+    await expect(
+      page.getByRole("button", { name: `Mark ${word} as correct` }),
+    ).toBeVisible();
+  },
+);
+
+// Bug-1 regression: the old standard-mode etymology quiz's concept-cluster
+// scaffold must never render on the Etymology Origin feedback screen.
+Then("I do not see the concept-cluster block", async ({ page }) => {
+  await expect(page.getByText("Feedback", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(/Fill in the blank to complete this concept/i),
+  ).toHaveCount(0);
+});
+
 Then(
   "the summary shows {int} total words",
   async ({ page }, count: number) => {

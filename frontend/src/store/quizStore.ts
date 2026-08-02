@@ -148,9 +148,11 @@ export interface FreeformResult {
   images?: string[];
 }
 
-// EtymologyWordResult is the per-word feedback for one family word. It is
-// display-only — the origin carries a single learning-log series, not one
-// per word.
+// EtymologyWordResult is the per-word feedback for one family word. The
+// origin still carries a single learning-log series (correct/incorrect and
+// excluded are overridable in place within that ONE record — see
+// OverrideEtymologyWordResult on the backend — never a second series per
+// word; invariants L1/L4).
 export interface EtymologyWordResult {
   wordId?: bigint;
   expression: string;
@@ -160,6 +162,15 @@ export interface EtymologyWordResult {
   // userAnswer is what the learner typed for this word (kept for the
   // feedback card's per-word answer chip). Empty on skipped screens.
   userAnswer: string;
+  // originalCorrect is the as-graded value, captured once when the result is
+  // first stored and never mutated afterward. Comparing it to `correct`
+  // tells the feedback card whether this word has been overridden —
+  // mirroring the origin-level originalValues pattern (invariant L3:
+  // what's displayed must match what's stored).
+  originalCorrect?: boolean;
+  // isExcluded marks the word as excluded via the feedback card's per-word
+  // Exclude action. Display-only annotation on the origin's one record.
+  isExcluded?: boolean;
 }
 
 // EtymologyOriginResult is the graded result of one origin screen. The origin
@@ -185,10 +196,6 @@ export interface EtymologyOriginResult {
   nextReviewDate?: string;
   learnedAt?: string;
   senseId?: string;
-  // graphContext, when set, is a filled-in (no-blank) graph the feedback
-  // card renders as elaborative scaffolding. Reuses the RelationGraph
-  // component.
-  graphContext?: import("@/gen-protos/api/v1/quiz_pb").GraphPrompt;
   isOverridden?: boolean;
   isSkipped?: boolean;
   originalValues?: OriginalValues;
@@ -228,6 +235,12 @@ interface QuizState {
   skipResult: (index: number, quizType: QuizType) => void;
   resumeResult: (index: number, quizType: QuizType) => void;
   updateResultReviewDate: (index: number, quizType: QuizType, newDate: string) => void;
+  // overrideEtymologyWord / excludeEtymologyWord flip ONE derived family
+  // word's correct/excluded flag within the origin's existing result — never
+  // by appending a new result (invariants L1/L4). wordExpression identifies
+  // the word within etymologyOriginResults[index].words.
+  overrideEtymologyWord: (index: number, wordExpression: string, correct: boolean) => void;
+  excludeEtymologyWord: (index: number, wordExpression: string, excluded: boolean) => void;
 }
 
 const initialState = {
@@ -278,7 +291,15 @@ export const useQuizStore = create<QuizState>((set) => ({
   submitFreeformResult: (result) =>
     set((state) => ({ freeformResults: [...state.freeformResults, result] })),
   submitEtymologyOriginResult: (result) =>
-    set((state) => ({ etymologyOriginResults: [...state.etymologyOriginResults, result] })),
+    set((state) => ({
+      etymologyOriginResults: [
+        ...state.etymologyOriginResults,
+        // Capture each word's as-graded correctness once, up front, so later
+        // per-word overrides can show "(overridden)" by comparing against it
+        // (see EtymologyWordResult.originalCorrect).
+        { ...result, words: result.words.map((w) => ({ ...w, originalCorrect: w.correct })) },
+      ],
+    })),
   nextCard: () =>
     set((state) => ({ currentIndex: state.currentIndex + 1 })),
   reset: () => set(initialState),
@@ -351,5 +372,27 @@ export const useQuizStore = create<QuizState>((set) => ({
         return { etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, { nextReviewDate: newDate }) };
       }
       return { freeformResults: updateArrayItem(state.freeformResults, index, { nextReviewDate: newDate }) };
+    }),
+
+  overrideEtymologyWord: (index, wordExpression, correct) =>
+    set((state) => {
+      const result = state.etymologyOriginResults[index];
+      if (!result) return {};
+      return {
+        etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, {
+          words: result.words.map((w) => (w.expression === wordExpression ? { ...w, correct } : w)),
+        }),
+      };
+    }),
+
+  excludeEtymologyWord: (index, wordExpression, excluded) =>
+    set((state) => {
+      const result = state.etymologyOriginResults[index];
+      if (!result) return {};
+      return {
+        etymologyOriginResults: updateArrayItem(state.etymologyOriginResults, index, {
+          words: result.words.map((w) => (w.expression === wordExpression ? { ...w, isExcluded: excluded } : w)),
+        }),
+      };
     }),
 }));

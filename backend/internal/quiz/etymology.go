@@ -275,12 +275,16 @@ func qualityFromResponseTime(correct bool, responseTimeMs int64) int {
 
 // SaveEtymologyOriginResult records ONE learning-log entry for the origin's
 // (session, sense) series — never one per derived word (invariants L1/L4).
+// wordResults carries this attempt's per-word grading outcome as inline data
+// on that one entry (see notebook.LearningRecord.WordResults); pass nil for
+// callers (e.g. the relearn quiz) that don't grade individual family words.
 func (s *Service) SaveEtymologyOriginResult(
 	card EtymologyOriginCard,
 	quality int,
 	correct bool,
 	responseTimeMs int64,
 	isKnownWord bool,
+	wordResults []notebook.EtymologyWordLog,
 ) error {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
@@ -297,6 +301,7 @@ func (s *Service) SaveEtymologyOriginResult(
 		isKnownWord,
 		quality,
 		responseTimeMs,
+		wordResults,
 	)
 
 	// L1 structural guard: refuse to persist a state where one (origin, sense)
@@ -308,6 +313,33 @@ func (s *Service) SaveEtymologyOriginResult(
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
 		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
+	}
+	return nil
+}
+
+// OverrideEtymologyWordResult flips one derived family word's correctness
+// and/or excluded flag within the origin's existing (session, sense)
+// learning-log entry. It never creates a second log series for the word —
+// see notebook.LearningHistoryUpdater.OverrideEtymologyWordResult, the
+// single function this delegates to, for the L1/L2 canonicalization this
+// relies on.
+func (s *Service) OverrideEtymologyWordResult(
+	notebookName, sessionTitle, origin, sense, learnedAt, wordExpression string,
+	correct, excluded *bool,
+) error {
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return fmt.Errorf("failed to load learning histories: %w", err)
+	}
+
+	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.calculator)
+	if !updater.OverrideEtymologyWordResult(sessionTitle, origin, sense, learnedAt, wordExpression, correct, excluded) {
+		return fmt.Errorf("etymology word %q not found for origin %q (session %q, sense %q)", wordExpression, origin, sessionTitle, sense)
+	}
+
+	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
+	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
+		return fmt.Errorf("failed to save learning history for %q: %w", notebookName, err)
 	}
 	return nil
 }

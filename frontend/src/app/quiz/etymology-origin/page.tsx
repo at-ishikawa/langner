@@ -39,8 +39,10 @@ export default function EtymologyOriginPage() {
   const startTimeRef = useRef<number>(0);
   const firstInputRef = useRef<HTMLInputElement>(null);
 
-  const { handleOverride, handleUndo, handleSkip: handleItemSkip, handleResume } =
-    useQuizResultActions(quizType);
+  const {
+    handleOverride, handleUndo, handleSkip: handleItemSkip, handleResume,
+    handleOverrideWord, handleExcludeWord,
+  } = useQuizResultActions(quizType);
 
   useEffect(() => {
     if (etymologyOriginCards.length === 0 || quizType !== "etymology-origin") router.push("/");
@@ -112,7 +114,6 @@ export default function EtymologyOriginPage() {
           nextReviewDate: r.nextReviewDate || undefined,
           learnedAt: r.learnedAt || undefined,
           senseId: r.senseId || undefined,
-          graphContext: r.graphContext,
           isSkipped: b.isSkipped,
         });
       });
@@ -188,6 +189,8 @@ export default function EtymologyOriginPage() {
           onUndo={handleUndo}
           onSkip={handleItemSkip}
           onResume={handleResume}
+          onOverrideWord={handleOverrideWord}
+          onExcludeWord={handleExcludeWord}
         />
       ) : phase === "grading" ? (
         <Box textAlign="center" py={8}>

@@ -17,3 +17,24 @@ origins:
     type: root
     language: Greek
     meaning: sound
+  # opsis/optikos are grouped under a "sight or vision" concept below. They
+  # exist so an e2e scenario can assert the Etymology Origin feedback screen
+  # never renders the concept-cluster "Fill in the blank to complete this
+  # concept" block — that block was leftover scaffolding from the old
+  # standard-mode etymology quiz and is not part of this quiz mode's UI.
+  - origin: opsis
+    type: root
+    language: Greek
+    meaning: sight, vision
+  - origin: optikos
+    type: root
+    language: Greek
+    meaning: sight, vision
+concepts:
+  - key: sight_vision
+    meaning: sight or vision
+    members:
+      - origin: opsis
+        language: Greek
+      - origin: optikos
+        language: Greek

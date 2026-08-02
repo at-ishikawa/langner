@@ -104,3 +104,69 @@ describe("BatchFeedback", () => {
     expect(screen.getByText("Incorrect: 0")).toBeInTheDocument();
   });
 });
+
+// Etymology-origin feedback screen: bug-1 regression (no leftover "Fill in
+// the blank to complete this concept" concept-cluster block) and bug-2
+// coverage (per-word Mark as Correct/Incorrect and Exclude buttons flip only
+// the clicked word, not the whole origin or its siblings).
+const etymologyItems: ResultItem[] = [
+  {
+    index: 0,
+    key: "10",
+    entry: "scribo",
+    meaning: "to write",
+    correct: false,
+    originalCorrect: false,
+    noteId: BigInt(10),
+    learnedAt: "2026-03-16T00:00:00Z",
+    etymologyWords: [
+      { expression: "describe", correct: false, correctMeaning: "to represent in words", reason: "", userAnswer: "tell" },
+      { expression: "inscribe", correct: true, correctMeaning: "to write or carve on a surface", reason: "", userAnswer: "carve" },
+    ],
+  },
+];
+
+describe("BatchFeedback etymology-origin feedback screen", () => {
+  it("does not render the leftover concept-cluster block", () => {
+    renderComponent({ items: etymologyItems, isEtymology: true });
+    expect(screen.queryByText(/Fill in the blank to complete this concept/i)).not.toBeInTheDocument();
+  });
+
+  it("renders a Mark as Correct/Incorrect button per family word", () => {
+    renderComponent({ items: etymologyItems, isEtymology: true, onOverrideWord: vi.fn(), onExcludeWord: vi.fn() });
+    // Each word button carries an aria-label naming the word, distinct from
+    // the root-level "Mark as Correct"/"Mark as Incorrect" button so a
+    // screen reader (and this test) can tell them apart.
+    expect(screen.getByRole("button", { name: "Mark describe as correct" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark inscribe as incorrect" })).toBeInTheDocument();
+  });
+
+  it("overriding one word calls onOverrideWord with only that word, not its sibling", () => {
+    const onOverrideWord = vi.fn();
+    renderComponent({ items: etymologyItems, isEtymology: true, onOverrideWord, onExcludeWord: vi.fn() });
+    fireEvent.click(screen.getByRole("button", { name: "Mark describe as correct" }));
+    expect(onOverrideWord).toHaveBeenCalledTimes(1);
+    const [item, word] = onOverrideWord.mock.calls[0];
+    expect(item.entry).toBe("scribo");
+    expect(word.expression).toBe("describe");
+  });
+
+  it("excluding one word calls onExcludeWord for that word only", () => {
+    const onExcludeWord = vi.fn();
+    renderComponent({ items: etymologyItems, isEtymology: true, onOverrideWord: vi.fn(), onExcludeWord });
+    fireEvent.click(screen.getByRole("button", { name: "Exclude describe" }));
+    expect(onExcludeWord).toHaveBeenCalledTimes(1);
+    expect(onExcludeWord.mock.calls[0][1].expression).toBe("describe");
+    // The sibling word's exclude button is untouched.
+    expect(screen.getByRole("button", { name: "Exclude inscribe" })).toBeInTheDocument();
+  });
+
+  it("omits per-word buttons when the handlers aren't provided", () => {
+    renderComponent({ items: etymologyItems, isEtymology: true });
+    expect(screen.queryByRole("button", { name: "Mark describe as correct" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exclude describe" })).not.toBeInTheDocument();
+    // The root-level override button is unaffected — it's gated on
+    // onOverride/onOverrideWord independently.
+    expect(screen.getByRole("button", { name: "Mark as Correct" })).toBeInTheDocument();
+  });
+});

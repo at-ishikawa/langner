@@ -696,9 +696,10 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
+	wordResults []EtymologyWordLog,
 ) bool {
 	if expr := FindOriginExpression(u.history, sessionTitle, origin, sense); expr != nil {
-		expr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin)
+		expr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin, wordResults)
 		return true
 	}
 
@@ -709,9 +710,59 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 		Sense:       sense,
 		LearnedLogs: []LearningRecord{},
 	}
-	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin)
+	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin, wordResults)
 	u.history[idx].Expressions = append(u.history[idx].Expressions, newExpression)
 	return false
+}
+
+// OverrideEtymologyWordResult flips one derived family word's Correct and/or
+// Excluded flag within the origin's EXISTING learning-log entry — it never
+// appends a new record for the word (invariant L1). It resolves the origin
+// via the SAME canonical FindOriginExpression lookup OverrideLog uses for
+// etymology (invariant L2), and locates the specific attempt by learnedAt the
+// same way indexLogByLearnedAt does for the aggregate override, so a
+// word-level correction always lands on the exact record the write path
+// created for that attempt.
+//
+// The word's Correct/Excluded flags are display-only annotations: unlike the
+// origin-level override, this does not touch the record's Status, Quality,
+// or IntervalDays — the origin's own aggregate result and SR schedule stay
+// under the existing origin-level Mark-as-Correct/Incorrect control.
+//
+// correct and excluded are optional; a nil pointer leaves that flag
+// unchanged. Returns false when the origin, the specific attempt, or the
+// word within it can't be found.
+func (u *LearningHistoryUpdater) OverrideEtymologyWordResult(
+	sessionTitle, origin, sense, learnedAt, wordExpression string,
+	correct, excluded *bool,
+) bool {
+	expr := FindOriginExpression(u.history, sessionTitle, origin, sense)
+	if expr == nil {
+		return false
+	}
+	idx := indexLogByLearnedAt(expr.EtymologyOriginLogs, learnedAt)
+	if idx < 0 {
+		return false
+	}
+	log := &expr.EtymologyOriginLogs[idx]
+
+	wi := -1
+	for i, w := range log.WordResults {
+		if strings.EqualFold(strings.TrimSpace(w.Expression), strings.TrimSpace(wordExpression)) {
+			wi = i
+			break
+		}
+	}
+	if wi < 0 {
+		return false
+	}
+	if correct != nil {
+		log.WordResults[wi].Correct = *correct
+	}
+	if excluded != nil {
+		log.WordResults[wi].Excluded = *excluded
+	}
+	return true
 }
 
 // AssertNoDuplicateOriginsInSession returns a non-nil error if the given

@@ -160,7 +160,7 @@ origins:
 		NotebookName: notebookID, NotebookTitle: "Dual Notebook",
 		SessionTitle: "Session 8",
 		Origin:       etymExpr, Meaning: "into",
-	}, 4, true, 1000, true))
+	}, 4, true, 1000, true, nil))
 
 	// 5. per-type skip — Service.SkipWord (vocab side)
 	require.NoError(t, svc.SkipWord(CardInfo{

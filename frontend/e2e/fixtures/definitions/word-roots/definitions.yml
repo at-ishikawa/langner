@@ -23,3 +23,11 @@
           meaning: a device for viewing distant broadcasts
           origin_parts:
             - origin: tele
+        - expression: synopsis
+          meaning: a brief summary or overview
+          origin_parts:
+            - origin: opsis
+        - expression: optician
+          meaning: someone who makes or sells eyeglasses
+          origin_parts:
+            - origin: optikos

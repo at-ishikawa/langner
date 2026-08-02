@@ -347,6 +347,17 @@ message OverrideAnswerRequest {
   // routes the override to that exact sense (falling back to note_id /
   // expression for legacy id-less data).
   string sense_id = 6;
+  // word_expression, when set, routes the override to a single derived
+  // family word's result within the etymology-origin record identified by
+  // note_id/sense_id, instead of the origin's own aggregate record. The
+  // word's outcome lives inline on that ONE record (learning-history
+  // invariant L1) — this never creates a second log series for the word.
+  // Only meaningful when quiz_type is QUIZ_TYPE_ETYMOLOGY_ORIGIN; ignored
+  // otherwise. When set, mark_correct (if present) flips the word's
+  // correctness and word_excluded (if present) flips its excluded flag; the
+  // origin's own aggregate result and schedule are left untouched.
+  optional string word_expression = 7;
+  optional bool word_excluded = 8;
 }
 
 message OverrideAnswerResponse {
@@ -556,9 +567,14 @@ message SubmitEtymologyOriginAnswerResponse {
   int64 note_id = 6;
   string sense_id = 7;
   repeated EtymologyWordResult results = 8;
-  // graph_context is read-only elaborative scaffolding (no blank) shown after
-  // grading. Optional.
-  GraphPrompt graph_context = 9;
+  // Removed: graph_context (elaborative "concept cluster" scaffolding). It
+  // was leftover code carried over from the old standard-mode etymology
+  // quiz's feedback screen and rendered a confusing, unrelated "Fill in the
+  // blank to complete this concept" block on the etymology-origin feedback
+  // screen. The per-word breakdown (results, above) already gives the
+  // learner this quiz mode's feedback.
+  reserved 9;
+  reserved "graph_context";
 }
 
 message BatchSubmitEtymologyOriginAnswersRequest {

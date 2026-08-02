@@ -30,3 +30,57 @@ Feature: Etymology Origin quiz
     And I continue to the next card
 
     Then I should be on the Quiz Complete page
+
+  # Bug-2 regression: the feedback screen lets the learner override each
+  # derived family word's correctness independently of the origin's other
+  # words, without disturbing the origin's own aggregate record.
+  Scenario: Mark an individual family word correct without affecting its sibling
+    Given I am on the Quiz page
+    When I switch to the "Etymology" tab
+    And I choose the "Etymology Origin" quiz mode
+    And I include unstudied words
+    And I select the "Word Roots" notebook
+    And I start the quiz
+    Then I see an etymology prompt
+
+    When I type "wrong" for the family word "photograph"
+    And I type "wrong" for the family word "autograph"
+    And I submit my answer
+    And I continue to the next card
+    And I skip the card
+    And I continue to the next card
+    When I type "wrong" for the family word "synopsis"
+    And I submit my answer
+    And I continue to the next card
+    And I skip the card
+
+    Then I see the family word "photograph" marked incorrect
+    And I see the family word "autograph" marked incorrect
+
+    When I mark the family word "autograph" as correct
+    Then I see the family word "autograph" marked correct
+    And I see the family word "photograph" marked incorrect
+
+  # Bug-1 regression: the old standard-mode etymology quiz's "concept cluster"
+  # scaffold (a block reading "Fill in the blank to complete this concept")
+  # must never render on the Etymology Origin feedback screen, even for an
+  # origin (opsis) that belongs to a concept group.
+  Scenario: The feedback screen never shows the leftover concept-cluster block
+    Given I am on the Quiz page
+    When I switch to the "Etymology" tab
+    And I choose the "Etymology Origin" quiz mode
+    And I include unstudied words
+    And I select the "Word Roots" notebook
+    And I start the quiz
+    Then I see an etymology prompt
+
+    When I skip the card
+    And I continue to the next card
+    And I skip the card
+    And I continue to the next card
+    When I type "a brief summary or overview" for the family word "synopsis"
+    And I submit my answer
+    And I continue to the next card
+    And I skip the card
+
+    Then I do not see the concept-cluster block

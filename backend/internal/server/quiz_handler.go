@@ -594,6 +594,7 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 	aggregateCorrect := true
 	quality := 5
 	var results []*apiv1.EtymologyWordResult
+	wordResults := make([]notebook.EtymologyWordLog, 0, len(card.Words))
 	for i, w := range card.Words {
 		wordID := int64(i + 1)
 		result := &apiv1.EtymologyWordResult{WordId: wordID, Expression: w.Expression, CorrectMeaning: w.Meaning}
@@ -604,6 +605,7 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 			aggregateCorrect = false
 			quality = 1
 			results = append(results, result)
+			wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: false})
 			continue
 		}
 		grade, err := h.svc.GradeEtymologyWordAnswer(ctx, w, answer, responseTimeMs)
@@ -619,13 +621,14 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 			quality = grade.Quality
 		}
 		results = append(results, result)
+		wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: grade.Correct})
 	}
 	if len(card.Words) == 0 {
 		aggregateCorrect = false
 		quality = 1
 	}
 
-	if err := h.svc.SaveEtymologyOriginResult(card, quality, aggregateCorrect, responseTimeMs, true); err != nil {
+	if err := h.svc.SaveEtymologyOriginResult(card, quality, aggregateCorrect, responseTimeMs, true, wordResults); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
 	learnedAt, nextReviewDate := h.svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
@@ -636,15 +639,10 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 	h.etymologyOriginStore[noteID] = card
 	h.mu.Unlock()
 
-	var graphContext *apiv1.GraphPrompt
-	if r, err := h.svc.NewReader(); err == nil {
-		concepts := loadBookConcepts(ctx, r, card.NotebookName)
-		graphContext = buildGraphContextForCard(ctx, r, card, concepts)
-	}
 	return &apiv1.SubmitEtymologyOriginAnswerResponse{
 		Correct: aggregateCorrect, Origin: card.Origin, Meaning: card.Meaning,
 		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID,
-		Results: results, GraphContext: graphContext,
+		Results: results,
 	}, nil
 }
 
@@ -664,6 +662,31 @@ func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[a
 		info.MarkCorrect = &mc
 	}
 	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
+
+	// word_expression routes to a single derived family word's result
+	// within the origin's ONE existing record, instead of the origin's own
+	// aggregate record — see OverrideAnswerRequest.word_expression and
+	// notebook.LearningHistoryUpdater.OverrideEtymologyWordResult for why
+	// this can never fork into a second log series for the word (L1/L2).
+	if wordExpression := req.Msg.GetWordExpression(); wordExpression != "" {
+		if quizType != notebook.QuizTypeEtymologyOrigin {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("word_expression is only valid for the etymology-origin quiz type"))
+		}
+		var correct, excluded *bool
+		if req.Msg.MarkCorrect != nil {
+			mc := req.Msg.GetMarkCorrect()
+			correct = &mc
+		}
+		if req.Msg.WordExcluded != nil {
+			we := req.Msg.GetWordExcluded()
+			excluded = &we
+		}
+		if err := h.svc.OverrideEtymologyWordResult(info.NotebookName, info.StoryTitle, info.Expression, info.Sense, info.LearnedAt, wordExpression, correct, excluded); err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override etymology word: %w", err))
+		}
+		return connect.NewResponse(&apiv1.OverrideAnswerResponse{}), nil
+	}
+
 	res, err := h.svc.OverrideAnswer(*info, quizType)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override answer: %w", err))
