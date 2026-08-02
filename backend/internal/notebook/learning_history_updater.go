@@ -730,8 +730,11 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology
 // under the existing origin-level Mark-as-Correct/Incorrect control.
 //
 // correct and excluded are optional; a nil pointer leaves that flag
-// unchanged. Returns false when the origin, the specific attempt, or the
-// word within it can't be found.
+// unchanged. Overriding correctness (correct != nil) also clears the word's
+// Skipped flag — once the learner deliberately marks a word correct/incorrect
+// it is no longer "ungraded", so the two states must not coexist (L3:
+// displayed status must match stored status). Returns false when the origin,
+// the specific attempt, or the word within it can't be found.
 func (u *LearningHistoryUpdater) OverrideEtymologyWordResult(
 	sessionTitle, origin, sense, learnedAt, wordExpression string,
 	correct, excluded *bool,
@@ -758,6 +761,7 @@ func (u *LearningHistoryUpdater) OverrideEtymologyWordResult(
 	}
 	if correct != nil {
 		log.WordResults[wi].Correct = *correct
+		log.WordResults[wi].Skipped = false
 	}
 	if excluded != nil {
 		log.WordResults[wi].Excluded = *excluded

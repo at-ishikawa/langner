@@ -269,6 +269,52 @@ func TestOverrideEtymologyWordResult_FlipsOnlyThatWordWithinTheOneRecord(t *test
 		"a word-level override must not change the origin's own aggregate quality")
 }
 
+// TestOverrideEtymologyWordResult_ClearsSkippedFlag verifies that overriding
+// a word's correctness also clears its Skipped flag: once the learner
+// deliberately marks a "Don't Know" word correct/incorrect it is no longer
+// ungraded, so a word can never display as both "skipped" and "correct"/
+// "incorrect" at once (invariant L3: displayed status must match stored
+// status).
+func TestOverrideEtymologyWordResult_ClearsSkippedFlag(t *testing.T) {
+	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	card := cards[0]
+
+	// "inscribe" was skipped ("Don't Know"); "describe" was graded correct.
+	wordResults := []notebook.EtymologyWordLog{
+		{Expression: "describe", Correct: true},
+		{Expression: "inscribe", Skipped: true},
+	}
+	require.NoError(t, svc.SaveEtymologyOriginResult(card, 5, true, 1000, true, wordResults))
+	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
+	require.NotEmpty(t, learnedAt)
+
+	// The learner later reconsiders and marks the skipped word correct.
+	correct := true
+	require.NoError(t, svc.OverrideEtymologyWordResult(
+		card.NotebookName, card.SessionTitle, card.Origin, card.Sense, learnedAt, "inscribe",
+		&correct, nil,
+	))
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, bookID+".yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+
+	expr := notebook.FindOriginExpression(histories, card.SessionTitle, card.Origin, card.Sense)
+	require.NotNil(t, expr)
+	require.Len(t, expr.EtymologyOriginLogs, 1)
+	byExpr := map[string]notebook.EtymologyWordLog{}
+	for _, w := range expr.EtymologyOriginLogs[0].WordResults {
+		byExpr[w.Expression] = w
+	}
+	assert.True(t, byExpr["inscribe"].Correct, "override must flip the word to correct")
+	assert.False(t, byExpr["inscribe"].Skipped, "override must clear the skipped flag once graded")
+}
+
 // TestOverrideEtymologyWordResult_UnknownWord_NotFound verifies the override
 // is a hard no-op error (not a silent write) when the word isn't part of the
 // stored record — it must never fall back to appending a guessed entry.

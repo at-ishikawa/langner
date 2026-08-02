@@ -16,8 +16,12 @@ interface BufferedAnswer {
   card: EtymologyOriginCard;
   // answers keyed by the family word's word_id (as a string) → typed meaning.
   answers: Record<string, string>;
+  // skipped keyed by the family word's word_id → true when the learner
+  // tapped "Don't Know" for THAT word specifically. Per-word, not
+  // all-or-nothing: sibling words with a typed answer are graded normally
+  // regardless of which words are skipped.
+  skipped: Record<string, boolean>;
   responseTimeMs: bigint;
-  isSkipped?: boolean;
 }
 
 export default function EtymologyOriginPage() {
@@ -33,6 +37,9 @@ export default function EtymologyOriginPage() {
   const [phase, setPhase] = useState<QuizPhase>("answering");
   // inputs maps a family word's word_id (string) → the typed meaning.
   const [inputs, setInputs] = useState<Record<string, string>>({});
+  // skippedWords maps a family word's word_id (string) → whether the learner
+  // tapped "Don't Know" for that word. Independent per word.
+  const [skippedWords, setSkippedWords] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [pendingRetry, setPendingRetry] = useState<BufferedAnswer[] | null>(null);
   const bufferRef = useRef<BufferedAnswer[]>([]);
@@ -51,6 +58,7 @@ export default function EtymologyOriginPage() {
   useEffect(() => {
     startTimeRef.current = Date.now();
     setInputs({});
+    setSkippedWords({});
     if (phase === "answering") {
       setTimeout(() => firstInputRef.current?.focus(), 50);
     }
@@ -74,7 +82,13 @@ export default function EtymologyOriginPage() {
   const card = etymologyOriginCards[currentIndex];
   const isFinalCard = currentIndex + 1 >= total;
   const principalParts = card.forms.map((f) => f.form).filter(Boolean).join(", ");
-  const allFilled = card.words.length > 0 && card.words.every((w) => (inputs[w.wordId.toString()] ?? "").trim());
+  // A word is "ready" once it's either answered or explicitly marked "Don't
+  // Know" — the two are independent per word, so answering some words and
+  // skipping others is a normal, expected combination.
+  const allFilled = card.words.length > 0 && card.words.every((w) => {
+    const key = w.wordId.toString();
+    return skippedWords[key] || (inputs[key] ?? "").trim();
+  });
 
   const flushBatch = async (toFlush: BufferedAnswer[]) => {
     setPhase("grading");
@@ -83,12 +97,15 @@ export default function EtymologyOriginPage() {
       const res = await quizClient.batchSubmitEtymologyOriginAnswers({
         answers: toFlush.map((b) => ({
           cardId: b.card.cardId,
-          answers: b.card.words.map((w) => ({
-            wordId: w.wordId,
-            answer: b.answers[w.wordId.toString()] ?? "",
-          })),
+          answers: b.card.words.map((w) => {
+            const key = w.wordId.toString();
+            return {
+              wordId: w.wordId,
+              answer: b.answers[key] ?? "",
+              skipped: b.skipped[key] ?? false,
+            };
+          }),
           responseTimeMs: b.responseTimeMs,
-          isSkipped: b.isSkipped ?? false,
         })),
       });
       toFlush.forEach((b, i) => {
@@ -109,12 +126,17 @@ export default function EtymologyOriginPage() {
             correctMeaning: wr.correctMeaning,
             reason: wr.reason,
             userAnswer: b.answers[wr.wordId.toString()] ?? "",
+            skipped: wr.skipped,
           })),
           notebookName: b.card.notebookName,
           nextReviewDate: r.nextReviewDate || undefined,
           learnedAt: r.learnedAt || undefined,
           senseId: r.senseId || undefined,
-          isSkipped: b.isSkipped,
+          // Note: isSkipped is intentionally NOT set here. It means "excluded
+          // from future quizzes" (the origin-level SkipWord/Exclude action) —
+          // a per-word "Don't Know" during answering must never be confused
+          // with that (bug: doing so made the origin display as Excluded on
+          // the feedback screen even though the user never tapped Exclude).
         });
       });
       bufferRef.current = [];
@@ -143,18 +165,25 @@ export default function EtymologyOriginPage() {
     recordAndAdvance({
       card,
       answers: { ...inputs },
+      skipped: { ...skippedWords },
       responseTimeMs: responseTime,
     });
   };
 
+  // handleSkip is the whole-card "Don't Know" shortcut: it marks every
+  // family word as individually skipped (discarding any partially-typed
+  // answers) and submits immediately, without requiring Submit. Each word is
+  // still recorded as skipped/ungraded — not wrong — via the same per-word
+  // path a single skipped word takes.
   const handleSkip = () => {
     if (phase !== "answering") return;
     const responseTime = responseTimeSince(startTimeRef.current);
+    const allSkipped = Object.fromEntries(card.words.map((w) => [w.wordId.toString(), true]));
     recordAndAdvance({
       card,
       answers: {},
+      skipped: allSkipped,
       responseTimeMs: responseTime,
-      isSkipped: true,
     });
   };
 
@@ -220,24 +249,46 @@ export default function EtymologyOriginPage() {
             )}
           </Box>
 
-          {/* One input per derived family word. The whole family is visible
-              as context; the user types each word's meaning. */}
+          {/* One input per derived family word, each with its own "Skip"
+              toggle. The whole family is visible as context; the user types
+              each word's meaning, or taps Skip for words they don't know —
+              independently, so answering some and skipping others in the
+              same submission is normal. */}
           <Box>
             <Text fontWeight="medium" mb={2}>Type the meaning of each word</Text>
             <VStack align="stretch" gap={3}>
               {card.words.map((w, i) => {
                 const key = w.wordId.toString();
+                const skipped = skippedWords[key] ?? false;
                 return (
                   <Box key={key}>
-                    <Text fontSize="sm" fontWeight="semibold" mb={1}>{w.expression}</Text>
+                    <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+                      <Text fontSize="sm" fontWeight="semibold">{w.expression}</Text>
+                      <Button
+                        size="xs"
+                        variant={skipped ? "solid" : "outline"}
+                        colorPalette="gray"
+                        aria-label={skipped ? `Answer ${w.expression} instead` : `Skip ${w.expression}`}
+                        onClick={() => {
+                          setSkippedWords((prev) => ({ ...prev, [key]: !skipped }));
+                          if (!skipped) setInputs((prev) => ({ ...prev, [key]: "" }));
+                        }}
+                      >
+                        {skipped ? "Skipped" : "Skip"}
+                      </Button>
+                    </Box>
                     <Input
                       ref={i === 0 ? firstInputRef : undefined}
                       value={inputs[key] ?? ""}
-                      onChange={(e) => setInputs((prev) => ({ ...prev, [key]: e.target.value }))}
+                      onChange={(e) => {
+                        setInputs((prev) => ({ ...prev, [key]: e.target.value }));
+                        if (skipped) setSkippedWords((prev) => ({ ...prev, [key]: false }));
+                      }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" && allFilled) handleSubmit();
                       }}
-                      placeholder="type the meaning..."
+                      placeholder={skipped ? "marked as don't know" : "type the meaning..."}
+                      disabled={skipped}
                       size="lg"
                       aria-label={`Meaning of ${w.expression}`}
                     />

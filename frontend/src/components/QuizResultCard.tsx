@@ -57,6 +57,10 @@ export interface ResultItem {
     userAnswer: string;
     originalCorrect?: boolean;
     isExcluded?: boolean;
+    /** skipped is true when the learner tapped "Don't Know" for this word;
+     * it is neither correct nor incorrect and didn't affect sibling grading
+     * or the origin's own aggregate result. */
+    skipped?: boolean;
   }[];
 }
 
@@ -385,23 +389,33 @@ export function QuizResultCard({
               const wordOverridden = w.originalCorrect !== undefined && w.originalCorrect !== w.correct;
               const canOverrideWord = Boolean(onOverrideWord && item.noteId && item.learnedAt);
               const canExcludeWord = Boolean(onExcludeWord && item.noteId && item.learnedAt);
+              const borderColor = w.skipped ? "gray.200" : w.correct ? "green.200" : "red.200";
+              const darkBorderColor = w.skipped ? "gray.600" : w.correct ? "green.800" : "red.800";
+              const glyphColor = w.skipped ? "gray.500" : w.correct ? "green.600" : "red.600";
+              const darkGlyphColor = w.skipped ? "gray.400" : w.correct ? "green.300" : "red.300";
+              const glyph = w.skipped ? "—" : w.correct ? "✓" : "✗";
               return (
                 <Box
                   key={i}
                   borderWidth="1px"
-                  borderColor={w.correct ? "green.200" : "red.200"}
-                  _dark={{ borderColor: w.correct ? "green.800" : "red.800" }}
+                  borderColor={borderColor}
+                  _dark={{ borderColor: darkBorderColor }}
                   borderRadius="md"
                   px={2}
                   py={1}
-                  opacity={w.isExcluded ? 0.7 : 1}
+                  opacity={w.isExcluded || w.skipped ? 0.7 : 1}
                 >
                   <Box display="flex" alignItems="center" gap={2}>
-                    <Text as="span" fontSize="xs" fontWeight="bold" color={w.correct ? "green.600" : "red.600"} _dark={{ color: w.correct ? "green.300" : "red.300" }}>
-                      {w.correct ? "✓" : "✗"}
+                    <Text as="span" fontSize="xs" fontWeight="bold" color={glyphColor} _dark={{ color: darkGlyphColor }}>
+                      {glyph}
                     </Text>
                     <Text as="span" fontSize="sm" fontWeight="medium" flex="1" minW={0}>
                       {w.expression}
+                      {w.skipped && (
+                        <Text as="span" fontSize="xs" color="fg.muted" fontStyle="italic" fontWeight="normal">
+                          {" "}(skipped)
+                        </Text>
+                      )}
                       {wordOverridden && (
                         <Text as="span" fontSize="xs" color="fg.muted" fontStyle="italic" fontWeight="normal">
                           {" "}(overridden)
@@ -461,52 +475,59 @@ export function QuizResultCard({
         </Box>
       )}
 
-      {/* Footer: small buttons left-aligned, + Undo link when overridden */}
-      <Box display="flex" flexWrap="wrap" gap={2} alignItems="center">
-        {!item.isOverridden && !item.isSkipped && item.noteId && item.learnedAt && (
-          <Button
-            size="sm"
-            variant="outline"
-            colorPalette={item.correct ? "red" : "blue"}
-            onClick={() => onOverride(item)}
-          >
-            {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
-          </Button>
-        )}
+      {/* Footer: small buttons left-aligned, + Undo link when overridden.
+          Origin-level Mark as Correct/Incorrect and Exclude/Resume are
+          meaningless for a multi-word etymology-origin card — the per-word
+          actions above are the correct granularity — so this footer is
+          suppressed entirely for isEtymology. Unaffected for every other
+          quiz mode, where a single origin-level action is still correct. */}
+      {!isEtymology && (
+        <Box display="flex" flexWrap="wrap" gap={2} alignItems="center">
+          {!item.isOverridden && !item.isSkipped && item.noteId && item.learnedAt && (
+            <Button
+              size="sm"
+              variant="outline"
+              colorPalette={item.correct ? "red" : "blue"}
+              onClick={() => onOverride(item)}
+            >
+              {item.correct ? "Mark as Incorrect" : "Mark as Correct"}
+            </Button>
+          )}
 
-        {item.isOverridden && item.noteId && item.learnedAt && (
-          <Button
-            size="sm"
-            variant="ghost"
-            colorPalette="blue"
-            onClick={() => onUndo(item)}
-          >
-            Undo override
-          </Button>
-        )}
+          {item.isOverridden && item.noteId && item.learnedAt && (
+            <Button
+              size="sm"
+              variant="ghost"
+              colorPalette="blue"
+              onClick={() => onUndo(item)}
+            >
+              Undo override
+            </Button>
+          )}
 
-        {item.isSkipped
-          ? item.noteId && (
-              <Button
-                size="sm"
-                variant="outline"
-                colorPalette="blue"
-                onClick={() => onResume(item)}
-              >
-                Resume
-              </Button>
-            )
-          : !item.isOverridden && item.noteId && (
-              <Button
-                size="sm"
-                variant="outline"
-                colorPalette="gray"
-                onClick={() => onSkip(item)}
-              >
-                Exclude
-              </Button>
-            )}
-      </Box>
+          {item.isSkipped
+            ? item.noteId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  colorPalette="blue"
+                  onClick={() => onResume(item)}
+                >
+                  Resume
+                </Button>
+              )
+            : !item.isOverridden && item.noteId && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  colorPalette="gray"
+                  onClick={() => onSkip(item)}
+                >
+                  Exclude
+                </Button>
+              )}
+        </Box>
+      )}
     </Box>
   );
 }

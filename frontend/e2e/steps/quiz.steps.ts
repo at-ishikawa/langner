@@ -333,6 +333,40 @@ Then(
   },
 );
 
+// The per-word "Skip" button on the answering screen carries an aria-label
+// naming the word ("Skip <word>"), distinct from the whole-card "Don't Know"
+// button, so a scenario can skip ONE derived family word while still typing
+// an answer for its sibling on the same card. See EtymologyOriginPage.
+When(
+  "I skip the family word {string}",
+  async ({ page }, word: string) => {
+    await page.getByRole("button", { name: `Skip ${word}` }).click();
+  },
+);
+
+// Bug-1 regression: a family word the learner tapped "Skip" for on the
+// answering screen must render as skipped on the feedback screen — neither
+// correct nor incorrect — via the "(skipped)" annotation next to its name.
+// See QuizResultCard.tsx.
+Then(
+  "I see the family word {string} marked as skipped",
+  async ({ page }, word: string) => {
+    await expect(
+      page.getByText(new RegExp(`^${word}\\s*\\(skipped\\)`)),
+    ).toBeVisible();
+  },
+);
+
+// Bug-1/UX regression: the etymology-origin feedback screen never renders
+// the origin-level "Excluded"/"Resume" state or the "Excluded from Quizzes"
+// bucket — excluding an origin from future quizzes is a distinct, explicit
+// action (the removed origin-level Exclude button) that a per-word "Skip"
+// during answering must never trigger as a side effect.
+Then("I do not see the origin marked excluded", async ({ page }) => {
+  await expect(page.getByRole("button", { name: /^resume$/i })).toHaveCount(0);
+  await expect(page.getByText(/excluded from quizzes/i)).toHaveCount(0);
+});
+
 // Bug-1 regression: the old standard-mode etymology quiz's concept-cluster
 // scaffold must never render on the Etymology Origin feedback screen.
 Then("I do not see the concept-cluster block", async ({ page }) => {

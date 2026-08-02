@@ -84,3 +84,31 @@ Feature: Etymology Origin quiz
     And I skip the card
 
     Then I do not see the concept-cluster block
+
+  # Bug-1 regression: tapping "Don't Know" for one derived family word must
+  # not affect grading for a sibling word answered on the same card, and
+  # must never mark the origin as excluded from future quizzes — excluding
+  # an origin is a distinct, explicit action that a per-word skip never
+  # triggers as a side effect.
+  Scenario: Skip one family word while answering its sibling, without excluding the origin
+    Given I am on the Quiz page
+    When I switch to the "Etymology" tab
+    And I choose the "Etymology Origin" quiz mode
+    And I include unstudied words
+    And I select the "Word Roots" notebook
+    And I start the quiz
+    Then I see an etymology prompt
+
+    When I type "a picture made with light" for the family word "photograph"
+    And I skip the family word "autograph"
+    And I submit my answer
+    And I continue to the next card
+    And I skip the card
+    And I continue to the next card
+    And I skip the card
+    And I continue to the next card
+    And I skip the card
+
+    Then I see the family word "photograph" marked correct
+    And I see the family word "autograph" marked as skipped
+    And I do not see the origin marked excluded

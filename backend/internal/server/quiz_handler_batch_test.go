@@ -2,16 +2,23 @@ package server
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+	"gopkg.in/yaml.v3"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
+	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
@@ -171,6 +178,148 @@ func TestQuizHandler_BatchSubmitAnswers_Skip(t *testing.T) {
 	assert.False(t, resp.Msg.GetResponses()[0].GetCorrect(), "skipped answer must be incorrect")
 	assert.Equal(t, "skipped by user", resp.Msg.GetResponses()[0].GetReason())
 	assert.True(t, resp.Msg.GetResponses()[1].GetCorrect(), "graded answer must reflect inference")
+}
+
+// newTestEtymologyHandler builds a QuizHandler with only LearningNotesDirectory
+// wired (no notebook/definitions fixtures) so tests can construct
+// quiz.EtymologyOriginCard values directly and inspect the YAML
+// gradeAndSaveEtymologyOrigin writes.
+func newTestEtymologyHandler(t *testing.T, openaiClient inference.Client) (*QuizHandler, string) {
+	t.Helper()
+	learningDir := t.TempDir()
+	svc := quiz.NewService(config.NotebooksConfig{
+		LearningNotesDirectory: learningDir,
+	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	return NewQuizHandler(svc), learningDir
+}
+
+// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip is the bug-1
+// regression: tapping "Don't Know" on ONE derived family word must not affect
+// grading for sibling words the user DID answer, and must never force the
+// origin's own learning-log record into an excluded state — excluding the
+// origin from future quizzes is a distinct, explicit action (SkipWord) that a
+// per-word skip never triggers (learning-history invariants L1/L4).
+func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, learningDir := newTestEtymologyHandler(t, mockClient)
+
+	const notebookName = "roots"
+	card := quiz.EtymologyOriginCard{
+		NotebookName: notebookName,
+		SessionTitle: "Session 1",
+		Origin:       "scribo",
+		Meaning:      "to write",
+		Words: []quiz.EtymologyFamilyWord{
+			{Expression: "describe", Meaning: "to represent in words"},
+			{Expression: "inscribe", Meaning: "to write or carve on a surface"},
+			{Expression: "transcribe", Meaning: "to write out in full"},
+		},
+	}
+	handler.etymologyOriginStore[1] = card
+
+	// describe and transcribe are answered with exact matches (short-circuits
+	// ValidateWordForm, so no mock expectation is needed for them); inscribe
+	// is marked "Don't Know". No OpenAI call should happen at all.
+	resp, err := handler.BatchSubmitEtymologyOriginAnswers(
+		context.Background(),
+		connect.NewRequest(&apiv1.BatchSubmitEtymologyOriginAnswersRequest{
+			Answers: []*apiv1.SubmitEtymologyOriginAnswerRequest{{
+				CardId: 1,
+				Answers: []*apiv1.EtymologyWordAnswer{
+					{WordId: 1, Answer: "to represent in words"},
+					{WordId: 2, Skipped: true},
+					{WordId: 3, Answer: "to write out in full"},
+				},
+				ResponseTimeMs: 500,
+			}},
+		}),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Msg.GetResponses(), 1)
+	got := resp.Msg.GetResponses()[0]
+
+	results := got.GetResults()
+	require.Len(t, results, 3)
+	assert.True(t, results[0].GetCorrect(), "describe: the sibling word actually answered must be graded correctly")
+	assert.False(t, results[0].GetSkipped())
+	assert.True(t, results[1].GetSkipped(), "inscribe: Don't Know must mark the word skipped, not incorrect")
+	assert.False(t, results[1].GetCorrect())
+	assert.True(t, results[2].GetCorrect(), "transcribe: unaffected by the sibling's skip")
+	assert.False(t, results[2].GetSkipped())
+
+	// The origin's aggregate is graded on the two ANSWERED words only, both
+	// correct, so the origin itself is recorded as correct — a skipped
+	// sibling must not drag it down.
+	assert.True(t, got.GetCorrect(), "aggregate must reflect only the graded words")
+	require.NotEmpty(t, got.GetLearnedAt())
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, notebookName+".yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+
+	expr := notebook.FindOriginExpression(histories, "Session 1", "scribo", "")
+	require.NotNil(t, expr)
+	assert.False(t, expr.SkippedAt.IsSkippedAny(),
+		"bug-1: a per-word Don't Know must never mark the origin as excluded from quizzes")
+	require.Len(t, expr.EtymologyOriginLogs, 1)
+	log := expr.EtymologyOriginLogs[0]
+	assert.Equal(t, notebook.LearnedStatusUnderstood, log.Status)
+	require.Len(t, log.WordResults, 3)
+	assert.True(t, log.WordResults[1].Skipped, "the skipped word's per-word log entry must record Skipped")
+	assert.False(t, log.WordResults[1].Correct)
+}
+
+// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllWordsSkipped verifies
+// that skipping every derived word still records ONE normal wrong attempt
+// (misunderstood) for the origin — never an excluded one — so the origin
+// resurfaces for review instead of silently disappearing from the quiz.
+func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllWordsSkipped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, learningDir := newTestEtymologyHandler(t, mockClient)
+
+	const notebookName = "roots"
+	card := quiz.EtymologyOriginCard{
+		NotebookName: notebookName,
+		SessionTitle: "Session 1",
+		Origin:       "scribo",
+		Meaning:      "to write",
+		Words: []quiz.EtymologyFamilyWord{
+			{Expression: "describe", Meaning: "to represent in words"},
+		},
+	}
+	handler.etymologyOriginStore[1] = card
+
+	resp, err := handler.BatchSubmitEtymologyOriginAnswers(
+		context.Background(),
+		connect.NewRequest(&apiv1.BatchSubmitEtymologyOriginAnswersRequest{
+			Answers: []*apiv1.SubmitEtymologyOriginAnswerRequest{{
+				CardId:         1,
+				Answers:        []*apiv1.EtymologyWordAnswer{{WordId: 1, Skipped: true}},
+				ResponseTimeMs: 500,
+			}},
+		}),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	got := resp.Msg.GetResponses()[0]
+	assert.False(t, got.GetCorrect())
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, notebookName+".yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+
+	expr := notebook.FindOriginExpression(histories, "Session 1", "scribo", "")
+	require.NotNil(t, expr)
+	assert.False(t, expr.SkippedAt.IsSkippedAny(),
+		"skipping every word must not exclude the origin from future quizzes")
+	require.Len(t, expr.EtymologyOriginLogs, 1)
+	assert.Equal(t, notebook.LearnedStatusMisunderstood, expr.EtymologyOriginLogs[0].Status,
+		"a fully-skipped attempt is recorded as a normal miss, not an exclusion")
 }
 
 // TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence documents the

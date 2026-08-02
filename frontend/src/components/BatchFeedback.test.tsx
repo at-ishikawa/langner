@@ -165,8 +165,27 @@ describe("BatchFeedback etymology-origin feedback screen", () => {
     renderComponent({ items: etymologyItems, isEtymology: true });
     expect(screen.queryByRole("button", { name: "Mark describe as correct" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Exclude describe" })).not.toBeInTheDocument();
-    // The root-level override button is unaffected — it's gated on
-    // onOverride/onOverrideWord independently.
-    expect(screen.getByRole("button", { name: "Mark as Correct" })).toBeInTheDocument();
+  });
+
+  // UX simplification: origin-level Mark as Correct/Incorrect and Exclude
+  // are meaningless for a multi-word etymology-origin card (the per-word
+  // actions above are the correct granularity), so they must never render
+  // on this quiz mode's feedback screen — regardless of whether the
+  // root-level handlers are provided.
+  it("never renders the root-level Mark as Correct/Exclude buttons", () => {
+    renderComponent({ items: etymologyItems, isEtymology: true, onOverrideWord: vi.fn(), onExcludeWord: vi.fn() });
+    expect(screen.queryByRole("button", { name: "Mark as Correct" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Mark as Incorrect" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Exclude" })).not.toBeInTheDocument();
+  });
+});
+
+// Non-etymology quiz modes keep the root-level Mark as Correct/Exclude
+// actions untouched — this UX change is scoped to etymology-origin only.
+describe("BatchFeedback non-etymology feedback screen", () => {
+  it("still renders the root-level Mark as Correct and Exclude buttons", () => {
+    renderComponent({ items: mockItems, isEtymology: false });
+    expect(screen.getAllByRole("button", { name: /^Mark as (Correct|Incorrect)$/ }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Exclude" }).length).toBeGreaterThan(0);
   });
 });

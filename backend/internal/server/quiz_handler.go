@@ -568,7 +568,7 @@ func (h *QuizHandler) SubmitEtymologyOriginAnswer(ctx context.Context, req *conn
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID))
 	}
-	resp, err := h.gradeAndSaveEtymologyOrigin(ctx, card, req.Msg.GetAnswers(), req.Msg.GetResponseTimeMs(), req.Msg.GetIsSkipped())
+	resp, err := h.gradeAndSaveEtymologyOrigin(ctx, card, req.Msg.GetAnswers(), req.Msg.GetResponseTimeMs())
 	if err != nil {
 		return nil, err
 	}
@@ -576,38 +576,61 @@ func (h *QuizHandler) SubmitEtymologyOriginAnswer(ctx context.Context, req *conn
 }
 
 // gradeAndSaveEtymologyOrigin grades every family word the user typed, records
-// ONE learning-log entry for the origin's (session, sense) series (the origin is
-// correct only when every family word is correct), and assembles the feedback
-// response with per-word results.
+// ONE learning-log entry for the origin's (session, sense) series, and
+// assembles the feedback response with per-word results.
+//
+// "Don't Know" is a PER-WORD choice (EtymologyWordAnswer.Skipped), not a
+// whole-origin one: a skipped word is recorded as skipped/ungraded and is
+// excluded from the aggregate correctness/quality computation entirely, so it
+// can never drag down grading for sibling words the user DID answer. The
+// origin's aggregate is correct only when every GRADED (non-skipped) word is
+// correct; if nothing was graded (every word skipped, or none answered), the
+// origin is recorded as a normal wrong attempt (misunderstood) — never as
+// excluded. Excluding the origin from future quizzes remains a distinct,
+// explicit action (SkipWord) that this grading path never triggers.
 func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 	ctx context.Context,
 	card quiz.EtymologyOriginCard,
 	answers []*apiv1.EtymologyWordAnswer,
 	responseTimeMs int64,
-	skipped bool,
 ) (*apiv1.SubmitEtymologyOriginAnswerResponse, error) {
-	answerByWordID := make(map[int64]string, len(answers))
+	answerByWordID := make(map[int64]*apiv1.EtymologyWordAnswer, len(answers))
 	for _, a := range answers {
-		answerByWordID[a.GetWordId()] = a.GetAnswer()
+		answerByWordID[a.GetWordId()] = a
 	}
 
 	aggregateCorrect := true
 	quality := 5
+	gradedCount := 0
 	var results []*apiv1.EtymologyWordResult
 	wordResults := make([]notebook.EtymologyWordLog, 0, len(card.Words))
 	for i, w := range card.Words {
 		wordID := int64(i + 1)
 		result := &apiv1.EtymologyWordResult{WordId: wordID, Expression: w.Expression, CorrectMeaning: w.Meaning}
-		answer, answered := answerByWordID[wordID]
-		if skipped || !answered {
+		a := answerByWordID[wordID]
+
+		if a.GetSkipped() {
+			result.Skipped = true
+			result.Reason = "skipped by user"
+			results = append(results, result)
+			wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Skipped: true})
+			continue
+		}
+
+		answer := strings.TrimSpace(a.GetAnswer())
+		if answer == "" {
+			// Left blank without an explicit "Don't Know": still graded, and
+			// still counts against the aggregate — unlike a per-word skip.
 			result.Correct = false
-			result.Reason = "skipped"
+			result.Reason = "not answered"
 			aggregateCorrect = false
 			quality = 1
+			gradedCount++
 			results = append(results, result)
 			wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: false})
 			continue
 		}
+
 		grade, err := h.svc.GradeEtymologyWordAnswer(ctx, w, answer, responseTimeMs)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology word: %w", err))
@@ -620,10 +643,13 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 		} else if grade.Quality < quality {
 			quality = grade.Quality
 		}
+		gradedCount++
 		results = append(results, result)
 		wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: grade.Correct})
 	}
-	if len(card.Words) == 0 {
+	if gradedCount == 0 {
+		// No word was actually graded (every word skipped, or the card has no
+		// words) — record as a normal wrong attempt, not a fabricated pass.
 		aggregateCorrect = false
 		quality = 1
 	}

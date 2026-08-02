@@ -527,30 +527,42 @@ message StartEtymologyOriginQuizResponse {
 }
 
 // EtymologyWordAnswer is the user's typed meaning for one family word on the
-// card, keyed by the word_id echoed from EtymologyFamilyWord.
+// card, keyed by the word_id echoed from EtymologyFamilyWord. skipped is true
+// when the learner tapped "Don't Know" for THIS word specifically — it is
+// recorded as skipped/ungraded and never counted toward the origin's
+// aggregate correctness, while sibling words with an answer are graded
+// normally and independently (bug: a per-word "Don't Know" must not affect
+// sibling grading or force the origin into an excluded state).
 message EtymologyWordAnswer {
   int64 word_id = 1;
   string answer = 2;
+  bool skipped = 3;
 }
 
 message SubmitEtymologyOriginAnswerRequest {
   int64 card_id = 1 [(buf.validate.field).int64.gt = 0];
-  // answers holds one entry per family word the user filled. Ignored when
-  // is_skipped=true (the whole origin is then recorded as one wrong attempt).
+  // answers holds one entry per family word: either a typed answer or
+  // skipped=true. Removed the old request-level is_skipped (whole-origin
+  // skip) in favor of per-word skipped — "don't know" is now a per-word
+  // choice, not an all-or-nothing one.
   repeated EtymologyWordAnswer answers = 2;
   int64 response_time_ms = 3;
-  bool is_skipped = 4;
+  reserved 4;
+  reserved "is_skipped";
 }
 
 // EtymologyWordResult is the per-word feedback for one family word. It is
 // display-only — the origin carries a single learning-log series, not one per
-// word.
+// word. skipped is true when the learner tapped "Don't Know" for this word;
+// such a word is neither correct nor incorrect and does not affect the
+// origin's aggregate grading.
 message EtymologyWordResult {
   int64 word_id = 1;
   string expression = 2;
   bool correct = 3;
   string correct_meaning = 4;
   string reason = 5;
+  bool skipped = 6;
 }
 
 message SubmitEtymologyOriginAnswerResponse {

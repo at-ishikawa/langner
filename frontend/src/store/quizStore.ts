@@ -171,6 +171,12 @@ export interface EtymologyWordResult {
   // isExcluded marks the word as excluded via the feedback card's per-word
   // Exclude action. Display-only annotation on the origin's one record.
   isExcluded?: boolean;
+  // skipped is true when the learner tapped "Don't Know" for THIS word on
+  // the answering screen. A skipped word is neither correct nor incorrect
+  // and never affected sibling words' grading or the origin's own aggregate
+  // result — distinct from the origin-level `isSkipped` on
+  // EtymologyOriginResult (which means "excluded from future quizzes").
+  skipped?: boolean;
 }
 
 // EtymologyOriginResult is the graded result of one origin screen. The origin

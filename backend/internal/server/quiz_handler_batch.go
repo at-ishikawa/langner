@@ -188,7 +188,7 @@ func (h *QuizHandler) BatchSubmitEtymologyOriginAnswers(
 
 	responses := make([]*apiv1.SubmitEtymologyOriginAnswerResponse, len(answers))
 	for i := range answers {
-		resp, err := h.gradeAndSaveEtymologyOrigin(ctx, cards[i], answers[i].GetAnswers(), answers[i].GetResponseTimeMs(), answers[i].GetIsSkipped())
+		resp, err := h.gradeAndSaveEtymologyOrigin(ctx, cards[i], answers[i].GetAnswers(), answers[i].GetResponseTimeMs())
 		if err != nil {
 			return nil, err
 		}
