@@ -322,6 +322,106 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllWordsSkipped(t *testin
 		"a fully-skipped attempt is recorded as a normal miss, not an exclusion")
 }
 
+// TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped is
+// the regression coverage for the exact user-reported repro: a 4-word family
+// where the learner typed real answers for 2 words and left the other 2
+// blank+skipped in the SAME submission (the frontend's whole-card "Don't
+// Know" button, tapped after partially typing). Every previous backend test
+// only exercised a SINGLE skipped word alongside answered siblings
+// (TestQuizHandler_BatchSubmitEtymologyOriginAnswers_PerWordSkip has 2
+// answered + 1 skipped); that gap let a frontend bug ship where tapping
+// "Don't Know" discarded every typed answer and force-skipped all 4 words
+// before the request ever reached this handler — a bug this backend-only
+// test can't see, but it still pins the contract the frontend must satisfy:
+// 2 answered words graded independently (one right, one wrong) and 2 skipped
+// words recorded as skipped/ungraded, never dragging each other down.
+func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoSkipped(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := mock_inference.NewMockClient(ctrl)
+	handler, learningDir := newTestEtymologyHandler(t, mockClient)
+
+	const notebookName = "roots"
+	card := quiz.EtymologyOriginCard{
+		NotebookName: notebookName,
+		SessionTitle: "Session 1",
+		Origin:       "graph",
+		Meaning:      "to write",
+		Words: []quiz.EtymologyFamilyWord{
+			{Expression: "photograph", Meaning: "light writing"},
+			{Expression: "autograph", Meaning: "self writing"},
+			{Expression: "telegraph", Meaning: "distant writing"},
+			{Expression: "paragraph", Meaning: "beside writing"},
+		},
+	}
+	handler.etymologyOriginStore[1] = card
+
+	// photograph: answered with an exact match (correct, no OpenAI call).
+	// autograph: answered but wrong (needs a mocked OpenAI classification).
+	// telegraph, paragraph: both skipped in the same request.
+	mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Return(
+		inference.ValidateWordFormResponse{
+			Classification: inference.ClassificationWrong,
+			Reason:         "not close enough",
+			Quality:        1,
+		}, nil,
+	)
+
+	resp, err := handler.BatchSubmitEtymologyOriginAnswers(
+		context.Background(),
+		connect.NewRequest(&apiv1.BatchSubmitEtymologyOriginAnswersRequest{
+			Answers: []*apiv1.SubmitEtymologyOriginAnswerRequest{{
+				CardId: 1,
+				Answers: []*apiv1.EtymologyWordAnswer{
+					{WordId: 1, Answer: "light writing"},
+					{WordId: 2, Answer: "a wrong guess"},
+					{WordId: 3, Skipped: true},
+					{WordId: 4, Skipped: true},
+				},
+				ResponseTimeMs: 500,
+			}},
+		}),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	require.Len(t, resp.Msg.GetResponses(), 1)
+	got := resp.Msg.GetResponses()[0]
+
+	results := got.GetResults()
+	require.Len(t, results, 4)
+	assert.True(t, results[0].GetCorrect(), "photograph: typed answer must be graded correct on its own merits")
+	assert.False(t, results[0].GetSkipped())
+	assert.False(t, results[1].GetCorrect(), "autograph: typed answer must be graded, and graded wrong here")
+	assert.False(t, results[1].GetSkipped(), "autograph: answered, so it must NOT be reported as skipped")
+	assert.True(t, results[2].GetSkipped(), "telegraph: left blank, marked Don't Know")
+	assert.False(t, results[2].GetCorrect())
+	assert.True(t, results[3].GetSkipped(), "paragraph: left blank, marked Don't Know")
+	assert.False(t, results[3].GetCorrect())
+
+	// The aggregate reflects only the two GRADED (non-skipped) words; since
+	// one of them (autograph) is wrong, the origin is recorded as incorrect —
+	// but photograph's own per-word result must still show correct:true.
+	assert.False(t, got.GetCorrect())
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, notebookName+".yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+
+	expr := notebook.FindOriginExpression(histories, "Session 1", "graph", "")
+	require.NotNil(t, expr)
+	assert.False(t, expr.SkippedAt.IsSkippedAny(),
+		"2 per-word skips alongside 2 answers must never exclude the origin from future quizzes")
+	require.Len(t, expr.EtymologyOriginLogs, 1)
+	log := expr.EtymologyOriginLogs[0]
+	require.Len(t, log.WordResults, 4)
+	assert.True(t, log.WordResults[0].Correct, "photograph's stored log entry must be correct")
+	assert.False(t, log.WordResults[0].Skipped)
+	assert.False(t, log.WordResults[1].Correct, "autograph's stored log entry must be incorrect")
+	assert.False(t, log.WordResults[1].Skipped)
+	assert.True(t, log.WordResults[2].Skipped, "telegraph's stored log entry must be skipped")
+	assert.True(t, log.WordResults[3].Skipped, "paragraph's stored log entry must be skipped")
+}
+
 // TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence documents the
 // current behavior around synonym classifications in the reverse quiz and
 // then, in the `accept_synonym_as_correct=true` case, pins the fixed

@@ -170,19 +170,29 @@ export default function EtymologyOriginPage() {
     });
   };
 
-  // handleSkip is the whole-card "Don't Know" shortcut: it marks every
-  // family word as individually skipped (discarding any partially-typed
-  // answers) and submits immediately, without requiring Submit. Each word is
-  // still recorded as skipped/ungraded — not wrong — via the same per-word
-  // path a single skipped word takes.
+  // handleSkip is the whole-card "Don't Know" shortcut for whatever the user
+  // hasn't answered yet: it marks only the words that are still blank (and
+  // any word already toggled "Skip") as skipped, and submits immediately
+  // without requiring every word to be filled first. Words the user already
+  // typed an answer for are submitted as-is and graded normally — tapping
+  // this button must never discard or skip an answer the user already typed
+  // (regression: it used to blow away every typed answer with answers: {}
+  // and mark all words skipped, so 2 typed + 2 blank + "Don't Know" reported
+  // all 4 words as skipped instead of grading the 2 typed ones).
   const handleSkip = () => {
     if (phase !== "answering") return;
     const responseTime = responseTimeSince(startTimeRef.current);
-    const allSkipped = Object.fromEntries(card.words.map((w) => [w.wordId.toString(), true]));
+    const skippedForSubmit = Object.fromEntries(
+      card.words.map((w) => {
+        const key = w.wordId.toString();
+        const isBlank = !(inputs[key] ?? "").trim();
+        return [key, (skippedWords[key] ?? false) || isBlank];
+      }),
+    );
     recordAndAdvance({
       card,
-      answers: {},
-      skipped: allSkipped,
+      answers: { ...inputs },
+      skipped: skippedForSubmit,
       responseTimeMs: responseTime,
     });
   };
