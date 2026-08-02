@@ -17,7 +17,7 @@ import (
 //
 // The operation is destructive and one-way: non-head member entries are
 // removed from the YAML. The head ends up holding the union of every
-// member's LearnedLogs/ReverseLogs/EtymologyBreakdownLogs/EtymologyAssemblyLogs
+// member's LearnedLogs/ReverseLogs/EtymologyOriginLogs
 // (sorted newest-first), the union of every member's SkippedAt
 // timestamps (earliest non-zero wins per quiz type), and a rewritten
 // interval_days on its newest log per quiz-type — set to the min across

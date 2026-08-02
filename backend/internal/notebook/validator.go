@@ -209,8 +209,8 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// reflects the actual chain of answers (each log's interval threaded
 	// into the next via RecalculateAll, with the early-review guard
 	// preventing growth on too-soon correct answers). Touches all four
-	// slots: LearnedLogs / ReverseLogs / EtymologyBreakdownLogs /
-	// EtymologyAssemblyLogs. Reports each interval drift as a warning so
+	// slots: LearnedLogs / ReverseLogs / EtymologyOriginLogs. Reports each
+	// interval drift as a warning so
 	// the run shows which logs got corrected; logs whose recalculated
 	// value matches stored stay untouched in the output.
 	fixedLearning = v.recalculateAllIntervals(fixedLearning, result)

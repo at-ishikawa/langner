@@ -34,8 +34,7 @@ type RelearnContextScene struct {
 //
 //	QuizTypeNotebook          recognition: show Entry, ask the Meaning
 //	QuizTypeReverse           production:  show Meaning + masked Contexts, ask Entry
-//	QuizTypeEtymologyStandard show Entry (origin), ask the Meaning
-//	QuizTypeEtymologyReverse  show Meaning, ask Entry (origin)
+//	QuizTypeEtymologyOrigin   show Entry (origin), ask the Meaning
 //
 // A word failed in several quiz types yields one card per type. Nothing about a
 // RelearnCard is ever persisted — the Relearn Quiz writes no learning history
@@ -92,7 +91,7 @@ type relearnCandidate struct {
 }
 
 // LoadRelearnPool builds the Relearn Quiz pool: for every learning-log series
-// (recognition, reverse, etymology breakdown, etymology assembly) whose
+// (recognition, reverse, etymology origin) whose
 // most-recent log within [windowStart, now] has status "misunderstood", it
 // emits one card that mirrors that series' quiz type. A word failed in several
 // types produces several cards.
@@ -265,10 +264,10 @@ type relearnSeriesSpec struct {
 	format notebook.QuizType
 }
 
-// relearnSeries returns the four independent log series an expression can carry,
+// relearnSeries returns the independent log series an expression can carry,
 // each mapped to the relearn card format that mirrors it. Notebook and freeform
-// share LearnedLogs and both replay as recognition; etymology freeform shares
-// the breakdown track and replays as etymology-standard.
+// share LearnedLogs and both replay as recognition; the etymology-origin series
+// replays as an etymology-origin recognition card (show origin, ask meaning).
 func relearnSeries(expr notebook.LearningHistoryExpression) []relearnSeriesSpec {
 	return []relearnSeriesSpec{
 		{logs: expr.LearnedLogs, format: notebook.QuizTypeNotebook},
