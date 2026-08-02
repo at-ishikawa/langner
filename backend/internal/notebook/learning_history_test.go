@@ -1021,31 +1021,16 @@ func containsStr(s, substr string) bool {
 func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T) {
 	tests := []struct {
 		name       string
-		quizType   QuizType
 		isCorrect  bool
 		wantStatus LearnedStatus
 	}{
 		{
-			name:       "breakdown correct",
-			quizType:   QuizTypeEtymologyStandard,
+			name:       "origin correct",
 			isCorrect:  true,
 			wantStatus: LearnedStatusUnderstood,
 		},
 		{
-			name:       "breakdown incorrect",
-			quizType:   QuizTypeEtymologyStandard,
-			isCorrect:  false,
-			wantStatus: LearnedStatusMisunderstood,
-		},
-		{
-			name:       "assembly correct",
-			quizType:   QuizTypeEtymologyReverse,
-			isCorrect:  true,
-			wantStatus: LearnedStatusUnderstood,
-		},
-		{
-			name:       "assembly incorrect",
-			quizType:   QuizTypeEtymologyReverse,
+			name:       "origin incorrect",
 			isCorrect:  false,
 			wantStatus: LearnedStatusMisunderstood,
 		},
@@ -1062,12 +1047,12 @@ func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T
 				quality = 1
 			}
 
-			exp.AddRecordWithQualityForEtymology(&SM2Calculator{}, tt.isCorrect, true, quality, 5000, tt.quizType)
+			exp.AddRecordWithQualityForEtymology(&SM2Calculator{}, tt.isCorrect, true, quality, 5000, QuizTypeEtymologyOrigin)
 
-			logs := exp.GetLogsForQuizType(tt.quizType)
+			logs := exp.GetLogsForQuizType(QuizTypeEtymologyOrigin)
 			require.Len(t, logs, 1)
 			assert.Equal(t, tt.wantStatus, logs[0].Status)
-			assert.Equal(t, string(tt.quizType), logs[0].QuizType)
+			assert.Equal(t, string(QuizTypeEtymologyOrigin), logs[0].QuizType)
 		})
 	}
 }
@@ -1086,40 +1071,40 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 		{
 			name:     "no logs - needs review",
 			expr:     LearningHistoryExpression{Expression: "test"},
-			quizType: QuizTypeEtymologyStandard,
+			quizType: QuizTypeEtymologyOrigin,
 			want:     true,
 		},
 		{
 			name: "misunderstood - needs review",
 			expr: LearningHistoryExpression{
 				Expression: "test",
-				EtymologyBreakdownLogs: []LearningRecord{
+				EtymologyOriginLogs: []LearningRecord{
 					{Status: LearnedStatusMisunderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 1},
 				},
 			},
-			quizType: QuizTypeEtymologyStandard,
+			quizType: QuizTypeEtymologyOrigin,
 			want:     true,
 		},
 		{
 			name: "recently answered - no review needed",
 			expr: LearningHistoryExpression{
 				Expression: "test",
-				EtymologyBreakdownLogs: []LearningRecord{
+				EtymologyOriginLogs: []LearningRecord{
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneHourAgo), IntervalDays: 3},
 				},
 			},
-			quizType: QuizTypeEtymologyStandard,
+			quizType: QuizTypeEtymologyOrigin,
 			want:     false,
 		},
 		{
 			name: "past due - needs review",
 			expr: LearningHistoryExpression{
 				Expression: "test",
-				EtymologyAssemblyLogs: []LearningRecord{
+				EtymologyOriginLogs: []LearningRecord{
 					{Status: LearnedStatusUnderstood, LearnedAt: NewDate(oneDayAgo), IntervalDays: 1},
 				},
 			},
-			quizType: QuizTypeEtymologyReverse,
+			quizType: QuizTypeEtymologyOrigin,
 			want:     true,
 		},
 	}
@@ -1133,24 +1118,17 @@ func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 }
 
 func TestLearningHistoryExpression_GetLogsForQuizType_Etymology(t *testing.T) {
-	breakdownLogs := []LearningRecord{{Status: LearnedStatusUnderstood, Quality: 4}}
-	assemblyLogs := []LearningRecord{{Status: LearnedStatusMisunderstood, Quality: 1}}
+	originLogs := []LearningRecord{{Status: LearnedStatusUnderstood, Quality: 4}}
 	learnedLogs := []LearningRecord{{Status: LearnedStatusCanBeUsed, Quality: 5}}
 
 	expr := LearningHistoryExpression{
-		LearnedLogs:            learnedLogs,
-		EtymologyBreakdownLogs: breakdownLogs,
-		EtymologyAssemblyLogs:  assemblyLogs,
+		LearnedLogs:         learnedLogs,
+		EtymologyOriginLogs: originLogs,
 	}
 
-	t.Run("etymology breakdown returns breakdown logs", func(t *testing.T) {
-		got := expr.GetLogsForQuizType(QuizTypeEtymologyStandard)
-		assert.Equal(t, breakdownLogs, got)
-	})
-
-	t.Run("etymology assembly returns assembly logs", func(t *testing.T) {
-		got := expr.GetLogsForQuizType(QuizTypeEtymologyReverse)
-		assert.Equal(t, assemblyLogs, got)
+	t.Run("etymology origin returns origin logs", func(t *testing.T) {
+		got := expr.GetLogsForQuizType(QuizTypeEtymologyOrigin)
+		assert.Equal(t, originLogs, got)
 	})
 
 	t.Run("notebook quiz type still returns learned logs", func(t *testing.T) {
@@ -1161,24 +1139,18 @@ func TestLearningHistoryExpression_GetLogsForQuizType_Etymology(t *testing.T) {
 
 func TestLearningHistoryExpression_GetEasinessFactorForQuizType_Etymology(t *testing.T) {
 	expr := LearningHistoryExpression{
-		EtymologyBreakdownEasinessFactor: 2.1,
-		EtymologyAssemblyEasinessFactor:  2.3,
-		EasinessFactor:                   2.5,
+		EtymologyOriginEasinessFactor: 2.1,
+		EasinessFactor:                2.5,
 	}
 
-	t.Run("etymology breakdown returns breakdown EF", func(t *testing.T) {
-		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyStandard)
+	t.Run("etymology origin returns origin EF", func(t *testing.T) {
+		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyOrigin)
 		assert.InDelta(t, 2.1, got, 0.001)
-	})
-
-	t.Run("etymology assembly returns assembly EF", func(t *testing.T) {
-		got := expr.GetEasinessFactorForQuizType(QuizTypeEtymologyReverse)
-		assert.InDelta(t, 2.3, got, 0.001)
 	})
 
 	t.Run("zero etymology EF returns default", func(t *testing.T) {
 		expr2 := LearningHistoryExpression{}
-		got := expr2.GetEasinessFactorForQuizType(QuizTypeEtymologyStandard)
+		got := expr2.GetEasinessFactorForQuizType(QuizTypeEtymologyOrigin)
 		assert.InDelta(t, DefaultEasinessFactor, got, 0.001)
 	})
 }

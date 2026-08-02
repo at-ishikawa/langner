@@ -19,7 +19,6 @@ vi.mock("@/lib/client", () => ({
   quizClient: {
     getQuizOptions: vi.fn().mockResolvedValue({ notebooks: [] }),
   },
-  EtymologyQuizMode: { BREAKDOWN: 1, ASSEMBLY: 2 },
 }));
 
 function renderPage() {
@@ -74,20 +73,18 @@ describe("QuizHubPage", () => {
     expect(screen.getByText("Start")).toBeInTheDocument();
   });
 
-  it("switches to Etymology tab and shows etymology quiz modes", async () => {
+  it("switches to Etymology tab and shows the single Etymology Origin mode", async () => {
     renderPage();
     await waitFor(() => {
       expect(screen.getByText("Vocabulary")).toBeInTheDocument();
     });
     fireEvent.click(screen.getByText("Etymology"));
 
-    // Etymology tab shows Standard, Reverse, Freeform modes
-    const standardTexts = screen.getAllByText("Standard");
-    expect(standardTexts.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("See an origin, type its meaning")).toBeInTheDocument();
-    const reverseTexts = screen.getAllByText("Reverse");
-    expect(reverseTexts.length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText("Freeform")).toBeInTheDocument();
+    // Etymology tab shows exactly one mode: Etymology Origin.
+    expect(screen.getByText("Etymology Origin")).toBeInTheDocument();
+    expect(
+      screen.getByText("See an origin and its word family; type each derived word's meaning"),
+    ).toBeInTheDocument();
   });
 
   it("deselects mode when clicking it again", async () => {

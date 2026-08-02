@@ -33,7 +33,12 @@ const mockEtymologyCards: EtymologyOriginCard[] = [
     meaning: "life",
     notebookName: "Science Roots",
     sessionTitle: "Lesson 1",
-    exampleWords: ["biology", "biopsy"],
+    sense: "",
+    forms: [{ form: "bio", role: "root" }],
+    words: [
+      { wordId: BigInt(100), expression: "biology" },
+      { wordId: BigInt(101), expression: "biopsy" },
+    ],
   },
 ];
 
@@ -42,12 +47,14 @@ const mockEtymologyResult: EtymologyOriginResult = {
   cardId: BigInt(10),
   origin: "bio",
   meaning: "life",
-  answer: "life",
   correct: true,
-  reason: "Correct meaning identified",
-  correctAnswer: "life",
   type: "root",
   language: "Greek",
+  forms: [{ form: "bio", role: "root" }],
+  words: [
+    { wordId: BigInt(100), expression: "biology", correct: true, correctMeaning: "study of life", reason: "", userAnswer: "study of life" },
+    { wordId: BigInt(101), expression: "biopsy", correct: true, correctMeaning: "examination of tissue", reason: "", userAnswer: "examination of tissue" },
+  ],
 };
 
 describe("useQuizStore", () => {
@@ -195,10 +202,10 @@ describe("useQuizStore", () => {
     expect(state.etymologyOriginResults[0].origin).toBe("bio");
   });
 
-  it("overrideResult works for etymology-standard type", () => {
+  it("overrideResult works for etymology-origin type", () => {
     useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
 
-    useQuizStore.getState().overrideResult(0, "etymology-standard", "2027-06-20", {
+    useQuizStore.getState().overrideResult(0, "etymology-origin", "2027-06-20", {
       quality: 5,
       status: "understood",
       intervalDays: 10,
@@ -209,10 +216,10 @@ describe("useQuizStore", () => {
     expect(state.etymologyOriginResults[0].isOverridden).toBe(true);
   });
 
-  it("skipResult works for etymology-reverse type", () => {
+  it("skipResult works for etymology-origin type", () => {
     useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
 
-    useQuizStore.getState().skipResult(0, "etymology-reverse");
+    useQuizStore.getState().skipResult(0, "etymology-origin");
 
     const state = useQuizStore.getState();
     expect(state.etymologyOriginResults[0].isSkipped).toBe(true);
@@ -220,8 +227,8 @@ describe("useQuizStore", () => {
 
   it("resumeResult clears isSkipped for etymology type", () => {
     useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-    useQuizStore.getState().skipResult(0, "etymology-standard");
-    useQuizStore.getState().resumeResult(0, "etymology-standard");
+    useQuizStore.getState().skipResult(0, "etymology-origin");
+    useQuizStore.getState().resumeResult(0, "etymology-origin");
 
     const state = useQuizStore.getState();
     expect(state.etymologyOriginResults[0].isSkipped).toBe(false);
@@ -230,7 +237,7 @@ describe("useQuizStore", () => {
   it("updateResultReviewDate works for etymology type", () => {
     useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
 
-    useQuizStore.getState().updateResultReviewDate(0, "etymology-standard", "2027-12-25");
+    useQuizStore.getState().updateResultReviewDate(0, "etymology-origin", "2027-12-25");
 
     const state = useQuizStore.getState();
     expect(state.etymologyOriginResults[0].nextReviewDate).toBe("2027-12-25");
@@ -245,16 +252,5 @@ describe("useQuizStore", () => {
     const state = useQuizStore.getState();
     expect(state.etymologyOriginCards).toEqual([]);
     expect(state.etymologyOriginResults).toEqual([]);
-  });
-
-  it("setEtymologyFreeformOrigins updates state", () => {
-    useQuizStore.getState().setEtymologyFreeformOrigins(["biology", "geology"]);
-    expect(useQuizStore.getState().etymologyFreeformOrigins).toEqual(["biology", "geology"]);
-  });
-
-  it("setEtymologyFreeformNextReviewDates updates state", () => {
-    const dates = { biology: "2027-06-20" };
-    useQuizStore.getState().setEtymologyFreeformNextReviewDates(dates);
-    expect(useQuizStore.getState().etymologyFreeformNextReviewDates).toEqual(dates);
   });
 });

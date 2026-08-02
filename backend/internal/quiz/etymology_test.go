@@ -12,6 +12,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
@@ -151,6 +152,46 @@ func TestSaveEtymologyOriginResult_OneSeriesPerOrigin(t *testing.T) {
 	}
 	assert.Equal(t, 1, originEntries, "L1: one canonical entry per (origin, sense)")
 	assert.Equal(t, 2, logCount, "L1/L4: both answers land in the single origin series")
+}
+
+// TestEtymologyOrigin_OverrideRoundTrip verifies L2 for the override path: a
+// Mark-as-Correct override resolves the exact (session, origin, sense) series
+// through the same canonical lookup the write path used, flips the log, and the
+// read path reflects it.
+func TestEtymologyOrigin_OverrideRoundTrip(t *testing.T) {
+	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
+	svc.learningRepository = learning.NewYAMLLearningRepository(learningDir, nil)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	card := cards[0]
+
+	// Record a wrong answer, then override it to correct.
+	require.NoError(t, svc.SaveEtymologyOriginResult(card, 1, false, 1000, true))
+	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
+	require.NotEmpty(t, learnedAt)
+
+	markCorrect := true
+	_, err = svc.OverrideAnswer(CardInfo{
+		NotebookName: card.NotebookName,
+		StoryTitle:   card.SessionTitle,
+		Expression:   card.Origin,
+		Sense:        card.Sense,
+		LearnedAt:    learnedAt,
+		MarkCorrect:  &markCorrect,
+	}, notebook.QuizTypeEtymologyOrigin)
+	require.NoError(t, err)
+
+	raw, err := os.ReadFile(filepath.Join(learningDir, bookID+".yml"))
+	require.NoError(t, err)
+	var histories []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &histories))
+	expr := notebook.FindOriginExpression(histories, card.SessionTitle, card.Origin, card.Sense)
+	require.NotNil(t, expr)
+	require.Len(t, expr.EtymologyOriginLogs, 1)
+	assert.Equal(t, notebook.LearnedStatusUnderstood, expr.EtymologyOriginLogs[0].Status,
+		"override must flip the origin series' log to a correct status")
 }
 
 const multiSenseEtymYAML = `metadata:
