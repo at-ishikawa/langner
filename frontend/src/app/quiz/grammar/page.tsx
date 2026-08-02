@@ -222,9 +222,33 @@ export default function GrammarQuizPage() {
     })();
   };
 
-  const focusNextUnanswered = () => {
-    const key = nextUnansweredAfter(-1);
-    if (key) inputRefs.current.get(key)?.focus();
+  // Reveal the answers for the current post without leaving it: grade any
+  // still-empty blanks as skipped (instant) so their correct answers show, and
+  // open the detail sheet so at least one answer is visible right away.
+  const revealAnswers = async () => {
+    const remaining = post.blanks.filter((b) => {
+      const k = b.noteId.toString();
+      return !postResults.has(k) && !gradingKeys.includes(k);
+    });
+    if (remaining.length > 0) {
+      try {
+        const res = await quizClient.submitGrammarPost({
+          answers: remaining.map((b) => ({ noteId: b.noteId, answer: "", responseTimeMs: BigInt(0), isSkipped: true })),
+        });
+        recordResults(res.results.map((r) => toResult(currentPostIndex, "", r)));
+      } catch {
+        setError("Couldn't reveal the answers. Try again.");
+        return;
+      }
+    }
+    // Show an answer immediately (first not-correct blank, else the first).
+    const firstToShow =
+      orderedKeys.find((k) => postResults.get(k)?.result && !postResults.get(k)!.result.correct) ??
+      orderedKeys[0];
+    if (firstToShow) {
+      selectBlank(firstToShow);
+      markReviewed(firstToShow);
+    }
   };
 
   // "Next post" is always available: grade any still-empty blanks as skipped
@@ -414,25 +438,23 @@ export default function GrammarQuizPage() {
         })()}
       </Box>
 
-      <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
-        {isLastPost ? "See results" : "Next post"}
-      </Button>
+      {remainingCount > 0 ? (
+        // Blanks are still unanswered — reveal their answers before moving on,
+        // rather than silently skipping them.
+        <Button colorPalette="blue" w="full" size="lg" onClick={revealAnswers}>
+          See answers ({remainingCount} left)
+        </Button>
+      ) : (
+        <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
+          {isLastPost ? "See results" : "Next post"}
+        </Button>
+      )}
       <Box mt={1} textAlign="center" minH="1.25rem">
-        {remainingCount > 0 ? (
-          <Text
-            as="button"
-            fontSize="xs"
-            color="blue.600"
-            _dark={{ color: "blue.300" }}
-            onClick={focusNextUnanswered}
-          >
-            ↓ Next unanswered ({remainingCount})
-          </Text>
-        ) : unreviewedWrong > 0 ? (
+        {remainingCount === 0 && unreviewedWrong > 0 && (
           <Text fontSize="xs" color="orange.600" _dark={{ color: "orange.300" }}>
             {unreviewedWrong} wrong {unreviewedWrong === 1 ? "correction" : "corrections"} not reviewed yet.
           </Text>
-        ) : null}
+        )}
       </Box>
       {error && (
         <Text fontSize="xs" color="red.500" mt={1} textAlign="center" aria-live="assertive">
