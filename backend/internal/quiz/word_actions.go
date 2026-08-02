@@ -47,6 +47,10 @@ type CardInfo struct {
 	SceneTitle         string
 	Expression         string
 	OriginalExpression string
+	// Sense routes etymology-origin overrides to the exact (origin, sense)
+	// series via the canonical lookup; StoryTitle carries the session title
+	// for etymology cards. Empty for vocabulary cards.
+	Sense string
 	// ID is the note's stable sense id (issue #32), set by the override
 	// handler from the request so Mark-as-Correct / Undo target the exact
 	// entry. Empty resolves by expression (legacy, pre-migration).
@@ -254,6 +258,7 @@ func (s *Service) OverrideAnswer(info CardInfo, quizType notebook.QuizType) (Ove
 		Expression:         info.Expression,
 		OriginalExpression: info.OriginalExpression,
 		ID:                 info.ID,
+		Sense:              info.Sense,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
 		MarkCorrect:        info.MarkCorrect,
@@ -290,6 +295,7 @@ func (s *Service) UndoOverrideAnswer(info CardInfo, quizType notebook.QuizType) 
 		Expression:         info.Expression,
 		OriginalExpression: info.OriginalExpression,
 		ID:                 info.ID,
+		Sense:              info.Sense,
 		QuizType:           string(quizType),
 		LearnedAt:          parseLearnedAt(info.LearnedAt),
 		MirrorValues: &learning.UpdateLogMirror{

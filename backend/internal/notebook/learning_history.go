@@ -40,11 +40,16 @@ func ReadLearningHistoryFile(path string) ([]LearningHistory, error) {
 const JournalStoryTitle = "journal"
 
 // isFlatMetadataType reports whether a learning history's Metadata.Type uses
-// the flat top-level Expressions shape instead of nested Scenes. Flashcard and
-// grammar (journal) notebooks are both flat.
+// the flat top-level Expressions shape instead of nested Scenes. Flashcard,
+// grammar (journal), and etymology notebooks are all flat: an etymology block
+// is one session's origins, keyed by (origin, sense), with no scene level.
 func isFlatMetadataType(metadataType string) bool {
-	return metadataType == "flashcard" || metadataType == "grammar"
+	return metadataType == "flashcard" || metadataType == "grammar" || metadataType == LearningHistoryTypeEtymology
 }
+
+// LearningHistoryTypeEtymology is the Metadata.Type marker for a flat
+// etymology learning-history block (one session's origins).
+const LearningHistoryTypeEtymology = "etymology"
 
 // flatTypeForStory returns the flat learning-history Metadata.Type for a
 // notebook's sentinel story title, or "" when the notebook uses nested scenes.
@@ -198,7 +203,13 @@ type LearningHistoryExpression struct {
 	// and the YAML would be ambiguous about which is being tracked.
 	// Backward-compatible: legacy entries without Type are treated as
 	// vocabulary by all readers.
-	Type           string           `yaml:"type,omitempty"`
+	Type string `yaml:"type,omitempty"`
+	// Sense disambiguates same-session multi-sense etymology origins (e.g.
+	// pathos = "feeling" vs pathos = "disease", both in one session). It is
+	// part of the canonical origin key alongside (session_title, expression)
+	// so each sense keeps its own log series. Empty for vocabulary entries and
+	// single-sense origins.
+	Sense          string           `yaml:"sense,omitempty"`
 	LearnedLogs    []LearningRecord `yaml:"learned_logs"`
 	EasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
@@ -206,13 +217,11 @@ type LearningHistoryExpression struct {
 	ReverseLogs           []LearningRecord `yaml:"reverse_logs,omitempty"`
 	ReverseEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
-	// Etymology breakdown quiz fields - track separately
-	EtymologyBreakdownLogs           []LearningRecord `yaml:"etymology_breakdown_logs,omitempty"`
-	EtymologyBreakdownEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
-
-	// Etymology assembly quiz fields - track separately
-	EtymologyAssemblyLogs           []LearningRecord `yaml:"etymology_assembly_logs,omitempty"`
-	EtymologyAssemblyEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
+	// Etymology origin quiz fields — the single learning-log series an
+	// etymology origin carries. One series per (origin, sense), regardless of
+	// how many derived words the quiz screen shows for it.
+	EtymologyOriginLogs           []LearningRecord `yaml:"etymology_origin_logs,omitempty"`
+	EtymologyOriginEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
 	// SkippedAt records, per quiz type, when the user excluded this expression
 	// from that quiz mode. A word skipped only from `reverse` will still appear
@@ -238,7 +247,7 @@ const (
 // without each kind clobbering the other's logs and skip state.
 func ExpressionTypeForQuizType(quizType QuizType) string {
 	switch quizType {
-	case QuizTypeEtymologyStandard, QuizTypeEtymologyReverse, QuizTypeEtymologyFreeform:
+	case QuizTypeEtymologyOrigin:
 		return LearningExpressionTypeOrigin
 	default:
 		return LearningExpressionTypeVocabulary
@@ -272,9 +281,7 @@ func allQuizTypeKeys() []string {
 		string(QuizTypeNotebook),
 		string(QuizTypeReverse),
 		string(QuizTypeFreeform),
-		string(QuizTypeEtymologyStandard),
-		string(QuizTypeEtymologyReverse),
-		string(QuizTypeEtymologyFreeform),
+		string(QuizTypeEtymologyOrigin),
 	}
 }
 
@@ -380,33 +387,24 @@ func (exp LearningHistoryExpression) GetLatestStatus() LearnedStatus {
 }
 
 // GetLogsForQuizType returns learning logs for the specified quiz type.
-// For etymology freeform, returns breakdown logs (the primary track).
 func (exp LearningHistoryExpression) GetLogsForQuizType(quizType QuizType) []LearningRecord {
 	switch quizType {
 	case QuizTypeReverse:
 		return exp.ReverseLogs
-	case QuizTypeEtymologyStandard, QuizTypeEtymologyFreeform:
-		return exp.EtymologyBreakdownLogs
-	case QuizTypeEtymologyReverse:
-		return exp.EtymologyAssemblyLogs
+	case QuizTypeEtymologyOrigin:
+		return exp.EtymologyOriginLogs
 	default:
 		return exp.LearnedLogs
 	}
 }
 
 // SetLogsForQuizType sets learning logs for the specified quiz type.
-// For etymology freeform, sets BOTH breakdown and assembly logs.
 func (exp *LearningHistoryExpression) SetLogsForQuizType(quizType QuizType, logs []LearningRecord) {
 	switch quizType {
 	case QuizTypeReverse:
 		exp.ReverseLogs = logs
-	case QuizTypeEtymologyStandard:
-		exp.EtymologyBreakdownLogs = logs
-	case QuizTypeEtymologyReverse:
-		exp.EtymologyAssemblyLogs = logs
-	case QuizTypeEtymologyFreeform:
-		exp.EtymologyBreakdownLogs = logs
-		exp.EtymologyAssemblyLogs = logs
+	case QuizTypeEtymologyOrigin:
+		exp.EtymologyOriginLogs = logs
 	default:
 		exp.LearnedLogs = logs
 	}
@@ -456,16 +454,11 @@ func (exp LearningHistoryExpression) GetEasinessFactorForQuizType(quizType QuizT
 			return DefaultEasinessFactor
 		}
 		return exp.ReverseEasinessFactor
-	case QuizTypeEtymologyStandard:
-		if exp.EtymologyBreakdownEasinessFactor == 0 {
+	case QuizTypeEtymologyOrigin:
+		if exp.EtymologyOriginEasinessFactor == 0 {
 			return DefaultEasinessFactor
 		}
-		return exp.EtymologyBreakdownEasinessFactor
-	case QuizTypeEtymologyReverse:
-		if exp.EtymologyAssemblyEasinessFactor == 0 {
-			return DefaultEasinessFactor
-		}
-		return exp.EtymologyAssemblyEasinessFactor
+		return exp.EtymologyOriginEasinessFactor
 	default:
 		if exp.EasinessFactor == 0 {
 			return DefaultEasinessFactor
@@ -520,27 +513,15 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 		}
 	}
 
-	addRecord := func(logs []LearningRecord) []LearningRecord {
-		tentative := LearningRecord{
-			Status:         status,
-			LearnedAt:      NewDate(),
-			Quality:        quality,
-			ResponseTimeMs: responseTimeMs,
-			QuizType:       string(quizType),
-		}
-		tentative.IntervalDays, _ = calculator.NextIntervalForWrite(logs, tentative)
-		return append([]LearningRecord{tentative}, logs...)
+	tentative := LearningRecord{
+		Status:         status,
+		LearnedAt:      NewDate(),
+		Quality:        quality,
+		ResponseTimeMs: responseTimeMs,
+		QuizType:       string(quizType),
 	}
-
-	switch quizType {
-	case QuizTypeEtymologyStandard:
-		exp.EtymologyBreakdownLogs = addRecord(exp.EtymologyBreakdownLogs)
-	case QuizTypeEtymologyReverse:
-		exp.EtymologyAssemblyLogs = addRecord(exp.EtymologyAssemblyLogs)
-	case QuizTypeEtymologyFreeform:
-		exp.EtymologyBreakdownLogs = addRecord(exp.EtymologyBreakdownLogs)
-		exp.EtymologyAssemblyLogs = addRecord(exp.EtymologyAssemblyLogs)
-	}
+	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.EtymologyOriginLogs, tentative)
+	exp.EtymologyOriginLogs = append([]LearningRecord{tentative}, exp.EtymologyOriginLogs...)
 }
 
 // NeedsEtymologyReview returns true if the expression needs etymology quiz review
@@ -619,39 +600,15 @@ func (exp LearningHistoryExpression) HasFreeformAnswer() bool {
 	return false
 }
 
-// HasEtymologyFreeformAnswer returns true if the expression has at least one
-// etymology freeform answer recorded in EtymologyBreakdownLogs. Origins must be
-// answered in etymology freeform mode first before becoming eligible for etymology
-// standard or reverse quizzes.
-func (exp LearningHistoryExpression) HasEtymologyFreeformAnswer() bool {
-	for _, log := range exp.EtymologyBreakdownLogs {
-		if log.QuizType == string(QuizTypeEtymologyFreeform) {
-			return true
-		}
-	}
-	return false
-}
-
-// HasCorrectEtymologyAnswer returns true if the expression has at least one
-// correct answer recorded in either etymology log slot. Origins must have
-// been answered correctly at least once (in any etymology mode) before
-// becoming eligible for etymology standard or reverse quizzes — otherwise
-// the user would be drilled on origins they have never actually
-// understood. Checks both breakdown (etymology_standard /
-// etymology_freeform) and assembly (etymology_reverse) so a correct
-// reverse answer also lifts the eligibility gate.
+// HasCorrectEtymologyAnswer returns true if the origin has at least one
+// correct answer in its etymology-origin log series.
 func (exp LearningHistoryExpression) HasCorrectEtymologyAnswer() bool {
 	isCorrect := func(s LearnedStatus) bool {
 		return s == LearnedStatusUnderstood ||
 			s == LearnedStatusCanBeUsed ||
 			s == learnedStatusIntuitivelyUsed
 	}
-	for _, log := range exp.EtymologyBreakdownLogs {
-		if isCorrect(log.Status) {
-			return true
-		}
-	}
-	for _, log := range exp.EtymologyAssemblyLogs {
+	for _, log := range exp.EtymologyOriginLogs {
 		if isCorrect(log.Status) {
 			return true
 		}
@@ -853,22 +810,23 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 			}
 		}
 
-		// Check for duplicate expressions in flashcard format. Key by
-		// (expression, id) so two entries that share a spelling but carry
-		// distinct ids (e.g. two senses of "bank") are NOT flagged as
+		// Check for duplicate expressions in flat format. Key by
+		// (expression, id, sense) so two entries that share a spelling but
+		// carry distinct ids (e.g. two senses of "bank") or distinct senses
+		// (multi-sense etymology origins in one session) are NOT flagged as
 		// duplicates — they are separate log series.
-		type flashcardKey struct{ expression, id string }
-		expressionSeen := make(map[flashcardKey]bool)
+		type flatKey struct{ expression, id, sense string }
+		expressionSeen := make(map[flatKey]bool)
 		for _, expr := range h.Expressions {
 			expression := strings.TrimSpace(expr.Expression)
 			if expression == "" {
 				continue
 			}
-			key := flashcardKey{expression, expr.ID}
+			key := flatKey{expression, expr.ID, expr.Sense}
 			if expressionSeen[key] {
 				errors = append(errors, ValidationError{
 					Location: location,
-					Message:  fmt.Sprintf("duplicate expression %q in flashcard format", expression),
+					Message:  fmt.Sprintf("duplicate expression %q in flat learning history", expression),
 				})
 			}
 			expressionSeen[key] = true
@@ -883,13 +841,6 @@ func (h *LearningHistory) Validate(location string) []ValidationError {
 		if sceneErrors := scene.Validate(sceneLocation); len(sceneErrors) > 0 {
 			errors = append(errors, sceneErrors...)
 		}
-	}
-
-	// Etymology histories use scene titles to disambiguate multi-sense origins
-	// (e.g. "ana" = "up" in one session, "negative" in another). The same
-	// expression appearing in two scenes is intentional, not a duplicate.
-	if h.Metadata.Type == "etymology" {
-		return errors
 	}
 
 	// Check for duplicate expressions across different scenes in the same

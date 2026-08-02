@@ -120,10 +120,9 @@ func appendExpressionAttempts(
 	out *[]yamlAttempt,
 ) {
 	tracks := map[string][]notebook.LearningRecord{
-		string(notebook.QuizTypeNotebook):          exp.LearnedLogs,
-		string(notebook.QuizTypeReverse):           exp.ReverseLogs,
-		string(notebook.QuizTypeEtymologyStandard): exp.EtymologyBreakdownLogs,
-		string(notebook.QuizTypeEtymologyReverse):  exp.EtymologyAssemblyLogs,
+		string(notebook.QuizTypeNotebook):        exp.LearnedLogs,
+		string(notebook.QuizTypeReverse):         exp.ReverseLogs,
+		string(notebook.QuizTypeEtymologyOrigin): exp.EtymologyOriginLogs,
 	}
 	for quizType, records := range tracks {
 		if quizTypeFilter != "" && quizTypeFilter != quizType {

@@ -71,9 +71,9 @@ func (c RelearnCard) VocabCard() Card                    { return c.vocabCard }
 func (c RelearnCard) ReverseCard() ReverseCard           { return c.reverseCard }
 func (c RelearnCard) EtymologyCard() EtymologyOriginCard { return c.etymologyCard }
 
-// IsEtymology reports whether the card's Format is one of the etymology modes.
+// IsEtymology reports whether the card's Format is the etymology mode.
 func (c RelearnCard) IsEtymology() bool {
-	return c.Format == notebook.QuizTypeEtymologyStandard || c.Format == notebook.QuizTypeEtymologyReverse
+	return c.Format == notebook.QuizTypeEtymologyOrigin
 }
 
 // relearnKeySep separates the fields of the internal de-dup key ((format,
@@ -188,7 +188,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 
 	cards := make([]RelearnCard, 0, len(candidates))
 	for _, c := range candidates {
-		if c.format == notebook.QuizTypeEtymologyStandard || c.format == notebook.QuizTypeEtymologyReverse {
+		if c.format == notebook.QuizTypeEtymologyOrigin {
 			sense, ok := etymByOrigin[strings.ToLower(strings.TrimSpace(c.expression))]
 			if !ok {
 				continue // no origin data to grade/display against
@@ -273,8 +273,7 @@ func relearnSeries(expr notebook.LearningHistoryExpression) []relearnSeriesSpec 
 	return []relearnSeriesSpec{
 		{logs: expr.LearnedLogs, format: notebook.QuizTypeNotebook},
 		{logs: expr.ReverseLogs, format: notebook.QuizTypeReverse},
-		{logs: expr.EtymologyBreakdownLogs, format: notebook.QuizTypeEtymologyStandard},
-		{logs: expr.EtymologyAssemblyLogs, format: notebook.QuizTypeEtymologyReverse},
+		{logs: expr.EtymologyOriginLogs, format: notebook.QuizTypeEtymologyOrigin},
 	}
 }
 
@@ -321,7 +320,7 @@ func (s *Service) relearnEtymologyIndex() (map[string]EtymologyOriginCard, error
 	if len(etymIDs) == 0 {
 		return byOrigin, nil
 	}
-	cards, err := s.LoadEtymologyOriginCards(etymIDs, true, true, notebook.QuizTypeEtymologyStandard, nil)
+	cards, err := s.LoadEtymologyOriginCards(etymIDs, true, true, nil)
 	if err != nil {
 		return nil, fmt.Errorf("load etymology origins for relearn pool: %w", err)
 	}

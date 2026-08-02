@@ -347,26 +347,13 @@ func buildExpression(
 	// into learned_logs (e.g. gauche with 1 source learned log + 7
 	// etymology logs exported as 8 learned logs). Match each YAML slot
 	// to the quiz_type values that get stored there at import time.
-	var learnedLogs, reverseLogs, breakdownLogs, assemblyLogs []LearningLog
+	var learnedLogs, reverseLogs, originLogs []LearningLog
 	for _, log := range logs {
 		switch log.QuizType {
 		case string(notebook.QuizTypeReverse):
 			reverseLogs = append(reverseLogs, log)
-		case string(notebook.QuizTypeEtymologyStandard): // stored as "etymology_breakdown"
-			breakdownLogs = append(breakdownLogs, log)
-		case string(notebook.QuizTypeEtymologyReverse): // stored as "etymology_assembly"
-			assemblyLogs = append(assemblyLogs, log)
-		case string(notebook.QuizTypeEtymologyFreeform):
-			// Freeform is one event that exercises both directions of
-			// recall, and AddRecordWithQualityForEtymology mirrors it
-			// into both YAML slots on the write side. Export has to
-			// mirror the same way so the round-trip matches — landing
-			// it in learned_logs (the previous default behavior)
-			// silently inflated LearnedLogCount by every freeform
-			// event, which validate-db surfaced as a +2 delta on
-			// short polysemous roots like "alter".
-			breakdownLogs = append(breakdownLogs, log)
-			assemblyLogs = append(assemblyLogs, log)
+		case string(notebook.QuizTypeEtymologyOrigin):
+			originLogs = append(originLogs, log)
 		default:
 			// notebook (standard) and freeform (vocabulary, not
 			// etymology) land in learned_logs in the YAML convention.
@@ -382,15 +369,13 @@ func buildExpression(
 	}
 	sortDescByLearnedAt(learnedLogs)
 	sortDescByLearnedAt(reverseLogs)
-	sortDescByLearnedAt(breakdownLogs)
-	sortDescByLearnedAt(assemblyLogs)
+	sortDescByLearnedAt(originLogs)
 
 	return notebook.LearningHistoryExpression{
-		Expression:             entry,
-		LearnedLogs:            convertToRecords(learnedLogs),
-		ReverseLogs:            convertToRecords(reverseLogs),
-		EtymologyBreakdownLogs: convertToRecords(breakdownLogs),
-		EtymologyAssemblyLogs:  convertToRecords(assemblyLogs),
+		Expression:          entry,
+		LearnedLogs:         convertToRecords(learnedLogs),
+		ReverseLogs:         convertToRecords(reverseLogs),
+		EtymologyOriginLogs: convertToRecords(originLogs),
 	}
 }
 
@@ -469,6 +454,8 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 			ID:                   in.ID,
 			Expression:           in.Expression,
 			OriginalExpression:   in.OriginalExpression,
+			SessionTitle:         in.StoryTitle,
+			Sense:                in.Sense,
 			QuizType:             notebook.QuizType(in.QuizType),
 			LearnedAt:            formatLearnedAt(in.LearnedAt),
 			OriginalQuality:      in.MirrorValues.Quality,
@@ -491,6 +478,8 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 			ID:                 in.ID,
 			Expression:         in.Expression,
 			OriginalExpression: in.OriginalExpression,
+			SessionTitle:       in.StoryTitle,
+			Sense:              in.Sense,
 			QuizType:           notebook.QuizType(in.QuizType),
 			LearnedAt:          formatLearnedAt(in.LearnedAt),
 			MarkCorrect:        in.MarkCorrect,
@@ -508,7 +497,12 @@ func (r *YAMLLearningRepository) UpdateLog(_ context.Context, in UpdateLogInput)
 	// exact bytes onto the secondary store. The updater's result
 	// already carries originals; we re-resolve the expression to read
 	// out the new status/quality/interval that landed on disk.
-	expr := updater.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
+	var expr *notebook.LearningHistoryExpression
+	if notebook.QuizType(in.QuizType) == notebook.QuizTypeEtymologyOrigin {
+		expr = notebook.FindOriginExpression(updater.GetHistory(), in.StoryTitle, in.Expression, in.Sense)
+	} else {
+		expr = updater.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
+	}
 	var newStatus string
 	var newQuality, newInterval int
 	if expr != nil {

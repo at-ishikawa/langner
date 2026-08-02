@@ -34,10 +34,13 @@ type UpdateLogInput struct {
 	SceneTitle         string
 	Expression         string
 	OriginalExpression string
-	QuizType           string
-	LearnedAt          time.Time
-	MarkCorrect        *bool
-	MirrorValues       *UpdateLogMirror
+	// Sense routes etymology-origin overrides to the (origin, sense) series;
+	// for etymology cards StoryTitle carries the session title. Empty otherwise.
+	Sense        string
+	QuizType     string
+	LearnedAt    time.Time
+	MarkCorrect  *bool
+	MirrorValues *UpdateLogMirror
 }
 
 // UpdateLogMirror carries the already-computed new values when a

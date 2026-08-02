@@ -184,10 +184,8 @@ func (h *QuizHandler) gradeRelearn(ctx context.Context, card quiz.RelearnCard, a
 	switch card.Format {
 	case notebook.QuizTypeReverse:
 		return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
-	case notebook.QuizTypeEtymologyStandard:
-		return h.svc.GradeEtymologyStandardAnswer(ctx, card.EtymologyCard(), answer, responseTimeMs)
-	case notebook.QuizTypeEtymologyReverse:
-		return h.svc.GradeEtymologyReverseAnswer(ctx, card.EtymologyCard(), answer, responseTimeMs)
+	case notebook.QuizTypeEtymologyOrigin:
+		return h.svc.GradeEtymologyOriginMeaning(ctx, card.EtymologyCard(), answer, responseTimeMs)
 	default:
 		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
 	}
@@ -207,7 +205,9 @@ func (h *QuizHandler) buildRelearnResponse(ctx context.Context, card quiz.Relear
 	}
 	if card.IsEtymology() {
 		ec := card.EtymologyCard()
-		resp.ExampleWords = h.loadCardExampleWords(ec)
+		for _, w := range ec.Words {
+			resp.ExampleWords = append(resp.ExampleWords, w.Expression)
+		}
 		if r, err := h.svc.NewReader(); err == nil {
 			concepts := loadBookConcepts(ctx, r, ec.NotebookName)
 			resp.GraphContext = buildGraphContextForCard(ctx, r, ec, concepts)
@@ -244,12 +244,8 @@ func notebookQuizTypeToProto(qt notebook.QuizType) apiv1.QuizType {
 		return apiv1.QuizType_QUIZ_TYPE_REVERSE
 	case notebook.QuizTypeFreeform:
 		return apiv1.QuizType_QUIZ_TYPE_FREEFORM
-	case notebook.QuizTypeEtymologyStandard:
-		return apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_STANDARD
-	case notebook.QuizTypeEtymologyReverse:
-		return apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_REVERSE
-	case notebook.QuizTypeEtymologyFreeform:
-		return apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM
+	case notebook.QuizTypeEtymologyOrigin:
+		return apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN
 	default:
 		return apiv1.QuizType_QUIZ_TYPE_STANDARD
 	}

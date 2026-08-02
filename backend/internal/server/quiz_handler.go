@@ -33,8 +33,6 @@ type QuizHandler struct {
 	freeformCards        []quiz.FreeformCard
 	freeformStore        map[int64]quiz.FreeformCard
 	etymologyOriginStore map[int64]quiz.EtymologyOriginCard
-	etymologyOriginCards []quiz.EtymologyOriginCard
-	etymologyQuizMode    apiv1.EtymologyQuizMode
 	relearnStore         map[int64]quiz.RelearnCard
 	// grammarStore holds the in-flight grammar blanks for the current session,
 	// keyed by the ephemeral note_id (same id scheme as noteStore) so Submit,
@@ -406,16 +404,15 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 	}
 	if ecard, found := h.etymologyOriginStore[noteID]; found {
 		h.mu.Unlock()
-		// Learning histories are keyed by SessionTitle at the top level
-		// (e.g. "Session 13") and SceneTitle inside each session
-		// (e.g. "tome (a cutting)"); NotebookTitle ("Word Power Made
-		// Easy") never appears in the YAML. Without these, OverrideAnswer's
-		// toggleLastAnswer found no match and silently no-op'd.
+		// Etymology learning history is a flat block keyed by SessionTitle at
+		// the top level, with each origin keyed by (origin, sense). Override
+		// routes through FindOriginExpression using StoryTitle=SessionTitle +
+		// Expression=Origin + Sense (invariant L2).
 		info := quiz.CardInfo{
 			NotebookName: ecard.NotebookName,
 			StoryTitle:   ecard.SessionTitle,
-			SceneTitle:   ecard.SceneTitle,
 			Expression:   ecard.Origin,
+			Sense:        ecard.Sense,
 		}
 		return &info, nil
 	}
@@ -463,12 +460,8 @@ func protoQuizTypeToNotebook(qt apiv1.QuizType) notebook.QuizType {
 		return notebook.QuizTypeReverse
 	case apiv1.QuizType_QUIZ_TYPE_FREEFORM:
 		return notebook.QuizTypeFreeform
-	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_STANDARD:
-		return notebook.QuizTypeEtymologyStandard
-	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_REVERSE:
-		return notebook.QuizTypeEtymologyReverse
-	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_FREEFORM:
-		return notebook.QuizTypeEtymologyFreeform
+	case apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN:
+		return notebook.QuizTypeEtymologyOrigin
 	default:
 		return notebook.QuizTypeNotebook
 	}
@@ -515,91 +508,56 @@ func protoQuizTypesToNotebook(qts []apiv1.QuizType) []notebook.QuizType {
 	return out
 }
 
-func (h *QuizHandler) StartEtymologyQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyQuizRequest]) (*connect.Response[apiv1.StartEtymologyQuizResponse], error) {
+func (h *QuizHandler) StartEtymologyOriginQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyOriginQuizRequest]) (*connect.Response[apiv1.StartEtymologyOriginQuizResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
-	}
-	loadQuizType := notebook.QuizTypeEtymologyStandard
-	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
-		loadQuizType = notebook.QuizTypeEtymologyReverse
 	}
 	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), req.Msg.GetNotebookSections())
 	if err != nil {
 		return nil, err
 	}
-	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, req.Msg.GetIncludeUnstudied(), false, loadQuizType, sectionTitles)
+	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, req.Msg.GetIncludeUnstudied(), false, sectionTitles)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err))
-	}
-	examples, err := h.svc.LoadEtymologyExampleWords(cards)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load example words: %w", err))
-	}
-	// Build the per-notebook concept map once for graph-prompt construction
-	// so each reverse card reuses the same in-memory YAML scan instead of
-	// re-reading session files per card. The reader itself is reused too so
-	// FORM_BRANCH can read forms + definitions without re-opening files.
-	conceptsByNotebook := make(map[string]map[string]*graphConceptInfo)
-	var graphReader *notebook.Reader
-	if req.Msg.GetMode() == apiv1.EtymologyQuizMode_ETYMOLOGY_QUIZ_MODE_REVERSE {
-		if r, err := h.svc.NewReader(); err == nil {
-			graphReader = r
-			for _, nbID := range notebookIDs {
-				conceptsByNotebook[nbID] = loadBookConcepts(ctx, r, nbID)
-			}
-		}
 	}
 
 	localStore := make(map[int64]quiz.EtymologyOriginCard)
 	var nextID int64 = 1
-	var protoCards []*apiv1.EtymologyQuizCard
+	var protoCards []*apiv1.EtymologyOriginCard
 	for _, card := range cards {
 		cardID := nextID
 		nextID++
 		localStore[cardID] = card
-		exampleKey := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle + "\x00" + card.Sense
-		var graphPrompt *apiv1.GraphPrompt
-		if graphReader != nil {
-			concepts := conceptsByNotebook[card.NotebookName]
-			graphPrompt = buildGraphPromptForCard(ctx, graphReader, card, concepts)
-		}
-		protoCards = append(protoCards, &apiv1.EtymologyQuizCard{
-			CardId: cardID, Origin: card.Origin, Type: card.Type,
-			Language: card.Language, Meaning: card.Meaning,
-			NotebookName: card.NotebookName, SessionTitle: card.SessionTitle,
-			Sense:        card.Sense,
-			ExampleWords: examples[exampleKey],
-			GraphPrompt:  graphPrompt,
-		})
+		protoCards = append(protoCards, toProtoEtymologyOriginCard(cardID, card))
 	}
-	// Hide, in each reverse card's graph, any origin that a later card
-	// will ask — otherwise a repeated concept cluster leaks the next
-	// answer (same forward-mask the vocab reverse quiz applies). No-op
-	// for standard mode (graphPrompt is nil there).
-	maskEtymologyGraphFutureAnswers(protoCards)
 
 	h.mu.Lock()
 	h.etymologyOriginStore = localStore
-	h.etymologyQuizMode = req.Msg.GetMode()
 	h.nextID = nextID
 	h.mu.Unlock()
-	return connect.NewResponse(&apiv1.StartEtymologyQuizResponse{Cards: protoCards}), nil
+	return connect.NewResponse(&apiv1.StartEtymologyOriginQuizResponse{Cards: protoCards}), nil
 }
 
-// loadCardExampleWords reuses LoadEtymologyExampleWords on a single-card
-// slice so the feedback responses can ship the same English-derivation
-// list that StartEtymologyQuiz already attaches to cards. Failures and
-// missing data resolve to nil — the feedback UI just renders nothing.
-func (h *QuizHandler) loadCardExampleWords(card quiz.EtymologyOriginCard) []string {
-	examples, err := h.svc.LoadEtymologyExampleWords([]quiz.EtymologyOriginCard{card})
-	if err != nil {
-		return nil
+// toProtoEtymologyOriginCard converts a service card to its proto form. Each
+// family word gets a 1-based word_id (its index within the card) that the
+// client echoes back on submit.
+func toProtoEtymologyOriginCard(cardID int64, card quiz.EtymologyOriginCard) *apiv1.EtymologyOriginCard {
+	var forms []*apiv1.EtymologyOriginForm
+	for _, f := range card.Forms {
+		forms = append(forms, &apiv1.EtymologyOriginForm{Form: f.Form, Role: f.Role, Note: f.Note})
 	}
-	key := strings.ToLower(strings.TrimSpace(card.Origin)) + "\x00" + card.SessionTitle + "\x00" + card.Sense
-	return examples[key]
+	var words []*apiv1.EtymologyFamilyWord
+	for i, w := range card.Words {
+		words = append(words, &apiv1.EtymologyFamilyWord{WordId: int64(i + 1), Expression: w.Expression})
+	}
+	return &apiv1.EtymologyOriginCard{
+		CardId: cardID, Origin: card.Origin, Type: card.Type, Language: card.Language,
+		Meaning: card.Meaning, NotebookName: card.NotebookName, SessionTitle: card.SessionTitle,
+		Sense: card.Sense, Forms: forms, Words: words,
+	}
 }
 
-func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyStandardAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyStandardAnswerResponse], error) {
+func (h *QuizHandler) SubmitEtymologyOriginAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyOriginAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyOriginAnswerResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
@@ -610,176 +568,84 @@ func (h *QuizHandler) SubmitEtymologyStandardAnswer(ctx context.Context, req *co
 	if !ok {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID))
 	}
-	var grade quiz.GradeResult
-	var err error
-	if req.Msg.GetIsSkipped() {
-		grade = skippedGradeResult()
-	} else {
-		grade, err = h.svc.GradeEtymologyStandardAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology standard: %w", err))
-		}
+	resp, err := h.gradeAndSaveEtymologyOrigin(ctx, card, req.Msg.GetAnswers(), req.Msg.GetResponseTimeMs(), req.Msg.GetIsSkipped())
+	if err != nil {
+		return nil, err
 	}
-	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
+	return connect.NewResponse(resp), nil
+}
+
+// gradeAndSaveEtymologyOrigin grades every family word the user typed, records
+// ONE learning-log entry for the origin's (session, sense) series (the origin is
+// correct only when every family word is correct), and assembles the feedback
+// response with per-word results.
+func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
+	ctx context.Context,
+	card quiz.EtymologyOriginCard,
+	answers []*apiv1.EtymologyWordAnswer,
+	responseTimeMs int64,
+	skipped bool,
+) (*apiv1.SubmitEtymologyOriginAnswerResponse, error) {
+	answerByWordID := make(map[int64]string, len(answers))
+	for _, a := range answers {
+		answerByWordID[a.GetWordId()] = a.GetAnswer()
+	}
+
+	aggregateCorrect := true
+	quality := 5
+	var results []*apiv1.EtymologyWordResult
+	for i, w := range card.Words {
+		wordID := int64(i + 1)
+		result := &apiv1.EtymologyWordResult{WordId: wordID, Expression: w.Expression, CorrectMeaning: w.Meaning}
+		answer, answered := answerByWordID[wordID]
+		if skipped || !answered {
+			result.Correct = false
+			result.Reason = "skipped"
+			aggregateCorrect = false
+			quality = 1
+			results = append(results, result)
+			continue
+		}
+		grade, err := h.svc.GradeEtymologyWordAnswer(ctx, w, answer, responseTimeMs)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology word: %w", err))
+		}
+		result.Correct = grade.Correct
+		result.Reason = grade.Reason
+		if !grade.Correct {
+			aggregateCorrect = false
+			quality = 1
+		} else if grade.Quality < quality {
+			quality = grade.Quality
+		}
+		results = append(results, result)
+	}
+	if len(card.Words) == 0 {
+		aggregateCorrect = false
+		quality = 1
+	}
+
+	if err := h.svc.SaveEtymologyOriginResult(card, quality, aggregateCorrect, responseTimeMs, true); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, "", card.Origin, notebook.QuizTypeEtymologyStandard)
+	learnedAt, nextReviewDate := h.svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
+
 	h.mu.Lock()
 	noteID := h.nextID
 	h.nextID++
 	h.etymologyOriginStore[noteID] = card
 	h.mu.Unlock()
-	// Build a graph context for the feedback card — same builder the
-	// reverse mode uses, but with the blank filled in so the just-answered
-	// origin is visible. Failures here don't block the answer response.
+
 	var graphContext *apiv1.GraphPrompt
 	if r, err := h.svc.NewReader(); err == nil {
 		concepts := loadBookConcepts(ctx, r, card.NotebookName)
 		graphContext = buildGraphContextForCard(ctx, r, card, concepts)
 	}
-	return connect.NewResponse(&apiv1.SubmitEtymologyStandardAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectMeaning: card.Meaning, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, GraphContext: graphContext, ExampleWords: h.loadCardExampleWords(card)}), nil
-}
-
-func (h *QuizHandler) SubmitEtymologyReverseAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyReverseAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyReverseAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-	cardID := req.Msg.GetCardId()
-	h.mu.Lock()
-	card, ok := h.etymologyOriginStore[cardID]
-	h.mu.Unlock()
-	if !ok {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", cardID))
-	}
-	var grade quiz.GradeResult
-	var err error
-	if req.Msg.GetIsSkipped() {
-		grade = skippedGradeResult()
-	} else {
-		grade, err = h.svc.GradeEtymologyReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology reverse: %w", err))
-		}
-	}
-	if err := h.svc.SaveEtymologyOriginResult(card, grade.Quality, grade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, true); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
-	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(card.NotebookName, "", card.Origin, notebook.QuizTypeEtymologyReverse)
-	h.mu.Lock()
-	noteID := h.nextID
-	h.nextID++
-	h.etymologyOriginStore[noteID] = card
-	h.mu.Unlock()
-	return connect.NewResponse(&apiv1.SubmitEtymologyReverseAnswerResponse{Correct: grade.Correct, Reason: grade.Reason, CorrectOrigin: card.Origin, Type: card.Type, Language: card.Language, NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID, ExampleWords: h.loadCardExampleWords(card)}), nil
-}
-
-func (h *QuizHandler) StartEtymologyFreeformQuiz(ctx context.Context, req *connect.Request[apiv1.StartEtymologyFreeformQuizRequest]) (*connect.Response[apiv1.StartEtymologyFreeformQuizResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-	notebookIDs, sectionTitles, err := resolveNotebookSections(req.Msg.GetEtymologyNotebookIds(), nil)
-	if err != nil {
-		return nil, err
-	}
-	// Freeform pulls EVERY origin into the cards list, not just due
-	// ones. The frontend gates redrilling via the "Not until $date"
-	// banner driven by NextReviewDates (computed below); filtering the
-	// cards list here would break that UX by making typed origins read
-	// as "Origin not found in notebooks" instead of "Not until $date".
-	cards, err := h.svc.LoadEtymologyOriginCards(notebookIDs, true, true, notebook.QuizTypeEtymologyFreeform, sectionTitles)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load etymology origin cards: %w", err))
-	}
-	nextReviewDates, err := h.svc.GetEtymologyOriginNextReviewDates(cards)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get etymology next review dates: %w", err))
-	}
-	h.mu.Lock()
-	h.etymologyOriginCards = cards
-	h.mu.Unlock()
-	seen := make(map[string]struct{})
-	var origins []string
-	for _, card := range cards {
-		lower := strings.ToLower(card.Origin)
-		if _, ok := seen[lower]; !ok {
-			seen[lower] = struct{}{}
-			origins = append(origins, card.Origin)
-		}
-	}
-	return connect.NewResponse(&apiv1.StartEtymologyFreeformQuizResponse{Origins: origins, NextReviewDates: nextReviewDates}), nil
-}
-
-func (h *QuizHandler) SubmitEtymologyFreeformAnswer(ctx context.Context, req *connect.Request[apiv1.SubmitEtymologyFreeformAnswerRequest]) (*connect.Response[apiv1.SubmitEtymologyFreeformAnswerResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-	h.mu.Lock()
-	cards := h.etymologyOriginCards
-	h.mu.Unlock()
-	origin := req.Msg.GetOrigin()
-	meaning := req.Msg.GetMeaning()
-	senses := h.svc.LoadEtymologyOriginSenses(cards, origin)
-	if len(senses) == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("origin %q not found", origin))
-	}
-
-	// Grade against every sense; the user's answer is correct if it matches
-	// any sense. The FIRST matching sense wins for SR-history updates.
-	// Non-matching senses aren't penalised — the user might know "ana = up"
-	// without knowing "ana = negative", and freeform shouldn't dock them.
-	var matchedSense *quiz.EtymologyOriginCard
-	var bestGrade quiz.GradeResult
-	bestGrade.Reason = "no sense matched"
-	for i, sense := range senses {
-		s := sense
-		grade, err := h.svc.GradeEtymologyStandardAnswer(ctx, s, meaning, req.Msg.GetResponseTimeMs())
-		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade etymology freeform: %w", err))
-		}
-		if grade.Correct && matchedSense == nil {
-			matchedSense = &s
-			bestGrade = grade
-		}
-		if i == 0 && matchedSense == nil {
-			bestGrade = grade
-		}
-	}
-
-	// If no sense matched, fall back to the first sense for SR-history
-	// (the user got it wrong; record misunderstood under the canonical sense).
-	resultSense := matchedSense
-	if resultSense == nil {
-		s := senses[0]
-		resultSense = &s
-	}
-
-	if err := h.svc.SaveEtymologyOriginResult(*resultSense, bestGrade.Quality, bestGrade.Correct, req.Msg.GetResponseTimeMs(), notebook.QuizTypeEtymologyFreeform, false); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology freeform result: %w", err))
-	}
-	learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(resultSense.NotebookName, "", resultSense.Origin, notebook.QuizTypeEtymologyFreeform)
-	h.mu.Lock()
-	noteID := h.nextID
-	h.nextID++
-	h.etymologyOriginStore[noteID] = *resultSense
-	h.mu.Unlock()
-
-	allSenses := make([]*apiv1.EtymologyOriginSense, 0, len(senses))
-	for _, sense := range senses {
-		allSenses = append(allSenses, &apiv1.EtymologyOriginSense{
-			Meaning:      sense.Meaning,
-			Type:         sense.Type,
-			Language:     sense.Language,
-			SessionTitle: sense.SessionTitle,
-		})
-	}
-
-	return connect.NewResponse(&apiv1.SubmitEtymologyFreeformAnswerResponse{
-		Correct: bestGrade.Correct, Reason: bestGrade.Reason, CorrectMeaning: resultSense.Meaning,
-		Type: resultSense.Type, Language: resultSense.Language, NotebookName: resultSense.NotebookName,
+	return &apiv1.SubmitEtymologyOriginAnswerResponse{
+		Correct: aggregateCorrect, Origin: card.Origin, Meaning: card.Meaning,
 		NextReviewDate: nextReviewDate, LearnedAt: learnedAt, NoteId: noteID,
-		AllSenses:    allSenses,
-		ExampleWords: h.loadCardExampleWords(*resultSense),
-	}), nil
+		Results: results, GraphContext: graphContext,
+	}, nil
 }
 
 func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[apiv1.OverrideAnswerRequest]) (*connect.Response[apiv1.OverrideAnswerResponse], error) {
