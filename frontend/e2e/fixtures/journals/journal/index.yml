@@ -1,0 +1,4 @@
+id: practice
+name: "Practice Journal"
+notebooks:
+  - ./entries.yml

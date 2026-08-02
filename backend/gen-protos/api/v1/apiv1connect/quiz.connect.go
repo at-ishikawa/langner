@@ -99,6 +99,12 @@ const (
 	// QuizServiceBatchSubmitRelearnAnswersProcedure is the fully-qualified name of the QuizService's
 	// BatchSubmitRelearnAnswers RPC.
 	QuizServiceBatchSubmitRelearnAnswersProcedure = "/api.v1.QuizService/BatchSubmitRelearnAnswers"
+	// QuizServiceStartGrammarQuizProcedure is the fully-qualified name of the QuizService's
+	// StartGrammarQuiz RPC.
+	QuizServiceStartGrammarQuizProcedure = "/api.v1.QuizService/StartGrammarQuiz"
+	// QuizServiceSubmitGrammarPostProcedure is the fully-qualified name of the QuizService's
+	// SubmitGrammarPost RPC.
+	QuizServiceSubmitGrammarPostProcedure = "/api.v1.QuizService/SubmitGrammarPost"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -130,6 +136,12 @@ type QuizServiceClient interface {
 	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
 	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
 	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
+	// Grammar Quiz — corrects grammar mistakes annotated in journal notebooks.
+	// Each card shows a sentence with an incorrect span; the user types the fix,
+	// which is AI-graded and recorded in the notebook's learning history keyed by
+	// the mistake id. See docs/content/proposals/grammar-quiz.
+	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
+	SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -281,6 +293,18 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
 			connect.WithClientOptions(opts...),
 		),
+		startGrammarQuiz: connect.NewClient[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse](
+			httpClient,
+			baseURL+QuizServiceStartGrammarQuizProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("StartGrammarQuiz")),
+			connect.WithClientOptions(opts...),
+		),
+		submitGrammarPost: connect.NewClient[v1.SubmitGrammarPostRequest, v1.SubmitGrammarPostResponse](
+			httpClient,
+			baseURL+QuizServiceSubmitGrammarPostProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarPost")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -309,6 +333,8 @@ type quizServiceClient struct {
 	startRelearnQuiz                    *connect.Client[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse]
 	submitRelearnAnswer                 *connect.Client[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse]
 	batchSubmitRelearnAnswers           *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
+	startGrammarQuiz                    *connect.Client[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse]
+	submitGrammarPost                   *connect.Client[v1.SubmitGrammarPostRequest, v1.SubmitGrammarPostResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -426,6 +452,16 @@ func (c *quizServiceClient) BatchSubmitRelearnAnswers(ctx context.Context, req *
 	return c.batchSubmitRelearnAnswers.CallUnary(ctx, req)
 }
 
+// StartGrammarQuiz calls api.v1.QuizService.StartGrammarQuiz.
+func (c *quizServiceClient) StartGrammarQuiz(ctx context.Context, req *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error) {
+	return c.startGrammarQuiz.CallUnary(ctx, req)
+}
+
+// SubmitGrammarPost calls api.v1.QuizService.SubmitGrammarPost.
+func (c *quizServiceClient) SubmitGrammarPost(ctx context.Context, req *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error) {
+	return c.submitGrammarPost.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -455,6 +491,12 @@ type QuizServiceHandler interface {
 	StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error)
 	SubmitRelearnAnswer(context.Context, *connect.Request[v1.SubmitRelearnAnswerRequest]) (*connect.Response[v1.SubmitRelearnAnswerResponse], error)
 	BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error)
+	// Grammar Quiz — corrects grammar mistakes annotated in journal notebooks.
+	// Each card shows a sentence with an incorrect span; the user types the fix,
+	// which is AI-graded and recorded in the notebook's learning history keyed by
+	// the mistake id. See docs/content/proposals/grammar-quiz.
+	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
+	SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -602,6 +644,18 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("BatchSubmitRelearnAnswers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceStartGrammarQuizHandler := connect.NewUnaryHandler(
+		QuizServiceStartGrammarQuizProcedure,
+		svc.StartGrammarQuiz,
+		connect.WithSchema(quizServiceMethods.ByName("StartGrammarQuiz")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceSubmitGrammarPostHandler := connect.NewUnaryHandler(
+		QuizServiceSubmitGrammarPostProcedure,
+		svc.SubmitGrammarPost,
+		connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarPost")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -650,6 +704,10 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceSubmitRelearnAnswerHandler.ServeHTTP(w, r)
 		case QuizServiceBatchSubmitRelearnAnswersProcedure:
 			quizServiceBatchSubmitRelearnAnswersHandler.ServeHTTP(w, r)
+		case QuizServiceStartGrammarQuizProcedure:
+			quizServiceStartGrammarQuizHandler.ServeHTTP(w, r)
+		case QuizServiceSubmitGrammarPostProcedure:
+			quizServiceSubmitGrammarPostHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -749,4 +807,12 @@ func (UnimplementedQuizServiceHandler) SubmitRelearnAnswer(context.Context, *con
 
 func (UnimplementedQuizServiceHandler) BatchSubmitRelearnAnswers(context.Context, *connect.Request[v1.BatchSubmitRelearnAnswersRequest]) (*connect.Response[v1.BatchSubmitRelearnAnswersResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.BatchSubmitRelearnAnswers is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartGrammarQuiz is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitGrammarPost is not implemented"))
 }

@@ -41,14 +41,24 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
-	return notebook.NewReader(
-		s.notebooksConfig.StoriesDirectories,
+	// Journals are stored in the story format but kept in their own directory;
+	// load them alongside stories so the grammar quiz can read them.
+	storyDirectories := append(append([]string{}, s.notebooksConfig.StoriesDirectories...), s.notebooksConfig.JournalsDirectories...)
+	reader, err := notebook.NewReader(
+		storyDirectories,
 		s.notebooksConfig.FlashcardsDirectories,
 		s.notebooksConfig.BooksDirectories,
 		s.notebooksConfig.DefinitionsDirectories,
 		s.notebooksConfig.EtymologyDirectories,
 		s.dictionaryMap,
 	)
+	if err != nil {
+		return nil, err
+	}
+	if err := reader.LoadGrammars(s.notebooksConfig.GrammarsDirectories); err != nil {
+		return nil, fmt.Errorf("reader.LoadGrammars() > %w", err)
+	}
+	return reader, nil
 }
 
 // NewReader creates a new notebook reader. Exported for use by handlers
@@ -187,6 +197,13 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		return nil, fmt.Errorf("failed to load etymology notebook summaries: %w", err)
 	}
 	summaries = append(summaries, etymSummaries...)
+
+	// Add stories that have grammar annotations (grammar quiz)
+	grammarSummaries, err := s.LoadGrammarStorySummaries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load grammar story summaries: %w", err)
+	}
+	summaries = append(summaries, grammarSummaries...)
 
 	return summaries, nil
 }

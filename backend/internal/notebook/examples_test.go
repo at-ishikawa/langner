@@ -124,6 +124,36 @@ func TestExamples_ReadEtymologyNotebook(t *testing.T) {
 	assert.Contains(t, types, "suffix", "should have suffix origins")
 }
 
+func TestExamples_ReadGrammars(t *testing.T) {
+	examples := examplesDir(t)
+
+	// A journal is a story; its grammar mistakes are a separate grammars
+	// notebook, matched to each entry by title.
+	reader, err := notebook.NewReader(
+		[]string{filepath.Join(examples, "stories"), filepath.Join(examples, "journals")}, nil, nil, nil, nil, nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, reader.LoadGrammars([]string{filepath.Join(examples, "grammars")}))
+
+	stories, err := reader.ReadStoryNotebooks("journal")
+	require.NoError(t, err)
+	require.NotEmpty(t, stories)
+
+	// Every scene's corrections must appear verbatim in that scene's text.
+	total := 0
+	for _, sn := range stories {
+		for sceneIdx, scene := range sn.Scenes {
+			text := notebook.StorySceneText(scene)
+			for _, c := range reader.CorrectionsForScene("journal", sn.Event, sceneIdx) {
+				assert.Contains(t, text, c.Incorrect, "correction span must exist in %q scene %d", sn.Event, sceneIdx)
+				assert.NotEqual(t, c.Incorrect, c.Correct)
+				total += 1
+			}
+		}
+	}
+	assert.Greater(t, total, 0)
+}
+
 func TestExamples_LearningHistories(t *testing.T) {
 	examples := examplesDir(t)
 

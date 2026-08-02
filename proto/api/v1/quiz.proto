@@ -19,6 +19,9 @@ enum QuizType {
   // It is NEVER written to a learning_logs row or a YAML quiz_type field —
   // the Relearn Quiz records no learning history at all.
   QUIZ_TYPE_RELEARN = 7;
+  // QUIZ_TYPE_GRAMMAR drills grammar mistakes annotated in journal notebooks:
+  // the user is shown a sentence with an incorrect span and types the fix.
+  QUIZ_TYPE_GRAMMAR = 8;
 }
 
 enum EtymologyQuizMode {
@@ -56,6 +59,13 @@ service QuizService {
   rpc StartRelearnQuiz(StartRelearnQuizRequest) returns (StartRelearnQuizResponse);
   rpc SubmitRelearnAnswer(SubmitRelearnAnswerRequest) returns (SubmitRelearnAnswerResponse);
   rpc BatchSubmitRelearnAnswers(BatchSubmitRelearnAnswersRequest) returns (BatchSubmitRelearnAnswersResponse);
+
+  // Grammar Quiz — corrects grammar mistakes annotated in journal notebooks.
+  // Each card shows a sentence with an incorrect span; the user types the fix,
+  // which is AI-graded and recorded in the notebook's learning history keyed by
+  // the mistake id. See docs/content/proposals/grammar-quiz.
+  rpc StartGrammarQuiz(StartGrammarQuizRequest) returns (StartGrammarQuizResponse);
+  rpc SubmitGrammarPost(SubmitGrammarPostRequest) returns (SubmitGrammarPostResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -91,6 +101,9 @@ message NotebookSummary {
   // The two can differ because the same origin can be due in one mode and
   // not in the other (each mode tracks its own SR interval and skip flag).
   int32 etymology_reverse_review_count = 9;
+  // grammar_review_count is the per-notebook due count for the grammar quiz
+  // (journal notebooks). Zero for non-journal notebooks.
+  int32 grammar_review_count = 10;
 }
 
 // NotebookSectionSummary holds the display title and per-mode review counts
@@ -101,6 +114,7 @@ message NotebookSectionSummary {
   int32 reverse_review_count = 3;
   int32 etymology_review_count = 4;
   int32 etymology_reverse_review_count = 5;
+  int32 grammar_review_count = 6;
 }
 
 // NotebookSection narrows a quiz request to specific sections within a single
@@ -706,5 +720,76 @@ message BatchSubmitRelearnAnswersRequest {
 
 message BatchSubmitRelearnAnswersResponse {
   repeated SubmitRelearnAnswerResponse responses = 1;
+}
+
+message StartGrammarQuizRequest {
+  repeated string notebook_ids = 1;
+  bool include_unstudied = 2;
+  // notebook_sections narrows the quiz to specific entries within a journal
+  // (each section title is a story entry / event). When empty, every entry of
+  // the selected notebook_ids is included.
+  repeated NotebookSection notebook_sections = 3;
+}
+
+message StartGrammarQuizResponse {
+  repeated GrammarPostCard posts = 1;
+}
+
+// GrammarPostCard is one journal post shown in full, with the due mistakes to
+// fix inline. The reference corrections are NOT sent to the client; the backend
+// re-derives each one (by note_id) at submit time.
+message GrammarPostCard {
+  string notebook_id = 1;
+  string entry_id = 2; // journal post id
+  string title = 3;
+  string post_text = 4; // the full post, shown whole
+  repeated GrammarBlank blanks = 5;
+}
+
+// GrammarBlank is one mistake to correct within a post. note_id is the
+// ephemeral session id (same scheme as the vocabulary quiz) so Override / Skip
+// reuse the existing RPCs; sense_id is the stable correction id.
+message GrammarBlank {
+  int64 note_id = 1;
+  string sense_id = 2;
+  string incorrect = 3; // the wrong span, highlighted in place in the post
+  int32 line = 4;
+  string category = 5;
+  string status = 6; // current learned status
+}
+
+// SubmitGrammarPost submits every blank a user filled for one post at once.
+message SubmitGrammarPostRequest {
+  repeated GrammarBlankAnswer answers = 1 [
+    (buf.validate.field).repeated.min_items = 1
+  ];
+}
+
+message GrammarBlankAnswer {
+  int64 note_id = 1 [
+    (buf.validate.field).int64.gt = 0
+  ];
+  string answer = 2;
+  int64 response_time_ms = 3;
+  bool is_skipped = 4;
+}
+
+message SubmitGrammarPostResponse {
+  repeated GrammarBlankResult results = 1;
+}
+
+message GrammarBlankResult {
+  int64 note_id = 1;
+  string sense_id = 2;
+  bool correct = 3;
+  string correct_answer = 4; // the reference correction, revealed after grading
+  string incorrect = 5;
+  string reason = 6; // the authored grammar note for the mistake
+  string category = 7;
+  string next_review_date = 8;
+  string learned_at = 9;
+  // assessment is the grader's per-answer critique — what THIS answer still got
+  // wrong and how to fix it. Empty when the answer was correct or skipped.
+  string assessment = 10;
 }
 

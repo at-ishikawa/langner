@@ -66,6 +66,7 @@ type NotebookSummary struct {
 	ReverseReviewCount          int
 	EtymologyReviewCount        int
 	EtymologyReverseReviewCount int
+	GrammarReviewCount          int
 	LatestDate                  time.Time
 	Kind                        string
 	// HasContent is true when any scene in the notebook has statements or
@@ -86,6 +87,7 @@ type NotebookSectionSummary struct {
 	ReverseReviewCount          int
 	EtymologyReviewCount        int
 	EtymologyReverseReviewCount int
+	GrammarReviewCount          int
 }
 
 // GradeResult holds the outcome of grading a user's answer.

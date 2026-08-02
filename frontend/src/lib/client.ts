@@ -61,6 +61,14 @@ export type {
   RelearnConversationLine,
   BatchSubmitRelearnAnswersRequest,
   BatchSubmitRelearnAnswersResponse,
+  GrammarPostCard,
+  GrammarBlank,
+  StartGrammarQuizRequest,
+  StartGrammarQuizResponse,
+  SubmitGrammarPostRequest,
+  SubmitGrammarPostResponse,
+  GrammarBlankAnswer,
+  GrammarBlankResult,
 } from "@/gen-protos/api/v1/quiz_pb";
 
 export { QuizType, EtymologyQuizMode } from "@/gen-protos/api/v1/quiz_pb";

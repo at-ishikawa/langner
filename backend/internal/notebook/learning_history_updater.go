@@ -98,7 +98,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 	responseTimeMs int64,
 	quizType QuizType,
 ) bool {
-	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	flatType := flatTypeForStory(storyTitle, sceneTitle)
 	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
@@ -106,7 +106,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQuality(
 			continue
 		}
 
-		if isFlashcard || h.Metadata.Type == "flashcard" {
+		if flatType != "" || isFlatMetadataType(h.Metadata.Type) {
 			for ei, exp := range h.Expressions {
 				if !MatchesEntry(&exp, id, expression, originalExpression) {
 					continue
@@ -158,7 +158,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 	responseTimeMs int64,
 	quizType QuizType,
 ) bool {
-	isFlashcard := storyTitle == "flashcards" && sceneTitle == ""
+	flatType := flatTypeForStory(storyTitle, sceneTitle)
 	normalizedSceneTitle := normalizeQuotes(sceneTitle)
 
 	for hi, h := range u.history {
@@ -166,7 +166,7 @@ func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForReverse(
 			continue
 		}
 
-		if isFlashcard || h.Metadata.Type == "flashcard" {
+		if flatType != "" || isFlatMetadataType(h.Metadata.Type) {
 			for ei, exp := range h.Expressions {
 				if !MatchesEntry(&exp, id, expression, originalExpression) {
 					continue
@@ -212,10 +212,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	flatType := ""
-	if storyTitle == "flashcards" && sceneTitle == "" {
-		flatType = "flashcard"
-	}
+	flatType := flatTypeForStory(storyTitle, sceneTitle)
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
@@ -230,7 +227,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQualityForReverse(
 		return
 	}
 
-	if flatType != "" || u.history[storyIndex].Metadata.Type == "flashcard" {
+	if flatType != "" || isFlatMetadataType(u.history[storyIndex].Metadata.Type) {
 		u.history[storyIndex].Expressions = append(
 			u.history[storyIndex].Expressions,
 			newExpression,
@@ -253,10 +250,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 	responseTimeMs int64,
 	quizType QuizType,
 ) {
-	flatType := ""
-	if storyTitle == "flashcards" && sceneTitle == "" {
-		flatType = "flashcard"
-	}
+	flatType := flatTypeForStory(storyTitle, sceneTitle)
 	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatType)
 
 	newExpression := LearningHistoryExpression{
@@ -270,7 +264,7 @@ func (u *LearningHistoryUpdater) createNewExpressionWithQuality(
 		return
 	}
 
-	if flatType != "" || u.history[storyIndex].Metadata.Type == "flashcard" {
+	if flatType != "" || isFlatMetadataType(u.history[storyIndex].Metadata.Type) {
 		u.history[storyIndex].Expressions = append(
 			u.history[storyIndex].Expressions,
 			newExpression,
@@ -635,7 +629,7 @@ func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
 	}
 	stub := LearningHistoryExpression{Expression: expression, ID: id}
 	if sceneTitle == "" {
-		idx := u.findOrCreateStory(notebookID, storyTitle, "flashcard")
+		idx := u.findOrCreateStory(notebookID, storyTitle, flatTypeForStory(storyTitle, sceneTitle))
 		u.history[idx].Expressions = append(u.history[idx].Expressions, stub)
 		return
 	}

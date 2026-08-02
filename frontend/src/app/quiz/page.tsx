@@ -21,8 +21,9 @@ import {
 } from "@/lib/client";
 import { useQuizStore, type QuizType } from "@/store/quizStore";
 import RelearnStart from "@/components/RelearnStart";
+import GrammarStart from "@/components/GrammarStart";
 
-type Tab = "vocabulary" | "etymology" | "relearn";
+type Tab = "vocabulary" | "etymology" | "relearn" | "grammar";
 type VocabMode = "standard" | "reverse" | "freeform";
 type EtyMode = "standard" | "reverse" | "freeform";
 
@@ -81,8 +82,9 @@ export default function QuizHubPage() {
   // Open the Relearn tab when arrived at via /quiz?tab=relearn (from the
   // relearn complete screen's "Relearn again", or a session that ended empty).
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("tab") === "relearn") {
-      setTab("relearn");
+    const t = new URLSearchParams(window.location.search).get("tab");
+    if (t === "relearn" || t === "grammar") {
+      setTab(t as Tab);
     }
   }, []);
 
@@ -426,7 +428,7 @@ export default function QuizHubPage() {
       {/* Tabs — Vocabulary / Etymology switch mode cards in place; Relearn is a
           cross-quiz-type flow whose tab navigates to its own start screen. */}
       <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200" display="flex">
-        {(["vocabulary", "etymology", "relearn"] as Tab[]).map((t) => (
+        {(["vocabulary", "etymology", "relearn", "grammar"] as Tab[]).map((t) => (
           <Box
             key={t}
             flex={1}
@@ -442,7 +444,7 @@ export default function QuizHubPage() {
               color={tab === t ? "blue.600" : "gray.500"}
               _dark={{ color: tab === t ? "blue.300" : "gray.400" }}
             >
-              {t === "vocabulary" ? "Vocabulary" : t === "etymology" ? "Etymology" : "Relearn"}
+              {t === "vocabulary" ? "Vocabulary" : t === "etymology" ? "Etymology" : t === "relearn" ? "Relearn" : "Grammar"}
             </Text>
             {tab === t && (
               <Box
@@ -465,6 +467,8 @@ export default function QuizHubPage() {
           within the tabbed hub); the other tabs show mode cards + notebooks. */}
       {tab === "relearn" ? (
         <RelearnStart />
+      ) : tab === "grammar" ? (
+        <GrammarStart />
       ) : (
       <Box p={4} display="flex" flexDirection="column" gap={3}>
         {modes.map((mode) => {

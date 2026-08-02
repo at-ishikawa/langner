@@ -90,12 +90,16 @@ func TestYAMLLearningRepository_FindByNotebookID(t *testing.T) {
 			notebookID: "nonexistent-id",
 		},
 		{
-			name: "invalid directory returns error",
+			// A nonexistent learning_notes directory yields an empty result
+			// (no error) so a not-yet-created directory can't break the read
+			// path or callers like GetQuizOptions.
+			name: "nonexistent directory returns empty",
 			setupDir: func(t *testing.T) string {
 				return filepath.Join(t.TempDir(), "nonexistent")
 			},
 			notebookID: "notebook-1",
-			wantErr:    true,
+			want:       nil,
+			wantErr:    false,
 		},
 		{
 			name: "multiple entries only matching returned",

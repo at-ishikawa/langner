@@ -35,6 +35,32 @@ func ReadLearningHistoryFile(path string) ([]LearningHistory, error) {
 	return readYamlFile[[]LearningHistory](path)
 }
 
+// JournalStoryTitle is the sentinel story title under which grammar (journal)
+// learning history is bucketed, analogous to "flashcards" for flashcard cards.
+const JournalStoryTitle = "journal"
+
+// isFlatMetadataType reports whether a learning history's Metadata.Type uses
+// the flat top-level Expressions shape instead of nested Scenes. Flashcard and
+// grammar (journal) notebooks are both flat.
+func isFlatMetadataType(metadataType string) bool {
+	return metadataType == "flashcard" || metadataType == "grammar"
+}
+
+// flatTypeForStory returns the flat learning-history Metadata.Type for a
+// notebook's sentinel story title, or "" when the notebook uses nested scenes.
+func flatTypeForStory(storyTitle, sceneTitle string) string {
+	if sceneTitle != "" {
+		return ""
+	}
+	switch storyTitle {
+	case "flashcards":
+		return "flashcard"
+	case JournalStoryTitle:
+		return "grammar"
+	}
+	return ""
+}
+
 func (h LearningHistory) GetLogs(
 	notebookTitle, sceneTitle string, definition Note,
 ) []LearningRecord {
@@ -42,8 +68,8 @@ func (h LearningHistory) GetLogs(
 		return nil
 	}
 
-	// For flashcard type, search in expressions directly
-	if h.Metadata.Type == "flashcard" {
+	// For flat types (flashcard, grammar), search in expressions directly
+	if isFlatMetadataType(h.Metadata.Type) {
 		for _, expression := range h.Expressions {
 			if !MatchesEntry(&expression, definition.ID, definition.Expression, definition.Definition) {
 				continue
@@ -85,7 +111,7 @@ func (h LearningHistory) GetReverseLogs(
 		return nil
 	}
 
-	if h.Metadata.Type == "flashcard" {
+	if isFlatMetadataType(h.Metadata.Type) {
 		for _, expression := range h.Expressions {
 			if !MatchesEntry(&expression, definition.ID, definition.Expression, definition.Definition) {
 				continue
@@ -818,8 +844,8 @@ func (scene *LearningScene) Validate(location string) []ValidationError {
 func (h *LearningHistory) Validate(location string) []ValidationError {
 	var errors []ValidationError
 
-	// For flashcard type, validate expressions directly
-	if h.Metadata.Type == "flashcard" {
+	// For flat types (flashcard, grammar), validate expressions directly
+	if isFlatMetadataType(h.Metadata.Type) {
 		for exprIdx, expr := range h.Expressions {
 			exprLocation := fmt.Sprintf("%s -> expression[%d]: %s", location, exprIdx, expr.Expression)
 			if exprErrors := expr.Validate(exprLocation); len(exprErrors) > 0 {

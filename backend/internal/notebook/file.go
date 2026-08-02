@@ -73,6 +73,16 @@ type yamlFile[T any] struct {
 func loadYamlFiles[T any](dir string, filter func(path string, info os.FileInfo) bool) ([]yamlFile[T], error) {
 	var files []yamlFile[T]
 
+	// A missing or unset directory yields no files rather than an error, so a
+	// not-yet-created learning_notes (or other) directory can't 500 callers
+	// like GetQuizOptions. Matches the os.Stat guard the index walkers use.
+	if dir == "" {
+		return files, nil
+	}
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return files, nil
+	}
+
 	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
