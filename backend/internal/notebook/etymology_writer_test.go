@@ -425,26 +425,21 @@ notebooks:
 
 	// Learning history: mastered-root has a recent correct answer with a long
 	// interval (next review far in the future). open-root has no etymology
-	// history at all. POST-MIGRATION shape — top-level title is the SESSION
-	// title ("Session 1"), per-origin scene titles are the SceneTitle the
-	// reader projects ("mastered-root (well-known)"). The earlier version
-	// of this fixture used the legacy shape (Title: "Test Roots") and
-	// silently aligned with the buggy originNeedsStudy comparison; with
-	// the comparison fixed, the fixture has to match real data shape too.
+	// history at all. Etymology learning history is flat — one session block
+	// (Metadata.Title = "Session 1", Type = etymology) whose top-level
+	// Expressions are the origins, each Type=origin with etymology_origin_logs.
 	learningHistories := map[string][]LearningHistory{
 		"test-roots": {{
-			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Session 1"},
-			Scenes: []LearningScene{{
-				Metadata: LearningSceneMetadata{Title: "mastered-root (well-known)"},
-				Expressions: []LearningHistoryExpression{{
-					Expression: "mastered-root",
-					EtymologyBreakdownLogs: []LearningRecord{{
-						Status:       LearnedStatusUnderstood,
-						LearnedAt:    Date{Time: time.Now()},
-						Quality:      5,
-						QuizType:     string(QuizTypeEtymologyStandard),
-						IntervalDays: 365,
-					}},
+			Metadata: LearningHistoryMetadata{NotebookID: "test-roots", Title: "Session 1", Type: LearningHistoryTypeEtymology},
+			Expressions: []LearningHistoryExpression{{
+				Expression: "mastered-root",
+				Type:       LearningExpressionTypeOrigin,
+				EtymologyOriginLogs: []LearningRecord{{
+					Status:       LearnedStatusUnderstood,
+					LearnedAt:    Date{Time: time.Now()},
+					Quality:      5,
+					QuizType:     string(QuizTypeEtymologyOrigin),
+					IntervalDays: 365,
 				}},
 			}},
 		}},

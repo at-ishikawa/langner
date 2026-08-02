@@ -2029,11 +2029,14 @@ func TestValidator_Fix_PreservesEveryPersistableField(t *testing.T) {
 	// Fields the fix pass is allowed to mutate or drop. Each entry must
 	// document why; an empty list keeps the guard tight.
 	skip := map[string]string{
-		"Expression":                       "the identifier itself, always set",
-		"EasinessFactor":                   `yaml:"-" — derived on the fly`,
-		"ReverseEasinessFactor":            `yaml:"-" — derived`,
-		"EtymologyBreakdownEasinessFactor": `yaml:"-" — derived`,
-		"EtymologyAssemblyEasinessFactor":  `yaml:"-" — derived`,
+		"Expression":                    "the identifier itself, always set",
+		"EasinessFactor":                `yaml:"-" — derived on the fly`,
+		"ReverseEasinessFactor":         `yaml:"-" — derived`,
+		"EtymologyOriginEasinessFactor": `yaml:"-" — derived`,
+		// Sense is a discriminator (multi-sense origin key), not data. An
+		// entry whose only content is a Sense carries no learning data and
+		// is correctly dropped by fixConsistency, exactly like Type.
+		"Sense": "discriminator field, not 'data' that keeps an entry alive",
 		// Type is a discriminator (vocabulary vs origin), not data. An
 		// entry whose only data is Type is empty by intent and is
 		// correctly dropped by fixConsistency. Round-tripping with
@@ -2196,11 +2199,11 @@ func TestValidator_Fix_TypeFieldRoundTrips(t *testing.T) {
               quiz_type: notebook
         - expression: ego
           type: origin
-          etymology_breakdown_logs:
+          etymology_origin_logs:
             - status: understood
               learned_at: "2026-05-01"
               quality: 4
-              quiz_type: etymology_freeform
+              quiz_type: etymology_origin
 `), 0644))
 
 	v := NewValidator(learningDir, []string{storyDir}, nil, nil, nil, "", nil)
@@ -2223,11 +2226,11 @@ func TestValidator_Fix_TypeFieldRoundTrips(t *testing.T) {
 	vocab, ok := byType[LearningExpressionTypeVocabulary]
 	require.True(t, ok, "vocabulary entry missing")
 	assert.NotEmpty(t, vocab.LearnedLogs, "vocab entry must keep its learned_logs")
-	assert.Empty(t, vocab.EtymologyBreakdownLogs, "vocab entry must not absorb etymology logs")
+	assert.Empty(t, vocab.EtymologyOriginLogs, "vocab entry must not absorb etymology logs")
 
 	origin, ok := byType[LearningExpressionTypeOrigin]
 	require.True(t, ok, "origin entry missing")
-	assert.NotEmpty(t, origin.EtymologyBreakdownLogs, "origin entry must keep its etymology_breakdown_logs")
+	assert.NotEmpty(t, origin.EtymologyOriginLogs, "origin entry must keep its etymology_origin_logs")
 	assert.Empty(t, origin.LearnedLogs, "origin entry must not absorb vocab logs")
 }
 
@@ -2274,17 +2277,17 @@ notebooks:
         title: "Session 2"
       expressions:
         - expression: ana
-          etymology_breakdown_logs:
+          etymology_origin_logs:
             - status: understood
               learned_at: "2026-05-01"
               quality: 4
-              quiz_type: etymology_freeform
+              quiz_type: etymology_origin
         - expression: untracked-origin
-          etymology_breakdown_logs:
+          etymology_origin_logs:
             - status: understood
               learned_at: "2026-05-01"
               quality: 4
-              quiz_type: etymology_freeform
+              quiz_type: etymology_origin
 `), 0644))
 
 	v := NewValidator(learningDir, []string{storyDir}, nil, []string{defsDir}, nil, "", nil)
@@ -2912,8 +2915,8 @@ func TestValidator_backfillQuizType(t *testing.T) {
 // TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots pins the rule
 // the user asked for: --fix replays each log series through the SR
 // calculator (RecalculateAll) so interval_days reflects the prior-state
-// chain. It touches all four slots (learned/reverse/etymology_breakdown/
-// etymology_assembly), not just vocabulary; etymology had been writing
+// chain. It touches all log slots (learned/reverse/etymology_origin),
+// not just vocabulary; etymology had been writing
 // intervals without consulting prior state under a since-fixed bug, and
 // --fix is the path that corrects that stored data.
 //
@@ -2971,11 +2974,10 @@ func TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots(t *testing.T) {
 					Metadata: LearningSceneMetadata{Title: "Scene 1"},
 					Expressions: []LearningHistoryExpression{
 						{
-							Expression:             "demo-word",
-							LearnedLogs:            makeLogs(),
-							ReverseLogs:            makeLogs(),
-							EtymologyBreakdownLogs: makeLogs(),
-							EtymologyAssemblyLogs:  makeLogs(),
+							Expression:          "demo-word",
+							LearnedLogs:         makeLogs(),
+							ReverseLogs:         makeLogs(),
+							EtymologyOriginLogs: makeLogs(),
 						},
 					},
 				},
@@ -2995,7 +2997,7 @@ func TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots(t *testing.T) {
 	require.Len(t, histories[0].Scenes[0].Expressions, 1)
 	expr := histories[0].Scenes[0].Expressions[0]
 
-	// All four slots must lose the corrupt 999 — the calculator output
+	// Every slot must lose the corrupt 999 — the calculator output
 	// is in DefaultFixedIntervals so 999 cannot survive.
 	for _, slot := range []struct {
 		name string
@@ -3003,8 +3005,7 @@ func TestValidator_Fix_RecalculatesIntervalsAcrossAllSlots(t *testing.T) {
 	}{
 		{"learned_logs", expr.LearnedLogs},
 		{"reverse_logs", expr.ReverseLogs},
-		{"etymology_breakdown_logs", expr.EtymologyBreakdownLogs},
-		{"etymology_assembly_logs", expr.EtymologyAssemblyLogs},
+		{"etymology_origin_logs", expr.EtymologyOriginLogs},
 	} {
 		require.Len(t, slot.logs, 2, slot.name)
 		for _, log := range slot.logs {
@@ -3207,11 +3208,11 @@ notebooks:
       expressions:
         - expression: gamos
           learned_logs: []
-          etymology_breakdown_logs:
+          etymology_origin_logs:
             - status: understood
               learned_at: "2026-04-25T14:21:42-07:00"
               quality: 4
-              quiz_type: etymology_breakdown
+              quiz_type: etymology_origin
               interval_days: 30
     - metadata:
         title: "gamos (marriage)"
@@ -3219,11 +3220,11 @@ notebooks:
         - expression: gamos
           type: origin
           learned_logs: []
-          etymology_breakdown_logs:
+          etymology_origin_logs:
             - status: understood
               learned_at: "2026-05-27T06:18:17-07:00"
               quality: 5
-              quiz_type: etymology_breakdown
+              quiz_type: etymology_origin
               interval_days: 30
 `), 0o644))
 
@@ -3243,7 +3244,7 @@ notebooks:
 		for _, e := range scene.Expressions {
 			if e.Expression == "gamos" {
 				gamosScenes = append(gamosScenes, scene.Metadata.Title)
-				gamosLogCount = len(e.EtymologyBreakdownLogs)
+				gamosLogCount = len(e.EtymologyOriginLogs)
 			}
 		}
 	}

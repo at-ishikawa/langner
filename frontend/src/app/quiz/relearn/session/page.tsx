@@ -15,10 +15,8 @@ function sourceLabel(source: QuizType): string {
   switch (source) {
     case QuizType.REVERSE:
       return "Reverse — recall the word";
-    case QuizType.ETYMOLOGY_STANDARD:
+    case QuizType.ETYMOLOGY_ORIGIN:
       return "Etymology — recall the meaning";
-    case QuizType.ETYMOLOGY_REVERSE:
-      return "Etymology — recall the origin";
     default:
       return "Recognition — recall the meaning";
   }
@@ -65,12 +63,8 @@ export default function RelearnSessionPage() {
   // Each card mirrors the quiz type it was failed in. For the reverse formats
   // the learner produces the word/origin from the meaning; otherwise they
   // recall the meaning from the word/origin.
-  const isReverse =
-    current.sourceQuizType === QuizType.REVERSE ||
-    current.sourceQuizType === QuizType.ETYMOLOGY_REVERSE;
-  const isEtymology =
-    current.sourceQuizType === QuizType.ETYMOLOGY_STANDARD ||
-    current.sourceQuizType === QuizType.ETYMOLOGY_REVERSE;
+  const isReverse = current.sourceQuizType === QuizType.REVERSE;
+  const isEtymology = current.sourceQuizType === QuizType.ETYMOLOGY_ORIGIN;
   const promptText = isReverse ? current.meaning : current.entry;
   const answerLabel = isReverse ? (isEtymology ? "The origin" : "The word") : "Your meaning";
   const answerPlaceholder = isReverse
