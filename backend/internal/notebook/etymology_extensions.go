@@ -95,6 +95,13 @@ type etymologyBookView struct {
 	// originForms maps (origin, language) -> set of declared form strings,
 	// scoped to a session. Used to resolve `from_form` on definitions.
 	originForms map[originFormKey]map[string]bool
+
+	// originEnglishForms maps (origin, language) -> set of declared
+	// english_forms strings, scoped to a session. A definition's `from_form`
+	// resolves against EITHER these English combining forms (e.g. fic, fect)
+	// or the source-language forms above, because a derived word surfaces its
+	// origin through its English spelling as often as its Latin principal part.
+	originEnglishForms map[originFormKey]map[string]bool
 }
 
 type conceptMemberKey struct {
@@ -124,10 +131,11 @@ type relationDecl struct {
 // book-level view used by the validator.
 func (v *Validator) loadEtymologyBookView(indexPath, bookID string, sessionPaths []string) (*etymologyBookView, error) {
 	view := &etymologyBookView{
-		bookID:           bookID,
-		originsBySession: make(map[string]map[conceptMemberKey]bool),
-		concepts:         make(map[string][]conceptDecl),
-		originForms:      make(map[originFormKey]map[string]bool),
+		bookID:             bookID,
+		originsBySession:   make(map[string]map[conceptMemberKey]bool),
+		concepts:           make(map[string][]conceptDecl),
+		originForms:        make(map[originFormKey]map[string]bool),
+		originEnglishForms: make(map[originFormKey]map[string]bool),
 	}
 
 	for _, nbPath := range sessionPaths {
@@ -146,13 +154,21 @@ func (v *Validator) loadEtymologyBookView(indexPath, bookID string, sessionPaths
 		origins := make(map[conceptMemberKey]bool, len(wrapped.Origins))
 		for _, o := range wrapped.Origins {
 			origins[conceptMemberKey{Origin: o.Origin, Language: o.Language}] = true
+			k := originFormKey{SessionTitle: session, Origin: o.Origin, Language: o.Language}
 			if len(o.Forms) > 0 {
-				k := originFormKey{SessionTitle: session, Origin: o.Origin, Language: o.Language}
 				if _, ok := view.originForms[k]; !ok {
 					view.originForms[k] = make(map[string]bool)
 				}
 				for _, f := range o.Forms {
 					view.originForms[k][f.Form] = true
+				}
+			}
+			if len(o.EnglishForms) > 0 {
+				if _, ok := view.originEnglishForms[k]; !ok {
+					view.originEnglishForms[k] = make(map[string]bool)
+				}
+				for _, ef := range o.EnglishForms {
+					view.originEnglishForms[k][ef] = true
 				}
 			}
 		}
@@ -416,17 +432,20 @@ func (v *Validator) validateFromForm(result *ValidationResult) {
 							continue
 						}
 						k := originFormKey{SessionTitle: session, Origin: op.Origin, Language: op.Language}
-						forms, ok := view.originForms[k]
-						if !ok || !forms[op.FromForm] {
-							result.AddWarning(ValidationError{
-								File:     path,
-								Location: fmt.Sprintf("session %q, expression %q", session, def.GetExpression()),
-								Message: fmt.Sprintf(
-									"from_form %q does not match any form declared on origin %q (%s) in this session",
-									op.FromForm, op.Origin, op.Language,
-								),
-							})
+						// from_form is valid when it matches either a
+						// source-language form (Latin principal part) or an
+						// English combining form declared via english_forms.
+						if view.originForms[k][op.FromForm] || view.originEnglishForms[k][op.FromForm] {
+							continue
 						}
+						result.AddWarning(ValidationError{
+							File:     path,
+							Location: fmt.Sprintf("session %q, expression %q", session, def.GetExpression()),
+							Message: fmt.Sprintf(
+								"from_form %q does not match any form or english_form declared on origin %q (%s) in this session",
+								op.FromForm, op.Origin, op.Language,
+							),
+						})
 					}
 				}
 			}
