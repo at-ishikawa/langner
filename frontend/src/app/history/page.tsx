@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { Box, Heading, Spinner, Text, VStack } from "@chakra-ui/react";
@@ -31,7 +31,15 @@ function buildQuery(state: AnalyticsFilterState): string {
   return sp.toString();
 }
 
-export default function HistoryPage() {
+export default function HistoryPageWrapper() {
+  return (
+    <Suspense fallback={<Box maxW="md" mx="auto" p={4}><Spinner data-testid="analytics-loading" /></Box>}>
+      <HistoryPage />
+    </Suspense>
+  );
+}
+
+function HistoryPage() {
   const router = useRouter();
   const params = useSearchParams();
   const [state, setState] = useState<AnalyticsFilterState>(() => parseFilters(params));
