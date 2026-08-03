@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { Box, HStack, Heading, Spinner, Text, VStack } from "@chakra-ui/react";
@@ -39,7 +39,15 @@ function buildBackQuery(state: AnalyticsFilterState): string {
   return sp.toString();
 }
 
-export default function DayDetailPage() {
+export default function DayDetailPageWrapper() {
+  return (
+    <Suspense fallback={<Box maxW="md" mx="auto" p={4}><Spinner data-testid="day-detail-loading" /></Box>}>
+      <DayDetailPage />
+    </Suspense>
+  );
+}
+
+function DayDetailPage() {
   const params = useParams<{ date: string }>();
   const search = useSearchParams();
   const date = params.date;
