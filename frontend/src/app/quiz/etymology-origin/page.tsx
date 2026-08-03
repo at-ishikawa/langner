@@ -42,7 +42,7 @@ export default function EtymologyOriginPage() {
 
   const {
     handleOverride, handleUndo, handleSkip: handleItemSkip, handleResume,
-    handleOverrideWord, handleExcludeWord,
+    handleOverrideWord,
   } = useQuizResultActions(quizType);
 
   useEffect(() => {
@@ -193,7 +193,6 @@ export default function EtymologyOriginPage() {
           onSkip={handleItemSkip}
           onResume={handleResume}
           onOverrideWord={handleOverrideWord}
-          onExcludeWord={handleExcludeWord}
         />
       ) : phase === "grading" ? (
         <Box textAlign="center" py={8}>

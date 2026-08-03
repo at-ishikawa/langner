@@ -71,6 +71,11 @@ export type {
   SubmitGrammarPostResponse,
   GrammarBlankAnswer,
   GrammarBlankResult,
+  GrammarMistake,
+  ListGrammarMistakesRequest,
+  ListGrammarMistakesResponse,
+  ExcludeGrammarMistakeRequest,
+  ResumeGrammarMistakeRequest,
 } from "@/gen-protos/api/v1/quiz_pb";
 
 export { QuizType } from "@/gen-protos/api/v1/quiz_pb";

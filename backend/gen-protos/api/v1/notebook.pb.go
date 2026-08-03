@@ -1376,15 +1376,29 @@ func (x *EtymologyOriginPart) GetConceptKeys() []string {
 }
 
 type EtymologyDefinition struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Expression    string                 `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
-	Meaning       string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	PartOfSpeech  string                 `protobuf:"bytes,3,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
-	Note          string                 `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
-	OriginParts   []*EtymologyOriginPart `protobuf:"bytes,5,rep,name=origin_parts,json=originParts,proto3" json:"origin_parts,omitempty"`
-	NotebookName  string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
-	Examples      []string               `protobuf:"bytes,7,rep,name=examples,proto3" json:"examples,omitempty"`
-	Contexts      []string               `protobuf:"bytes,8,rep,name=contexts,proto3" json:"contexts,omitempty"` // statements or conversations from the source scene
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	Expression   string                 `protobuf:"bytes,1,opt,name=expression,proto3" json:"expression,omitempty"`
+	Meaning      string                 `protobuf:"bytes,2,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	PartOfSpeech string                 `protobuf:"bytes,3,opt,name=part_of_speech,json=partOfSpeech,proto3" json:"part_of_speech,omitempty"`
+	Note         string                 `protobuf:"bytes,4,opt,name=note,proto3" json:"note,omitempty"`
+	OriginParts  []*EtymologyOriginPart `protobuf:"bytes,5,rep,name=origin_parts,json=originParts,proto3" json:"origin_parts,omitempty"`
+	NotebookName string                 `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
+	Examples     []string               `protobuf:"bytes,7,rep,name=examples,proto3" json:"examples,omitempty"`
+	Contexts     []string               `protobuf:"bytes,8,rep,name=contexts,proto3" json:"contexts,omitempty"` // statements or conversations from the source scene
+	// is_skipped is true when this word is excluded from the etymology-origin
+	// quiz. Mirrors NotebookWord.is_skipped; drives the "Excluded" badge on the
+	// etymology browse page so the UI can offer a Resume button.
+	IsSkipped bool `protobuf:"varint,9,opt,name=is_skipped,json=isSkipped,proto3" json:"is_skipped,omitempty"`
+	// skipped_quiz_types lists the quiz type strings this word is excluded from
+	// (for etymology words this is "etymology_origin"). Empty when not skipped.
+	// Mirrors NotebookWord.skipped_quiz_types (repeated string, not QuizType, to
+	// avoid a circular import: quiz.proto already imports notebook.proto).
+	SkippedQuizTypes []string `protobuf:"bytes,10,rep,name=skipped_quiz_types,json=skippedQuizTypes,proto3" json:"skipped_quiz_types,omitempty"`
+	// note_id is the DB primary key of this word's note row, used to call
+	// SkipWord/ResumeWord directly from the etymology browse page. Zero when the
+	// DB hasn't been populated (no langner migrate import-db run). Mirrors
+	// NotebookWord.note_id.
+	NoteId        int64 `protobuf:"varint,11,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1473,6 +1487,27 @@ func (x *EtymologyDefinition) GetContexts() []string {
 		return x.Contexts
 	}
 	return nil
+}
+
+func (x *EtymologyDefinition) GetIsSkipped() bool {
+	if x != nil {
+		return x.IsSkipped
+	}
+	return false
+}
+
+func (x *EtymologyDefinition) GetSkippedQuizTypes() []string {
+	if x != nil {
+		return x.SkippedQuizTypes
+	}
+	return nil
+}
+
+func (x *EtymologyDefinition) GetNoteId() int64 {
+	if x != nil {
+		return x.NoteId
+	}
+	return 0
 }
 
 type EtymologyMeaningGroup struct {
@@ -1996,7 +2031,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"word_count\x18\x05 \x01(\x05R\twordCount\x121\n" +
 	"\x05forms\x18\x06 \x03(\v2\x1b.api.v1.EtymologyOriginFormR\x05forms\x12\x1b\n" +
 	"\tfrom_form\x18\a \x01(\tR\bfromForm\x12!\n" +
-	"\fconcept_keys\x18\b \x03(\tR\vconceptKeys\"\xa6\x02\n" +
+	"\fconcept_keys\x18\b \x03(\tR\vconceptKeys\"\x8c\x03\n" +
 	"\x13EtymologyDefinition\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
@@ -2007,7 +2042,12 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\forigin_parts\x18\x05 \x03(\v2\x1b.api.v1.EtymologyOriginPartR\voriginParts\x12#\n" +
 	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\x12\x1a\n" +
 	"\bexamples\x18\a \x03(\tR\bexamples\x12\x1a\n" +
-	"\bcontexts\x18\b \x03(\tR\bcontexts\"h\n" +
+	"\bcontexts\x18\b \x03(\tR\bcontexts\x12\x1d\n" +
+	"\n" +
+	"is_skipped\x18\t \x01(\bR\tisSkipped\x12,\n" +
+	"\x12skipped_quiz_types\x18\n" +
+	" \x03(\tR\x10skippedQuizTypes\x12\x17\n" +
+	"\anote_id\x18\v \x01(\x03R\x06noteId\"h\n" +
 	"\x15EtymologyMeaningGroup\x12\x18\n" +
 	"\ameaning\x18\x01 \x01(\tR\ameaning\x125\n" +
 	"\aorigins\x18\x02 \x03(\v2\x1b.api.v1.EtymologyOriginPartR\aorigins\"G\n" +

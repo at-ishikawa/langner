@@ -64,6 +64,17 @@ service QuizService {
   // the mistake id. See docs/content/proposals/grammar-quiz.
   rpc StartGrammarQuiz(StartGrammarQuizRequest) returns (StartGrammarQuizResponse);
   rpc SubmitGrammarPost(SubmitGrammarPostRequest) returns (SubmitGrammarPostResponse);
+
+  // Grammar mistake review (standalone, no live session). ListGrammarMistakes
+  // lists a journal's grammar mistakes — both currently-due and already-excluded
+  // — for a review surface. ExcludeGrammarMistake / ResumeGrammarMistake toggle
+  // a single mistake's grammar exclusion by its stable (notebook_id, sense_id),
+  // WITHOUT an ephemeral session note_id: unlike SkipWord/ResumeWord (which
+  // resolve an in-memory session id), these can act on a mistake that was never
+  // dealt in a session, which is exactly what the review page needs.
+  rpc ListGrammarMistakes(ListGrammarMistakesRequest) returns (ListGrammarMistakesResponse);
+  rpc ExcludeGrammarMistake(ExcludeGrammarMistakeRequest) returns (ExcludeGrammarMistakeResponse);
+  rpc ResumeGrammarMistake(ResumeGrammarMistakeRequest) returns (ResumeGrammarMistakeResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -800,4 +811,69 @@ message GrammarBlankResult {
   // wrong and how to fix it. Empty when the answer was correct or skipped.
   string assessment = 10;
 }
+
+// Grammar Mistake Review Messages — a standalone review surface listing a
+// journal's grammar mistakes (due + excluded) with no live quiz session.
+
+message ListGrammarMistakesRequest {
+  // notebook_id is the journal whose grammar mistakes to list.
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  // section_titles, when non-empty, narrows the listing to specific journal
+  // entries (each title is a story entry / event), mirroring how
+  // StartGrammarQuiz narrows via NotebookSection.section_titles. When empty,
+  // every entry of the notebook is included.
+  repeated string section_titles = 2;
+}
+
+message ListGrammarMistakesResponse {
+  repeated GrammarMistake mistakes = 1;
+}
+
+// GrammarMistake is one grammar correction as a review row. It carries the
+// stable identity (sense_id, resolved against the request's notebook_id) needed
+// to exclude/resume it, plus everything a review row displays. Distinct from
+// GrammarBlank (a live-session blank keyed by an ephemeral note_id) because a
+// review row has no session id and needs the correct/reason text up front.
+message GrammarMistake {
+  // sense_id is the stable correction id — the identity passed to
+  // ExcludeGrammarMistake / ResumeGrammarMistake together with the journal's
+  // notebook_id.
+  string sense_id = 1;
+  // entry_id / title identify the journal entry (post) this mistake belongs to.
+  string entry_id = 2;
+  string title = 3;
+  string incorrect = 4; // the mistaken span
+  string correct = 5;   // the reference correction
+  string category = 6;
+  string reason = 7;    // the authored grammar note for the mistake
+  string status = 8;    // current learned status
+  // is_excluded is true when this mistake is currently skipped for grammar
+  // (its skipped_at is set for QUIZ_TYPE_GRAMMAR), so the row can show an
+  // "Excluded" state with a Resume action instead of an Exclude action.
+  bool is_excluded = 9;
+}
+
+message ExcludeGrammarMistakeRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string sense_id = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ExcludeGrammarMistakeResponse {}
+
+message ResumeGrammarMistakeRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string sense_id = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ResumeGrammarMistakeResponse {}
 

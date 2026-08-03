@@ -455,3 +455,69 @@ func TestEtymologyOrigin_MultiSense_SeparateSeries(t *testing.T) {
 	assert.Len(t, disease.EtymologyOriginLogs, 1)
 	assert.NotSame(t, feeling, disease, "each sense keeps an independent series")
 }
+
+// familyExpressions returns the derived-word expressions of the one card the
+// loader emits for the single-sense scribo fixture (or nil when the origin is
+// no longer offered because its whole family was excluded).
+func familyExpressions(t *testing.T, svc *Service, bookID string) []string {
+	t.Helper()
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	if len(cards) == 0 {
+		return nil
+	}
+	require.Len(t, cards, 1)
+	var out []string
+	for _, w := range cards[0].Words {
+		out = append(out, w.Expression)
+	}
+	return out
+}
+
+// TestEtymologyOrigin_PerWordExclude verifies FIX 2: excluding ONE family word
+// (a) persists a per-word etymology-origin skipped_at, (b) drops only that word
+// from the origin's family, (c) drops the whole origin once every word is
+// excluded, and (d) is reversible with ResumeWord. Exclusion uses the SAME
+// SkipWord/skipped_at path every other card uses, and the loader reads it back
+// via the same key (invariants L1/L2, U1/U2). It also asserts the browse
+// payload's exclusion read (IsExpressionExcludedForQuizType) agrees.
+func TestEtymologyOrigin_PerWordExclude(t *testing.T) {
+	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
+
+	// Baseline: the origin carries both family words.
+	assert.ElementsMatch(t, []string{"describe", "inscribe"}, familyExpressions(t, svc, bookID))
+
+	excludeWord := func(expr string) {
+		require.NoError(t, svc.SkipWord(
+			CardInfo{NotebookName: bookID, StoryTitle: "Session 1", SceneTitle: "S1", Expression: expr},
+			"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
+		))
+	}
+	readHistories := func() []notebook.LearningHistory {
+		raw, err := os.ReadFile(filepath.Join(learningDir, bookID+".yml"))
+		require.NoError(t, err)
+		var histories []notebook.LearningHistory
+		require.NoError(t, yaml.Unmarshal(raw, &histories))
+		return histories
+	}
+
+	// Exclude "describe": only that word drops; the origin stays quizzable.
+	excludeWord("describe")
+	assert.Equal(t, []string{"inscribe"}, familyExpressions(t, svc, bookID))
+	assert.True(t, notebook.IsExpressionExcludedForQuizType(
+		readHistories(), "", notebook.QuizTypeEtymologyOrigin, "describe"),
+		"the browse payload must report the excluded word as skipped")
+	assert.False(t, notebook.IsExpressionExcludedForQuizType(
+		readHistories(), "", notebook.QuizTypeEtymologyOrigin, "inscribe"))
+
+	// Exclude "inscribe" too: the origin now has no family and is not offered.
+	excludeWord("inscribe")
+	assert.Nil(t, familyExpressions(t, svc, bookID), "an origin with all words excluded is not offered")
+
+	// Resume "describe": it reappears; "inscribe" stays excluded.
+	require.NoError(t, svc.ResumeWord(
+		CardInfo{NotebookName: bookID, StoryTitle: "Session 1", SceneTitle: "S1", Expression: "describe"},
+		[]notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
+	))
+	assert.Equal(t, []string{"describe"}, familyExpressions(t, svc, bookID))
+}

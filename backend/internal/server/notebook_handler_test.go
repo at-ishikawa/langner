@@ -555,3 +555,51 @@ func TestNotebookHandler_RegisterDefinition_PathTraversal(t *testing.T) {
 
 	require.Error(t, err, "path traversal should be rejected")
 }
+
+// TestGetNotebookDetail_LoadsJournal verifies FIX 1(a): a journal notebook
+// (stored in the story format under a journals directory) loads via
+// GetNotebookDetail rather than returning "notebook not found". Before the
+// fix the notebook handler's reader omitted JournalsDirectories, so the story
+// reader could not find the journal index.
+func TestGetNotebookDetail_LoadsJournal(t *testing.T) {
+	journalsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	journalDir := filepath.Join(journalsDir, "my-journal")
+	require.NoError(t, os.MkdirAll(journalDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "index.yml"), []byte(`id: my-journal
+name: My Journal
+notebooks:
+  - ./posts.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "posts.yml"), []byte(`- event: "Entry 1"
+  date: 2025-02-01T00:00:00Z
+  scenes:
+    - scene: ""
+      statements:
+        - "Yesterday I go to the market."
+`), 0644))
+
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{
+			JournalsDirectories:    []string{journalsDir},
+			LearningNotesDirectory: learningDir,
+		},
+		config.TemplatesConfig{},
+		make(map[string]rapidapi.Response),
+		nil,
+		nil,
+		nil,
+	)
+
+	resp, err := handler.GetNotebookDetail(
+		context.Background(),
+		connect.NewRequest(&apiv1.GetNotebookDetailRequest{NotebookId: "my-journal"}),
+	)
+	require.NoError(t, err, "a journal must load via GetNotebookDetail")
+	require.NotNil(t, resp)
+	assert.Equal(t, "my-journal", resp.Msg.GetNotebookId())
+	assert.Equal(t, "My Journal", resp.Msg.GetName())
+	require.Len(t, resp.Msg.GetStories(), 1)
+	assert.Equal(t, "Entry 1", resp.Msg.GetStories()[0].GetEvent())
+}

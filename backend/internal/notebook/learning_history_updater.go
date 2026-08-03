@@ -291,29 +291,7 @@ func (u *LearningHistoryUpdater) FindExpressionByName(expression string) *Learni
 // form but the YAML stores the entry under the original Note.Expression
 // — callers pass both forms so the fallback succeeds.
 func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *LearningHistoryExpression {
-	for _, name := range names {
-		if name == "" {
-			continue
-		}
-		for hi := range u.history {
-			h := &u.history[hi]
-			// Always search top-level expressions first (flashcard, etymology, etc.)
-			for ei := range h.Expressions {
-				if strings.EqualFold(h.Expressions[ei].Expression, name) {
-					return &h.Expressions[ei]
-				}
-			}
-			// Then search scenes
-			for si := range h.Scenes {
-				for ei := range h.Scenes[si].Expressions {
-					if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, name) {
-						return &h.Scenes[si].Expressions[ei]
-					}
-				}
-			}
-		}
-	}
-	return nil
+	return FindExpressionInHistories(u.history, "", names...)
 }
 
 // FindExpressionByID resolves an expression preferring the stable id.
@@ -322,9 +300,19 @@ func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *Learn
 // the migration) it falls back to matching by name, so pre-migration
 // data still resolves symmetrically with the write path.
 func (u *LearningHistoryUpdater) FindExpressionByID(id string, names ...string) *LearningHistoryExpression {
+	return FindExpressionInHistories(u.history, id, names...)
+}
+
+// FindExpressionInHistories locates the learning-history entry for an item by
+// stable id (exact, preferred) then by any name (case-insensitive), searching
+// top-level Expressions and every scene. It is the SINGLE lookup shared by the
+// skip write path (SetSkippedAt / ClearSkippedAt via FindExpressionByID) and
+// the skip read path (IsExpressionExcludedForQuizType), so an exclusion is read
+// back under the exact key it was written (learning-history invariant L2).
+func FindExpressionInHistories(histories []LearningHistory, id string, names ...string) *LearningHistoryExpression {
 	if id != "" {
-		for hi := range u.history {
-			h := &u.history[hi]
+		for hi := range histories {
+			h := &histories[hi]
 			for ei := range h.Expressions {
 				if h.Expressions[ei].ID == id {
 					return &h.Expressions[ei]
@@ -339,7 +327,37 @@ func (u *LearningHistoryUpdater) FindExpressionByID(id string, names ...string) 
 			}
 		}
 	}
-	return u.FindExpressionByAnyName(names...)
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		for hi := range histories {
+			h := &histories[hi]
+			for ei := range h.Expressions {
+				if strings.EqualFold(h.Expressions[ei].Expression, name) {
+					return &h.Expressions[ei]
+				}
+			}
+			for si := range h.Scenes {
+				for ei := range h.Scenes[si].Expressions {
+					if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, name) {
+						return &h.Scenes[si].Expressions[ei]
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// IsExpressionExcludedForQuizType reports whether the entry identified by id
+// (preferred) or any name is excluded — its skipped_at is set — for quizType.
+// It is the read twin of the SkipWord write path: both resolve the entry via
+// FindExpressionInHistories, so read and write can never drift on which entry
+// carries the exclusion (learning-history invariant L2).
+func IsExpressionExcludedForQuizType(histories []LearningHistory, id string, quizType QuizType, names ...string) bool {
+	expr := FindExpressionInHistories(histories, id, names...)
+	return expr != nil && expr.SkippedAt.IsSkipped(quizType)
 }
 
 // OverrideLogInput carries everything OverrideLog needs to locate and

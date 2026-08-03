@@ -93,6 +93,15 @@ const (
 	// QuizServiceSubmitGrammarPostProcedure is the fully-qualified name of the QuizService's
 	// SubmitGrammarPost RPC.
 	QuizServiceSubmitGrammarPostProcedure = "/api.v1.QuizService/SubmitGrammarPost"
+	// QuizServiceListGrammarMistakesProcedure is the fully-qualified name of the QuizService's
+	// ListGrammarMistakes RPC.
+	QuizServiceListGrammarMistakesProcedure = "/api.v1.QuizService/ListGrammarMistakes"
+	// QuizServiceExcludeGrammarMistakeProcedure is the fully-qualified name of the QuizService's
+	// ExcludeGrammarMistake RPC.
+	QuizServiceExcludeGrammarMistakeProcedure = "/api.v1.QuizService/ExcludeGrammarMistake"
+	// QuizServiceResumeGrammarMistakeProcedure is the fully-qualified name of the QuizService's
+	// ResumeGrammarMistake RPC.
+	QuizServiceResumeGrammarMistakeProcedure = "/api.v1.QuizService/ResumeGrammarMistake"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -130,6 +139,16 @@ type QuizServiceClient interface {
 	// the mistake id. See docs/content/proposals/grammar-quiz.
 	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
 	SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error)
+	// Grammar mistake review (standalone, no live session). ListGrammarMistakes
+	// lists a journal's grammar mistakes — both currently-due and already-excluded
+	// — for a review surface. ExcludeGrammarMistake / ResumeGrammarMistake toggle
+	// a single mistake's grammar exclusion by its stable (notebook_id, sense_id),
+	// WITHOUT an ephemeral session note_id: unlike SkipWord/ResumeWord (which
+	// resolve an in-memory session id), these can act on a mistake that was never
+	// dealt in a session, which is exactly what the review page needs.
+	ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error)
+	ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error)
+	ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -269,6 +288,24 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarPost")),
 			connect.WithClientOptions(opts...),
 		),
+		listGrammarMistakes: connect.NewClient[v1.ListGrammarMistakesRequest, v1.ListGrammarMistakesResponse](
+			httpClient,
+			baseURL+QuizServiceListGrammarMistakesProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ListGrammarMistakes")),
+			connect.WithClientOptions(opts...),
+		),
+		excludeGrammarMistake: connect.NewClient[v1.ExcludeGrammarMistakeRequest, v1.ExcludeGrammarMistakeResponse](
+			httpClient,
+			baseURL+QuizServiceExcludeGrammarMistakeProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ExcludeGrammarMistake")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeGrammarMistake: connect.NewClient[v1.ResumeGrammarMistakeRequest, v1.ResumeGrammarMistakeResponse](
+			httpClient,
+			baseURL+QuizServiceResumeGrammarMistakeProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ResumeGrammarMistake")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -295,6 +332,9 @@ type quizServiceClient struct {
 	batchSubmitRelearnAnswers         *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
 	startGrammarQuiz                  *connect.Client[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse]
 	submitGrammarPost                 *connect.Client[v1.SubmitGrammarPostRequest, v1.SubmitGrammarPostResponse]
+	listGrammarMistakes               *connect.Client[v1.ListGrammarMistakesRequest, v1.ListGrammarMistakesResponse]
+	excludeGrammarMistake             *connect.Client[v1.ExcludeGrammarMistakeRequest, v1.ExcludeGrammarMistakeResponse]
+	resumeGrammarMistake              *connect.Client[v1.ResumeGrammarMistakeRequest, v1.ResumeGrammarMistakeResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -402,6 +442,21 @@ func (c *quizServiceClient) SubmitGrammarPost(ctx context.Context, req *connect.
 	return c.submitGrammarPost.CallUnary(ctx, req)
 }
 
+// ListGrammarMistakes calls api.v1.QuizService.ListGrammarMistakes.
+func (c *quizServiceClient) ListGrammarMistakes(ctx context.Context, req *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error) {
+	return c.listGrammarMistakes.CallUnary(ctx, req)
+}
+
+// ExcludeGrammarMistake calls api.v1.QuizService.ExcludeGrammarMistake.
+func (c *quizServiceClient) ExcludeGrammarMistake(ctx context.Context, req *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error) {
+	return c.excludeGrammarMistake.CallUnary(ctx, req)
+}
+
+// ResumeGrammarMistake calls api.v1.QuizService.ResumeGrammarMistake.
+func (c *quizServiceClient) ResumeGrammarMistake(ctx context.Context, req *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error) {
+	return c.resumeGrammarMistake.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -437,6 +492,16 @@ type QuizServiceHandler interface {
 	// the mistake id. See docs/content/proposals/grammar-quiz.
 	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
 	SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error)
+	// Grammar mistake review (standalone, no live session). ListGrammarMistakes
+	// lists a journal's grammar mistakes — both currently-due and already-excluded
+	// — for a review surface. ExcludeGrammarMistake / ResumeGrammarMistake toggle
+	// a single mistake's grammar exclusion by its stable (notebook_id, sense_id),
+	// WITHOUT an ephemeral session note_id: unlike SkipWord/ResumeWord (which
+	// resolve an in-memory session id), these can act on a mistake that was never
+	// dealt in a session, which is exactly what the review page needs.
+	ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error)
+	ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error)
+	ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -572,6 +637,24 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarPost")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceListGrammarMistakesHandler := connect.NewUnaryHandler(
+		QuizServiceListGrammarMistakesProcedure,
+		svc.ListGrammarMistakes,
+		connect.WithSchema(quizServiceMethods.ByName("ListGrammarMistakes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceExcludeGrammarMistakeHandler := connect.NewUnaryHandler(
+		QuizServiceExcludeGrammarMistakeProcedure,
+		svc.ExcludeGrammarMistake,
+		connect.WithSchema(quizServiceMethods.ByName("ExcludeGrammarMistake")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceResumeGrammarMistakeHandler := connect.NewUnaryHandler(
+		QuizServiceResumeGrammarMistakeProcedure,
+		svc.ResumeGrammarMistake,
+		connect.WithSchema(quizServiceMethods.ByName("ResumeGrammarMistake")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuizServiceGetQuizOptionsProcedure:
@@ -616,6 +699,12 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceStartGrammarQuizHandler.ServeHTTP(w, r)
 		case QuizServiceSubmitGrammarPostProcedure:
 			quizServiceSubmitGrammarPostHandler.ServeHTTP(w, r)
+		case QuizServiceListGrammarMistakesProcedure:
+			quizServiceListGrammarMistakesHandler.ServeHTTP(w, r)
+		case QuizServiceExcludeGrammarMistakeProcedure:
+			quizServiceExcludeGrammarMistakeHandler.ServeHTTP(w, r)
+		case QuizServiceResumeGrammarMistakeProcedure:
+			quizServiceResumeGrammarMistakeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -707,4 +796,16 @@ func (UnimplementedQuizServiceHandler) StartGrammarQuiz(context.Context, *connec
 
 func (UnimplementedQuizServiceHandler) SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitGrammarPost is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ListGrammarMistakes is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ExcludeGrammarMistake is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ResumeGrammarMistake is not implemented"))
 }

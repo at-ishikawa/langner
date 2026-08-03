@@ -90,7 +90,7 @@ func (s *Service) LoadEtymologyOriginCards(
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	families := buildOriginFamilies(reader)
+	families := buildOriginFamilies(reader, learningHistories)
 	etymIndexes := reader.GetEtymologyIndexes()
 
 	seen := make(map[string]bool)
@@ -165,7 +165,13 @@ func originFamilyKey(notebookID, sessionTitle, sense, origin string) string {
 // A definition's origin_parts ref pins a sense via ref.Sense; the family key
 // includes that sense, so a card for a specific sense only collects the words
 // whose ref names that sense (or the empty sense for single-sense origins).
-func buildOriginFamilies(reader *notebook.Reader) map[string][]EtymologyFamilyWord {
+//
+// A word the learner deliberately excluded from the etymology-origin quiz
+// (skipped_at set for QuizTypeEtymologyOrigin, via SkipWord) is dropped from
+// every family here — per-word exclusion. An origin whose whole family is
+// excluded ends up with an empty family and is therefore never offered by
+// LoadEtymologyOriginCards / counted by LoadEtymologyNotebookSummaries.
+func buildOriginFamilies(reader *notebook.Reader, learningHistories map[string][]notebook.LearningHistory) map[string][]EtymologyFamilyWord {
 	result := make(map[string][]EtymologyFamilyWord)
 	for _, bookID := range reader.GetDefinitionsBookIDs() {
 		defs, ok := reader.GetDefinitionsNotes(bookID)
@@ -180,6 +186,14 @@ func buildOriginFamilies(reader *notebook.Reader) map[string][]EtymologyFamilyWo
 						expr = note.Definition
 					}
 					if expr == "" {
+						continue
+					}
+					// Per-word exclusion: skip a word the learner excluded from
+					// the etymology-origin quiz. Read via the same key SkipWord
+					// wrote (invariant L2).
+					if notebook.IsExpressionExcludedForQuizType(
+						learningHistories[bookID], note.ID, notebook.QuizTypeEtymologyOrigin, note.Expression, note.Definition,
+					) {
 						continue
 					}
 					word := EtymologyFamilyWord{
@@ -407,7 +421,7 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	families := buildOriginFamilies(reader)
+	families := buildOriginFamilies(reader, learningHistories)
 
 	var summaries []NotebookSummary
 	for id, index := range reader.GetEtymologyIndexes() {

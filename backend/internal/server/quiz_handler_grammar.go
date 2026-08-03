@@ -166,3 +166,82 @@ func (h *QuizHandler) SubmitGrammarPost(
 	}
 	return connect.NewResponse(&apiv1.SubmitGrammarPostResponse{Results: results}), nil
 }
+
+// ListGrammarMistakes lists a journal's grammar mistakes — both due and already
+// excluded — for the standalone mistake review page (no live quiz session).
+func (h *QuizHandler) ListGrammarMistakes(
+	_ context.Context,
+	req *connect.Request[apiv1.ListGrammarMistakesRequest],
+) (*connect.Response[apiv1.ListGrammarMistakesResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	mistakes, err := h.svc.LoadGrammarMistakes(req.Msg.GetNotebookId(), req.Msg.GetSectionTitles())
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load grammar mistakes: %w", err))
+	}
+	protoMistakes := make([]*apiv1.GrammarMistake, 0, len(mistakes))
+	for _, m := range mistakes {
+		protoMistakes = append(protoMistakes, &apiv1.GrammarMistake{
+			SenseId:    m.SenseID,
+			EntryId:    m.EntryID,
+			Title:      m.Title,
+			Incorrect:  m.Incorrect,
+			Correct:    m.Correct,
+			Category:   m.Category,
+			Reason:     m.Reason,
+			Status:     m.Status,
+			IsExcluded: m.IsExcluded,
+		})
+	}
+	return connect.NewResponse(&apiv1.ListGrammarMistakesResponse{Mistakes: protoMistakes}), nil
+}
+
+// grammarMistakeCardInfo builds the canonical CardInfo that addresses one
+// grammar correction's learning-history slot by its stable (notebook_id,
+// sense_id): the flat "journal"-titled grammar bucket keyed by the correction
+// id — the SAME slot the live grammar quiz's per-blank Exclude uses via
+// resolveCardInfo, so excluding here removes the mistake from the live quiz and
+// the Relearn pool (invariant L2 / U1-U2).
+func grammarMistakeCardInfo(notebookID, senseID string) quiz.CardInfo {
+	return quiz.CardInfo{
+		NotebookName: notebookID,
+		StoryTitle:   notebook.JournalStoryTitle,
+		Expression:   senseID,
+		ID:           senseID,
+	}
+}
+
+// ExcludeGrammarMistake sets the grammar skipped_at marker for one correction,
+// addressed by its stable (notebook_id, sense_id). It reuses the same
+// SkipWord / SetSkippedAt path (and EnsureExpressionStubForSkip when the
+// correction has no log yet) every other card's Exclude uses.
+func (h *QuizHandler) ExcludeGrammarMistake(
+	_ context.Context,
+	req *connect.Request[apiv1.ExcludeGrammarMistakeRequest],
+) (*connect.Response[apiv1.ExcludeGrammarMistakeResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	info := grammarMistakeCardInfo(req.Msg.GetNotebookId(), req.Msg.GetSenseId())
+	if err := h.svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeGrammar}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("exclude grammar mistake: %w", err))
+	}
+	return connect.NewResponse(&apiv1.ExcludeGrammarMistakeResponse{}), nil
+}
+
+// ResumeGrammarMistake clears the grammar skipped_at marker for one correction,
+// making it due again in the live quiz and the Relearn pool.
+func (h *QuizHandler) ResumeGrammarMistake(
+	_ context.Context,
+	req *connect.Request[apiv1.ResumeGrammarMistakeRequest],
+) (*connect.Response[apiv1.ResumeGrammarMistakeResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	info := grammarMistakeCardInfo(req.Msg.GetNotebookId(), req.Msg.GetSenseId())
+	if err := h.svc.ResumeWord(info, []notebook.QuizType{notebook.QuizTypeGrammar}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume grammar mistake: %w", err))
+	}
+	return connect.NewResponse(&apiv1.ResumeGrammarMistakeResponse{}), nil
+}

@@ -17,7 +17,13 @@ type Reader struct {
 	// grammarsMap holds grammar annotations keyed by story id → entry title →
 	// scene index → corrections (the parallel of definitionsMap for the grammar
 	// quiz).
-	grammarsMap      map[string]map[string]map[int][]Correction
+	grammarsMap map[string]map[string]map[int][]Correction
+	// journalIDs marks which story ids were loaded from journal directories
+	// (the learner's own writing). A journal is stored in the story format and
+	// registered in `indexes` so it can be read like any story, but readers use
+	// IsJournal to surface it under a dedicated "Journal" kind instead of plain
+	// vocabulary.
+	journalIDs       map[string]struct{}
 	dictionaryMap    map[string]rapidapi.Response
 	definitionsMap   DefinitionsMap
 	definitionsRaw   map[string][]Definitions
@@ -126,6 +132,7 @@ func NewReader(
 		flashcardIndexes: flashcardIndexes,
 		etymologyIndexes: etymologyIndexes,
 		grammarsMap:      make(map[string]map[string]map[int][]Correction),
+		journalIDs:       make(map[string]struct{}),
 		dictionaryMap:    dictionaryMap,
 		definitionsMap:   definitionsMap,
 		definitionsRaw:   definitionsRaw,
@@ -372,4 +379,33 @@ func (f Reader) GetFlashcardIndexes() map[string]FlashcardIndex {
 
 func (f Reader) GetStoryIndexes() map[string]Index {
 	return f.indexes
+}
+
+// LoadJournals registers journal notebooks from the given directories. A
+// journal is stored in the story format, so it is added to the story `indexes`
+// (making it readable via ReadStoryNotebooks and loadable by GetNotebookDetail)
+// and its id is recorded so IsJournal can distinguish it from a plain story.
+// Opt-in, like LoadGrammars; a missing directory is tolerated.
+func (f Reader) LoadJournals(journalDirectories []string) error {
+	for _, dir := range journalDirectories {
+		if dir == "" {
+			continue
+		}
+		journalIndexes := make(map[string]Index)
+		if err := walkIndexFiles(dir, journalIndexes, false); err != nil {
+			return fmt.Errorf("walkIndexFiles(journal, %s) > %w", dir, err)
+		}
+		for id, index := range journalIndexes {
+			f.indexes[id] = index
+			f.journalIDs[id] = struct{}{}
+		}
+	}
+	return nil
+}
+
+// IsJournal reports whether the given story id was loaded from a journal
+// directory (the learner's own writing) rather than a regular story directory.
+func (f Reader) IsJournal(id string) bool {
+	_, ok := f.journalIDs[id]
+	return ok
 }

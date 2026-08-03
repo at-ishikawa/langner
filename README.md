@@ -88,7 +88,9 @@ Browse your vocabulary and etymology notebooks to review what you've been studyi
 
 **Vocabulary** - View all saved words organized by the stories and scenes where you found them. Each word shows its definition, pronunciation, examples, learning status, and next review date.
 
-**Etymology** - Explore word origins (roots, prefixes, suffixes). Browse by origin or by meaning to see how words are related.
+**Journals** - Your own journal entries live on their own tab, separate from your vocabulary. Open a journal to read its story back as prose and review the grammar mistakes found in it. For any mistake you can tap **Exclude from quizzes** to stop it from appearing in future grammar quizzes and review, or **Resume** to bring it back.
+
+**Etymology** - Explore word origins (roots, prefixes, suffixes). Browse by origin or by meaning to see how words are related. Each word has an **Exclude from quizzes** / **Resume** control, so you can drop a word you already know from the etymology quiz and add it back whenever you like.
 
 ![Learn](docs/static/screenshots/learn.jpg)
 

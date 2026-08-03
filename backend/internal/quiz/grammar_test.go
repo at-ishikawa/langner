@@ -151,3 +151,126 @@ func TestService_GrammarQuiz_WrongAnswerStaysDue(t *testing.T) {
 	require.Len(t, posts[0].Blanks, 1)
 	assert.Equal(t, string(notebook.LearnedStatusMisunderstood), posts[0].Blanks[0].Status)
 }
+
+// TestLoadNotebookSummaries_JournalTaggedKind verifies FIX 1(b): a notebook
+// loaded from a journals directory is surfaced in LoadNotebookSummaries with
+// Kind "Journal" (so the Vocabulary tab can exclude it and a Journals tab can
+// list it), while the SAME notebook still appears as a separate "Grammar"
+// summary for the grammar quiz tab.
+func TestLoadNotebookSummaries_JournalTaggedKind(t *testing.T) {
+	base := t.TempDir()
+
+	journalDir := filepath.Join(base, "journals", "journal")
+	require.NoError(t, os.MkdirAll(journalDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(journalDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me.\"\n"), 0o644))
+
+	grammarsDir := filepath.Join(base, "grammars", "journal")
+	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: note-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+`), 0o644))
+
+	learningDir := t.TempDir()
+	quizCfg := config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}}
+	svc := NewService(
+		config.NotebooksConfig{
+			JournalsDirectories:    []string{filepath.Join(base, "journals")},
+			GrammarsDirectories:    []string{filepath.Join(base, "grammars")},
+			LearningNotesDirectory: learningDir,
+		},
+		inferencemock.NewClient(),
+		make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)),
+		quizCfg,
+	)
+
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+
+	var journalKind, grammarKind bool
+	for _, s := range summaries {
+		if s.NotebookID != "journal" {
+			continue
+		}
+		switch s.Kind {
+		case "Journal":
+			journalKind = true
+		case "Grammar":
+			grammarKind = true
+		default:
+			t.Errorf("journal notebook must not be plain vocabulary (kind %q)", s.Kind)
+		}
+	}
+	assert.True(t, journalKind, "journal must be tagged Kind=Journal (not plain vocabulary)")
+	assert.True(t, grammarKind, "journal must still surface a Grammar summary for the grammar quiz tab")
+}
+
+// TestService_LoadGrammarMistakes_DueAndExcluded verifies FIX 3: the standalone
+// mistake list returns every correction (due AND excluded), Exclude sets the
+// SAME grammar skipped_at the live quiz path filters on (so an excluded mistake
+// is is_excluded here and drops out of LoadGrammarPosts), and Resume clears it.
+func TestService_LoadGrammarMistakes_DueAndExcluded(t *testing.T) {
+	storiesDir, grammarsDir := writeGrammarNotebook(t)
+	learningDir := t.TempDir()
+	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
+
+	// A fresh notebook: the one correction is listed, due, not excluded.
+	mistakes, err := svc.LoadGrammarMistakes("journal", nil)
+	require.NoError(t, err)
+	require.Len(t, mistakes, 1)
+	assert.Equal(t, "note-the-john", mistakes[0].SenseID)
+	assert.Equal(t, "the John", mistakes[0].Incorrect)
+	assert.Equal(t, "John", mistakes[0].Correct)
+	assert.False(t, mistakes[0].IsExcluded)
+
+	// Exclude it via the same SkipWord path the handler / live quiz uses.
+	info := CardInfo{NotebookName: "journal", StoryTitle: notebook.JournalStoryTitle, Expression: "note-the-john"}
+	require.NoError(t, svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeGrammar}))
+
+	// The on-disk YAML records the grammar exclusion.
+	raw, err := os.ReadFile(filepath.Join(learningDir, "journal.yml"))
+	require.NoError(t, err)
+	var got []notebook.LearningHistory
+	require.NoError(t, yaml.Unmarshal(raw, &got))
+	require.Len(t, got, 1)
+	assert.Equal(t, "grammar", got[0].Metadata.Type)
+	require.Len(t, got[0].Expressions, 1)
+	assert.True(t, got[0].Expressions[0].SkippedAt.IsSkipped(notebook.QuizTypeGrammar),
+		"Exclude must set the grammar skipped_at marker")
+
+	// The list still returns it, now flagged excluded...
+	mistakes, err = svc.LoadGrammarMistakes("journal", nil)
+	require.NoError(t, err)
+	require.Len(t, mistakes, 1)
+	assert.True(t, mistakes[0].IsExcluded, "an excluded mistake stays in the list flagged is_excluded")
+
+	// ...but the live quiz path no longer offers it (same marker).
+	posts, err := svc.LoadGrammarPosts("journal", nil)
+	require.NoError(t, err)
+	assert.Empty(t, posts, "Exclude removes the mistake from the live grammar quiz / Relearn pool")
+
+	// Resume clears it: it is due and offered again.
+	require.NoError(t, svc.ResumeWord(info, []notebook.QuizType{notebook.QuizTypeGrammar}))
+	mistakes, err = svc.LoadGrammarMistakes("journal", nil)
+	require.NoError(t, err)
+	require.Len(t, mistakes, 1)
+	assert.False(t, mistakes[0].IsExcluded, "Resume clears the exclusion")
+	posts, err = svc.LoadGrammarPosts("journal", nil)
+	require.NoError(t, err)
+	require.Len(t, posts, 1, "Resume makes the mistake due again")
+}
