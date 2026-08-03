@@ -114,25 +114,44 @@ func collectExpressions(
 	}
 }
 
+// appendExpressionAttempts flattens one expression's log slots into
+// yamlAttempts. A slot (LearnedLogs, ReverseLogs, …) is a STORAGE detail
+// shared by several quiz modes — e.g. notebook, freeform, and grammar all
+// share LearnedLogs (see GetLogsForQuizType) — not the attempt's type. Each
+// record carries its own QuizType field, stamped by the writer
+// (AddRecordWithQuality); that recorded value, not the slot it lives in, is
+// the label every downstream surface (Trends, Day Detail, History) must
+// show. Grouping by slot and stamping the slot's default type would (and
+// did) mislabel every grammar and freeform attempt as generic "notebook".
 func appendExpressionAttempts(
 	exp notebook.LearningHistoryExpression,
 	notebookName, sceneTitle, quizTypeFilter string,
 	out *[]yamlAttempt,
 ) {
-	tracks := map[string][]notebook.LearningRecord{
-		string(notebook.QuizTypeNotebook):        exp.LearnedLogs,
-		string(notebook.QuizTypeReverse):         exp.ReverseLogs,
-		string(notebook.QuizTypeEtymologyOrigin): exp.EtymologyOriginLogs,
+	slots := []struct {
+		defaultType string
+		records     []notebook.LearningRecord
+	}{
+		{string(notebook.QuizTypeNotebook), exp.LearnedLogs},
+		{string(notebook.QuizTypeReverse), exp.ReverseLogs},
+		{string(notebook.QuizTypeEtymologyOrigin), exp.EtymologyOriginLogs},
 	}
-	for quizType, records := range tracks {
-		if quizTypeFilter != "" && quizTypeFilter != quizType {
-			continue
-		}
-		skipped := exp.SkippedAt.IsSkipped(notebook.QuizType(quizType))
-		for _, rec := range records {
+	for _, slot := range slots {
+		for _, rec := range slot.records {
 			if rec.LearnedAt.IsZero() {
 				continue
 			}
+			// The record's own recorded type is authoritative; the slot's
+			// default only backfills legacy records written before
+			// LearningRecord.QuizType existed.
+			quizType := rec.QuizType
+			if quizType == "" {
+				quizType = slot.defaultType
+			}
+			if quizTypeFilter != "" && quizTypeFilter != quizType {
+				continue
+			}
+			skipped := exp.SkippedAt.IsSkipped(notebook.QuizType(quizType))
 			*out = append(*out, yamlAttempt{
 				NotebookID:     notebookName,
 				NotebookTitle:  notebookName,
@@ -330,6 +349,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 			NotebookKind:          meta.NotebookKind,
 			Skipped:               hit.Skipped,
 			RelatedGroups:         meta.RelatedGroups,
+			DisplayExpression:     meta.DisplayExpression,
 		})
 	}
 	// Newest failure first. Ties (rare — same word + quiz type wrong twice on

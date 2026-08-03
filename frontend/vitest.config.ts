@@ -7,7 +7,10 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
-    exclude: [...configDefaults.exclude, "e2e/**"],
+    // e2e/** holds Playwright BDD sources; .features-gen/** holds the specs
+    // bddgen generates from them. Both use @playwright/test and must never be
+    // run by vitest.
+    exclude: [...configDefaults.exclude, "e2e/**", ".features-gen/**"],
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],

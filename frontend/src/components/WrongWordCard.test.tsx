@@ -45,6 +45,27 @@ describe("WrongWordCard", () => {
     expect(screen.queryByTestId("excluded-badge")).toBeNull();
   });
 
+  // L3: a grammar attempt's `expression` is the opaque correction id (the
+  // canonical storage/lookup key) — the card must show displayExpression,
+  // the resolver's human-readable "Incorrect → Correct" label, not the id.
+  it("prefers displayExpression as the headline when present (grammar)", () => {
+    renderCard(
+      baseWord({
+        expression: "note-the-john",
+        displayExpression: "the John → John",
+        notebookKind: "grammar",
+        quizType: "grammar",
+      }),
+    );
+    expect(screen.getByText("the John → John")).toBeInTheDocument();
+    expect(screen.queryByText("note-the-john")).not.toBeInTheDocument();
+  });
+
+  it("falls back to expression as the headline when displayExpression is empty", () => {
+    renderCard(baseWord({ expression: "ephemeral" }));
+    expect(screen.getByText("ephemeral")).toBeInTheDocument();
+  });
+
   it("renders chip preview for related groups when collapsed", () => {
     renderCard(
       baseWord({

@@ -89,6 +89,8 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 			Contexts:       contexts,
 			Type:           card.OriginType,
 			Language:       card.Language,
+			Content:        card.Content,
+			Incorrect:      card.Incorrect,
 		})
 	}
 
@@ -186,6 +188,8 @@ func (h *QuizHandler) gradeRelearn(ctx context.Context, card quiz.RelearnCard, a
 		return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
 	case notebook.QuizTypeEtymologyOrigin:
 		return h.svc.GradeEtymologyOriginMeaning(ctx, card.EtymologyCard(), answer, responseTimeMs)
+	case notebook.QuizTypeGrammar:
+		return h.svc.GradeGrammarBlank(ctx, card.Content, card.GrammarCard(), answer, responseTimeMs)
 	default:
 		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
 	}
@@ -212,6 +216,12 @@ func (h *QuizHandler) buildRelearnResponse(ctx context.Context, card quiz.Relear
 			concepts := loadBookConcepts(ctx, r, ec.NotebookName)
 			resp.GraphContext = buildGraphContextForCard(ctx, r, ec, concepts)
 		}
+	}
+	if card.IsGrammar() {
+		gc := card.GrammarCard()
+		resp.CorrectAnswer = gc.Correct
+		resp.Category = gc.Category
+		resp.GrammarNote = gc.Reason
 	}
 	return resp
 }
@@ -246,6 +256,8 @@ func notebookQuizTypeToProto(qt notebook.QuizType) apiv1.QuizType {
 		return apiv1.QuizType_QUIZ_TYPE_FREEFORM
 	case notebook.QuizTypeEtymologyOrigin:
 		return apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN
+	case notebook.QuizTypeGrammar:
+		return apiv1.QuizType_QUIZ_TYPE_GRAMMAR
 	default:
 		return apiv1.QuizType_QUIZ_TYPE_STANDARD
 	}

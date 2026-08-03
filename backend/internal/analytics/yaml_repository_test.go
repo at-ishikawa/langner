@@ -122,6 +122,71 @@ func TestYAMLRepository_DayDetail(t *testing.T) {
 	}
 }
 
+// TestYAMLRepository_DayDetailLabelsByRecordOwnQuizType pins the Part B fix:
+// a grammar or freeform attempt must be labeled with its OWN recorded quiz
+// type, not the generic type of the log slot it happens to share
+// (LearnedLogs for grammar; ReverseLogs for freeform, since freeform quizzes
+// also test recall and write there). Before the fix, appendExpressionAttempts
+// stamped Attempt.QuizType from the map key ("notebook" / "reverse") instead
+// of each record's own LearningRecord.QuizType field, so every grammar AND
+// freeform attempt showed up mislabeled "notebook"/"reverse" everywhere
+// (Day Detail, Trends, History).
+func TestYAMLRepository_DayDetailLabelsByRecordOwnQuizType(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "journal.yml"), []byte(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: note-the-john
+      expression: note-the-john
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-06-10"
+          quality: 1
+          quiz_type: grammar
+`), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "vocab.yml"), []byte(`- metadata:
+    id: vocab
+    title: Vocab
+    type: flashcard
+  expressions:
+    - expression: articulate
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2026-06-10"
+          quality: 1
+          quiz_type: notebook
+      reverse_logs:
+        - status: misunderstood
+          learned_at: "2026-06-10"
+          quality: 1
+          quiz_type: freeform
+`), 0o600))
+
+	repo := NewYAMLRepository(dir)
+	day, _ := time.Parse("2006-01-02", "2026-06-10")
+	got, err := repo.DayDetail(context.Background(), day, Filters{})
+	require.NoError(t, err)
+
+	byExpr := map[string]WrongWord{}
+	for _, w := range got.WrongWords {
+		byExpr[w.Expression] = w
+	}
+	require.Contains(t, byExpr, "note-the-john")
+	assert.Equal(t, "grammar", byExpr["note-the-john"].QuizType,
+		"a grammar attempt sharing LearnedLogs must keep its own recorded type, not fall back to the slot's default (notebook)")
+	require.Contains(t, byExpr, "articulate")
+	assert.Equal(t, "freeform", byExpr["articulate"].QuizType,
+		"a freeform attempt sharing ReverseLogs must keep its own recorded type, not the slot's default (reverse)")
+
+	// Filtering by quiz_type must also key off the record's own type.
+	filtered, err := repo.DayDetail(context.Background(), day, Filters{QuizType: "grammar"})
+	require.NoError(t, err)
+	require.Len(t, filtered.WrongWords, 1)
+	assert.Equal(t, "note-the-john", filtered.WrongWords[0].Expression)
+}
+
 // TestYAMLRepository_TrendsGroupsByNotebookFile guards the fix for the
 // "notebook split shows episode titles" bug: a story's episode title
 // (Metadata.Title) must NOT become the notebook group — the notebook

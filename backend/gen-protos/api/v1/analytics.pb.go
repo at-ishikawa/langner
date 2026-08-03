@@ -1000,9 +1000,16 @@ type WrongWord struct {
 	// sense_id is the stable source-entry identity of the word. The frontend
 	// echoes it into GetWordHistory so the drill-down targets the exact sense
 	// (falling back to note_id / expression for legacy id-less data).
-	SenseId       string `protobuf:"bytes,16,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	SenseId string `protobuf:"bytes,16,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
+	// display_expression is a human-readable label for the card headline when
+	// `expression` itself isn't one — e.g. a grammar attempt's `expression` is
+	// the opaque correction id (the canonical storage/lookup key, per L3), so
+	// the resolver fills this with "Incorrect → Correct" instead. Empty for
+	// every other quiz type, where `expression` is already the display text;
+	// the frontend falls back to `expression` when this is empty.
+	DisplayExpression string `protobuf:"bytes,17,opt,name=display_expression,json=displayExpression,proto3" json:"display_expression,omitempty"`
+	unknownFields     protoimpl.UnknownFields
+	sizeCache         protoimpl.SizeCache
 }
 
 func (x *WrongWord) Reset() {
@@ -1143,6 +1150,13 @@ func (x *WrongWord) GetRelatedGroups() []*RelatedGroup {
 func (x *WrongWord) GetSenseId() string {
 	if x != nil {
 		return x.SenseId
+	}
+	return ""
+}
+
+func (x *WrongWord) GetDisplayExpression() string {
+	if x != nil {
+		return x.DisplayExpression
 	}
 	return ""
 }
@@ -1554,7 +1568,7 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\vwrong_words\x18\x02 \x03(\v2\x11.api.v1.WrongWordR\n" +
 	"wrongWords\x12#\n" +
 	"\rprevious_date\x18\x03 \x01(\tR\fpreviousDate\x12\x1b\n" +
-	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\xde\x04\n" +
+	"\tnext_date\x18\x04 \x01(\tR\bnextDate\"\x8d\x05\n" +
 	"\tWrongWord\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x1e\n" +
 	"\n" +
@@ -1576,7 +1590,8 @@ const file_api_v1_analytics_proto_rawDesc = "" +
 	"\rnotebook_kind\x18\r \x01(\tR\fnotebookKind\x12\x18\n" +
 	"\askipped\x18\x0e \x01(\bR\askipped\x12;\n" +
 	"\x0erelated_groups\x18\x0f \x03(\v2\x14.api.v1.RelatedGroupR\rrelatedGroups\x12\x19\n" +
-	"\bsense_id\x18\x10 \x01(\tR\asenseId\"R\n" +
+	"\bsense_id\x18\x10 \x01(\tR\asenseId\x12-\n" +
+	"\x12display_expression\x18\x11 \x01(\tR\x11displayExpression\"R\n" +
 	"\fRelatedGroup\x12\x12\n" +
 	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +

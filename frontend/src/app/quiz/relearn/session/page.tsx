@@ -6,6 +6,7 @@ import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
 import { quizClient, QuizType, type SubmitRelearnAnswerResponse } from "@/lib/client";
 import { AnswerInput } from "@/components/AnswerInput";
 import { FeedbackActions } from "@/components/FeedbackActions";
+import { RelearnGrammarPost } from "@/components/RelearnGrammarPost";
 import { useRelearnStore } from "@/store/relearnStore";
 import RelearnContext from "@/components/RelearnContext";
 
@@ -29,8 +30,9 @@ export default function RelearnSessionPage() {
   const queue = useRelearnStore((s) => s.queue);
   const totalAnswers = useRelearnStore((s) => s.totalAnswers);
   const resolveFront = useRelearnStore((s) => s.resolveFront);
+  const completePost = useRelearnStore((s) => s.completePost);
 
-  const current = queue[0];
+  const front = queue[0];
   const [phase, setPhase] = useState<Phase>("answering");
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<SubmitRelearnAnswerResponse | null>(null);
@@ -43,6 +45,13 @@ export default function RelearnSessionPage() {
   const [error, setError] = useState<string | null>(null);
   const startRef = useRef<number>(Date.now());
 
+  // Words left across every remaining screen: a card is one word, a grammar
+  // post contributes one per due blank it still holds.
+  const wordsLeft = queue.reduce(
+    (n, item) => n + (item.kind === "card" ? 1 : item.post.blanks.length),
+    0,
+  );
+
   // Leaving the queue empty ends the session. A direct visit with no answers
   // yet bounces back to the start screen instead of a hollow complete page.
   useEffect(() => {
@@ -51,14 +60,35 @@ export default function RelearnSessionPage() {
     }
   }, [queue.length, totalAnswers, router]);
 
-  // Reset the per-card timer whenever a new card reaches the front.
+  // Reset the per-card timer whenever a new screen reaches the front.
   useEffect(() => {
     startRef.current = Date.now();
-  }, [current?.noteId]);
+  }, [front]);
 
-  if (!current) {
+  if (!front) {
     return null;
   }
+
+  // A grammar post is presented once with all its due blanks, drilled
+  // progressively like the live grammar quiz (see RelearnGrammarPost). It is
+  // answered in a single pass and removed — never requeued.
+  if (front.kind === "post") {
+    return (
+      <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
+        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
+          {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
+        </Text>
+        <RelearnGrammarPost
+          key={front.post.content}
+          content={front.post.content}
+          blanks={front.post.blanks}
+          onComplete={(correctCount, blankCount) => completePost(correctCount, blankCount)}
+        />
+      </Box>
+    );
+  }
+
+  const current = front.card;
 
   // Each card mirrors the quiz type it was failed in. For the reverse formats
   // the learner produces the word/origin from the meaning; otherwise they
@@ -108,7 +138,7 @@ export default function RelearnSessionPage() {
   return (
     <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
       <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
-        {queue.length} {queue.length === 1 ? "word" : "words"} left
+        {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
       </Text>
 
       {/* Prompt card — mirrors the source quiz's format. */}
@@ -116,6 +146,7 @@ export default function RelearnSessionPage() {
         <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium" mb={2}>
           {sourceLabel(current.sourceQuizType)}
         </Text>
+
         <Heading size="lg" textAlign="center" data-testid="relearn-prompt">
           {promptText}
         </Heading>

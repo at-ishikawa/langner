@@ -302,6 +302,7 @@ func allQuizTypeKeys() []string {
 		string(QuizTypeReverse),
 		string(QuizTypeFreeform),
 		string(QuizTypeEtymologyOrigin),
+		string(QuizTypeGrammar),
 	}
 }
 

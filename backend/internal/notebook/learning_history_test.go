@@ -1266,3 +1266,19 @@ func TestLearningHistory_GetLogs_IDIsolation(t *testing.T) {
 	tipLogs := legacyHist.GetLogs("flashcards", "", Note{ID: "tip-1", Expression: "tip"})
 	require.Len(t, tipLogs, 1, "id-less legacy entry resolves by expression even when the card carries an id")
 }
+
+// TestSkippedAtMap_SkippedTypes_IncludesGrammar pins a cross-cutting gap: a
+// grammar skip (the grammar quiz's own Exclude action calls SkipWord with
+// QuizTypeGrammar, same as any other quiz mode) is recorded generically by
+// Set/IsSkipped, but SkippedTypes() — used to build the notebook page's
+// per-type skip badges — filtered through allQuizTypeKeys(), which omitted
+// "grammar". The write always worked; only the display list silently
+// dropped it, so a skipped grammar correction never showed as skipped
+// anywhere that reads SkippedTypes().
+func TestSkippedAtMap_SkippedTypes_IncludesGrammar(t *testing.T) {
+	m := SkippedAtMap{}.Set(QuizTypeGrammar, "2025-01-01T00:00:00Z")
+	assert.True(t, m.IsSkipped(QuizTypeGrammar))
+	assert.True(t, m.IsSkippedAny())
+	assert.Contains(t, m.SkippedTypes(), string(QuizTypeGrammar),
+		"a grammar skip must appear in SkippedTypes(), not just IsSkipped()")
+}

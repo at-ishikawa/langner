@@ -10,7 +10,7 @@ vi.mock("@/lib/client", () => ({
   quizClient: {
     startRelearnQuiz: (...args: unknown[]) => startRelearnQuiz(...args),
   },
-  QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2 },
+  QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, GRAMMAR: 8 },
 }));
 
 const pushMock = vi.fn();
@@ -60,7 +60,9 @@ describe("RelearnStart", () => {
     renderStart();
     await screen.findByText("2 words to relearn");
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
-    expect(useRelearnStore.getState().queue.map((c) => c.entry)).toEqual(["a", "b"]);
+    expect(
+      useRelearnStore.getState().queue.map((it) => (it.kind === "card" ? it.card.entry : undefined)),
+    ).toEqual(["a", "b"]);
     expect(pushMock).toHaveBeenCalledWith("/quiz/relearn/session");
   });
 

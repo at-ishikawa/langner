@@ -7,6 +7,7 @@ const LABEL: Record<string, string> = {
   etymology_breakdown: "Etym · Breakdown",
   etymology_assembly: "Etym · Assembly",
   etymology_freeform: "Etym · Freeform",
+  grammar: "Grammar",
 };
 
 const PALETTE: Record<string, string> = {
@@ -16,6 +17,7 @@ const PALETTE: Record<string, string> = {
   etymology_breakdown: "orange",
   etymology_assembly: "orange",
   etymology_freeform: "orange",
+  grammar: "pink",
 };
 
 export function QuizTypeChip({ quizType }: { quizType: string }) {

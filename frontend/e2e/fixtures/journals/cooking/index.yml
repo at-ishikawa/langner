@@ -1,0 +1,4 @@
+id: cooking
+name: "Cooking Notes"
+notebooks:
+  - ./entries.yml

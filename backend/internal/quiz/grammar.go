@@ -35,16 +35,6 @@ type GrammarBlank struct {
 	Status    string
 }
 
-// correctionID returns a correction's stable spaced-repetition id: its explicit
-// id when set, otherwise one derived from the story id, entry title, scene
-// index, and order.
-func correctionID(storyID, title string, sceneIndex, seq int, c notebook.Correction) string {
-	if strings.TrimSpace(c.ID) != "" {
-		return c.ID
-	}
-	return notebook.DerivedCorrectionID(storyID, title, sceneIndex, seq)
-}
-
 // LoadGrammarPosts loads the story entries that have at least one due mistake,
 // each with its due blanks. It merges each entry's prose (a story notebook) with
 // its corrections (the grammars notebook) by entry title, and filters blanks by
@@ -92,7 +82,7 @@ func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]G
 			}
 			blanks := make([]GrammarBlank, 0, len(corrections))
 			for seq, c := range corrections {
-				id := correctionID(notebookID, sn.Event, sceneIdx, seq+1, c)
+				id := notebook.CorrectionID(notebookID, sn.Event, sceneIdx, seq+1, c)
 				exp, seen := expByMistake[id]
 				if !grammarMistakeDue(exp, seen) {
 					continue
@@ -132,8 +122,14 @@ func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]G
 
 // grammarMistakeDue reports whether a mistake is due for review: it is due when
 // it has no learning history yet (seen == false) or its SM-2 forward review is
-// due.
+// due. A correction the learner deliberately Excluded from the grammar quiz
+// (skipped_at set via SkipWord) is never due — this is the loader-side filter
+// that makes Exclude remove the correction from both the live grammar quiz and
+// the Relearn pool (see .claude/rules/quiz-ui-invariants.md).
 func grammarMistakeDue(exp notebook.LearningHistoryExpression, seen bool) bool {
+	if seen && exp.SkippedAt.IsSkipped(notebook.QuizTypeGrammar) {
+		return false
+	}
 	return !seen || exp.NeedsForwardReview()
 }
 
@@ -191,7 +187,7 @@ func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 			entryDue := 0
 			for sceneIdx := range sn.Scenes {
 				for seq, c := range reader.CorrectionsForScene(id, sn.Event, sceneIdx) {
-					exp, seen := expByMistake[correctionID(id, sn.Event, sceneIdx, seq+1, c)]
+					exp, seen := expByMistake[notebook.CorrectionID(id, sn.Event, sceneIdx, seq+1, c)]
 					if grammarMistakeDue(exp, seen) {
 						entryDue++
 					}
@@ -241,7 +237,15 @@ func normalizeCorrection(s string) string {
 func deterministicGrammarGrade(answer, correct, incorrect string) (GradeResult, bool) {
 	na := normalizeCorrection(answer)
 	if na == "" {
-		return GradeResult{}, false
+		// An empty answer can never be the correction — grade it wrong
+		// deterministically (no LLM call). This is the "unanswered → incorrect"
+		// path: revealing answers for a blank the learner never typed records
+		// the same miss a wrong typed answer would, never a skip.
+		return GradeResult{
+			Correct: false,
+			Reason:  "No answer provided.",
+			Quality: int(notebook.QualityWrong),
+		}, true
 	}
 	nc := normalizeCorrection(correct)
 	ni := normalizeCorrection(incorrect)

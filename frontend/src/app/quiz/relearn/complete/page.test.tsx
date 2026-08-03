@@ -5,7 +5,7 @@ import RelearnCompletePage from "./page";
 import { useRelearnStore } from "@/store/relearnStore";
 import type { RelearnCard } from "@/lib/client";
 
-vi.mock("@/lib/client", () => ({ quizClient: {} }));
+vi.mock("@/lib/client", () => ({ quizClient: {}, QuizType: { STANDARD: 1, GRAMMAR: 8 } }));
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: pushMock }) }));
 

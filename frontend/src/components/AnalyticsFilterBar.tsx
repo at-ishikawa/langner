@@ -23,6 +23,7 @@ export const QUIZ_TYPE_OPTIONS: readonly { value: string; label: string }[] = [
   { value: "etymology_breakdown", label: "— Etymology · Breakdown" },
   { value: "etymology_assembly", label: "— Etymology · Assembly" },
   { value: "etymology_freeform", label: "— Etymology · Freeform" },
+  { value: "grammar", label: "— Grammar" },
 ];
 
 export function AnalyticsFilterBar({

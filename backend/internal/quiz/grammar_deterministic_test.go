@@ -22,7 +22,11 @@ func TestDeterministicGrammarGrade(t *testing.T) {
 		{"still contains the mistake -> defer to LLM", "the John", "John", "the John", false, false},
 		{"fix inside a longer answer is accepted", "a friend named John", "John", "the John", true, true},
 		{"unrelated answer -> defer to LLM", "banana", "John", "the John", false, false},
-		{"empty answer -> defer", "", "John", "the John", false, false},
+		// An empty answer is decided deterministically as incorrect (no LLM):
+		// this is the "unanswered -> incorrect" reveal path — typing nothing can
+		// never be the correction, so it records a normal miss, not a skip.
+		{"empty answer -> incorrect", "", "John", "the John", true, false},
+		{"whitespace-only answer -> incorrect", "   ", "John", "the John", true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -36,6 +40,9 @@ func TestDeterministicGrammarGrade(t *testing.T) {
 				}
 				if got.Correct && got.Quality != int(notebook.QualityCorrect) {
 					t.Fatalf("quality = %d, want %d", got.Quality, int(notebook.QualityCorrect))
+				}
+				if !got.Correct && got.Quality != int(notebook.QualityWrong) {
+					t.Fatalf("quality = %d, want %d", got.Quality, int(notebook.QualityWrong))
 				}
 			}
 		})

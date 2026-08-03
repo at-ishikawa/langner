@@ -106,8 +106,14 @@ func run(ctx context.Context) error {
 	// Once etymology gets first-class DB storage we can swap this for a
 	// hybrid that pulls vocab from DB and etymology from YAML.
 	yamlAnalyticsRepo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
+	// Journals are read alongside stories (they share the story format, see
+	// quiz.Service.newReader) so a grammar attempt's notebook — a journal —
+	// resolves here too; LoadGrammars then attaches the corrections
+	// themselves, which resolveGrammar needs to turn a correction id back
+	// into its mistake/fix text.
+	analyticsStoryDirectories := append(append([]string{}, cfg.Notebooks.StoriesDirectories...), cfg.Notebooks.JournalsDirectories...)
 	if reader, err := notebook.NewReader(
-		cfg.Notebooks.StoriesDirectories,
+		analyticsStoryDirectories,
 		cfg.Notebooks.FlashcardsDirectories,
 		cfg.Notebooks.BooksDirectories,
 		cfg.Notebooks.DefinitionsDirectories,
@@ -115,6 +121,8 @@ func run(ctx context.Context) error {
 		dictionaryMap,
 	); err != nil {
 		slog.Warn("analytics meaning lookup disabled — notebook reader init failed", "error", err)
+	} else if err := reader.LoadGrammars(cfg.Notebooks.GrammarsDirectories); err != nil {
+		slog.Warn("analytics grammar meaning lookup disabled — LoadGrammars failed", "error", err)
 	} else {
 		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
 	}

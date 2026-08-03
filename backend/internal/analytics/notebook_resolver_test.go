@@ -98,6 +98,66 @@ origins:
 	})
 }
 
+// TestNotebookMetadataResolver_Grammar pins the Part B "grammar metadata
+// resolution" fix: a grammar attempt's Expression is the correction's
+// opaque senseID (the canonical storage/lookup key — see .claude/rules/
+// learning-history-invariants.md, L1/L2), so the resolver must turn that id
+// back into the mistake/fix text via notebook.CorrectionID — the same
+// derivation the grammar quiz itself and the Relearn pool use — rather than
+// leaving Meaning/ExampleSentence blank (which is what happened before this
+// branch existed, since resolveVocab has no notion of corrections).
+func TestNotebookMetadataResolver_Grammar(t *testing.T) {
+	root := t.TempDir()
+
+	storyDir := filepath.Join(root, "stories", "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me.\"\n"), 0o644))
+
+	grammarsDir := filepath.Join(root, "grammars", "journal")
+	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: note-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+`), 0o644))
+
+	reader, err := notebook.NewReader(
+		[]string{filepath.Join(root, "stories")},
+		nil, nil, nil, nil, nil,
+	)
+	require.NoError(t, err)
+	require.NoError(t, reader.LoadGrammars([]string{filepath.Join(root, "grammars")}))
+
+	r := NewNotebookMetadataResolver(reader)
+
+	t.Run("resolves the correction by its stable id", func(t *testing.T) {
+		got := r.Resolve(context.Background(), "journal", "", "note-the-john", "", "grammar")
+		assert.Equal(t, "grammar", got.NotebookKind)
+		assert.Equal(t, "No article before a personal name.", got.Meaning)
+		assert.Contains(t, got.ExampleSentence, "the John called me")
+		assert.Equal(t, "the John → John", got.DisplayExpression,
+			"the raw expression is an opaque id; DisplayExpression carries the human-readable mistake -> fix")
+	})
+
+	t.Run("miss returns empty", func(t *testing.T) {
+		got := r.Resolve(context.Background(), "journal", "", "no-such-id", "", "grammar")
+		assert.Equal(t, WordMetadata{}, got)
+	})
+}
+
 // TestNotebookMetadataResolver_StoryNotebookPullsExampleFromConversations
 // pins the behavior the user expects on the analytics card for a
 // story-style notebook (Speak English Like an American, Friends, etc.).
