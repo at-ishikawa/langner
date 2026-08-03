@@ -34,7 +34,7 @@ export default function SessionCompletePage() {
   const etymologyResults = useQuizStore((s) => s.etymologyOriginResults);
   const quizType = useQuizStore((s) => s.quizType);
   const reset = useQuizStore((s) => s.reset);
-  const isEtymologyQuiz = quizType === "etymology-standard" || quizType === "etymology-reverse" || quizType === "etymology-freeform";
+  const isEtymologyQuiz = quizType === "etymology-origin";
 
   const allResults = useMemo((): ResultItem[] => {
     if (results.length > 0) return results.map(standardResultToItem);

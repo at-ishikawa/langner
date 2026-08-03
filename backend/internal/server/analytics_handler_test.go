@@ -140,26 +140,25 @@ func (emptyDBRepo) Trends(context.Context, analytics.TrendsQuery) (analytics.Tre
 	return analytics.TrendsResult{}, nil
 }
 
-// writeEtymologyLearningHistory lays out one YAML learning history file
-// with an etymology breakdown log marked misunderstood on the requested
-// date. The fixture mirrors a real "word-power-made-easy" notebook with
+// writeEtymologyLearningHistory lays out one YAML learning history file with
+// an etymology-origin log marked misunderstood on the requested date, in the
+// flat single-series etymology shape (metadata.type=etymology, origin at the
+// top level). The fixture mirrors a "word-power-made-easy" notebook with
 // origin "logos" failed on 2026-06-07.
 func writeEtymologyLearningHistory(t *testing.T, dir, date string) {
 	t.Helper()
 	body := `- metadata:
     id: word-power-made-easy
-    title: "Word Power Made Easy"
-  scenes:
-    - metadata:
-        title: "Session 1"
-      expressions:
-        - expression: logos
-          type: origin
-          etymology_breakdown_logs:
-            - status: misunderstood
-              learned_at: "` + date + `"
-              quality: 1
-              quiz_type: etymology_breakdown
+    title: "Session 1"
+    type: etymology
+  expressions:
+    - expression: logos
+      type: origin
+      etymology_origin_logs:
+        - status: misunderstood
+          learned_at: "` + date + `"
+          quality: 1
+          quiz_type: etymology_origin
 `
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "word-power-made-easy.yml"), []byte(body), 0o600))
 }
@@ -187,7 +186,7 @@ func TestAnalyticsHandler_GetDayDetail_EtymologyMissingFromDB(t *testing.T) {
 	require.Len(t, resp.Msg.WrongWords, 1, "expected one etymology origin to appear in analytics")
 	w := resp.Msg.WrongWords[0]
 	assert.Equal(t, "logos", w.Expression)
-	assert.Equal(t, "etymology_breakdown", w.QuizType)
+	assert.Equal(t, "etymology_origin", w.QuizType)
 }
 
 func TestAnalyticsHandler_GetTrends(t *testing.T) {

@@ -209,8 +209,8 @@ func (v *Validator) Fix() (*ValidationResult, error) {
 	// reflects the actual chain of answers (each log's interval threaded
 	// into the next via RecalculateAll, with the early-review guard
 	// preventing growth on too-soon correct answers). Touches all four
-	// slots: LearnedLogs / ReverseLogs / EtymologyBreakdownLogs /
-	// EtymologyAssemblyLogs. Reports each interval drift as a warning so
+	// slots: LearnedLogs / ReverseLogs / EtymologyOriginLogs. Reports each
+	// interval drift as a warning so
 	// the run shows which logs got corrected; logs whose recalculated
 	// value matches stored stay untouched in the output.
 	fixedLearning = v.recalculateAllIntervals(fixedLearning, result)
@@ -845,13 +845,9 @@ func (v *Validator) mergeDuplicateScenes(
 						base.Expressions[idx].ReverseLogs = append(base.Expressions[idx].ReverseLogs, e.ReverseLogs...)
 						_, base.Expressions[idx].ReverseLogs, _ = recalculateLearningLogs(base.Expressions[idx].ReverseLogs, v.calculator)
 					}
-					if len(e.EtymologyBreakdownLogs) > 0 {
-						base.Expressions[idx].EtymologyBreakdownLogs = append(base.Expressions[idx].EtymologyBreakdownLogs, e.EtymologyBreakdownLogs...)
-						_, base.Expressions[idx].EtymologyBreakdownLogs, _ = recalculateLearningLogs(base.Expressions[idx].EtymologyBreakdownLogs, v.calculator)
-					}
-					if len(e.EtymologyAssemblyLogs) > 0 {
-						base.Expressions[idx].EtymologyAssemblyLogs = append(base.Expressions[idx].EtymologyAssemblyLogs, e.EtymologyAssemblyLogs...)
-						_, base.Expressions[idx].EtymologyAssemblyLogs, _ = recalculateLearningLogs(base.Expressions[idx].EtymologyAssemblyLogs, v.calculator)
+					if len(e.EtymologyOriginLogs) > 0 {
+						base.Expressions[idx].EtymologyOriginLogs = append(base.Expressions[idx].EtymologyOriginLogs, e.EtymologyOriginLogs...)
+						_, base.Expressions[idx].EtymologyOriginLogs, _ = recalculateLearningLogs(base.Expressions[idx].EtymologyOriginLogs, v.calculator)
 					}
 					// Merge skip state: a skip recorded on either copy must
 					// survive the merge. Without this, a word skipped in the
@@ -984,7 +980,7 @@ func isEtymologyOriginEntry(e *LearningHistoryExpression) bool {
 	if e.Type == LearningExpressionTypeOrigin {
 		return true
 	}
-	return len(e.EtymologyBreakdownLogs) > 0 || len(e.EtymologyAssemblyLogs) > 0
+	return len(e.EtymologyOriginLogs) > 0
 }
 
 // latestLogTime returns the most recent LearnedAt across all of an
@@ -1002,8 +998,7 @@ func latestLogTime(e *LearningHistoryExpression) time.Time {
 	}
 	consider(e.LearnedLogs)
 	consider(e.ReverseLogs)
-	consider(e.EtymologyBreakdownLogs)
-	consider(e.EtymologyAssemblyLogs)
+	consider(e.EtymologyOriginLogs)
 	return latest
 }
 
@@ -1022,13 +1017,9 @@ func (v *Validator) mergeOriginExpressionInto(base, other *LearningHistoryExpres
 		base.ReverseLogs = append(base.ReverseLogs, other.ReverseLogs...)
 		_, base.ReverseLogs, _ = recalculateLearningLogs(base.ReverseLogs, v.calculator)
 	}
-	if len(other.EtymologyBreakdownLogs) > 0 {
-		base.EtymologyBreakdownLogs = append(base.EtymologyBreakdownLogs, other.EtymologyBreakdownLogs...)
-		_, base.EtymologyBreakdownLogs, _ = recalculateLearningLogs(base.EtymologyBreakdownLogs, v.calculator)
-	}
-	if len(other.EtymologyAssemblyLogs) > 0 {
-		base.EtymologyAssemblyLogs = append(base.EtymologyAssemblyLogs, other.EtymologyAssemblyLogs...)
-		_, base.EtymologyAssemblyLogs, _ = recalculateLearningLogs(base.EtymologyAssemblyLogs, v.calculator)
+	if len(other.EtymologyOriginLogs) > 0 {
+		base.EtymologyOriginLogs = append(base.EtymologyOriginLogs, other.EtymologyOriginLogs...)
+		_, base.EtymologyOriginLogs, _ = recalculateLearningLogs(base.EtymologyOriginLogs, v.calculator)
 	}
 	base.SkippedAt = mergeSkippedAt(base.SkippedAt, other.SkippedAt)
 }
@@ -1416,7 +1407,7 @@ func (v *Validator) fixConsistency(
 					// 3. Are skipped from at least one quiz mode — the
 					//    notebook detail page seeds skip-only stubs that
 					//    would otherwise be dropped on the next --fix.
-					hasLogs := len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || len(expr.EtymologyBreakdownLogs) > 0 || len(expr.EtymologyAssemblyLogs) > 0
+					hasLogs := len(expr.LearnedLogs) > 0 || len(expr.ReverseLogs) > 0 || len(expr.EtymologyOriginLogs) > 0
 					hasSkip := expr.SkippedAt.IsSkippedAny()
 					if hasLogs || existsInStory || hasSkip {
 						validExpressions = append(validExpressions, expr)
@@ -1487,10 +1478,8 @@ func (v *Validator) recalculateAllIntervals(files []learningHistoryFile, result 
 				label := expr.Expression
 				expr.LearnedLogs = recalcSlice(expr.LearnedLogs, file.path, label, "learned_logs")
 				expr.ReverseLogs = recalcSlice(expr.ReverseLogs, file.path, label, "reverse_logs")
-				expr.EtymologyBreakdownLogs = recalcSlice(
-					expr.EtymologyBreakdownLogs, file.path, label, "etymology_breakdown_logs")
-				expr.EtymologyAssemblyLogs = recalcSlice(
-					expr.EtymologyAssemblyLogs, file.path, label, "etymology_assembly_logs")
+				expr.EtymologyOriginLogs = recalcSlice(
+					expr.EtymologyOriginLogs, file.path, label, "etymology_origin_logs")
 			}
 			// Flashcard shape: top-level expressions.
 			for eIdx := range history.Expressions {
@@ -2202,8 +2191,7 @@ func (v *Validator) migrateEtymologyShape(files []learningHistoryFile, result *V
 					existing := &keep[targetIdx].Scenes[sceneIdx].Expressions[mergeIdx]
 					existing.LearnedLogs = append(existing.LearnedLogs, expr.LearnedLogs...)
 					existing.ReverseLogs = append(existing.ReverseLogs, expr.ReverseLogs...)
-					existing.EtymologyBreakdownLogs = append(existing.EtymologyBreakdownLogs, expr.EtymologyBreakdownLogs...)
-					existing.EtymologyAssemblyLogs = append(existing.EtymologyAssemblyLogs, expr.EtymologyAssemblyLogs...)
+					existing.EtymologyOriginLogs = append(existing.EtymologyOriginLogs, expr.EtymologyOriginLogs...)
 					for k, val := range expr.SkippedAt {
 						if existing.SkippedAt == nil {
 							existing.SkippedAt = make(SkippedAtMap)
@@ -2358,8 +2346,7 @@ func (v *Validator) migrateLegacySkipIntervals(files []learningHistoryFile, resu
 			migrate := func(expr *LearningHistoryExpression) {
 				expr.LearnedLogs = promote(expr, expr.LearnedLogs, file.path, expr.Expression)
 				expr.ReverseLogs = promote(expr, expr.ReverseLogs, file.path, expr.Expression)
-				expr.EtymologyBreakdownLogs = promote(expr, expr.EtymologyBreakdownLogs, file.path, expr.Expression)
-				expr.EtymologyAssemblyLogs = promote(expr, expr.EtymologyAssemblyLogs, file.path, expr.Expression)
+				expr.EtymologyOriginLogs = promote(expr, expr.EtymologyOriginLogs, file.path, expr.Expression)
 			}
 
 			for ei := range history.Expressions {

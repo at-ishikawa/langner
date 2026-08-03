@@ -17,7 +17,7 @@ import (
 //
 // The operation is destructive and one-way: non-head member entries are
 // removed from the YAML. The head ends up holding the union of every
-// member's LearnedLogs/ReverseLogs/EtymologyBreakdownLogs/EtymologyAssemblyLogs
+// member's LearnedLogs/ReverseLogs/EtymologyOriginLogs
 // (sorted newest-first), the union of every member's SkippedAt
 // timestamps (earliest non-zero wins per quiz type), and a rewritten
 // interval_days on its newest log per quiz-type — set to the min across
@@ -234,8 +234,7 @@ func mergeMemberInto(out []notebook.LearningHistoryExpression, head string, memb
 		}
 		out[i].LearnedLogs = mergeLogsNewestFirst(out[i].LearnedLogs, member.LearnedLogs)
 		out[i].ReverseLogs = mergeLogsNewestFirst(out[i].ReverseLogs, member.ReverseLogs)
-		out[i].EtymologyBreakdownLogs = mergeLogsNewestFirst(out[i].EtymologyBreakdownLogs, member.EtymologyBreakdownLogs)
-		out[i].EtymologyAssemblyLogs = mergeLogsNewestFirst(out[i].EtymologyAssemblyLogs, member.EtymologyAssemblyLogs)
+		out[i].EtymologyOriginLogs = mergeLogsNewestFirst(out[i].EtymologyOriginLogs, member.EtymologyOriginLogs)
 		out[i].SkippedAt = mergeSkippedAt(out[i].SkippedAt, member.SkippedAt)
 		return
 	}
@@ -329,6 +328,5 @@ func rewriteLatestIntervalToMin(head *notebook.LearningHistoryExpression, member
 	}
 	rewrite(func(e *notebook.LearningHistoryExpression) *[]notebook.LearningRecord { return &e.LearnedLogs })
 	rewrite(func(e *notebook.LearningHistoryExpression) *[]notebook.LearningRecord { return &e.ReverseLogs })
-	rewrite(func(e *notebook.LearningHistoryExpression) *[]notebook.LearningRecord { return &e.EtymologyBreakdownLogs })
-	rewrite(func(e *notebook.LearningHistoryExpression) *[]notebook.LearningRecord { return &e.EtymologyAssemblyLogs })
+	rewrite(func(e *notebook.LearningHistoryExpression) *[]notebook.LearningRecord { return &e.EtymologyOriginLogs })
 }

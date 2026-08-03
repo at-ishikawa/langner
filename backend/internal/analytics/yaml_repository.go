@@ -134,8 +134,7 @@ func appendExpressionAttempts(
 	}{
 		{string(notebook.QuizTypeNotebook), exp.LearnedLogs},
 		{string(notebook.QuizTypeReverse), exp.ReverseLogs},
-		{string(notebook.QuizTypeEtymologyStandard), exp.EtymologyBreakdownLogs},
-		{string(notebook.QuizTypeEtymologyReverse), exp.EtymologyAssemblyLogs},
+		{string(notebook.QuizTypeEtymologyOrigin), exp.EtymologyOriginLogs},
 	}
 	for _, slot := range slots {
 		for _, rec := range slot.records {

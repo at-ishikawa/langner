@@ -77,6 +77,80 @@ origins:
 	assert.Equal(t, "Greek", origins[2].Language)
 }
 
+func TestEtymologyOrigin_EnglishFormsAndNote_RoundTrip(t *testing.T) {
+	// The new-shape writer marshals []EtymologyNotebookEntry (used by the
+	// legacy→scenes migrator). Prove the additive english_forms + note origin
+	// fields survive a marshal → unmarshal round-trip so converted data keeps
+	// them.
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "session.yml")
+
+	entry := EtymologyNotebookEntry{
+		Event: "Lesson 1",
+		Scenes: []EtymologyNotebookScene{
+			{
+				Scene: "facere (to make, to do)",
+				Origins: []EtymologyOrigin{
+					{
+						Origin:       "facere",
+						Type:         "root",
+						Language:     "Latin",
+						Meaning:      "to make, to do",
+						EnglishForms: []string{"fac", "fic", "fect", "fy"},
+						Note:         "Be on the lookout for words with fic, fect, and fy.",
+						Forms: []EtymologyOriginForm{
+							{Form: "facio", Role: "present_active_indicative"},
+							{Form: "factum", Role: "supine"},
+						},
+					},
+				},
+			},
+		},
+	}
+	require.NoError(t, WriteYamlFile(path, []EtymologyNotebookEntry{entry}))
+
+	got, err := readYamlFile[[]EtymologyNotebookEntry](path)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Scenes, 1)
+	require.Len(t, got[0].Scenes[0].Origins, 1)
+
+	origin := got[0].Scenes[0].Origins[0]
+	assert.Equal(t, []string{"fac", "fic", "fect", "fy"}, origin.EnglishForms)
+	assert.Equal(t, "Be on the lookout for words with fic, fect, and fy.", origin.Note)
+	// Existing fields must still round-trip alongside the new ones.
+	assert.Equal(t, "facere", origin.Origin)
+	assert.Len(t, origin.Forms, 2)
+
+	// And the reader-facing legacy shape deserialises them too.
+	etymDir := filepath.Join(tmpDir, "etymology", "roots")
+	require.NoError(t, os.MkdirAll(etymDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "index.yml"), []byte(`id: roots
+kind: Etymology
+name: Roots
+notebooks:
+  - ./origins.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymDir, "origins.yml"), []byte(`metadata:
+  title: "Lesson 1"
+origins:
+  - origin: facere
+    type: root
+    language: Latin
+    meaning: "to make, to do"
+    english_forms: [fac, fic, fect]
+    note: "Watch for fic and fect."
+`), 0644))
+
+	reader, err := NewReader(nil, nil, nil, nil, []string{filepath.Join(tmpDir, "etymology")}, nil)
+	require.NoError(t, err)
+	origins, err := reader.ReadEtymologyNotebook("roots")
+	require.NoError(t, err)
+	require.Len(t, origins, 1)
+	assert.Equal(t, []string{"fac", "fic", "fect"}, origins[0].EnglishForms)
+	assert.Equal(t, "Watch for fic and fect.", origins[0].Note)
+}
+
 func TestReader_ReadEtymologyNotebook_MissingTitle(t *testing.T) {
 	// Reader must reject session files without metadata.title.
 	tmpDir := t.TempDir()

@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, Heading, Text, VStack } from "@chakra-ui/react";
-import { QuizResultCard, type ResultItem } from "./QuizResultCard";
+import { QuizResultCard, type EtymologyWordItem, type ResultItem } from "./QuizResultCard";
 
 interface QuizResultsGroupedListProps {
   items: ResultItem[];
@@ -10,6 +10,8 @@ interface QuizResultsGroupedListProps {
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
   onResume: (item: ResultItem) => void;
+  onOverrideWord?: (item: ResultItem, word: EtymologyWordItem) => void;
+  onExcludeWord?: (item: ResultItem, word: EtymologyWordItem) => void;
 }
 
 export function QuizResultsGroupedList({
@@ -19,6 +21,8 @@ export function QuizResultsGroupedList({
   onUndo,
   onSkip,
   onResume,
+  onOverrideWord,
+  onExcludeWord,
 }: QuizResultsGroupedListProps) {
   const correctResults = items.filter((r) => r.correct && !r.isSkipped);
   const incorrectResults = items.filter((r) => !r.correct && !r.isSkipped);
@@ -41,6 +45,8 @@ export function QuizResultsGroupedList({
                 onUndo={onUndo}
                 onSkip={onSkip}
                 onResume={onResume}
+                onOverrideWord={onOverrideWord}
+                onExcludeWord={onExcludeWord}
               />
             ))}
           </VStack>
@@ -62,6 +68,8 @@ export function QuizResultsGroupedList({
                 onUndo={onUndo}
                 onSkip={onSkip}
                 onResume={onResume}
+                onOverrideWord={onOverrideWord}
+                onExcludeWord={onExcludeWord}
               />
             ))}
           </VStack>
@@ -83,6 +91,8 @@ export function QuizResultsGroupedList({
                 onUndo={onUndo}
                 onSkip={onSkip}
                 onResume={onResume}
+                onOverrideWord={onOverrideWord}
+                onExcludeWord={onExcludeWord}
               />
             ))}
           </VStack>

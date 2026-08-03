@@ -69,8 +69,7 @@ func mergeIDLessInList(list *[]LearningHistoryExpression, calculator IntervalCal
 			src := exprs[j]
 			target.LearnedLogs = mergeSeries(target.LearnedLogs, src.LearnedLogs, calculator)
 			target.ReverseLogs = mergeSeries(target.ReverseLogs, src.ReverseLogs, calculator)
-			target.EtymologyBreakdownLogs = mergeSeries(target.EtymologyBreakdownLogs, src.EtymologyBreakdownLogs, calculator)
-			target.EtymologyAssemblyLogs = mergeSeries(target.EtymologyAssemblyLogs, src.EtymologyAssemblyLogs, calculator)
+			target.EtymologyOriginLogs = mergeSeries(target.EtymologyOriginLogs, src.EtymologyOriginLogs, calculator)
 			for qt, at := range src.SkippedAt {
 				if at == "" {
 					continue

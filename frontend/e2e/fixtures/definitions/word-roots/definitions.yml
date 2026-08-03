@@ -1,0 +1,33 @@
+# Derived-word family for the Word Roots etymology origins. The grouped
+# Etymology Origin quiz builds each origin card from the definitions whose
+# `origin_parts` reference that origin (buildOriginFamilies), so an origin
+# with no referencing definition is omitted from the quiz. The book `id`
+# (word-roots) and the session `title` ("Word Roots") must match the
+# etymology notebook so the family binds to the right (origin, sense).
+- metadata:
+    title: "Word Roots"
+  scenes:
+    - metadata:
+        index: 0
+        title: "Word Roots"
+      expressions:
+        - expression: photograph
+          meaning: a picture made with light
+          origin_parts:
+            - origin: graph
+        - expression: autograph
+          meaning: a person's own signature
+          origin_parts:
+            - origin: graph
+        - expression: television
+          meaning: a device for viewing distant broadcasts
+          origin_parts:
+            - origin: tele
+        - expression: synopsis
+          meaning: a brief summary or overview
+          origin_parts:
+            - origin: opsis
+        - expression: optician
+          meaning: someone who makes or sells eyeglasses
+          origin_parts:
+            - origin: optikos

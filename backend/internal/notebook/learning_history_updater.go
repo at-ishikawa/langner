@@ -368,6 +368,11 @@ type OverrideLogInput struct {
 	QuizType           QuizType
 	LearnedAt          string
 	MarkCorrect        *bool
+	// SessionTitle and Sense route etymology-origin overrides through the
+	// canonical FindOriginExpression lookup so the override targets the exact
+	// (origin, sense) series, not whichever same-named entry appears first.
+	SessionTitle string
+	Sense        string
 }
 
 // OverrideLogResult reports the pre-change values of the affected log
@@ -389,7 +394,7 @@ type OverrideLogResult struct {
 // log lists at submit time — the override is applied to both lists in the
 // same call so the two halves of one logical answer stay in sync.
 func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogResult {
-	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
+	expr := u.resolveOverrideTarget(in.QuizType, in.SessionTitle, in.Sense, in.ID, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return OverrideLogResult{}
 	}
@@ -434,6 +439,9 @@ type UndoOverrideLogInput struct {
 	OriginalQuality      int
 	OriginalStatus       string
 	OriginalIntervalDays int
+	// SessionTitle and Sense — see OverrideLogInput.
+	SessionTitle string
+	Sense        string
 }
 
 // UndoOverrideLogResult mirrors OverrideLogResult for the undo path.
@@ -448,7 +456,7 @@ type UndoOverrideLogResult struct {
 // Like OverrideLog, the freeform variants mirror the restore across
 // both paired log lists.
 func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOverrideLogResult {
-	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
+	expr := u.resolveOverrideTarget(in.QuizType, in.SessionTitle, in.Sense, in.ID, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return UndoOverrideLogResult{}
 	}
@@ -474,6 +482,19 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOv
 	}
 }
 
+// resolveOverrideTarget locates the entry an override/undo should mutate.
+// Etymology-origin overrides go through the canonical FindOriginExpression
+// (keyed by session + origin + sense) so they hit the exact series the write
+// path created; every other quiz type resolves by stable id then expression.
+func (u *LearningHistoryUpdater) resolveOverrideTarget(
+	quizType QuizType, sessionTitle, sense, id, expression, originalExpression string,
+) *LearningHistoryExpression {
+	if quizType == QuizTypeEtymologyOrigin {
+		return FindOriginExpression(u.history, sessionTitle, expression, sense)
+	}
+	return u.FindExpressionByID(id, expression, originalExpression)
+}
+
 // applyMark writes the desired correct/incorrect state onto a log.
 // Standard / reverse / etymology-non-freeform use the binary
 // understood/misunderstood pair; freeform variants use can-be-used to
@@ -485,7 +506,7 @@ func applyMark(log *LearningRecord, markCorrect bool, quizType QuizType) {
 		return
 	}
 	log.Quality = 4
-	if quizType == QuizTypeFreeform || quizType == QuizTypeEtymologyFreeform {
+	if quizType == QuizTypeFreeform {
 		log.Status = LearnedStatusCanBeUsed
 	} else {
 		log.Status = LearnedStatusUnderstood
@@ -508,10 +529,9 @@ func indexLogByLearnedAt(logs []LearningRecord, learnedAt string) int {
 }
 
 // mirrorOverrideToPair handles the freeform-pair case: when QuizType is
-// Freeform / EtymologyFreeform, the write path appends the same answer
-// into two log lists (LearnedLogs+ReverseLogs, or EtymologyBreakdown+
-// EtymologyAssembly). After overriding one half we must apply the same
-// mutation to the matching entry in the other half so the two stay
+// Freeform, the write path appends the same answer into two log lists
+// (LearnedLogs+ReverseLogs). After overriding one half we must apply the
+// same mutation to the matching entry in the other half so the two stay
 // consistent. The same-day match-by-learnedAt is how the lookup pairs
 // them — the freeform writer stamps both with the same timestamp.
 func mirrorOverrideToPair(expr *LearningHistoryExpression, quizType QuizType, updated LearningRecord) {
@@ -519,8 +539,6 @@ func mirrorOverrideToPair(expr *LearningHistoryExpression, quizType QuizType, up
 	switch quizType {
 	case QuizTypeFreeform:
 		pair = listReverse
-	case QuizTypeEtymologyFreeform:
-		pair = listEtymologyAssembly
 	default:
 		return
 	}
@@ -548,22 +566,19 @@ type logList int
 const (
 	listLearned logList = iota
 	listReverse
-	listEtymologyBreakdown
-	listEtymologyAssembly
+	listEtymologyOrigin
 )
 
 // PrimaryLogList returns the log list a single OverrideLog call mutates
-// for the given quiz type. Freeform variants identify their primary
-// list here; the secondary (paired) list is handled by
-// mirrorOverrideToPair after the primary has been written.
+// for the given quiz type. Freeform identifies its primary list here; the
+// secondary (paired) list is handled by mirrorOverrideToPair after the
+// primary has been written.
 func (qt QuizType) PrimaryLogList() logList {
 	switch qt {
 	case QuizTypeReverse:
 		return listReverse
-	case QuizTypeEtymologyStandard, QuizTypeEtymologyFreeform:
-		return listEtymologyBreakdown
-	case QuizTypeEtymologyReverse:
-		return listEtymologyAssembly
+	case QuizTypeEtymologyOrigin:
+		return listEtymologyOrigin
 	default:
 		return listLearned
 	}
@@ -573,10 +588,8 @@ func getLogsByList(expr *LearningHistoryExpression, list logList) []LearningReco
 	switch list {
 	case listReverse:
 		return expr.ReverseLogs
-	case listEtymologyBreakdown:
-		return expr.EtymologyBreakdownLogs
-	case listEtymologyAssembly:
-		return expr.EtymologyAssemblyLogs
+	case listEtymologyOrigin:
+		return expr.EtymologyOriginLogs
 	default:
 		return expr.LearnedLogs
 	}
@@ -586,10 +599,8 @@ func setLogsByList(expr *LearningHistoryExpression, list logList, logs []Learnin
 	switch list {
 	case listReverse:
 		expr.ReverseLogs = logs
-	case listEtymologyBreakdown:
-		expr.EtymologyBreakdownLogs = logs
-	case listEtymologyAssembly:
-		expr.EtymologyAssemblyLogs = logs
+	case listEtymologyOrigin:
+		expr.EtymologyOriginLogs = logs
 	default:
 		expr.LearnedLogs = logs
 	}
@@ -640,129 +651,148 @@ func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
 	)
 }
 
-// UpdateOrCreateExpressionWithQualityForEtymology updates or creates an
-// origin entry. Lookup matches on (session, expression, Type=origin)
-// across EVERY scene in the matching session — scene title is not part
-// of the key. This is what stops an origin's learning history from
-// splitting into two entries when the scene title pickBestSceneForOrigin
-// derives drifts over time: today's writer might be told to use
-// "derma (skin)" while the prior writer used "gyne (woman)", but if the
-// origin already lives under "gyne (woman)" we update there. Vocab
-// entries are filtered out so an etymology log can't pollute a same-
-// named word; legacy type-empty entries that already carry etymology
-// logs are upgraded in place to Type=origin so re-runs converge on the
-// typed shape.
-//
-// Only when no existing origin entry is found do we create a new one,
-// and only then does sceneTitle matter (it's the location for the new
-// entry, derived by pickBestSceneForOrigin).
-func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
-	notebookID, storyTitle, sceneTitle, expression, originalExpression string,
-	isCorrect, isKnownWord bool,
-	quality int,
-	responseTimeMs int64,
-	quizType QuizType,
-) bool {
-	for hi, h := range u.history {
-		if normalizeQuotes(h.Metadata.Title) != normalizeQuotes(storyTitle) {
+// matchOriginEntry is the single canonical predicate that decides whether a
+// learning-history entry is THE record for an etymology origin. The key is
+// (Type=origin, expression, sense); scene/notebook selection happens by the
+// caller narrowing to a session block. Both the write path
+// (UpdateOrCreateExpressionWithQualityForEtymology) and every read path
+// (FindOriginExpression) call this, so read and write can never drift on the
+// canonicalization rule (learning-history invariant L2).
+func matchOriginEntry(e *LearningHistoryExpression, origin, sense string) bool {
+	return e.Type == LearningExpressionTypeOrigin &&
+		strings.EqualFold(strings.TrimSpace(e.Expression), strings.TrimSpace(origin)) &&
+		e.Sense == sense
+}
+
+// FindOriginExpression returns the learning-history entry for the origin
+// identified by (sessionTitle, origin, sense), or nil. It is the ONE lookup
+// every surface uses — eligibility, the submit-response learned_at read,
+// override, and analytics — so they all resolve the same series the write
+// path created. Etymology blocks are flat (one session per block, origins at
+// the top level), keyed by (origin, sense) via matchOriginEntry.
+func FindOriginExpression(histories []LearningHistory, sessionTitle, origin, sense string) *LearningHistoryExpression {
+	normalised := normalizeQuotes(sessionTitle)
+	for hi := range histories {
+		if normalizeQuotes(histories[hi].Metadata.Title) != normalised {
 			continue
 		}
-
-		for si, s := range h.Scenes {
-			for ei, exp := range s.Expressions {
-				if exp.Expression != expression && (originalExpression == "" || exp.Expression != originalExpression) {
-					continue
-				}
-				// Skip vocab entries — only update origin entries (or
-				// legacy type-empty entries that already carry etymology
-				// logs, which we can safely upgrade).
-				if exp.Type != LearningExpressionTypeOrigin {
-					if exp.Type != "" {
-						continue
-					}
-					if len(exp.EtymologyBreakdownLogs) == 0 && len(exp.EtymologyAssemblyLogs) == 0 {
-						continue
-					}
-				}
-				if exp.Type == "" {
-					exp.Type = LearningExpressionTypeOrigin
-				}
-				exp.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
-				u.history[hi].Scenes[si].Expressions[ei] = exp
-				return true
+		for ei := range histories[hi].Expressions {
+			if matchOriginEntry(&histories[hi].Expressions[ei], origin, sense) {
+				return &histories[hi].Expressions[ei]
 			}
 		}
 	}
-
-	u.createNewExpressionWithQualityForEtymology(notebookID, storyTitle, sceneTitle, expression, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
-	return false
+	return nil
 }
 
-// createNewExpressionWithQualityForEtymology creates a new expression entry
-// with quality data for etymology quizzes. The entry is tagged
-// Type=origin so it never collides with a vocab entry sharing the same
-// name in the same scene (e.g., "ego" the word vs the Latin root).
-func (u *LearningHistoryUpdater) createNewExpressionWithQualityForEtymology(
-	notebookID, storyTitle, sceneTitle, expression string,
+// UpdateOrCreateExpressionWithQualityForEtymology records one etymology-origin
+// answer under the canonical (sessionTitle, origin, sense) key. The origin
+// carries exactly one learning-log series regardless of how many derived words
+// the quiz screen showed for it (learning-history invariants L1 and L4). The
+// entry is tagged Type=origin so it never collides with a vocab entry sharing
+// the same spelling.
+func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
+	notebookID, sessionTitle, origin, sense string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
-	quizType QuizType,
-) {
-	storyIndex := u.findOrCreateStory(notebookID, storyTitle, "")
+	wordResults []EtymologyWordLog,
+) bool {
+	if expr := FindOriginExpression(u.history, sessionTitle, origin, sense); expr != nil {
+		expr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin, wordResults)
+		return true
+	}
 
+	idx := u.findOrCreateStory(notebookID, sessionTitle, LearningHistoryTypeEtymology)
 	newExpression := LearningHistoryExpression{
-		Expression:  expression,
+		Expression:  origin,
 		Type:        LearningExpressionTypeOrigin,
+		Sense:       sense,
 		LearnedLogs: []LearningRecord{},
 	}
-	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, quizType)
+	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin, wordResults)
+	u.history[idx].Expressions = append(u.history[idx].Expressions, newExpression)
+	return false
+}
 
-	logs := newExpression.GetLogsForQuizType(quizType)
-	if len(logs) == 0 {
-		return
+// OverrideEtymologyWordResult flips one derived family word's Correct and/or
+// Excluded flag within the origin's EXISTING learning-log entry — it never
+// appends a new record for the word (invariant L1). It resolves the origin
+// via the SAME canonical FindOriginExpression lookup OverrideLog uses for
+// etymology (invariant L2), and locates the specific attempt by learnedAt the
+// same way indexLogByLearnedAt does for the aggregate override, so a
+// word-level correction always lands on the exact record the write path
+// created for that attempt.
+//
+// The word's Correct/Excluded flags are display-only annotations: unlike the
+// origin-level override, this does not touch the record's Status, Quality,
+// or IntervalDays — the origin's own aggregate result and SR schedule stay
+// under the existing origin-level Mark-as-Correct/Incorrect control.
+//
+// correct and excluded are optional; a nil pointer leaves that flag
+// unchanged. Returns false when the origin, the specific attempt, or the word
+// within it can't be found.
+func (u *LearningHistoryUpdater) OverrideEtymologyWordResult(
+	sessionTitle, origin, sense, learnedAt, wordExpression string,
+	correct, excluded *bool,
+) bool {
+	expr := FindOriginExpression(u.history, sessionTitle, origin, sense)
+	if expr == nil {
+		return false
 	}
+	idx := indexLogByLearnedAt(expr.EtymologyOriginLogs, learnedAt)
+	if idx < 0 {
+		return false
+	}
+	log := &expr.EtymologyOriginLogs[idx]
 
-	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
-	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
-		u.history[storyIndex].Scenes[sceneIndex].Expressions,
-		newExpression,
-	)
+	wi := -1
+	for i, w := range log.WordResults {
+		if strings.EqualFold(strings.TrimSpace(w.Expression), strings.TrimSpace(wordExpression)) {
+			wi = i
+			break
+		}
+	}
+	if wi < 0 {
+		return false
+	}
+	if correct != nil {
+		log.WordResults[wi].Correct = *correct
+	}
+	if excluded != nil {
+		log.WordResults[wi].Excluded = *excluded
+	}
+	return true
 }
 
 // AssertNoDuplicateOriginsInSession returns a non-nil error if the given
-// session block holds the same origin expression under more than one
-// scene. Used by SaveEtymologyOriginResult as a structural guard right
-// before WriteYamlFile so any write that would re-introduce the "two
-// logos sessions" class of bug fails loudly instead of silently
-// corrupting the YAML. After the etymology source migration this
-// invariant cannot fail in normal operation — the writer always
-// addresses scenes the source declares — so a trip indicates either a
-// real regression or hand-edited data that needs reconciliation.
+// session block holds two entries for the same (origin, sense) — the L1
+// guard that a single origin/sense never forks into two log series. Used by
+// SaveEtymologyOriginResult right before WriteYamlFile so a bug that would
+// re-introduce a duplicate fails loudly instead of silently corrupting YAML.
 func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, sessionTitle string) error {
 	normalised := normalizeQuotes(sessionTitle)
+	type originKey struct{ origin, sense string }
 	for _, h := range history {
 		if normalizeQuotes(h.Metadata.Title) != normalised {
 			continue
 		}
-		scenesByOrigin := make(map[string][]string)
-		for _, scene := range h.Scenes {
-			for _, expr := range scene.Expressions {
-				if expr.Type != LearningExpressionTypeOrigin {
-					continue
-				}
-				name := strings.TrimSpace(expr.Expression)
-				if name == "" {
-					continue
-				}
-				scenesByOrigin[name] = append(scenesByOrigin[name], scene.Metadata.Title)
+		counts := make(map[originKey]int)
+		for _, expr := range h.Expressions {
+			if expr.Type != LearningExpressionTypeOrigin {
+				continue
 			}
+			name := strings.ToLower(strings.TrimSpace(expr.Expression))
+			if name == "" {
+				continue
+			}
+			counts[originKey{name, expr.Sense}]++
 		}
-		for origin, scenes := range scenesByOrigin {
-			if len(scenes) > 1 {
+		for key, n := range counts {
+			if n > 1 {
 				return fmt.Errorf(
-					"invariant violation: origin %q appears in %d scenes (%v) within notebook %q session %q — refusing to write",
-					origin, len(scenes), scenes, notebookID, sessionTitle,
+					"invariant violation: origin %q (sense %q) appears %d times within notebook %q session %q — refusing to write",
+					key.origin, key.sense, n, notebookID, sessionTitle,
 				)
 			}
 		}

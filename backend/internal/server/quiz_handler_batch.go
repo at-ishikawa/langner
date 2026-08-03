@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"connectrpc.com/connect"
@@ -164,11 +163,12 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 // the word as fast as exact-match answers.
 const synonymAcceptedQuality = 2
 
-// BatchSubmitEtymologyStandardAnswers grades a batch of etymology standard answers.
-func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
+// BatchSubmitEtymologyOriginAnswers grades a batch of etymology-origin cards,
+// each with its own set of family-word answers.
+func (h *QuizHandler) BatchSubmitEtymologyOriginAnswers(
 	ctx context.Context,
-	req *connect.Request[apiv1.BatchSubmitEtymologyStandardAnswersRequest],
-) (*connect.Response[apiv1.BatchSubmitEtymologyStandardAnswersResponse], error) {
+	req *connect.Request[apiv1.BatchSubmitEtymologyOriginAnswersRequest],
+) (*connect.Response[apiv1.BatchSubmitEtymologyOriginAnswersResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
@@ -186,129 +186,16 @@ func (h *QuizHandler) BatchSubmitEtymologyStandardAnswers(
 	}
 	h.mu.Unlock()
 
-	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
-		if answers[i].GetIsSkipped() {
-			return skippedGradeResult(), nil
-		}
-		return h.svc.GradeEtymologyStandardAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
-	}
-
-	// Load the graph context once per notebook for the elaborative scaffold
-	// the feedback card renders. Failures here are non-fatal — feedback
-	// stays usable without the graph.
-	var graphReader *notebook.Reader
-	conceptsByNotebook := make(map[string]map[string]*graphConceptInfo)
-	if r, err := h.svc.NewReader(); err == nil {
-		graphReader = r
-		seen := make(map[string]bool)
-		for _, c := range cards {
-			if seen[c.NotebookName] {
-				continue
-			}
-			seen[c.NotebookName] = true
-			conceptsByNotebook[c.NotebookName] = loadBookConcepts(ctx, r, c.NotebookName)
-		}
-	}
-
-	examplesByKey, _ := h.svc.LoadEtymologyExampleWords(cards)
-
-	responses := make([]*apiv1.SubmitEtymologyStandardAnswerResponse, len(answers))
+	responses := make([]*apiv1.SubmitEtymologyOriginAnswerResponse, len(answers))
 	for i := range answers {
-		if err := h.svc.SaveEtymologyOriginResult(cards[i], grades[i].Quality, grades[i].Correct, answers[i].GetResponseTimeMs(), notebook.QuizTypeEtymologyStandard, true); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
+		resp, err := h.gradeAndSaveEtymologyOrigin(ctx, cards[i], answers[i].GetAnswers(), answers[i].GetResponseTimeMs())
+		if err != nil {
+			return nil, err
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, "", cards[i].Origin, notebook.QuizTypeEtymologyStandard)
-		h.mu.Lock()
-		noteID := h.nextID
-		h.nextID++
-		h.etymologyOriginStore[noteID] = cards[i]
-		h.mu.Unlock()
-		var graphContext *apiv1.GraphPrompt
-		if graphReader != nil {
-			graphContext = buildGraphContextForCard(ctx, graphReader, cards[i], conceptsByNotebook[cards[i].NotebookName])
-		}
-		exampleKey := strings.ToLower(strings.TrimSpace(cards[i].Origin)) + "\x00" + cards[i].SessionTitle + "\x00" + cards[i].Sense
-		responses[i] = &apiv1.SubmitEtymologyStandardAnswerResponse{
-			Correct:        grades[i].Correct,
-			Reason:         grades[i].Reason,
-			CorrectMeaning: cards[i].Meaning,
-			NextReviewDate: nextReviewDate,
-			LearnedAt:      learnedAt,
-			NoteId:         noteID,
-			GraphContext:   graphContext,
-			ExampleWords:   examplesByKey[exampleKey],
-		}
+		responses[i] = resp
 	}
 
-	return connect.NewResponse(&apiv1.BatchSubmitEtymologyStandardAnswersResponse{Responses: responses}), nil
-}
-
-// BatchSubmitEtymologyReverseAnswers grades a batch of etymology reverse answers.
-func (h *QuizHandler) BatchSubmitEtymologyReverseAnswers(
-	ctx context.Context,
-	req *connect.Request[apiv1.BatchSubmitEtymologyReverseAnswersRequest],
-) (*connect.Response[apiv1.BatchSubmitEtymologyReverseAnswersResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-	answers := req.Msg.GetAnswers()
-
-	cards := make([]quiz.EtymologyOriginCard, len(answers))
-	h.mu.Lock()
-	for i, a := range answers {
-		card, ok := h.etymologyOriginStore[a.GetCardId()]
-		if !ok {
-			h.mu.Unlock()
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", a.GetCardId()))
-		}
-		cards[i] = card
-	}
-	h.mu.Unlock()
-
-	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
-		if answers[i].GetIsSkipped() {
-			return skippedGradeResult(), nil
-		}
-		return h.svc.GradeEtymologyReverseAnswer(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs())
-	})
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answers: %w", err))
-	}
-
-	// One scan of definitions for the whole batch — LoadEtymologyExampleWords
-	// is O(definitions) regardless of card count, so doing it once and indexing
-	// by (origin, session, sense) beats per-card calls inside the loop.
-	examplesByKey, _ := h.svc.LoadEtymologyExampleWords(cards)
-
-	responses := make([]*apiv1.SubmitEtymologyReverseAnswerResponse, len(answers))
-	for i := range answers {
-		if err := h.svc.SaveEtymologyOriginResult(cards[i], grades[i].Quality, grades[i].Correct, answers[i].GetResponseTimeMs(), notebook.QuizTypeEtymologyReverse, true); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
-		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, "", cards[i].Origin, notebook.QuizTypeEtymologyReverse)
-		h.mu.Lock()
-		noteID := h.nextID
-		h.nextID++
-		h.etymologyOriginStore[noteID] = cards[i]
-		h.mu.Unlock()
-		exampleKey := strings.ToLower(strings.TrimSpace(cards[i].Origin)) + "\x00" + cards[i].SessionTitle + "\x00" + cards[i].Sense
-		responses[i] = &apiv1.SubmitEtymologyReverseAnswerResponse{
-			Correct:        grades[i].Correct,
-			Reason:         grades[i].Reason,
-			CorrectOrigin:  cards[i].Origin,
-			Type:           cards[i].Type,
-			Language:       cards[i].Language,
-			NextReviewDate: nextReviewDate,
-			LearnedAt:      learnedAt,
-			NoteId:         noteID,
-			ExampleWords:   examplesByKey[exampleKey],
-		}
-	}
-
-	return connect.NewResponse(&apiv1.BatchSubmitEtymologyReverseAnswersResponse{Responses: responses}), nil
+	return connect.NewResponse(&apiv1.BatchSubmitEtymologyOriginAnswersResponse{Responses: responses}), nil
 }
 
 // parallelGrade runs gradeFn(i) for i in [0, len(items)) concurrently and

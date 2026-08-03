@@ -326,38 +326,32 @@ func (writer EtymologyNotebookWriter) originNeedsStudy(etymID, _ /*nbTitle: unus
 	// the etymology PDF kept listing words the user had already learned.
 	// See Validator.migrateEtymologyShape for the schema move.
 	//
-	// originNeedsStudy doesn't receive the per-origin SceneTitle from
-	// callers, so we scan every scene's expressions under the matching
-	// session and find the expression by name. Multi-sense origins (same
-	// origin string, different sense) within a session share a
-	// learning-history entry today, so a single match suffices.
+	// Etymology learning history is flat: one session block whose top-level
+	// Expressions are the origins, keyed by (origin, sense). originNeedsStudy
+	// isn't given the sense, so it matches by origin name — the first entry
+	// governs the "still being studied" decision for the PDF/markdown export.
 	for _, h := range histories {
 		if h.Metadata.Title != sessionTitle {
 			continue
 		}
-		for _, scene := range h.Scenes {
-			for _, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, origin) {
-					continue
-				}
-				// Pick the most recent log across both etymology
-				// directions. Whichever was answered last governs the
-				// "is this still being studied today" decision.
-				latest, found := latestEtymologyLog(expr.EtymologyBreakdownLogs, expr.EtymologyAssemblyLogs)
-				if !found {
-					return true // no etymology logs → include
-				}
-				if latest.Status == LearnedStatusMisunderstood {
-					return true
-				}
-				// Check SR: if the review interval has elapsed, needs study.
-				if latest.IntervalDays > 0 {
-					elapsed := int(time.Since(latest.LearnedAt.Time).Hours() / 24)
-					return elapsed >= latest.IntervalDays
-				}
-				// Has correct answer and no interval → recently reviewed, skip.
-				return false
+		for _, expr := range h.Expressions {
+			if expr.Type != LearningExpressionTypeOrigin || !strings.EqualFold(expr.Expression, origin) {
+				continue
 			}
+			latest, found := latestEtymologyLog(expr.EtymologyOriginLogs)
+			if !found {
+				return true // no etymology logs → include
+			}
+			if latest.Status == LearnedStatusMisunderstood {
+				return true
+			}
+			// Check SR: if the review interval has elapsed, needs study.
+			if latest.IntervalDays > 0 {
+				elapsed := int(time.Since(latest.LearnedAt.Time).Hours() / 24)
+				return elapsed >= latest.IntervalDays
+			}
+			// Has correct answer and no interval → recently reviewed, skip.
+			return false
 		}
 	}
 	return true // not found in history → include
@@ -471,16 +465,26 @@ func (writer EtymologyNotebookWriter) expressionIsSkipped(etymID, sessionTitle, 
 		if h.Metadata.Title != sessionTitle {
 			continue
 		}
-		for _, scene := range h.Scenes {
-			for _, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, expression) {
-					continue
-				}
-				return expr.SkippedAt.IsSkippedAny()
+		for _, expr := range allBlockExpressions(h) {
+			if !strings.EqualFold(expr.Expression, expression) {
+				continue
 			}
+			return expr.SkippedAt.IsSkippedAny()
 		}
 	}
 	return false
+}
+
+// allBlockExpressions returns every expression in a learning-history block,
+// flattening both the flat top-level list (flashcard/etymology) and the
+// scene-nested list (story) so callers can look an expression up without
+// knowing the block's shape.
+func allBlockExpressions(h LearningHistory) []LearningHistoryExpression {
+	out := append([]LearningHistoryExpression(nil), h.Expressions...)
+	for _, scene := range h.Scenes {
+		out = append(out, scene.Expressions...)
+	}
+	return out
 }
 
 func (writer EtymologyNotebookWriter) expressionRecentlyLearned(etymID, sessionTitle, expression string) bool {
@@ -492,40 +496,33 @@ func (writer EtymologyNotebookWriter) expressionRecentlyLearned(etymID, sessionT
 		if h.Metadata.Title != sessionTitle {
 			continue
 		}
-		for _, scene := range h.Scenes {
-			for _, expr := range scene.Expressions {
-				if !strings.EqualFold(expr.Expression, expression) {
-					continue
-				}
-				if hasRecentCorrectLog(expr.LearnedLogs, GetThresholdDaysFromCount(correctStreakCount(expr.LearnedLogs))) {
-					return true
-				}
-				if hasRecentCorrectLog(expr.ReverseLogs, GetThresholdDaysFromCount(correctStreakCount(expr.ReverseLogs))) {
-					return true
-				}
-				return false
+		for _, expr := range allBlockExpressions(h) {
+			if !strings.EqualFold(expr.Expression, expression) {
+				continue
 			}
+			if hasRecentCorrectLog(expr.LearnedLogs, GetThresholdDaysFromCount(correctStreakCount(expr.LearnedLogs))) {
+				return true
+			}
+			if hasRecentCorrectLog(expr.ReverseLogs, GetThresholdDaysFromCount(correctStreakCount(expr.ReverseLogs))) {
+				return true
+			}
+			return false
 		}
 	}
 	return false
 }
 
-// latestEtymologyLog returns the single most-recent log across both etymology
-// tracks (breakdown for standard/freeform, assembly for reverse). The bool
-// is false when neither slice has any entries.
-func latestEtymologyLog(breakdown, assembly []LearningRecord) (LearningRecord, bool) {
+// latestEtymologyLog returns the single most-recent log in the origin's
+// etymology-origin series. The bool is false when the slice is empty.
+func latestEtymologyLog(logs []LearningRecord) (LearningRecord, bool) {
 	var latest LearningRecord
 	found := false
-	consider := func(logs []LearningRecord) {
-		for _, l := range logs {
-			if !found || l.LearnedAt.After(latest.LearnedAt.Time) {
-				latest = l
-				found = true
-			}
+	for _, l := range logs {
+		if !found || l.LearnedAt.After(latest.LearnedAt.Time) {
+			latest = l
+			found = true
 		}
 	}
-	consider(breakdown)
-	consider(assembly)
 	return latest, found
 }
 

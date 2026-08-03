@@ -13,6 +13,8 @@ origins:
     type: root
     language: Latin
     meaning: to say, to speak
+    english_forms: [dict, dic]
+    note: "Watch for dict/dic in words about speaking (dictate, predict, verdict)."
     forms:
       - { form: dico,    role: present_active_indicative }
       - { form: dicere,  role: present_active_infinitive }

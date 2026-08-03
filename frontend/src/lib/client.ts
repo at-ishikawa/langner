@@ -41,17 +41,19 @@ export type {
   SkipWordResponse,
   ResumeWordRequest,
   ResumeWordResponse,
-  EtymologyQuizCard,
-  StartEtymologyQuizRequest,
-  StartEtymologyQuizResponse,
-  SubmitEtymologyStandardAnswerRequest,
-  SubmitEtymologyStandardAnswerResponse,
-  SubmitEtymologyReverseAnswerRequest,
-  SubmitEtymologyReverseAnswerResponse,
-  StartEtymologyFreeformQuizRequest,
-  StartEtymologyFreeformQuizResponse,
-  SubmitEtymologyFreeformAnswerRequest,
-  SubmitEtymologyFreeformAnswerResponse,
+  EtymologyOriginCard,
+  EtymologyFamilyWord,
+  StartEtymologyOriginQuizRequest,
+  StartEtymologyOriginQuizResponse,
+  EtymologyWordAnswer,
+  SubmitEtymologyOriginAnswerRequest,
+  SubmitEtymologyOriginAnswerResponse,
+  EtymologyWordResult,
+  BatchSubmitEtymologyOriginAnswersRequest,
+  BatchSubmitEtymologyOriginAnswersResponse,
+  GraphPrompt,
+  GraphNode,
+  GraphEdge,
   StartRelearnQuizRequest,
   StartRelearnQuizResponse,
   RelearnCard,
@@ -71,7 +73,7 @@ export type {
   GrammarBlankResult,
 } from "@/gen-protos/api/v1/quiz_pb";
 
-export { QuizType, EtymologyQuizMode } from "@/gen-protos/api/v1/quiz_pb";
+export { QuizType } from "@/gen-protos/api/v1/quiz_pb";
 
 export type {
   GetNotebookDetailResponse,

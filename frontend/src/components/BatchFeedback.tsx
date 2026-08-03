@@ -1,7 +1,7 @@
 "use client";
 
 import { Box, Button, Heading, Text } from "@chakra-ui/react";
-import { type ResultItem } from "./QuizResultCard";
+import { type EtymologyWordItem, type ResultItem } from "./QuizResultCard";
 import { QuizResultsGroupedList } from "./QuizResultsGroupedList";
 
 interface BatchFeedbackProps {
@@ -14,6 +14,8 @@ interface BatchFeedbackProps {
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
   onResume: (item: ResultItem) => void;
+  onOverrideWord?: (item: ResultItem, word: EtymologyWordItem) => void;
+  onExcludeWord?: (item: ResultItem, word: EtymologyWordItem) => void;
 }
 
 export function BatchFeedback({
@@ -26,6 +28,8 @@ export function BatchFeedback({
   onUndo,
   onSkip,
   onResume,
+  onOverrideWord,
+  onExcludeWord,
 }: BatchFeedbackProps) {
   const correctCount = items.filter((r) => r.correct && !r.isSkipped).length;
   const incorrectCount = items.filter((r) => !r.correct && !r.isSkipped).length;
@@ -53,6 +57,8 @@ export function BatchFeedback({
           onUndo={onUndo}
           onSkip={onSkip}
           onResume={onResume}
+          onOverrideWord={onOverrideWord}
+          onExcludeWord={onExcludeWord}
         />
       </Box>
 

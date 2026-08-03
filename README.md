@@ -103,10 +103,8 @@ Test yourself with several quiz modes, all powered by spaced repetition:
 - **Reverse** - See a meaning and context, type the word
 - **Freeform** - Recall any word and its meaning from memory
 
-**Etymology Quizzes**
-- **Breakdown** - See a word, identify its origins and their meanings
-- **Assembly** - See the origins, type the complete word
-- **Freeform** - Recall a word and break down its etymology
+**Etymology Quiz**
+- **Origin** - See a word origin (e.g. the Latin root `scribo`) together with the whole family of words that come from it in that session (describe, inscribe, transcript, …), and type each word's meaning while the family stays in view. Each origin is tracked as one item.
 
 Choose how many answers to review at once on the start screen (default 10). You can also narrow a quiz to specific chapters or episodes within a notebook by expanding the notebook on the start screen and ticking only the sections you want — useful when you want to drill the most recent episode you read. After every batch, a feedback screen shows your answers with the correct meanings, examples, and pronunciation — you can mark answers correct or incorrect, exclude words from future quizzes, or undo overrides, then continue to the next batch or jump to the final results. Freeform quizzes still show feedback after each answer.
 

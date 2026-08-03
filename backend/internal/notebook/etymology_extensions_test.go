@@ -244,3 +244,46 @@ definitions:
 		assert.NotContains(t, w.Message, "missum", "valid from_form should not warn")
 	}
 }
+
+// TestValidateFromForm_MatchesEnglishForms verifies a definition whose
+// origin_parts.from_form names one of the origin's english_forms (the English
+// combining spelling a word actually surfaces, e.g. "fic") validates cleanly —
+// english_forms are a legitimate source of from_form values, alongside the
+// source-language principal parts.
+func TestValidateFromForm_MatchesEnglishForms(t *testing.T) {
+	dir := makeEtymologyBook(t, "demo", map[string]string{
+		"session1.yml": `metadata:
+  title: "Session 1"
+origins:
+  - origin: facere
+    language: Latin
+    meaning: "to make, to do"
+    english_forms: [fac, fic, fect]
+    forms:
+      - { form: facere, role: present_active_infinitive }
+      - { form: factum, role: supine }
+definitions:
+  - expression: deficient
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: fic }
+  - expression: facsimile
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: factum }
+  - expression: bogus
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: zzz }
+`,
+	})
+
+	v := NewValidator("", nil, nil, nil, []string{dir}, "", nil)
+	result := &ValidationResult{}
+	v.validateFromForm(result)
+
+	// English combining form "fic" and Latin form "factum" both resolve.
+	for _, w := range result.Warnings {
+		assert.NotContains(t, w.Message, "\"fic\"", "english_form from_form should not warn")
+		assert.NotContains(t, w.Message, "factum", "source-language from_form should not warn")
+	}
+	// A genuinely-unknown from_form still warns.
+	assert.NotEmpty(t, findWarning(result.Warnings, "zzz"), "unknown from_form should still warn; got: %+v", result.Warnings)
+}

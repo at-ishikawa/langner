@@ -34,8 +34,7 @@ type RelearnContextScene struct {
 //
 //	QuizTypeNotebook          recognition: show Entry, ask the Meaning
 //	QuizTypeReverse           production:  show Meaning + masked Contexts, ask Entry
-//	QuizTypeEtymologyStandard show Entry (origin), ask the Meaning
-//	QuizTypeEtymologyReverse  show Meaning, ask Entry (origin)
+//	QuizTypeEtymologyOrigin   show Entry (origin), ask the Meaning
 //	QuizTypeGrammar           correction: show Content with Incorrect struck
 //	                          through, ask for the fix — the live grammar
 //	                          quiz's own inline-correction card, reused as-is.
@@ -82,9 +81,9 @@ func (c RelearnCard) ReverseCard() ReverseCard           { return c.reverseCard 
 func (c RelearnCard) EtymologyCard() EtymologyOriginCard { return c.etymologyCard }
 func (c RelearnCard) GrammarCard() GrammarBlank          { return c.grammarCard }
 
-// IsEtymology reports whether the card's Format is one of the etymology modes.
+// IsEtymology reports whether the card's Format is the etymology mode.
 func (c RelearnCard) IsEtymology() bool {
-	return c.Format == notebook.QuizTypeEtymologyStandard || c.Format == notebook.QuizTypeEtymologyReverse
+	return c.Format == notebook.QuizTypeEtymologyOrigin
 }
 
 // IsGrammar reports whether the card's Format is the grammar mode.
@@ -108,7 +107,7 @@ type relearnCandidate struct {
 }
 
 // LoadRelearnPool builds the Relearn Quiz pool: for every learning-log series
-// (recognition, reverse, etymology breakdown, etymology assembly) whose
+// (recognition, reverse, etymology origin) whose
 // most-recent log within [windowStart, now] has status "misunderstood", it
 // emits one card that mirrors that series' quiz type. A word failed in several
 // types produces several cards.
@@ -234,7 +233,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			})
 			continue
 		}
-		if c.format == notebook.QuizTypeEtymologyStandard || c.format == notebook.QuizTypeEtymologyReverse {
+		if c.format == notebook.QuizTypeEtymologyOrigin {
 			sense, ok := etymByOrigin[strings.ToLower(strings.TrimSpace(c.expression))]
 			if !ok {
 				continue // no origin data to grade/display against
@@ -311,16 +310,16 @@ type relearnSeriesSpec struct {
 	format notebook.QuizType
 }
 
-// relearnSeries returns the log series an expression can carry, each mapped
-// to the relearn card format that mirrors it. Notebook and freeform share
-// LearnedLogs and both replay as recognition; etymology freeform shares the
-// breakdown track and replays as etymology-standard.
+// relearnSeries returns the independent log series an expression can carry,
+// each mapped to the relearn card format that mirrors it. Notebook and freeform
+// share LearnedLogs and both replay as recognition; the etymology-origin series
+// replays as an etymology-origin recognition card (show origin, ask meaning).
 //
 // metadataType is the owning LearningHistory's Metadata.Type — the same
 // value flatTypeForStory (learning_history.go) derives at write time for the
 // flat "journal" bucket. A grammar entry only ever writes LearnedLogs (see
 // SaveGrammarBlank), so it gets a single series mapped to QuizTypeGrammar
-// instead of the four vocab series; reusing this one check (rather than
+// instead of the vocab/etymology series; reusing this one check (rather than
 // re-deriving "is this a grammar entry" from the expression shape) is what
 // keeps this classification symmetric with the writer (L2).
 func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression) []relearnSeriesSpec {
@@ -332,8 +331,7 @@ func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression)
 	return []relearnSeriesSpec{
 		{logs: expr.LearnedLogs, format: notebook.QuizTypeNotebook},
 		{logs: expr.ReverseLogs, format: notebook.QuizTypeReverse},
-		{logs: expr.EtymologyBreakdownLogs, format: notebook.QuizTypeEtymologyStandard},
-		{logs: expr.EtymologyAssemblyLogs, format: notebook.QuizTypeEtymologyReverse},
+		{logs: expr.EtymologyOriginLogs, format: notebook.QuizTypeEtymologyOrigin},
 	}
 }
 
@@ -380,7 +378,7 @@ func (s *Service) relearnEtymologyIndex() (map[string]EtymologyOriginCard, error
 	if len(etymIDs) == 0 {
 		return byOrigin, nil
 	}
-	cards, err := s.LoadEtymologyOriginCards(etymIDs, true, true, notebook.QuizTypeEtymologyStandard, nil)
+	cards, err := s.LoadEtymologyOriginCards(etymIDs, true, true, nil)
 	if err != nil {
 		return nil, fmt.Errorf("load etymology origins for relearn pool: %w", err)
 	}

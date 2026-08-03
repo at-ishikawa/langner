@@ -32,6 +32,18 @@ type EtymologyOrigin struct {
 	// examples/etymology/SCHEMA.md for usage.
 	Forms []EtymologyOriginForm `yaml:"forms,omitempty"`
 
+	// EnglishForms are the English combining-form spellings this Latin/Greek
+	// origin surfaces as inside English words (e.g. facere → fac, fic, fect).
+	// These are NOT aliases of the origin and NOT the origin's own
+	// inflectional Forms (which hold the source-language principal parts);
+	// they are how the origin appears in English derivatives. Study context
+	// only — never quizzed.
+	EnglishForms []string `yaml:"english_forms,omitempty"`
+
+	// Note is a free-text pedagogical hint about the origin (e.g. "Be on the
+	// lookout for words with fic, fect, and fy…"). Study context only.
+	Note string `yaml:"note,omitempty"`
+
 	// SessionTitle is the parent session's title. Set at read time from
 	// the surrounding event/metadata block; not serialised.
 	SessionTitle string `yaml:"-"`

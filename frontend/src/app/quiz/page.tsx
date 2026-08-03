@@ -16,16 +16,15 @@ import {
 } from "@chakra-ui/react";
 import {
   quizClient,
-  EtymologyQuizMode,
   type NotebookSummary,
 } from "@/lib/client";
-import { useQuizStore, type QuizType } from "@/store/quizStore";
+import { useQuizStore } from "@/store/quizStore";
 import RelearnStart from "@/components/RelearnStart";
 import GrammarStart from "@/components/GrammarStart";
 
 type Tab = "vocabulary" | "etymology" | "relearn" | "grammar";
 type VocabMode = "standard" | "reverse" | "freeform";
-type EtyMode = "standard" | "reverse" | "freeform";
+type EtyMode = "origin";
 
 const vocabularyModes: { key: VocabMode; title: string; description: string }[] = [
   { key: "standard", title: "Standard", description: "See a word, type its meaning" },
@@ -34,9 +33,7 @@ const vocabularyModes: { key: VocabMode; title: string; description: string }[] 
 ];
 
 const etymologyModes: { key: EtyMode; title: string; description: string }[] = [
-  { key: "standard", title: "Standard", description: "See an origin, type its meaning" },
-  { key: "reverse", title: "Reverse", description: "See a meaning, type the origin" },
-  { key: "freeform", title: "Freeform", description: "Type any origin and its meaning" },
+  { key: "origin", title: "Etymology Origin", description: "See an origin and its word family; type each derived word's meaning" },
 ];
 
 export default function QuizHubPage() {
@@ -65,8 +62,6 @@ export default function QuizHubPage() {
   const setFreeformNextReviewDates = useQuizStore((s) => s.setFreeformNextReviewDates);
   const setQuizType = useQuizStore((s) => s.setQuizType);
   const setEtymologyOriginCards = useQuizStore((s) => s.setEtymologyOriginCards);
-  const setEtymologyFreeformOrigins = useQuizStore((s) => s.setEtymologyFreeformOrigins);
-  const setEtymologyFreeformNextReviewDates = useQuizStore((s) => s.setEtymologyFreeformNextReviewDates);
   const feedbackInterval = useQuizStore((s) => s.feedbackInterval);
   const setFeedbackInterval = useQuizStore((s) => s.setFeedbackInterval);
   const [feedbackIntervalText, setFeedbackIntervalText] = useState(
@@ -105,9 +100,7 @@ export default function QuizHubPage() {
 
   const selectedMode = tab === "vocabulary" ? selectedVocabMode : selectedEtyMode;
 
-  const isFreeformMode =
-    (tab === "vocabulary" && selectedVocabMode === "freeform") ||
-    (tab === "etymology" && selectedEtyMode === "freeform");
+  const isFreeformMode = tab === "vocabulary" && selectedVocabMode === "freeform";
 
   // Notebook lists. Hide notebooks with zero review count for the selected
   // mode; when includeUnstudied is on (or in freeform, which always covers
@@ -119,14 +112,12 @@ export default function QuizHubPage() {
     if (includeUnstudied || isFreeformMode) return base;
     return base.filter((n) => {
       if (tab === "etymology") {
-        return selectedEtyMode === "reverse"
-          ? n.etymologyReverseReviewCount > 0
-          : n.etymologyReviewCount > 0;
+        return n.etymologyReviewCount > 0;
       }
       if (selectedVocabMode === "reverse") return n.reverseReviewCount > 0;
       return n.reviewCount > 0;
     });
-  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode, selectedEtyMode]);
+  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode]);
 
   // Drop selections that are hidden by the current filter so the user doesn't
   // accidentally start a quiz referencing notebooks they can no longer see.
@@ -251,9 +242,7 @@ export default function QuizHubPage() {
     etymologyReverseReviewCount: number;
   }): number => {
     if (tab === "etymology") {
-      return selectedEtyMode === "reverse"
-        ? counts.etymologyReverseReviewCount
-        : counts.etymologyReviewCount;
+      return counts.etymologyReviewCount;
     }
     if (selectedVocabMode === "reverse") return counts.reverseReviewCount;
     return counts.reviewCount;
@@ -361,40 +350,26 @@ export default function QuizHubPage() {
           router.push("/quiz/freeform");
         }
       } else {
-        if (selectedEtyMode === "freeform") {
-          setQuizType("etymology-freeform" as QuizType);
-          // Etymology freeform doesn't yet support per-session narrowing;
-          // the canonical "all sessions of selected notebooks" form keeps
-          // the existing API shape.
-          const res = await quizClient.startEtymologyFreeformQuiz({
-            etymologyNotebookIds: Array.from(selectedIds),
-          });
-          setEtymologyFreeformOrigins(res.origins ?? []);
-          setEtymologyFreeformNextReviewDates(res.nextReviewDates ?? {});
-          router.push("/quiz/etymology-freeform");
-        } else {
-          const quizMode = selectedEtyMode === "standard"
-            ? EtymologyQuizMode.STANDARD : EtymologyQuizMode.REVERSE;
-          const storeType = selectedEtyMode === "standard"
-            ? "etymology-standard" as QuizType : "etymology-reverse" as QuizType;
-          setQuizType(storeType);
-          const res = await quizClient.startEtymologyQuiz({
-            notebookSections,
-            mode: quizMode,
-            includeUnstudied,
-          });
-          setEtymologyOriginCards(
-            (res.cards ?? []).map((c) => ({
-              cardId: c.cardId, origin: c.origin, type: c.type,
-              language: c.language, meaning: c.meaning,
-              notebookName: c.notebookName, sessionTitle: c.sessionTitle,
-              sense: c.sense,
-              exampleWords: c.exampleWords ?? [],
-              graphPrompt: c.graphPrompt,
+        setQuizType("etymology-origin");
+        const res = await quizClient.startEtymologyOriginQuiz({
+          notebookSections,
+          includeUnstudied,
+        });
+        setEtymologyOriginCards(
+          (res.cards ?? []).map((c) => ({
+            cardId: c.cardId, origin: c.origin, type: c.type,
+            language: c.language, meaning: c.meaning,
+            notebookName: c.notebookName, sessionTitle: c.sessionTitle,
+            sense: c.sense,
+            forms: (c.forms ?? []).map((f) => ({ form: f.form, role: f.role, note: f.note })),
+            englishForms: c.englishForms ?? [],
+            note: c.note,
+            words: (c.words ?? []).map((w) => ({
+              wordId: w.wordId, expression: w.expression, pronunciation: w.pronunciation,
             })),
-          );
-          router.push(selectedEtyMode === "standard" ? "/quiz/etymology-standard" : "/quiz/etymology-reverse");
-        }
+          })),
+        );
+        router.push("/quiz/etymology-origin");
       }
     } finally {
       setStarting(false);

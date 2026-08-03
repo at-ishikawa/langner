@@ -12,8 +12,8 @@ vi.mock("@/lib/client", () => ({
     startQuiz: vi.fn(),
     startReverseQuiz: vi.fn(),
     startFreeformQuiz: vi.fn(),
+    startEtymologyOriginQuiz: vi.fn(),
   },
-  EtymologyQuizMode: { BREAKDOWN: 1, ASSEMBLY: 2 },
 }));
 
 const pushMock = vi.fn();

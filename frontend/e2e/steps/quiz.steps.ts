@@ -56,8 +56,7 @@ When("I select the {string} notebook", async ({ page }, name: string) => {
 });
 
 // Starting a quiz navigates to one of the per-mode pages:
-//   /quiz/standard, /quiz/reverse, /quiz/freeform,
-//   /quiz/etymology-standard, /quiz/etymology-reverse, /quiz/etymology-freeform
+//   /quiz/standard, /quiz/reverse, /quiz/freeform, /quiz/etymology-origin
 When("I start the quiz", async ({ page }) => {
   await page.getByRole("button", { name: /^start$/i }).click();
 });
@@ -79,26 +78,14 @@ When("I type the word {string}", async ({ page }, word: string) => {
   await page.getByPlaceholder(/e\.g\., hit the hay/i).fill(word);
 });
 
-When("I type the origin {string}", async ({ page }, originText: string) => {
-  // /quiz/etymology-freeform: Origin <Input> with placeholder "e.g., spect".
-  await page.getByPlaceholder(/e\.g\., spect/i).fill(originText);
-});
-
 When("I type the meaning {string}", async ({ page }, meaning: string) => {
-  // Two pages use a "Meaning" input: vocabulary freeform (placeholder "e.g.,
-  // to go to bed; to sleep") and etymology freeform (placeholder "e.g., to
-  // look or see"). Each scenario only exposes one of them at a time, so we
-  // try both.
-  const vocab = page.getByPlaceholder(/e\.g\., to go to bed/i);
-  if (await vocab.first().isVisible().catch(() => false)) {
-    await vocab.first().fill(meaning);
-    return;
-  }
-  await page.getByPlaceholder(/e\.g\., to look or see/i).fill(meaning);
+  // Vocabulary freeform's "Meaning" input (placeholder "e.g., to go to bed;
+  // to sleep").
+  await page.getByPlaceholder(/e\.g\., to go to bed/i).first().fill(meaning);
 });
 
 When("I submit my answer", async ({ page }) => {
-  // The submit button is rendered as "Submit" (AnswerInput, etymology-freeform)
+  // The submit button is rendered as "Submit" (AnswerInput / Etymology Origin)
   // or "Check Answer" (vocabulary freeform). Match either one.
   await page
     .getByRole("button", { name: /^(submit|check answer)$/i })
@@ -107,7 +94,9 @@ When("I submit my answer", async ({ page }) => {
 });
 
 // AnswerInput renders a secondary "Don't Know" button next to Submit when its
-// onSkip handler is wired (Standard, Reverse, Etymology Standard/Reverse).
+// onSkip handler is wired (Standard and Reverse vocabulary quizzes). The
+// Etymology Origin quiz has no skip control — a blank word graded incorrect on
+// Submit is its equivalent — so this step is not used by etymology scenarios.
 When("I skip the card", async ({ page }) => {
   await page.getByRole("button", { name: /^don'?t know$/i }).first().click();
 });
@@ -289,15 +278,80 @@ Then("I see a freeform answer form", async ({ page }) => {
 });
 
 Then("I see an etymology prompt", async ({ page }) => {
-  // Etymology standard placeholder: "type the meaning..."
-  // Etymology reverse placeholder:  "type the origin..."
-  // Etymology freeform: separate Origin + Meaning inputs (placeholders
-  // "e.g., spect" / "e.g., to look or see").
-  const anyPrompt = page
-    .getByPlaceholder(/type the meaning\.\.\./i)
-    .or(page.getByPlaceholder(/type the origin\.\.\./i))
-    .or(page.getByPlaceholder(/e\.g\., spect/i));
-  await expect(anyPrompt.first()).toBeVisible();
+  // The Etymology Origin page renders one "type the meaning..." input per
+  // derived family word under the origin header.
+  await expect(
+    page.getByPlaceholder(/type the meaning\.\.\./i).first(),
+  ).toBeVisible();
+});
+
+// Each family word's meaning input carries aria-label "Meaning of <word>" (see
+// EtymologyOriginPage), letting a scenario target one specific word on a
+// multi-word origin card instead of relying on input order.
+When(
+  "I type {string} for the family word {string}",
+  async ({ page }, meaning: string, word: string) => {
+    await page.getByLabel(`Meaning of ${word}`).fill(meaning);
+  },
+);
+
+// QuizResultCard's per-word override button carries an aria-label naming the
+// word ("Mark <word> as correct/incorrect"), distinct from the origin's own
+// root-level "Mark as Correct"/"Mark as Incorrect" button, so a card with
+// several family words can be targeted precisely. See QuizResultCard.tsx.
+When(
+  "I mark the family word {string} as correct",
+  async ({ page }, word: string) => {
+    await page.getByRole("button", { name: `Mark ${word} as correct` }).click();
+  },
+);
+
+When(
+  "I mark the family word {string} as incorrect",
+  async ({ page }, word: string) => {
+    await page.getByRole("button", { name: `Mark ${word} as incorrect` }).click();
+  },
+);
+
+// A word's per-word button label is the inverse of its current correctness —
+// "Mark as Incorrect" is shown when the word IS currently correct, and vice
+// versa — so asserting on the button's presence doubles as asserting the
+// word's displayed status (learning-history invariant L3: display == stored).
+Then(
+  "I see the family word {string} marked correct",
+  async ({ page }, word: string) => {
+    await expect(
+      page.getByRole("button", { name: `Mark ${word} as incorrect` }),
+    ).toBeVisible();
+  },
+);
+
+Then(
+  "I see the family word {string} marked incorrect",
+  async ({ page }, word: string) => {
+    await expect(
+      page.getByRole("button", { name: `Mark ${word} as correct` }),
+    ).toBeVisible();
+  },
+);
+
+// UX regression: the etymology-origin feedback screen never renders
+// the origin-level "Excluded"/"Resume" state or the "Excluded from Quizzes"
+// bucket — excluding an origin from future quizzes is a distinct, explicit
+// action (the removed origin-level Exclude button) that a per-word "Skip"
+// during answering must never trigger as a side effect.
+Then("I do not see the origin marked excluded", async ({ page }) => {
+  await expect(page.getByRole("button", { name: /^resume$/i })).toHaveCount(0);
+  await expect(page.getByText(/excluded from quizzes/i)).toHaveCount(0);
+});
+
+// Bug-1 regression: the old standard-mode etymology quiz's concept-cluster
+// scaffold must never render on the Etymology Origin feedback screen.
+Then("I do not see the concept-cluster block", async ({ page }) => {
+  await expect(page.getByText("Feedback", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText(/Fill in the blank to complete this concept/i),
+  ).toHaveCount(0);
 });
 
 Then(

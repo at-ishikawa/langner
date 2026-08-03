@@ -78,8 +78,8 @@ func walkEtymologyStatus(dir string, histories map[string][]notebook.LearningHis
 
 func printEtymologyStatus(dir string, idx etymologyStatusIndex, history []notebook.LearningHistory) {
 	fmt.Printf("\n=== %s (%s) ===\n", idx.Name, idx.ID)
-	fmt.Printf("%-15s %5s %5s %5s %5s   %s\n",
-		"Session", "total", "frfm", "elig", "due", "blocked-by-future")
+	fmt.Printf("%-15s %5s %5s %5s   %s\n",
+		"Session", "total", "seen", "due", "blocked-by-future")
 
 	for _, p := range idx.NotebookPaths {
 		data, err := os.ReadFile(filepath.Join(dir, p))
@@ -96,58 +96,32 @@ func printEtymologyStatus(dir string, idx etymologyStatusIndex, history []notebo
 		}
 
 		seen := make(map[string]bool)
-		var total, freeformed, eligible, due int
+		var total, studied, due int
 		var blocked []string
 		for _, o := range sf.Origins {
-			key := strings.ToLower(strings.TrimSpace(o.Origin))
+			key := strings.ToLower(strings.TrimSpace(o.Origin)) + "\x00" + o.Sense
 			if seen[key] {
 				continue
 			}
 			seen[key] = true
 			total++
-			expr := findEtymologyExpression(history, idx.Name, title, o.Origin)
+			expr := notebook.FindOriginExpression(history, title, o.Origin, o.Sense)
 			if expr == nil {
 				continue
 			}
-			if !expr.HasEtymologyFreeformAnswer() {
-				continue
-			}
-			freeformed++
-			if !expr.HasCorrectEtymologyAnswer() {
-				continue
-			}
-			eligible++
-			if expr.NeedsEtymologyReview(notebook.QuizTypeEtymologyStandard) {
+			studied++
+			if expr.NeedsEtymologyReview(notebook.QuizTypeEtymologyOrigin) {
 				due++
 				continue
 			}
-			if d := nextEtymologyReviewDate(expr.EtymologyBreakdownLogs); d != "" {
+			if d := nextEtymologyReviewDate(expr.EtymologyOriginLogs); d != "" {
 				blocked = append(blocked, fmt.Sprintf("%s→%s", o.Origin, d))
 			}
 		}
 		sort.Strings(blocked)
-		fmt.Printf("%-15s %5d %5d %5d %5d   %s\n",
-			title, total, freeformed, eligible, due, strings.Join(blocked, ", "))
+		fmt.Printf("%-15s %5d %5d %5d   %s\n",
+			title, total, studied, due, strings.Join(blocked, ", "))
 	}
-}
-
-func findEtymologyExpression(hist []notebook.LearningHistory, notebookTitle, sceneTitle, origin string) *notebook.LearningHistoryExpression {
-	for _, h := range hist {
-		if h.Metadata.Title != notebookTitle {
-			continue
-		}
-		for _, scene := range h.Scenes {
-			if scene.Metadata.Title != sceneTitle {
-				continue
-			}
-			for i := range scene.Expressions {
-				if strings.EqualFold(scene.Expressions[i].Expression, origin) {
-					return &scene.Expressions[i]
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func nextEtymologyReviewDate(logs []notebook.LearningRecord) string {

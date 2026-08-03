@@ -435,20 +435,16 @@ var quizTypeOrder = []string{
 	string(notebook.QuizTypeNotebook),
 	string(notebook.QuizTypeReverse),
 	string(notebook.QuizTypeFreeform),
-	string(notebook.QuizTypeEtymologyStandard),
-	string(notebook.QuizTypeEtymologyReverse),
-	string(notebook.QuizTypeEtymologyFreeform),
+	string(notebook.QuizTypeEtymologyOrigin),
 	string(notebook.QuizTypeGrammar),
 }
 
 var quizTypeLabels = map[string]string{
-	string(notebook.QuizTypeNotebook):          "Notebook",
-	string(notebook.QuizTypeReverse):           "Reverse",
-	string(notebook.QuizTypeFreeform):          "Freeform",
-	string(notebook.QuizTypeEtymologyStandard): "Etymology breakdown",
-	string(notebook.QuizTypeEtymologyReverse):  "Etymology assembly",
-	string(notebook.QuizTypeEtymologyFreeform): "Etymology freeform",
-	string(notebook.QuizTypeGrammar):           "Grammar",
+	string(notebook.QuizTypeNotebook):        "Notebook",
+	string(notebook.QuizTypeReverse):         "Reverse",
+	string(notebook.QuizTypeFreeform):        "Freeform",
+	string(notebook.QuizTypeEtymologyOrigin): "Etymology",
+	string(notebook.QuizTypeGrammar):         "Grammar",
 }
 
 func quizTypeLabel(q string) string {

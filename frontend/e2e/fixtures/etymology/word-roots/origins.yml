@@ -9,13 +9,32 @@ origins:
     type: prefix
     language: Greek
     meaning: distant
-  # phon is the freeform scenario's answer target. Standard/Reverse run
-  # afterwards with `Include unstudied words` on and expect to see graph
-  # and tele as their two cards — answering an origin from THAT set in
-  # freeform would push it into SR cooldown and the later scenarios would
-  # see only one card. Using a separate origin for freeform keeps each
-  # scenario self-contained without an inter-scenario data reset.
+  # phon has no derived-word family in the definitions notebook, so the
+  # grouped Etymology Origin quiz omits it (an origin with nothing to type
+  # is not shown). It stays here to exercise that "no family → skipped"
+  # path while graph and tele remain the notebook's two quiz cards.
   - origin: phon
     type: root
     language: Greek
     meaning: sound
+  # opsis/optikos are grouped under a "sight or vision" concept below. They
+  # exist so an e2e scenario can assert the Etymology Origin feedback screen
+  # never renders the concept-cluster "Fill in the blank to complete this
+  # concept" block — that block was leftover scaffolding from the old
+  # standard-mode etymology quiz and is not part of this quiz mode's UI.
+  - origin: opsis
+    type: root
+    language: Greek
+    meaning: sight, vision
+  - origin: optikos
+    type: root
+    language: Greek
+    meaning: sight, vision
+concepts:
+  - key: sight_vision
+    meaning: sight or vision
+    members:
+      - origin: opsis
+        language: Greek
+      - origin: optikos
+        language: Greek
