@@ -1,0 +1,4 @@
+id: travel
+name: "Travel Diary"
+notebooks:
+  - ./entries.yml

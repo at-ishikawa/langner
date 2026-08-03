@@ -132,16 +132,26 @@ When(
 );
 
 // Navigates the working queue to the grammar POST holding the due blank for
-// {string} (skipping past any other-format card via its "Don't Know" shortcut,
-// which on a single vocab/etymology card is a skip-for-now, not an exclude),
-// then STOPS on the post without answering — so a following step can exercise
-// "See answers" or the per-blank Exclude control.
+// {string}, then STOPS on it without answering — so a following step can
+// exercise "See answers" or the per-blank Exclude control. Two kinds of card
+// may sit in front of the target:
+//   - a single vocab/etymology card → skipped via its "Don't Know" shortcut (a
+//     skip-for-now, not an exclude);
+//   - ANOTHER grammar post (a miss pooled by an earlier scenario in the same
+//     24h window — the pool is shared, DB state is not reset between scenarios)
+//     → it has no "Don't Know", so it is drained by revealing its answers and
+//     advancing. Relearn persists nothing, so revealing a distractor post grades
+//     nothing to disk and leaves the correction due for its own scenario.
 When(
   "I open the grammar relearn post for {string}",
   async ({ page }, incorrect: string) => {
     const dontKnow = page.getByRole("button", { name: "Don't Know", exact: true });
     const cardNext = page.getByRole("button", { name: "Next", exact: true });
     const grammarInput = page.getByLabel(`Correction for "${incorrect}"`);
+    const grammarPost = page.getByTestId("relearn-grammar-post");
+    const seeAnswers = page.getByRole("button", { name: /See answers/ });
+    const closeDetails = page.getByRole("button", { name: "Close details" });
+    const grammarNext = page.getByTestId("relearn-grammar-next");
 
     let found = false;
     for (let i = 0; i < 50 && !page.url().includes("/quiz/relearn/complete"); i++) {
@@ -158,9 +168,20 @@ When(
         found = true;
         break;
       }
-      await dontKnow.click();
-      await cardNext.waitFor({ state: "visible" });
-      await cardNext.click();
+      if (await grammarPost.isVisible().catch(() => false)) {
+        // A grammar post that is NOT the target — reveal every blank (marks the
+        // unanswered ones incorrect, persisting nothing) then advance past it.
+        if (await seeAnswers.isVisible().catch(() => false)) await seeAnswers.click();
+        await grammarNext.waitFor({ state: "visible" });
+        // The revealed-feedback sheet is pinned to the viewport bottom and can
+        // overlap Next; close it first so the click isn't intercepted.
+        if (await closeDetails.isVisible().catch(() => false)) await closeDetails.click();
+        await grammarNext.click();
+      } else {
+        await dontKnow.click();
+        await cardNext.waitFor({ state: "visible" });
+        await cardNext.click();
+      }
     }
     expect(found, `grammar relearn post for "${incorrect}" never appeared`).toBe(true);
   },

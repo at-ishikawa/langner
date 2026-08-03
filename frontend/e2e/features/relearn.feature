@@ -46,7 +46,7 @@ Feature: Relearn Quiz
   # correction's stable id, is unchanged end to end — grouping is presentation).
   Scenario: Relearn a grammar correction missed moments ago
     Given I open the Grammar quiz
-    And I select the "Practice Journal" notebook
+    And I select the "Travel Diary" notebook
     And I start the grammar quiz
     Then I see the grammar correction input for "the John"
 
@@ -78,7 +78,7 @@ Feature: Relearn Quiz
   # .claude/rules/learning-history-invariants.md).
   Scenario: An unanswered grammar relearn blank is marked incorrect, not excluded
     Given I open the Grammar quiz
-    And I select the "Practice Journal" notebook
+    And I select the "Cooking Notes" notebook
     And I start the grammar quiz
     Then I see the grammar correction input for "the John"
 
@@ -102,7 +102,7 @@ Feature: Relearn Quiz
   # blank incorrect. See .claude/rules/quiz-ui-invariants.md.
   Scenario: Excluding a grammar relearn blank removes it from the post
     Given I open the Grammar quiz
-    And I select the "Practice Journal" notebook
+    And I select the "Cooking Notes" notebook
     And I start the grammar quiz
     Then I see the grammar correction input for "the John"
 

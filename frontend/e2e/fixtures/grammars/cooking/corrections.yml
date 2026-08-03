@@ -1,0 +1,24 @@
+# Grammar corrections for the "Cooking Notes" journal. This journal is shared by
+# the two grammar Relearn scenarios that answer every blank wrong: "An
+# unanswered grammar relearn blank is marked incorrect, not excluded" and
+# "Excluding a grammar relearn blank removes it from the post". Both leave the
+# corrections DUE (the first reveals answers, the second only excludes at the
+# end), so the second scenario still finds "the John" due when it starts. Unique
+# ids keep this journal's learning-history / Relearn-pool series distinct from
+# the Travel Diary and Practice Journal journals.
+- metadata:
+    title: "A dinner night"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: cooking-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No definite article before a personal name."
+        - id: cooking-suggested
+          incorrect: "suggested to go"
+          correct: "suggested going"
+          category: verb-pattern
+          reason: "'suggest' takes a gerund, not an infinitive."

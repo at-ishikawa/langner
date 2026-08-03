@@ -1,0 +1,7 @@
+- event: "A city trip"
+  date: 2026-04-12T00:00:00Z
+  scenes:
+    - scene: ""
+      statements:
+        - "Last spring the John showed me around the old town."
+        - "He suggested to go by train, but we drove instead."

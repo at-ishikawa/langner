@@ -1,0 +1,7 @@
+- event: "A dinner night"
+  date: 2026-05-20T00:00:00Z
+  scenes:
+    - scene: ""
+      statements:
+        - "On Friday the John cooked dinner for the whole team."
+        - "He suggested to go for dessert afterwards."
