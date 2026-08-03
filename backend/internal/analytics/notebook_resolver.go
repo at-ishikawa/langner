@@ -2,6 +2,7 @@ package analytics
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -48,6 +49,9 @@ func (r *NotebookMetadataResolver) Resolve(_ context.Context, notebookID, id, ex
 	if quizType != "" {
 		if isEtymologyQuizType(quizType) {
 			return r.resolveOrigin(notebookID, expression)
+		}
+		if quizType == string(notebook.QuizTypeGrammar) {
+			return r.resolveGrammar(notebookID, expression)
 		}
 		return r.resolveVocab(notebookID, id, expression)
 	}
@@ -304,6 +308,73 @@ func matchExpression(expr, definition, target string) bool {
 	}
 	low := strings.ToLower(target)
 	return strings.ToLower(expr) == low || strings.ToLower(definition) == low
+}
+
+// resolveGrammar looks up a grammar attempt's metadata. expression is the
+// correction's stable id (senseID) — the canonical storage/lookup key
+// grammar's writer and reader already agree on (SaveGrammarBlank /
+// GetLatestLearnedInfo, both keyed on (notebookID, senseID); see .claude/
+// rules/learning-history-invariants.md, L1/L2). Resolution walks the
+// notebook's corrections using notebook.CorrectionID — the same single
+// derivation the grammar quiz and the Relearn pool call — so the id a
+// correction was stored under is always the id resolved back here.
+//
+// Since the stored key is an opaque id, not display text, Meaning /
+// ExampleSentence / DisplayExpression are populated here rather than left to
+// derive from `expression` itself (L3): the card shows the correction's
+// actual mistake and fix, not the id.
+func (r *NotebookMetadataResolver) resolveGrammar(notebookID, expression string) WordMetadata {
+	stories, err := r.reader.ReadStoryNotebooks(notebookID)
+	if err != nil {
+		return WordMetadata{}
+	}
+	for _, sn := range stories {
+		for sceneIdx, scene := range sn.Scenes {
+			for seq, c := range r.reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx) {
+				if notebook.CorrectionID(notebookID, sn.Event, sceneIdx, seq+1, c) != expression {
+					continue
+				}
+				display := c.Incorrect
+				if c.Correct != "" {
+					display = fmt.Sprintf("%s → %s", c.Incorrect, c.Correct)
+				}
+				meaning := c.Reason
+				if meaning == "" && c.Correct != "" {
+					meaning = fmt.Sprintf("Correct: %s", c.Correct)
+				}
+				return WordMetadata{
+					Meaning:           meaning,
+					ExampleSentence:   grammarExampleSentence(scene, c.Incorrect),
+					NotebookKind:      "grammar",
+					DisplayExpression: display,
+				}
+			}
+		}
+	}
+	return WordMetadata{}
+}
+
+// grammarExampleSentence returns the scene line (conversation quote or
+// statement) that contains the mistaken span, so the card shows the
+// sentence the mistake actually appeared in. Correction.Incorrect is
+// documented as an exact substring of the entry's text, so a plain
+// substring match is enough (unlike vocab's findUsageInScene, which also
+// absorbs conjugated/pluralised forms).
+func grammarExampleSentence(scene notebook.StoryScene, incorrect string) string {
+	if incorrect == "" {
+		return ""
+	}
+	for _, conv := range scene.Conversations {
+		if strings.Contains(conv.Quote, incorrect) {
+			return cleanExampleSentence(conv.Quote)
+		}
+	}
+	for _, stmt := range scene.Statements {
+		if strings.Contains(stmt, incorrect) {
+			return cleanExampleSentence(stmt)
+		}
+	}
+	return ""
 }
 
 func (r *NotebookMetadataResolver) resolveOrigin(notebookID, expression string) WordMetadata {

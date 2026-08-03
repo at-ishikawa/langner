@@ -1,0 +1,21 @@
+# Pre-seeds a misunderstood grammar correction on a fixed date so the
+# Analytics Day Detail e2e scenario can assert it is labeled "grammar", not
+# the generic "notebook" the old appendExpressionAttempts slot-based bug
+# stamped on every LearnedLogs record regardless of the record's own
+# recorded quiz_type (grammar shares the LearnedLogs slot with notebook and
+# freeform — see internal/analytics/yaml_repository.go). Shape mirrors
+# learning_notes/word-roots.yml; id matches the "party-suggested" correction
+# in fixtures/grammars/journal/corrections.yml, which SaveGrammarBlank keys
+# both `id` and `expression` on (the correction's stable senseID).
+- metadata:
+    id: practice
+    title: journal
+    type: grammar
+  expressions:
+    - id: party-suggested
+      expression: party-suggested
+      learned_logs:
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
+          quality: 1
+          quiz_type: grammar

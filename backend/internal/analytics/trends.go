@@ -438,6 +438,7 @@ var quizTypeOrder = []string{
 	string(notebook.QuizTypeEtymologyStandard),
 	string(notebook.QuizTypeEtymologyReverse),
 	string(notebook.QuizTypeEtymologyFreeform),
+	string(notebook.QuizTypeGrammar),
 }
 
 var quizTypeLabels = map[string]string{
@@ -447,6 +448,7 @@ var quizTypeLabels = map[string]string{
 	string(notebook.QuizTypeEtymologyStandard): "Etymology breakdown",
 	string(notebook.QuizTypeEtymologyReverse):  "Etymology assembly",
 	string(notebook.QuizTypeEtymologyFreeform): "Etymology freeform",
+	string(notebook.QuizTypeGrammar):           "Grammar",
 }
 
 func quizTypeLabel(q string) string {

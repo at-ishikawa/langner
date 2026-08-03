@@ -4123,11 +4123,17 @@ type RelearnCard struct {
 	SourceQuizType QuizType `protobuf:"varint,3,opt,name=source_quiz_type,json=sourceQuizType,proto3,enum=api.v1.QuizType" json:"source_quiz_type,omitempty"`
 	// meaning is the prompt for reverse / etymology-reverse cards and the
 	// expected answer otherwise. Always sent so feedback can show both sides.
-	Meaning       string             `protobuf:"bytes,4,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	Examples      []*Example         `protobuf:"bytes,5,rep,name=examples,proto3" json:"examples,omitempty"` // recognition hint
-	Contexts      []*ContextSentence `protobuf:"bytes,6,rep,name=contexts,proto3" json:"contexts,omitempty"` // reverse hint (masked)
-	Type          string             `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"`         // etymology origin type (root/prefix/suffix)
-	Language      string             `protobuf:"bytes,8,opt,name=language,proto3" json:"language,omitempty"` // etymology origin language
+	Meaning  string             `protobuf:"bytes,4,opt,name=meaning,proto3" json:"meaning,omitempty"`
+	Examples []*Example         `protobuf:"bytes,5,rep,name=examples,proto3" json:"examples,omitempty"` // recognition hint
+	Contexts []*ContextSentence `protobuf:"bytes,6,rep,name=contexts,proto3" json:"contexts,omitempty"` // reverse hint (masked)
+	Type     string             `protobuf:"bytes,7,opt,name=type,proto3" json:"type,omitempty"`         // etymology origin type (root/prefix/suffix)
+	Language string             `protobuf:"bytes,8,opt,name=language,proto3" json:"language,omitempty"` // etymology origin language
+	// Grammar display extras (empty for vocab/etymology cards). Populated when
+	// source_quiz_type is QUIZ_TYPE_GRAMMAR: the live grammar quiz's inline-
+	// correction card is reused to present these — the full entry text with
+	// the missed span struck through and an inline box for the fix.
+	Content       string `protobuf:"bytes,9,opt,name=content,proto3" json:"content,omitempty"`      // the journal entry's full text (grammar)
+	Incorrect     string `protobuf:"bytes,10,opt,name=incorrect,proto3" json:"incorrect,omitempty"` // the mistaken span to correct, struck through in content
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4218,6 +4224,20 @@ func (x *RelearnCard) GetLanguage() string {
 	return ""
 }
 
+func (x *RelearnCard) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *RelearnCard) GetIncorrect() string {
+	if x != nil {
+		return x.Incorrect
+	}
+	return ""
+}
+
 type SubmitRelearnAnswerRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
@@ -4300,6 +4320,15 @@ type SubmitRelearnAnswerResponse struct {
 	ContextScenes []*RelearnContextScene `protobuf:"bytes,6,rep,name=context_scenes,json=contextScenes,proto3" json:"context_scenes,omitempty"`
 	GraphContext  *GraphPrompt           `protobuf:"bytes,7,opt,name=graph_context,json=graphContext,proto3" json:"graph_context,omitempty"`
 	ExampleWords  []string               `protobuf:"bytes,8,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
+	// Grammar feedback extras (empty for vocab/etymology cards), populated
+	// when the graded card's source_quiz_type was QUIZ_TYPE_GRAMMAR — mirrors
+	// what the live grammar quiz's feedback card shows (see
+	// GrammarFeedbackCard.tsx): the reference fix, the mistake's category,
+	// and the authored grammar note (separate from `reason`, which here
+	// carries the grader's critique of THIS answer).
+	CorrectAnswer string `protobuf:"bytes,9,opt,name=correct_answer,json=correctAnswer,proto3" json:"correct_answer,omitempty"`
+	Category      string `protobuf:"bytes,10,opt,name=category,proto3" json:"category,omitempty"`
+	GrammarNote   string `protobuf:"bytes,11,opt,name=grammar_note,json=grammarNote,proto3" json:"grammar_note,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4388,6 +4417,27 @@ func (x *SubmitRelearnAnswerResponse) GetExampleWords() []string {
 		return x.ExampleWords
 	}
 	return nil
+}
+
+func (x *SubmitRelearnAnswerResponse) GetCorrectAnswer() string {
+	if x != nil {
+		return x.CorrectAnswer
+	}
+	return ""
+}
+
+func (x *SubmitRelearnAnswerResponse) GetCategory() string {
+	if x != nil {
+		return x.Category
+	}
+	return ""
+}
+
+func (x *SubmitRelearnAnswerResponse) GetGrammarNote() string {
+	if x != nil {
+		return x.GrammarNote
+	}
+	return ""
 }
 
 // RelearnContextScene mirrors what the Learn page renders for a word: the
@@ -5483,7 +5533,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\fwindow_hours\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xa8\x01(\x00R\vwindowHours\"E\n" +
 	"\x18StartRelearnQuizResponse\x12)\n" +
-	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xa4\x02\n" +
+	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xdc\x02\n" +
 	"\vRelearnCard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
 	"\x05entry\x18\x02 \x01(\tR\x05entry\x12:\n" +
@@ -5492,13 +5542,16 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\bexamples\x18\x05 \x03(\v2\x0f.api.v1.ExampleR\bexamples\x123\n" +
 	"\bcontexts\x18\x06 \x03(\v2\x17.api.v1.ContextSentenceR\bcontexts\x12\x12\n" +
 	"\x04type\x18\a \x01(\tR\x04type\x12\x1a\n" +
-	"\blanguage\x18\b \x01(\tR\blanguage\"\x9f\x01\n" +
+	"\blanguage\x18\b \x01(\tR\blanguage\x12\x18\n" +
+	"\acontent\x18\t \x01(\tR\acontent\x12\x1c\n" +
+	"\tincorrect\x18\n" +
+	" \x01(\tR\tincorrect\"\x9f\x01\n" +
 	"\x1aSubmitRelearnAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xd9\x02\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xbf\x03\n" +
 	"\x1bSubmitRelearnAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -5508,7 +5561,11 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x06images\x18\x05 \x03(\tR\x06images\x12B\n" +
 	"\x0econtext_scenes\x18\x06 \x03(\v2\x1b.api.v1.RelearnContextSceneR\rcontextScenes\x128\n" +
 	"\rgraph_context\x18\a \x01(\v2\x13.api.v1.GraphPromptR\fgraphContext\x12#\n" +
-	"\rexample_words\x18\b \x03(\tR\fexampleWords\"\xc2\x01\n" +
+	"\rexample_words\x18\b \x03(\tR\fexampleWords\x12%\n" +
+	"\x0ecorrect_answer\x18\t \x01(\tR\rcorrectAnswer\x12\x1a\n" +
+	"\bcategory\x18\n" +
+	" \x01(\tR\bcategory\x12!\n" +
+	"\fgrammar_note\x18\v \x01(\tR\vgrammarNote\"\xc2\x01\n" +
 	"\x13RelearnContextScene\x12#\n" +
 	"\rnotebook_name\x18\x01 \x01(\tR\fnotebookName\x12\x1f\n" +
 	"\vscene_title\x18\x02 \x01(\tR\n" +

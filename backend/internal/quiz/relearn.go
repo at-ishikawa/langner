@@ -36,6 +36,9 @@ type RelearnContextScene struct {
 //	QuizTypeReverse           production:  show Meaning + masked Contexts, ask Entry
 //	QuizTypeEtymologyStandard show Entry (origin), ask the Meaning
 //	QuizTypeEtymologyReverse  show Meaning, ask Entry (origin)
+//	QuizTypeGrammar           correction: show Content with Incorrect struck
+//	                          through, ask for the fix — the live grammar
+//	                          quiz's own inline-correction card, reused as-is.
 //
 // A word failed in several quiz types yields one card per type. Nothing about a
 // RelearnCard is ever persisted — the Relearn Quiz writes no learning history
@@ -50,6 +53,12 @@ type RelearnCard struct {
 	OriginType string
 	Language   string
 
+	// Grammar display extras (empty for vocab/etymology cards). Content is
+	// the journal entry's full text; Incorrect is the mistaken span struck
+	// through in it, exactly as the live grammar quiz renders one blank.
+	Content   string
+	Incorrect string
+
 	// Answering-screen hints.
 	Examples []Example        // recognition
 	Contexts []ReverseContext // reverse (masked)
@@ -63,17 +72,24 @@ type RelearnCard struct {
 	vocabCard     Card
 	reverseCard   ReverseCard
 	etymologyCard EtymologyOriginCard
+	grammarCard   GrammarBlank
 }
 
-// VocabCard, ReverseCard, EtymologyCard return the card the matching pure grader
-// consumes for this Format.
+// VocabCard, ReverseCard, EtymologyCard, GrammarCard return the card the
+// matching pure grader consumes for this Format.
 func (c RelearnCard) VocabCard() Card                    { return c.vocabCard }
 func (c RelearnCard) ReverseCard() ReverseCard           { return c.reverseCard }
 func (c RelearnCard) EtymologyCard() EtymologyOriginCard { return c.etymologyCard }
+func (c RelearnCard) GrammarCard() GrammarBlank          { return c.grammarCard }
 
 // IsEtymology reports whether the card's Format is one of the etymology modes.
 func (c RelearnCard) IsEtymology() bool {
 	return c.Format == notebook.QuizTypeEtymologyStandard || c.Format == notebook.QuizTypeEtymologyReverse
+}
+
+// IsGrammar reports whether the card's Format is the grammar mode.
+func (c RelearnCard) IsGrammar() bool {
+	return c.Format == notebook.QuizTypeGrammar
 }
 
 // relearnKeySep separates the fields of the internal de-dup key ((format,
@@ -112,8 +128,8 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	// One candidate per (format, notebook, expression); the same expression can
 	// recur across scenes (multi-sense etymology), so keep the most-recent wrong.
 	candidates := make(map[string]relearnCandidate)
-	consider := func(notebookName string, expr notebook.LearningHistoryExpression) {
-		for _, sp := range relearnSeries(expr) {
+	consider := func(notebookName, metadataType string, expr notebook.LearningHistoryExpression) {
+		for _, sp := range relearnSeries(metadataType, expr) {
 			if len(sp.logs) == 0 {
 				continue
 			}
@@ -138,12 +154,12 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	}
 	for notebookName, hs := range histories {
 		for _, h := range hs {
-			for _, expr := range h.Expressions { // flashcard-level
-				consider(notebookName, expr)
+			for _, expr := range h.Expressions { // flashcard/grammar-level
+				consider(notebookName, h.Metadata.Type, expr)
 			}
 			for _, scene := range h.Scenes { // story/etymology scene-level
 				for _, expr := range scene.Expressions {
-					consider(notebookName, expr)
+					consider(notebookName, h.Metadata.Type, expr)
 				}
 			}
 		}
@@ -159,6 +175,10 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return nil, err
 	}
 	etymByOrigin, err := s.relearnEtymologyIndex()
+	if err != nil {
+		return nil, err
+	}
+	grammarByID, err := s.relearnGrammarIndex()
 	if err != nil {
 		return nil, err
 	}
@@ -188,6 +208,32 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 
 	cards := make([]RelearnCard, 0, len(candidates))
 	for _, c := range candidates {
+		if c.format == notebook.QuizTypeGrammar {
+			// A grammar candidate's id and expression are both the
+			// correction's senseID (SaveGrammarBlank writes Expression:
+			// senseID, SenseID: senseID) — try id first for symmetry with
+			// the vocab branch below, falling back to expression for
+			// legacy id-less candidates.
+			entry, ok := grammarByID[c.id]
+			if !ok {
+				entry, ok = grammarByID[c.expression]
+			}
+			if !ok {
+				continue // no due grammar post/blank to grade/display against
+			}
+			cards = append(cards, RelearnCard{
+				// NotebookName carries the notebook ID (c.notebookName, from the
+				// learning-history metadata) — not the display name — so a
+				// deliberate Exclude (SkipWord) resolves to the correct
+				// <notebookID>.yml, matching the live grammar quiz's grammarStore
+				// (which also skips by notebook ID). The frontend never shows a
+				// notebook name on a grammar relearn post.
+				Format: c.format, Entry: c.expression, NotebookName: c.notebookName,
+				Content: entry.post.Content, Incorrect: entry.blank.Incorrect,
+				grammarCard: entry.blank,
+			})
+			continue
+		}
 		if c.format == notebook.QuizTypeEtymologyStandard || c.format == notebook.QuizTypeEtymologyReverse {
 			sense, ok := etymByOrigin[strings.ToLower(strings.TrimSpace(c.expression))]
 			if !ok {
@@ -265,11 +311,24 @@ type relearnSeriesSpec struct {
 	format notebook.QuizType
 }
 
-// relearnSeries returns the four independent log series an expression can carry,
-// each mapped to the relearn card format that mirrors it. Notebook and freeform
-// share LearnedLogs and both replay as recognition; etymology freeform shares
-// the breakdown track and replays as etymology-standard.
-func relearnSeries(expr notebook.LearningHistoryExpression) []relearnSeriesSpec {
+// relearnSeries returns the log series an expression can carry, each mapped
+// to the relearn card format that mirrors it. Notebook and freeform share
+// LearnedLogs and both replay as recognition; etymology freeform shares the
+// breakdown track and replays as etymology-standard.
+//
+// metadataType is the owning LearningHistory's Metadata.Type — the same
+// value flatTypeForStory (learning_history.go) derives at write time for the
+// flat "journal" bucket. A grammar entry only ever writes LearnedLogs (see
+// SaveGrammarBlank), so it gets a single series mapped to QuizTypeGrammar
+// instead of the four vocab series; reusing this one check (rather than
+// re-deriving "is this a grammar entry" from the expression shape) is what
+// keeps this classification symmetric with the writer (L2).
+func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression) []relearnSeriesSpec {
+	if metadataType == string(notebook.QuizTypeGrammar) {
+		return []relearnSeriesSpec{
+			{logs: expr.LearnedLogs, format: notebook.QuizTypeGrammar},
+		}
+	}
 	return []relearnSeriesSpec{
 		{logs: expr.LearnedLogs, format: notebook.QuizTypeNotebook},
 		{logs: expr.ReverseLogs, format: notebook.QuizTypeReverse},
@@ -332,6 +391,41 @@ func (s *Service) relearnEtymologyIndex() (map[string]EtymologyOriginCard, error
 		}
 	}
 	return byOrigin, nil
+}
+
+// relearnGrammarEntry pairs a due grammar blank with the post it belongs to,
+// so the relearn card can show the whole entry (Content) with the missed
+// span (Incorrect) struck through — exactly like the live grammar quiz.
+type relearnGrammarEntry struct {
+	post  GrammarPost
+	blank GrammarBlank
+}
+
+// relearnGrammarIndex loads every grammar-drilled journal once and indexes
+// each due blank by its stable correction id (senseID), for grading and
+// display. It reuses LoadGrammarPosts — the same loader the live grammar
+// quiz calls — so a just-missed correction (status "misunderstood") is
+// always "due" (NeedsForwardReview treats misunderstood as always-due) and
+// therefore always present in the index the moment it lands in the relearn
+// pool.
+func (s *Service) relearnGrammarIndex() (map[string]relearnGrammarEntry, error) {
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("init reader for relearn grammar pool: %w", err)
+	}
+	byID := make(map[string]relearnGrammarEntry)
+	for _, storyID := range reader.GrammarStoryIDs() {
+		posts, err := s.LoadGrammarPosts(storyID, nil)
+		if err != nil {
+			return nil, fmt.Errorf("load grammar posts for relearn pool (%s): %w", storyID, err)
+		}
+		for _, post := range posts {
+			for _, blank := range post.Blanks {
+				byID[blank.SenseID] = relearnGrammarEntry{post: post, blank: blank}
+			}
+		}
+	}
+	return byID, nil
 }
 
 // relearnMaskedContexts builds reverse-quiz-style masked contexts from a vocab

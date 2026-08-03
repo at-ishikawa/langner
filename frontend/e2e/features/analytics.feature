@@ -25,3 +25,16 @@ Feature: Quiz Analytics
     Then I should be on the Analytics Day Detail page
     And the Day Detail page is not in an error state
     And I see the word "scribo"
+
+  # A grammar attempt shares its storage slot with notebook/freeform
+  # (LearnedLogs), so before the fix it was mislabeled "notebook" — the map
+  # key of that shared slot — instead of the "grammar" its own log record
+  # carries. Also pins the L3 display fix: the raw stored key is the
+  # correction's opaque id (party-suggested), so the card must show the
+  # resolver's human-readable "mistake → fix" label instead.
+  Scenario: Day Detail labels a grammar attempt as grammar, not notebook
+    Given I open the Analytics Day Detail for "2025-01-02"
+    Then I should be on the Analytics Day Detail page
+    And the Day Detail page is not in an error state
+    And I see the word "suggested to go → suggested going"
+    And the word "party-suggested" is labeled the "grammar" quiz type

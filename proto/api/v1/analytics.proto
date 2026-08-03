@@ -234,6 +234,13 @@ message WrongWord {
   // echoes it into GetWordHistory so the drill-down targets the exact sense
   // (falling back to note_id / expression for legacy id-less data).
   string sense_id = 16;
+  // display_expression is a human-readable label for the card headline when
+  // `expression` itself isn't one — e.g. a grammar attempt's `expression` is
+  // the opaque correction id (the canonical storage/lookup key, per L3), so
+  // the resolver fills this with "Incorrect → Correct" instead. Empty for
+  // every other quiz type, where `expression` is already the display text;
+  // the frontend falls back to `expression` when this is empty.
+  string display_expression = 17;
 }
 
 // RelatedGroup is one cluster of related entries surfaced on the

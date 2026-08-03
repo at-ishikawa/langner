@@ -104,6 +104,14 @@ type WrongWord struct {
 	// concepts connected via etymology relations (antonym / synonym /
 	// hyponym / …). Empty when the source notebook declares no concepts.
 	RelatedGroups []RelatedGroup
+	// DisplayExpression is a human-readable headline for cards whose
+	// Expression is not itself display text — a grammar attempt's
+	// Expression is the opaque correction id (the canonical storage/lookup
+	// key; changing it would violate L1/L2), so the resolver fills this
+	// with e.g. "Incorrect → Correct" instead. Empty for every other quiz
+	// type, where Expression already IS the display text (L3): the
+	// frontend falls back to Expression when this is empty.
+	DisplayExpression string
 }
 
 // RelatedGroup is one cluster of related entries returned alongside a
@@ -128,6 +136,9 @@ type WordMetadata struct {
 	// under it), plus etymology relations from that concept (antonym /
 	// synonym / hyponym / …). Empty when the notebook has no concepts.
 	RelatedGroups []RelatedGroup
+	// DisplayExpression — see WrongWord.DisplayExpression. Set only by the
+	// grammar resolution path.
+	DisplayExpression string
 }
 
 // expressionType is the LearningHistoryExpression.Type value carried into

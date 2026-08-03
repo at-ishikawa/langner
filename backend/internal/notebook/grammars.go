@@ -76,6 +76,21 @@ func DerivedCorrectionID(storyID, title string, sceneIndex, seq int) string {
 	return fmt.Sprintf("%s-%s-s%d-%d", storyID, slugifyTitle(title), sceneIndex, seq)
 }
 
+// CorrectionID returns a correction's stable spaced-repetition id: its
+// explicit id when set, otherwise one derived from the story id, entry
+// title, scene index, and order. This is the single canonical derivation —
+// every reader of a grammar correction's identity (the grammar quiz itself,
+// the Relearn pool, the Analytics resolver) calls this instead of
+// re-deriving the rule, so the id a correction is stored under never drifts
+// from the id used to look it up back up (see .claude/rules/learning-
+// history-invariants.md, L2).
+func CorrectionID(storyID, title string, sceneIndex, seq int, c Correction) string {
+	if strings.TrimSpace(c.ID) != "" {
+		return c.ID
+	}
+	return DerivedCorrectionID(storyID, title, sceneIndex, seq)
+}
+
 func slugifyTitle(title string) string {
 	s := strings.ToLower(strings.TrimSpace(title))
 	s = strings.Map(func(r rune) rune {

@@ -339,3 +339,161 @@ func TestRelearn_SubmitUnknownCardIsNotFound(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
+
+// TestRelearn_GrammarCardEndToEnd is the full-stack pin for Part A: a missed
+// grammar correction reaches StartRelearnQuiz as a QUIZ_TYPE_GRAMMAR card
+// carrying the entry's content and the mistaken span (the live grammar
+// quiz's own inline-correction display data — no plain-text fallback), and
+// SubmitRelearnAnswer grades it with the same GradeGrammarBlank the live
+// grammar quiz uses, surfacing the reference fix + category on the response.
+func TestRelearn_GrammarCardEndToEnd(t *testing.T) {
+	h, _ := writeGrammarRelearnFixture(t)
+
+	cards := startRelearn(t, h, 24)
+	require.Len(t, cards, 1)
+	card := cards[0]
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
+	assert.Contains(t, card.GetContent(), "the John called me",
+		"the card carries the whole entry, like the live grammar quiz — not a degraded plain-text fallback")
+	assert.Equal(t, "the John", card.GetIncorrect())
+
+	resp, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
+		NoteId: card.GetNoteId(),
+		Answer: "John",
+	}))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetCorrect())
+	assert.Equal(t, "John", resp.Msg.GetCorrectAnswer())
+	assert.Equal(t, "article", resp.Msg.GetCategory())
+}
+
+// writeGrammarRelearnFixture writes the minimal story + grammar + learning
+// files for a single due grammar correction ("the John" → "John", status
+// misunderstood in-window) and returns a handler over them plus the learning
+// history path, so a test can drive Relearn against real YAML.
+func writeGrammarRelearnFixture(t *testing.T) (*QuizHandler, string) {
+	t.Helper()
+	storiesDir := t.TempDir()
+	grammarsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(storiesDir, "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me.\"\n"), 0644))
+
+	grammarNotebookDir := filepath.Join(grammarsDir, "journal")
+	require.NoError(t, os.MkdirAll(grammarNotebookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarNotebookDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarNotebookDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: note-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+`), 0644))
+
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: note-the-john
+      expression: note-the-john
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent)), 0644))
+
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		GrammarsDirectories:    []string{grammarsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	return NewQuizHandler(svc), learningDir
+}
+
+// TestRelearn_GrammarUnansweredIsIncorrectNotExcluded pins the final model: a
+// grammar blank the learner never answered (revealed via "See answers", sent as
+// an empty answer) is graded INCORRECT — a normal miss, never a skip and never
+// an exclude. It must NOT write the exclude-from-quizzes marker (skipped_at)
+// and the correction must stay due — reappearing in the next Relearn session.
+// See .claude/rules/quiz-ui-invariants.md.
+func TestRelearn_GrammarUnansweredIsIncorrectNotExcluded(t *testing.T) {
+	h, learningDir := writeGrammarRelearnFixture(t)
+	historyPath := filepath.Join(learningDir, "journal.yml")
+	before, err := os.ReadFile(historyPath)
+	require.NoError(t, err)
+
+	cards := startRelearn(t, h, 24)
+	require.Len(t, cards, 1, "the missed grammar correction is in the pool")
+	card := cards[0]
+	require.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
+
+	// "See answers" for an unanswered blank sends an empty answer (is_skipped is
+	// never set in grammar relearn) — it is graded incorrect deterministically.
+	resp, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
+		NoteId: card.GetNoteId(),
+		Answer: "",
+	}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetCorrect(), "an unanswered blank grades as incorrect")
+
+	// Real-state check 1: the learning-history YAML is byte-identical — no
+	// skipped_at written, no log appended. A relearn answer persists nothing.
+	after, err := os.ReadFile(historyPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after),
+		"an incorrect answer must not write learning history — and never the skipped_at exclude marker")
+	assert.NotContains(t, string(after), "skipped_at",
+		"an incorrect/unanswered blank must NOT be excluded from quizzes")
+
+	// Real-state check 2: reload the pool — the correction is still due.
+	next := startRelearn(t, h, 24)
+	require.Len(t, next, 1, "an incorrect correction stays in the Relearn pool for a future session")
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, next[0].GetSourceQuizType())
+}
+
+// TestRelearn_GrammarExcludeSetsSkippedAtAndRemovesFromPool pins the deliberate
+// Exclude action: the per-blank Exclude button calls the same SkipWord RPC every
+// other card uses. Excluding a grammar correction MUST write the skipped_at
+// exclude marker on its (notebook, senseID) learning-history slot and remove it
+// from the Relearn pool on reload — the opposite of an incorrect answer.
+func TestRelearn_GrammarExcludeSetsSkippedAtAndRemovesFromPool(t *testing.T) {
+	h, learningDir := writeGrammarRelearnFixture(t)
+	historyPath := filepath.Join(learningDir, "journal.yml")
+
+	cards := startRelearn(t, h, 24)
+	require.Len(t, cards, 1, "the missed grammar correction is in the pool")
+	card := cards[0]
+	require.Equal(t, apiv1.QuizType_QUIZ_TYPE_GRAMMAR, card.GetSourceQuizType())
+
+	// Exclude this blank: the same SkipWord RPC the vocab/etymology cards use,
+	// resolved from the relearn store to the grammar correction's senseID.
+	_, err := h.SkipWord(context.Background(), connect.NewRequest(&apiv1.SkipWordRequest{
+		NoteId:    card.GetNoteId(),
+		QuizTypes: []apiv1.QuizType{apiv1.QuizType_QUIZ_TYPE_GRAMMAR},
+	}))
+	require.NoError(t, err)
+
+	// Real-state check 1: skipped_at IS now written for this correction.
+	after, err := os.ReadFile(historyPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(after), "skipped_at",
+		"Exclude must write the skipped_at exclude marker")
+
+	// Real-state check 2: reload the pool — the correction is gone.
+	next := startRelearn(t, h, 24)
+	assert.Empty(t, next, "an excluded correction must not appear in the Relearn pool")
+}

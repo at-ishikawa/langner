@@ -1,0 +1,23 @@
+# Grammar corrections for the "Travel Diary" journal. This journal is dedicated
+# to the first grammar Relearn scenario ("Relearn a grammar correction missed
+# moments ago"), which answers "the John" correctly and "suggested to go"
+# wrong. It is kept separate from grammar.feature's "Practice Journal" (which
+# earlier scenarios exhaust) and from the "Cooking Notes" journal so each
+# scenario starts with its own fresh, due corrections. Unique ids keep the
+# learning-history / Relearn-pool series distinct from every other journal.
+- metadata:
+    title: "A city trip"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: travel-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No definite article before a personal name."
+        - id: travel-suggested
+          incorrect: "suggested to go"
+          correct: "suggested going"
+          category: verb-pattern
+          reason: "'suggest' takes a gerund, not an infinitive."

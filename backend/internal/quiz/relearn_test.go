@@ -1,6 +1,7 @@
 package quiz
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
+	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
 func TestRelearnRecognitionContexts_GuaranteesOneAnchoredContext(t *testing.T) {
@@ -207,4 +209,162 @@ notebooks:
 		}
 	}
 	require.True(t, found, "the failed concept member must appear in the relearn pool")
+}
+
+// TestLoadRelearnPool_GrammarMiss pins Part A of the grammar/Relearn fix: a
+// missed grammar correction (a "misunderstood" log under the flat "grammar"
+// learning-history bucket) must resurface in the Relearn pool as a
+// QuizTypeGrammar card carrying the entry's full content and the mistaken
+// span — not be silently dropped because relearnSeries mislabeled it
+// QuizTypeNotebook and it then failed vocab resolution (the pre-fix bug).
+func TestLoadRelearnPool_GrammarMiss(t *testing.T) {
+	storiesDir, grammarsDir := writeGrammarNotebook(t)
+	learningDir := t.TempDir()
+
+	// A learning history entry for the correction, written the same way
+	// SaveGrammarBlank writes it: flat "grammar" bucket, Expression == ID ==
+	// the correction's stable senseID, status misunderstood.
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: note-the-john
+      expression: note-the-john
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent)), 0o644))
+
+	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
+
+	cards, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	require.Len(t, cards, 1, "the missed correction must yield exactly one relearn card")
+
+	card := cards[0]
+	assert.Equal(t, notebook.QuizTypeGrammar, card.Format)
+	assert.Contains(t, card.Content, "the John called me", "the card carries the whole entry, like the live grammar quiz")
+	assert.Equal(t, "the John", card.Incorrect)
+	// NotebookName carries the notebook ID (not the display name) so a
+	// deliberate Exclude (SkipWord) resolves to the correct <id>.yml.
+	assert.Equal(t, "journal", card.NotebookName)
+
+	// The card must grade like the live quiz: GradeGrammarBlank against the
+	// card's own grading inputs (GrammarCard(), never sent to the client).
+	result, err := svc.GradeGrammarBlank(context.Background(), card.Content, card.GrammarCard(), "John", 1200)
+	require.NoError(t, err)
+	assert.True(t, result.Correct)
+}
+
+// TestLoadRelearnPool_GrammarSamePostMultipleBlanks pins the contract the
+// frontend's post-grouping relies on: when a single journal post has MORE THAN
+// ONE due correction, the pool emits one card per correction, every card
+// carries the SAME full post text (so the client can group them into one
+// progressive post view), each card keeps its OWN mistaken span and grades
+// individually — and a correction of the same post that is NOT due (its latest
+// log is not "misunderstood") is not emitted at all, so relearn only ever asks
+// the due blanks while still rendering the whole post for context.
+func TestLoadRelearnPool_GrammarSamePostMultipleBlanks(t *testing.T) {
+	base := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(base, "stories", "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me and then I go home.\"\n"), 0o644))
+
+	grammarsDir := filepath.Join(base, "grammars", "journal")
+	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
+	// One post, three corrections: two will be due, one will not be.
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: note-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+        - id: note-go
+          incorrect: "go"
+          correct: "went"
+          category: tense
+          reason: "Use past tense for a past event."
+        - id: note-me
+          incorrect: "called me"
+          correct: "phoned me"
+          category: word-choice
+          reason: "Prefer a more precise verb."
+`), 0o644))
+
+	// Two corrections failed (misunderstood) in-window; the third is understood,
+	// so it is NOT due and must not enter the pool.
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: note-the-john
+      expression: note-the-john
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+    - id: note-go
+      expression: note-go
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+    - id: note-me
+      expression: note-me
+      learned_logs:
+        - status: understood
+          learned_at: %q
+          quiz_type: grammar
+`, recent, recent, recent)), 0o644))
+
+	svc := newGrammarService(t, filepath.Join(base, "stories"), filepath.Join(base, "grammars"), learningDir)
+
+	cards, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	var grammar []RelearnCard
+	for _, c := range cards {
+		if c.Format == notebook.QuizTypeGrammar {
+			grammar = append(grammar, c)
+		}
+	}
+	require.Len(t, grammar, 2, "only the two DUE corrections are emitted; the understood one is excluded")
+
+	incorrects := map[string]bool{}
+	for _, c := range grammar {
+		incorrects[c.Incorrect] = true
+		// Every due blank carries the SAME whole post text — the group key the
+		// client folds them by into one progressive post view.
+		assert.Equal(t, grammar[0].Content, c.Content, "all blanks of one post share the full post text")
+		assert.Contains(t, c.Content, "the John called me and then I go home")
+		// Each blank grades on its OWN correction, individually (no collapsing).
+		want := "John"
+		if c.Incorrect == "go" {
+			want = "went"
+		}
+		result, err := svc.GradeGrammarBlank(context.Background(), c.Content, c.GrammarCard(), want, 1200)
+		require.NoError(t, err)
+		assert.True(t, result.Correct, "blank %q must grade against its own reference", c.Incorrect)
+	}
+	assert.True(t, incorrects["the John"], "the first due mistake is asked")
+	assert.True(t, incorrects["go"], "the second due mistake is asked")
+	assert.False(t, incorrects["called me"], "a not-due correction of the same post is not asked")
 }
