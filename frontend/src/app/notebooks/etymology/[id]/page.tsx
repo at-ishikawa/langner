@@ -15,7 +15,6 @@ import {
 import {
   notebookClient,
   quizClient,
-  QuizType,
   type EtymologyOriginPart,
   type EtymologyDefinition,
   type EtymologyMeaningGroup,
@@ -29,19 +28,21 @@ const ETYMOLOGY_ORIGIN_SKIP_TYPE = "etymology_origin";
 
 // EtymologyWordExclude is the deliberate per-word "Exclude from quizzes" /
 // "Resume" control — the ONLY writer of the etymology-origin skip marker on
-// the browse page (quiz-ui-invariants U1/U2, via SkipWord / ResumeWord). It
-// hides itself when the word has no stable note id (noteId === 0n), matching
-// the vocabulary word list. `excluded` is optimistic and reverts on failure.
+// the browse page (quiz-ui-invariants U1/U2). It calls ExcludeEtymologyWord /
+// ResumeEtymologyWord, keyed by the word's stable (notebookName, expression) —
+// the same skipped_at write path every card uses, needing NO DB note id, so it
+// works for YAML-only notebooks (where def.noteId is always 0n). `excluded` is
+// optimistic and reverts on failure.
 function EtymologyWordExclude({ def }: { def: EtymologyDefinition }) {
   const [excluded, setExcluded] = useState(
     def.isSkipped || (def.skippedQuizTypes ?? []).includes(ETYMOLOGY_ORIGIN_SKIP_TYPE),
   );
   const [busy, setBusy] = useState(false);
 
-  // BigInt(0) is falsy, so !def.noteId hides the control for both a YAML-only
-  // word (note_id === 0n, no stable id) and any missing id, matching how the
-  // vocabulary word list hides its skip control when noteId is 0.
-  if (!def.noteId) return null;
+  // notebookName (the word's home definitions-book id) + expression are always
+  // present, so the control renders for every word. Without a home book there
+  // is no key to write, so hide it (defensive; shouldn't happen).
+  if (!def.notebookName || !def.expression) return null;
 
   async function toggle() {
     if (busy) return;
@@ -50,15 +51,14 @@ function EtymologyWordExclude({ def }: { def: EtymologyDefinition }) {
     setBusy(true);
     try {
       if (next) {
-        await quizClient.skipWord({
-          noteId: def.noteId,
-          quizTypes: [QuizType.ETYMOLOGY_ORIGIN],
-          skipUntil: "",
+        await quizClient.excludeEtymologyWord({
+          notebookId: def.notebookName,
+          expression: def.expression,
         });
       } else {
-        await quizClient.resumeWord({
-          noteId: def.noteId,
-          quizTypes: [QuizType.ETYMOLOGY_ORIGIN],
+        await quizClient.resumeEtymologyWord({
+          notebookId: def.notebookName,
+          expression: def.expression,
         });
       }
     } catch {

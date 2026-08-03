@@ -97,6 +97,10 @@ export function etymologyResultToItem(r: EtymologyOriginResult, index: number): 
     correct: r.correct,
     noteId: r.noteId,
     senseId: r.senseId,
+    // notebookName is the word's home definitions-book id (== the loader's
+    // bookID). Threaded onto ResultItem so the feedback card's per-word Exclude
+    // can call ExcludeEtymologyWord(notebookId, expression) without a DB note id.
+    notebookName: r.notebookName,
     learnedAt: r.learnedAt,
     isOverridden: r.isOverridden,
     isSkipped: r.isSkipped,

@@ -19,16 +19,16 @@ export interface QuizResultActions {
    * the origin's existing record (see OverrideAnswerRequest.word_expression) —
    * never a second record for the word (invariants L1/L4). Optional: only the
    * etymology-origin quiz implements it; other quiz modes (grammar, standard,
-   * reverse, freeform) have no per-word breakdown to override.
-   *
-   * There is deliberately no per-word "exclude" here: a real exclude must set
-   * skipped_at via SkipWord (quiz-ui-invariants U1/U2), which needs the word's
-   * stable note id. The etymology-origin submit response carries only ephemeral
-   * ids (origin-level note_id is an in-memory session key; per-word word_id is a
-   * card index), so a correct per-word exclude can't be issued from the quiz
-   * feedback. Excluding a word lives on the etymology browse page, where each
-   * word carries its stable note id. */
+   * reverse, freeform) have no per-word breakdown to override. */
   handleOverrideWord?: (item: ResultItem, word: EtymologyWordItem) => Promise<void>;
+  /** handleExcludeWord toggles ONE derived family word's etymology-origin
+   * exclusion via the deliberate ExcludeEtymologyWord / ResumeEtymologyWord
+   * RPCs — the real skipped_at write path (quiz-ui-invariants U1/U2), keyed by
+   * the word's (notebookName, expression). Unlike Override it needs no DB note
+   * id, so it works from the quiz feedback for YAML notebooks. Distinct from
+   * any "Don't know"/skip: this removes the word from all future
+   * etymology-origin quizzes until Resumed. */
+  handleExcludeWord?: (item: ResultItem, word: EtymologyWordItem) => Promise<void>;
 }
 
 export function useQuizResultActions(quizType: QuizType): QuizResultActions {
@@ -41,6 +41,7 @@ export function useQuizResultActions(quizType: QuizType): QuizResultActions {
   const skipResult = useQuizStore((s) => s.skipResult);
   const resumeResult = useQuizStore((s) => s.resumeResult);
   const overrideEtymologyWord = useQuizStore((s) => s.overrideEtymologyWord);
+  const excludeEtymologyWordInStore = useQuizStore((s) => s.excludeEtymologyWord);
 
   const protoQt = toProtoQuizType(quizType);
 
@@ -117,5 +118,21 @@ export function useQuizResultActions(quizType: QuizType): QuizResultActions {
     } catch { /* silently fail */ }
   }, [protoQt, overrideEtymologyWord]);
 
-  return { handleOverride, handleUndo, handleSkip, handleResume, handleOverrideWord };
+  const handleExcludeWord = useCallback(async (item: ResultItem, word: EtymologyWordItem) => {
+    if (!item.notebookName) return;
+    const next = !word.isExcluded;
+    // Optimistic flip; revert on error.
+    excludeEtymologyWordInStore(item.index, word.expression, next);
+    try {
+      if (next) {
+        await quizClient.excludeEtymologyWord({ notebookId: item.notebookName, expression: word.expression });
+      } else {
+        await quizClient.resumeEtymologyWord({ notebookId: item.notebookName, expression: word.expression });
+      }
+    } catch {
+      excludeEtymologyWordInStore(item.index, word.expression, word.isExcluded ?? false);
+    }
+  }, [excludeEtymologyWordInStore]);
+
+  return { handleOverride, handleUndo, handleSkip, handleResume, handleOverrideWord, handleExcludeWord };
 }

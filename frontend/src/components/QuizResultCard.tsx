@@ -23,6 +23,11 @@ export interface ResultItem {
    * response. Threaded back into OverrideAnswer/UndoOverrideAnswer so the
    * override targets the exact sense the card came from. */
   senseId?: string;
+  /** notebookName is the word's home definitions-book id (== the etymology
+   * loader's bookID). Present on etymology-origin results so the per-word
+   * Exclude can call ExcludeEtymologyWord(notebookId, expression) — keyed by a
+   * stable string identity, no DB note id required. */
+  notebookName?: string;
   learnedAt?: string;
   isOverridden?: boolean;
   isSkipped?: boolean;
@@ -416,7 +421,10 @@ export function QuizResultCard({
             {item.etymologyWords.map((w, i) => {
               const wordOverridden = w.originalCorrect !== undefined && w.originalCorrect !== w.correct;
               const canOverrideWord = Boolean(onOverrideWord && item.noteId && item.learnedAt);
-              const canExcludeWord = Boolean(onExcludeWord && item.noteId && item.learnedAt);
+              // Exclude is keyed by (notebookName, expression) via
+              // ExcludeEtymologyWord — no DB note id / learnedAt needed, so it
+              // renders whenever the word's home book is known (U1/U2).
+              const canExcludeWord = Boolean(onExcludeWord && item.notebookName);
               const borderColor = w.correct ? "green.200" : "red.200";
               const darkBorderColor = w.correct ? "green.800" : "red.800";
               const glyphColor = w.correct ? "green.600" : "red.600";

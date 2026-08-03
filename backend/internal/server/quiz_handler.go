@@ -600,6 +600,54 @@ func (h *QuizHandler) SubmitEtymologyOriginAnswer(ctx context.Context, req *conn
 	return connect.NewResponse(resp), nil
 }
 
+// etymologyWordCardInfo builds the CardInfo that addresses one derived family
+// word's learning-history slot by its (notebook_id, expression). notebookID is
+// the definitions-book id that owns the word — the SAME id buildOriginFamilies
+// reads exclusion under (learning-history L2) — so excluding here drops the word
+// from its origin family in every future etymology-origin quiz. This mirrors
+// grammarMistakeCardInfo: keyed by a stable string identity, no DB note_id.
+func etymologyWordCardInfo(notebookID, expression string) quiz.CardInfo {
+	return quiz.CardInfo{
+		NotebookName: notebookID,
+		Expression:   expression,
+	}
+}
+
+// ExcludeEtymologyWord sets the etymology-origin skipped_at marker for one
+// derived family word, addressed by its stable (notebook_id, expression). It
+// reuses the same SkipWord / SetSkippedAt path (and EnsureExpressionStubForSkip
+// when the word has no log yet) every other card's Exclude uses — no DB note_id
+// required, so it works for YAML-only notebooks.
+func (h *QuizHandler) ExcludeEtymologyWord(
+	_ context.Context,
+	req *connect.Request[apiv1.ExcludeEtymologyWordRequest],
+) (*connect.Response[apiv1.ExcludeEtymologyWordResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	info := etymologyWordCardInfo(req.Msg.GetNotebookId(), req.Msg.GetExpression())
+	if err := h.svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("exclude etymology word: %w", err))
+	}
+	return connect.NewResponse(&apiv1.ExcludeEtymologyWordResponse{}), nil
+}
+
+// ResumeEtymologyWord clears the etymology-origin skipped_at marker for one
+// derived family word, making it due again in its origin family.
+func (h *QuizHandler) ResumeEtymologyWord(
+	_ context.Context,
+	req *connect.Request[apiv1.ResumeEtymologyWordRequest],
+) (*connect.Response[apiv1.ResumeEtymologyWordResponse], error) {
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	info := etymologyWordCardInfo(req.Msg.GetNotebookId(), req.Msg.GetExpression())
+	if err := h.svc.ResumeWord(info, []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume etymology word: %w", err))
+	}
+	return connect.NewResponse(&apiv1.ResumeEtymologyWordResponse{}), nil
+}
+
 // gradeAndSaveEtymologyOrigin grades every family word, records ONE
 // learning-log entry for the origin's (session, sense) series, and assembles
 // the feedback response with per-word results.

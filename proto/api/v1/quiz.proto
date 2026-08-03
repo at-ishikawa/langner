@@ -49,6 +49,19 @@ service QuizService {
   rpc StartEtymologyOriginQuiz(StartEtymologyOriginQuizRequest) returns (StartEtymologyOriginQuizResponse);
   rpc SubmitEtymologyOriginAnswer(SubmitEtymologyOriginAnswerRequest) returns (SubmitEtymologyOriginAnswerResponse);
   rpc BatchSubmitEtymologyOriginAnswers(BatchSubmitEtymologyOriginAnswersRequest) returns (BatchSubmitEtymologyOriginAnswersResponse);
+  // ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived family word's
+  // etymology-origin exclusion by its stable (notebook_id, expression) — the
+  // same SkipWord / ResumeWord path (skipped_at) every other card's Exclude
+  // uses, WITHOUT a DB note_id. buildOriginFamilies reads the same key
+  // (IsExpressionExcludedForQuizType), so excluding a word drops it from its
+  // origin family in every future etymology-origin quiz; an origin whose whole
+  // family is excluded is no longer offered. Used by BOTH the browse
+  // origin-detail Learn page and the etymology-origin quiz feedback card
+  // (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
+  // definitions-book id that owns the word (EtymologyDefinition.notebook_name /
+  // the origin card's notebook_name) — the same id the loader reads under.
+  rpc ExcludeEtymologyWord(ExcludeEtymologyWordRequest) returns (ExcludeEtymologyWordResponse);
+  rpc ResumeEtymologyWord(ResumeEtymologyWordRequest) returns (ResumeEtymologyWordResponse);
 
   // Relearn Quiz — a practice-only quiz over recently-missed words. It writes
   // NOTHING to learning history: Submit calls only the pure meaning graders,
@@ -876,4 +889,32 @@ message ResumeGrammarMistakeRequest {
 }
 
 message ResumeGrammarMistakeResponse {}
+
+message ExcludeEtymologyWordRequest {
+  // notebook_id is the definitions-book id that owns the word — the same id
+  // buildOriginFamilies reads its learning-history file under, exposed to the
+  // client as EtymologyDefinition.notebook_name (browse page) and the origin
+  // card's notebook_name (quiz feedback).
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  // expression is the derived word's expression — the key SkipWord writes and
+  // the loader matches (learning-history L2).
+  string expression = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ExcludeEtymologyWordResponse {}
+
+message ResumeEtymologyWordRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string expression = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ResumeEtymologyWordResponse {}
 

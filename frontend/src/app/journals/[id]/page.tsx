@@ -16,66 +16,19 @@ import {
   quizClient,
   type GetNotebookDetailResponse,
   type GrammarMistake,
-  type StoryEntry,
 } from "@/lib/client";
+import { SceneContent } from "@/components/SceneContent";
 
-// JournalDetailPage shows a journal's story prose plus its grammar-mistake
-// review list. Each mistake carries a deliberate "Exclude from quizzes" /
-// "Resume" control (the ONLY thing that writes the grammar skipped_at marker,
-// via ExcludeGrammarMistake / ResumeGrammarMistake) — see quiz-ui-invariants
+// JournalDetailPage shows a journal's story content with each entry's
+// grammar mistakes attached directly beneath the scene they came from, so on
+// a long journal you can always tell which mistake belongs to which entry.
+// The story is rendered with the shared SceneContent reader (identical to the
+// vocabulary /learn/[id] page) minus its word-lookup wiring.
+//
+// Each mistake carries a deliberate "Exclude from quizzes" / "Resume" control
+// (the ONLY thing that writes the grammar skipped_at marker, via
+// ExcludeGrammarMistake / ResumeGrammarMistake) — see quiz-ui-invariants
 // U1/U2. Nothing else on this page touches the exclude marker.
-
-// StoryProse renders a journal entry's scenes as plain prose (statements +
-// dialogue). Mirrors the /learn/[id] reader's structure without its
-// word-lookup / highlight machinery, which a journal review view doesn't need.
-function StoryProse({ story }: { story: StoryEntry }) {
-  return (
-    <Box>
-      {story.event && (
-        <Heading size="sm" mb={2} color="fg.muted">
-          {story.event}
-        </Heading>
-      )}
-      <VStack align="stretch" gap={4}>
-        {story.scenes.map((scene, si) => {
-          const hasStatements = scene.statements.length > 0;
-          const hasConversations = scene.conversations.length > 0;
-          if (!hasStatements && !hasConversations) return null;
-          return (
-            <Box key={si}>
-              {scene.title && (
-                <Heading size="xs" mb={1} color="fg.muted">
-                  {scene.title}
-                </Heading>
-              )}
-              {hasStatements && (
-                <VStack align="stretch" gap={3} lineHeight="tall">
-                  {scene.statements.map((stmt, i) => (
-                    <Text key={i} fontSize="md">
-                      {stmt}
-                    </Text>
-                  ))}
-                </VStack>
-              )}
-              {hasConversations && (
-                <VStack align="stretch" gap={1} mt={hasStatements ? 3 : 0}>
-                  {scene.conversations.map((conv, i) => (
-                    <Text key={i} fontSize="sm" color="fg.muted">
-                      <Text as="span" fontWeight="bold" color="fg.default">
-                        {conv.speaker}:
-                      </Text>{" "}
-                      &ldquo;{conv.quote}&rdquo;
-                    </Text>
-                  ))}
-                </VStack>
-              )}
-            </Box>
-          );
-        })}
-      </VStack>
-    </Box>
-  );
-}
 
 // MistakeRow renders one grammar correction as a review row and owns the
 // deliberate exclude/resume action. `excluded` is optimistic: it flips on
@@ -191,23 +144,61 @@ function MistakeRow({
   );
 }
 
-// groupMistakesByTitle preserves the order in which titles first appear.
-function groupMistakesByTitle(
+// MistakeList renders a stack of MistakeRow cards for the mistakes attached to
+// one scene/entry. Renders nothing when there are none.
+function MistakeList({
+  notebookId,
+  mistakes,
+}: {
+  notebookId: string;
+  mistakes: GrammarMistake[];
+}) {
+  if (mistakes.length === 0) return null;
+  return (
+    <VStack align="stretch" gap={2} mt={3}>
+      {mistakes.map((m) => (
+        <MistakeRow key={m.senseId} notebookId={notebookId} mistake={m} />
+      ))}
+    </VStack>
+  );
+}
+
+// placeMistakes assigns every grammar mistake to the story entry / scene it
+// came from so each renders adjacent to its source (quiz-ui-invariants U3).
+// Both keys derive from the backend story loop variable `sn.Event`: a
+// mistake's `title` equals the entry's `event`, and its `entryId` equals
+// `${event}#${sceneIndex}` for the specific scene. Mistakes matching a scene
+// render under that scene; mistakes matching the entry title but no rendered
+// scene index fall to the entry level; anything left over (matching no
+// rendered entry — rare) goes to the "Other" bucket so nothing is dropped.
+interface StoryPlacement {
+  bySceneIndex: Map<number, GrammarMistake[]>;
+  entryLevel: GrammarMistake[];
+}
+
+function placeMistakes(
+  stories: GetNotebookDetailResponse["stories"],
   mistakes: GrammarMistake[],
-): { title: string; mistakes: GrammarMistake[] }[] {
-  const out: { title: string; mistakes: GrammarMistake[] }[] = [];
-  const indexByTitle = new Map<string, number>();
-  for (const m of mistakes) {
-    const title = m.title || "Untitled entry";
-    const idx = indexByTitle.get(title);
-    if (idx === undefined) {
-      indexByTitle.set(title, out.length);
-      out.push({ title, mistakes: [m] });
-      continue;
-    }
-    out[idx].mistakes.push(m);
-  }
-  return out;
+): { placements: StoryPlacement[]; other: GrammarMistake[] } {
+  const used = new Set<string>();
+  const placements = stories.map((story) => {
+    const entryMistakes = mistakes.filter(
+      (m) => m.title === story.event && !used.has(m.senseId),
+    );
+    const bySceneIndex = new Map<number, GrammarMistake[]>();
+    story.scenes.forEach((_, sceneIndex) => {
+      const key = `${story.event}#${sceneIndex}`;
+      const sceneMistakes = entryMistakes.filter((m) => m.entryId === key);
+      if (sceneMistakes.length === 0) return;
+      bySceneIndex.set(sceneIndex, sceneMistakes);
+      sceneMistakes.forEach((m) => used.add(m.senseId));
+    });
+    const entryLevel = entryMistakes.filter((m) => !used.has(m.senseId));
+    entryLevel.forEach((m) => used.add(m.senseId));
+    return { bySceneIndex, entryLevel };
+  });
+  const other = mistakes.filter((m) => !used.has(m.senseId));
+  return { placements, other };
 }
 
 export default function JournalDetailPage() {
@@ -257,7 +248,7 @@ export default function JournalDetailPage() {
     );
   }
 
-  const grouped = groupMistakesByTitle(mistakes);
+  const { placements, other } = placeMistakes(data.stories, mistakes);
 
   return (
     <Box p={4} maxW="3xl" mx="auto">
@@ -273,36 +264,45 @@ export default function JournalDetailPage() {
         {data.name}
       </Heading>
 
-      {/* Story prose */}
-      {data.stories.length > 0 && (
-        <VStack align="stretch" gap={6} mb={8}>
-          {data.stories.map((story, i) => (
-            <StoryProse key={i} story={story} />
-          ))}
-        </VStack>
-      )}
-
-      {/* Grammar mistakes review */}
-      <Heading size="md" mb={3}>
-        Grammar mistakes
-      </Heading>
-      {grouped.length === 0 ? (
-        <Text color="fg.muted">No grammar mistakes recorded for this journal.</Text>
-      ) : (
-        <VStack align="stretch" gap={5}>
-          {grouped.map((group, gi) => (
-            <Box key={gi}>
-              <Text fontSize="sm" fontWeight="medium" color="fg.muted" mb={2}>
-                {group.title}
-              </Text>
-              <VStack align="stretch" gap={2}>
-                {group.mistakes.map((m) => (
-                  <MistakeRow key={m.senseId} notebookId={id} mistake={m} />
+      {/* Story content, each entry's grammar mistakes attached beneath the
+          scene they came from. */}
+      <VStack align="stretch" gap={8}>
+        {data.stories.map((story, storyIndex) => {
+          const placement = placements[storyIndex];
+          return (
+            <Box key={storyIndex}>
+              {story.event && (
+                <Heading size="md" mb={3}>
+                  {story.event}
+                </Heading>
+              )}
+              <VStack align="stretch" gap={6}>
+                {story.scenes.map((scene, sceneIndex) => (
+                  <Box key={sceneIndex}>
+                    <SceneContent scene={scene} />
+                    <MistakeList
+                      notebookId={id}
+                      mistakes={placement.bySceneIndex.get(sceneIndex) ?? []}
+                    />
+                  </Box>
                 ))}
               </VStack>
+              {/* Mistakes tied to this entry but not to a rendered scene. */}
+              <MistakeList notebookId={id} mistakes={placement.entryLevel} />
             </Box>
-          ))}
-        </VStack>
+          );
+        })}
+      </VStack>
+
+      {/* Any mistake whose entry no longer exists in the story — rare, but
+          surfaced here so nothing is silently dropped. */}
+      {other.length > 0 && (
+        <Box mt={8}>
+          <Heading size="md" mb={3}>
+            Other grammar mistakes
+          </Heading>
+          <MistakeList notebookId={id} mistakes={other} />
+        </Box>
       )}
     </Box>
   );
