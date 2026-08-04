@@ -139,10 +139,11 @@ export default function GrammarQuizPage() {
   const gradedCount = orderedKeys.filter((k) => postResults.has(k)).length;
   const gradingCount = gradingKeys.length;
   const remainingCount = totalBlanks - gradedCount - gradingCount;
-  // Let the learner stop mid-session and see results, mirroring the vocab/etymology
-  // BatchFeedback footer. Only once at least one blank is graded, and never when the
-  // primary button is already the terminal "See results" (last post, none remaining).
-  const showSeeResults = results.length > 0 && !(isLastPost && remainingCount === 0);
+  // Let the learner stop the session at any time, mirroring the vocab/etymology
+  // BatchFeedback footer. Available in every state except when the primary button is
+  // already the terminal "See results" (last post, none remaining) — then it would
+  // duplicate. If anything's been graded it reads "See results"; otherwise "Stop quiz".
+  const showExit = !(isLastPost && remainingCount === 0);
   const correctCount = orderedKeys.filter((k) => postResults.get(k)?.result.correct).length;
   const unreviewedWrong = orderedKeys.filter((k) => {
     const r = postResults.get(k)?.result;
@@ -411,18 +412,21 @@ export default function GrammarQuizPage() {
             {isLastPost ? "See results" : "Next post"}
           </Button>
         )}
-        {showSeeResults && (
-          // Early exit: stop the session now and review what's graded so far. The
-          // current post's untouched blanks stay due (not graded), matching the
-          // vocab pages' early "See Results".
+        {showExit && (
+          // Early exit: stop the session at any point. If anything's been graded,
+          // review it ("See results"); otherwise leave cleanly to the grammar hub
+          // ("Stop quiz"). The current post's untouched blanks stay due (not graded),
+          // matching the vocab pages' early "See Results".
           <Button
             variant="outline"
             colorPalette="green"
             w="full"
             size="lg"
-            onClick={() => router.push("/quiz/grammar/complete")}
+            onClick={() =>
+              router.push(results.length > 0 ? "/quiz/grammar/complete" : "/quiz?tab=grammar")
+            }
           >
-            See results
+            {results.length > 0 ? "See results" : "Stop quiz"}
           </Button>
         )}
       </VStack>
