@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -108,6 +109,170 @@ func TestService_GrammarQuiz_LoadGradeSave(t *testing.T) {
 	posts, err = svc.LoadGrammarPosts("journal", nil)
 	require.NoError(t, err)
 	assert.Empty(t, posts)
+}
+
+// writeCollidingGrammarNotebook builds a journal whose TWO entries collide on a
+// derived correction id: their titles ("Week 16" and "Week-16") slugify to the
+// same string, so each entry's first correction derives the same id
+// (journal-week-16-s0-1). Before the uniqueness pass both corrections shared one
+// learning-log series; answering one dropped the other from every quiz.
+func writeCollidingGrammarNotebook(t *testing.T) (storiesDir, grammarsDir string) {
+	t.Helper()
+	base := t.TempDir()
+
+	storyDir := filepath.Join(base, "stories", "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		`- event: "Week 16"
+  scenes:
+    - scene: ""
+      statements:
+        - "Yesterday the John called me."
+- event: "Week-16"
+  scenes:
+    - scene: ""
+      statements:
+        - "I ate a apple today."
+`), 0o644))
+
+	grammarsDir = filepath.Join(base, "grammars", "journal")
+	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Week 16"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+- metadata:
+    title: "Week-16"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - incorrect: "a apple"
+          correct: "an apple"
+          category: article
+          reason: "Use 'an' before a vowel sound."
+`), 0o644))
+	return filepath.Join(base, "stories"), filepath.Join(base, "grammars")
+}
+
+func findGrammarBlank(t *testing.T, posts []GrammarPost, incorrect string) GrammarBlank {
+	t.Helper()
+	for _, p := range posts {
+		for _, b := range p.Blanks {
+			if b.Incorrect == incorrect {
+				return b
+			}
+		}
+	}
+	t.Fatalf("no blank for %q in posts", incorrect)
+	return GrammarBlank{}
+}
+
+// TestService_GrammarQuiz_CollidingIDsStayIndependent reproduces the vanish and
+// proves the fix: two corrections whose entry titles slugify alike get DISTINCT
+// senseIDs, so answering one correctly leaves the OTHER still due (its own
+// series is untouched). Under the pre-fix single-derived-id keying both shared
+// one series and the second correction disappeared from the live quiz and the
+// Relearn pool.
+func TestService_GrammarQuiz_CollidingIDsStayIndependent(t *testing.T) {
+	ctx := context.Background()
+	storiesDir, grammarsDir := writeCollidingGrammarNotebook(t)
+	learningDir := t.TempDir()
+	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
+
+	posts, err := svc.LoadGrammarPosts("journal", nil)
+	require.NoError(t, err)
+	theJohn := findGrammarBlank(t, posts, "the John")
+	anApple := findGrammarBlank(t, posts, "a apple")
+	require.NotEqual(t, theJohn.SenseID, anApple.SenseID,
+		"colliding corrections must be stored under distinct senseIDs (L1)")
+
+	// Answer "the John" correctly and persist it.
+	result, err := svc.GradeGrammarBlank(ctx, posts[0].Content, theJohn, "John", 1000)
+	require.NoError(t, err)
+	require.True(t, result.Correct)
+	require.NoError(t, svc.SaveGrammarBlank(ctx, "journal", theJohn.SenseID, result, 1000))
+
+	// The other correction is still due — it was NOT conflated with the answered
+	// one, so it remains in the live grammar quiz...
+	posts, err = svc.LoadGrammarPosts("journal", nil)
+	require.NoError(t, err)
+	still := findGrammarBlank(t, posts, "a apple")
+	assert.Equal(t, anApple.SenseID, still.SenseID)
+	for _, p := range posts {
+		for _, b := range p.Blanks {
+			assert.NotEqual(t, "the John", b.Incorrect, "the answered correction is no longer due")
+		}
+	}
+
+	// ...and in the Relearn pool once it has been missed (misunderstood).
+	wrong, err := svc.GradeGrammarBlank(ctx, "", still, "", 500)
+	require.NoError(t, err)
+	require.False(t, wrong.Correct)
+	require.NoError(t, svc.SaveGrammarBlank(ctx, "journal", still.SenseID, wrong, 500))
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	var found bool
+	for _, card := range pool {
+		if card.Format == notebook.QuizTypeGrammar && card.Incorrect == "a apple" {
+			found = true
+		}
+	}
+	assert.True(t, found, "the still-due correction reaches the Relearn pool on its own series")
+}
+
+// TestService_GrammarQuiz_ByteIdenticalDuplicateDeduped verifies that two
+// byte-identical corrections that share an id (a true duplicate) collapse to a
+// single blank rather than showing twice.
+func TestService_GrammarQuiz_ByteIdenticalDuplicateDeduped(t *testing.T) {
+	base := t.TempDir()
+	storyDir := filepath.Join(base, "stories", "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me.\"\n"), 0o644))
+
+	grammarsDir := filepath.Join(base, "grammars", "journal")
+	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: dup
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+        - id: dup
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+`), 0o644))
+
+	svc := newGrammarService(t, filepath.Join(base, "stories"), filepath.Join(base, "grammars"), t.TempDir())
+	posts, err := svc.LoadGrammarPosts("journal", nil)
+	require.NoError(t, err)
+	require.Len(t, posts, 1)
+	assert.Len(t, posts[0].Blanks, 1, "byte-identical duplicate corrections collapse to one blank")
 }
 
 func TestService_LoadGrammarStorySummaries(t *testing.T) {

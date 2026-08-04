@@ -400,14 +400,20 @@ func TestRelearnCardID_GrammarSpanDiscriminatesBlanks(t *testing.T) {
 		"vocab de-duplication must be unaffected: identical words fold to one card")
 }
 
-// TestRelearn_GrammarSharedSenseIDDistinctNoteIDs is the full-stack pin: two
-// corrections sharing one senseID reach StartRelearnQuiz as TWO blanks of one
-// post, get DISTINCT note_ids, and grade INDEPENDENTLY — grading one leaves the
-// other in the store as its own unaffected card (the frontend keys per-blank
-// state by note_id, so distinct ids are what stop one answer from resolving and
-// dropping the other).
-func TestRelearn_GrammarSharedSenseIDDistinctNoteIDs(t *testing.T) {
-	h := writeGrammarSharedSenseIDFixture(t)
+// TestRelearn_GrammarTwoBlanksIndependent is the full-stack pin: two distinct
+// corrections in one post each keep their OWN learning-log series, reach
+// StartRelearnQuiz as TWO blanks of one post, get DISTINCT note_ids, and grade
+// INDEPENDENTLY — grading one leaves the other in the store as its own
+// unaffected card (the frontend keys per-blank state by note_id).
+//
+// Two corrections can no longer share a senseID: ensureUniqueCorrectionIDs makes
+// every correction's id unique at load time, so even a reused explicit `id:`
+// resolves to two series (see internal/notebook grammars_test.go and
+// internal/quiz TestService_GrammarQuiz_CollidingIDsStayIndependent). The
+// note_id-level belt-and-suspenders (relearnCardID folds the mistaken span) is
+// pinned separately by TestRelearnCardID_GrammarSpanDiscriminatesBlanks.
+func TestRelearn_GrammarTwoBlanksIndependent(t *testing.T) {
+	h := writeGrammarTwoBlanksFixture(t)
 
 	cards := startRelearn(t, h, 24)
 	require.Len(t, cards, 2, "both blanks of the post reach the client")
@@ -440,10 +446,10 @@ func TestRelearn_GrammarSharedSenseIDDistinctNoteIDs(t *testing.T) {
 	assert.Equal(t, "went", resp2.Msg.GetCorrectAnswer(), "the second blank keeps its own correction")
 }
 
-// writeGrammarSharedSenseIDFixture writes a post whose single scene has two
-// DISTINCT corrections given the SAME explicit id, both due via one misunderstood
-// series — the collision that used to collapse the pool to one card.
-func writeGrammarSharedSenseIDFixture(t *testing.T) *QuizHandler {
+// writeGrammarTwoBlanksFixture writes a post whose single scene has two distinct
+// corrections, each its own misunderstood series in-window, so both are due in
+// the Relearn pool as separate blanks of one post.
+func writeGrammarTwoBlanksFixture(t *testing.T) *QuizHandler {
 	t.Helper()
 	storiesDir := t.TempDir()
 	grammarsDir := t.TempDir()
@@ -467,12 +473,12 @@ func writeGrammarSharedSenseIDFixture(t *testing.T) *QuizHandler {
     - metadata:
         index: 0
       corrections:
-        - id: dup-id
+        - id: note-the-john
           incorrect: "the John"
           correct: "John"
           category: article
           reason: "No article before a personal name."
-        - id: dup-id
+        - id: note-i-go
           incorrect: "go"
           correct: "went"
           category: tense
@@ -485,13 +491,19 @@ func writeGrammarSharedSenseIDFixture(t *testing.T) *QuizHandler {
     title: journal
     type: grammar
   expressions:
-    - id: dup-id
-      expression: dup-id
+    - id: note-the-john
+      expression: note-the-john
       learned_logs:
         - status: misunderstood
           learned_at: %q
           quiz_type: grammar
-`, recent)), 0644))
+    - id: note-i-go
+      expression: note-i-go
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent, recent)), 0644))
 
 	svc := quiz.NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},

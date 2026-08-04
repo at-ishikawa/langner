@@ -369,16 +369,16 @@ func TestLoadRelearnPool_GrammarSamePostMultipleBlanks(t *testing.T) {
 	assert.False(t, incorrects["called me"], "a not-due correction of the same post is not asked")
 }
 
-// TestLoadRelearnPool_GrammarSharedSenseIDKeepsBothBlanks pins the pool half of
-// the "one correct blank marks the others correct and drops them" fix: two
-// DISTINCT corrections in one scene that share a senseID (here a duplicate
-// explicit id: — the collision the user hits in practice) back a single due
-// learning series, yet each mistaken span must survive as its OWN gradeable
-// blank. Before the fix, relearnGrammarIndex keyed the blanks last-write-wins by
-// senseID, so the pool emitted a single card and every span but one silently
-// vanished. Now the pool emits one card per blank, each carrying its own span
-// and grading independently.
-func TestLoadRelearnPool_GrammarSharedSenseIDKeepsBothBlanks(t *testing.T) {
+// TestLoadRelearnPool_GrammarTwoBlanksKeepsBothBlanks pins the pool half of the
+// "one correct blank marks the others correct and drops them" fix: two distinct
+// corrections in one scene, each its OWN misunderstood series, must each survive
+// as its own gradeable blank in the pool. Two corrections can no longer share a
+// senseID (ensureUniqueCorrectionIDs makes every correction id unique at load,
+// even a reused explicit id: — see notebook grammars_test.go and
+// TestService_GrammarQuiz_CollidingIDsStayIndependent), so a single post always
+// emits one card per due blank, each carrying its own span and grading
+// independently.
+func TestLoadRelearnPool_GrammarTwoBlanksKeepsBothBlanks(t *testing.T) {
 	base := t.TempDir()
 	learningDir := t.TempDir()
 
@@ -393,7 +393,7 @@ func TestLoadRelearnPool_GrammarSharedSenseIDKeepsBothBlanks(t *testing.T) {
 	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
 		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
-	// Two DISTINCT corrections in one scene given the SAME explicit id.
+	// Two DISTINCT corrections in one scene, each with its own id.
 	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
 		`- metadata:
     title: "Note 1"
@@ -401,32 +401,38 @@ func TestLoadRelearnPool_GrammarSharedSenseIDKeepsBothBlanks(t *testing.T) {
     - metadata:
         index: 0
       corrections:
-        - id: dup-id
+        - id: note-the-john
           incorrect: "the John"
           correct: "John"
           category: article
           reason: "No article before a personal name."
-        - id: dup-id
+        - id: note-i-go
           incorrect: "go"
           correct: "went"
           category: tense
           reason: "Use past tense for a past event."
 `), 0o644))
 
-	// One misunderstood series under the shared senseID makes both blanks due.
+	// Each correction has its own misunderstood series, so both blanks are due.
 	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
 	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
     id: journal
     title: journal
     type: grammar
   expressions:
-    - id: dup-id
-      expression: dup-id
+    - id: note-the-john
+      expression: note-the-john
       learned_logs:
         - status: misunderstood
           learned_at: %q
           quiz_type: grammar
-`, recent)), 0o644))
+    - id: note-i-go
+      expression: note-i-go
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent, recent)), 0o644))
 
 	svc := newGrammarService(t, filepath.Join(base, "stories"), filepath.Join(base, "grammars"), learningDir)
 
