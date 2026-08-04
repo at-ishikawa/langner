@@ -991,41 +991,53 @@ func TestAssertNoDuplicateOriginsInSession_PassesAndFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "Session X", "error must name the session")
 }
 
-// TestUpdateOrCreateExpressionForEtymology_WritesToExistingEntry pins the
-// rule that stops an origin's learning history from forking: when an
-// etymology origin already exists under a session (keyed by origin+sense),
-// a subsequent write for the same (session, origin, sense) must update the
-// existing entry in place, not create a duplicate. FindOriginExpression is
-// the single canonical lookup both read and write paths use (invariant L2).
-func TestUpdateOrCreateExpressionForEtymology_WritesToExistingEntry(t *testing.T) {
-	// Generic Latin root, not from the user's data.
+// TestUpsertWordEtymologyOriginResult_PerWordSeries pins the per-word contract
+// (invariants L1/L4): the etymology-origin schedule lives on the WORD's own
+// entry, resolved file-wide by (id, expression) — the same lookup the exclude
+// check uses (L2). A second answer for the same word appends to that entry's
+// series instead of forking; a never-studied word gets one new entry under its
+// (story, scene), and the word's OTHER series (LearnedLogs) is untouched.
+func TestUpsertWordEtymologyOriginResult_PerWordSeries(t *testing.T) {
+	// A vocab word already studied in the standard quiz (has LearnedLogs) and
+	// answered once in the etymology-origin quiz.
 	history := []LearningHistory{{
-		Metadata: LearningHistoryMetadata{Title: "Session X", Type: LearningHistoryTypeEtymology},
-		Expressions: []LearningHistoryExpression{{
-			Expression: "demo-root",
-			Type:       LearningExpressionTypeOrigin,
-			EtymologyOriginLogs: []LearningRecord{
-				{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-24 * time.Hour)), Quality: 4, QuizType: string(QuizTypeEtymologyOrigin)},
-			},
+		Metadata: LearningHistoryMetadata{Title: "Session X"},
+		Scenes: []LearningScene{{
+			Metadata: LearningSceneMetadata{Title: "S1"},
+			Expressions: []LearningHistoryExpression{{
+				Expression:  "describe",
+				ID:          "note-1",
+				LearnedLogs: []LearningRecord{{Status: LearnedStatusUnderstood, LearnedAt: NewDate(time.Now()), Quality: 4}},
+				EtymologyOriginLogs: []LearningRecord{
+					{Status: LearnedStatusCanBeUsed, LearnedAt: NewDate(time.Now().Add(-24 * time.Hour)), Quality: 4, QuizType: string(QuizTypeEtymologyOrigin)},
+				},
+			}},
 		}},
 	}}
 
 	updater := NewLearningHistoryUpdater(history, nil)
-	// A second answer for the same origin+sense must land on the existing
-	// entry, not fork a new one.
-	found := updater.UpdateOrCreateExpressionWithQualityForEtymology(
-		"demo-notebook", "Session X", "demo-root", "",
-		true, true, 5, 2000, nil,
-	)
-	assert.True(t, found, "must find the existing origin entry, not create a duplicate")
+	// A second etymology answer for the same word lands on the existing entry.
+	updater.UpsertWordEtymologyOriginResult("demo-notebook", "Session X", "S1", "describe", "", "note-1", true, true, 5, 2000)
+	// A never-studied word gets a fresh entry under (Session X, S1).
+	updater.UpsertWordEtymologyOriginResult("demo-notebook", "Session X", "S1", "inscribe", "", "note-2", true, true, 5, 2000)
 
 	got := updater.GetHistory()
 	require.Len(t, got, 1)
-	require.Len(t, got[0].Expressions, 1, "no new entry must be created on a same-session origin write")
-	exp := got[0].Expressions[0]
-	assert.Equal(t, "demo-root", exp.Expression)
-	assert.Len(t, exp.EtymologyOriginLogs, 2,
-		"the new log must be appended onto the existing entry's logs")
+	require.Len(t, got[0].Scenes, 1)
+	byExpr := map[string]LearningHistoryExpression{}
+	for _, e := range got[0].Scenes[0].Expressions {
+		byExpr[e.Expression] = e
+	}
+	require.Len(t, byExpr, 2, "the new word must nest under the same scene, not fork elsewhere")
+
+	describe := byExpr["describe"]
+	assert.Len(t, describe.EtymologyOriginLogs, 2, "second answer appends to the word's etymology series")
+	assert.Len(t, describe.LearnedLogs, 1, "the word's standard series is untouched (L4)")
+
+	inscribe := byExpr["inscribe"]
+	assert.Equal(t, "note-2", inscribe.ID)
+	assert.Len(t, inscribe.EtymologyOriginLogs, 1)
+	assert.Empty(t, inscribe.LearnedLogs, "a never-studied word gains only the etymology series")
 }
 
 // TestLearningHistoryUpdater_IDRouting covers the id-as-identity contract:

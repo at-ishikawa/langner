@@ -193,13 +193,32 @@ func newTestEtymologyHandler(t *testing.T, openaiClient inference.Client) (*Quiz
 	return NewQuizHandler(svc), learningDir
 }
 
+// findEtymWordEntry finds a derived word's learning-history entry (top-level or
+// nested) by its expression, for asserting the per-word etymology series.
+func findEtymWordEntry(histories []notebook.LearningHistory, expr string) *notebook.LearningHistoryExpression {
+	for hi := range histories {
+		for ei := range histories[hi].Expressions {
+			if histories[hi].Expressions[ei].Expression == expr {
+				return &histories[hi].Expressions[ei]
+			}
+		}
+		for si := range histories[hi].Scenes {
+			for ei := range histories[hi].Scenes[si].Expressions {
+				if histories[hi].Scenes[si].Expressions[ei].Expression == expr {
+					return &histories[hi].Scenes[si].Expressions[ei]
+				}
+			}
+		}
+	}
+	return nil
+}
+
 // TestQuizHandler_BatchSubmitEtymologyOriginAnswers_BlankWordGradedIncorrect
 // pins the answering model: there is no "skip"/"don't know" control, so a word
-// the learner leaves blank is graded INCORRECT — a normal miss that counts
-// against the origin's aggregate and keeps it due — while sibling words the
-// learner typed are graded independently on their own merits. The blank word
-// must never mark the origin as excluded from future quizzes (that stays a
-// distinct, explicit SkipWord action; learning-history invariants L1/L4).
+// the learner leaves blank is graded INCORRECT — a normal miss that keeps THAT
+// word due on its OWN per-word series — while sibling words the learner typed
+// are graded independently. A blank word must never exclude anything from future
+// quizzes (that stays a distinct SkipWord action; learning-history L1/L4).
 func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_BlankWordGradedIncorrect(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
@@ -212,9 +231,9 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_BlankWordGradedIncorrect(
 		Origin:       "scribo",
 		Meaning:      "to write",
 		Words: []quiz.EtymologyFamilyWord{
-			{Expression: "describe", Meaning: "to represent in words"},
-			{Expression: "inscribe", Meaning: "to write or carve on a surface"},
-			{Expression: "transcribe", Meaning: "to write out in full"},
+			{Expression: "describe", Meaning: "to represent in words", SessionTitle: "Session 1", SceneTitle: "S1"},
+			{Expression: "inscribe", Meaning: "to write or carve on a surface", SessionTitle: "Session 1", SceneTitle: "S1"},
+			{Expression: "transcribe", Meaning: "to write out in full", SessionTitle: "Session 1", SceneTitle: "S1"},
 		},
 	}
 	handler.etymologyOriginStore[1] = card
@@ -247,8 +266,7 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_BlankWordGradedIncorrect(
 	assert.False(t, results[1].GetCorrect(), "inscribe: left blank, so graded incorrect")
 	assert.True(t, results[2].GetCorrect(), "transcribe: unaffected by the blank sibling")
 
-	// One blank word makes the aggregate incorrect; the origin is recorded as
-	// a normal miss and stays due — not excluded.
+	// One blank word makes the aggregate incorrect; that word stays due.
 	assert.False(t, got.GetCorrect(), "a blank word counts against the aggregate")
 	require.NotEmpty(t, got.GetLearnedAt())
 
@@ -257,22 +275,33 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_BlankWordGradedIncorrect(
 	var histories []notebook.LearningHistory
 	require.NoError(t, yaml.Unmarshal(raw, &histories))
 
-	expr := notebook.FindOriginExpression(histories, "Session 1", "scribo", "")
-	require.NotNil(t, expr)
-	assert.False(t, expr.SkippedAt.IsSkippedAny(),
-		"a blank answer must never mark the origin as excluded from quizzes")
-	require.Len(t, expr.EtymologyOriginLogs, 1)
-	log := expr.EtymologyOriginLogs[0]
-	assert.Equal(t, notebook.LearnedStatusMisunderstood, log.Status)
-	assert.True(t, expr.NeedsEtymologyReview(notebook.QuizTypeEtymologyOrigin),
-		"a missed origin must stay due for review")
-	require.Len(t, log.WordResults, 3)
-	assert.False(t, log.WordResults[1].Correct, "the blank word's per-word log entry must record a miss")
+	// No per-origin entry exists; the schedule is per-word.
+	for _, h := range histories {
+		for _, e := range h.Expressions {
+			assert.NotEqual(t, notebook.LearningExpressionTypeOrigin, e.Type,
+				"the per-word model must not create a per-origin entry")
+		}
+	}
+
+	inscribe := findEtymWordEntry(histories, "inscribe")
+	require.NotNil(t, inscribe)
+	assert.False(t, inscribe.SkippedAt.IsSkippedAny(),
+		"a blank answer must never mark the word as excluded from quizzes")
+	require.Len(t, inscribe.EtymologyOriginLogs, 1)
+	assert.Equal(t, notebook.LearnedStatusMisunderstood, inscribe.EtymologyOriginLogs[0].Status)
+	assert.True(t, inscribe.NeedsEtymologyReview(notebook.QuizTypeEtymologyOrigin),
+		"a blank word must stay due for review")
+
+	describe := findEtymWordEntry(histories, "describe")
+	require.NotNil(t, describe)
+	require.Len(t, describe.EtymologyOriginLogs, 1)
+	assert.Equal(t, notebook.LearnedStatusUnderstood, describe.EtymologyOriginLogs[0].Status,
+		"the answered sibling advances its own series independently")
 }
 
 // TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllBlank verifies that
-// leaving every derived word blank records ONE normal wrong attempt
-// (misunderstood) for the origin — never an excluded one — so the origin
+// leaving the only derived word blank records ONE normal wrong attempt
+// (misunderstood) on that WORD's series — never an excluded one — so it
 // resurfaces for review instead of silently disappearing from the quiz.
 func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllBlank(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -286,7 +315,7 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllBlank(t *testing.T) {
 		Origin:       "scribo",
 		Meaning:      "to write",
 		Words: []quiz.EtymologyFamilyWord{
-			{Expression: "describe", Meaning: "to represent in words"},
+			{Expression: "describe", Meaning: "to represent in words", SessionTitle: "Session 1", SceneTitle: "S1"},
 		},
 	}
 	handler.etymologyOriginStore[1] = card
@@ -311,13 +340,13 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_AllBlank(t *testing.T) {
 	var histories []notebook.LearningHistory
 	require.NoError(t, yaml.Unmarshal(raw, &histories))
 
-	expr := notebook.FindOriginExpression(histories, "Session 1", "scribo", "")
-	require.NotNil(t, expr)
-	assert.False(t, expr.SkippedAt.IsSkippedAny(),
-		"leaving every word blank must not exclude the origin from future quizzes")
-	require.Len(t, expr.EtymologyOriginLogs, 1)
-	assert.Equal(t, notebook.LearnedStatusMisunderstood, expr.EtymologyOriginLogs[0].Status,
-		"an all-blank attempt is recorded as a normal miss, not an exclusion")
+	describe := findEtymWordEntry(histories, "describe")
+	require.NotNil(t, describe)
+	assert.False(t, describe.SkippedAt.IsSkippedAny(),
+		"leaving a word blank must not exclude it from future quizzes")
+	require.Len(t, describe.EtymologyOriginLogs, 1)
+	assert.Equal(t, notebook.LearnedStatusMisunderstood, describe.EtymologyOriginLogs[0].Status,
+		"a blank attempt is recorded as a normal miss, not an exclusion")
 }
 
 // TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoBlank pins
@@ -338,10 +367,10 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoBlank(t *te
 		Origin:       "graph",
 		Meaning:      "to write",
 		Words: []quiz.EtymologyFamilyWord{
-			{Expression: "photograph", Meaning: "light writing"},
-			{Expression: "autograph", Meaning: "self writing"},
-			{Expression: "telegraph", Meaning: "distant writing"},
-			{Expression: "paragraph", Meaning: "beside writing"},
+			{Expression: "photograph", Meaning: "light writing", SessionTitle: "Session 1", SceneTitle: "S1"},
+			{Expression: "autograph", Meaning: "self writing", SessionTitle: "Session 1", SceneTitle: "S1"},
+			{Expression: "telegraph", Meaning: "distant writing", SessionTitle: "Session 1", SceneTitle: "S1"},
+			{Expression: "paragraph", Meaning: "beside writing", SessionTitle: "Session 1", SceneTitle: "S1"},
 		},
 	}
 	handler.etymologyOriginStore[1] = card
@@ -391,17 +420,21 @@ func TestQuizHandler_BatchSubmitEtymologyOriginAnswers_TwoAnsweredTwoBlank(t *te
 	var histories []notebook.LearningHistory
 	require.NoError(t, yaml.Unmarshal(raw, &histories))
 
-	expr := notebook.FindOriginExpression(histories, "Session 1", "graph", "")
-	require.NotNil(t, expr)
-	assert.False(t, expr.SkippedAt.IsSkippedAny(),
-		"2 blank words alongside 2 answers must never exclude the origin from future quizzes")
-	require.Len(t, expr.EtymologyOriginLogs, 1)
-	log := expr.EtymologyOriginLogs[0]
-	require.Len(t, log.WordResults, 4)
-	assert.True(t, log.WordResults[0].Correct, "photograph's stored log entry must be correct")
-	assert.False(t, log.WordResults[1].Correct, "autograph's stored log entry must be incorrect")
-	assert.False(t, log.WordResults[2].Correct, "telegraph's stored log entry (blank) must be a miss")
-	assert.False(t, log.WordResults[3].Correct, "paragraph's stored log entry (blank) must be a miss")
+	// Each word advances its OWN series independently: photograph correct;
+	// autograph, telegraph, paragraph all missed. None is excluded.
+	wantStatus := map[string]notebook.LearnedStatus{
+		"photograph": notebook.LearnedStatusUnderstood,
+		"autograph":  notebook.LearnedStatusMisunderstood,
+		"telegraph":  notebook.LearnedStatusMisunderstood,
+		"paragraph":  notebook.LearnedStatusMisunderstood,
+	}
+	for expr, status := range wantStatus {
+		e := findEtymWordEntry(histories, expr)
+		require.NotNilf(t, e, "word %q must own an etymology series", expr)
+		assert.Falsef(t, e.SkippedAt.IsSkippedAny(), "word %q must never be excluded by grading", expr)
+		require.Lenf(t, e.EtymologyOriginLogs, 1, "word %q must carry one attempt", expr)
+		assert.Equalf(t, status, e.EtymologyOriginLogs[0].Status, "word %q status", expr)
+	}
 }
 
 // TestQuizHandler_BatchSubmitReverseAnswers_SynonymPersistence documents the

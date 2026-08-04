@@ -12,7 +12,6 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
-	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
@@ -53,7 +52,7 @@ notebooks:
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
-		nil, config.QuizConfig{DisableShuffle: true})
+		nil, config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
 	return svc, bookID, learningDir
 }
 
@@ -159,102 +158,48 @@ origins:
 	assert.Equal(t, []string{"The museum displayed a facsimile of the manuscript."}, w.Examples)
 }
 
-// TestSaveEtymologyOriginResult_OneSeriesPerOrigin verifies L1/L4: two answers
-// on the same origin append to ONE origin series (not one per family word),
-// the read path sees them via the same canonical key (L2), and the derived
-// vocabulary words' learning history is left untouched (L4).
-func TestSaveEtymologyOriginResult_OneSeriesPerOrigin(t *testing.T) {
-	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
-
-	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+// answerCard grades every family word on the card with the given correctness
+// and persists a per-word etymology-origin result (mirrors what the handler
+// does), returning the aggregate learned_at.
+func answerCard(t *testing.T, svc *Service, card EtymologyOriginCard, correct bool) string {
+	t.Helper()
+	quality := 5
+	if !correct {
+		quality = 1
+	}
+	grades := make([]EtymologyWordGrade, 0, len(card.Words))
+	for _, w := range card.Words {
+		grades = append(grades, EtymologyWordGrade{Word: w, Correct: correct, Quality: quality})
+	}
+	learnedAt, _, err := svc.SaveEtymologyWordResults(card, grades, 1000)
 	require.NoError(t, err)
-	require.Len(t, cards, 1)
-	card := cards[0]
+	return learnedAt
+}
 
-	require.NoError(t, svc.SaveEtymologyOriginResult(card, 5, true, 1000, true, nil))
-	require.NoError(t, svc.SaveEtymologyOriginResult(card, 1, false, 1000, true, nil))
-
-	// L2: the read path used by the submit response finds the just-written
-	// series via the same canonical (session, origin, sense) key.
-	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
-	assert.NotEmpty(t, learnedAt, "L2: write must be visible to the read path")
-
-	raw, err := os.ReadFile(filepath.Join(learningDir, bookID+".yml"))
-	require.NoError(t, err)
-	var histories []notebook.LearningHistory
-	require.NoError(t, yaml.Unmarshal(raw, &histories))
-
-	// L1: exactly one origin entry for scribo, carrying BOTH answers as one
-	// series — never one entry (or one series) per derived word.
-	var originEntries int
-	var logCount int
-	for _, h := range histories {
-		for _, e := range h.Expressions {
-			if e.Type == notebook.LearningExpressionTypeOrigin && e.Expression == "scribo" {
-				originEntries++
-				logCount = len(e.EtymologyOriginLogs)
+// wordEntry finds a derived word's learning-history entry across scenes.
+func wordEntry(histories []notebook.LearningHistory, expr string) *notebook.LearningHistoryExpression {
+	for hi := range histories {
+		for ei := range histories[hi].Expressions {
+			if histories[hi].Expressions[ei].Expression == expr {
+				return &histories[hi].Expressions[ei]
 			}
-			// L4: the derived words must NOT gain any etymology/vocab logs from
-			// the origin quiz.
-			if e.Expression == "describe" || e.Expression == "inscribe" {
-				t.Errorf("L4 violation: derived word %q gained a learning entry from the origin quiz", e.Expression)
+		}
+		for si := range histories[hi].Scenes {
+			for ei := range histories[hi].Scenes[si].Expressions {
+				if histories[hi].Scenes[si].Expressions[ei].Expression == expr {
+					return &histories[hi].Scenes[si].Expressions[ei]
+				}
 			}
 		}
 	}
-	assert.Equal(t, 1, originEntries, "L1: one canonical entry per (origin, sense)")
-	assert.Equal(t, 2, logCount, "L1/L4: both answers land in the single origin series")
+	return nil
 }
 
-// TestEtymologyOrigin_OverrideRoundTrip verifies L2 for the override path: a
-// Mark-as-Correct override resolves the exact (session, origin, sense) series
-// through the same canonical lookup the write path used, flips the log, and the
-// read path reflects it.
-func TestEtymologyOrigin_OverrideRoundTrip(t *testing.T) {
-	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
-	svc.learningRepository = learning.NewYAMLLearningRepository(learningDir, nil)
-
-	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
-	require.NoError(t, err)
-	require.Len(t, cards, 1)
-	card := cards[0]
-
-	// Record a wrong answer, then override it to correct.
-	require.NoError(t, svc.SaveEtymologyOriginResult(card, 1, false, 1000, true, nil))
-	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
-	require.NotEmpty(t, learnedAt)
-
-	markCorrect := true
-	_, err = svc.OverrideAnswer(CardInfo{
-		NotebookName: card.NotebookName,
-		StoryTitle:   card.SessionTitle,
-		Expression:   card.Origin,
-		Sense:        card.Sense,
-		LearnedAt:    learnedAt,
-		MarkCorrect:  &markCorrect,
-	}, notebook.QuizTypeEtymologyOrigin)
-	require.NoError(t, err)
-
-	raw, err := os.ReadFile(filepath.Join(learningDir, bookID+".yml"))
-	require.NoError(t, err)
-	var histories []notebook.LearningHistory
-	require.NoError(t, yaml.Unmarshal(raw, &histories))
-	expr := notebook.FindOriginExpression(histories, card.SessionTitle, card.Origin, card.Sense)
-	require.NotNil(t, expr)
-	require.Len(t, expr.EtymologyOriginLogs, 1)
-	assert.Equal(t, notebook.LearnedStatusUnderstood, expr.EtymologyOriginLogs[0].Status,
-		"override must flip the origin series' log to a correct status")
-}
-
-// TestOverrideEtymologyWordResult_FlipsOnlyThatWordWithinTheOneRecord verifies
-// the bug-2 fix: overriding an individual derived family word's correctness
-// (a) lands as inline data on the origin's SAME existing log entry — never a
-// second entry/series for the word (L1); (b) leaves the sibling family word's
-// stored result untouched; (c) leaves the origin's own aggregate
-// Status/Quality/IntervalDays untouched — the origin-level override remains
-// the only thing that can change those; and (d) never creates a vocabulary
-// entry for the derived word, so its flashcard/story/other-quiz-mode history
-// is unaffected (L4).
-func TestOverrideEtymologyWordResult_FlipsOnlyThatWordWithinTheOneRecord(t *testing.T) {
+// TestSaveEtymologyWordResults_OneSeriesPerWord verifies L1/L4: answering a card
+// writes ONE etymology-origin series per DERIVED WORD (not per origin), two
+// answers append to that word's single series, and no per-origin entry is ever
+// created.
+func TestSaveEtymologyWordResults_OneSeriesPerWord(t *testing.T) {
 	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
 
 	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
@@ -262,69 +207,39 @@ func TestOverrideEtymologyWordResult_FlipsOnlyThatWordWithinTheOneRecord(t *test
 	require.Len(t, cards, 1)
 	card := cards[0]
 
-	// Both family words graded incorrect (describe/inscribe from the fixture).
-	wordResults := []notebook.EtymologyWordLog{
-		{Expression: "describe", Correct: false},
-		{Expression: "inscribe", Correct: false},
-	}
-	require.NoError(t, svc.SaveEtymologyOriginResult(card, 1, false, 1000, true, wordResults))
-	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
-	require.NotEmpty(t, learnedAt)
-
-	// Override "describe" to correct; leave "inscribe" alone.
-	correct := true
-	require.NoError(t, svc.OverrideEtymologyWordResult(
-		card.NotebookName, card.SessionTitle, card.Origin, card.Sense, learnedAt, "describe",
-		&correct, nil,
-	))
+	learnedAt := answerCard(t, svc, card, true)
+	assert.NotEmpty(t, learnedAt, "L2: write must be visible via the returned learned_at")
+	answerCard(t, svc, card, false)
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, bookID+".yml"))
 	require.NoError(t, err)
 	var histories []notebook.LearningHistory
 	require.NoError(t, yaml.Unmarshal(raw, &histories))
 
-	// L1: still exactly one origin entry with one log — the override must not
-	// fork a second entry or a second log for the word.
-	var originEntries int
+	// L1: no per-origin entry exists — the origin is presentation only.
 	for _, h := range histories {
 		for _, e := range h.Expressions {
-			if e.Type == notebook.LearningExpressionTypeOrigin && e.Expression == "scribo" {
-				originEntries++
-			}
-			// L4: the derived words must NOT gain their own learning entry
-			// from a word-level etymology override.
-			if e.Expression == "describe" || e.Expression == "inscribe" {
-				t.Errorf("L4 violation: derived word %q gained a learning entry from the word override", e.Expression)
+			if e.Type == notebook.LearningExpressionTypeOrigin {
+				t.Errorf("L1 violation: a per-origin entry %q was created; the schedule is per-word now", e.Expression)
 			}
 		}
 	}
-	assert.Equal(t, 1, originEntries, "L1: word override must not fork a second origin entry")
 
-	expr := notebook.FindOriginExpression(histories, card.SessionTitle, card.Origin, card.Sense)
-	require.NotNil(t, expr)
-	require.Len(t, expr.EtymologyOriginLogs, 1, "L1: word override must not append a second log")
-	log := expr.EtymologyOriginLogs[0]
-
-	// (b) and (c): only "describe" flips; "inscribe" and the aggregate
-	// record's own status/quality are untouched.
-	require.Len(t, log.WordResults, 2)
-	byExpr := map[string]notebook.EtymologyWordLog{}
-	for _, w := range log.WordResults {
-		byExpr[w.Expression] = w
+	// L1/L4: each derived word carries its OWN etymology series with BOTH
+	// answers; the standard series is untouched.
+	for _, expr := range []string{"describe", "inscribe"} {
+		e := wordEntry(histories, expr)
+		require.NotNilf(t, e, "derived word %q must own an etymology-origin series", expr)
+		assert.Lenf(t, e.EtymologyOriginLogs, 2, "both answers land in %q's single per-word series", expr)
+		assert.Emptyf(t, e.LearnedLogs, "the origin quiz must not touch %q's standard series (L4)", expr)
 	}
-	assert.True(t, byExpr["describe"].Correct, "the overridden word must flip to correct")
-	assert.False(t, byExpr["inscribe"].Correct, "the sibling word must be untouched by the override")
-	assert.Equal(t, notebook.LearnedStatusMisunderstood, log.Status,
-		"a word-level override must not change the origin's own aggregate status")
-	assert.Equal(t, 1, log.Quality,
-		"a word-level override must not change the origin's own aggregate quality")
 }
 
-// TestOverrideEtymologyWordResult_BlankGradedIncorrect verifies that a word
-// the learner left blank (recorded incorrect — there is no "skipped" state)
-// can be flipped to correct on the feedback screen via the per-word override,
-// landing on the origin's ONE stored record (invariant L1).
-func TestOverrideEtymologyWordResult_BlankGradedIncorrect(t *testing.T) {
+// TestEtymologyOrigin_WordOverrideRoundTrip verifies L2 for the per-word override
+// path: a Mark-as-Correct override resolves the WORD's own etymology series by
+// expression (the same key the exclude path uses), flips its log to a correct
+// status, and never forks a second series.
+func TestEtymologyOrigin_WordOverrideRoundTrip(t *testing.T) {
 	svc, bookID, learningDir := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
 
 	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
@@ -332,58 +247,43 @@ func TestOverrideEtymologyWordResult_BlankGradedIncorrect(t *testing.T) {
 	require.Len(t, cards, 1)
 	card := cards[0]
 
-	// "describe" was answered correctly; "inscribe" was left blank, so it is
-	// recorded as a normal miss (Correct=false) — not a distinct skipped state.
-	wordResults := []notebook.EtymologyWordLog{
-		{Expression: "describe", Correct: true},
-		{Expression: "inscribe", Correct: false},
-	}
-	require.NoError(t, svc.SaveEtymologyOriginResult(card, 1, false, 1000, true, wordResults))
-	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
-	require.NotEmpty(t, learnedAt)
+	learnedAt := answerCard(t, svc, card, false) // both words wrong
 
-	// The learner later reconsiders and marks the missed word correct.
+	// Override only "describe" to correct; "inscribe" stays wrong.
 	correct := true
-	require.NoError(t, svc.OverrideEtymologyWordResult(
-		card.NotebookName, card.SessionTitle, card.Origin, card.Sense, learnedAt, "inscribe",
-		&correct, nil,
-	))
+	require.NoError(t, svc.OverrideEtymologyWordResult(card.NotebookName, learnedAt, "describe", &correct))
 
 	raw, err := os.ReadFile(filepath.Join(learningDir, bookID+".yml"))
 	require.NoError(t, err)
 	var histories []notebook.LearningHistory
 	require.NoError(t, yaml.Unmarshal(raw, &histories))
 
-	expr := notebook.FindOriginExpression(histories, card.SessionTitle, card.Origin, card.Sense)
-	require.NotNil(t, expr)
-	require.Len(t, expr.EtymologyOriginLogs, 1)
-	byExpr := map[string]notebook.EtymologyWordLog{}
-	for _, w := range expr.EtymologyOriginLogs[0].WordResults {
-		byExpr[w.Expression] = w
-	}
-	assert.True(t, byExpr["inscribe"].Correct, "override must flip the word to correct")
+	describe := wordEntry(histories, "describe")
+	require.NotNil(t, describe)
+	require.Len(t, describe.EtymologyOriginLogs, 1, "L1: override must not fork a second log")
+	assert.Equal(t, notebook.LearnedStatusUnderstood, describe.EtymologyOriginLogs[0].Status,
+		"override must flip the word's own series to a correct status")
+
+	inscribe := wordEntry(histories, "inscribe")
+	require.NotNil(t, inscribe)
+	require.Len(t, inscribe.EtymologyOriginLogs, 1)
+	assert.Equal(t, notebook.LearnedStatusMisunderstood, inscribe.EtymologyOriginLogs[0].Status,
+		"the sibling word must be untouched by the override")
 }
 
-// TestOverrideEtymologyWordResult_UnknownWord_NotFound verifies the override
-// is a hard no-op error (not a silent write) when the word isn't part of the
-// stored record — it must never fall back to appending a guessed entry.
+// TestOverrideEtymologyWordResult_UnknownWord_NotFound verifies the per-word
+// override is a hard no-op error (not a silent write) when no series exists for
+// that word — it must never fabricate an entry.
 func TestOverrideEtymologyWordResult_UnknownWord_NotFound(t *testing.T) {
 	svc, bookID, _ := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
 
 	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
-	card := cards[0]
-
-	wordResults := []notebook.EtymologyWordLog{{Expression: "describe", Correct: true}}
-	require.NoError(t, svc.SaveEtymologyOriginResult(card, 5, true, 1000, true, wordResults))
-	learnedAt, _ := svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
+	learnedAt := answerCard(t, svc, cards[0], true)
 
 	correct := false
-	err = svc.OverrideEtymologyWordResult(
-		card.NotebookName, card.SessionTitle, card.Origin, card.Sense, learnedAt, "not-a-family-word",
-		&correct, nil,
-	)
+	err = svc.OverrideEtymologyWordResult(cards[0].NotebookName, learnedAt, "not-a-family-word", &correct)
 	assert.Error(t, err)
 }
 
@@ -421,11 +321,11 @@ const multiSenseDefsYAML = `- metadata:
         sense: disease
 `
 
-// TestEtymologyOrigin_MultiSense_SeparateSeries verifies a same-session
-// multi-sense origin yields one card and one log series PER sense (invariant
-// L4: sense selects the series, it does not create a parallel series), each
-// with its own family word.
-func TestEtymologyOrigin_MultiSense_SeparateSeries(t *testing.T) {
+// TestEtymologyOrigin_MultiSense_SeparateWords verifies a same-session
+// multi-sense origin yields one card per sense, each carrying its own derived
+// word, and that answering advances each WORD's own per-word series (the words
+// differ per sense, so the series never collide).
+func TestEtymologyOrigin_MultiSense_SeparateWords(t *testing.T) {
 	svc, bookID, learningDir := etymologyFixture(t, multiSenseEtymYAML, multiSenseDefsYAML)
 
 	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
@@ -434,7 +334,7 @@ func TestEtymologyOrigin_MultiSense_SeparateSeries(t *testing.T) {
 
 	familyBySense := map[string][]string{}
 	for _, c := range cards {
-		require.NoError(t, svc.SaveEtymologyOriginResult(c, 5, true, 1000, true, nil))
+		answerCard(t, svc, c, true)
 		for _, w := range c.Words {
 			familyBySense[c.Sense] = append(familyBySense[c.Sense], w.Expression)
 		}
@@ -447,13 +347,12 @@ func TestEtymologyOrigin_MultiSense_SeparateSeries(t *testing.T) {
 	var histories []notebook.LearningHistory
 	require.NoError(t, yaml.Unmarshal(raw, &histories))
 
-	feeling := notebook.FindOriginExpression(histories, "Session 1", "pathos", "feeling")
-	disease := notebook.FindOriginExpression(histories, "Session 1", "pathos", "disease")
-	require.NotNil(t, feeling)
-	require.NotNil(t, disease)
-	assert.Len(t, feeling.EtymologyOriginLogs, 1)
-	assert.Len(t, disease.EtymologyOriginLogs, 1)
-	assert.NotSame(t, feeling, disease, "each sense keeps an independent series")
+	sympathy := wordEntry(histories, "sympathy")
+	pathology := wordEntry(histories, "pathology")
+	require.NotNil(t, sympathy)
+	require.NotNil(t, pathology)
+	assert.Len(t, sympathy.EtymologyOriginLogs, 1)
+	assert.Len(t, pathology.EtymologyOriginLogs, 1)
 }
 
 // familyExpressions returns the derived-word expressions of the one card the
@@ -520,4 +419,112 @@ func TestEtymologyOrigin_PerWordExclude(t *testing.T) {
 		[]notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
 	))
 	assert.Equal(t, []string{"describe"}, familyExpressions(t, svc, bookID))
+}
+
+// A multi-origin fixture: "deficient" derives from BOTH "de" and "facere", so
+// under a per-origin schedule it lived in two families and was asked twice per
+// session. "defer" derives from "de" only. Generic Latin examples — no personal
+// data.
+const multiOriginEtymYAML = `metadata:
+  title: "Session 1"
+origins:
+  - origin: "de"
+    type: prefix
+    language: Latin
+    meaning: down, away
+  - origin: "facere"
+    type: root
+    language: Latin
+    meaning: to make, to do
+`
+
+const multiOriginDefsYAML = `- metadata:
+    title: "Session 1"
+  scenes:
+  - metadata:
+      index: 0
+      title: S1
+    expressions:
+    - expression: deficient
+      meaning: lacking something
+      origin_parts:
+      - origin: de
+      - origin: facere
+    - expression: defer
+      meaning: to put off
+      origin_parts:
+      - origin: de
+`
+
+// cardExpressions returns the derived-word expressions on a card.
+func cardExpressions(c EtymologyOriginCard) []string {
+	var out []string
+	for _, w := range c.Words {
+		out = append(out, w.Expression)
+	}
+	return out
+}
+
+// TestLoadEtymologyOriginCards_WithinSessionDedup verifies FIX 3: a word whose
+// origin_parts span two origins is placed on exactly ONE card per session, and a
+// card whose only word was already placed on an earlier card is dropped.
+func TestLoadEtymologyOriginCards_WithinSessionDedup(t *testing.T) {
+	svc, bookID, _ := etymologyFixture(t, multiOriginEtymYAML, multiOriginDefsYAML)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+
+	// "deficient" appears on exactly one card across the whole deck.
+	count := 0
+	for _, c := range cards {
+		for _, w := range c.Words {
+			if w.Expression == "deficient" {
+				count++
+			}
+		}
+	}
+	assert.Equal(t, 1, count, "a multi-origin word must be asked exactly once per session")
+
+	// The "facere" card's only word was "deficient" (placed on the earlier "de"
+	// card), so that card is dropped and only "de" survives with both its words.
+	require.Len(t, cards, 1)
+	assert.Equal(t, "de", cards[0].Origin)
+	assert.ElementsMatch(t, []string{"deficient", "defer"}, cardExpressions(cards[0]))
+}
+
+// TestLoadEtymologyNotebookSummaries_CountsDistinctDueWords verifies the review
+// badge counts DISTINCT due words: "deficient" (in two origins) + "defer" = 2,
+// not 3 (which the old per-origin double-count would report).
+func TestLoadEtymologyNotebookSummaries_CountsDistinctDueWords(t *testing.T) {
+	svc, _, _ := etymologyFixture(t, multiOriginEtymYAML, multiOriginDefsYAML)
+
+	summaries, err := svc.LoadEtymologyNotebookSummaries(true)
+	require.NoError(t, err)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, 2, summaries[0].EtymologyReviewCount,
+		"distinct due words are counted once, not once per origin")
+	require.Len(t, summaries[0].Sections, 1)
+	assert.Equal(t, 2, summaries[0].Sections[0].EtymologyReviewCount)
+}
+
+// TestEtymologyOrigin_PerWordSchedule_NoCrossOriginRepeat verifies FIX 1: after
+// the multi-origin word is answered correctly ONCE, its per-word schedule is no
+// longer due, so it never resurfaces under EITHER origin in a later session (the
+// same-day / pre-interval case).
+func TestEtymologyOrigin_PerWordSchedule_NoCrossOriginRepeat(t *testing.T) {
+	svc, bookID, _ := etymologyFixture(t, multiOriginEtymYAML, multiOriginDefsYAML)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	answerCard(t, svc, cards[0], true) // answers deficient + defer correctly
+
+	// Next session, before the interval lapses: no word is due, and "deficient"
+	// in particular is absent under every origin.
+	again, err := svc.LoadEtymologyOriginCards([]string{bookID}, false, false, nil)
+	require.NoError(t, err)
+	for _, c := range again {
+		assert.NotContains(t, cardExpressions(c), "deficient",
+			"a word answered once must not recur under any origin the same session")
+	}
 }

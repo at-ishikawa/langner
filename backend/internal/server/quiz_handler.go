@@ -649,16 +649,17 @@ func (h *QuizHandler) ResumeEtymologyWord(
 }
 
 // gradeAndSaveEtymologyOrigin grades every family word, records ONE
-// learning-log entry for the origin's (session, sense) series, and assembles
-// the feedback response with per-word results.
+// learning-log entry PER WORD on that word's own etymology-origin series
+// (invariants L1/L4 — the origin is presentation grouping, not a schedule), and
+// assembles the feedback response with per-word results.
 //
 // There is no "skip"/"don't know" control: a word the learner left blank is
-// graded INCORRECT — a normal miss that counts against the aggregate and keeps
-// the origin due — exactly like a wrong typed answer. The origin's aggregate
-// is correct only when every family word is correct; a card with no words is
-// recorded as a wrong attempt rather than a fabricated pass. Excluding the
-// origin from future quizzes remains a distinct, explicit action (SkipWord)
-// that this grading path never triggers.
+// graded INCORRECT — a normal miss that keeps THAT word due — exactly like a
+// wrong typed answer. The response's aggregate `correct` is true only when every
+// word was correct; next_review_date/learned_at are aggregated across the words
+// (earliest next review) so the existing UI keeps working. Excluding a word from
+// future quizzes remains a distinct, explicit action (ExcludeEtymologyWord) this
+// grading path never triggers.
 func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 	ctx context.Context,
 	card quiz.EtymologyOriginCard,
@@ -670,10 +671,9 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 		answerByWordID[a.GetWordId()] = a
 	}
 
-	aggregateCorrect := true
-	quality := 5
+	aggregateCorrect := len(card.Words) > 0
 	var results []*apiv1.EtymologyWordResult
-	wordResults := make([]notebook.EtymologyWordLog, 0, len(card.Words))
+	grades := make([]quiz.EtymologyWordGrade, 0, len(card.Words))
 	for i, w := range card.Words {
 		wordID := int64(i + 1)
 		result := &apiv1.EtymologyWordResult{
@@ -683,14 +683,13 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 
 		answer := strings.TrimSpace(answerByWordID[wordID].GetAnswer())
 		if answer == "" {
-			// Left blank: graded incorrect (a normal miss), counting against
-			// the aggregate so the origin stays due.
+			// Left blank: graded incorrect (a normal miss) on the word's own
+			// series, so THAT word stays due — no per-origin schedule.
 			result.Correct = false
 			result.Reason = "not answered"
 			aggregateCorrect = false
-			quality = 1
 			results = append(results, result)
-			wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: false})
+			grades = append(grades, quiz.EtymologyWordGrade{Word: w, Correct: false, Quality: 1})
 			continue
 		}
 
@@ -700,25 +699,19 @@ func (h *QuizHandler) gradeAndSaveEtymologyOrigin(
 		}
 		result.Correct = grade.Correct
 		result.Reason = grade.Reason
+		wordQuality := grade.Quality
 		if !grade.Correct {
 			aggregateCorrect = false
-			quality = 1
-		} else if grade.Quality < quality {
-			quality = grade.Quality
+			wordQuality = 1
 		}
 		results = append(results, result)
-		wordResults = append(wordResults, notebook.EtymologyWordLog{Expression: w.Expression, Correct: grade.Correct})
-	}
-	if len(card.Words) == 0 {
-		// A card with no words can't be a pass — record a wrong attempt.
-		aggregateCorrect = false
-		quality = 1
+		grades = append(grades, quiz.EtymologyWordGrade{Word: w, Correct: grade.Correct, Quality: wordQuality})
 	}
 
-	if err := h.svc.SaveEtymologyOriginResult(card, quality, aggregateCorrect, responseTimeMs, true, wordResults); err != nil {
+	learnedAt, nextReviewDate, err := h.svc.SaveEtymologyWordResults(card, grades, responseTimeMs)
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save etymology result: %w", err))
 	}
-	learnedAt, nextReviewDate := h.svc.GetLatestOriginLearnedInfo(card.NotebookName, card.SessionTitle, card.Origin, card.Sense)
 
 	h.mu.Lock()
 	noteID := h.nextID
@@ -750,25 +743,20 @@ func (h *QuizHandler) OverrideAnswer(ctx context.Context, req *connect.Request[a
 	}
 	quizType := protoQuizTypeToNotebook(req.Msg.GetQuizType())
 
-	// word_expression routes to a single derived family word's result
-	// within the origin's ONE existing record, instead of the origin's own
-	// aggregate record — see OverrideAnswerRequest.word_expression and
-	// notebook.LearningHistoryUpdater.OverrideEtymologyWordResult for why
-	// this can never fork into a second log series for the word (L1/L2).
+	// word_expression routes the override to a single derived word's OWN
+	// etymology-origin series (the word owns its schedule now — invariants
+	// L1/L4). It resolves the word by expression, the same key the exclude path
+	// uses (L2), and never forks a second series for the word.
 	if wordExpression := req.Msg.GetWordExpression(); wordExpression != "" {
 		if quizType != notebook.QuizTypeEtymologyOrigin {
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("word_expression is only valid for the etymology-origin quiz type"))
 		}
-		var correct, excluded *bool
+		var correct *bool
 		if req.Msg.MarkCorrect != nil {
 			mc := req.Msg.GetMarkCorrect()
 			correct = &mc
 		}
-		if req.Msg.WordExcluded != nil {
-			we := req.Msg.GetWordExcluded()
-			excluded = &we
-		}
-		if err := h.svc.OverrideEtymologyWordResult(info.NotebookName, info.StoryTitle, info.Expression, info.Sense, info.LearnedAt, wordExpression, correct, excluded); err != nil {
+		if err := h.svc.OverrideEtymologyWordResult(info.NotebookName, info.LearnedAt, wordExpression, correct); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("override etymology word: %w", err))
 		}
 		return connect.NewResponse(&apiv1.OverrideAnswerResponse{}), nil

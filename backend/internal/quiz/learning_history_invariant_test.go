@@ -153,14 +153,20 @@ origins:
 		Expression: vocabExpr, Meaning: "a quiet person",
 	}, FreeformGradeResult{Correct: true, Quality: 4}, 1000))
 
-	// 4. etymology answer — Service.SaveEtymologyOriginResult writes the
-	// flat etymology shape: a session-titled block (metadata.type=etymology)
-	// with the origin at the top level, keyed by (origin, sense).
-	require.NoError(t, svc.SaveEtymologyOriginResult(EtymologyOriginCard{
+	// 4. etymology-origin answer — Service.SaveEtymologyWordResults writes the
+	// WORD's own per-word etymology series (invariants L1/L4) into the SAME
+	// entry the vocab writers used — never a separate per-origin entry.
+	_, _, etymErr := svc.SaveEtymologyWordResults(EtymologyOriginCard{
 		NotebookName: notebookID, NotebookTitle: "Dual Notebook",
-		SessionTitle: "Session 8",
-		Origin:       etymExpr, Meaning: "into",
-	}, 4, true, 1000, true, nil))
+		SessionTitle: "Session 8", Origin: etymExpr, Meaning: "into",
+	}, []EtymologyWordGrade{{
+		Word: EtymologyFamilyWord{
+			Expression: vocabExpr, Meaning: "a quiet, inwardly-focused person",
+			SessionTitle: "Session 8", SceneTitle: "psyche + intro",
+		},
+		Correct: true, Quality: 4,
+	}}, 1000)
+	require.NoError(t, etymErr)
 
 	// 5. per-type skip — Service.SkipWord (vocab side)
 	require.NoError(t, svc.SkipWord(CardInfo{
@@ -211,37 +217,36 @@ origins:
 		return out
 	}
 
-	// Locator: each expression — vocab and etymology — exists at exactly
-	// one on-disk location after every writer runs.
+	// Locator: the vocab word exists at exactly one on-disk location after
+	// every writer — including the etymology-origin writer, which now targets
+	// the WORD — has run. The origin string never becomes its own entry.
 	require.Lenf(t, locationsOf(vocabExpr), 1,
-		"vocab writers must converge on one location for %q — found: %v",
+		"all writers (incl. etymology-origin) must converge on one location for %q — found: %v",
 		vocabExpr, locationsOf(vocabExpr),
 	)
-	require.Lenf(t, locationsOf(etymExpr), 1,
-		"etymology writer must produce exactly one location for %q — found: %v",
+	require.Lenf(t, locationsOf(etymExpr), 0,
+		"the per-word model must NOT create a per-origin entry for %q — found: %v",
 		etymExpr, locationsOf(etymExpr),
 	)
 
-	// Shape fingerprint: the etymology origin is a TOP-LEVEL expression tagged
-	// Type=origin under the session-titled block, carrying exactly ONE origin
-	// log series (invariants L1/L4) — never nested in a scene, never split.
-	var foundEtym bool
+	// Shape fingerprint: the word carries BOTH its standard series (LearnedLogs)
+	// and its etymology-origin series (EtymologyOriginLogs) in the SAME single
+	// entry — one entry per word, one series per quiz mode (invariants L1/L4).
+	var foundWord bool
 	for _, h := range got {
-		if h.Metadata.Title != "Session 8" {
-			continue
-		}
-		for _, expr := range h.Expressions {
-			if expr.Expression != etymExpr {
-				continue
+		for _, scene := range h.Scenes {
+			for _, expr := range scene.Expressions {
+				if expr.Expression != vocabExpr {
+					continue
+				}
+				assert.NotEmpty(t, expr.LearnedLogs, "the word must keep its standard series")
+				assert.Len(t, expr.EtymologyOriginLogs, 1,
+					"the word must carry exactly one etymology-origin log in the same entry")
+				foundWord = true
 			}
-			assert.Equal(t, notebook.LearningExpressionTypeOrigin, expr.Type,
-				"etymology origin entry must be Type=origin")
-			assert.Len(t, expr.EtymologyOriginLogs, 1,
-				"etymology origin must carry exactly one origin-log entry")
-			foundEtym = true
 		}
 	}
-	assert.True(t, foundEtym, "etymology origin must be a top-level Type=origin entry")
+	assert.True(t, foundWord, "the word must own a single entry carrying every quiz mode's series")
 }
 
 // TestLearningHistory_ReadWriteRoundtrip_AcrossAllWriters is the third

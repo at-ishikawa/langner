@@ -368,3 +368,157 @@ func TestLoadRelearnPool_GrammarSamePostMultipleBlanks(t *testing.T) {
 	assert.True(t, incorrects["go"], "the second due mistake is asked")
 	assert.False(t, incorrects["called me"], "a not-due correction of the same post is not asked")
 }
+
+// TestLoadRelearnPool_GrammarSharedSenseIDKeepsBothBlanks pins the pool half of
+// the "one correct blank marks the others correct and drops them" fix: two
+// DISTINCT corrections in one scene that share a senseID (here a duplicate
+// explicit id: — the collision the user hits in practice) back a single due
+// learning series, yet each mistaken span must survive as its OWN gradeable
+// blank. Before the fix, relearnGrammarIndex keyed the blanks last-write-wins by
+// senseID, so the pool emitted a single card and every span but one silently
+// vanished. Now the pool emits one card per blank, each carrying its own span
+// and grading independently.
+func TestLoadRelearnPool_GrammarSharedSenseIDKeepsBothBlanks(t *testing.T) {
+	base := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(base, "stories", "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me and then I go home.\"\n"), 0o644))
+
+	grammarsDir := filepath.Join(base, "grammars", "journal")
+	require.NoError(t, os.MkdirAll(grammarsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0o644))
+	// Two DISTINCT corrections in one scene given the SAME explicit id.
+	require.NoError(t, os.WriteFile(filepath.Join(grammarsDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: dup-id
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+        - id: dup-id
+          incorrect: "go"
+          correct: "went"
+          category: tense
+          reason: "Use past tense for a past event."
+`), 0o644))
+
+	// One misunderstood series under the shared senseID makes both blanks due.
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: dup-id
+      expression: dup-id
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent)), 0o644))
+
+	svc := newGrammarService(t, filepath.Join(base, "stories"), filepath.Join(base, "grammars"), learningDir)
+
+	cards, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	var grammar []RelearnCard
+	for _, c := range cards {
+		if c.Format == notebook.QuizTypeGrammar {
+			grammar = append(grammar, c)
+		}
+	}
+	require.Len(t, grammar, 2, "both corrections sharing one senseID must each keep their own blank")
+
+	incorrects := map[string]bool{}
+	for _, c := range grammar {
+		incorrects[c.Incorrect] = true
+		assert.Equal(t, grammar[0].Content, c.Content, "both blanks of one post share the full post text")
+		want := "John"
+		if c.Incorrect == "go" {
+			want = "went"
+		}
+		// Each blank grades against its OWN correction — grading one never
+		// resolves the other.
+		result, err := svc.GradeGrammarBlank(context.Background(), c.Content, c.GrammarCard(), want, 1200)
+		require.NoError(t, err)
+		assert.True(t, result.Correct, "blank %q must grade against its own reference", c.Incorrect)
+	}
+	assert.True(t, incorrects["the John"], "the first span survives")
+	assert.True(t, incorrects["go"], "the second span survives (was dropped before the fix)")
+}
+
+// TestLoadRelearnPool_EtymologyWordMiss pins the etymology half of the fix: the
+// etymology-origin schedule migrated to PER-WORD (a word's EtymologyOriginLogs
+// series lives on the word's own entry, keyed by the word, not the origin). A
+// missed etymology word must resurface in the Relearn pool as an etymology card
+// keyed by the WORD, graded against the word's OWN meaning — exactly how the
+// origin card quizzed it. Before the fix the pool resolved etymology candidates
+// through an origin-keyed index, so a word-keyed miss (expression "describe",
+// not origin "scribo") never resolved and was silently dropped. An excluded or
+// re-learned word must NOT be in the pool.
+func TestLoadRelearnPool_EtymologyWordMiss(t *testing.T) {
+	svc, bookID, _ := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	// Answer the whole family WRONG via the real per-word write path, so each
+	// word's EtymologyOriginLogs holds a "misunderstood" miss (symmetric L2).
+	answerCard(t, svc, cards[0], false)
+
+	etymByEntry := func(cards []RelearnCard) map[string]RelearnCard {
+		out := map[string]RelearnCard{}
+		for _, c := range cards {
+			if c.Format == notebook.QuizTypeEtymologyOrigin {
+				out[c.Entry] = c
+			}
+		}
+		return out
+	}
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	got := etymByEntry(pool)
+	require.Contains(t, got, "describe", "a missed etymology word must enter the pool by WORD, not origin")
+	require.Contains(t, got, "inscribe")
+	// The card re-drills the WORD against its OWN meaning — the same reference
+	// GradeEtymologyOriginMeaning scores against.
+	assert.Equal(t, "to represent in words", got["describe"].Meaning)
+	assert.Equal(t, got["describe"].Meaning, got["describe"].EtymologyCard().Meaning,
+		"the grading reference is the word's own meaning")
+	assert.True(t, got["describe"].IsEtymology())
+
+	// Exclude "describe" (the SAME SkipWord path every card uses): it drops from
+	// the pool; "inscribe" stays due.
+	require.NoError(t, svc.SkipWord(
+		CardInfo{NotebookName: bookID, StoryTitle: "Session 1", SceneTitle: "S1", Expression: "describe"},
+		"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
+	))
+	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	got = etymByEntry(pool)
+	assert.NotContains(t, got, "describe", "an excluded etymology word must leave the pool")
+	assert.Contains(t, got, "inscribe", "excluding one word must not drop the other")
+
+	// Re-learn "inscribe" (answer the remaining family correct): its latest log
+	// is no longer "misunderstood", so it too leaves the pool.
+	cards, err = svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	answerCard(t, svc, cards[0], true)
+	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	assert.NotContains(t, etymByEntry(pool), "inscribe", "a re-learned etymology word must leave the pool")
+}
