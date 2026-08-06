@@ -1344,6 +1344,10 @@ type FreeformCard struct {
 	Contexts           []inference.Context
 	WordDetail         WordDetail
 	Images             []string
+	// Literal is the etymology literal gloss stored in the word's free-text
+	// note field (Note.Note) — e.g. `de "down" + facere = "made down"`. Carried
+	// so the etymology-origin Relearn feedback can show it, mirroring the quiz.
+	Literal string
 	// ConceptHead, when non-empty, names the concept head this card maps
 	// to. SaveFreeformResult writes the log under the head so per-member
 	// freeform answers (e.g. typing "misanthropist") consolidate into
@@ -1434,6 +1438,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 					Contexts:           contexts,
 					WordDetail:         buildWordDetail(&definition, originMap),
 					Images:             definition.Images,
+					Literal:            definition.Note,
 				})
 			}
 		}
@@ -1484,6 +1489,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 				Contexts:     contexts,
 				WordDetail:   buildWordDetail(&card, originMap),
 				Images:       card.Images,
+				Literal:      card.Note,
 			})
 		}
 	}
@@ -2099,6 +2105,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					OriginalExpression: note.Expression,
 					Meaning:            note.Meaning,
 					WordDetail:         buildWordDetail(&note, originMap),
+					Literal:            note.Note,
 				}
 				if head, ok := conceptHeads[note.Expression]; ok && head != "" {
 					card.ConceptHead = head

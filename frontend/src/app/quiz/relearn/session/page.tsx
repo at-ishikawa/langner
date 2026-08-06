@@ -9,6 +9,7 @@ import { FeedbackActions } from "@/components/FeedbackActions";
 import { RelearnGrammarPost } from "@/components/RelearnGrammarPost";
 import { useRelearnStore } from "@/store/relearnStore";
 import RelearnContext from "@/components/RelearnContext";
+import { OriginBreakdown } from "@/components/OriginBreakdown";
 
 // sourceLabel names which quiz produced the wrong answer that pooled this card —
 // and, now that relearn mirrors that quiz, which format it is presented in.
@@ -217,6 +218,43 @@ export default function RelearnSessionPage() {
               onOverride={() => setOverride(!feedback.correct)}
               onUndo={() => setOverride(null)}
             >
+              {/* Etymology origin details — mirrors the etymology-origin quiz
+                  feedback (QuizResultCard): the roots with their meanings, the
+                  pronunciation, and the literal gloss. The origin_parts already
+                  flow on the relearn response's word_detail; literal arrives on
+                  the response's dedicated field. Only shown for etymology
+                  cards; every field is guarded so a missing value renders
+                  nothing. */}
+              {isEtymology && (
+                <Box display="flex" flexDirection="column" gap={1}>
+                  {feedback.wordDetail?.pronunciation && (
+                    <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                      /{feedback.wordDetail.pronunciation}/
+                    </Text>
+                  )}
+                  {feedback.wordDetail?.originParts && feedback.wordDetail.originParts.length > 0 && (
+                    <Box>
+                      <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>
+                        Origin
+                      </Text>
+                      <OriginBreakdown
+                        parts={feedback.wordDetail.originParts.map((p) => ({
+                          origin: p.origin,
+                          meaning: p.meaning,
+                          language: p.language,
+                          type: p.type,
+                        }))}
+                      />
+                    </Box>
+                  )}
+                  {feedback.literal && (
+                    <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
+                      {feedback.literal}
+                    </Text>
+                  )}
+                </Box>
+              )}
+
               {/* Show the word, its correct meaning, and what the learner typed
                   so they can see exactly what was off. */}
               <Box display="flex" flexDirection="column" gap={1}>

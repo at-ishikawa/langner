@@ -51,6 +51,10 @@ type RelearnCard struct {
 	// Etymology display extras (empty for vocab cards).
 	OriginType string
 	Language   string
+	// Literal is the etymology literal gloss (e.g. `de "down" + facere = "made
+	// down"`), sourced from the word's definitions note (Note.Note). Shown on the
+	// etymology-origin Relearn feedback, mirroring the quiz. Empty for other formats.
+	Literal string
 
 	// Grammar display extras (empty for vocab/etymology cards). Content is
 	// the journal entry's full text; Incorrect is the mistaken span struck
@@ -278,7 +282,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			}
 			cards = append(cards, RelearnCard{
 				Format: c.format, Entry: c.expression, Meaning: fc.Meaning, NotebookName: c.notebookName,
-				WordDetail: fc.WordDetail, Images: fc.Images,
+				WordDetail: fc.WordDetail, Images: fc.Images, Literal: fc.Literal,
 				ContextScenes: relearnScenesFromCard(fc),
 				// Grade the meaning against the word's own gloss, so a re-drill
 				// matches how the origin card scored it.

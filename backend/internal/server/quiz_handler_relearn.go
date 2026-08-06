@@ -224,6 +224,7 @@ func (h *QuizHandler) buildRelearnResponse(ctx context.Context, card quiz.Relear
 		ContextScenes: toProtoRelearnScenes(card.ContextScenes),
 	}
 	if card.IsEtymology() {
+		resp.Literal = card.Literal
 		ec := card.EtymologyCard()
 		for _, w := range ec.Words {
 			resp.ExampleWords = append(resp.ExampleWords, w.Expression)

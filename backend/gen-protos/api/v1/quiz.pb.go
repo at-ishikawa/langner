@@ -3908,6 +3908,11 @@ type SubmitRelearnAnswerResponse struct {
 	CorrectAnswer string `protobuf:"bytes,9,opt,name=correct_answer,json=correctAnswer,proto3" json:"correct_answer,omitempty"`
 	Category      string `protobuf:"bytes,10,opt,name=category,proto3" json:"category,omitempty"`
 	GrammarNote   string `protobuf:"bytes,11,opt,name=grammar_note,json=grammarNote,proto3" json:"grammar_note,omitempty"`
+	// literal is the etymology literal gloss for an etymology-origin card (e.g.
+	// `de "down" + facere = "made down"`) — mirrors EtymologyWordResult.literal.
+	// Sourced from the definitions note's free-text `note` field; empty for
+	// vocab/reverse/grammar cards.
+	Literal       string `protobuf:"bytes,12,opt,name=literal,proto3" json:"literal,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4015,6 +4020,13 @@ func (x *SubmitRelearnAnswerResponse) GetCategory() string {
 func (x *SubmitRelearnAnswerResponse) GetGrammarNote() string {
 	if x != nil {
 		return x.GrammarNote
+	}
+	return ""
+}
+
+func (x *SubmitRelearnAnswerResponse) GetLiteral() string {
+	if x != nil {
+		return x.Literal
 	}
 	return ""
 }
@@ -5681,7 +5693,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xbf\x03\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xd9\x03\n" +
 	"\x1bSubmitRelearnAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -5695,7 +5707,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x0ecorrect_answer\x18\t \x01(\tR\rcorrectAnswer\x12\x1a\n" +
 	"\bcategory\x18\n" +
 	" \x01(\tR\bcategory\x12!\n" +
-	"\fgrammar_note\x18\v \x01(\tR\vgrammarNote\"\xc2\x01\n" +
+	"\fgrammar_note\x18\v \x01(\tR\vgrammarNote\x12\x18\n" +
+	"\aliteral\x18\f \x01(\tR\aliteral\"\xc2\x01\n" +
 	"\x13RelearnContextScene\x12#\n" +
 	"\rnotebook_name\x18\x01 \x01(\tR\fnotebookName\x12\x1f\n" +
 	"\vscene_title\x18\x02 \x01(\tR\n" +

@@ -724,6 +724,12 @@ message SubmitRelearnAnswerResponse {
   string category = 10;
   string grammar_note = 11;
 
+  // literal is the etymology literal gloss for an etymology-origin card (e.g.
+  // `de "down" + facere = "made down"`) — mirrors EtymologyWordResult.literal.
+  // Sourced from the definitions note's free-text `note` field; empty for
+  // vocab/reverse/grammar cards.
+  string literal = 12;
+
   // NOTE: intentionally NO next_review_date and NO learned_at. The Relearn
   // Quiz writes no learning history, so there is no schedule to show and no
   // log to override.

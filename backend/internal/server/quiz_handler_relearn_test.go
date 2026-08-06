@@ -149,6 +149,18 @@ func TestRelearn_MirrorsEachSourceQuizType(t *testing.T) {
 	assert.Equal(t, "a change or difference", delta.GetMeaning(), "reverse card prompts with the meaning")
 }
 
+// TestRelearn_VocabResponseHasNoLiteral pins that the etymology literal gloss
+// is etymology-only: a plain vocabulary relearn card's response carries no
+// literal (buildRelearnResponse sets it only inside the IsEtymology branch).
+func TestRelearn_VocabResponseHasNoLiteral(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+	id := relearnByEntryType(startRelearn(t, h, 24))["alpha/QUIZ_TYPE_STANDARD"].GetNoteId()
+	resp, err := h.SubmitRelearnAnswer(context.Background(),
+		connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: id, Answer: "the first thing"}))
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetLiteral(), "a vocab relearn response carries no etymology literal")
+}
+
 func TestRelearn_WordFailedInTwoTypesYieldsTwoCards(t *testing.T) {
 	h, _ := newRelearnTestHandler(t)
 	byKey := relearnByEntryType(startRelearn(t, h, 24))

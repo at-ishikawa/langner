@@ -528,3 +528,57 @@ func TestLoadRelearnPool_EtymologyWordMiss(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotContains(t, etymByEntry(pool), "inscribe", "a re-learned etymology word must leave the pool")
 }
+
+// TestLoadRelearnPool_EtymologyCardCarriesOriginDetails pins the Relearn
+// etymology feedback contract: a pooled etymology-origin card must carry the
+// origin roots WITH their meanings (WordDetail.OriginParts) and the literal
+// gloss (sourced from the word's definitions note) so the Relearn feedback can
+// mirror the etymology-origin quiz feedback (origin breakdown + literal).
+func TestLoadRelearnPool_EtymologyCardCarriesOriginDetails(t *testing.T) {
+	const etymYAML = `metadata:
+  title: "Session 1"
+origins:
+  - origin: "scribo"
+    type: root
+    language: Latin
+    meaning: to write
+`
+	const defsYAML = `- metadata:
+    title: "Session 1"
+  scenes:
+  - metadata:
+      index: 0
+      title: S1
+    expressions:
+    - expression: describe
+      meaning: to represent in words
+      note: 'de "down" + scribo "write" = "write down"'
+      origin_parts:
+      - origin: scribo
+`
+	svc, bookID, _ := etymologyFixture(t, etymYAML, defsYAML)
+
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	answerCard(t, svc, cards[0], false) // fail the family so the word enters the pool
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	var describe *RelearnCard
+	for i := range pool {
+		if pool[i].Format == notebook.QuizTypeEtymologyOrigin && pool[i].Entry == "describe" {
+			describe = &pool[i]
+		}
+	}
+	require.NotNil(t, describe, "the missed etymology word must be pooled")
+
+	// Origin roots WITH their meanings flow on the card's WordDetail — the same
+	// data toProtoWordDetail copies straight onto the response's word_detail.
+	require.Len(t, describe.WordDetail.OriginParts, 1)
+	assert.Equal(t, "scribo", describe.WordDetail.OriginParts[0].Origin)
+	assert.Equal(t, "to write", describe.WordDetail.OriginParts[0].Meaning)
+	// The literal gloss flows from the word's definitions note field.
+	assert.Equal(t, `de "down" + scribo "write" = "write down"`, describe.Literal)
+}
