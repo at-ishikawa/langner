@@ -62,7 +62,15 @@ type yamlAttempt struct {
 	// IntervalDays is the record's stored spaced-repetition interval, used
 	// by the Trends level-box aggregation.
 	IntervalDays int
-	Attempt      Attempt
+	// Seq is the attempt's stable encounter order across the whole load
+	// (history files walked in sorted filename order, then each expression's
+	// log slots in fixed order: LearnedLogs, ReverseLogs, EtymologyOriginLogs).
+	// It is the deterministic final tiebreak for the Day Detail card list so a
+	// word that was wrong in two quiz modes on the same instant always sorts
+	// the same way regardless of Go's map-iteration order — each card still
+	// keeps its own recorded QuizType (invariant L3).
+	Seq     int
+	Attempt Attempt
 }
 
 // allAttempts loads every record from every history file, flattens them,
@@ -78,13 +86,26 @@ func (r *YAMLRepository) allAttempts(filters Filters) ([]yamlAttempt, error) {
 	// stores as source_notebook_id. Metadata.Title/id are per-episode
 	// (e.g. "Friends S01E01"), so grouping the analytics "notebook"
 	// dimension on them would split one notebook into many chapters.
-	for notebookName, list := range histories {
+	//
+	// Walk the files in sorted name order so the flattened result — and every
+	// yamlAttempt.Seq derived from it — is deterministic instead of following
+	// Go's randomized map iteration.
+	notebookNames := make([]string, 0, len(histories))
+	for notebookName := range histories {
+		notebookNames = append(notebookNames, notebookName)
+	}
+	sort.Strings(notebookNames)
+	for _, notebookName := range notebookNames {
 		if filters.NotebookID != "" && filters.NotebookID != notebookName {
 			continue
 		}
-		for _, h := range list {
+		for _, h := range histories[notebookName] {
 			collectExpressions(h, notebookName, filters.QuizType, &out)
 		}
+	}
+	// Stamp each attempt's stable encounter order (see yamlAttempt.Seq).
+	for i := range out {
+		out[i].Seq = i
 	}
 	return out, nil
 }
@@ -303,8 +324,15 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 	summary.NotebookCount = len(notebooks)
 	summary.QuizTypes = sortedKeys(quizTypes)
 
-	// Collect wrong words for the day.
-	var wrong []WrongWord
+	// Collect wrong words for the day. Each card is paired with its hit
+	// attempt's stable encounter order (Seq) so the final sort is fully
+	// deterministic even though byWord is iterated in Go's randomized map
+	// order.
+	type dayCard struct {
+		word WrongWord
+		seq  int
+	}
+	var cards []dayCard
 	for _, records := range byWord {
 		// records ordered as encountered; sort by LearnedAt desc to keep
 		// newest-first invariant required by streak helpers.
@@ -332,34 +360,47 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 			fromHit = append(fromHit, records[i].Attempt)
 		}
 		meta := r.resolver.Resolve(ctx, hit.NotebookID, hit.ID, hit.Expression, hit.ExpressionType, hit.QuizType)
-		wrong = append(wrong, WrongWord{
-			ID:                    hit.ID,
-			Expression:            hit.Expression,
-			NotebookID:            hit.NotebookID,
-			NotebookTitle:         hit.NotebookTitle,
-			SceneTitle:            hit.SceneTitle,
-			QuizType:              hit.QuizType,
-			RecentPattern:         RecentPattern(fromHit),
-			CurrentWrongStreak:    CurrentWrongStreak(fromHit),
-			PreviousCorrectStreak: PreviousCorrectStreak(fromHit),
-			CurrentStatus:         hit.Attempt.Status,
-			LearnedAt:             hit.Attempt.LearnedAt,
-			Meaning:               meta.Meaning,
-			ExampleSentence:       meta.ExampleSentence,
-			NotebookKind:          meta.NotebookKind,
-			Skipped:               hit.Skipped,
-			RelatedGroups:         meta.RelatedGroups,
-			DisplayExpression:     meta.DisplayExpression,
+		cards = append(cards, dayCard{
+			seq: hit.Seq,
+			word: WrongWord{
+				ID:                    hit.ID,
+				Expression:            hit.Expression,
+				NotebookID:            hit.NotebookID,
+				NotebookTitle:         hit.NotebookTitle,
+				SceneTitle:            hit.SceneTitle,
+				QuizType:              hit.QuizType,
+				RecentPattern:         RecentPattern(fromHit),
+				CurrentWrongStreak:    CurrentWrongStreak(fromHit),
+				PreviousCorrectStreak: PreviousCorrectStreak(fromHit),
+				CurrentStatus:         hit.Attempt.Status,
+				LearnedAt:             hit.Attempt.LearnedAt,
+				Meaning:               meta.Meaning,
+				ExampleSentence:       meta.ExampleSentence,
+				NotebookKind:          meta.NotebookKind,
+				Skipped:               hit.Skipped,
+				RelatedGroups:         meta.RelatedGroups,
+				DisplayExpression:     meta.DisplayExpression,
+			},
 		})
 	}
-	// Newest failure first. Ties (rare — same word + quiz type wrong twice on
-	// the same exact instant) fall back to expression for stability.
-	sort.Slice(wrong, func(i, j int) bool {
-		if !wrong[i].LearnedAt.Equal(wrong[j].LearnedAt) {
-			return wrong[i].LearnedAt.After(wrong[j].LearnedAt)
+	// Newest failure first. Ties (same word wrong in two quiz modes on the same
+	// instant) fall back to expression, then to the hit attempt's stable
+	// encounter order (Seq) — never to Go's map-iteration order. Each card
+	// keeps its own recorded QuizType, so this only fixes the ORDER of two
+	// distinct, correctly-labeled cards (invariant L3), it never relabels one.
+	sort.Slice(cards, func(i, j int) bool {
+		if !cards[i].word.LearnedAt.Equal(cards[j].word.LearnedAt) {
+			return cards[i].word.LearnedAt.After(cards[j].word.LearnedAt)
 		}
-		return wrong[i].Expression < wrong[j].Expression
+		if cards[i].word.Expression != cards[j].word.Expression {
+			return cards[i].word.Expression < cards[j].word.Expression
+		}
+		return cards[i].seq < cards[j].seq
 	})
+	wrong := make([]WrongWord, len(cards))
+	for i, c := range cards {
+		wrong[i] = c.word
+	}
 
 	// Find prev/next dates with activity (regardless of correct/wrong) matching filters.
 	prev, next := adjacentDates(dayHas, day)
