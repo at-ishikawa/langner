@@ -97,7 +97,7 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 		fresh[noteID] = card
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples {
-			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker})
+			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker, Highlight: ex.Highlight})
 		}
 		var contexts []*apiv1.ContextSentence
 		for _, c := range card.Contexts {

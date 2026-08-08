@@ -486,7 +486,7 @@ func (s *Service) loadFlashcardCards(
 
 			var examples []Example
 			for _, ex := range card.Examples {
-				examples = append(examples, Example{Text: ex})
+				examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
 			}
 
 			cards = append(cards, Card{
@@ -1108,13 +1108,20 @@ func (s *Service) loadFlashcardReverseCards(
 
 			var contexts []ReverseContext
 			for _, ex := range card.Examples {
-				if strings.Contains(strings.ToLower(ex), strings.ToLower(card.Expression)) {
-					masked := maskWord(ex, card.Expression, card.Definition)
-					contexts = append(contexts, ReverseContext{
-						Context:       ex,
-						MaskedContext: masked,
-					})
+				textLower := strings.ToLower(ex.Text)
+				// An irregular highlight (e.g. lemma "go", highlight "went")
+				// may not contain the expression as a substring, so also
+				// accept an example whose highlight surface form is present.
+				hasExpr := strings.Contains(textLower, strings.ToLower(card.Expression))
+				hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
+				if !hasExpr && !hasHighlight {
+					continue
 				}
+				masked := maskWord(ex.Text, card.Expression, card.Definition, ex.Highlight)
+				contexts = append(contexts, ReverseContext{
+					Context:       ex.Text,
+					MaskedContext: masked,
+				})
 			}
 
 			if listMissingContext {
@@ -1149,10 +1156,17 @@ func (s *Service) loadFlashcardReverseCards(
 	return cards, nil
 }
 
-func maskWord(context, expression, definition string) string {
+// maskWord blanks out every occurrence of the expression, its Definition
+// alt-form, and the per-example highlight (any of which may be empty). The
+// highlight covers irregular inflections the lemma can't derive (e.g. lemma
+// "go", highlight "went"), so the reverse quiz never leaks the answer.
+func maskWord(context, expression, definition, highlight string) string {
 	context = maskOccurrences(context, expression)
 	if definition != "" {
 		context = maskOccurrences(context, definition)
+	}
+	if highlight != "" {
+		context = maskOccurrences(context, highlight)
 	}
 	return context
 }
@@ -1229,7 +1243,7 @@ func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note)
 		}
 
 		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
-		masked := maskWord(cleaned, definition.Expression, definition.Definition)
+		masked := maskWord(cleaned, definition.Expression, definition.Definition, "")
 		contexts = append(contexts, ReverseContext{
 			Context:       cleaned,
 			MaskedContext: masked,
@@ -1520,7 +1534,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 			var contexts []inference.Context
 			for _, ex := range card.Examples {
 				contexts = append(contexts, inference.Context{
-					Context:             ex,
+					Context:             ex.Text,
 					ReferenceDefinition: card.Meaning,
 				})
 			}
@@ -2020,7 +2034,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				// show their examples in the standard quiz.
 				var examples []Example
 				for _, ex := range note.Examples {
-					examples = append(examples, Example{Text: ex})
+					examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
 				}
 				card := Card{
 					ID:            note.ID,
@@ -2102,13 +2116,21 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				// masking).
 				var contexts []ReverseContext
 				for _, ex := range note.Examples {
-					if strings.Contains(strings.ToLower(ex), strings.ToLower(note.Expression)) {
-						masked := maskWord(ex, note.Expression, note.Definition)
-						contexts = append(contexts, ReverseContext{
-							Context:       ex,
-							MaskedContext: masked,
-						})
+					textLower := strings.ToLower(ex.Text)
+					// An irregular highlight (e.g. lemma "go", highlight
+					// "went") may not contain the expression as a substring,
+					// so also accept an example whose highlight surface form
+					// is present.
+					hasExpr := strings.Contains(textLower, strings.ToLower(note.Expression))
+					hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
+					if !hasExpr && !hasHighlight {
+						continue
 					}
+					masked := maskWord(ex.Text, note.Expression, note.Definition, ex.Highlight)
+					contexts = append(contexts, ReverseContext{
+						Context:       ex.Text,
+						MaskedContext: masked,
+					})
 				}
 				card := ReverseCard{
 					ID:           note.ID,

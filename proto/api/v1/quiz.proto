@@ -185,6 +185,10 @@ message Flashcard {
 message Example {
   string text = 1;
   string speaker = 2;
+  // highlight is the exact surface word/phrase to bold in this sentence
+  // (e.g. "went" for lemma "go"). Empty means fall back to the auto
+  // whole-word lemma rule on the client.
+  string highlight = 3;
 }
 
 message WordDetail {

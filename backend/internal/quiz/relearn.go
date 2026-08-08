@@ -464,7 +464,7 @@ func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 		}
 		out = append(out, ReverseContext{
 			Context:       text,
-			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression),
+			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, ""),
 		})
 	}
 	return out

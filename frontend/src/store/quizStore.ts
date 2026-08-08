@@ -22,6 +22,10 @@ export interface WordDetail {
 interface Example {
   text: string;
   speaker: string;
+  // highlight is the exact surface word/phrase to bold in this sentence
+  // (e.g. "went" for lemma "go"). Empty falls back to the auto whole-word
+  // lemma rule in highlightExpression.
+  highlight?: string;
 }
 
 export interface Flashcard {

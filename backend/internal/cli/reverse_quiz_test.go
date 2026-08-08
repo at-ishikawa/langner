@@ -1323,7 +1323,7 @@ func TestNewReverseQuizCLI_ListMissingContext(t *testing.T) {
 			Title: "Unit 1",
 			Cards: []notebook.Note{
 				{Expression: "abstruse", Meaning: "difficult to understand"},
-				{Expression: "break the ice", Meaning: "to initiate interaction", Examples: []string{"She told a joke to break the ice."}},
+				{Expression: "break the ice", Meaning: "to initiate interaction", Examples: notebook.Examples{{Text: "She told a joke to break the ice."}}},
 			},
 		},
 	}))

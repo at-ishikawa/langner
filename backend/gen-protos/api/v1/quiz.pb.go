@@ -785,9 +785,13 @@ func (x *Flashcard) GetConceptMeaning() string {
 }
 
 type Example struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	Speaker       string                 `protobuf:"bytes,2,opt,name=speaker,proto3" json:"speaker,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Text    string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Speaker string                 `protobuf:"bytes,2,opt,name=speaker,proto3" json:"speaker,omitempty"`
+	// highlight is the exact surface word/phrase to bold in this sentence
+	// (e.g. "went" for lemma "go"). Empty means fall back to the auto
+	// whole-word lemma rule on the client.
+	Highlight     string `protobuf:"bytes,3,opt,name=highlight,proto3" json:"highlight,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -832,6 +836,13 @@ func (x *Example) GetText() string {
 func (x *Example) GetSpeaker() string {
 	if x != nil {
 		return x.Speaker
+	}
+	return ""
+}
+
+func (x *Example) GetHighlight() string {
+	if x != nil {
+		return x.Highlight
 	}
 	return ""
 }
@@ -4706,10 +4717,11 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x0eoriginal_entry\x18\x04 \x01(\tR\roriginalEntry\x12!\n" +
 	"\fconcept_head\x18\x05 \x01(\tR\vconceptHead\x12'\n" +
 	"\x0fconcept_members\x18\x06 \x03(\tR\x0econceptMembers\x12'\n" +
-	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\"7\n" +
+	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\"U\n" +
 	"\aExample\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x18\n" +
-	"\aspeaker\x18\x02 \x01(\tR\aspeaker\"\xf7\x01\n" +
+	"\aspeaker\x18\x02 \x01(\tR\aspeaker\x12\x1c\n" +
+	"\thighlight\x18\x03 \x01(\tR\thighlight\"\xf7\x01\n" +
 	"\n" +
 	"WordDetail\x12\x16\n" +
 	"\x06origin\x18\x01 \x01(\tR\x06origin\x12$\n" +

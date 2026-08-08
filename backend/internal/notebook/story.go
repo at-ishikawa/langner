@@ -672,7 +672,7 @@ func (converter assetsStoryConverter) convertStoryScene(scene StoryScene) assets
 			Definition:    note.Definition,
 			Expression:    note.Expression,
 			Meaning:       note.Meaning,
-			Examples:      note.Examples,
+			Examples:      note.Examples.Texts(),
 			Pronunciation: note.Pronunciation,
 			PartOfSpeech:  note.PartOfSpeech,
 			Origin:        note.Origin,

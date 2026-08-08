@@ -58,7 +58,7 @@ type Note struct {
 	// Either of them is required.
 	Level    ExpressionLevel `yaml:"level,omitempty"`
 	Meaning  string          `yaml:"meaning,omitempty"`
-	Examples []string        `yaml:"examples,omitempty"`
+	Examples Examples        `yaml:"examples,omitempty"`
 	Images   []string        `yaml:"images,omitempty"`
 
 	Origin        string   `yaml:"origin,omitempty"`
@@ -91,6 +91,73 @@ type Note struct {
 
 	// only for template rendering
 	YoutubeURL string `yaml:",omitempty"`
+}
+
+// Example is a single usage sentence for a note. In YAML it accepts EITHER a
+// plain scalar string (the sentence, unchanged legacy form) OR a mapping
+// {text, highlight}. Highlight names the exact surface word/phrase to bold in
+// standard quizzes and mask in reverse quizzes — required for irregular
+// inflections the lemma can't derive (e.g. lemma "go", highlight "went").
+type Example struct {
+	Text      string `yaml:"text,omitempty"`
+	Highlight string `yaml:"highlight,omitempty"`
+}
+
+// UnmarshalYAML accepts a scalar string or a {text, highlight} mapping so
+// existing plain-string examples keep parsing with no migration.
+func (e *Example) UnmarshalYAML(node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode {
+		return node.Decode(&e.Text)
+	}
+	// rawExample avoids infinite recursion into this UnmarshalYAML.
+	type rawExample Example
+	var raw rawExample
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+	*e = Example(raw)
+	return nil
+}
+
+// MarshalYAML round-trips a highlight-less example back to a plain scalar so
+// unchanged files stay byte-stable; only examples with a highlight serialize
+// as a {text, highlight} mapping.
+func (e Example) MarshalYAML() (interface{}, error) {
+	if e.Highlight == "" {
+		return e.Text, nil
+	}
+	type rawExample Example
+	return rawExample(e), nil
+}
+
+// Examples is a list of usage sentences supporting the mixed scalar/mapping
+// YAML form via Example's (Un)MarshalYAML.
+type Examples []Example
+
+// Texts returns the plain sentence of each example, for surfaces that only
+// need the text (PDF/markdown export, the notebook API, analytics).
+func (exs Examples) Texts() []string {
+	if len(exs) == 0 {
+		return nil
+	}
+	out := make([]string, len(exs))
+	for i, ex := range exs {
+		out[i] = ex.Text
+	}
+	return out
+}
+
+// ExamplesFromStrings builds an Examples list from plain sentence strings with
+// no highlight, used when importing examples from a dictionary or record.
+func ExamplesFromStrings(texts []string) Examples {
+	if len(texts) == 0 {
+		return nil
+	}
+	out := make(Examples, len(texts))
+	for i, t := range texts {
+		out[i] = Example{Text: t}
+	}
+	return out
 }
 
 // Date represents a timestamp for YAML serialization
@@ -192,7 +259,7 @@ func (note *Note) SetDetails(dictionaryMap map[string]rapidapi.Response, youTube
 		note.Meaning = definition.Definition
 		note.Synonyms = definition.Synonyms
 		if len(note.Examples) == 0 {
-			note.Examples = definition.Examples
+			note.Examples = ExamplesFromStrings(definition.Examples)
 		}
 		if note.YouTubeTimeSeconds > 0 {
 			note.YoutubeURL = fmt.Sprintf("%s?t=%d", youTubeURL, note.YouTubeTimeSeconds)
