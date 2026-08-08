@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -798,6 +799,67 @@ notebooks:
 	require.NotNil(t, book)
 	assert.Equal(t, 2, book.ReverseReviewCount,
 		"summary ReverseReviewCount with includeUnstudied must match the 2 reverse cards loaded")
+}
+
+// TestService_LoadCards_DefinitionsBook_SurfacesExamples verifies that a
+// definitions-book (incl. etymology-derived) word's `examples:` sentences
+// reach the standard quiz Card (forward) and the reverse Card's masked
+// Contexts (reverse). Before the fix, loadDefinitionCards never read
+// note.Examples (Card.Examples stayed nil) and loadDefinitionReverseCards
+// built no Contexts, so definitions words showed no example sentence while
+// flashcard words did.
+func TestService_LoadCards_DefinitionsBook_SurfacesExamples(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	const example = "His grasp of the language was barely passable at first, but it improved."
+
+	bookDir := filepath.Join(defsDir, "examples-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: examples-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "roots"
+      expressions:
+        - expression: "passable"
+          meaning: "good enough, but not excellent"
+          examples:
+            - "`+example+`"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	// Forward: the standard quiz Card must carry the example sentence.
+	cards, err := svc.LoadCards([]string{"examples-defs"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	require.Len(t, cards[0].Examples, 1,
+		"definitions-book word must surface its example sentence (was nil before the fix)")
+	assert.Equal(t, example, cards[0].Examples[0].Text)
+
+	// Reverse: the reverse Card must carry a masked context built from the
+	// same example, with the expression masked out.
+	reverse, err := svc.LoadReverseCards([]string{"examples-defs"}, false, true, nil)
+	require.NoError(t, err)
+	require.Len(t, reverse, 1)
+	require.Len(t, reverse[0].Contexts, 1,
+		"definitions-book reverse card must build masked contexts (was empty before the fix)")
+	assert.Equal(t, example, reverse[0].Contexts[0].Context)
+	assert.NotContains(t, strings.ToLower(reverse[0].Contexts[0].MaskedContext), "passable",
+		"the expression must be masked out of the reverse context")
+	assert.Contains(t, reverse[0].Contexts[0].MaskedContext, "______",
+		"masking must replace the expression with the blank marker")
 }
 
 // TestService_LoadDefinitionWords_RespectsFreeformSkip exercises the
