@@ -83,6 +83,14 @@ Then("I see the notebook {string}", async ({ page }, name: string) => {
   await expect(page.getByText(name).first()).toBeVisible();
 });
 
+// Negative counterpart: the notebook must be absent from the picker entirely.
+// Used to assert the Vocabulary tab hides a notebook with no vocabulary (an
+// empty journal, or a grammar-only summary) — including the Journal+Grammar
+// duplicate id, which collapses to nothing when the journal has no words.
+Then("I do not see the notebook {string}", async ({ page }, name: string) => {
+  await expect(page.getByText(name)).toHaveCount(0);
+});
+
 Then("I see the word {string}", async ({ page }, entry: string) => {
   await expect(page.getByText(entry, { exact: true }).first()).toBeVisible();
 });

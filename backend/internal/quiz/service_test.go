@@ -144,6 +144,11 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	assert.Equal(t, 0, storySummary.ReviewCount)
 	// Only misunderstood answers in fixture → no words eligible for reverse quiz
 	assert.Equal(t, 0, storySummary.ReverseReviewCount)
+	// VocabularyCount is STRUCTURAL: the scene has one definition
+	// ("preposterous"), so it is 1 even though ReviewCount is 0. This is
+	// what keeps a with-vocabulary notebook on the Vocabulary tab
+	// regardless of studied/due state (decoupled from ReviewCount).
+	assert.Equal(t, 1, storySummary.VocabularyCount)
 
 	vocabSummary, ok := summaryMap["test-vocab"]
 	require.True(t, ok)
@@ -155,6 +160,8 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	// with story notebooks.
 	assert.Equal(t, 0, vocabSummary.ReviewCount)
 	assert.Equal(t, 0, vocabSummary.ReverseReviewCount)
+	// One flashcard card → structural VocabularyCount 1 despite ReviewCount 0.
+	assert.Equal(t, 1, vocabSummary.VocabularyCount)
 }
 
 // The standalone etymology-origin quiz was removed, but etymology notebooks

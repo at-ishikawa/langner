@@ -128,6 +128,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReviewCount:          countStoryDefinitions(filtered),
 			ReverseReviewCount:   reverseCount,
 			EtymologyReviewCount: etymCount,
+			VocabularyCount:      countStoryDefinitions(stories),
 			LatestDate:           latestDate,
 			Kind:                 kind,
 			HasContent:           storyHasContent(stories),
@@ -167,6 +168,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReviewCount:          countFlashcardCards(filtered),
 			ReverseReviewCount:   reverseCount,
 			EtymologyReviewCount: etymCount,
+			VocabularyCount:      countFlashcardCards(notebooks),
 			LatestDate:           latestDate,
 			Sections:             flashcardSectionSummaries(notebooks, filtered, learningHistories[id], includeUnstudied),
 		})
@@ -197,6 +199,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			Name:               nbID,
 			ReviewCount:        reviewCount,
 			ReverseReviewCount: reverseCount,
+			VocabularyCount:    countDefinitionEntries(defs, conceptHeads),
 			Kind:               "Books",
 			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
 			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID], includeUnstudied, conceptHeads),
@@ -670,6 +673,37 @@ func countStoryDefinitions(stories []notebook.StoryNotebook) int {
 		}
 	}
 	return len(seen)
+}
+
+// countDefinitionEntries returns the STRUCTURAL number of vocabulary entries a
+// definitions-only book has — every note with a meaning, deduped by concept
+// head (mirroring how the quiz surfaces one card per concept). It applies no
+// spaced-repetition/skip gate and ignores includeUnstudied, so it reports how
+// many words COULD be quizzed rather than how many are currently due. Used to
+// decide whether the book appears on the Vocabulary tab at all.
+func countDefinitionEntries(defs map[string]map[string][]notebook.Note, conceptHeads map[string]string) int {
+	seenConcept := make(map[string]bool)
+	count := 0
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for i := range notes {
+				note := &notes[i]
+				if note.Meaning == "" {
+					continue
+				}
+				if _, isConceptExpr := conceptHeads[note.Expression]; isConceptExpr {
+					canonical := canonicalDefinitionExpression(note.Expression, conceptHeads)
+					conceptKey := storyTitle + "|" + sceneTitle + "|" + canonical
+					if seenConcept[conceptKey] {
+						continue
+					}
+					seenConcept[conceptKey] = true
+				}
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func countStoryEtymologyDefinitions(stories []notebook.StoryNotebook) int {

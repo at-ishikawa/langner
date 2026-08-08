@@ -121,6 +121,14 @@ message NotebookSummary {
   // grammar_review_count is the per-notebook due count for the grammar quiz
   // (journal notebooks). Zero for non-journal notebooks.
   int32 grammar_review_count = 10;
+  // vocabulary_count is the STRUCTURAL number of vocabulary entries the
+  // notebook has (definitions in a definitions book, scene definitions across
+  // a story/journal, or flashcard cards) — i.e. how many words COULD be
+  // quizzed, independent of spaced-repetition/studied state. Unlike
+  // review_count (SR-due), it does not change with the "Include unstudied"
+  // toggle. Grammar summaries are 0. The Vocabulary tab lists a notebook iff
+  // this is > 0, so grammar-only and definition-less journal rows drop out.
+  int32 vocabulary_count = 11;
 }
 
 // NotebookSectionSummary holds the display title and per-mode review counts

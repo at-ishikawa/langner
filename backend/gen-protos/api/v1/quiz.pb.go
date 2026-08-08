@@ -319,8 +319,16 @@ type NotebookSummary struct {
 	// grammar_review_count is the per-notebook due count for the grammar quiz
 	// (journal notebooks). Zero for non-journal notebooks.
 	GrammarReviewCount int32 `protobuf:"varint,10,opt,name=grammar_review_count,json=grammarReviewCount,proto3" json:"grammar_review_count,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// vocabulary_count is the STRUCTURAL number of vocabulary entries the
+	// notebook has (definitions in a definitions book, scene definitions across
+	// a story/journal, or flashcard cards) — i.e. how many words COULD be
+	// quizzed, independent of spaced-repetition/studied state. Unlike
+	// review_count (SR-due), it does not change with the "Include unstudied"
+	// toggle. Grammar summaries are 0. The Vocabulary tab lists a notebook iff
+	// this is > 0, so grammar-only and definition-less journal rows drop out.
+	VocabularyCount int32 `protobuf:"varint,11,opt,name=vocabulary_count,json=vocabularyCount,proto3" json:"vocabulary_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *NotebookSummary) Reset() {
@@ -419,6 +427,13 @@ func (x *NotebookSummary) GetEtymologyReverseReviewCount() int32 {
 func (x *NotebookSummary) GetGrammarReviewCount() int32 {
 	if x != nil {
 		return x.GrammarReviewCount
+	}
+	return 0
+}
+
+func (x *NotebookSummary) GetVocabularyCount() int32 {
+	if x != nil {
+		return x.VocabularyCount
 	}
 	return 0
 }
@@ -4649,7 +4664,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x15GetQuizOptionsRequest\x12+\n" +
 	"\x11include_unstudied\x18\x01 \x01(\bR\x10includeUnstudied\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
-	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xb9\x03\n" +
+	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xe4\x03\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
@@ -4663,7 +4678,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\bsections\x18\b \x03(\v2\x1e.api.v1.NotebookSectionSummaryR\bsections\x12C\n" +
 	"\x1eetymology_reverse_review_count\x18\t \x01(\x05R\x1betymologyReverseReviewCount\x120\n" +
 	"\x14grammar_review_count\x18\n" +
-	" \x01(\x05R\x12grammarReviewCount\"\xb0\x02\n" +
+	" \x01(\x05R\x12grammarReviewCount\x12)\n" +
+	"\x10vocabulary_count\x18\v \x01(\x05R\x0fvocabularyCount\"\xb0\x02\n" +
 	"\x16NotebookSectionSummary\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12!\n" +
 	"\freview_count\x18\x02 \x01(\x05R\vreviewCount\x120\n" +
