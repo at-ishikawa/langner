@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Button, Input, Spinner, Text } from "@chakra-ui/react";
 import {
   quizClient,
-  QuizType as ProtoQuizType,
   type RelearnCard,
   type SubmitRelearnAnswerResponse,
 } from "@/lib/client";
@@ -18,18 +17,17 @@ import { responseTimeSince } from "@/lib/responseTime";
 // note_id — grouping is purely presentation, so the per-word grading path (and
 // relearn's write-nothing guarantee) is unchanged.
 //
-// The model has NO skip / "Don't know" (see .claude/rules/quiz-ui-invariants):
+// Relearn re-drills missed words and persists NOTHING (see
+// .claude/rules/quiz-ui-invariants). There is no skip / "Don't know" and no
+// Exclude control here — a word is one of two states:
 //
 //   - unanswered  → on "See answers" it is graded INCORRECT (a normal miss).
 //                   SubmitRelearnAnswer persists nothing, so the word stays
 //                   "misunderstood" and therefore DUE, returning next session.
 //   - answered    → correct / incorrect from the grader.
-//   - Excluded    → the deliberate per-word Exclude button removes the word from
-//                   its origin family in all future quizzes. It calls SkipWord
-//                   (SetSkippedAt) for QUIZ_TYPE_ETYMOLOGY_ORIGIN — the same RPC
-//                   every other card uses — never a normal or empty answer.
 //
-// A normal miss (incorrect) MUST NOT set the exclude marker; only Exclude does.
+// Excluding a word from future quizzes is done only in the normal quizzes; a
+// Relearn miss never writes any state.
 
 interface GradedWord {
   answer: string;
@@ -56,11 +54,6 @@ export function RelearnOriginPost({
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, GradedWord>>({});
   const [grading, setGrading] = useState<string[]>([]);
-  // excluded holds the keys the learner deliberately removed from future quizzes
-  // via SkipWord. An excluded word is neither answered nor graded and drops out
-  // of the family (denominator and remaining count).
-  const [excluded, setExcluded] = useState<string[]>([]);
-  const [excluding, setExcluding] = useState<string[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
@@ -76,8 +69,7 @@ export function RelearnOriginPost({
 
   const originBadge = [type, language].filter(Boolean).join(" · ");
 
-  const isExcluded = (key: string) => excluded.includes(key);
-  const isDone = (key: string) => key in results || grading.includes(key) || isExcluded(key);
+  const isDone = (key: string) => key in results || grading.includes(key);
   const nextUnansweredAfter = (afterIndex: number): string | null => {
     for (let i = afterIndex + 1; i < orderedKeys.length; i++) {
       if (!isDone(orderedKeys[i])) return orderedKeys[i];
@@ -88,10 +80,9 @@ export function RelearnOriginPost({
     return null;
   };
 
-  const activeKeys = orderedKeys.filter((k) => !isExcluded(k));
-  const gradedCount = activeKeys.filter((k) => k in results).length;
-  const correctCount = activeKeys.filter((k) => results[k]?.res.correct).length;
-  const remainingCount = activeKeys.filter((k) => !isDone(k)).length;
+  const gradedCount = orderedKeys.filter((k) => k in results).length;
+  const correctCount = orderedKeys.filter((k) => results[k]?.res.correct).length;
+  const remainingCount = orderedKeys.filter((k) => !isDone(k)).length;
   const selected = selectedKey ? results[selectedKey] : undefined;
   const selectedWord = selectedKey ? wordByKey.get(selectedKey) : undefined;
 
@@ -140,38 +131,15 @@ export function RelearnOriginPost({
     void grade(word, value, true);
   };
 
-  // Exclude THIS word from its origin family in all future quizzes. The deliberate
-  // exclude action — it calls SkipWord (SetSkippedAt) for the word's
-  // QUIZ_TYPE_ETYMOLOGY_ORIGIN marker, the same RPC every other card uses. It
-  // never grades the word incorrect; the word simply leaves the family.
-  const excludeWord = async (word: RelearnCard) => {
-    const key = word.noteId.toString();
-    if (isExcluded(key) || excluding.includes(key)) return;
-    setExcluding((e) => [...e, key]);
-    try {
-      await quizClient.skipWord({
-        noteId: word.noteId,
-        quizTypes: [ProtoQuizType.ETYMOLOGY_ORIGIN],
-      });
-      setExcluded((ex) => (ex.includes(key) ? ex : [...ex, key]));
-      setError(null);
-      setSelectedKey((sel) => (sel === key ? null : sel));
-    } catch {
-      setError("Couldn't exclude that word. Try again.");
-    } finally {
-      setExcluding((e) => e.filter((k) => k !== key));
-    }
-  };
-
   // Reveal any still-empty words by grading them INCORRECT (a normal miss —
-  // never skipped, never excluded), then open the first not-correct word.
+  // never skipped), then open the first not-correct word.
   const revealAnswers = async () => {
     const remaining = words.filter((w) => !isDone(w.noteId.toString()));
     await Promise.all(remaining.map((w) => grade(w, "", false)));
     const firstToShow =
-      activeKeys.find((k) => results[k] && !results[k].res.correct) ??
+      orderedKeys.find((k) => results[k] && !results[k].res.correct) ??
       remaining[0]?.noteId.toString() ??
-      activeKeys[0];
+      orderedKeys[0];
     if (firstToShow) setSelectedKey(firstToShow);
   };
 
@@ -185,7 +153,7 @@ export function RelearnOriginPost({
           Etymology — recall each word&rsquo;s meaning
         </Text>
         <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
-          {correctCount} / {activeKeys.length} correct
+          {correctCount} / {orderedKeys.length} correct
           {grading.length > 0 ? " · grading…" : ""}
         </Text>
       </Box>
@@ -204,33 +172,11 @@ export function RelearnOriginPost({
       >
         <OriginHeader originText={originText} originBadge={originBadge} originMeaning={originMeaning} />
 
-        <Text fontSize="xs" color="fg.muted" mt={2} mb={3}>
-          Type each word&rsquo;s meaning and press Enter. Tap “See answers” to
-          reveal the rest — anything you didn’t answer is marked incorrect and
-          stays due. Use “Exclude” to drop a word from future quizzes. Tap a
-          graded word for details.
-        </Text>
-
-        <Box display="flex" flexDirection="column" gap={2}>
+        <Box display="flex" flexDirection="column" gap={2} mt={3}>
           {words.map((word, indexInOrder) => {
             const key = word.noteId.toString();
             const graded = results[key];
             const isGrading = grading.includes(key);
-
-            if (isExcluded(key)) {
-              return (
-                <Text
-                  as="div"
-                  key={key}
-                  color="gray.500"
-                  _dark={{ color: "gray.400" }}
-                  fontStyle="italic"
-                  fontSize="sm"
-                >
-                  {word.entry} <Text as="span" fontSize="xs">(excluded)</Text>
-                </Text>
-              );
-            }
 
             if (graded) {
               const isSel = key === selectedKey;
@@ -321,21 +267,6 @@ export function RelearnOriginPost({
                   }}
                   onBlur={() => commitWord(word, indexInOrder)}
                 />
-                <Button
-                  size="xs"
-                  variant="ghost"
-                  colorPalette="gray"
-                  loading={excluding.includes(key)}
-                  // onMouseDown so the click registers before the input's onBlur
-                  // commits a typed answer — Exclude must never grade the word.
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    void excludeWord(word);
-                  }}
-                  aria-label={`Exclude "${word.entry}" from quizzes`}
-                >
-                  Exclude
-                </Button>
               </Box>
             );
           })}
@@ -351,7 +282,7 @@ export function RelearnOriginPost({
           colorPalette="purple"
           w="full"
           size="lg"
-          onClick={() => onComplete(correctCount, activeKeys.length)}
+          onClick={() => onComplete(correctCount, orderedKeys.length)}
           data-testid="relearn-origin-next"
         >
           Next
@@ -445,18 +376,6 @@ export function RelearnOriginPost({
               {selected.res.literal}
             </Text>
           )}
-          <Button
-            mt={2}
-            size="xs"
-            w="full"
-            variant="outline"
-            colorPalette="gray"
-            loading={selectedKey ? excluding.includes(selectedKey) : false}
-            onClick={() => void excludeWord(selectedWord)}
-            aria-label={`Exclude "${selectedWord.entry}" from quizzes`}
-          >
-            Exclude from quizzes
-          </Button>
         </Box>
       )}
     </Box>

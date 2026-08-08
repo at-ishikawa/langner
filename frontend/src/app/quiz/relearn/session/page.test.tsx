@@ -105,6 +105,25 @@ describe("RelearnSessionPage", () => {
     expect(useRelearnStore.getState().clearedCount).toBe(1);
   });
 
+  // Relearn persists nothing, so the single-card feedback offers no Exclude:
+  // FeedbackActions is rendered with showExclude={false}, so neither the
+  // "Exclude from Quizzes" button nor an "Excluded" label appears, and skipWord
+  // is never called.
+  it("shows no Exclude control in the single-card feedback", async () => {
+    useRelearnStore.getState().seedQueue([card("alpha")]);
+    submitRelearnAnswer.mockResolvedValue({ correct: false, meaning: "the first", reason: "nope" });
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
+    // The override control stays; the exclude control does not.
+    expect(screen.getByRole("button", { name: "Mark as Correct" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /exclude/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/excluded from quizzes/i)).not.toBeInTheDocument();
+    expect(skipWord).not.toHaveBeenCalled();
+  });
+
   it("redirects to start when the queue is empty and nothing was answered", async () => {
     renderPage();
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/quiz?tab=relearn"));
@@ -251,14 +270,16 @@ describe("RelearnSessionPage", () => {
     expect(useRelearnStore.getState().totalAnswers).toBe(2);
   });
 
-  // The model has NO skip / "Don't know" control (see quiz-ui-invariants).
-  it("has no Don't know / skip control on a grammar blank", () => {
+  // Relearn re-drills missed items and persists nothing: the grammar post has
+  // NO skip / "Don't know" control AND NO Exclude control (see
+  // quiz-ui-invariants). Exclusion is offered only in the normal quizzes.
+  it("has no Don't know / skip and no Exclude control on a grammar blank", () => {
     const post = "Yesterday the John called me.";
     useRelearnStore.getState().seedQueue([grammarCard(post, "the John", 1)]);
     renderPage();
     expect(screen.queryByRole("button", { name: /don't know/i })).not.toBeInTheDocument();
-    // Every ungraded blank offers an Exclude control instead.
-    expect(screen.getByRole("button", { name: /Exclude "the John" from quizzes/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /exclude/i })).not.toBeInTheDocument();
+    expect(skipWord).not.toHaveBeenCalled();
   });
 
   // "See answers" grades every UNANSWERED blank as INCORRECT (a normal miss —
@@ -300,33 +321,35 @@ describe("RelearnSessionPage", () => {
     expect(sheet).not.toHaveTextContent(/Excluded/i);
   });
 
-  // A per-blank Exclude is the ONLY thing that excludes: it calls the SkipWord
-  // RPC (the same path every other card uses) for the blank's note_id + GRAMMAR
-  // quiz type, and drops the blank from the post's active blanks. It never
-  // grades the blank incorrect (no submitRelearnAnswer for it).
-  it("per-blank Exclude calls skipWord and removes the blank", async () => {
+  // Relearn persists nothing, so the grammar post never excludes a correction:
+  // there is no Exclude control anywhere on the post (ungraded blank, graded
+  // pill, or pinned feedback sheet), and skipWord is never called from Relearn.
+  it("never excludes a grammar correction (no Exclude control, no skipWord)", async () => {
     const post = "Yesterday the John called me and then I go home.";
     useRelearnStore
       .getState()
       .seedQueue([grammarCard(post, "the John", 1), grammarCard(post, "go", 2)]);
+    submitRelearnAnswer.mockResolvedValue({
+      correct: false,
+      correctAnswer: "John",
+      category: "article",
+      grammarNote: "No article.",
+      reason: "no",
+    });
     renderPage();
 
-    // Two due blanks → denominator is 2.
+    // No Exclude control on the ungraded post; the denominator stays at 2.
     expect(screen.getByText(/0 \/ 2 correct/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /exclude/i })).not.toBeInTheDocument();
 
-    fireEvent.mouseDown(screen.getByRole("button", { name: /Exclude "the John" from quizzes/i }));
-
-    await waitFor(() =>
-      expect(skipWord).toHaveBeenCalledWith({ noteId: BigInt(1), quizTypes: [8] }),
-    );
-    // Excluding never grades the blank.
-    expect(submitRelearnAnswer).not.toHaveBeenCalledWith(
-      expect.objectContaining({ noteId: BigInt(1) }),
-    );
-    // The excluded blank leaves the active set → denominator drops to 1, and the
-    // blank reads "excluded" (not "incorrect").
-    await waitFor(() => expect(screen.getByText(/0 \/ 1 correct/)).toBeInTheDocument());
-    expect(screen.getByTestId("relearn-grammar-post")).toHaveTextContent(/excluded/i);
+    // Grading a blank wrong opens the pinned feedback — which also has no
+    // Exclude control.
+    fireEvent.change(screen.getByLabelText('Correction for "the John"'), { target: { value: "wrong" } });
+    fireEvent.blur(screen.getByLabelText('Correction for "the John"'));
+    const sheet = await screen.findByTestId("relearn-grammar-feedback");
+    expect(sheet).not.toHaveTextContent(/exclude/i);
+    expect(sheet).not.toHaveTextContent(/excluded/i);
+    expect(skipWord).not.toHaveBeenCalled();
   });
 
   // A wrong answer auto-reveals its feedback in the pinned sheet (associated
@@ -401,30 +424,32 @@ describe("RelearnSessionPage", () => {
     );
   });
 
-  // A per-word Exclude is the ONLY thing that excludes: it calls SkipWord for
-  // the word's note_id + ETYMOLOGY_ORIGIN (=4) quiz type — the same path every
-  // other card uses — and never grades the word (no submitRelearnAnswer). This
-  // is the skip-vs-exclude (U1/U2) collision surface for the origin family card.
-  it("per-word Exclude calls skipWord for ETYMOLOGY_ORIGIN and never grades the word", async () => {
+  // Relearn persists nothing, so the origin family card never excludes a word:
+  // there is no Exclude control anywhere (ungraded row or pinned feedback
+  // sheet), and skipWord is never called from Relearn.
+  it("never excludes an origin word (no Exclude control, no skipWord)", async () => {
     useRelearnStore.getState().seedQueue([
       etymologyCard("describe", 1, "scribo", "to write"),
       etymologyCard("inscribe", 2, "scribo", "to write"),
     ]);
+    submitRelearnAnswer.mockResolvedValue({
+      correct: false,
+      meaning: "to represent in words",
+      reason: "not quite",
+    });
     renderPage();
     expect(screen.getByTestId("relearn-origin-post")).toBeInTheDocument();
 
-    // Exclude "describe" (mouseDown so it beats the input's onBlur-commit).
-    fireEvent.mouseDown(screen.getByRole("button", { name: /Exclude "describe" from quizzes/i }));
+    // No Exclude control on the ungraded family card.
+    expect(screen.queryByRole("button", { name: /exclude/i })).not.toBeInTheDocument();
 
-    await waitFor(() =>
-      expect(skipWord).toHaveBeenCalledWith({ noteId: BigInt(1), quizTypes: [4] }),
-    );
-    // Excluding never grades the word — no submit for it.
-    expect(submitRelearnAnswer).not.toHaveBeenCalledWith(
-      expect.objectContaining({ noteId: BigInt(1) }),
-    );
-    // The sibling word's Exclude is untouched.
-    expect(screen.getByRole("button", { name: /Exclude "inscribe" from quizzes/i })).toBeInTheDocument();
+    // Grading a word wrong opens the pinned feedback — which also has no Exclude.
+    const input = screen.getByLabelText('Meaning for "describe"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.blur(input);
+    const sheet = await screen.findByTestId("relearn-origin-feedback");
+    expect(sheet).not.toHaveTextContent(/exclude/i);
+    expect(skipWord).not.toHaveBeenCalled();
   });
 
   // A plain vocabulary relearn card must NOT render the etymology origin block

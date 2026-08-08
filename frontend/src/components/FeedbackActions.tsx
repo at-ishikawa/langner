@@ -11,6 +11,13 @@ interface FeedbackActionsProps {
   isOverridden: boolean;
   /** Whether the word has been skipped. */
   isSkipped: boolean;
+  /**
+   * Whether to render the Exclude-from-quizzes control (and the "Excluded"
+   * label). Defaults to true. Relearn passes false: Relearn re-drills missed
+   * items and persists nothing, so excluding a word is not offered there —
+   * exclusion is done only from the normal quizzes.
+   */
+  showExclude?: boolean;
   /** Label for the primary navigation button. */
   nextLabel: string;
   /** Called when the user clicks Next / See Results. */
@@ -32,6 +39,7 @@ export function FeedbackActions({
   noteId,
   isOverridden,
   isSkipped,
+  showExclude = true,
   nextLabel,
   onNext,
   onOverride,
@@ -97,8 +105,9 @@ export function FeedbackActions({
         </Button>
       ) : null}
 
-      {/* Exclude button or Excluded label */}
-      {isSkipped ? (
+      {/* Exclude button or Excluded label. Hidden entirely when showExclude is
+          false (Relearn), where exclusion is not offered. */}
+      {!showExclude ? null : isSkipped ? (
         <Text fontSize="sm" color="fg.muted" fontStyle="italic">
           Excluded from quizzes
         </Text>

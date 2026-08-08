@@ -95,27 +95,4 @@ Feature: Relearn Quiz
     And I open the grammar relearn post for "the John"
     And I tap See answers on the grammar relearn post
     Then the grammar relearn feedback shows "the John" is incorrect and not excluded
-
-  # Exclude is the ONLY deliberate exclusion: tapping the per-blank Exclude
-  # button calls SkipWord (SetSkippedAt) for that correction, drops it from the
-  # active post, and removes it from future Relearn sessions. It never marks the
-  # blank incorrect. See .claude/rules/quiz-ui-invariants.md.
-  Scenario: Excluding a grammar relearn blank removes it from the post
-    Given I open the Grammar quiz
-    And I select the "Cooking Notes" notebook
-    And I start the grammar quiz
-    Then I see the grammar correction input for "the John"
-
-    When I correct "the John" with "wrong on purpose"
-    And I correct "suggested to go" with "wrong on purpose"
-    Then the graded post marks "the John" as incorrect
-
-    When I finish the grammar post
-    Then I should be on the Grammar Complete page
-
-    When I open the Relearn Quiz
-    Then I see words to relearn
-    When I start the relearn session
-    And I open the grammar relearn post for "the John"
-    And I tap Exclude on the grammar relearn blank for "the John"
-    Then the grammar relearn blank for "the John" is excluded
+    And the grammar relearn post has no Exclude control

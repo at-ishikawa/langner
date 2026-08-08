@@ -223,6 +223,7 @@ export default function RelearnSessionPage() {
               noteId={current.noteId}
               isOverridden={override !== null}
               isSkipped={false}
+              showExclude={false}
               nextLabel="Next"
               onNext={() => void handleNext()}
               onOverride={() => setOverride(!feedback.correct)}
