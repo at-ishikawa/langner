@@ -1,0 +1,480 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Box, Button, Input, Spinner, Text } from "@chakra-ui/react";
+import {
+  quizClient,
+  QuizType as ProtoQuizType,
+  type RelearnCard,
+  type SubmitRelearnAnswerResponse,
+} from "@/lib/client";
+import { OriginBreakdown } from "@/components/OriginBreakdown";
+import { responseTimeSince } from "@/lib/responseTime";
+
+// RelearnOriginPost presents ONE etymology origin the way the etymology family
+// card does: the origin (with its meaning) heads the screen, and every missed
+// word that shares that origin is listed with an inline box for its meaning.
+// Each word grades individually through SubmitRelearnAnswer keyed by its own
+// note_id — grouping is purely presentation, so the per-word grading path (and
+// relearn's write-nothing guarantee) is unchanged.
+//
+// The model has NO skip / "Don't know" (see .claude/rules/quiz-ui-invariants):
+//
+//   - unanswered  → on "See answers" it is graded INCORRECT (a normal miss).
+//                   SubmitRelearnAnswer persists nothing, so the word stays
+//                   "misunderstood" and therefore DUE, returning next session.
+//   - answered    → correct / incorrect from the grader.
+//   - Excluded    → the deliberate per-word Exclude button removes the word from
+//                   its origin family in all future quizzes. It calls SkipWord
+//                   (SetSkippedAt) for QUIZ_TYPE_ETYMOLOGY_ORIGIN — the same RPC
+//                   every other card uses — never a normal or empty answer.
+//
+// A normal miss (incorrect) MUST NOT set the exclude marker; only Exclude does.
+
+interface GradedWord {
+  answer: string;
+  res: SubmitRelearnAnswerResponse;
+}
+
+export interface RelearnOriginPostProps {
+  originText: string;
+  originMeaning: string;
+  type: string;
+  language: string;
+  words: RelearnCard[];
+  onComplete: (correctCount: number, wordCount: number) => void;
+}
+
+export function RelearnOriginPost({
+  originText,
+  originMeaning,
+  type,
+  language,
+  words,
+  onComplete,
+}: RelearnOriginPostProps) {
+  const [inputs, setInputs] = useState<Record<string, string>>({});
+  const [results, setResults] = useState<Record<string, GradedWord>>({});
+  const [grading, setGrading] = useState<string[]>([]);
+  // excluded holds the keys the learner deliberately removed from future quizzes
+  // via SkipWord. An excluded word is neither answered nor graded and drops out
+  // of the family (denominator and remaining count).
+  const [excluded, setExcluded] = useState<string[]>([]);
+  const [excluding, setExcluding] = useState<string[]>([]);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
+  const focusTimeRef = useRef<Map<string, number>>(new Map());
+
+  const orderedKeys = useMemo(() => words.map((w) => w.noteId.toString()), [words]);
+  const wordByKey = useMemo(() => {
+    const m = new Map<string, RelearnCard>();
+    for (const w of words) m.set(w.noteId.toString(), w);
+    return m;
+  }, [words]);
+
+  const originBadge = [type, language].filter(Boolean).join(" · ");
+
+  const isExcluded = (key: string) => excluded.includes(key);
+  const isDone = (key: string) => key in results || grading.includes(key) || isExcluded(key);
+  const nextUnansweredAfter = (afterIndex: number): string | null => {
+    for (let i = afterIndex + 1; i < orderedKeys.length; i++) {
+      if (!isDone(orderedKeys[i])) return orderedKeys[i];
+    }
+    for (let i = 0; i <= afterIndex; i++) {
+      if (!isDone(orderedKeys[i])) return orderedKeys[i];
+    }
+    return null;
+  };
+
+  const activeKeys = orderedKeys.filter((k) => !isExcluded(k));
+  const gradedCount = activeKeys.filter((k) => k in results).length;
+  const correctCount = activeKeys.filter((k) => results[k]?.res.correct).length;
+  const remainingCount = activeKeys.filter((k) => !isDone(k)).length;
+  const selected = selectedKey ? results[selectedKey] : undefined;
+  const selectedWord = selectedKey ? wordByKey.get(selectedKey) : undefined;
+
+  // Keep the selected row scrolled into view alongside the pinned feedback sheet,
+  // so the word and its meaning/why are visible together — never buried below the
+  // Next button on a long family.
+  useEffect(() => {
+    if (selectedKey) {
+      rowRefs.current.get(selectedKey)?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    }
+  }, [selectedKey]);
+
+  // grade one word. An empty value is the "unanswered → incorrect" case (the
+  // backend grades an empty answer wrong). reveal opens the feedback sheet
+  // automatically when the result is not correct.
+  const grade = async (word: RelearnCard, value: string, reveal: boolean) => {
+    const key = word.noteId.toString();
+    const startedAt = focusTimeRef.current.get(key);
+    const responseTimeMs = startedAt !== undefined ? responseTimeSince(startedAt) : BigInt(0);
+    setGrading((g) => (g.includes(key) ? g : [...g, key]));
+    try {
+      const res = await quizClient.submitRelearnAnswer({
+        noteId: word.noteId,
+        answer: value,
+        isSkipped: false,
+        responseTimeMs,
+      });
+      setResults((r) => ({ ...r, [key]: { answer: value, res } }));
+      setError(null);
+      if (reveal && !res.correct) setSelectedKey(key);
+    } catch {
+      setError("A word couldn't be graded. Re-type it to retry.");
+    } finally {
+      setGrading((g) => g.filter((k) => k !== key));
+    }
+  };
+
+  // Grade one word the moment its box is committed (Enter / blur), and jump the
+  // cursor to the next unanswered box.
+  const commitWord = (word: RelearnCard, indexInOrder: number) => {
+    const key = word.noteId.toString();
+    const value = (inputs[key] ?? "").trim();
+    if (!value || isDone(key)) return;
+    const nextKey = nextUnansweredAfter(indexInOrder);
+    if (nextKey) setTimeout(() => inputRefs.current.get(nextKey)?.focus(), 0);
+    void grade(word, value, true);
+  };
+
+  // Exclude THIS word from its origin family in all future quizzes. The deliberate
+  // exclude action — it calls SkipWord (SetSkippedAt) for the word's
+  // QUIZ_TYPE_ETYMOLOGY_ORIGIN marker, the same RPC every other card uses. It
+  // never grades the word incorrect; the word simply leaves the family.
+  const excludeWord = async (word: RelearnCard) => {
+    const key = word.noteId.toString();
+    if (isExcluded(key) || excluding.includes(key)) return;
+    setExcluding((e) => [...e, key]);
+    try {
+      await quizClient.skipWord({
+        noteId: word.noteId,
+        quizTypes: [ProtoQuizType.ETYMOLOGY_ORIGIN],
+      });
+      setExcluded((ex) => (ex.includes(key) ? ex : [...ex, key]));
+      setError(null);
+      setSelectedKey((sel) => (sel === key ? null : sel));
+    } catch {
+      setError("Couldn't exclude that word. Try again.");
+    } finally {
+      setExcluding((e) => e.filter((k) => k !== key));
+    }
+  };
+
+  // Reveal any still-empty words by grading them INCORRECT (a normal miss —
+  // never skipped, never excluded), then open the first not-correct word.
+  const revealAnswers = async () => {
+    const remaining = words.filter((w) => !isDone(w.noteId.toString()));
+    await Promise.all(remaining.map((w) => grade(w, "", false)));
+    const firstToShow =
+      activeKeys.find((k) => results[k] && !results[k].res.correct) ??
+      remaining[0]?.noteId.toString() ??
+      activeKeys[0];
+    if (firstToShow) setSelectedKey(firstToShow);
+  };
+
+  const setInput = (key: string, value: string) =>
+    setInputs((prev) => ({ ...prev, [key]: value }));
+
+  return (
+    <Box pb={selected ? 80 : 0} maxW="100%">
+      <Box display="flex" justifyContent="space-between" mb={2}>
+        <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium">
+          Etymology — recall each word&rsquo;s meaning
+        </Text>
+        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
+          {correctCount} / {activeKeys.length} correct
+          {grading.length > 0 ? " · grading…" : ""}
+        </Text>
+      </Box>
+
+      {/* Origin header — the shared root, its meaning, and the family below it. */}
+      <Box
+        p={4}
+        bg="white"
+        _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+        borderWidth="1px"
+        borderColor="gray.200"
+        borderRadius="lg"
+        mb={4}
+        maxW="100%"
+        data-testid="relearn-origin-post"
+      >
+        <Heading originText={originText} originBadge={originBadge} originMeaning={originMeaning} />
+
+        <Text fontSize="xs" color="fg.muted" mt={2} mb={3}>
+          Type each word&rsquo;s meaning and press Enter. Tap “See answers” to
+          reveal the rest — anything you didn’t answer is marked incorrect and
+          stays due. Use “Exclude” to drop a word from future quizzes. Tap a
+          graded word for details.
+        </Text>
+
+        <Box display="flex" flexDirection="column" gap={2}>
+          {words.map((word, indexInOrder) => {
+            const key = word.noteId.toString();
+            const graded = results[key];
+            const isGrading = grading.includes(key);
+
+            if (isExcluded(key)) {
+              return (
+                <Text
+                  as="div"
+                  key={key}
+                  color="gray.500"
+                  _dark={{ color: "gray.400" }}
+                  fontStyle="italic"
+                  fontSize="sm"
+                >
+                  {word.entry} <Text as="span" fontSize="xs">(excluded)</Text>
+                </Text>
+              );
+            }
+
+            if (graded) {
+              const isSel = key === selectedKey;
+              const c = graded.res.correct
+                ? { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓" }
+                : { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗" };
+              return (
+                <Box
+                  key={key}
+                  ref={(el: HTMLElement | null) => {
+                    if (el) rowRefs.current.set(key, el);
+                    else rowRefs.current.delete(key);
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  aria-pressed={isSel}
+                  aria-label={`${word.entry} — ${graded.res.correct ? "correct" : "incorrect"}`}
+                  onClick={() => setSelectedKey(key)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setSelectedKey(key);
+                    }
+                  }}
+                  cursor="pointer"
+                  display="inline-flex"
+                  alignItems="baseline"
+                  gap={2}
+                  px={2}
+                  py={1}
+                  borderRadius="md"
+                  bg={c.bg}
+                  color={c.color}
+                  _dark={{ bg: c.darkBg, color: c.darkColor }}
+                  boxShadow={isSel ? "0 0 0 2px var(--chakra-colors-blue-500)" : undefined}
+                  maxW="100%"
+                  overflowWrap="anywhere"
+                >
+                  <Text as="span" fontWeight="bold" aria-hidden="true">{c.glyph}</Text>
+                  <Text as="span" fontWeight="medium">{word.entry}</Text>
+                </Box>
+              );
+            }
+
+            if (isGrading) {
+              return (
+                <Box key={key} display="inline-flex" alignItems="baseline" gap={2}>
+                  <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
+                    {word.entry}
+                  </Text>
+                  <Spinner size="xs" />
+                </Box>
+              );
+            }
+
+            return (
+              <Box
+                key={key}
+                display="inline-flex"
+                flexWrap="wrap"
+                alignItems="baseline"
+                gap={2}
+                maxW="100%"
+              >
+                <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }} overflowWrap="anywhere">
+                  {word.entry}
+                </Text>
+                <Input
+                  ref={(el: HTMLInputElement | null) => {
+                    if (el) inputRefs.current.set(key, el);
+                    else inputRefs.current.delete(key);
+                  }}
+                  size="sm"
+                  display="inline-block"
+                  w="auto"
+                  minW="8rem"
+                  maxW="100%"
+                  aria-label={`Meaning for "${word.entry}"`}
+                  placeholder="meaning"
+                  value={inputs[key] ?? ""}
+                  onFocus={() => focusTimeRef.current.set(key, Date.now())}
+                  onChange={(e) => setInput(key, e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitWord(word, indexInOrder);
+                    }
+                  }}
+                  onBlur={() => commitWord(word, indexInOrder)}
+                />
+                <Button
+                  size="xs"
+                  variant="ghost"
+                  colorPalette="gray"
+                  loading={excluding.includes(key)}
+                  // onMouseDown so the click registers before the input's onBlur
+                  // commits a typed answer — Exclude must never grade the word.
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    void excludeWord(word);
+                  }}
+                  aria-label={`Exclude "${word.entry}" from quizzes`}
+                >
+                  Exclude
+                </Button>
+              </Box>
+            );
+          })}
+        </Box>
+      </Box>
+
+      {remainingCount > 0 ? (
+        <Button colorPalette="blue" w="full" size="lg" onClick={() => void revealAnswers()}>
+          See answers ({remainingCount} left)
+        </Button>
+      ) : (
+        <Button
+          colorPalette="purple"
+          w="full"
+          size="lg"
+          onClick={() => onComplete(correctCount, activeKeys.length)}
+          data-testid="relearn-origin-next"
+        >
+          Next
+        </Button>
+      )}
+      {error && (
+        <Text fontSize="xs" color="red.500" mt={1} textAlign="center" role="alert">
+          {error}
+        </Text>
+      )}
+
+      <Box mt={2} minH="1rem" textAlign="center">
+        {remainingCount === 0 && gradedCount > 0 && (
+          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>
+            Tap any word above to review it.
+          </Text>
+        )}
+      </Box>
+
+      {/* Feedback for the word just graded (wrong answers) opens here
+          automatically, PINNED to the bottom so it stays visible without
+          scrolling past the Next button — the word, its meaning, the origin
+          breakdown, the literal gloss, and what the learner typed. */}
+      {selected && selectedWord && (
+        <Box
+          position="fixed"
+          bottom={0}
+          left={0}
+          right={0}
+          maxW="sm"
+          mx="auto"
+          maxH="60vh"
+          overflowY="auto"
+          overflowX="hidden"
+          bg="white"
+          _dark={{ bg: "gray.900", borderTopColor: "gray.700" }}
+          borderTopWidth="1px"
+          borderTopColor="gray.200"
+          borderTopRadius="xl"
+          p={3}
+          boxShadow="0 -4px 12px rgba(0,0,0,0.08)"
+          data-testid="relearn-origin-feedback"
+        >
+          <Box display="flex" alignItems="center" justifyContent="space-between" mb={2}>
+            <Text
+              fontSize="xs"
+              fontWeight="bold"
+              color={selected.res.correct ? "green.600" : "red.600"}
+              _dark={{ color: selected.res.correct ? "green.300" : "red.300" }}
+            >
+              {selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
+            </Text>
+            <Button size="xs" variant="ghost" onClick={() => setSelectedKey(null)} aria-label="Close details">
+              ✕
+            </Button>
+          </Box>
+
+          <Text fontWeight="bold">{selectedWord.entry}</Text>
+          <Text fontSize="sm" mb={1}>
+            <Text as="span" fontWeight="semibold">Meaning: </Text>
+            <Text as="span" data-testid="relearn-answer">
+              {selected.res.meaning || selectedWord.meaning}
+            </Text>
+          </Text>
+          {selected.answer.trim() && (
+            <Text fontSize="sm" color={selected.res.correct ? "gray.500" : "red.600"} _dark={{ color: selected.res.correct ? "gray.400" : "red.300" }}>
+              <Text as="span" fontWeight="semibold">Your answer: </Text>
+              {selected.answer}
+            </Text>
+          )}
+          {selected.res.reason && (
+            <Text fontSize="sm" fontStyle="italic" color="gray.500" _dark={{ color: "gray.400" }} mt={1}>
+              {selected.res.reason}
+            </Text>
+          )}
+          {selected.res.wordDetail?.originParts && selected.res.wordDetail.originParts.length > 0 && (
+            <Box mt={2}>
+              <Text fontSize="xs" color="fg.muted" mb={1}>Origin</Text>
+              <OriginBreakdown
+                parts={selected.res.wordDetail.originParts.map((p) => ({
+                  origin: p.origin,
+                  meaning: p.meaning,
+                  language: p.language,
+                  type: p.type,
+                }))}
+              />
+            </Box>
+          )}
+          {selected.res.literal && (
+            <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic" mt={1}>
+              {selected.res.literal}
+            </Text>
+          )}
+          <Button
+            mt={2}
+            size="xs"
+            w="full"
+            variant="outline"
+            colorPalette="gray"
+            loading={selectedKey ? excluding.includes(selectedKey) : false}
+            onClick={() => void excludeWord(selectedWord)}
+            aria-label={`Exclude "${selectedWord.entry}" from quizzes`}
+          >
+            Exclude from quizzes
+          </Button>
+        </Box>
+      )}
+    </Box>
+  );
+}
+
+// Heading renders the origin header: the source-language root, an optional
+// type/language badge, and the origin's English gloss.
+function Heading({ originText, originBadge, originMeaning }: { originText: string; originBadge: string; originMeaning: string }) {
+  return (
+    <Box>
+      <Text fontSize="lg" fontWeight="bold" overflowWrap="anywhere">{originText}</Text>
+      {originBadge && (
+        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }}>{originBadge}</Text>
+      )}
+      {originMeaning && (
+        <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>{originMeaning}</Text>
+      )}
+    </Box>
+  );
+}

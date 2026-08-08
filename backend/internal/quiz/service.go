@@ -203,13 +203,6 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		})
 	}
 
-	// Add etymology notebooks
-	etymSummaries, err := s.LoadEtymologyNotebookSummaries(includeUnstudied)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load etymology notebook summaries: %w", err)
-	}
-	summaries = append(summaries, etymSummaries...)
-
 	// Add stories that have grammar annotations (grammar quiz)
 	grammarSummaries, err := s.LoadGrammarStorySummaries()
 	if err != nil {

@@ -316,7 +316,6 @@ export default function ReverseQuizPage() {
       {phase === "batch-feedback" ? (
         <BatchFeedback
           items={batchItems}
-          isEtymology={false}
           isFinal={isFinalCard}
           onContinue={handleContinue}
           onSeeResults={handleSeeResults}

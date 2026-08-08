@@ -12,7 +12,6 @@ vi.mock("@/lib/client", () => ({
     startQuiz: vi.fn(),
     startReverseQuiz: vi.fn(),
     startFreeformQuiz: vi.fn(),
-    startEtymologyOriginQuiz: vi.fn(),
   },
 }));
 

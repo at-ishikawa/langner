@@ -212,7 +212,6 @@ export default function QuizCardPage() {
       {phase === "batch-feedback" ? (
         <BatchFeedback
           items={batchItems}
-          isEtymology={false}
           isFinal={isFinalCard}
           onContinue={handleContinue}
           onSeeResults={handleSeeResults}

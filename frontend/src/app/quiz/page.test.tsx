@@ -73,20 +73,6 @@ describe("QuizHubPage", () => {
     expect(screen.getByText("Start")).toBeInTheDocument();
   });
 
-  it("switches to Etymology tab and shows the single Etymology Origin mode", async () => {
-    renderPage();
-    await waitFor(() => {
-      expect(screen.getByText("Vocabulary")).toBeInTheDocument();
-    });
-    fireEvent.click(screen.getByText("Etymology"));
-
-    // Etymology tab shows exactly one mode: Etymology Origin.
-    expect(screen.getByText("Etymology Origin")).toBeInTheDocument();
-    expect(
-      screen.getByText("See an origin and its word family; type each derived word's meaning"),
-    ).toBeInTheDocument();
-  });
-
   it("deselects mode when clicking it again", async () => {
     renderPage();
     await waitFor(() => {

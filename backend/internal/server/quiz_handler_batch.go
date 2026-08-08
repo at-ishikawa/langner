@@ -163,41 +163,6 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 // the word as fast as exact-match answers.
 const synonymAcceptedQuality = 2
 
-// BatchSubmitEtymologyOriginAnswers grades a batch of etymology-origin cards,
-// each with its own set of family-word answers.
-func (h *QuizHandler) BatchSubmitEtymologyOriginAnswers(
-	ctx context.Context,
-	req *connect.Request[apiv1.BatchSubmitEtymologyOriginAnswersRequest],
-) (*connect.Response[apiv1.BatchSubmitEtymologyOriginAnswersResponse], error) {
-	if err := validateRequest(req.Msg); err != nil {
-		return nil, err
-	}
-	answers := req.Msg.GetAnswers()
-
-	cards := make([]quiz.EtymologyOriginCard, len(answers))
-	h.mu.Lock()
-	for i, a := range answers {
-		card, ok := h.etymologyOriginStore[a.GetCardId()]
-		if !ok {
-			h.mu.Unlock()
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("card %d not found", a.GetCardId()))
-		}
-		cards[i] = card
-	}
-	h.mu.Unlock()
-
-	responses := make([]*apiv1.SubmitEtymologyOriginAnswerResponse, len(answers))
-	for i := range answers {
-		resp, err := h.gradeAndSaveEtymologyOrigin(ctx, cards[i], answers[i].GetAnswers(), answers[i].GetResponseTimeMs())
-		if err != nil {
-			return nil, err
-		}
-		responses[i] = resp
-	}
-
-	return connect.NewResponse(&apiv1.BatchSubmitEtymologyOriginAnswersResponse{Responses: responses}), nil
-}
-
 // parallelGrade runs gradeFn(i) for i in [0, len(items)) concurrently and
 // returns results in original order. If any call returns an error, the first
 // error encountered (by index) is returned.

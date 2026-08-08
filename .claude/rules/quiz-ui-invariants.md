@@ -1,12 +1,14 @@
 # Quiz UI invariants
 
-These invariants govern the **quiz-facing UI and its request/grade contract** for every quiz mode — vocabulary (flashcard / story / definitions), etymology origin, grammar (live quiz + grammar Relearn), and any future mode. They are the surface-layer complement to [[learning-history-invariants]] (which governs how a learning log is written, read, and displayed). Where a learning record is touched, both documents apply.
+These invariants govern the **quiz-facing UI and its request/grade contract** for every quiz mode — vocabulary (flashcard / story / definitions), grammar (live quiz + grammar Relearn), the Relearn origin family card, and any future mode. They are the surface-layer complement to [[learning-history-invariants]] (which governs how a learning log is written, read, and displayed). Where a learning record is touched, both documents apply.
+
+There is **no standalone etymology-origin quiz**. Etymology words are ordinary definition entries, so they are quizzed through the normal vocabulary quizzes and their origin shows in vocabulary feedback. The origin family card (an origin + its meaning + the words that derive from it) now lives **only in Relearn**: when origin-bearing words are missed as vocabulary, they are grouped by origin into one family card.
 
 Check these before touching any of:
 
-- `frontend/src/components/RelearnGrammarPost.tsx`, `frontend/src/app/quiz/relearn/session/page.tsx` — the grammar Relearn post + single-card relearn screen
+- `frontend/src/components/RelearnGrammarPost.tsx`, `frontend/src/components/RelearnOriginPost.tsx`, `frontend/src/app/quiz/relearn/session/page.tsx` — the grammar Relearn post, the Relearn origin family card, and the single-card relearn screen
 - `frontend/src/app/quiz/grammar/page.tsx`, `frontend/src/components/GrammarFeedbackCard.tsx`, `frontend/src/components/GrammarCorrectionBody.tsx`, `frontend/src/lib/grammarSegments.ts` — the live grammar quiz + shared grammar feedback
-- `frontend/src/app/quiz/etymology-origin/*`, the etymology origin family card and its per-word skip
+- `frontend/src/store/relearnStore.ts` (`groupIntoItems`) — how missed cards fold into grammar posts / origin family screens; `internal/quiz/relearn.go` (`primaryOriginPart`) — how a missed vocabulary word becomes an origin family card
 - `frontend/src/components/QuizResultCard.tsx`, `frontend/src/components/FeedbackActions.tsx`, `frontend/src/components/AnswerInput.tsx` — the shared answer/feedback surfaces and the flags they read
 - backend: `internal/server/quiz_handler_grammar.go`, `internal/server/quiz_handler_relearn.go`, `internal/server/quiz_handler_batch.go` (`skippedGradeResult`), `internal/quiz/word_actions.go` (`SkipWord` / `ResumeWord`), `internal/notebook/learning_history_updater.go` (`SetSkippedAt` / `ClearSkippedAt`)
 
@@ -28,7 +30,15 @@ Grammar Relearn (`RelearnGrammarPost.tsx`) has **no skip / "Don't know"** contro
 - **answered** → correct / incorrect from the grader.
 - **Excluded** → the deliberate per-blank **Exclude** button, which calls `SkipWord` for the correction's `(notebookID, senseID)` — the same RPC every other card uses — and drops it from the post's active blanks and from all future quizzes / the Relearn pool.
 
-A normal miss (incorrect) never sets the exclude marker; only the Exclude button does. The grammar card loader (`grammarMistakeDue`) filters out any correction whose `skipped_at` is set for `grammar`, so Exclude removes it from both the live grammar quiz and the Relearn pool. (The live grammar quiz and the single-card vocab/etymology Relearn screen still have their own "Don't know" skip, which U1/U2 continue to govern; only the grammar Relearn post dropped skip.)
+A normal miss (incorrect) never sets the exclude marker; only the Exclude button does. The grammar card loader (`grammarMistakeDue`) filters out any correction whose `skipped_at` is set for `grammar`, so Exclude removes it from both the live grammar quiz and the Relearn pool. (The live grammar quiz and the single-card vocab/reverse Relearn screen still have their own "Don't know" skip, which U1/U2 continue to govern; the grammar Relearn post and the Relearn origin family card have **no** skip — an unanswered item is a normal miss.)
+
+### The Relearn origin family card has no skip — unanswered is *incorrect*, Exclude is deliberate
+
+The Relearn origin family card (`RelearnOriginPost.tsx`) mirrors the grammar Relearn post exactly. A word is one of three states:
+
+- **unanswered** → on "See answers" it is graded **incorrect** (empty answer, `is_skipped=false`). Relearn persists nothing, so the word stays `misunderstood` and therefore **due**; it MUST NOT set `skipped_at`.
+- **answered** → correct / incorrect from the grader (the same recognition grader every vocabulary card uses — the origin is presentation only).
+- **Excluded** → the deliberate per-word **Exclude** button, which calls `SkipWord` for `QUIZ_TYPE_ETYMOLOGY_ORIGIN`. This drops the word from its origin family; because a normal miss must never drop a word from Relearn (U1), an excluded origin-bearing word simply reappears as a plain recognition card rather than vanishing.
 
 ## U2 — Skip and exclude are separate flags/paths, end to end
 
@@ -71,3 +81,9 @@ The same post once rendered its per-blank feedback (`GrammarCorrectionBody`) at 
 ## Worked example — grammar-relearn horizontal overflow (this PR, #38)
 
 The progressive-post rework wrapped each ungraded blank's struck word + inline textbox + control in a `whiteSpace="nowrap"` span so they stayed on one line — but a long post or a long unbroken token then forced the whole post to scroll horizontally on a phone. **UI-wrapping expectation:** the quiz surfaces must wrap within the viewport and never scroll horizontally on long content or a long single token. Fix: dropped `nowrap`; the post box uses `whiteSpace="pre-wrap"` + `overflowWrap="anywhere"` + `wordBreak="break-word"` + `maxW="100%"`, and each ungraded blank is an `inline-flex` group with `flexWrap="wrap"` so the word/input/Exclude wrap together instead of overflowing. Long tokens break; inputs shrink to fit.
+
+## Worked example — standalone etymology-origin quiz removed; origin family card is Relearn-only
+
+The standalone "Etymology Origin" quiz asked a whole origin's word family on one screen and wrote a separate `etymology_origin_logs` series per word. But those words are ordinary definition entries already quizzed by the vocabulary quizzes, so the mode double-quizzed them and forked a second log series — a latent [[learning-history-invariants]] L4 hazard. This change removes the mode entirely (the `/quiz/etymology-origin` page, the Etymology tab, the `Start/Submit/BatchSubmitEtymologyOriginAnswer` RPCs, and the per-word etymology write path). Etymology words are now quizzed as normal vocabulary and their origin shows in vocabulary feedback (`QuizResultCard`'s origin breakdown, unchanged).
+
+The grouped family UI moves to **Relearn only**. `LoadRelearnPool` emits a `QUIZ_TYPE_ETYMOLOGY_ORIGIN` card for every missed vocabulary word that carries an origin (`primaryOriginPart`), tagged with `origin_text` / `origin_meaning`; `relearnStore.groupIntoItems` folds every card sharing an origin into one `RelearnOriginPost` (origin header + only the missed words). Each word still grades through its own `SubmitRelearnAnswer` call keyed by its `note_id` — grouping is presentation only (compare the grammar-post model). Because etymology is no longer a separate log series, the card is graded by the ordinary recognition grader, satisfying L4 (one series per word per mode). The per-word Exclude is the only thing that writes `skipped_at` (for `QUIZ_TYPE_ETYMOLOGY_ORIGIN`), and a normal miss never does — U1/U2 preserved.

@@ -22,7 +22,6 @@ import {
   standardResultToItem,
   reverseResultToItem,
   freeformResultToItem,
-  etymologyResultToItem,
 } from "@/lib/quizResultItems";
 import { useQuizResultActions } from "@/lib/useQuizResultActions";
 
@@ -31,18 +30,15 @@ export default function SessionCompletePage() {
   const results = useQuizStore((s) => s.results);
   const reverseResults = useQuizStore((s) => s.reverseResults);
   const freeformResults = useQuizStore((s) => s.freeformResults);
-  const etymologyResults = useQuizStore((s) => s.etymologyOriginResults);
   const quizType = useQuizStore((s) => s.quizType);
   const reset = useQuizStore((s) => s.reset);
-  const isEtymologyQuiz = quizType === "etymology-origin";
 
   const allResults = useMemo((): ResultItem[] => {
     if (results.length > 0) return results.map(standardResultToItem);
     if (reverseResults.length > 0) return reverseResults.map(reverseResultToItem);
     if (freeformResults.length > 0) return freeformResults.map(freeformResultToItem);
-    if (etymologyResults.length > 0) return etymologyResults.map(etymologyResultToItem);
     return [];
-  }, [results, reverseResults, freeformResults, etymologyResults]);
+  }, [results, reverseResults, freeformResults]);
 
   useEffect(() => {
     if (allResults.length === 0) {
@@ -83,7 +79,6 @@ export default function SessionCompletePage() {
       <Box pb={20}>
         <QuizResultsGroupedList
           items={allResults}
-          isEtymology={isEtymologyQuiz}
           onOverride={handleOverride}
           onUndo={handleUndo}
           onSkip={handleSkip}

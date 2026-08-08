@@ -69,7 +69,6 @@ func TestLearningHistory_OneLocationPerExpression_AcrossAllWriters(t *testing.T)
 	// prefixes/suffixes/roots, not full words.
 	const notebookID = "dual"
 	const vocabExpr = "introvert"
-	const etymExpr = "intro"
 
 	storyNotebookDir := filepath.Join(storiesDir, notebookID)
 	require.NoError(t, os.MkdirAll(storyNotebookDir, 0755))
@@ -153,41 +152,26 @@ origins:
 		Expression: vocabExpr, Meaning: "a quiet person",
 	}, FreeformGradeResult{Correct: true, Quality: 4}, 1000))
 
-	// 4. etymology-origin answer — Service.SaveEtymologyWordResults writes the
-	// WORD's own per-word etymology series (invariants L1/L4) into the SAME
-	// entry the vocab writers used — never a separate per-origin entry.
-	_, _, etymErr := svc.SaveEtymologyWordResults(EtymologyOriginCard{
-		NotebookName: notebookID, NotebookTitle: "Dual Notebook",
-		SessionTitle: "Session 8", Origin: etymExpr, Meaning: "into",
-	}, []EtymologyWordGrade{{
-		Word: EtymologyFamilyWord{
-			Expression: vocabExpr, Meaning: "a quiet, inwardly-focused person",
-			SessionTitle: "Session 8", SceneTitle: "psyche + intro",
-		},
-		Correct: true, Quality: 4,
-	}}, 1000)
-	require.NoError(t, etymErr)
-
-	// 5. per-type skip — Service.SkipWord (vocab side)
+	// 4. per-type skip — Service.SkipWord (vocab side)
 	require.NoError(t, svc.SkipWord(CardInfo{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr,
 	}, "", []notebook.QuizType{notebook.QuizTypeReverse}))
 
-	// 6. per-type resume — Service.ResumeWord (vocab side)
+	// 5. per-type resume — Service.ResumeWord (vocab side)
 	require.NoError(t, svc.ResumeWord(CardInfo{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr,
 	}, []notebook.QuizType{notebook.QuizTypeReverse}))
 
-	// 7. override answer — Service.OverrideAnswer (vocab side)
+	// 6. override answer — Service.OverrideAnswer (vocab side)
 	_, err := svc.OverrideAnswer(CardInfo{
 		NotebookName: notebookID, StoryTitle: "Session 8", SceneTitle: "psyche + intro",
 		Expression: vocabExpr,
 	}, notebook.QuizTypeNotebook)
 	require.NoError(t, err)
 
-	// 8. normalisation pass — Validator.Fix
+	// 7. normalisation pass — Validator.Fix
 	v := notebook.NewValidator(learningDir, []string{storiesDir}, nil, nil, []string{etymDir}, "", nil)
 	_, err = v.Fix()
 	require.NoError(t, err)
@@ -218,20 +202,14 @@ origins:
 	}
 
 	// Locator: the vocab word exists at exactly one on-disk location after
-	// every writer — including the etymology-origin writer, which now targets
-	// the WORD — has run. The origin string never becomes its own entry.
+	// every writer has run — the vocab writers all converge on one entry.
 	require.Lenf(t, locationsOf(vocabExpr), 1,
-		"all writers (incl. etymology-origin) must converge on one location for %q — found: %v",
+		"all writers must converge on one location for %q — found: %v",
 		vocabExpr, locationsOf(vocabExpr),
 	)
-	require.Lenf(t, locationsOf(etymExpr), 0,
-		"the per-word model must NOT create a per-origin entry for %q — found: %v",
-		etymExpr, locationsOf(etymExpr),
-	)
 
-	// Shape fingerprint: the word carries BOTH its standard series (LearnedLogs)
-	// and its etymology-origin series (EtymologyOriginLogs) in the SAME single
-	// entry — one entry per word, one series per quiz mode (invariants L1/L4).
+	// Shape fingerprint: the word carries its standard series (LearnedLogs) in a
+	// single entry — one entry per word, one series per quiz mode (L1/L4).
 	var foundWord bool
 	for _, h := range got {
 		for _, scene := range h.Scenes {
@@ -240,8 +218,6 @@ origins:
 					continue
 				}
 				assert.NotEmpty(t, expr.LearnedLogs, "the word must keep its standard series")
-				assert.Len(t, expr.EtymologyOriginLogs, 1,
-					"the word must carry exactly one etymology-origin log in the same entry")
 				foundWord = true
 			}
 		}

@@ -36,9 +36,21 @@ const card = (entry: string): RelearnCard =>
 const reverseCard = (entry: string, meaning: string): RelearnCard =>
   ({ entry, noteId: BigInt(entry.length), sourceQuizType: 2, meaning, examples: [], contexts: [] }) as RelearnCard;
 
-// An etymology-origin-format card: shown the word, asks for the meaning.
-const etymologyCard = (entry: string): RelearnCard =>
-  ({ entry, noteId: BigInt(entry.length), sourceQuizType: 4, meaning: `${entry}-meaning`, examples: [], contexts: [] }) as RelearnCard;
+// An etymology-origin card: a missed vocabulary word (shown, asks its meaning)
+// that carries an origin. Cards sharing an origin group into ONE family screen.
+const etymologyCard = (entry: string, noteId: number, originText: string, originMeaning: string): RelearnCard =>
+  ({
+    entry,
+    noteId: BigInt(noteId),
+    sourceQuizType: 4,
+    meaning: `${entry}-meaning`,
+    examples: [],
+    contexts: [],
+    type: "root",
+    language: "Latin",
+    originText,
+    originMeaning,
+  }) as RelearnCard;
 
 // A grammar-format card: one due correction within a journal post. All
 // corrections of a post carry the SAME full post text (content); each has its
@@ -345,38 +357,48 @@ describe("RelearnSessionPage", () => {
     expect(sheet).toHaveTextContent("went"); // the suggested fix for the go blank
   });
 
-  // An etymology-origin card's feedback must show the origin details the quiz
-  // shows — the roots with their meanings, the pronunciation, and the literal
-  // gloss — not just the generic word/meaning/answer body.
-  it("shows origin roots, meanings, pronunciation, and literal on etymology feedback", async () => {
-    useRelearnStore.getState().seedQueue([etymologyCard("deface")]);
+  // Missed origin-bearing words group into ONE origin family screen (origin
+  // header + each missed word), and each word's feedback shows the origin roots
+  // with their meanings and the literal gloss — like the etymology family quiz.
+  it("groups missed origin words into a family card and shows origin details on feedback", async () => {
+    useRelearnStore.getState().seedQueue([
+      etymologyCard("describe", 1, "scribo", "to write"),
+      etymologyCard("inscribe", 2, "scribo", "to write"),
+    ]);
     submitRelearnAnswer.mockResolvedValue({
       correct: false,
-      meaning: "to mar the surface of",
+      meaning: "to represent in words",
       reason: "not quite",
-      literal: 'de "down" + facere = "made down"',
+      literal: 'de "down" + scribo "write" = "write down"',
       wordDetail: {
-        pronunciation: "dɪˈfeɪs",
         originParts: [
-          { origin: "de", meaning: "down", language: "Latin", type: "prefix" },
-          { origin: "facere", meaning: "to make", language: "Latin", type: "root" },
+          { origin: "scribo", meaning: "to write", language: "Latin", type: "root" },
         ],
       },
     });
     renderPage();
 
-    fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "wrong guess" } });
-    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
-    expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
+    // One family screen: the origin header (scribo · to write) over the words.
+    const post = screen.getByTestId("relearn-origin-post");
+    expect(post).toHaveTextContent("scribo");
+    expect(post).toHaveTextContent("to write");
+    expect(post).toHaveTextContent("describe");
+    expect(post).toHaveTextContent("inscribe");
+    expect(screen.getByText(/Etymology/)).toBeInTheDocument();
 
-    // Roots with their meanings.
-    expect(screen.getByText("de")).toBeInTheDocument();
-    expect(screen.getByText("(down)")).toBeInTheDocument();
-    expect(screen.getByText("facere")).toBeInTheDocument();
-    expect(screen.getByText("(to make)")).toBeInTheDocument();
-    // Pronunciation and literal gloss.
-    expect(screen.getByText("/dɪˈfeɪs/")).toBeInTheDocument();
-    expect(screen.getByText('de "down" + facere = "made down"')).toBeInTheDocument();
+    // Answer one word wrong → its pinned feedback shows the origin breakdown +
+    // literal gloss (the etymology feedback), keyed to that word.
+    const input = screen.getByLabelText('Meaning for "describe"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.blur(input);
+    const sheet = await screen.findByTestId("relearn-origin-feedback");
+    expect(sheet).toHaveTextContent("✗ Incorrect");
+    expect(sheet).toHaveTextContent("scribo");
+    expect(sheet).toHaveTextContent("to write");
+    expect(sheet).toHaveTextContent('de "down" + scribo "write" = "write down"');
+    expect(submitRelearnAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: BigInt(1), answer: "wrong guess", isSkipped: false }),
+    );
   });
 
   // A plain vocabulary relearn card must NOT render the etymology origin block

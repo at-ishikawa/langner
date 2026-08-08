@@ -90,7 +90,7 @@ Browse your vocabulary and etymology notebooks to review what you've been studyi
 
 **Journals** - Your own journal entries live on their own tab, separate from your vocabulary. Open a journal to read its story back as prose and review the grammar mistakes found in it. For any mistake you can tap **Exclude from quizzes** to stop it from appearing in future grammar quizzes and review, or **Resume** to bring it back.
 
-**Etymology** - Explore word origins (roots, prefixes, suffixes). Browse by origin or by meaning to see how words are related. Each word has an **Exclude from quizzes** / **Resume** control, so you can drop a word you already know from the etymology quiz and add it back whenever you like.
+**Etymology** - Explore word origins (roots, prefixes, suffixes). Browse by origin or by meaning to see how words are related. Each word has an **Exclude from quizzes** / **Resume** control, so you can drop a word you already know from its origin family review and add it back whenever you like.
 
 ![Learn](docs/static/screenshots/learn.jpg)
 
@@ -105,8 +105,10 @@ Test yourself with several quiz modes, all powered by spaced repetition:
 - **Reverse** - See a meaning and context, type the word
 - **Freeform** - Recall any word and its meaning from memory
 
-**Etymology Quiz**
-- **Origin** - See a word origin (e.g. the Latin root `scribo`) together with the whole family of words that come from it in that session (describe, inscribe, transcript, …), and type each word's meaning while the family stays in view. Each word is tracked on its own review schedule, so a word that appears under more than one origin is asked only once per session.
+Words with etymology origins are quizzed as part of these vocabulary quizzes, and each word's origin (its roots, prefixes, and suffixes with their meanings) is shown in the feedback.
+
+**Relearn**
+- Re-drill the words you recently missed across every quiz mode. Words that share an etymology origin are grouped into one card — showing the origin, its meaning, and just the words you missed under it — so you can study a whole word family together. Relearn is practice only: it never changes your review schedule.
 
 Choose how many answers to review at once on the start screen (default 10). You can also narrow a quiz to specific chapters or episodes within a notebook by expanding the notebook on the start screen and ticking only the sections you want — useful when you want to drill the most recent episode you read. After every batch, a feedback screen shows your answers with the correct meanings, examples, and pronunciation — you can mark answers correct or incorrect, exclude words from future quizzes, or undo overrides, then continue to the next batch or jump to the final results. Freeform quizzes still show feedback after each answer.
 

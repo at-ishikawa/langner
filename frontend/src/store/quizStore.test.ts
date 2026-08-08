@@ -1,16 +1,18 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { useQuizStore } from "./quizStore";
-import type { Flashcard, QuizResult, EtymologyOriginCard, EtymologyOriginResult } from "./quizStore";
+import type { Flashcard, QuizResult } from "./quizStore";
 
 const mockFlashcards: Flashcard[] = [
   {
     noteId: BigInt(1),
     entry: "break the ice",
+    originalEntry: "",
     examples: [{ text: "She told a joke to break the ice.", speaker: "Rachel" }],
   },
   {
     noteId: BigInt(2),
     entry: "lose one's temper",
+    originalEntry: "",
     examples: [],
   },
 ];
@@ -22,39 +24,6 @@ const mockResult: QuizResult = {
   correct: true,
   meaning: "to initiate social interaction",
   reason: "The answer captures the core meaning",
-};
-
-const mockEtymologyCards: EtymologyOriginCard[] = [
-  {
-    cardId: BigInt(10),
-    origin: "bio",
-    type: "root",
-    language: "Greek",
-    meaning: "life",
-    notebookName: "Science Roots",
-    sessionTitle: "Lesson 1",
-    sense: "",
-    forms: [{ form: "bio", role: "root" }],
-    words: [
-      { wordId: BigInt(100), expression: "biology" },
-      { wordId: BigInt(101), expression: "biopsy" },
-    ],
-  },
-];
-
-const mockEtymologyResult: EtymologyOriginResult = {
-  noteId: BigInt(10),
-  cardId: BigInt(10),
-  origin: "bio",
-  meaning: "life",
-  correct: true,
-  type: "root",
-  language: "Greek",
-  forms: [{ form: "bio", role: "root" }],
-  words: [
-    { wordId: BigInt(100), expression: "biology", correct: true, correctMeaning: "study of life", reason: "", userAnswer: "study of life" },
-    { wordId: BigInt(101), expression: "biopsy", correct: true, correctMeaning: "examination of tissue", reason: "", userAnswer: "examination of tissue" },
-  ],
 };
 
 describe("useQuizStore", () => {
@@ -187,104 +156,5 @@ describe("useQuizStore", () => {
     expect(state.flashcards).toEqual([]);
     expect(state.currentIndex).toBe(0);
     expect(state.results).toEqual([]);
-  });
-
-  // Etymology quiz store tests
-  it("setEtymologyOriginCards updates etymologyCards", () => {
-    useQuizStore.getState().setEtymologyOriginCards(mockEtymologyCards);
-    expect(useQuizStore.getState().etymologyOriginCards).toEqual(mockEtymologyCards);
-  });
-
-  it("submitEtymologyOriginResult appends result", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-    const state = useQuizStore.getState();
-    expect(state.etymologyOriginResults).toHaveLength(1);
-    expect(state.etymologyOriginResults[0].origin).toBe("bio");
-  });
-
-  it("overrideResult works for etymology-origin type", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-
-    useQuizStore.getState().overrideResult(0, "etymology-origin", "2027-06-20", {
-      quality: 5,
-      status: "understood",
-      intervalDays: 10,
-    });
-
-    const state = useQuizStore.getState();
-    expect(state.etymologyOriginResults[0].correct).toBe(false);
-    expect(state.etymologyOriginResults[0].isOverridden).toBe(true);
-  });
-
-  it("skipResult works for etymology-origin type", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-
-    useQuizStore.getState().skipResult(0, "etymology-origin");
-
-    const state = useQuizStore.getState();
-    expect(state.etymologyOriginResults[0].isSkipped).toBe(true);
-  });
-
-  it("resumeResult clears isSkipped for etymology type", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-    useQuizStore.getState().skipResult(0, "etymology-origin");
-    useQuizStore.getState().resumeResult(0, "etymology-origin");
-
-    const state = useQuizStore.getState();
-    expect(state.etymologyOriginResults[0].isSkipped).toBe(false);
-  });
-
-  it("updateResultReviewDate works for etymology type", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-
-    useQuizStore.getState().updateResultReviewDate(0, "etymology-origin", "2027-12-25");
-
-    const state = useQuizStore.getState();
-    expect(state.etymologyOriginResults[0].nextReviewDate).toBe("2027-12-25");
-  });
-
-  it("reset clears etymology state", () => {
-    useQuizStore.getState().setEtymologyOriginCards(mockEtymologyCards);
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-
-    useQuizStore.getState().reset();
-
-    const state = useQuizStore.getState();
-    expect(state.etymologyOriginCards).toEqual([]);
-    expect(state.etymologyOriginResults).toEqual([]);
-  });
-
-  it("submitEtymologyOriginResult captures each word's originalCorrect", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-    const words = useQuizStore.getState().etymologyOriginResults[0].words;
-    expect(words[0].originalCorrect).toBe(true);
-    expect(words[1].originalCorrect).toBe(true);
-  });
-
-  it("overrideEtymologyWord flips only the targeted word's correct flag (L1/L4)", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-
-    useQuizStore.getState().overrideEtymologyWord(0, "biology", false);
-
-    const result = useQuizStore.getState().etymologyOriginResults[0];
-    const biology = result.words.find((w) => w.expression === "biology");
-    const biopsy = result.words.find((w) => w.expression === "biopsy");
-    expect(biology?.correct).toBe(false);
-    expect(biology?.originalCorrect).toBe(true); // as-graded value preserved
-    expect(biopsy?.correct).toBe(true); // sibling word untouched
-    // The origin's own aggregate result is untouched by a word-level override.
-    expect(result.correct).toBe(true);
-  });
-
-  it("excludeEtymologyWord flips only the targeted word's isExcluded flag", () => {
-    useQuizStore.getState().submitEtymologyOriginResult(mockEtymologyResult);
-
-    useQuizStore.getState().excludeEtymologyWord(0, "biology", true);
-
-    const result = useQuizStore.getState().etymologyOriginResults[0];
-    const biology = result.words.find((w) => w.expression === "biology");
-    const biopsy = result.words.find((w) => w.expression === "biopsy");
-    expect(biology?.isExcluded).toBe(true);
-    expect(biopsy?.isExcluded).toBeUndefined();
   });
 });
