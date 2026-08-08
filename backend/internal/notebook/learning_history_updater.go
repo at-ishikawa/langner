@@ -690,43 +690,6 @@ func FindOriginExpression(histories []LearningHistory, sessionTitle, origin, sen
 	return nil
 }
 
-// UpsertWordEtymologyOriginResult appends one etymology-origin answer to the
-// WORD's own learning series (EtymologyOriginLogs). It resolves the word's entry
-// file-wide by (id, expression, originalExpression) — the SAME lookup the due
-// check and the exclude check use (FindExpressionInHistories), so the schedule
-// the writer advances is exactly the one the reader gates on (learning-history
-// invariant L2). One entry per word carries every quiz mode's series (L1/L4); a
-// never-studied word gets a new entry created under (storyTitle, sceneTitle) so
-// it lands where the standard/reverse quizzes also write, keeping a word's logs
-// in a single entry.
-func (u *LearningHistoryUpdater) UpsertWordEtymologyOriginResult(
-	notebookID, storyTitle, sceneTitle, expression, originalExpression, id string,
-	isCorrect, isKnownWord bool,
-	quality int,
-	responseTimeMs int64,
-) {
-	if expr := FindExpressionInHistories(u.history, id, expression, originalExpression); expr != nil {
-		if expr.ID == "" && id != "" {
-			expr.ID = id
-		}
-		expr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin)
-		return
-	}
-
-	newExpression := LearningHistoryExpression{Expression: expression, ID: id}
-	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin)
-
-	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatTypeForStory(storyTitle, sceneTitle))
-	if sceneTitle == "" || isFlatMetadataType(u.history[storyIndex].Metadata.Type) {
-		u.history[storyIndex].Expressions = append(u.history[storyIndex].Expressions, newExpression)
-		return
-	}
-	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
-	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
-		u.history[storyIndex].Scenes[sceneIndex].Expressions, newExpression,
-	)
-}
-
 // AssertNoDuplicateOriginsInSession returns a non-nil error if the given
 // session block holds two entries for the same (origin, sense). It guarded the
 // old per-origin writer against forking a series; the etymology-origin schedule

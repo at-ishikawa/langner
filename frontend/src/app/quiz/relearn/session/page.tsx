@@ -259,8 +259,7 @@ export default function RelearnSessionPage() {
               <RelearnContext
                 entry={current.entry}
                 scenes={feedback.contextScenes ?? []}
-                exampleWords={feedback.exampleWords ?? []}
-                graphContext={feedback.graphContext}
+                exampleWords={[]}
               />
             </FeedbackActions>
           )}

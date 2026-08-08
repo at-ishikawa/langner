@@ -401,6 +401,32 @@ describe("RelearnSessionPage", () => {
     );
   });
 
+  // A per-word Exclude is the ONLY thing that excludes: it calls SkipWord for
+  // the word's note_id + ETYMOLOGY_ORIGIN (=4) quiz type — the same path every
+  // other card uses — and never grades the word (no submitRelearnAnswer). This
+  // is the skip-vs-exclude (U1/U2) collision surface for the origin family card.
+  it("per-word Exclude calls skipWord for ETYMOLOGY_ORIGIN and never grades the word", async () => {
+    useRelearnStore.getState().seedQueue([
+      etymologyCard("describe", 1, "scribo", "to write"),
+      etymologyCard("inscribe", 2, "scribo", "to write"),
+    ]);
+    renderPage();
+    expect(screen.getByTestId("relearn-origin-post")).toBeInTheDocument();
+
+    // Exclude "describe" (mouseDown so it beats the input's onBlur-commit).
+    fireEvent.mouseDown(screen.getByRole("button", { name: /Exclude "describe" from quizzes/i }));
+
+    await waitFor(() =>
+      expect(skipWord).toHaveBeenCalledWith({ noteId: BigInt(1), quizTypes: [4] }),
+    );
+    // Excluding never grades the word — no submit for it.
+    expect(submitRelearnAnswer).not.toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: BigInt(1) }),
+    );
+    // The sibling word's Exclude is untouched.
+    expect(screen.getByRole("button", { name: /Exclude "inscribe" from quizzes/i })).toBeInTheDocument();
+  });
+
   // A plain vocabulary relearn card must NOT render the etymology origin block
   // (no literal, no Origin header).
   it("does not show the etymology origin block for a vocab card", async () => {

@@ -202,7 +202,7 @@ export function RelearnOriginPost({
         maxW="100%"
         data-testid="relearn-origin-post"
       >
-        <Heading originText={originText} originBadge={originBadge} originMeaning={originMeaning} />
+        <OriginHeader originText={originText} originBadge={originBadge} originMeaning={originMeaning} />
 
         <Text fontSize="xs" color="fg.muted" mt={2} mb={3}>
           Type each word&rsquo;s meaning and press Enter. Tap “See answers” to
@@ -463,9 +463,9 @@ export function RelearnOriginPost({
   );
 }
 
-// Heading renders the origin header: the source-language root, an optional
+// OriginHeader renders the origin header: the source-language root, an optional
 // type/language badge, and the origin's English gloss.
-function Heading({ originText, originBadge, originMeaning }: { originText: string; originBadge: string; originMeaning: string }) {
+function OriginHeader({ originText, originBadge, originMeaning }: { originText: string; originBadge: string; originMeaning: string }) {
   return (
     <Box>
       <Text fontSize="lg" fontWeight="bold" overflowWrap="anywhere">{originText}</Text>

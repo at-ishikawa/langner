@@ -578,12 +578,16 @@ message SubmitRelearnAnswerResponse {
   WordDetail word_detail = 4;
   repeated string images = 5;
 
-  // Rich Learn-page context, assembled read-only from notebook/etymology data:
-  // the scenes the word appears in, the etymology relation graph, and related
-  // words. All optional — omitted sub-parts render nothing.
+  // Rich Learn-page context, assembled read-only from notebook data: the scenes
+  // the word appears in. Optional — omitted when there is nothing to show.
   repeated RelearnContextScene context_scenes = 6;
-  GraphPrompt graph_context = 7;
-  repeated string example_words = 8;
+  // Removed: graph_context (7) and example_words (8) — the etymology relation
+  // graph and related-words scaffolding. They were only ever populated by the
+  // standalone etymology-origin quiz's feedback path, which no longer exists
+  // (etymology is quizzed as vocabulary; the origin family card lives in
+  // Relearn). Nothing populates them, so they are reserved rather than sent.
+  reserved 7, 8;
+  reserved "graph_context", "example_words";
 
   // Grammar feedback extras (empty for vocab/etymology cards), populated
   // when the graded card's source_quiz_type was QUIZ_TYPE_GRAMMAR — mirrors
