@@ -55,6 +55,12 @@ Then("I should be on the Quiz page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz(\/?|$)/);
 });
 
+// covers route: /history — the bare History list. Anchored so it matches
+// /history and /history?<query> but not the /history/[date] Day Detail page.
+Then("I should be on the History page", async ({ page }) => {
+  await expect(page).toHaveURL(/\/history(\?|$)/);
+});
+
 // covers route: /quiz/complete
 Then("I should be on the Quiz Complete page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz\/complete/);

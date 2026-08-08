@@ -203,6 +203,25 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		})
 	}
 
+	// Add etymology notebooks so they stay browsable from the Learn hub's
+	// Etymology tab. The standalone etymology-origin quiz was removed (etymology
+	// words are quizzed as ordinary vocabulary), so there is no per-word due
+	// schedule to compute here — the summary just lists each etymology notebook
+	// with its origin count so a learner can still open and read it.
+	for id, index := range reader.GetEtymologyIndexes() {
+		origins, err := reader.ReadEtymologyNotebook(id)
+		if err != nil {
+			continue
+		}
+		summaries = append(summaries, NotebookSummary{
+			NotebookID:           id,
+			Name:                 index.Name,
+			EtymologyReviewCount: len(origins),
+			Kind:                 "Etymology",
+			LatestDate:           index.LatestDate,
+		})
+	}
+
 	// Add stories that have grammar annotations (grammar quiz)
 	grammarSummaries, err := s.LoadGrammarStorySummaries()
 	if err != nil {

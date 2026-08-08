@@ -156,6 +156,57 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	assert.Equal(t, 0, vocabSummary.ReverseReviewCount)
 }
 
+// The standalone etymology-origin quiz was removed, but etymology notebooks
+// must stay browsable from the Learn hub's Etymology tab. LoadNotebookSummaries
+// therefore still lists each etymology notebook with Kind "Etymology" and its
+// origin count so the frontend can render the browse link.
+func TestService_LoadNotebookSummaries_IncludesEtymologyNotebooks(t *testing.T) {
+	etymDir := t.TempDir()
+	learningDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+
+	book := filepath.Join(etymDir, "word-roots")
+	require.NoError(t, os.MkdirAll(book, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(book, "index.yml"), []byte(`id: word-roots
+kind: Etymology
+name: Word Roots
+notebooks:
+  - ./s1.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(book, "s1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: "graph"
+    type: root
+    language: Greek
+    meaning: to write
+  - origin: "tele"
+    type: prefix
+    language: Greek
+    meaning: far
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		EtymologyDirectories:   []string{etymDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(gomock.NewController(t)), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	summaries, err := svc.LoadNotebookSummaries(false)
+	require.NoError(t, err)
+
+	var etym *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "word-roots" {
+			etym = &summaries[i]
+		}
+	}
+	require.NotNil(t, etym, "etymology notebook must still be listed for browsing")
+	assert.Equal(t, "Word Roots", etym.Name)
+	assert.Equal(t, "Etymology", etym.Kind)
+	assert.Equal(t, 2, etym.EtymologyReviewCount)
+}
+
 func TestService_LoadNotebookSummaries_ReverseReviewCount(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	storiesDir := t.TempDir()
