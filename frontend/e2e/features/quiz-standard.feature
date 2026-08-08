@@ -183,3 +183,18 @@ Feature: Standard vocabulary quiz
     And I submit my answer
     And I retry grading
     Then I see the heading "Feedback"
+
+  # The Vocabulary tab lists a notebook iff it structurally has vocabulary
+  # entries. The "Idioms" flashcard notebook has cards, so it shows. The
+  # "Practice Journal" is a journal with no scene definitions (zero
+  # vocabulary) that also carries a grammar annotation — on the old kind
+  # denylist it surfaced twice (a Journal row and a Grammar row) with nothing
+  # to quiz. With the structural gate it is absent from the vocab picker
+  # entirely, even with unstudied words included.
+  Scenario: Vocabulary picker lists only notebooks that have vocabulary
+    Given I am on the Quiz page
+    When I choose the "Standard" quiz mode
+    And I include unstudied words
+
+    Then I see the notebook "Idioms"
+    And I do not see the notebook "Practice Journal"

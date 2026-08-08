@@ -90,6 +90,7 @@ func (h *QuizHandler) GetQuizOptions(ctx context.Context, req *connect.Request[a
 			EtymologyReviewCount:        int32(s.EtymologyReviewCount),
 			EtymologyReverseReviewCount: int32(s.EtymologyReverseReviewCount),
 			GrammarReviewCount:          int32(s.GrammarReviewCount),
+			VocabularyCount:             int32(s.VocabularyCount),
 			HasContent:                  s.HasContent,
 			Sections:                    sections,
 		})

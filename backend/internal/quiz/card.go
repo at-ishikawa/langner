@@ -67,8 +67,16 @@ type NotebookSummary struct {
 	EtymologyReviewCount        int
 	EtymologyReverseReviewCount int
 	GrammarReviewCount          int
-	LatestDate                  time.Time
-	Kind                        string
+	// VocabularyCount is the STRUCTURAL number of vocabulary entries the
+	// notebook has (definitions in a definitions book, scene definitions
+	// across a story/journal, or flashcard cards) — how many words COULD be
+	// quizzed, independent of spaced-repetition/studied state. Unlike
+	// ReviewCount it does not vary with the "Include unstudied" toggle.
+	// Grammar summaries are 0. The Vocabulary tab lists a notebook iff this
+	// is > 0, dropping grammar-only and definition-less journal rows.
+	VocabularyCount int
+	LatestDate      time.Time
+	Kind            string
 	// HasContent is true when any scene in the notebook has statements or
 	// conversations — i.e., there is prose/dialogue to read, not just flashcards.
 	HasContent bool

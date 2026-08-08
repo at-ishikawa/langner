@@ -102,13 +102,22 @@ export default function QuizHubPage() {
 
   const isFreeformMode = tab === "vocabulary" && selectedVocabMode === "freeform";
 
-  // Notebook lists. Hide notebooks with zero review count for the selected
-  // mode; when includeUnstudied is on (or in freeform, which always covers
-  // unstudied words) we can't know the unstudied count so show all of them.
+  // Notebook lists. The Vocabulary tab lists a notebook iff it STRUCTURALLY
+  // has vocabulary entries (vocabularyCount > 0) and isn't owned by another
+  // tab — Etymology goes to the Etymology tab, Grammar to the Grammar tab.
+  // This structural gate is independent of studied/due state, so it runs for
+  // both toggle positions: it drops grammar-only rows and definition-less
+  // journals, and collapses a Journal+Grammar duplicate id (grammar carries
+  // no vocabulary) to at most one row. The separate SR/due filter below still
+  // governs studied-vs-unstudied among a WITH-vocabulary notebook's words —
+  // vocabularyCount is never conflated with reviewCount.
   const displayedNotebooks = useMemo(() => {
-    const base = notebooks.filter((n) =>
-      tab === "vocabulary" ? n.kind !== "Etymology" : n.kind === "Etymology",
-    );
+    const base = notebooks.filter((n) => {
+      if (tab === "etymology") return n.kind === "Etymology";
+      // Vocabulary tab: exclude other tabs' kinds and empty notebooks.
+      if (n.kind === "Etymology" || n.kind === "Grammar") return false;
+      return n.vocabularyCount > 0;
+    });
     if (includeUnstudied || isFreeformMode) return base;
     return base.filter((n) => {
       if (tab === "etymology") {
