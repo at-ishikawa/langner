@@ -35,15 +35,19 @@ function splitBold(
 
 // highlightExpression bolds the target word inside an example sentence.
 //
-// Precedence (first rule that matches wins):
-//  1. highlight — bold that exact word/phrase as a WHOLE word (case-insensitive
-//     `\bHIGHLIGHT\b`, multi-word phrases allowed). Use this for irregular
-//     inflections the lemma can't derive (e.g. lemma "go", highlight "went").
-//  2. auto whole-word of each lemma candidate: `\bLEMMA\w*`, so "obliterate"
-//     bolds "obliterated"/"obliterates". Both the entry and its Definition
+// Matching is EXACT-WHOLE-WORD only (case-insensitive); precedence (first rule
+// that matches wins):
+//  1. highlight — bold that exact word/phrase as a WHOLE word
+//     (`\bHIGHLIGHT\b`, multi-word phrases allowed). Use this for irregular or
+//     inflected forms the lemma can't match exactly (e.g. lemma "go",
+//     highlight "went"; lemma "obliterate", highlight "obliterated").
+//  2. each lemma candidate as a WHOLE word (`\bLEMMA\b`), so lemma "high" bolds
+//     "high" but never "highlight"/"highway". Both the entry and its Definition
 //     alt-form are tried.
-//  3. plain substring of a lemma candidate (the legacy behavior) as a last
-//     resort.
+//
+// There is no prefix (`\bLEMMA\w*`) or substring guessing: if neither the
+// highlight nor a lemma matches as a whole word, nothing is bolded (the author
+// is expected to add a `highlight` for forms the lemma can't match).
 //
 // lemmas is the ordered list of lemma candidates (typically [entry,
 // originalEntry]); empty/blank entries are ignored.
@@ -66,15 +70,7 @@ export function highlightExpression(
     .filter((lemma): lemma is string => !!lemma);
 
   for (const lemma of candidates) {
-    const re = new RegExp(`(\\b${escapeRegex(lemma)}\\w*)`, "gi");
-    const { nodes, matched } = splitBold(text, re);
-    if (matched) {
-      return nodes;
-    }
-  }
-
-  for (const lemma of candidates) {
-    const re = new RegExp(`(${escapeRegex(lemma)})`, "gi");
+    const re = new RegExp(`(\\b${escapeRegex(lemma)}\\b)`, "gi");
     const { nodes, matched } = splitBold(text, re);
     if (matched) {
       return nodes;

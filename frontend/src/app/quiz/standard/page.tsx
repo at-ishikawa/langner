@@ -233,10 +233,10 @@ export default function QuizCardPage() {
                   {ex.speaker && <>{ex.speaker}: &ldquo;</>}
                   {!ex.speaker && <>&ldquo;</>}
                   {highlightExpression(
-                  ex.text,
-                  [card.originalEntry, card.entry],
-                  ex.highlight,
-                )}
+                    ex.text,
+                    [card.originalEntry, card.entry],
+                    ex.highlight,
+                  )}
                   &rdquo;
                 </Text>
               ))}

@@ -32,13 +32,40 @@ describe("highlightExpression", () => {
     expect(boldWords(nodes)).toEqual(["broke the ice"]);
   });
 
-  it("falls back to the whole-word lemma rule when no highlight, bolding the full inflection", () => {
+  it("bolds a lemma that appears as an exact whole word", () => {
+    const nodes = highlightExpression("The obliterate spell is powerful.", [
+      "obliterate",
+    ]);
+    expect(boldWords(nodes)).toEqual(["obliterate"]);
+  });
+
+  it("does NOT bold an inflected form via the lemma rule (highlight required)", () => {
     const nodes = highlightExpression(
       "The note obliterated every good feeling.",
       ["obliterate"],
     );
-    // \bobliterate\w* bolds the entire inflected form, not just the stem.
+    // Exact-word only: \bobliterate\b cannot match "obliterated"; without a
+    // `highlight` field nothing is bolded.
+    expect(boldWords(nodes)).toEqual([]);
+    expect(nodes).toEqual(["The note obliterated every good feeling."]);
+  });
+
+  it("bolds the inflected form once a matching highlight is supplied", () => {
+    const nodes = highlightExpression(
+      "The note obliterated every good feeling.",
+      ["obliterate"],
+      "obliterated",
+    );
     expect(boldWords(nodes)).toEqual(["obliterated"]);
+  });
+
+  it("bolds a lemma as a whole word but not a longer word containing it", () => {
+    const nodes = highlightExpression(
+      "The high tower cast a highlight on the highway.",
+      ["high"],
+    );
+    // \bhigh\b matches only the standalone "high", never "highlight"/"highway".
+    expect(boldWords(nodes)).toEqual(["high"]);
   });
 
   it("does not bold a partial word via the highlight rule", () => {
@@ -48,10 +75,11 @@ describe("highlightExpression", () => {
     expect(nodes).toEqual(["The wenten path."]);
   });
 
-  it("falls back to a plain substring when the whole-word rule finds nothing", () => {
+  it("does NOT fall back to a substring when the whole-word rule finds nothing", () => {
     const nodes = highlightExpression("It was a clever device.", ["ice"]);
-    // \bice\w* can't match inside "device"; the substring rule still bolds it.
-    expect(boldWords(nodes)).toEqual(["ice"]);
+    // No substring fallback: "ice" inside "device" is left untouched.
+    expect(boldWords(nodes)).toEqual([]);
+    expect(nodes).toEqual(["It was a clever device."]);
   });
 
   it("returns the text unchanged when nothing matches", () => {

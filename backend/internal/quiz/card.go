@@ -58,8 +58,9 @@ type Example struct {
 	Speaker string // empty for flashcards
 	// Highlight names the exact surface word/phrase to bold in the standard
 	// quiz and mask in the reverse quiz, carried through from the note's
-	// per-example highlight. Empty falls back to the auto whole-word lemma
-	// rule (see the frontend highlight helper and maskWord).
+	// per-example highlight. Empty falls back to matching each lemma as an
+	// exact whole word (see the frontend highlight helper and maskWord); an
+	// inflected/irregular form the lemma can't match requires a Highlight.
 	Highlight string
 }
 
