@@ -5,7 +5,13 @@ import Link from "next/link";
 import { Box, Heading, Spinner, Text, VStack } from "@chakra-ui/react";
 import { quizClient, type NotebookSummary } from "@/lib/client";
 
-type Tab = "vocabulary" | "etymology";
+type Tab = "vocabulary" | "journals" | "etymology";
+
+const TAB_LABELS: { key: Tab; label: string }[] = [
+  { key: "vocabulary", label: "Vocabulary" },
+  { key: "journals", label: "Journals" },
+  { key: "etymology", label: "Etymology" },
+];
 
 export default function LearnHubPage() {
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
@@ -39,8 +45,21 @@ export default function LearnHubPage() {
     );
   }
 
-  const vocabularyNotebooks = notebooks.filter((n) => n.kind !== "Etymology");
+  // Vocabulary keeps only true vocabulary notebooks — journals (kind
+  // "Journal") and their grammar-quiz twin (kind "Grammar") get their own tab.
+  const vocabularyNotebooks = notebooks.filter(
+    (n) => n.kind !== "Etymology" && n.kind !== "Journal" && n.kind !== "Grammar",
+  );
   const etymologyNotebooks = notebooks.filter((n) => n.kind === "Etymology");
+
+  // A journal surfaces twice in the options (once as "Journal", once as
+  // "Grammar" with the same notebookId); list each journal once, keyed by id.
+  const journalNotebooks = Array.from(
+    notebooks
+      .filter((n) => n.kind === "Journal")
+      .reduce((map, n) => map.set(n.notebookId, n), new Map<string, NotebookSummary>())
+      .values(),
+  );
 
   const totalVocabWords = vocabularyNotebooks.reduce(
     (sum, n) => sum + n.reviewCount,
@@ -75,66 +94,39 @@ export default function LearnHubPage() {
         borderColor="gray.200"
         display="flex"
       >
-        <Box
-          flex={1}
-          textAlign="center"
-          py={2}
-          cursor="pointer"
-          onClick={() => setTab("vocabulary")}
-          position="relative"
-        >
-          <Text
-            fontSize="sm"
-            fontWeight={tab === "vocabulary" ? "semibold" : "normal"}
-            color={tab === "vocabulary" ? "blue.600" : "gray.500"}
-            _dark={{ color: tab === "vocabulary" ? "blue.300" : "gray.400" }}
+        {TAB_LABELS.map(({ key, label }) => (
+          <Box
+            key={key}
+            flex={1}
+            textAlign="center"
+            py={2}
+            cursor="pointer"
+            onClick={() => setTab(key)}
+            position="relative"
           >
-            Vocabulary
-          </Text>
-          {tab === "vocabulary" && (
-            <Box
-              position="absolute"
-              bottom={0}
-              left="50%"
-              transform="translateX(-50%)"
-              w="60%"
-              h="3px"
-              borderRadius="full"
-              bg="blue.600"
-              _dark={{ bg: "blue.300" }}
-            />
-          )}
-        </Box>
-        <Box
-          flex={1}
-          textAlign="center"
-          py={2}
-          cursor="pointer"
-          onClick={() => setTab("etymology")}
-          position="relative"
-        >
-          <Text
-            fontSize="sm"
-            fontWeight={tab === "etymology" ? "semibold" : "normal"}
-            color={tab === "etymology" ? "blue.600" : "gray.500"}
-            _dark={{ color: tab === "etymology" ? "blue.300" : "gray.400" }}
-          >
-            Etymology
-          </Text>
-          {tab === "etymology" && (
-            <Box
-              position="absolute"
-              bottom={0}
-              left="50%"
-              transform="translateX(-50%)"
-              w="60%"
-              h="3px"
-              borderRadius="full"
-              bg="blue.600"
-              _dark={{ bg: "blue.300" }}
-            />
-          )}
-        </Box>
+            <Text
+              fontSize="sm"
+              fontWeight={tab === key ? "semibold" : "normal"}
+              color={tab === key ? "blue.600" : "gray.500"}
+              _dark={{ color: tab === key ? "blue.300" : "gray.400" }}
+            >
+              {label}
+            </Text>
+            {tab === key && (
+              <Box
+                position="absolute"
+                bottom={0}
+                left="50%"
+                transform="translateX(-50%)"
+                w="60%"
+                h="3px"
+                borderRadius="full"
+                bg="blue.600"
+                _dark={{ bg: "blue.300" }}
+              />
+            )}
+          </Box>
+        ))}
       </Box>
 
       {/* Content */}
@@ -179,6 +171,42 @@ export default function LearnHubPage() {
                         &rsaquo;
                       </Text>
                     </Box>
+                  </Box>
+                </Link>
+              ))}
+            </VStack>
+          )
+        ) : tab === "journals" ? (
+          journalNotebooks.length === 0 ? (
+            <Text color="fg.muted" textAlign="center">
+              No journals found.
+            </Text>
+          ) : (
+            <VStack align="stretch" gap={2}>
+              {journalNotebooks.map((notebook) => (
+                <Link
+                  key={notebook.notebookId}
+                  href={`/journals/${notebook.notebookId}`}
+                >
+                  <Box
+                    p={4}
+                    bg="white"
+                    _dark={{ bg: "gray.800", borderColor: "gray.600" }}
+                    borderWidth="1px"
+                    borderColor="gray.200"
+                    borderRadius="10px"
+                    _hover={{ bg: "gray.50" }}
+                    cursor="pointer"
+                    display="flex"
+                    alignItems="center"
+                    justifyContent="space-between"
+                  >
+                    <Text fontWeight="medium" fontSize="sm">
+                      {notebook.name}
+                    </Text>
+                    <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
+                      &rsaquo;
+                    </Text>
                   </Box>
                 </Link>
               ))}
@@ -244,7 +272,9 @@ export default function LearnHubPage() {
         <Text fontSize="sm" color="gray.600" _dark={{ color: "gray.400" }}>
           {tab === "vocabulary"
             ? `${vocabularyNotebooks.length} notebooks \u00B7 ${totalVocabWords} words`
-            : `${etymologyNotebooks.length} notebooks \u00B7 ${totalEtymologyOrigins} origins`}
+            : tab === "journals"
+              ? `${journalNotebooks.length} journals`
+              : `${etymologyNotebooks.length} notebooks \u00B7 ${totalEtymologyOrigins} origins`}
         </Text>
       </Box>
     </Box>

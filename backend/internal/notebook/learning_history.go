@@ -186,26 +186,6 @@ type LearningRecord struct {
 	QuizType         string        `yaml:"quiz_type,omitempty"`         // "freeform" or "notebook"
 	IntervalDays     int           `yaml:"interval_days,omitempty"`     // days until next review
 	OverrideInterval int           `yaml:"override_interval,omitempty"` // manually-set interval (non-zero = user override)
-	// WordResults records this etymology-origin attempt's per-derived-word
-	// outcome. The origin still carries exactly ONE log entry regardless of
-	// family size (invariants L1/L4); WordResults is inline data on that one
-	// entry, never a separate log series per word. Empty for non-etymology
-	// records. See EtymologyWordLog.
-	WordResults []EtymologyWordLog `yaml:"word_results,omitempty"`
-}
-
-// EtymologyWordLog is one derived family word's outcome within an etymology
-// origin's single learning-log entry (see LearningRecord.WordResults).
-// Correct and Excluded are overridden in place by
-// LearningHistoryUpdater.OverrideEtymologyWordResult — never by appending a
-// new record for the word — so a word-level correction can never fork into a
-// parallel log series (learning-history invariant L1). A word the learner
-// left blank while answering is recorded as Correct=false (a normal miss),
-// not as a distinct "skipped"/ungraded state.
-type EtymologyWordLog struct {
-	Expression string `yaml:"expression"`
-	Correct    bool   `yaml:"correct"`
-	Excluded   bool   `yaml:"excluded,omitempty"`
 }
 
 type LearningHistoryExpression struct {
@@ -237,9 +217,10 @@ type LearningHistoryExpression struct {
 	ReverseLogs           []LearningRecord `yaml:"reverse_logs,omitempty"`
 	ReverseEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
-	// Etymology origin quiz fields — the single learning-log series an
-	// etymology origin carries. One series per (origin, sense), regardless of
-	// how many derived words the quiz screen shows for it.
+	// Etymology origin quiz fields — the single learning-log series a WORD
+	// carries for the etymology-origin quiz. One series per word (invariants
+	// L1/L4), regardless of how many origin cards show it; the origin is only
+	// presentation grouping and carries no schedule of its own.
 	EtymologyOriginLogs           []LearningRecord `yaml:"etymology_origin_logs,omitempty"`
 	EtymologyOriginEasinessFactor float64          `yaml:"-"` // derived on the fly from logs
 
@@ -517,17 +498,16 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 	exp.ReverseLogs = append([]LearningRecord{tentative}, exp.ReverseLogs...)
 }
 
-// AddRecordWithQualityForEtymology adds a new learning record for etymology
-// quiz with SM-2 quality data. wordResults carries this attempt's per-word
-// grading outcome (see LearningRecord.WordResults) — inline data on the one
-// record created here, not a separate record per word.
+// AddRecordWithQualityForEtymology adds a new learning record for the
+// etymology-origin quiz with SM-2 quality data. The record is appended to the
+// WORD's own EtymologyOriginLogs series (invariants L1/L4) — one series per
+// word, never per origin.
 func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 	calculator IntervalCalculator,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
 	quizType QuizType,
-	wordResults []EtymologyWordLog,
 ) {
 	status := LearnedStatusMisunderstood
 	if isCorrect {
@@ -544,7 +524,6 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
 		Quality:        quality,
 		ResponseTimeMs: responseTimeMs,
 		QuizType:       string(quizType),
-		WordResults:    wordResults,
 	}
 	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.EtymologyOriginLogs, tentative)
 	exp.EtymologyOriginLogs = append([]LearningRecord{tentative}, exp.EtymologyOriginLogs...)

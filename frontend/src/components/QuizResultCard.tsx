@@ -3,13 +3,9 @@
 import { Box, Button, Text, VStack } from "@chakra-ui/react";
 import type { WordDetail } from "@/store/quizStore";
 import { WordDetailView } from "./WordDetailView";
+import { OriginBreakdown, type OriginPartDisplay } from "./OriginBreakdown";
 
-export interface OriginPartDisplay {
-  origin: string;
-  meaning: string;
-  language?: string;
-  type?: string;
-}
+export type { OriginPartDisplay };
 
 export interface ResultItem {
   index: number;
@@ -23,6 +19,11 @@ export interface ResultItem {
    * response. Threaded back into OverrideAnswer/UndoOverrideAnswer so the
    * override targets the exact sense the card came from. */
   senseId?: string;
+  /** notebookName is the word's home definitions-book id (== the etymology
+   * loader's bookID). Present on etymology-origin results so the per-word
+   * Exclude can call ExcludeEtymologyWord(notebookId, expression) — keyed by a
+   * stable string identity, no DB note id required. */
+  notebookName?: string;
   learnedAt?: string;
   isOverridden?: boolean;
   isSkipped?: boolean;
@@ -77,19 +78,6 @@ export interface ResultItem {
  * derived family word — pulled out so onOverrideWord/onExcludeWord can share
  * one parameter type. */
 export type EtymologyWordItem = NonNullable<ResultItem["etymologyWords"]>[number];
-
-function getTypeBadgeColors(type: string): { bg: string; darkBg: string; color: string; darkColor: string } {
-  switch (type.toLowerCase()) {
-    case "root":
-      return { bg: "blue.100", darkBg: "blue.900", color: "blue.600", darkColor: "blue.300" };
-    case "prefix":
-      return { bg: "yellow.100", darkBg: "yellow.900", color: "yellow.800", darkColor: "yellow.200" };
-    case "suffix":
-      return { bg: "green.100", darkBg: "green.900", color: "green.800", darkColor: "green.200" };
-    default:
-      return { bg: "gray.100", darkBg: "gray.700", color: "gray.600", darkColor: "gray.300" };
-  }
-}
 
 interface StatusChipProps {
   kind: "correct" | "incorrect" | "skipped";
@@ -313,28 +301,7 @@ export function QuizResultCard({
           <Text fontSize="xs" color="fg.muted" mb={1}>
             {item.correct ? "Breakdown" : "Correct"}
           </Text>
-          <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
-            {item.originBreakdown.map((p, i) => {
-              const typeBadge = p.type ? getTypeBadgeColors(p.type) : null;
-              return (
-                <Box key={i} display="flex" alignItems="center" gap={1}>
-                  {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-                  <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
-                  <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
-                  {p.language && (
-                    <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
-                      <Text fontSize="2xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
-                    </Box>
-                  )}
-                  {typeBadge && p.type && (
-                    <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg} _dark={{ bg: typeBadge.darkBg }}>
-                      <Text fontSize="2xs" color={typeBadge.color} _dark={{ color: typeBadge.darkColor }}>{p.type}</Text>
-                    </Box>
-                  )}
-                </Box>
-              );
-            })}
-          </Box>
+          <OriginBreakdown parts={item.originBreakdown} />
         </Box>
       )}
 
@@ -342,28 +309,7 @@ export function QuizResultCard({
       {!isEtymology && item.originBreakdown && item.originBreakdown.length > 0 && (
         <Box mb={2}>
           <Text fontSize="xs" color="fg.muted" mb={1}>Etymology</Text>
-          <Box display="flex" gap={1} alignItems="center" flexWrap="wrap">
-            {item.originBreakdown.map((p, i) => {
-              const typeBadge = p.type ? getTypeBadgeColors(p.type) : null;
-              return (
-                <Box key={i} display="flex" alignItems="center" gap={1}>
-                  {i > 0 && <Text fontSize="xs" color="fg.muted">+</Text>}
-                  <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.300" }} fontWeight="medium">{p.origin}</Text>
-                  <Text fontSize="xs" color="fg.muted">({p.meaning})</Text>
-                  {p.language && (
-                    <Box px={1.5} py={0} borderRadius="full" bg="gray.100" _dark={{ bg: "gray.700" }}>
-                      <Text fontSize="2xs" color="gray.600" _dark={{ color: "gray.300" }}>{p.language}</Text>
-                    </Box>
-                  )}
-                  {typeBadge && p.type && (
-                    <Box px={1.5} py={0} borderRadius="full" bg={typeBadge.bg} _dark={{ bg: typeBadge.darkBg }}>
-                      <Text fontSize="2xs" color={typeBadge.color} _dark={{ color: typeBadge.darkColor }}>{p.type}</Text>
-                    </Box>
-                  )}
-                </Box>
-              );
-            })}
-          </Box>
+          <OriginBreakdown parts={item.originBreakdown} />
         </Box>
       )}
 
@@ -416,7 +362,10 @@ export function QuizResultCard({
             {item.etymologyWords.map((w, i) => {
               const wordOverridden = w.originalCorrect !== undefined && w.originalCorrect !== w.correct;
               const canOverrideWord = Boolean(onOverrideWord && item.noteId && item.learnedAt);
-              const canExcludeWord = Boolean(onExcludeWord && item.noteId && item.learnedAt);
+              // Exclude is keyed by (notebookName, expression) via
+              // ExcludeEtymologyWord — no DB note id / learnedAt needed, so it
+              // renders whenever the word's home book is known (U1/U2).
+              const canExcludeWord = Boolean(onExcludeWord && item.notebookName);
               const borderColor = w.correct ? "green.200" : "red.200";
               const darkBorderColor = w.correct ? "green.800" : "red.800";
               const glyphColor = w.correct ? "green.600" : "red.600";

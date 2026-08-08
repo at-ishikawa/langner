@@ -41,11 +41,8 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
-	// Journals are stored in the story format but kept in their own directory;
-	// load them alongside stories so the grammar quiz can read them.
-	storyDirectories := append(append([]string{}, s.notebooksConfig.StoriesDirectories...), s.notebooksConfig.JournalsDirectories...)
 	reader, err := notebook.NewReader(
-		storyDirectories,
+		s.notebooksConfig.StoriesDirectories,
 		s.notebooksConfig.FlashcardsDirectories,
 		s.notebooksConfig.BooksDirectories,
 		s.notebooksConfig.DefinitionsDirectories,
@@ -54,6 +51,12 @@ func (s *Service) newReader() (*notebook.Reader, error) {
 	)
 	if err != nil {
 		return nil, err
+	}
+	// Journals are stored in the story format but kept in their own directory;
+	// register them so the grammar quiz can read them and IsJournal can tag
+	// them apart from plain vocabulary stories.
+	if err := reader.LoadJournals(s.notebooksConfig.JournalsDirectories); err != nil {
+		return nil, fmt.Errorf("reader.LoadJournals() > %w", err)
 	}
 	if err := reader.LoadGrammars(s.notebooksConfig.GrammarsDirectories); err != nil {
 		return nil, fmt.Errorf("reader.LoadGrammars() > %w", err)
@@ -110,6 +113,15 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		}
 		reverseCount := countReverseStoryDefinitions(stories, learningHistories[id], includeUnstudied)
 		etymCount := countStoryEtymologyDefinitions(stories)
+		// Journals are surfaced under a dedicated "Journal" kind so the
+		// frontend can list them in a Journals tab and exclude them from the
+		// Vocabulary tab (which keeps every non-Etymology kind). The same
+		// notebook still appears as a separate "Grammar" summary via
+		// LoadGrammarStorySummaries for the grammar quiz tab.
+		kind := kindFromIndex(index)
+		if reader.IsJournal(id) {
+			kind = "Journal"
+		}
 		summaries = append(summaries, NotebookSummary{
 			NotebookID:           id,
 			Name:                 index.Name,
@@ -117,7 +129,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReverseReviewCount:   reverseCount,
 			EtymologyReviewCount: etymCount,
 			LatestDate:           latestDate,
-			Kind:                 kindFromIndex(index),
+			Kind:                 kind,
 			HasContent:           storyHasContent(stories),
 			Sections:             storySectionSummaries(stories, filtered, learningHistories[id], includeUnstudied),
 		})
@@ -1332,6 +1344,10 @@ type FreeformCard struct {
 	Contexts           []inference.Context
 	WordDetail         WordDetail
 	Images             []string
+	// Literal is the etymology literal gloss stored in the word's free-text
+	// note field (Note.Note) — e.g. `de "down" + facere = "made down"`. Carried
+	// so the etymology-origin Relearn feedback can show it, mirroring the quiz.
+	Literal string
 	// ConceptHead, when non-empty, names the concept head this card maps
 	// to. SaveFreeformResult writes the log under the head so per-member
 	// freeform answers (e.g. typing "misanthropist") consolidate into
@@ -1422,6 +1438,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 					Contexts:           contexts,
 					WordDetail:         buildWordDetail(&definition, originMap),
 					Images:             definition.Images,
+					Literal:            definition.Note,
 				})
 			}
 		}
@@ -1472,6 +1489,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 				Contexts:     contexts,
 				WordDetail:   buildWordDetail(&card, originMap),
 				Images:       card.Images,
+				Literal:      card.Note,
 			})
 		}
 	}
@@ -2087,6 +2105,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					OriginalExpression: note.Expression,
 					Meaning:            note.Meaning,
 					WordDetail:         buildWordDetail(&note, originMap),
+					Literal:            note.Note,
 				}
 				if head, ok := conceptHeads[note.Expression]; ok && head != "" {
 					card.ConceptHead = head

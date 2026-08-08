@@ -11,6 +11,7 @@ import {
   Progress,
   Spinner,
   Text,
+  VStack,
 } from "@chakra-ui/react";
 import { quizClient, type GrammarPostCard, type GrammarBlank } from "@/lib/client";
 import { useGrammarStore, type GrammarResultState } from "@/store/grammarStore";
@@ -138,6 +139,11 @@ export default function GrammarQuizPage() {
   const gradedCount = orderedKeys.filter((k) => postResults.has(k)).length;
   const gradingCount = gradingKeys.length;
   const remainingCount = totalBlanks - gradedCount - gradingCount;
+  // Let the learner stop the session at any time, mirroring the vocab/etymology
+  // BatchFeedback footer. Available in every state except when the primary button is
+  // already the terminal "See results" (last post, none remaining) — then it would
+  // duplicate. If anything's been graded it reads "See results"; otherwise "Stop quiz".
+  const showExit = !(isLastPost && remainingCount === 0);
   const correctCount = orderedKeys.filter((k) => postResults.get(k)?.result.correct).length;
   const unreviewedWrong = orderedKeys.filter((k) => {
     const r = postResults.get(k)?.result;
@@ -394,17 +400,36 @@ export default function GrammarQuizPage() {
         })()}
       </Box>
 
-      {remainingCount > 0 ? (
-        // Blanks are still unanswered — reveal their answers before moving on,
-        // rather than silently skipping them.
-        <Button colorPalette="blue" w="full" size="lg" onClick={revealAnswers}>
-          See answers ({remainingCount} left)
-        </Button>
-      ) : (
-        <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
-          {isLastPost ? "See results" : "Next post"}
-        </Button>
-      )}
+      <VStack align="stretch" gap={2}>
+        {remainingCount > 0 ? (
+          // Blanks are still unanswered — reveal their answers before moving on,
+          // rather than silently skipping them.
+          <Button colorPalette="blue" w="full" size="lg" onClick={revealAnswers}>
+            See answers ({remainingCount} left)
+          </Button>
+        ) : (
+          <Button colorPalette="blue" w="full" size="lg" onClick={handleNextPost}>
+            {isLastPost ? "See results" : "Next post"}
+          </Button>
+        )}
+        {showExit && (
+          // Early exit: stop the session at any point. If anything's been graded,
+          // review it ("See results"); otherwise leave cleanly to the grammar hub
+          // ("Stop quiz"). The current post's untouched blanks stay due (not graded),
+          // matching the vocab pages' early "See Results".
+          <Button
+            variant="outline"
+            colorPalette="green"
+            w="full"
+            size="lg"
+            onClick={() =>
+              router.push(results.length > 0 ? "/quiz/grammar/complete" : "/quiz?tab=grammar")
+            }
+          >
+            {results.length > 0 ? "See results" : "Stop quiz"}
+          </Button>
+        )}
+      </VStack>
       <Box mt={1} textAlign="center" minH="1.25rem">
         {remainingCount === 0 && unreviewedWrong > 0 && (
           <Text fontSize="xs" color="orange.600" _dark={{ color: "orange.300" }}>

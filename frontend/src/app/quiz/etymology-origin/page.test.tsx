@@ -118,6 +118,47 @@ describe("EtymologyOriginPage", () => {
     expect(screen.queryByText(/\(skipped\)/)).not.toBeInTheDocument();
   });
 
+  // Feedback screen: every graded family word — correct, wrong, or left blank —
+  // must render its per-word override button so any word can be corrected. The
+  // button's aria-label is the INVERSE of the word's correctness ("Mark X as
+  // correct" when X is incorrect, "Mark X as incorrect" when X is correct),
+  // exactly the locator the e2e scenario asserts. A blank word (graded incorrect,
+  // reason "not answered") must show "Mark <word> as correct" like any other
+  // incorrect word — it must not be dropped from the per-word feedback list.
+  it("renders a per-word override button for every family word, including blanks", async () => {
+    batchSubmitEtymologyOriginAnswers.mockResolvedValue({
+      responses: [
+        {
+          noteId: BigInt(42),
+          origin: "graph",
+          meaning: "to write",
+          correct: false,
+          nextReviewDate: "",
+          learnedAt: "2026-08-02",
+          senseId: "",
+          results: [
+            { wordId: BigInt(1), expression: "photograph", correct: true, correctMeaning: "light writing", reason: "" },
+            { wordId: BigInt(2), expression: "autograph", correct: false, correctMeaning: "self writing", reason: "not answered" },
+            { wordId: BigInt(3), expression: "telegraph", correct: false, correctMeaning: "distant writing", reason: "not answered" },
+            { wordId: BigInt(4), expression: "paragraph", correct: false, correctMeaning: "beside writing", reason: "not answered" },
+          ],
+        },
+      ],
+    });
+
+    renderPage();
+    fireEvent.change(screen.getByLabelText("Meaning of photograph"), { target: { value: "light writing" } });
+    // autograph, telegraph, paragraph are left blank → graded incorrect.
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+    // The correct word offers "Mark as Incorrect"; each blank/incorrect word
+    // offers "Mark as Correct" — the exact button the e2e scenario looks for.
+    expect(await screen.findByRole("button", { name: "Mark photograph as incorrect" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark autograph as correct" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark telegraph as correct" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mark paragraph as correct" })).toBeInTheDocument();
+  });
+
   // Study-context card (roots-book support): carries origin english_forms +
   // note and a word with pronunciation. The answering screen shows the safe
   // hints (pronunciation, english_forms, origin note) but must NOT leak the

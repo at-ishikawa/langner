@@ -5,6 +5,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
   Box,
+  Button,
   Heading,
   Input,
   Spinner,
@@ -13,11 +14,81 @@ import {
 } from "@chakra-ui/react";
 import {
   notebookClient,
+  quizClient,
   type EtymologyOriginPart,
   type EtymologyDefinition,
   type EtymologyMeaningGroup,
   type SemanticConcept,
 } from "@/lib/client";
+
+// ETYMOLOGY_ORIGIN_SKIP_TYPE is the quiz-type string the backend writes into
+// EtymologyDefinition.skipped_quiz_types when a word is excluded from the
+// etymology-origin quiz (mirrors NotebookWord.skipped_quiz_types).
+const ETYMOLOGY_ORIGIN_SKIP_TYPE = "etymology_origin";
+
+// EtymologyWordExclude is the deliberate per-word "Exclude from quizzes" /
+// "Resume" control — the ONLY writer of the etymology-origin skip marker on
+// the browse page (quiz-ui-invariants U1/U2). It calls ExcludeEtymologyWord /
+// ResumeEtymologyWord, keyed by the word's stable (notebookName, expression) —
+// the same skipped_at write path every card uses, needing NO DB note id, so it
+// works for YAML-only notebooks (where def.noteId is always 0n). `excluded` is
+// optimistic and reverts on failure.
+function EtymologyWordExclude({ def }: { def: EtymologyDefinition }) {
+  const [excluded, setExcluded] = useState(
+    def.isSkipped || (def.skippedQuizTypes ?? []).includes(ETYMOLOGY_ORIGIN_SKIP_TYPE),
+  );
+  const [busy, setBusy] = useState(false);
+
+  // notebookName (the word's home definitions-book id) + expression are always
+  // present, so the control renders for every word. Without a home book there
+  // is no key to write, so hide it (defensive; shouldn't happen).
+  if (!def.notebookName || !def.expression) return null;
+
+  async function toggle() {
+    if (busy) return;
+    const next = !excluded;
+    setExcluded(next);
+    setBusy(true);
+    try {
+      if (next) {
+        await quizClient.excludeEtymologyWord({
+          notebookId: def.notebookName,
+          expression: def.expression,
+        });
+      } else {
+        await quizClient.resumeEtymologyWord({
+          notebookId: def.notebookName,
+          expression: def.expression,
+        });
+      }
+    } catch {
+      setExcluded(!next); // revert on failure
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Box mt={2} display="flex" alignItems="center" gap={2} flexWrap="wrap">
+      {excluded && (
+        <Box bg="gray.100" _dark={{ bg: "gray.700" }} px={2} py={0.5} borderRadius="full">
+          <Text fontSize="xs" fontWeight="medium" color="fg.muted">
+            Excluded
+          </Text>
+        </Box>
+      )}
+      {excluded ? (
+        <Button size="xs" variant="outline" colorPalette="blue" onClick={toggle} disabled={busy}>
+          Resume
+        </Button>
+      ) : (
+        <Button size="xs" variant="outline" colorPalette="gray" onClick={toggle} disabled={busy}>
+          Exclude from quizzes
+        </Button>
+      )}
+    </Box>
+  );
+}
 import { FormsTable } from "@/components/FormsTable";
 import { ConceptCard } from "@/components/ConceptCard";
 
@@ -315,6 +386,7 @@ function OriginDetailView({
                   </Box>
                 ))}
               </Box>
+              <EtymologyWordExclude def={def} />
             </Box>
           ))}
         </VStack>

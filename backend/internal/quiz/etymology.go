@@ -24,6 +24,16 @@ type EtymologyFamilyWord struct {
 	Pronunciation string
 	Examples      []string
 	Literal       string
+	// Identity + on-disk location of the word's OWN per-word etymology-origin
+	// learning series (invariants L1/L4). NoteID (preferred) then Expression /
+	// Definition resolve the word's entry via FindExpressionInHistories — the
+	// SAME lookup the exclude check uses (L2). SessionTitle / SceneTitle place a
+	// never-studied word's new entry exactly where the standard/reverse quizzes
+	// write it, so a word keeps a single entry carrying all its quiz series.
+	NoteID       string
+	Definition   string
+	SessionTitle string
+	SceneTitle   string
 }
 
 // EtymologyOriginCard is one screen of the etymology-origin quiz: a single
@@ -90,10 +100,16 @@ func (s *Service) LoadEtymologyOriginCards(
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	families := buildOriginFamilies(reader)
+	families := buildOriginFamilies(reader, learningHistories)
 	etymIndexes := reader.GetEtymologyIndexes()
 
 	seen := make(map[string]bool)
+	// placed tracks words already put on an EARLIER card this session, so a word
+	// whose origin_parts span several origins (e.g. deficient → de, facere) is
+	// asked exactly once per deck instead of once per origin. Applied only to the
+	// real quiz; the relearn enumeration (skipEligibility) keeps every origin's
+	// full family so it can index each origin for grading.
+	placed := make(map[string]bool)
 	var cards []EtymologyOriginCard
 	for _, etymID := range etymologyNotebookIDs {
 		origins, err := reader.ReadEtymologyNotebook(etymID)
@@ -120,10 +136,19 @@ func (s *Service) LoadEtymologyOriginCards(
 			if len(words) == 0 {
 				continue
 			}
-			if !skipEligibility && !shouldIncludeOrigin(
-				learningHistories[etymID], o.SessionTitle, o.Origin, o.Sense, includeUnstudied,
-			) {
-				continue
+			if !skipEligibility {
+				// Offer this origin iff at least one of its not-yet-placed family
+				// words is DUE; when offered, the card carries the WHOLE
+				// not-yet-placed family (due or not) — a derived-word family is
+				// quizzed as a single card, so a sibling that is individually
+				// scheduled out is still shown for context and graded on its own
+				// per-word series (never a per-origin schedule). A word due under
+				// two origins lands on the first card only; an origin whose family
+				// has no due word — or was already placed earlier — is dropped.
+				words = offeredFamilyWords(learningHistories[etymID], etymID, words, includeUnstudied, placed)
+				if len(words) == 0 {
+					continue
+				}
 			}
 
 			cards = append(cards, EtymologyOriginCard{
@@ -165,21 +190,40 @@ func originFamilyKey(notebookID, sessionTitle, sense, origin string) string {
 // A definition's origin_parts ref pins a sense via ref.Sense; the family key
 // includes that sense, so a card for a specific sense only collects the words
 // whose ref names that sense (or the empty sense for single-sense origins).
-func buildOriginFamilies(reader *notebook.Reader) map[string][]EtymologyFamilyWord {
+//
+// A word the learner deliberately excluded from the etymology-origin quiz
+// (skipped_at set for QuizTypeEtymologyOrigin, via SkipWord) is dropped from
+// every family here — per-word exclusion. An origin whose whole family is
+// excluded ends up with an empty family and is therefore never offered by
+// LoadEtymologyOriginCards / counted by LoadEtymologyNotebookSummaries.
+func buildOriginFamilies(reader *notebook.Reader, learningHistories map[string][]notebook.LearningHistory) map[string][]EtymologyFamilyWord {
 	result := make(map[string][]EtymologyFamilyWord)
 	for _, bookID := range reader.GetDefinitionsBookIDs() {
-		defs, ok := reader.GetDefinitionsNotes(bookID)
+		// GetDefinitionsNotesByTitle keys scenes by their HUMAN title (not the
+		// __index_N key) — the same (sessionTitle, sceneTitle) the standard /
+		// reverse quizzes and the skip path write a word's learning history
+		// under. Reading through it here lets a word's per-word etymology series
+		// land in the very same entry those quizzes use (invariants L1/L4/L2).
+		defs, ok := reader.GetDefinitionsNotesByTitle(bookID)
 		if !ok {
 			continue
 		}
 		for sessionTitle, sceneDefs := range defs {
-			for _, notes := range sceneDefs {
+			for sceneTitle, notes := range sceneDefs {
 				for _, note := range notes {
 					expr := note.Expression
 					if expr == "" {
 						expr = note.Definition
 					}
 					if expr == "" {
+						continue
+					}
+					// Per-word exclusion: skip a word the learner excluded from
+					// the etymology-origin quiz. Read via the same key SkipWord
+					// wrote (invariant L2).
+					if notebook.IsExpressionExcludedForQuizType(
+						learningHistories[bookID], note.ID, notebook.QuizTypeEtymologyOrigin, note.Expression, note.Definition,
+					) {
 						continue
 					}
 					word := EtymologyFamilyWord{
@@ -189,7 +233,11 @@ func buildOriginFamilies(reader *notebook.Reader) map[string][]EtymologyFamilyWo
 						Examples:      note.Examples,
 						// Literal is the assembled literal gloss the converter
 						// stores in the word's free-text note field (Note.Note).
-						Literal: note.Note,
+						Literal:      note.Note,
+						NoteID:       note.ID,
+						Definition:   note.Definition,
+						SessionTitle: sessionTitle,
+						SceneTitle:   sceneTitle,
 					}
 					for _, ref := range note.OriginParts {
 						key := originFamilyKey(bookID, sessionTitle, ref.Sense, ref.Origin)
@@ -202,27 +250,82 @@ func buildOriginFamilies(reader *notebook.Reader) map[string][]EtymologyFamilyWo
 	return result
 }
 
-// shouldIncludeOrigin reports whether an origin sense must appear in the
-// etymology quiz for the given toggle. It is the single source of truth used
-// by both LoadEtymologyOriginCards and LoadEtymologyNotebookSummaries so the
-// count badge and the quiz can never disagree.
+// wordScheduleKey is the per-session dedup / distinct-count key for one derived
+// word: its notebook plus its stable identity (NoteID when present, else the
+// lower-cased expression). A word that appears under several origins shares one
+// key, so it is placed on exactly one card and counted once.
+func wordScheduleKey(notebookID string, w EtymologyFamilyWord) string {
+	id := w.NoteID
+	if id == "" {
+		id = strings.ToLower(strings.TrimSpace(w.Expression))
+	}
+	return notebookID + "\x00" + id
+}
+
+// etymologyWordDue reports whether a derived word is due for the etymology-origin
+// quiz. It is the single source of truth used by the card loader and the
+// notebook-summary count so the badge and the quiz can never disagree. It reads
+// the word's OWN per-word series (invariants L1/L4) via the same lookup the
+// exclude check uses (L2):
 //
-//   - skipped → exclude.
-//   - never-seen (no origin logs) → include iff includeUnstudied.
-//   - has logs → defer to the SR interval.
-func shouldIncludeOrigin(
-	histories []notebook.LearningHistory,
-	sessionTitle, origin, sense string,
-	includeUnstudied bool,
+//   - excluded (skipped_at set) → not due.
+//   - no etymology-origin logs yet → due iff includeUnstudied.
+//   - has logs → defer to the word's own SR interval.
+func etymologyWordDue(
+	histories []notebook.LearningHistory, w EtymologyFamilyWord, includeUnstudied bool,
 ) bool {
-	expr := notebook.FindOriginExpression(histories, sessionTitle, origin, sense)
+	expr := notebook.FindExpressionInHistories(histories, w.NoteID, w.Expression, w.Definition)
 	if expr == nil {
 		return includeUnstudied
 	}
 	if expr.SkippedAt.IsSkipped(notebook.QuizTypeEtymologyOrigin) {
 		return false
 	}
+	if len(expr.EtymologyOriginLogs) == 0 {
+		return includeUnstudied
+	}
 	return expr.NeedsEtymologyReview(notebook.QuizTypeEtymologyOrigin)
+}
+
+// offeredFamilyWords decides whether an origin is offered this session and, if
+// so, which words its card carries. An origin is offered iff at least one of its
+// not-yet-placed family words is DUE (per that word's own SR schedule). When
+// offered, the WHOLE not-yet-placed family is returned — due or not — because a
+// derived-word family is quizzed as a single card: a sibling that is
+// individually scheduled out (e.g. answered correctly earlier) is still shown
+// for context and graded on its own per-word series, which never creates a
+// per-origin schedule (invariants L1/L4). Returning nil means the origin is not
+// offered: no family word is due, or every word was already placed on an earlier
+// card this session.
+//
+// Every returned word is marked placed, so a word whose origin_parts span two
+// origins is asked exactly once per session (within-session dedup) regardless of
+// which origin's card carries it.
+func offeredFamilyWords(
+	histories []notebook.LearningHistory,
+	notebookID string,
+	words []EtymologyFamilyWord,
+	includeUnstudied bool,
+	placed map[string]bool,
+) []EtymologyFamilyWord {
+	var unplaced []EtymologyFamilyWord
+	anyDue := false
+	for _, w := range words {
+		if placed[wordScheduleKey(notebookID, w)] {
+			continue
+		}
+		unplaced = append(unplaced, w)
+		if etymologyWordDue(histories, w, includeUnstudied) {
+			anyDue = true
+		}
+	}
+	if !anyDue {
+		return nil
+	}
+	for _, w := range unplaced {
+		placed[wordScheduleKey(notebookID, w)] = true
+	}
+	return unplaced
 }
 
 // GradeEtymologyWordAnswer grades one family word's typed meaning against the
@@ -297,59 +400,84 @@ func qualityFromResponseTime(correct bool, responseTimeMs int64) int {
 	}
 }
 
-// SaveEtymologyOriginResult records ONE learning-log entry for the origin's
-// (session, sense) series — never one per derived word (invariants L1/L4).
-// wordResults carries this attempt's per-word grading outcome as inline data
-// on that one entry (see notebook.LearningRecord.WordResults); pass nil for
-// callers (e.g. the relearn quiz) that don't grade individual family words.
-func (s *Service) SaveEtymologyOriginResult(
+// EtymologyWordGrade is one derived family word's graded outcome for a submitted
+// origin card, carried into SaveEtymologyWordResults so each word advances its
+// OWN per-word series (invariants L1/L4).
+type EtymologyWordGrade struct {
+	Word    EtymologyFamilyWord
+	Correct bool
+	Quality int
+}
+
+// SaveEtymologyWordResults records ONE learning-log entry per answered derived
+// word, each on the WORD's own EtymologyOriginLogs series (invariants L1/L4) —
+// never a per-origin series. The origin is presentation grouping only. Every
+// word's entry lives in the definitions book's learning-history file
+// (card.NotebookName == that book id), the SAME file the exclude check reads
+// (invariant L2). It returns the aggregate learned_at (the answer date) and
+// next_review_date (the earliest per-word next review) the submit response
+// surfaces so the existing UI keeps working without a per-origin schedule.
+func (s *Service) SaveEtymologyWordResults(
 	card EtymologyOriginCard,
-	quality int,
-	correct bool,
+	grades []EtymologyWordGrade,
 	responseTimeMs int64,
-	isKnownWord bool,
-	wordResults []notebook.EtymologyWordLog,
-) error {
+) (learnedAt string, nextReviewDate string, err error) {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
-		return fmt.Errorf("failed to load learning histories: %w", err)
+		return "", "", fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[card.NotebookName], s.calculator)
-	updater.UpdateOrCreateExpressionWithQualityForEtymology(
-		card.NotebookName,
-		card.SessionTitle,
-		card.Origin,
-		card.Sense,
-		correct,
-		isKnownWord,
-		quality,
-		responseTimeMs,
-		wordResults,
-	)
-
-	// L1 structural guard: refuse to persist a state where one (origin, sense)
-	// forks into two entries within the same session.
-	if err := notebook.AssertNoDuplicateOriginsInSession(updater.GetHistory(), card.NotebookName, card.SessionTitle); err != nil {
-		return fmt.Errorf("save etymology origin %q: %w", card.Origin, err)
+	for _, g := range grades {
+		updater.UpsertWordEtymologyOriginResult(
+			card.NotebookName,
+			g.Word.SessionTitle,
+			g.Word.SceneTitle,
+			g.Word.Expression,
+			g.Word.Definition,
+			g.Word.NoteID,
+			g.Correct,
+			true,
+			g.Quality,
+			responseTimeMs,
+		)
 	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, card.NotebookName+".yml")
 	if err := notebook.WriteYamlFile(notePath, updater.GetHistory()); err != nil {
-		return fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
+		return "", "", fmt.Errorf("failed to save learning history for %q: %w", card.NotebookName, err)
 	}
-	return nil
+
+	// Aggregate learned_at/next_review across the just-written words: learned_at
+	// is the answer date (all share it); next_review_date is the earliest word's
+	// next review, so the card surfaces the soonest it should be seen again.
+	var earliest string
+	for _, g := range grades {
+		expr := notebook.FindExpressionInHistories(updater.GetHistory(), g.Word.NoteID, g.Word.Expression, g.Word.Definition)
+		if expr == nil || len(expr.EtymologyOriginLogs) == 0 {
+			continue
+		}
+		latest := expr.EtymologyOriginLogs[0]
+		if learnedAt == "" {
+			learnedAt = latest.LearnedAt.Format("2006-01-02")
+		}
+		next := latest.LearnedAt.AddDate(0, 0, latest.IntervalDays).Format("2006-01-02")
+		if earliest == "" || next < earliest {
+			earliest = next
+		}
+	}
+	return learnedAt, earliest, nil
 }
 
-// OverrideEtymologyWordResult flips one derived family word's correctness
-// and/or excluded flag within the origin's existing (session, sense)
-// learning-log entry. It never creates a second log series for the word —
-// see notebook.LearningHistoryUpdater.OverrideEtymologyWordResult, the
-// single function this delegates to, for the L1/L2 canonicalization this
-// relies on.
+// OverrideEtymologyWordResult flips ONE derived word's stored etymology-origin
+// result (Mark-as-Correct / Incorrect on the feedback screen). The word owns its
+// series now, so this is a normal override on that word's EtymologyOriginLogs:
+// it resolves the word by expression — the SAME key the exclude path uses
+// (invariant L2) — recomputes its interval, and never forks a second series
+// (L1). learnedAt selects the specific attempt.
 func (s *Service) OverrideEtymologyWordResult(
-	notebookName, sessionTitle, origin, sense, learnedAt, wordExpression string,
-	correct, excluded *bool,
+	notebookName, learnedAt, wordExpression string,
+	correct *bool,
 ) error {
 	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
@@ -357,8 +485,14 @@ func (s *Service) OverrideEtymologyWordResult(
 	}
 
 	updater := notebook.NewLearningHistoryUpdater(learningHistories[notebookName], s.calculator)
-	if !updater.OverrideEtymologyWordResult(sessionTitle, origin, sense, learnedAt, wordExpression, correct, excluded) {
-		return fmt.Errorf("etymology word %q not found for origin %q (session %q, sense %q)", wordExpression, origin, sessionTitle, sense)
+	res := updater.OverrideLog(notebook.OverrideLogInput{
+		QuizType:    notebook.QuizTypeEtymologyOrigin,
+		Expression:  wordExpression,
+		LearnedAt:   learnedAt,
+		MarkCorrect: correct,
+	})
+	if !res.Found {
+		return fmt.Errorf("etymology word %q not found for notebook %q at %q", wordExpression, notebookName, learnedAt)
 	}
 
 	notePath := filepath.Join(s.notebooksConfig.LearningNotesDirectory, notebookName+".yml")
@@ -368,35 +502,10 @@ func (s *Service) OverrideEtymologyWordResult(
 	return nil
 }
 
-// GetLatestOriginLearnedInfo returns learned_at and next_review_date for the
-// latest log of an origin's (session, sense) series. It uses the SAME
-// canonical lookup the write path uses (invariant L2), so a fresh submit is
-// immediately visible via this read.
-func (s *Service) GetLatestOriginLearnedInfo(notebookName, sessionTitle, origin, sense string) (learnedAt string, nextReviewDate string) {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return "", ""
-	}
-	expr := notebook.FindOriginExpression(learningHistories[notebookName], sessionTitle, origin, sense)
-	if expr == nil {
-		return "", ""
-	}
-	logs := expr.GetLogsForQuizType(notebook.QuizTypeEtymologyOrigin)
-	if len(logs) == 0 {
-		return "", ""
-	}
-	latest := logs[0]
-	learnedAt = latest.LearnedAt.Format("2006-01-02")
-	if latest.IntervalDays > 0 {
-		nextReviewDate = latest.LearnedAt.AddDate(0, 0, latest.IntervalDays).Format("2006-01-02")
-	}
-	return learnedAt, nextReviewDate
-}
-
 // LoadEtymologyNotebookSummaries returns etymology notebook summaries with the
-// per-mode due origin count. includeUnstudied passes through to
-// shouldIncludeOrigin so the counts match what LoadEtymologyOriginCards would
-// return for the same toggle.
+// per-mode due count — now the number of DISTINCT due derived words (a word in
+// several origins is counted once), matching what LoadEtymologyOriginCards would
+// offer for the same toggle.
 func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]NotebookSummary, error) {
 	reader, err := s.newReader()
 	if err != nil {
@@ -407,7 +516,7 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
-	families := buildOriginFamilies(reader)
+	families := buildOriginFamilies(reader, learningHistories)
 
 	var summaries []NotebookSummary
 	for id, index := range reader.GetEtymologyIndexes() {
@@ -416,11 +525,13 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 			continue
 		}
 
-		var total int
-		seen := make(map[string]bool)
 		seenSession := make(map[string]struct{})
 		var sessionOrder []string
-		sectionCounts := make(map[string]int)
+		// Count DISTINCT due words per notebook and per session: a word that
+		// derives from several origins is counted once (dedup by wordScheduleKey),
+		// so the badge no longer double-counts a multi-origin word.
+		countedTotal := make(map[string]bool)
+		countedSection := make(map[string]map[string]bool)
 		for _, o := range origins {
 			if o.SessionTitle != "" {
 				if _, ok := seenSession[o.SessionTitle]; !ok {
@@ -428,25 +539,25 @@ func (s *Service) LoadEtymologyNotebookSummaries(includeUnstudied bool) ([]Noteb
 					sessionOrder = append(sessionOrder, o.SessionTitle)
 				}
 			}
-			key := o.SessionTitle + "\x00" + o.Sense + "\x00" + originDedupKey(o.Origin)
-			if seen[key] {
-				continue
-			}
-			seen[key] = true
-			if len(families[originFamilyKey(id, o.SessionTitle, o.Sense, o.Origin)]) == 0 {
-				continue
-			}
-			if shouldIncludeOrigin(learningHistories[id], o.SessionTitle, o.Origin, o.Sense, includeUnstudied) {
-				total++
-				sectionCounts[o.SessionTitle]++
+			for _, w := range families[originFamilyKey(id, o.SessionTitle, o.Sense, o.Origin)] {
+				if !etymologyWordDue(learningHistories[id], w, includeUnstudied) {
+					continue
+				}
+				k := wordScheduleKey(id, w)
+				countedTotal[k] = true
+				if countedSection[o.SessionTitle] == nil {
+					countedSection[o.SessionTitle] = make(map[string]bool)
+				}
+				countedSection[o.SessionTitle][k] = true
 			}
 		}
+		total := len(countedTotal)
 
 		var sections []NotebookSectionSummary
 		for _, title := range sessionOrder {
 			sections = append(sections, NotebookSectionSummary{
 				Title:                title,
-				EtymologyReviewCount: sectionCounts[title],
+				EtymologyReviewCount: len(countedSection[title]),
 			})
 		}
 

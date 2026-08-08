@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/learning"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
 
@@ -146,6 +147,18 @@ func TestRelearn_MirrorsEachSourceQuizType(t *testing.T) {
 	delta := byKey["delta/QUIZ_TYPE_REVERSE"]
 	require.NotNil(t, delta)
 	assert.Equal(t, "a change or difference", delta.GetMeaning(), "reverse card prompts with the meaning")
+}
+
+// TestRelearn_VocabResponseHasNoLiteral pins that the etymology literal gloss
+// is etymology-only: a plain vocabulary relearn card's response carries no
+// literal (buildRelearnResponse sets it only inside the IsEtymology branch).
+func TestRelearn_VocabResponseHasNoLiteral(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+	id := relearnByEntryType(startRelearn(t, h, 24))["alpha/QUIZ_TYPE_STANDARD"].GetNoteId()
+	resp, err := h.SubmitRelearnAnswer(context.Background(),
+		connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: id, Answer: "the first thing"}))
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetLiteral(), "a vocab relearn response carries no etymology literal")
 }
 
 func TestRelearn_WordFailedInTwoTypesYieldsTwoCards(t *testing.T) {
@@ -365,6 +378,151 @@ func TestRelearn_GrammarCardEndToEnd(t *testing.T) {
 	assert.True(t, resp.Msg.GetCorrect())
 	assert.Equal(t, "John", resp.Msg.GetCorrectAnswer())
 	assert.Equal(t, "article", resp.Msg.GetCategory())
+}
+
+// TestRelearnCardID_GrammarSpanDiscriminatesBlanks pins the note_id half of the
+// grammar-relearn fix: two DISTINCT grammar corrections that share an Entry (the
+// senseID) and an empty Meaning — which collided to ONE note_id before the fix —
+// must now get DISTINCT note_ids because the mistaken span is folded in. A vocab
+// pair with the same (Entry, Meaning) MUST still collide, so identical vocab
+// words keep folding to one card (the discriminator is grammar-scoped).
+func TestRelearnCardID_GrammarSpanDiscriminatesBlanks(t *testing.T) {
+	grammarBlank := func(senseID, incorrect string) quiz.RelearnCard {
+		// Entry == senseID and Meaning == "" for grammar cards (see relearn.go);
+		// the mistaken span is what must break the tie.
+		return quiz.RelearnCard{
+			Format: notebook.QuizTypeGrammar, NotebookName: "journal",
+			Entry: senseID, Content: "the post", Incorrect: incorrect,
+		}
+	}
+	a := grammarBlank("dup-id", "the John")
+	b := grammarBlank("dup-id", "go")
+	assert.NotEqual(t, relearnCardID(a), relearnCardID(b),
+		"two corrections sharing a senseID must get distinct note_ids via their span")
+
+	// Stability: the same blank hashes the same across calls, so a client's held
+	// id still resolves after another StartRelearn (the merge-store contract).
+	assert.Equal(t, relearnCardID(a), relearnCardID(grammarBlank("dup-id", "the John")),
+		"the same blank must hash to a stable note_id")
+
+	// Vocab folding is unchanged: identical (Entry, Meaning) still collapses.
+	v1 := quiz.RelearnCard{Format: notebook.QuizTypeNotebook, NotebookName: "vocab", Entry: "bank", Meaning: "a riverbank"}
+	v2 := quiz.RelearnCard{Format: notebook.QuizTypeNotebook, NotebookName: "vocab", Entry: "bank", Meaning: "a riverbank"}
+	assert.Equal(t, relearnCardID(v1), relearnCardID(v2),
+		"vocab de-duplication must be unaffected: identical words fold to one card")
+}
+
+// TestRelearn_GrammarTwoBlanksIndependent is the full-stack pin: two distinct
+// corrections in one post each keep their OWN learning-log series, reach
+// StartRelearnQuiz as TWO blanks of one post, get DISTINCT note_ids, and grade
+// INDEPENDENTLY — grading one leaves the other in the store as its own
+// unaffected card (the frontend keys per-blank state by note_id).
+//
+// Two corrections can no longer share a senseID: ensureUniqueCorrectionIDs makes
+// every correction's id unique at load time, so even a reused explicit `id:`
+// resolves to two series (see internal/notebook grammars_test.go and
+// internal/quiz TestService_GrammarQuiz_CollidingIDsStayIndependent). The
+// note_id-level belt-and-suspenders (relearnCardID folds the mistaken span) is
+// pinned separately by TestRelearnCardID_GrammarSpanDiscriminatesBlanks.
+func TestRelearn_GrammarTwoBlanksIndependent(t *testing.T) {
+	h := writeGrammarTwoBlanksFixture(t)
+
+	cards := startRelearn(t, h, 24)
+	require.Len(t, cards, 2, "both blanks of the post reach the client")
+	assert.NotEqual(t, cards[0].GetNoteId(), cards[1].GetNoteId(),
+		"the two blanks must carry distinct note_ids so their state never collapses")
+	assert.Equal(t, cards[0].GetContent(), cards[1].GetContent(), "both blanks share the full post text")
+
+	byIncorrect := map[string]*apiv1.RelearnCard{}
+	for _, c := range cards {
+		byIncorrect[c.GetIncorrect()] = c
+	}
+	require.Contains(t, byIncorrect, "the John")
+	require.Contains(t, byIncorrect, "go")
+
+	// Grade the first blank correct; the second must still resolve and grade on
+	// its OWN reference — not be marked correct or dropped by the first answer.
+	resp, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
+		NoteId: byIncorrect["the John"].GetNoteId(),
+		Answer: "John",
+	}))
+	require.NoError(t, err)
+	assert.True(t, resp.Msg.GetCorrect())
+
+	resp2, err := h.SubmitRelearnAnswer(context.Background(), connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
+		NoteId: byIncorrect["go"].GetNoteId(),
+		Answer: "wrong",
+	}))
+	require.NoError(t, err)
+	assert.False(t, resp2.Msg.GetCorrect(), "the second blank grades on its own reference, independent of the first")
+	assert.Equal(t, "went", resp2.Msg.GetCorrectAnswer(), "the second blank keeps its own correction")
+}
+
+// writeGrammarTwoBlanksFixture writes a post whose single scene has two distinct
+// corrections, each its own misunderstood series in-window, so both are due in
+// the Relearn pool as separate blanks of one post.
+func writeGrammarTwoBlanksFixture(t *testing.T) *QuizHandler {
+	t.Helper()
+	storiesDir := t.TempDir()
+	grammarsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	storyDir := filepath.Join(storiesDir, "journal")
+	require.NoError(t, os.MkdirAll(storyDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "index.yml"), []byte(
+		"id: journal\nname: \"English Journal\"\nnotebooks:\n  - ./posts.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(storyDir, "posts.yml"), []byte(
+		"- event: \"Note 1\"\n  scenes:\n    - scene: \"\"\n      statements:\n        - \"Yesterday the John called me and then I go home.\"\n"), 0644))
+
+	grammarNotebookDir := filepath.Join(grammarsDir, "journal")
+	require.NoError(t, os.MkdirAll(grammarNotebookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarNotebookDir, "index.yml"), []byte(
+		"id: journal\nnotebooks:\n  - ./corr.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(grammarNotebookDir, "corr.yml"), []byte(
+		`- metadata:
+    title: "Note 1"
+  scenes:
+    - metadata:
+        index: 0
+      corrections:
+        - id: note-the-john
+          incorrect: "the John"
+          correct: "John"
+          category: article
+          reason: "No article before a personal name."
+        - id: note-i-go
+          incorrect: "go"
+          correct: "went"
+          category: tense
+          reason: "Use past tense for a past event."
+`), 0644))
+
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(fmt.Sprintf(`- metadata:
+    id: journal
+    title: journal
+    type: grammar
+  expressions:
+    - id: note-the-john
+      expression: note-the-john
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+    - id: note-i-go
+      expression: note-i-go
+      learned_logs:
+        - status: misunderstood
+          learned_at: %q
+          quiz_type: grammar
+`, recent, recent)), 0644))
+
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{storiesDir},
+		GrammarsDirectories:    []string{grammarsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	return NewQuizHandler(svc)
 }
 
 // writeGrammarRelearnFixture writes the minimal story + grammar + learning

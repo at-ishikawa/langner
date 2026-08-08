@@ -36,6 +36,10 @@ const card = (entry: string): RelearnCard =>
 const reverseCard = (entry: string, meaning: string): RelearnCard =>
   ({ entry, noteId: BigInt(entry.length), sourceQuizType: 2, meaning, examples: [], contexts: [] }) as RelearnCard;
 
+// An etymology-origin-format card: shown the word, asks for the meaning.
+const etymologyCard = (entry: string): RelearnCard =>
+  ({ entry, noteId: BigInt(entry.length), sourceQuizType: 4, meaning: `${entry}-meaning`, examples: [], contexts: [] }) as RelearnCard;
+
 // A grammar-format card: one due correction within a journal post. All
 // corrections of a post carry the SAME full post text (content); each has its
 // own note_id and mistaken span (incorrect).
@@ -339,6 +343,53 @@ describe("RelearnSessionPage", () => {
     const sheet = await screen.findByTestId("relearn-grammar-feedback");
     expect(sheet).toHaveTextContent("✗ Incorrect");
     expect(sheet).toHaveTextContent("went"); // the suggested fix for the go blank
+  });
+
+  // An etymology-origin card's feedback must show the origin details the quiz
+  // shows — the roots with their meanings, the pronunciation, and the literal
+  // gloss — not just the generic word/meaning/answer body.
+  it("shows origin roots, meanings, pronunciation, and literal on etymology feedback", async () => {
+    useRelearnStore.getState().seedQueue([etymologyCard("deface")]);
+    submitRelearnAnswer.mockResolvedValue({
+      correct: false,
+      meaning: "to mar the surface of",
+      reason: "not quite",
+      literal: 'de "down" + facere = "made down"',
+      wordDetail: {
+        pronunciation: "dɪˈfeɪs",
+        originParts: [
+          { origin: "de", meaning: "down", language: "Latin", type: "prefix" },
+          { origin: "facere", meaning: "to make", language: "Latin", type: "root" },
+        ],
+      },
+    });
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "wrong guess" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
+
+    // Roots with their meanings.
+    expect(screen.getByText("de")).toBeInTheDocument();
+    expect(screen.getByText("(down)")).toBeInTheDocument();
+    expect(screen.getByText("facere")).toBeInTheDocument();
+    expect(screen.getByText("(to make)")).toBeInTheDocument();
+    // Pronunciation and literal gloss.
+    expect(screen.getByText("/dɪˈfeɪs/")).toBeInTheDocument();
+    expect(screen.getByText('de "down" + facere = "made down"')).toBeInTheDocument();
+  });
+
+  // A plain vocabulary relearn card must NOT render the etymology origin block
+  // (no literal, no Origin header).
+  it("does not show the etymology origin block for a vocab card", async () => {
+    useRelearnStore.getState().seedQueue([card("alpha")]);
+    submitRelearnAnswer.mockResolvedValue({ correct: false, meaning: "the first", reason: "nope" });
+    renderPage();
+
+    fireEvent.change(screen.getByPlaceholderText("Type the meaning"), { target: { value: "x" } });
+    fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+    expect(await screen.findByText("✗ Incorrect")).toBeInTheDocument();
+    expect(screen.queryByText("Origin")).not.toBeInTheDocument();
   });
 
   it("still renders non-grammar relearn cards one per screen", () => {

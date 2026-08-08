@@ -78,6 +78,12 @@ const (
 	// QuizServiceBatchSubmitEtymologyOriginAnswersProcedure is the fully-qualified name of the
 	// QuizService's BatchSubmitEtymologyOriginAnswers RPC.
 	QuizServiceBatchSubmitEtymologyOriginAnswersProcedure = "/api.v1.QuizService/BatchSubmitEtymologyOriginAnswers"
+	// QuizServiceExcludeEtymologyWordProcedure is the fully-qualified name of the QuizService's
+	// ExcludeEtymologyWord RPC.
+	QuizServiceExcludeEtymologyWordProcedure = "/api.v1.QuizService/ExcludeEtymologyWord"
+	// QuizServiceResumeEtymologyWordProcedure is the fully-qualified name of the QuizService's
+	// ResumeEtymologyWord RPC.
+	QuizServiceResumeEtymologyWordProcedure = "/api.v1.QuizService/ResumeEtymologyWord"
 	// QuizServiceStartRelearnQuizProcedure is the fully-qualified name of the QuizService's
 	// StartRelearnQuiz RPC.
 	QuizServiceStartRelearnQuizProcedure = "/api.v1.QuizService/StartRelearnQuiz"
@@ -93,6 +99,15 @@ const (
 	// QuizServiceSubmitGrammarPostProcedure is the fully-qualified name of the QuizService's
 	// SubmitGrammarPost RPC.
 	QuizServiceSubmitGrammarPostProcedure = "/api.v1.QuizService/SubmitGrammarPost"
+	// QuizServiceListGrammarMistakesProcedure is the fully-qualified name of the QuizService's
+	// ListGrammarMistakes RPC.
+	QuizServiceListGrammarMistakesProcedure = "/api.v1.QuizService/ListGrammarMistakes"
+	// QuizServiceExcludeGrammarMistakeProcedure is the fully-qualified name of the QuizService's
+	// ExcludeGrammarMistake RPC.
+	QuizServiceExcludeGrammarMistakeProcedure = "/api.v1.QuizService/ExcludeGrammarMistake"
+	// QuizServiceResumeGrammarMistakeProcedure is the fully-qualified name of the QuizService's
+	// ResumeGrammarMistake RPC.
+	QuizServiceResumeGrammarMistakeProcedure = "/api.v1.QuizService/ResumeGrammarMistake"
 )
 
 // QuizServiceClient is a client for the api.v1.QuizService service.
@@ -117,6 +132,19 @@ type QuizServiceClient interface {
 	StartEtymologyOriginQuiz(context.Context, *connect.Request[v1.StartEtymologyOriginQuizRequest]) (*connect.Response[v1.StartEtymologyOriginQuizResponse], error)
 	SubmitEtymologyOriginAnswer(context.Context, *connect.Request[v1.SubmitEtymologyOriginAnswerRequest]) (*connect.Response[v1.SubmitEtymologyOriginAnswerResponse], error)
 	BatchSubmitEtymologyOriginAnswers(context.Context, *connect.Request[v1.BatchSubmitEtymologyOriginAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyOriginAnswersResponse], error)
+	// ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived family word's
+	// etymology-origin exclusion by its stable (notebook_id, expression) — the
+	// same SkipWord / ResumeWord path (skipped_at) every other card's Exclude
+	// uses, WITHOUT a DB note_id. buildOriginFamilies reads the same key
+	// (IsExpressionExcludedForQuizType), so excluding a word drops it from its
+	// origin family in every future etymology-origin quiz; an origin whose whole
+	// family is excluded is no longer offered. Used by BOTH the browse
+	// origin-detail Learn page and the etymology-origin quiz feedback card
+	// (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
+	// definitions-book id that owns the word (EtymologyDefinition.notebook_name /
+	// the origin card's notebook_name) — the same id the loader reads under.
+	ExcludeEtymologyWord(context.Context, *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error)
+	ResumeEtymologyWord(context.Context, *connect.Request[v1.ResumeEtymologyWordRequest]) (*connect.Response[v1.ResumeEtymologyWordResponse], error)
 	// Relearn Quiz — a practice-only quiz over recently-missed words. It writes
 	// NOTHING to learning history: Submit calls only the pure meaning graders,
 	// never any Save/UpdateLog path, and the responses carry no next_review_date
@@ -130,6 +158,16 @@ type QuizServiceClient interface {
 	// the mistake id. See docs/content/proposals/grammar-quiz.
 	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
 	SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error)
+	// Grammar mistake review (standalone, no live session). ListGrammarMistakes
+	// lists a journal's grammar mistakes — both currently-due and already-excluded
+	// — for a review surface. ExcludeGrammarMistake / ResumeGrammarMistake toggle
+	// a single mistake's grammar exclusion by its stable (notebook_id, sense_id),
+	// WITHOUT an ephemeral session note_id: unlike SkipWord/ResumeWord (which
+	// resolve an in-memory session id), these can act on a mistake that was never
+	// dealt in a session, which is exactly what the review page needs.
+	ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error)
+	ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error)
+	ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error)
 }
 
 // NewQuizServiceClient constructs a client for the api.v1.QuizService service. By default, it uses
@@ -239,6 +277,18 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("BatchSubmitEtymologyOriginAnswers")),
 			connect.WithClientOptions(opts...),
 		),
+		excludeEtymologyWord: connect.NewClient[v1.ExcludeEtymologyWordRequest, v1.ExcludeEtymologyWordResponse](
+			httpClient,
+			baseURL+QuizServiceExcludeEtymologyWordProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ExcludeEtymologyWord")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeEtymologyWord: connect.NewClient[v1.ResumeEtymologyWordRequest, v1.ResumeEtymologyWordResponse](
+			httpClient,
+			baseURL+QuizServiceResumeEtymologyWordProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ResumeEtymologyWord")),
+			connect.WithClientOptions(opts...),
+		),
 		startRelearnQuiz: connect.NewClient[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse](
 			httpClient,
 			baseURL+QuizServiceStartRelearnQuizProcedure,
@@ -269,6 +319,24 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarPost")),
 			connect.WithClientOptions(opts...),
 		),
+		listGrammarMistakes: connect.NewClient[v1.ListGrammarMistakesRequest, v1.ListGrammarMistakesResponse](
+			httpClient,
+			baseURL+QuizServiceListGrammarMistakesProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ListGrammarMistakes")),
+			connect.WithClientOptions(opts...),
+		),
+		excludeGrammarMistake: connect.NewClient[v1.ExcludeGrammarMistakeRequest, v1.ExcludeGrammarMistakeResponse](
+			httpClient,
+			baseURL+QuizServiceExcludeGrammarMistakeProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ExcludeGrammarMistake")),
+			connect.WithClientOptions(opts...),
+		),
+		resumeGrammarMistake: connect.NewClient[v1.ResumeGrammarMistakeRequest, v1.ResumeGrammarMistakeResponse](
+			httpClient,
+			baseURL+QuizServiceResumeGrammarMistakeProcedure,
+			connect.WithSchema(quizServiceMethods.ByName("ResumeGrammarMistake")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -290,11 +358,16 @@ type quizServiceClient struct {
 	startEtymologyOriginQuiz          *connect.Client[v1.StartEtymologyOriginQuizRequest, v1.StartEtymologyOriginQuizResponse]
 	submitEtymologyOriginAnswer       *connect.Client[v1.SubmitEtymologyOriginAnswerRequest, v1.SubmitEtymologyOriginAnswerResponse]
 	batchSubmitEtymologyOriginAnswers *connect.Client[v1.BatchSubmitEtymologyOriginAnswersRequest, v1.BatchSubmitEtymologyOriginAnswersResponse]
+	excludeEtymologyWord              *connect.Client[v1.ExcludeEtymologyWordRequest, v1.ExcludeEtymologyWordResponse]
+	resumeEtymologyWord               *connect.Client[v1.ResumeEtymologyWordRequest, v1.ResumeEtymologyWordResponse]
 	startRelearnQuiz                  *connect.Client[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse]
 	submitRelearnAnswer               *connect.Client[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse]
 	batchSubmitRelearnAnswers         *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
 	startGrammarQuiz                  *connect.Client[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse]
 	submitGrammarPost                 *connect.Client[v1.SubmitGrammarPostRequest, v1.SubmitGrammarPostResponse]
+	listGrammarMistakes               *connect.Client[v1.ListGrammarMistakesRequest, v1.ListGrammarMistakesResponse]
+	excludeGrammarMistake             *connect.Client[v1.ExcludeGrammarMistakeRequest, v1.ExcludeGrammarMistakeResponse]
+	resumeGrammarMistake              *connect.Client[v1.ResumeGrammarMistakeRequest, v1.ResumeGrammarMistakeResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -377,6 +450,16 @@ func (c *quizServiceClient) BatchSubmitEtymologyOriginAnswers(ctx context.Contex
 	return c.batchSubmitEtymologyOriginAnswers.CallUnary(ctx, req)
 }
 
+// ExcludeEtymologyWord calls api.v1.QuizService.ExcludeEtymologyWord.
+func (c *quizServiceClient) ExcludeEtymologyWord(ctx context.Context, req *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error) {
+	return c.excludeEtymologyWord.CallUnary(ctx, req)
+}
+
+// ResumeEtymologyWord calls api.v1.QuizService.ResumeEtymologyWord.
+func (c *quizServiceClient) ResumeEtymologyWord(ctx context.Context, req *connect.Request[v1.ResumeEtymologyWordRequest]) (*connect.Response[v1.ResumeEtymologyWordResponse], error) {
+	return c.resumeEtymologyWord.CallUnary(ctx, req)
+}
+
 // StartRelearnQuiz calls api.v1.QuizService.StartRelearnQuiz.
 func (c *quizServiceClient) StartRelearnQuiz(ctx context.Context, req *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error) {
 	return c.startRelearnQuiz.CallUnary(ctx, req)
@@ -402,6 +485,21 @@ func (c *quizServiceClient) SubmitGrammarPost(ctx context.Context, req *connect.
 	return c.submitGrammarPost.CallUnary(ctx, req)
 }
 
+// ListGrammarMistakes calls api.v1.QuizService.ListGrammarMistakes.
+func (c *quizServiceClient) ListGrammarMistakes(ctx context.Context, req *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error) {
+	return c.listGrammarMistakes.CallUnary(ctx, req)
+}
+
+// ExcludeGrammarMistake calls api.v1.QuizService.ExcludeGrammarMistake.
+func (c *quizServiceClient) ExcludeGrammarMistake(ctx context.Context, req *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error) {
+	return c.excludeGrammarMistake.CallUnary(ctx, req)
+}
+
+// ResumeGrammarMistake calls api.v1.QuizService.ResumeGrammarMistake.
+func (c *quizServiceClient) ResumeGrammarMistake(ctx context.Context, req *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error) {
+	return c.resumeGrammarMistake.CallUnary(ctx, req)
+}
+
 // QuizServiceHandler is an implementation of the api.v1.QuizService service.
 type QuizServiceHandler interface {
 	GetQuizOptions(context.Context, *connect.Request[v1.GetQuizOptionsRequest]) (*connect.Response[v1.GetQuizOptionsResponse], error)
@@ -424,6 +522,19 @@ type QuizServiceHandler interface {
 	StartEtymologyOriginQuiz(context.Context, *connect.Request[v1.StartEtymologyOriginQuizRequest]) (*connect.Response[v1.StartEtymologyOriginQuizResponse], error)
 	SubmitEtymologyOriginAnswer(context.Context, *connect.Request[v1.SubmitEtymologyOriginAnswerRequest]) (*connect.Response[v1.SubmitEtymologyOriginAnswerResponse], error)
 	BatchSubmitEtymologyOriginAnswers(context.Context, *connect.Request[v1.BatchSubmitEtymologyOriginAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyOriginAnswersResponse], error)
+	// ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived family word's
+	// etymology-origin exclusion by its stable (notebook_id, expression) — the
+	// same SkipWord / ResumeWord path (skipped_at) every other card's Exclude
+	// uses, WITHOUT a DB note_id. buildOriginFamilies reads the same key
+	// (IsExpressionExcludedForQuizType), so excluding a word drops it from its
+	// origin family in every future etymology-origin quiz; an origin whose whole
+	// family is excluded is no longer offered. Used by BOTH the browse
+	// origin-detail Learn page and the etymology-origin quiz feedback card
+	// (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
+	// definitions-book id that owns the word (EtymologyDefinition.notebook_name /
+	// the origin card's notebook_name) — the same id the loader reads under.
+	ExcludeEtymologyWord(context.Context, *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error)
+	ResumeEtymologyWord(context.Context, *connect.Request[v1.ResumeEtymologyWordRequest]) (*connect.Response[v1.ResumeEtymologyWordResponse], error)
 	// Relearn Quiz — a practice-only quiz over recently-missed words. It writes
 	// NOTHING to learning history: Submit calls only the pure meaning graders,
 	// never any Save/UpdateLog path, and the responses carry no next_review_date
@@ -437,6 +548,16 @@ type QuizServiceHandler interface {
 	// the mistake id. See docs/content/proposals/grammar-quiz.
 	StartGrammarQuiz(context.Context, *connect.Request[v1.StartGrammarQuizRequest]) (*connect.Response[v1.StartGrammarQuizResponse], error)
 	SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error)
+	// Grammar mistake review (standalone, no live session). ListGrammarMistakes
+	// lists a journal's grammar mistakes — both currently-due and already-excluded
+	// — for a review surface. ExcludeGrammarMistake / ResumeGrammarMistake toggle
+	// a single mistake's grammar exclusion by its stable (notebook_id, sense_id),
+	// WITHOUT an ephemeral session note_id: unlike SkipWord/ResumeWord (which
+	// resolve an in-memory session id), these can act on a mistake that was never
+	// dealt in a session, which is exactly what the review page needs.
+	ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error)
+	ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error)
+	ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error)
 }
 
 // NewQuizServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -542,6 +663,18 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("BatchSubmitEtymologyOriginAnswers")),
 		connect.WithHandlerOptions(opts...),
 	)
+	quizServiceExcludeEtymologyWordHandler := connect.NewUnaryHandler(
+		QuizServiceExcludeEtymologyWordProcedure,
+		svc.ExcludeEtymologyWord,
+		connect.WithSchema(quizServiceMethods.ByName("ExcludeEtymologyWord")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceResumeEtymologyWordHandler := connect.NewUnaryHandler(
+		QuizServiceResumeEtymologyWordProcedure,
+		svc.ResumeEtymologyWord,
+		connect.WithSchema(quizServiceMethods.ByName("ResumeEtymologyWord")),
+		connect.WithHandlerOptions(opts...),
+	)
 	quizServiceStartRelearnQuizHandler := connect.NewUnaryHandler(
 		QuizServiceStartRelearnQuizProcedure,
 		svc.StartRelearnQuiz,
@@ -570,6 +703,24 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		QuizServiceSubmitGrammarPostProcedure,
 		svc.SubmitGrammarPost,
 		connect.WithSchema(quizServiceMethods.ByName("SubmitGrammarPost")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceListGrammarMistakesHandler := connect.NewUnaryHandler(
+		QuizServiceListGrammarMistakesProcedure,
+		svc.ListGrammarMistakes,
+		connect.WithSchema(quizServiceMethods.ByName("ListGrammarMistakes")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceExcludeGrammarMistakeHandler := connect.NewUnaryHandler(
+		QuizServiceExcludeGrammarMistakeProcedure,
+		svc.ExcludeGrammarMistake,
+		connect.WithSchema(quizServiceMethods.ByName("ExcludeGrammarMistake")),
+		connect.WithHandlerOptions(opts...),
+	)
+	quizServiceResumeGrammarMistakeHandler := connect.NewUnaryHandler(
+		QuizServiceResumeGrammarMistakeProcedure,
+		svc.ResumeGrammarMistake,
+		connect.WithSchema(quizServiceMethods.ByName("ResumeGrammarMistake")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/api.v1.QuizService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -606,6 +757,10 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceSubmitEtymologyOriginAnswerHandler.ServeHTTP(w, r)
 		case QuizServiceBatchSubmitEtymologyOriginAnswersProcedure:
 			quizServiceBatchSubmitEtymologyOriginAnswersHandler.ServeHTTP(w, r)
+		case QuizServiceExcludeEtymologyWordProcedure:
+			quizServiceExcludeEtymologyWordHandler.ServeHTTP(w, r)
+		case QuizServiceResumeEtymologyWordProcedure:
+			quizServiceResumeEtymologyWordHandler.ServeHTTP(w, r)
 		case QuizServiceStartRelearnQuizProcedure:
 			quizServiceStartRelearnQuizHandler.ServeHTTP(w, r)
 		case QuizServiceSubmitRelearnAnswerProcedure:
@@ -616,6 +771,12 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceStartGrammarQuizHandler.ServeHTTP(w, r)
 		case QuizServiceSubmitGrammarPostProcedure:
 			quizServiceSubmitGrammarPostHandler.ServeHTTP(w, r)
+		case QuizServiceListGrammarMistakesProcedure:
+			quizServiceListGrammarMistakesHandler.ServeHTTP(w, r)
+		case QuizServiceExcludeGrammarMistakeProcedure:
+			quizServiceExcludeGrammarMistakeHandler.ServeHTTP(w, r)
+		case QuizServiceResumeGrammarMistakeProcedure:
+			quizServiceResumeGrammarMistakeHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -689,6 +850,14 @@ func (UnimplementedQuizServiceHandler) BatchSubmitEtymologyOriginAnswers(context
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.BatchSubmitEtymologyOriginAnswers is not implemented"))
 }
 
+func (UnimplementedQuizServiceHandler) ExcludeEtymologyWord(context.Context, *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ExcludeEtymologyWord is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ResumeEtymologyWord(context.Context, *connect.Request[v1.ResumeEtymologyWordRequest]) (*connect.Response[v1.ResumeEtymologyWordResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ResumeEtymologyWord is not implemented"))
+}
+
 func (UnimplementedQuizServiceHandler) StartRelearnQuiz(context.Context, *connect.Request[v1.StartRelearnQuizRequest]) (*connect.Response[v1.StartRelearnQuizResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartRelearnQuiz is not implemented"))
 }
@@ -707,4 +876,16 @@ func (UnimplementedQuizServiceHandler) StartGrammarQuiz(context.Context, *connec
 
 func (UnimplementedQuizServiceHandler) SubmitGrammarPost(context.Context, *connect.Request[v1.SubmitGrammarPostRequest]) (*connect.Response[v1.SubmitGrammarPostResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitGrammarPost is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ListGrammarMistakes(context.Context, *connect.Request[v1.ListGrammarMistakesRequest]) (*connect.Response[v1.ListGrammarMistakesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ListGrammarMistakes is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ExcludeGrammarMistake(context.Context, *connect.Request[v1.ExcludeGrammarMistakeRequest]) (*connect.Response[v1.ExcludeGrammarMistakeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ExcludeGrammarMistake is not implemented"))
+}
+
+func (UnimplementedQuizServiceHandler) ResumeGrammarMistake(context.Context, *connect.Request[v1.ResumeGrammarMistakeRequest]) (*connect.Response[v1.ResumeGrammarMistakeResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ResumeGrammarMistake is not implemented"))
 }

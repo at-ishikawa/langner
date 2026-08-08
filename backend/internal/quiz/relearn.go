@@ -51,6 +51,10 @@ type RelearnCard struct {
 	// Etymology display extras (empty for vocab cards).
 	OriginType string
 	Language   string
+	// Literal is the etymology literal gloss (e.g. `de "down" + facere = "made
+	// down"`), sourced from the word's definitions note (Note.Note). Shown on the
+	// etymology-origin Relearn feedback, mirroring the quiz. Empty for other formats.
+	Literal string
 
 	// Grammar display extras (empty for vocab/etymology cards). Content is
 	// the journal entry's full text; Incorrect is the mistaken span struck
@@ -173,13 +177,30 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	if err != nil {
 		return nil, err
 	}
-	etymByOrigin, err := s.relearnEtymologyIndex()
-	if err != nil {
-		return nil, err
-	}
 	grammarByID, err := s.relearnGrammarIndex()
 	if err != nil {
 		return nil, err
+	}
+
+	// resolveWord maps a wrong-word candidate to its vocabulary card, mirroring
+	// MatchesEntry: by stable id first (so same-spelling homographs never
+	// collide), then by (notebook, expression), then by expression alone for
+	// legacy id-less candidates. Used by both the recognition/reverse branch and
+	// the etymology-origin branch, whose missed items are now WORDS resolved the
+	// same way (invariant L2).
+	resolveWord := func(c relearnCandidate) (FreeformCard, bool) {
+		if c.id != "" {
+			if fc, ok := vocabByID[c.id]; ok {
+				return fc, true
+			}
+		}
+		if fc, ok := vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]; ok {
+			return fc, true
+		}
+		if fc, ok := vocabByExpr[strings.ToLower(strings.TrimSpace(c.expression))]; ok {
+			return fc, true
+		}
+		return FreeformCard{}, false
 	}
 
 	// A definitions concept member (e.g. "consummate", grouped with its
@@ -213,34 +234,59 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			// senseID, SenseID: senseID) — try id first for symmetry with
 			// the vocab branch below, falling back to expression for
 			// legacy id-less candidates.
-			entry, ok := grammarByID[c.id]
+			entries, ok := grammarByID[c.id]
 			if !ok {
-				entry, ok = grammarByID[c.expression]
+				entries, ok = grammarByID[c.expression]
 			}
 			if !ok {
 				continue // no due grammar post/blank to grade/display against
 			}
-			cards = append(cards, RelearnCard{
-				// NotebookName carries the notebook ID (c.notebookName, from the
-				// learning-history metadata) — not the display name — so a
-				// deliberate Exclude (SkipWord) resolves to the correct
-				// <notebookID>.yml, matching the live grammar quiz's grammarStore
-				// (which also skips by notebook ID). The frontend never shows a
-				// notebook name on a grammar relearn post.
-				Format: c.format, Entry: c.expression, NotebookName: c.notebookName,
-				Content: entry.post.Content, Incorrect: entry.blank.Incorrect,
-				grammarCard: entry.blank,
-			})
+			// Two DISTINCT corrections can share one senseID (a duplicate
+			// explicit `id:`, or two titles that slugify alike), so a single
+			// due series can back several blanks. Emit ONE card per blank —
+			// each with its own mistaken span — rather than folding them to
+			// last-write-wins, which silently dropped every blank but one.
+			// relearnCardID folds the span in, so the cards get distinct
+			// note_ids and grade independently.
+			for _, entry := range entries {
+				cards = append(cards, RelearnCard{
+					// NotebookName carries the notebook ID (c.notebookName, from the
+					// learning-history metadata) — not the display name — so a
+					// deliberate Exclude (SkipWord) resolves to the correct
+					// <notebookID>.yml, matching the live grammar quiz's grammarStore
+					// (which also skips by notebook ID). The frontend never shows a
+					// notebook name on a grammar relearn post.
+					Format: c.format, Entry: c.expression, NotebookName: c.notebookName,
+					Content: entry.post.Content, Incorrect: entry.blank.Incorrect,
+					grammarCard: entry.blank,
+				})
+			}
 			continue
 		}
 		if c.format == notebook.QuizTypeEtymologyOrigin {
-			sense, ok := etymByOrigin[strings.ToLower(strings.TrimSpace(c.expression))]
+			// The etymology-origin schedule is now per-WORD: a missed item is a
+			// derived word (its EtymologyOriginLogs series lives on the word's
+			// own learning-history entry), not the origin. Re-drill the word by
+			// asking its meaning — exactly how the origin card quizzes it
+			// (GradeEtymologyWordAnswer against the word's meaning) — resolving
+			// the word through the same vocab index and skipping any word the
+			// learner excluded from the etymology-origin quiz (invariant L2).
+			if notebook.IsExpressionExcludedForQuizType(
+				histories[c.notebookName], c.id, notebook.QuizTypeEtymologyOrigin, c.expression,
+			) {
+				continue
+			}
+			fc, ok := resolveWord(c)
 			if !ok {
-				continue // no origin data to grade/display against
+				continue // no word data to grade/display against
 			}
 			cards = append(cards, RelearnCard{
-				Format: c.format, Entry: c.expression, Meaning: sense.Meaning, NotebookName: c.notebookName,
-				OriginType: sense.Type, Language: sense.Language, etymologyCard: sense,
+				Format: c.format, Entry: c.expression, Meaning: fc.Meaning, NotebookName: c.notebookName,
+				WordDetail: fc.WordDetail, Images: fc.Images, Literal: fc.Literal,
+				ContextScenes: relearnScenesFromCard(fc),
+				// Grade the meaning against the word's own gloss, so a re-drill
+				// matches how the origin card scored it.
+				etymologyCard: EtymologyOriginCard{Meaning: fc.Meaning},
 			})
 			continue
 		}
@@ -248,19 +294,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		// entry resolves to its own card, so same-spelling homographs never
 		// collide). Fall back to the sense-less expression lookups for
 		// legacy id-less candidates or an id miss.
-		var (
-			fc FreeformCard
-			ok bool
-		)
-		if c.id != "" {
-			fc, ok = vocabByID[c.id]
-		}
-		if !ok {
-			fc, ok = vocabByNotebookExpr[strings.ToLower(c.notebookName)+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))]
-		}
-		if !ok {
-			fc, ok = vocabByExpr[strings.ToLower(strings.TrimSpace(c.expression))]
-		}
+		fc, ok := resolveWord(c)
 		if !ok {
 			continue // no vocab data to grade/display against
 		}
@@ -313,7 +347,8 @@ type relearnSeriesSpec struct {
 // relearnSeries returns the independent log series an expression can carry,
 // each mapped to the relearn card format that mirrors it. Notebook and freeform
 // share LearnedLogs and both replay as recognition; the etymology-origin series
-// replays as an etymology-origin recognition card (show origin, ask meaning).
+// (now per-WORD, not per-origin) replays as an etymology card that re-drills the
+// word by asking its meaning.
 //
 // metadataType is the owning LearningHistory's Metadata.Type — the same
 // value flatTypeForStory (learning_history.go) derives at write time for the
@@ -363,34 +398,6 @@ func (s *Service) relearnVocabIndex() (byID map[string]FreeformCard, byExpr map[
 	return byID, byExpr, byNotebookExpr, nil
 }
 
-// relearnEtymologyIndex loads every etymology origin once and indexes the
-// first sense per origin spelling for grading and display.
-func (s *Service) relearnEtymologyIndex() (map[string]EtymologyOriginCard, error) {
-	reader, err := s.newReader()
-	if err != nil {
-		return nil, fmt.Errorf("init reader for relearn etymology pool: %w", err)
-	}
-	var etymIDs []string
-	for id := range reader.GetEtymologyIndexes() {
-		etymIDs = append(etymIDs, id)
-	}
-	byOrigin := make(map[string]EtymologyOriginCard)
-	if len(etymIDs) == 0 {
-		return byOrigin, nil
-	}
-	cards, err := s.LoadEtymologyOriginCards(etymIDs, true, true, nil)
-	if err != nil {
-		return nil, fmt.Errorf("load etymology origins for relearn pool: %w", err)
-	}
-	for _, c := range cards {
-		k := strings.ToLower(strings.TrimSpace(c.Origin))
-		if _, ok := byOrigin[k]; !ok {
-			byOrigin[k] = c
-		}
-	}
-	return byOrigin, nil
-}
-
 // relearnGrammarEntry pairs a due grammar blank with the post it belongs to,
 // so the relearn card can show the whole entry (Content) with the missed
 // span (Incorrect) struck through — exactly like the live grammar quiz.
@@ -399,19 +406,24 @@ type relearnGrammarEntry struct {
 	blank GrammarBlank
 }
 
-// relearnGrammarIndex loads every grammar-drilled journal once and indexes
-// each due blank by its stable correction id (senseID), for grading and
-// display. It reuses LoadGrammarPosts — the same loader the live grammar
-// quiz calls — so a just-missed correction (status "misunderstood") is
-// always "due" (NeedsForwardReview treats misunderstood as always-due) and
-// therefore always present in the index the moment it lands in the relearn
-// pool.
-func (s *Service) relearnGrammarIndex() (map[string]relearnGrammarEntry, error) {
+// relearnGrammarIndex loads every grammar-drilled journal once and indexes the
+// due blanks by their stable correction id (senseID), for grading and display.
+// It reuses LoadGrammarPosts — the same loader the live grammar quiz calls — so
+// a just-missed correction (status "misunderstood") is always "due"
+// (NeedsForwardReview treats misunderstood as always-due) and therefore always
+// present in the index the moment it lands in the relearn pool.
+//
+// The value is a SLICE, not a single entry: two DISTINCT corrections can share
+// one senseID (a duplicate explicit `id:`, or two titles that slugify alike),
+// and each must survive as its own blank. Keying last-write-wins collapsed them
+// to a single card, so every blank of the post but one silently vanished from
+// Relearn.
+func (s *Service) relearnGrammarIndex() (map[string][]relearnGrammarEntry, error) {
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("init reader for relearn grammar pool: %w", err)
 	}
-	byID := make(map[string]relearnGrammarEntry)
+	byID := make(map[string][]relearnGrammarEntry)
 	for _, storyID := range reader.GrammarStoryIDs() {
 		posts, err := s.LoadGrammarPosts(storyID, nil)
 		if err != nil {
@@ -419,7 +431,7 @@ func (s *Service) relearnGrammarIndex() (map[string]relearnGrammarEntry, error) 
 		}
 		for _, post := range posts {
 			for _, blank := range post.Blanks {
-				byID[blank.SenseID] = relearnGrammarEntry{post: post, blank: blank}
+				byID[blank.SenseID] = append(byID[blank.SenseID], relearnGrammarEntry{post: post, blank: blank})
 			}
 		}
 	}

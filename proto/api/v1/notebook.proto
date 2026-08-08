@@ -196,6 +196,20 @@ message EtymologyDefinition {
   string notebook_name = 6;
   repeated string examples = 7;
   repeated string contexts = 8; // statements or conversations from the source scene
+  // is_skipped is true when this word is excluded from the etymology-origin
+  // quiz. Mirrors NotebookWord.is_skipped; drives the "Excluded" badge on the
+  // etymology browse page so the UI can offer a Resume button.
+  bool is_skipped = 9;
+  // skipped_quiz_types lists the quiz type strings this word is excluded from
+  // (for etymology words this is "etymology_origin"). Empty when not skipped.
+  // Mirrors NotebookWord.skipped_quiz_types (repeated string, not QuizType, to
+  // avoid a circular import: quiz.proto already imports notebook.proto).
+  repeated string skipped_quiz_types = 10;
+  // note_id is the DB primary key of this word's note row, used to call
+  // SkipWord/ResumeWord directly from the etymology browse page. Zero when the
+  // DB hasn't been populated (no langner migrate import-db run). Mirrors
+  // NotebookWord.note_id.
+  int64 note_id = 11;
 }
 
 message EtymologyMeaningGroup {

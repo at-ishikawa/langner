@@ -49,6 +49,19 @@ service QuizService {
   rpc StartEtymologyOriginQuiz(StartEtymologyOriginQuizRequest) returns (StartEtymologyOriginQuizResponse);
   rpc SubmitEtymologyOriginAnswer(SubmitEtymologyOriginAnswerRequest) returns (SubmitEtymologyOriginAnswerResponse);
   rpc BatchSubmitEtymologyOriginAnswers(BatchSubmitEtymologyOriginAnswersRequest) returns (BatchSubmitEtymologyOriginAnswersResponse);
+  // ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived family word's
+  // etymology-origin exclusion by its stable (notebook_id, expression) — the
+  // same SkipWord / ResumeWord path (skipped_at) every other card's Exclude
+  // uses, WITHOUT a DB note_id. buildOriginFamilies reads the same key
+  // (IsExpressionExcludedForQuizType), so excluding a word drops it from its
+  // origin family in every future etymology-origin quiz; an origin whose whole
+  // family is excluded is no longer offered. Used by BOTH the browse
+  // origin-detail Learn page and the etymology-origin quiz feedback card
+  // (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
+  // definitions-book id that owns the word (EtymologyDefinition.notebook_name /
+  // the origin card's notebook_name) — the same id the loader reads under.
+  rpc ExcludeEtymologyWord(ExcludeEtymologyWordRequest) returns (ExcludeEtymologyWordResponse);
+  rpc ResumeEtymologyWord(ResumeEtymologyWordRequest) returns (ResumeEtymologyWordResponse);
 
   // Relearn Quiz — a practice-only quiz over recently-missed words. It writes
   // NOTHING to learning history: Submit calls only the pure meaning graders,
@@ -64,6 +77,17 @@ service QuizService {
   // the mistake id. See docs/content/proposals/grammar-quiz.
   rpc StartGrammarQuiz(StartGrammarQuizRequest) returns (StartGrammarQuizResponse);
   rpc SubmitGrammarPost(SubmitGrammarPostRequest) returns (SubmitGrammarPostResponse);
+
+  // Grammar mistake review (standalone, no live session). ListGrammarMistakes
+  // lists a journal's grammar mistakes — both currently-due and already-excluded
+  // — for a review surface. ExcludeGrammarMistake / ResumeGrammarMistake toggle
+  // a single mistake's grammar exclusion by its stable (notebook_id, sense_id),
+  // WITHOUT an ephemeral session note_id: unlike SkipWord/ResumeWord (which
+  // resolve an in-memory session id), these can act on a mistake that was never
+  // dealt in a session, which is exactly what the review page needs.
+  rpc ListGrammarMistakes(ListGrammarMistakesRequest) returns (ListGrammarMistakesResponse);
+  rpc ExcludeGrammarMistake(ExcludeGrammarMistakeRequest) returns (ExcludeGrammarMistakeResponse);
+  rpc ResumeGrammarMistake(ResumeGrammarMistakeRequest) returns (ResumeGrammarMistakeResponse);
 }
 
 message GetQuizOptionsRequest {
@@ -700,6 +724,12 @@ message SubmitRelearnAnswerResponse {
   string category = 10;
   string grammar_note = 11;
 
+  // literal is the etymology literal gloss for an etymology-origin card (e.g.
+  // `de "down" + facere = "made down"`) — mirrors EtymologyWordResult.literal.
+  // Sourced from the definitions note's free-text `note` field; empty for
+  // vocab/reverse/grammar cards.
+  string literal = 12;
+
   // NOTE: intentionally NO next_review_date and NO learned_at. The Relearn
   // Quiz writes no learning history, so there is no schedule to show and no
   // log to override.
@@ -800,4 +830,97 @@ message GrammarBlankResult {
   // wrong and how to fix it. Empty when the answer was correct or skipped.
   string assessment = 10;
 }
+
+// Grammar Mistake Review Messages — a standalone review surface listing a
+// journal's grammar mistakes (due + excluded) with no live quiz session.
+
+message ListGrammarMistakesRequest {
+  // notebook_id is the journal whose grammar mistakes to list.
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  // section_titles, when non-empty, narrows the listing to specific journal
+  // entries (each title is a story entry / event), mirroring how
+  // StartGrammarQuiz narrows via NotebookSection.section_titles. When empty,
+  // every entry of the notebook is included.
+  repeated string section_titles = 2;
+}
+
+message ListGrammarMistakesResponse {
+  repeated GrammarMistake mistakes = 1;
+}
+
+// GrammarMistake is one grammar correction as a review row. It carries the
+// stable identity (sense_id, resolved against the request's notebook_id) needed
+// to exclude/resume it, plus everything a review row displays. Distinct from
+// GrammarBlank (a live-session blank keyed by an ephemeral note_id) because a
+// review row has no session id and needs the correct/reason text up front.
+message GrammarMistake {
+  // sense_id is the stable correction id — the identity passed to
+  // ExcludeGrammarMistake / ResumeGrammarMistake together with the journal's
+  // notebook_id.
+  string sense_id = 1;
+  // entry_id / title identify the journal entry (post) this mistake belongs to.
+  string entry_id = 2;
+  string title = 3;
+  string incorrect = 4; // the mistaken span
+  string correct = 5;   // the reference correction
+  string category = 6;
+  string reason = 7;    // the authored grammar note for the mistake
+  string status = 8;    // current learned status
+  // is_excluded is true when this mistake is currently skipped for grammar
+  // (its skipped_at is set for QUIZ_TYPE_GRAMMAR), so the row can show an
+  // "Excluded" state with a Resume action instead of an Exclude action.
+  bool is_excluded = 9;
+}
+
+message ExcludeGrammarMistakeRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string sense_id = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ExcludeGrammarMistakeResponse {}
+
+message ResumeGrammarMistakeRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string sense_id = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ResumeGrammarMistakeResponse {}
+
+message ExcludeEtymologyWordRequest {
+  // notebook_id is the definitions-book id that owns the word — the same id
+  // buildOriginFamilies reads its learning-history file under, exposed to the
+  // client as EtymologyDefinition.notebook_name (browse page) and the origin
+  // card's notebook_name (quiz feedback).
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  // expression is the derived word's expression — the key SkipWord writes and
+  // the loader matches (learning-history L2).
+  string expression = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ExcludeEtymologyWordResponse {}
+
+message ResumeEtymologyWordRequest {
+  string notebook_id = 1 [
+    (buf.validate.field).string.min_len = 1
+  ];
+  string expression = 2 [
+    (buf.validate.field).string.min_len = 1
+  ];
+}
+
+message ResumeEtymologyWordResponse {}
 

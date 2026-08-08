@@ -48,7 +48,7 @@ func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig 
 }
 
 func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
-	return notebook.NewReader(
+	reader, err := notebook.NewReader(
 		h.notebooksConfig.StoriesDirectories,
 		h.notebooksConfig.FlashcardsDirectories,
 		h.notebooksConfig.BooksDirectories,
@@ -56,6 +56,15 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 		h.notebooksConfig.EtymologyDirectories,
 		h.dictionaryMap,
 	)
+	if err != nil {
+		return nil, err
+	}
+	// Register journals (stored in the story format) so GetNotebookDetail can
+	// load a journal's prose, mirroring the quiz service reader.
+	if err := reader.LoadJournals(h.notebooksConfig.JournalsDirectories); err != nil {
+		return nil, fmt.Errorf("load journals: %w", err)
+	}
+	return reader, nil
 }
 
 
@@ -676,6 +685,23 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read etymology notebook: %w", err))
 	}
 
+	// Learning histories (for the per-word etymology-origin exclusion badge) and
+	// a lazily-filled DB note-id cache (so the browse page can call
+	// SkipWord/ResumeWord with a stable note_id, exactly like the vocabulary
+	// notebook-detail page does off NotebookWord). Both are keyed per notebook
+	// because a definition can come from any book. Skip exclusion is read via
+	// the SAME key SkipWord wrote (invariant L2).
+	learningHistories, _ := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
+	noteIDCache := make(map[string]map[string]int64)
+	noteIDsFor := func(nbName string) map[string]int64 {
+		if m, ok := noteIDCache[nbName]; ok {
+			return m
+		}
+		m := h.loadNoteIDsForNotebook(ctx, nbName)
+		noteIDCache[nbName] = m
+		return m
+	}
+
 	// originKey returns the (origin, sessionTitle) tuple used for strict
 	// per-sense binding. Two senses of the same origin (e.g. "ana" in Session
 	// 13 vs Session 16) have different keys and accumulate separate word
@@ -701,7 +727,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 	// and is silently skipped.
 	var definitions []*apiv1.EtymologyDefinition
 	seen := make(map[string]bool)
-	addDefinition := func(expr, meaning, partOfSpeech, note string, examples, contexts []string, originParts []notebook.OriginPartRef, nbName, sessionTitle string) {
+	addDefinition := func(expr, meaning, partOfSpeech, note string, examples, contexts []string, originParts []notebook.OriginPartRef, nbName, sessionTitle, id string) {
 		key := strings.ToLower(expr) + "|" + nbName + "|" + sessionTitle
 		if seen[key] {
 			return
@@ -741,15 +767,33 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 				originWordCounts[k]++
 			}
 		}
+		// Per-word etymology-origin exclusion state for the browse page's
+		// Exclude/Resume control. is_skipped is specifically the
+		// etymology-origin exclusion; skipped_quiz_types lists every mode the
+		// word is excluded from; note_id lets the frontend call
+		// SkipWord/ResumeWord directly (zero when the DB isn't populated).
+		histories := learningHistories[nbName]
+		isSkipped := notebook.IsExpressionExcludedForQuizType(histories, id, notebook.QuizTypeEtymologyOrigin, expr)
+		var skippedTypes []string
+		if e := notebook.FindExpressionInHistories(histories, id, expr); e != nil {
+			skippedTypes = e.SkippedAt.SkippedTypes()
+		}
+		var noteID int64
+		if ids := noteIDsFor(nbName); len(ids) > 0 {
+			noteID = ids[strings.ToLower(strings.TrimSpace(expr))]
+		}
 		definitions = append(definitions, &apiv1.EtymologyDefinition{
-			Expression:   expr,
-			Meaning:      meaning,
-			PartOfSpeech: partOfSpeech,
-			Note:         note,
-			Examples:     examples,
-			Contexts:     contexts,
-			OriginParts:  parts,
-			NotebookName: nbName,
+			Expression:       expr,
+			Meaning:          meaning,
+			PartOfSpeech:     partOfSpeech,
+			Note:             note,
+			Examples:         examples,
+			Contexts:         contexts,
+			OriginParts:      parts,
+			NotebookName:     nbName,
+			IsSkipped:        isSkipped,
+			SkippedQuizTypes: skippedTypes,
+			NoteId:           noteID,
 		})
 	}
 
@@ -772,7 +816,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					for _, conv := range scene.Conversations {
 						contexts = append(contexts, conv.Speaker+": "+conv.Quote)
 					}
-					addDefinition(def.Expression, def.Meaning, def.PartOfSpeech, def.Memo, def.Examples, contexts, def.OriginParts, nbID, "")
+					addDefinition(def.Expression, def.Meaning, def.PartOfSpeech, def.Memo, def.Examples, contexts, def.OriginParts, nbID, "", def.ID)
 				}
 			}
 		}
@@ -784,7 +828,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		if len(def.OriginParts) == 0 {
 			continue
 		}
-		addDefinition(def.GetExpression(), def.Meaning, def.PartOfSpeech, def.Note, nil, nil, def.OriginParts, def.NotebookName, def.SessionTitle)
+		addDefinition(def.GetExpression(), def.Meaning, def.PartOfSpeech, def.Note, nil, nil, def.OriginParts, def.NotebookName, def.SessionTitle, "")
 	}
 
 	for nbID := range reader.GetFlashcardIndexes() {
@@ -797,7 +841,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 				if len(card.OriginParts) == 0 {
 					continue
 				}
-				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples, nil, card.OriginParts, nbID, "")
+				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples, nil, card.OriginParts, nbID, "", card.ID)
 			}
 		}
 	}
@@ -824,7 +868,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					if len(note.OriginParts) == 0 {
 						continue
 					}
-					addDefinition(note.Expression, note.Meaning, note.PartOfSpeech, note.Memo, note.Examples, nil, note.OriginParts, nbID, sessionTitle)
+					addDefinition(note.Expression, note.Meaning, note.PartOfSpeech, note.Memo, note.Examples, nil, note.OriginParts, nbID, sessionTitle, note.ID)
 				}
 			}
 		}

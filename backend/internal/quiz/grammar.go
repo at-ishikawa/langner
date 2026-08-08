@@ -120,6 +120,86 @@ func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]G
 	return posts, nil
 }
 
+// GrammarMistake is one grammar correction as a standalone review row. Unlike
+// GrammarBlank (a live-session blank keyed by an ephemeral note_id), it carries
+// the stable identity (SenseID, resolved against the journal's notebook id) and
+// the full correct/reason text a review surface renders, plus IsExcluded so the
+// row can show an "Excluded" state with a Resume action.
+type GrammarMistake struct {
+	SenseID    string
+	EntryID    string
+	Title      string
+	Incorrect  string
+	Correct    string
+	Category   string
+	Reason     string
+	Status     string
+	IsExcluded bool
+}
+
+// LoadGrammarMistakes enumerates ALL grammar corrections for a journal —
+// both currently-due and already-excluded — for the standalone mistake review
+// surface. It is the sibling of LoadGrammarPosts (which drops excluded and
+// not-yet-due corrections via grammarMistakeDue); this one keeps every
+// correction and marks IsExcluded from the SAME grammar skipped_at the quiz
+// path filters on, so a mistake excluded here disappears from the live quiz and
+// Relearn pool and reappears on Resume. When entryTitles is non-empty only
+// those entries (by title) are included; empty means every entry.
+func (s *Service) LoadGrammarMistakes(notebookID string, entryTitles []string) ([]GrammarMistake, error) {
+	var entryFilter map[string]struct{}
+	if len(entryTitles) > 0 {
+		entryFilter = make(map[string]struct{}, len(entryTitles))
+		for _, t := range entryTitles {
+			entryFilter[t] = struct{}{}
+		}
+	}
+	reader, err := s.newReader()
+	if err != nil {
+		return nil, fmt.Errorf("newReader() > %w", err)
+	}
+	stories, err := reader.ReadStoryNotebooks(notebookID)
+	if err != nil {
+		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
+	}
+	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, fmt.Errorf("NewLearningHistories() > %w", err)
+	}
+	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
+
+	mistakes := make([]GrammarMistake, 0)
+	for _, sn := range stories {
+		if entryFilter != nil {
+			if _, ok := entryFilter[sn.Event]; !ok {
+				continue
+			}
+		}
+		for sceneIdx := range sn.Scenes {
+			corrections := reader.CorrectionsForScene(notebookID, sn.Event, sceneIdx)
+			for seq, c := range corrections {
+				id := notebook.CorrectionID(notebookID, sn.Event, sceneIdx, seq+1, c)
+				exp, seen := expByMistake[id]
+				status := string(notebook.LearnedStatusLearning)
+				if seen {
+					status = string(exp.GetLatestStatus())
+				}
+				mistakes = append(mistakes, GrammarMistake{
+					SenseID:    id,
+					EntryID:    fmt.Sprintf("%s#%d", sn.Event, sceneIdx),
+					Title:      sn.Event,
+					Incorrect:  c.Incorrect,
+					Correct:    c.Correct,
+					Category:   c.Category,
+					Reason:     c.Reason,
+					Status:     status,
+					IsExcluded: seen && exp.SkippedAt.IsSkipped(notebook.QuizTypeGrammar),
+				})
+			}
+		}
+	}
+	return mistakes, nil
+}
+
 // grammarMistakeDue reports whether a mistake is due for review: it is due when
 // it has no learning history yet (seen == false) or its SM-2 forward review is
 // due. A correction the learner deliberately Excluded from the grammar quiz

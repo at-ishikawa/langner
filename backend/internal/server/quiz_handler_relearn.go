@@ -22,6 +22,18 @@ import (
 // several quiz types, and meaning separates two same-spelling senses
 // (homographs) that share an entry. The sign bit is masked off so the id is a
 // non-negative int64.
+//
+// Grammar cards fold in the corrected span (Incorrect) as well: a single
+// rendered post can hold two DISTINCT corrections whose senseIDs collide (a
+// duplicate explicit `id:`, or two titles that slugify alike), which would
+// otherwise share an Entry (== senseID) and an empty Meaning and so hash to the
+// SAME note_id — collapsing both blanks onto one store entry and one frontend
+// key, so grading one resolved/dropped the other. The mistaken span makes each
+// blank's id unique per post, matching the per-blank uniqueness the live grammar
+// quiz gets from its incremental ids. Two blanks that share a senseID AND the
+// same span strike the identical text in the post (the frontend cannot tell them
+// apart regardless) and still fold to one card. Scoped to grammar so vocab
+// de-duplication (identical words folding to one card) is unchanged.
 func relearnCardID(card quiz.RelearnCard) int64 {
 	h := fnv.New64a()
 	_, _ = io.WriteString(h, string(card.Format))
@@ -31,6 +43,10 @@ func relearnCardID(card quiz.RelearnCard) int64 {
 	_, _ = io.WriteString(h, card.Entry)
 	_, _ = io.WriteString(h, "\x1f")
 	_, _ = io.WriteString(h, card.Meaning)
+	if card.IsGrammar() {
+		_, _ = io.WriteString(h, "\x1f")
+		_, _ = io.WriteString(h, card.Incorrect)
+	}
 	return int64(h.Sum64() >> 1)
 }
 
@@ -208,6 +224,7 @@ func (h *QuizHandler) buildRelearnResponse(ctx context.Context, card quiz.Relear
 		ContextScenes: toProtoRelearnScenes(card.ContextScenes),
 	}
 	if card.IsEtymology() {
+		resp.Literal = card.Literal
 		ec := card.EtymologyCard()
 		for _, w := range ec.Words {
 			resp.ExampleWords = append(resp.ExampleWords, w.Expression)

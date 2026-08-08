@@ -291,29 +291,7 @@ func (u *LearningHistoryUpdater) FindExpressionByName(expression string) *Learni
 // form but the YAML stores the entry under the original Note.Expression
 // — callers pass both forms so the fallback succeeds.
 func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *LearningHistoryExpression {
-	for _, name := range names {
-		if name == "" {
-			continue
-		}
-		for hi := range u.history {
-			h := &u.history[hi]
-			// Always search top-level expressions first (flashcard, etymology, etc.)
-			for ei := range h.Expressions {
-				if strings.EqualFold(h.Expressions[ei].Expression, name) {
-					return &h.Expressions[ei]
-				}
-			}
-			// Then search scenes
-			for si := range h.Scenes {
-				for ei := range h.Scenes[si].Expressions {
-					if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, name) {
-						return &h.Scenes[si].Expressions[ei]
-					}
-				}
-			}
-		}
-	}
-	return nil
+	return FindExpressionInHistories(u.history, "", names...)
 }
 
 // FindExpressionByID resolves an expression preferring the stable id.
@@ -322,9 +300,19 @@ func (u *LearningHistoryUpdater) FindExpressionByAnyName(names ...string) *Learn
 // the migration) it falls back to matching by name, so pre-migration
 // data still resolves symmetrically with the write path.
 func (u *LearningHistoryUpdater) FindExpressionByID(id string, names ...string) *LearningHistoryExpression {
+	return FindExpressionInHistories(u.history, id, names...)
+}
+
+// FindExpressionInHistories locates the learning-history entry for an item by
+// stable id (exact, preferred) then by any name (case-insensitive), searching
+// top-level Expressions and every scene. It is the SINGLE lookup shared by the
+// skip write path (SetSkippedAt / ClearSkippedAt via FindExpressionByID) and
+// the skip read path (IsExpressionExcludedForQuizType), so an exclusion is read
+// back under the exact key it was written (learning-history invariant L2).
+func FindExpressionInHistories(histories []LearningHistory, id string, names ...string) *LearningHistoryExpression {
 	if id != "" {
-		for hi := range u.history {
-			h := &u.history[hi]
+		for hi := range histories {
+			h := &histories[hi]
 			for ei := range h.Expressions {
 				if h.Expressions[ei].ID == id {
 					return &h.Expressions[ei]
@@ -339,7 +327,37 @@ func (u *LearningHistoryUpdater) FindExpressionByID(id string, names ...string) 
 			}
 		}
 	}
-	return u.FindExpressionByAnyName(names...)
+	for _, name := range names {
+		if name == "" {
+			continue
+		}
+		for hi := range histories {
+			h := &histories[hi]
+			for ei := range h.Expressions {
+				if strings.EqualFold(h.Expressions[ei].Expression, name) {
+					return &h.Expressions[ei]
+				}
+			}
+			for si := range h.Scenes {
+				for ei := range h.Scenes[si].Expressions {
+					if strings.EqualFold(h.Scenes[si].Expressions[ei].Expression, name) {
+						return &h.Scenes[si].Expressions[ei]
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// IsExpressionExcludedForQuizType reports whether the entry identified by id
+// (preferred) or any name is excluded — its skipped_at is set — for quizType.
+// It is the read twin of the SkipWord write path: both resolve the entry via
+// FindExpressionInHistories, so read and write can never drift on which entry
+// carries the exclusion (learning-history invariant L2).
+func IsExpressionExcludedForQuizType(histories []LearningHistory, id string, quizType QuizType, names ...string) bool {
+	expr := FindExpressionInHistories(histories, id, names...)
+	return expr != nil && expr.SkippedAt.IsSkipped(quizType)
 }
 
 // OverrideLogInput carries everything OverrideLog needs to locate and
@@ -368,9 +386,10 @@ type OverrideLogInput struct {
 	QuizType           QuizType
 	LearnedAt          string
 	MarkCorrect        *bool
-	// SessionTitle and Sense route etymology-origin overrides through the
-	// canonical FindOriginExpression lookup so the override targets the exact
-	// (origin, sense) series, not whichever same-named entry appears first.
+	// SessionTitle and Sense are retained for call-site compatibility. The
+	// etymology-origin schedule now lives on the WORD's own entry (invariants
+	// L1/L4), resolved by id/expression like every other quiz type, so these no
+	// longer select a per-origin series.
 	SessionTitle string
 	Sense        string
 }
@@ -394,7 +413,7 @@ type OverrideLogResult struct {
 // log lists at submit time — the override is applied to both lists in the
 // same call so the two halves of one logical answer stay in sync.
 func (u *LearningHistoryUpdater) OverrideLog(in OverrideLogInput) OverrideLogResult {
-	expr := u.resolveOverrideTarget(in.QuizType, in.SessionTitle, in.Sense, in.ID, in.Expression, in.OriginalExpression)
+	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return OverrideLogResult{}
 	}
@@ -456,7 +475,7 @@ type UndoOverrideLogResult struct {
 // Like OverrideLog, the freeform variants mirror the restore across
 // both paired log lists.
 func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOverrideLogResult {
-	expr := u.resolveOverrideTarget(in.QuizType, in.SessionTitle, in.Sense, in.ID, in.Expression, in.OriginalExpression)
+	expr := u.FindExpressionByID(in.ID, in.Expression, in.OriginalExpression)
 	if expr == nil {
 		return UndoOverrideLogResult{}
 	}
@@ -480,19 +499,6 @@ func (u *LearningHistoryUpdater) UndoOverrideLog(in UndoOverrideLogInput) UndoOv
 		NewNextReviewDate: logs[idx].LearnedAt.AddDate(0, 0, logs[idx].IntervalDays).Format("2006-01-02"),
 		Found:             true,
 	}
-}
-
-// resolveOverrideTarget locates the entry an override/undo should mutate.
-// Etymology-origin overrides go through the canonical FindOriginExpression
-// (keyed by session + origin + sense) so they hit the exact series the write
-// path created; every other quiz type resolves by stable id then expression.
-func (u *LearningHistoryUpdater) resolveOverrideTarget(
-	quizType QuizType, sessionTitle, sense, id, expression, originalExpression string,
-) *LearningHistoryExpression {
-	if quizType == QuizTypeEtymologyOrigin {
-		return FindOriginExpression(u.history, sessionTitle, expression, sense)
-	}
-	return u.FindExpressionByID(id, expression, originalExpression)
 }
 
 // applyMark writes the desired correct/incorrect state onto a log.
@@ -651,13 +657,12 @@ func (u *LearningHistoryUpdater) EnsureExpressionStubForSkip(
 	)
 }
 
-// matchOriginEntry is the single canonical predicate that decides whether a
-// learning-history entry is THE record for an etymology origin. The key is
-// (Type=origin, expression, sense); scene/notebook selection happens by the
-// caller narrowing to a session block. Both the write path
-// (UpdateOrCreateExpressionWithQualityForEtymology) and every read path
-// (FindOriginExpression) call this, so read and write can never drift on the
-// canonicalization rule (learning-history invariant L2).
+// matchOriginEntry decides whether a learning-history entry is a legacy
+// per-origin record (Type=origin, matching expression + sense). The
+// etymology-origin schedule is now per-word (invariants L1/L4), so no new
+// per-origin entries are written; this predicate and FindOriginExpression
+// remain only to resolve any pre-existing per-origin records for the
+// analytics/override read-back.
 func matchOriginEntry(e *LearningHistoryExpression, origin, sense string) bool {
 	return e.Type == LearningExpressionTypeOrigin &&
 		strings.EqualFold(strings.TrimSpace(e.Expression), strings.TrimSpace(origin)) &&
@@ -685,91 +690,48 @@ func FindOriginExpression(histories []LearningHistory, sessionTitle, origin, sen
 	return nil
 }
 
-// UpdateOrCreateExpressionWithQualityForEtymology records one etymology-origin
-// answer under the canonical (sessionTitle, origin, sense) key. The origin
-// carries exactly one learning-log series regardless of how many derived words
-// the quiz screen showed for it (learning-history invariants L1 and L4). The
-// entry is tagged Type=origin so it never collides with a vocab entry sharing
-// the same spelling.
-func (u *LearningHistoryUpdater) UpdateOrCreateExpressionWithQualityForEtymology(
-	notebookID, sessionTitle, origin, sense string,
+// UpsertWordEtymologyOriginResult appends one etymology-origin answer to the
+// WORD's own learning series (EtymologyOriginLogs). It resolves the word's entry
+// file-wide by (id, expression, originalExpression) — the SAME lookup the due
+// check and the exclude check use (FindExpressionInHistories), so the schedule
+// the writer advances is exactly the one the reader gates on (learning-history
+// invariant L2). One entry per word carries every quiz mode's series (L1/L4); a
+// never-studied word gets a new entry created under (storyTitle, sceneTitle) so
+// it lands where the standard/reverse quizzes also write, keeping a word's logs
+// in a single entry.
+func (u *LearningHistoryUpdater) UpsertWordEtymologyOriginResult(
+	notebookID, storyTitle, sceneTitle, expression, originalExpression, id string,
 	isCorrect, isKnownWord bool,
 	quality int,
 	responseTimeMs int64,
-	wordResults []EtymologyWordLog,
-) bool {
-	if expr := FindOriginExpression(u.history, sessionTitle, origin, sense); expr != nil {
-		expr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin, wordResults)
-		return true
-	}
-
-	idx := u.findOrCreateStory(notebookID, sessionTitle, LearningHistoryTypeEtymology)
-	newExpression := LearningHistoryExpression{
-		Expression:  origin,
-		Type:        LearningExpressionTypeOrigin,
-		Sense:       sense,
-		LearnedLogs: []LearningRecord{},
-	}
-	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin, wordResults)
-	u.history[idx].Expressions = append(u.history[idx].Expressions, newExpression)
-	return false
-}
-
-// OverrideEtymologyWordResult flips one derived family word's Correct and/or
-// Excluded flag within the origin's EXISTING learning-log entry — it never
-// appends a new record for the word (invariant L1). It resolves the origin
-// via the SAME canonical FindOriginExpression lookup OverrideLog uses for
-// etymology (invariant L2), and locates the specific attempt by learnedAt the
-// same way indexLogByLearnedAt does for the aggregate override, so a
-// word-level correction always lands on the exact record the write path
-// created for that attempt.
-//
-// The word's Correct/Excluded flags are display-only annotations: unlike the
-// origin-level override, this does not touch the record's Status, Quality,
-// or IntervalDays — the origin's own aggregate result and SR schedule stay
-// under the existing origin-level Mark-as-Correct/Incorrect control.
-//
-// correct and excluded are optional; a nil pointer leaves that flag
-// unchanged. Returns false when the origin, the specific attempt, or the word
-// within it can't be found.
-func (u *LearningHistoryUpdater) OverrideEtymologyWordResult(
-	sessionTitle, origin, sense, learnedAt, wordExpression string,
-	correct, excluded *bool,
-) bool {
-	expr := FindOriginExpression(u.history, sessionTitle, origin, sense)
-	if expr == nil {
-		return false
-	}
-	idx := indexLogByLearnedAt(expr.EtymologyOriginLogs, learnedAt)
-	if idx < 0 {
-		return false
-	}
-	log := &expr.EtymologyOriginLogs[idx]
-
-	wi := -1
-	for i, w := range log.WordResults {
-		if strings.EqualFold(strings.TrimSpace(w.Expression), strings.TrimSpace(wordExpression)) {
-			wi = i
-			break
+) {
+	if expr := FindExpressionInHistories(u.history, id, expression, originalExpression); expr != nil {
+		if expr.ID == "" && id != "" {
+			expr.ID = id
 		}
+		expr.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin)
+		return
 	}
-	if wi < 0 {
-		return false
+
+	newExpression := LearningHistoryExpression{Expression: expression, ID: id}
+	newExpression.AddRecordWithQualityForEtymology(u.calculator, isCorrect, isKnownWord, quality, responseTimeMs, QuizTypeEtymologyOrigin)
+
+	storyIndex := u.findOrCreateStory(notebookID, storyTitle, flatTypeForStory(storyTitle, sceneTitle))
+	if sceneTitle == "" || isFlatMetadataType(u.history[storyIndex].Metadata.Type) {
+		u.history[storyIndex].Expressions = append(u.history[storyIndex].Expressions, newExpression)
+		return
 	}
-	if correct != nil {
-		log.WordResults[wi].Correct = *correct
-	}
-	if excluded != nil {
-		log.WordResults[wi].Excluded = *excluded
-	}
-	return true
+	sceneIndex := u.findOrCreateScene(storyIndex, sceneTitle)
+	u.history[storyIndex].Scenes[sceneIndex].Expressions = append(
+		u.history[storyIndex].Scenes[sceneIndex].Expressions, newExpression,
+	)
 }
 
 // AssertNoDuplicateOriginsInSession returns a non-nil error if the given
-// session block holds two entries for the same (origin, sense) — the L1
-// guard that a single origin/sense never forks into two log series. Used by
-// SaveEtymologyOriginResult right before WriteYamlFile so a bug that would
-// re-introduce a duplicate fails loudly instead of silently corrupting YAML.
+// session block holds two entries for the same (origin, sense). It guarded the
+// old per-origin writer against forking a series; the etymology-origin schedule
+// is now per-word (invariants L1/L4), so this remains only as a validity check
+// over any pre-existing per-origin records.
 func AssertNoDuplicateOriginsInSession(history []LearningHistory, notebookID, sessionTitle string) error {
 	normalised := normalizeQuotes(sessionTitle)
 	type originKey struct{ origin, sense string }

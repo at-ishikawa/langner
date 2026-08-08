@@ -119,6 +119,9 @@ const etymologyItems: ResultItem[] = [
     originalCorrect: false,
     noteId: BigInt(10),
     learnedAt: "2026-03-16T00:00:00Z",
+    // notebookName is the word's home definitions-book id — the key the
+    // per-word Exclude uses (ExcludeEtymologyWord), independent of noteId.
+    notebookName: "roots",
     etymologyWords: [
       { expression: "describe", correct: false, correctMeaning: "to represent in words", reason: "", userAnswer: "tell" },
       { expression: "inscribe", correct: true, correctMeaning: "to write or carve on a surface", reason: "", userAnswer: "carve" },
