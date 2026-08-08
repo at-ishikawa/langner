@@ -1969,6 +1969,13 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				} else {
 					originalEntry = note.Expression
 				}
+				// Mirror loadFlashcardCards: surface each entry's example
+				// sentences so definitions-book / etymology-derived words
+				// show their examples in the standard quiz.
+				var examples []Example
+				for _, ex := range note.Examples {
+					examples = append(examples, Example{Text: ex})
+				}
 				card := Card{
 					ID:            note.ID,
 					NotebookName:  bookID,
@@ -1977,6 +1984,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 					Entry:         entry,
 					OriginalEntry: originalEntry,
 					Meaning:       note.Meaning,
+					Examples:      examples,
 					WordDetail:    buildWordDetail(&note, originMap),
 				}
 				// Decorate via byMember so non-head members of non-family
@@ -2042,12 +2050,27 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					expression = note.Definition
 					altForm = note.Expression
 				}
+				// Mirror loadFlashcardReverseCards: build masked example
+				// contexts so a definitions-book word behaves like a
+				// flashcard word in reverse mode (same expression/definition
+				// masking).
+				var contexts []ReverseContext
+				for _, ex := range note.Examples {
+					if strings.Contains(strings.ToLower(ex), strings.ToLower(note.Expression)) {
+						masked := maskWord(ex, note.Expression, note.Definition)
+						contexts = append(contexts, ReverseContext{
+							Context:       ex,
+							MaskedContext: masked,
+						})
+					}
+				}
 				card := ReverseCard{
 					ID:           note.ID,
 					NotebookName: bookID,
 					StoryTitle:   storyTitle,
 					SceneTitle:   sceneTitle,
 					Meaning:      note.Meaning,
+					Contexts:     contexts,
 					Expression:   expression,
 					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&note, originMap),
