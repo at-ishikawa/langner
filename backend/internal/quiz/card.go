@@ -56,6 +56,11 @@ type Card struct {
 type Example struct {
 	Text    string
 	Speaker string // empty for flashcards
+	// Highlight names the exact surface word/phrase to bold in the standard
+	// quiz and mask in the reverse quiz, carried through from the note's
+	// per-example highlight. Empty falls back to the auto whole-word lemma
+	// rule (see the frontend highlight helper and maskWord).
+	Highlight string
 }
 
 // NotebookSummary holds display info for one notebook.

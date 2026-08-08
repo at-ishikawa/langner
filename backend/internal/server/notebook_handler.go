@@ -159,7 +159,7 @@ func (h *NotebookHandler) GetNotebookDetail(
 					Meaning:        def.Meaning,
 					PartOfSpeech:   def.PartOfSpeech,
 					Pronunciation:  def.Pronunciation,
-					Examples:       def.Examples,
+					Examples:       def.Examples.Texts(),
 					Synonyms:       def.Synonyms,
 					Antonyms:       def.Antonyms,
 					LearningStatus: string(info.status),
@@ -256,7 +256,7 @@ func (h *NotebookHandler) getFlashcardNotebookDetail(
 				Meaning:          card.Meaning,
 				PartOfSpeech:     card.PartOfSpeech,
 				Pronunciation:    card.Pronunciation,
-				Examples:         card.Examples,
+				Examples:         card.Examples.Texts(),
 				Synonyms:         card.Synonyms,
 				Antonyms:         card.Antonyms,
 				LearningStatus:   string(info.status),
@@ -342,7 +342,7 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 					Meaning:        note.Meaning,
 					PartOfSpeech:   note.PartOfSpeech,
 					Pronunciation:  note.Pronunciation,
-					Examples:       note.Examples,
+					Examples:       note.Examples.Texts(),
 					Synonyms:       note.Synonyms,
 					Antonyms:       note.Antonyms,
 					LearningStatus: string(info.status),
@@ -816,7 +816,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					for _, conv := range scene.Conversations {
 						contexts = append(contexts, conv.Speaker+": "+conv.Quote)
 					}
-					addDefinition(def.Expression, def.Meaning, def.PartOfSpeech, def.Memo, def.Examples, contexts, def.OriginParts, nbID, "", def.ID)
+					addDefinition(def.Expression, def.Meaning, def.PartOfSpeech, def.Memo, def.Examples.Texts(), contexts, def.OriginParts, nbID, "", def.ID)
 				}
 			}
 		}
@@ -841,7 +841,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 				if len(card.OriginParts) == 0 {
 					continue
 				}
-				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples, nil, card.OriginParts, nbID, "", card.ID)
+				addDefinition(card.Expression, card.Meaning, card.PartOfSpeech, card.Memo, card.Examples.Texts(), nil, card.OriginParts, nbID, "", card.ID)
 			}
 		}
 	}
@@ -868,7 +868,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 					if len(note.OriginParts) == 0 {
 						continue
 					}
-					addDefinition(note.Expression, note.Meaning, note.PartOfSpeech, note.Memo, note.Examples, nil, note.OriginParts, nbID, sessionTitle, note.ID)
+					addDefinition(note.Expression, note.Meaning, note.PartOfSpeech, note.Memo, note.Examples.Texts(), nil, note.OriginParts, nbID, sessionTitle, note.ID)
 				}
 			}
 		}

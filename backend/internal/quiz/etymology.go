@@ -230,7 +230,7 @@ func buildOriginFamilies(reader *notebook.Reader, learningHistories map[string][
 						Expression:    expr,
 						Meaning:       note.Meaning,
 						Pronunciation: note.Pronunciation,
-						Examples:      note.Examples,
+						Examples:      note.Examples.Texts(),
 						// Literal is the assembled literal gloss the converter
 						// stores in the word's free-text note field (Note.Note).
 						Literal:      note.Note,

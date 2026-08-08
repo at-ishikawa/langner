@@ -6,6 +6,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"gopkg.in/yaml.v3"
 )
 
@@ -714,4 +715,54 @@ func TestNote_needsToLearnInNotebook(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestNote_Examples_UnmarshalMixed verifies backward-compat parsing: a note's
+// examples list accepts EITHER a plain scalar string (legacy form) OR a
+// {text, highlight} mapping, in any mix, with no migration.
+func TestNote_Examples_UnmarshalMixed(t *testing.T) {
+	src := `expression: "go"
+meaning: "to move or travel"
+examples:
+  - "They go to school every day."
+  - text: "She went home early yesterday."
+    highlight: "went"
+`
+	var note Note
+	require.NoError(t, yaml.Unmarshal([]byte(src), &note))
+
+	require.Len(t, note.Examples, 2)
+	assert.Equal(t, "They go to school every day.", note.Examples[0].Text)
+	assert.Empty(t, note.Examples[0].Highlight, "plain-string example has no highlight")
+	assert.Equal(t, "She went home early yesterday.", note.Examples[1].Text)
+	assert.Equal(t, "went", note.Examples[1].Highlight)
+
+	assert.Equal(t,
+		[]string{"They go to school every day.", "She went home early yesterday."},
+		note.Examples.Texts(),
+	)
+}
+
+// TestNote_Examples_MarshalRoundTrip verifies a highlight-less example
+// serializes back to a plain scalar (so existing files stay byte-stable),
+// while a highlighted example serializes as a {text, highlight} mapping.
+func TestNote_Examples_MarshalRoundTrip(t *testing.T) {
+	note := Note{
+		Expression: "go",
+		Examples: Examples{
+			{Text: "They go to school every day."},
+			{Text: "She went home early yesterday.", Highlight: "went"},
+		},
+	}
+	out, err := yaml.Marshal(note)
+	require.NoError(t, err)
+
+	got := string(out)
+	assert.Contains(t, got, "- They go to school every day.", "plain example stays a scalar")
+	assert.Contains(t, got, "text: She went home early yesterday.")
+	assert.Contains(t, got, "highlight: went")
+
+	var round Note
+	require.NoError(t, yaml.Unmarshal(out, &round))
+	assert.Equal(t, note.Examples, round.Examples)
 }

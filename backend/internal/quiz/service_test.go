@@ -324,6 +324,45 @@ func TestService_LoadCards_FlashcardNotebook(t *testing.T) {
 	assert.Equal(t, "It was pure serendipity that they met.", cards[0].Examples[0].Text)
 }
 
+// TestService_LoadCards_FlashcardHighlight pins the forward path: a per-example
+// {text, highlight} carries the exact surface word (an irregular inflection the
+// lemma can't derive) all the way onto the standard-quiz Card so the frontend
+// can bold it.
+func TestService_LoadCards_FlashcardHighlight(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	flashcardsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	vocabDir := filepath.Join(flashcardsDir, "irregulars")
+	require.NoError(t, os.MkdirAll(vocabDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "index.yml"), []byte(`id: irregulars
+name: Irregular Verbs
+notebooks:
+  - ./cards.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "cards.yml"), []byte(`- title: "Past Tense"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "go"
+      meaning: "to move or travel"
+      examples:
+        - text: "She went home early yesterday."
+          highlight: "went"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		FlashcardsDirectories:  []string{flashcardsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"irregulars"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	require.Len(t, cards[0].Examples, 1)
+	assert.Equal(t, "She went home early yesterday.", cards[0].Examples[0].Text)
+	assert.Equal(t, "went", cards[0].Examples[0].Highlight)
+}
+
 // TestService_LoadCards_FlashcardNotebook_HidesFreeformWrongWhenNotIncludingUnstudied
 // pins the gate: a flashcard the user only ever freeform-failed (no
 // correct answer anywhere) must NOT appear in the standard quiz unless
@@ -2032,6 +2071,7 @@ func TestMaskWord(t *testing.T) {
 		context    string
 		expression string
 		definition string
+		highlight  string
 		want       string
 	}{
 		{
@@ -2077,11 +2117,21 @@ func TestMaskWord(t *testing.T) {
 			definition: "break the ice",
 			want:       "She used the term ______ during the meeting",
 		},
+		{
+			// Irregular inflection the lemma can't derive: lemma "go" never
+			// substring-matches "went", so only the per-example highlight
+			// masks it. Without this the reverse quiz would leak the answer.
+			name:       "irregular highlight masked",
+			context:    "She went home early yesterday.",
+			expression: "go",
+			highlight:  "went",
+			want:       "She ______ home early yesterday.",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := maskWord(tt.context, tt.expression, tt.definition)
+			got := maskWord(tt.context, tt.expression, tt.definition, tt.highlight)
 			assert.Equal(t, tt.want, got)
 		})
 	}

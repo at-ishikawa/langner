@@ -221,7 +221,7 @@ func TestReadFlashcardNotebooks_Success(t *testing.T) {
 	assert.Equal(t, "noun", card1.PartOfSpeech)
 	assert.Equal(t, "/ˌserənˈdɪpəti/", card1.Pronunciation)
 	assert.Len(t, card1.Examples, 1)
-	assert.Equal(t, "It was pure serendipity that we met at the coffee shop that day.", card1.Examples[0])
+	assert.Equal(t, "It was pure serendipity that we met at the coffee shop that day.", card1.Examples[0].Text)
 	assert.Len(t, card1.Synonyms, 2)
 	assert.Contains(t, card1.Synonyms, "chance")
 	assert.Contains(t, card1.Synonyms, "luck")

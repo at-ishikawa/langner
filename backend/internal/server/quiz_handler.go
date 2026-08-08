@@ -122,7 +122,7 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		localStore[noteID] = card
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples {
-			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker})
+			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker, Highlight: ex.Highlight})
 		}
 		flashcards = append(flashcards, &apiv1.Flashcard{
 			NoteId: noteID, Entry: card.Entry, Examples: examples, OriginalEntry: card.OriginalEntry,
