@@ -158,6 +158,39 @@ origins:
 	assert.Equal(t, []string{"The museum displayed a facsimile of the manuscript."}, w.Examples)
 }
 
+// TestLoadEtymologyOriginCards_OfferedOriginCarriesNotDueSibling guards the
+// regression behind the "Leaving one family word blank grades it incorrect"
+// e2e scenario: once an origin is offered because ONE family word is due, its
+// card must carry the WHOLE family — including a sibling that is individually
+// scheduled out (answered correctly earlier) — so that sibling can be
+// re-answered/graded on its own per-word series instead of silently vanishing
+// from the card (which drops it from the graded results and hides its per-word
+// override button on the feedback screen).
+func TestLoadEtymologyOriginCards_OfferedOriginCarriesNotDueSibling(t *testing.T) {
+	svc, bookID, _ := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
+
+	// First pass: both words due (include unstudied), answered wrong so both
+	// stay due and each owns a per-word etymology series.
+	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	learnedAt := answerCard(t, svc, cards[0], false)
+
+	// Mark ONE sibling ("inscribe") correct so its per-word schedule advances
+	// past today; "describe" stays due.
+	correct := true
+	require.NoError(t, svc.OverrideEtymologyWordResult(cards[0].NotebookName, learnedAt, "inscribe", &correct))
+
+	// Reload WITHOUT include-unstudied: "describe" is due, "inscribe" is not.
+	// The origin is still offered (describe is due) and its card must carry the
+	// FULL family, including the not-due "inscribe" — not just the due word.
+	again, err := svc.LoadEtymologyOriginCards([]string{bookID}, false, false, nil)
+	require.NoError(t, err)
+	require.Len(t, again, 1, "origin stays offered while one family word is due")
+	assert.ElementsMatch(t, []string{"describe", "inscribe"}, cardExpressions(again[0]),
+		"an offered origin carries its whole family, including a not-due sibling")
+}
+
 // answerCard grades every family word on the card with the given correctness
 // and persists a per-word etymology-origin result (mirrors what the handler
 // does), returning the aggregate learned_at.

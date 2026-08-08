@@ -137,10 +137,15 @@ func (s *Service) LoadEtymologyOriginCards(
 				continue
 			}
 			if !skipEligibility {
-				// Keep only this origin's DUE, not-yet-placed words. A word due
-				// under two origins lands on the first card only; an origin whose
-				// due words were all placed earlier becomes empty and is dropped.
-				words = dueUnplacedWords(learningHistories[etymID], etymID, words, includeUnstudied, placed)
+				// Offer this origin iff at least one of its not-yet-placed family
+				// words is DUE; when offered, the card carries the WHOLE
+				// not-yet-placed family (due or not) — a derived-word family is
+				// quizzed as a single card, so a sibling that is individually
+				// scheduled out is still shown for context and graded on its own
+				// per-word series (never a per-origin schedule). A word due under
+				// two origins lands on the first card only; an origin whose family
+				// has no due word — or was already placed earlier — is dropped.
+				words = offeredFamilyWords(learningHistories[etymID], etymID, words, includeUnstudied, placed)
 				if len(words) == 0 {
 					continue
 				}
@@ -282,30 +287,45 @@ func etymologyWordDue(
 	return expr.NeedsEtymologyReview(notebook.QuizTypeEtymologyOrigin)
 }
 
-// dueUnplacedWords returns the subset of an origin's family that is due AND has
-// not already been placed on an earlier card this session, marking each returned
-// word as placed. This is what makes a multi-origin word appear exactly once per
-// deck (within-session dedup) while still honouring the per-word SR schedule.
-func dueUnplacedWords(
+// offeredFamilyWords decides whether an origin is offered this session and, if
+// so, which words its card carries. An origin is offered iff at least one of its
+// not-yet-placed family words is DUE (per that word's own SR schedule). When
+// offered, the WHOLE not-yet-placed family is returned — due or not — because a
+// derived-word family is quizzed as a single card: a sibling that is
+// individually scheduled out (e.g. answered correctly earlier) is still shown
+// for context and graded on its own per-word series, which never creates a
+// per-origin schedule (invariants L1/L4). Returning nil means the origin is not
+// offered: no family word is due, or every word was already placed on an earlier
+// card this session.
+//
+// Every returned word is marked placed, so a word whose origin_parts span two
+// origins is asked exactly once per session (within-session dedup) regardless of
+// which origin's card carries it.
+func offeredFamilyWords(
 	histories []notebook.LearningHistory,
 	notebookID string,
 	words []EtymologyFamilyWord,
 	includeUnstudied bool,
 	placed map[string]bool,
 ) []EtymologyFamilyWord {
-	var out []EtymologyFamilyWord
+	var unplaced []EtymologyFamilyWord
+	anyDue := false
 	for _, w := range words {
-		k := wordScheduleKey(notebookID, w)
-		if placed[k] {
+		if placed[wordScheduleKey(notebookID, w)] {
 			continue
 		}
-		if !etymologyWordDue(histories, w, includeUnstudied) {
-			continue
+		unplaced = append(unplaced, w)
+		if etymologyWordDue(histories, w, includeUnstudied) {
+			anyDue = true
 		}
-		placed[k] = true
-		out = append(out, w)
 	}
-	return out
+	if !anyDue {
+		return nil
+	}
+	for _, w := range unplaced {
+		placed[wordScheduleKey(notebookID, w)] = true
+	}
+	return unplaced
 }
 
 // GradeEtymologyWordAnswer grades one family word's typed meaning against the
