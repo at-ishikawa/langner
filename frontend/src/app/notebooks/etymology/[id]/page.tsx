@@ -153,9 +153,10 @@ function OriginCard({
 }) {
   return (
     <Box
-      p={3}
+      p={4}
       borderWidth="1px"
-      borderRadius="lg"
+      borderColor="gray.200"
+      borderRadius="10px"
       bg="white"
       _dark={{ bg: "gray.800", borderColor: "gray.600" }}
       _hover={{ bg: "gray.50" }}
@@ -431,9 +432,9 @@ function ByMeaningView({
       {filtered.map((group, i) => (
         <Box
           key={i}
-          p={3}
+          p={4}
           borderWidth="1px"
-          borderRadius="lg"
+          borderRadius="10px"
           bg="white"
           _dark={{ bg: "gray.800", borderColor: "gray.600" }}
           borderColor="gray.200"
@@ -599,12 +600,7 @@ function EtymologyNotebookPage() {
       <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
         <Box px={4} pt={2}>
           <Link href="/learn">
-            <Text
-              color="gray.500"
-              _dark={{ color: "gray.400" }}
-              fontSize="xs"
-              _hover={{ textDecoration: "underline" }}
-            >
+            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
               &lt; Learn
             </Text>
           </Link>
@@ -729,17 +725,9 @@ function EtymologyNotebookPage() {
             {originSections.map(({ section, origins: sectionOrigins }) => (
               <Box key={section || "__unsectioned__"}>
                 {section && (
-                  <Text
-                    fontSize="xs"
-                    fontWeight="semibold"
-                    textTransform="uppercase"
-                    letterSpacing="wide"
-                    color="gray.500"
-                    _dark={{ color: "gray.400" }}
-                    mb={2}
-                  >
-                    {section}
-                  </Text>
+                  <Heading size="sm" mb={2} color="fg.muted">
+                    {section} &middot; {sectionOrigins.length}
+                  </Heading>
                 )}
                 <VStack align="stretch" gap={2}>
                   {sectionOrigins.map((origin, i) => (

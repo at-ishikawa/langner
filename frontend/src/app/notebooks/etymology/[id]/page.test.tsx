@@ -152,12 +152,18 @@ describe("EtymologyNotebookPage - Origin List", () => {
     expect(screen.getByText("2 words")).toBeInTheDocument();
   });
 
-  it("groups origins under their source-book section headers", async () => {
+  it("groups origins under prominent section headings", async () => {
     vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText("Chapter 1: Writing")).toBeInTheDocument();
-      expect(screen.getByText("Chapter 2: Motion")).toBeInTheDocument();
+      // Sections render as real headings (prominent), not faint captions,
+      // and carry the source-book section title plus an origin count.
+      expect(
+        screen.getByRole("heading", { name: /Chapter 1: Writing/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /Chapter 2: Motion/ }),
+      ).toBeInTheDocument();
     });
     // Origins still render under their sections.
     expect(screen.getByText("graph")).toBeInTheDocument();
@@ -168,7 +174,9 @@ describe("EtymologyNotebookPage - Origin List", () => {
   it("drops sections with no matching origins when searching", async () => {
     vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
     renderPage();
-    await waitFor(() => expect(screen.getByText("Chapter 1: Writing")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /Chapter 1: Writing/ })).toBeInTheDocument(),
+    );
 
     fireEvent.change(screen.getByPlaceholderText("Search origins or meanings..."), {
       target: { value: "tele" },
@@ -176,8 +184,8 @@ describe("EtymologyNotebookPage - Origin List", () => {
 
     await waitFor(() => {
       // Only the section that still has a matching origin remains.
-      expect(screen.getByText("Chapter 1: Writing")).toBeInTheDocument();
-      expect(screen.queryByText("Chapter 2: Motion")).not.toBeInTheDocument();
+      expect(screen.getByRole("heading", { name: /Chapter 1: Writing/ })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Chapter 2: Motion/ })).not.toBeInTheDocument();
       expect(screen.getByText("tele")).toBeInTheDocument();
       expect(screen.queryByText("scrib")).not.toBeInTheDocument();
     });
