@@ -608,17 +608,52 @@ func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 	}}
 }
 
-// primaryOriginPart returns the first etymology origin a vocabulary word derives
-// from, and whether it has one. Relearn groups a missed origin-bearing word into
-// this origin's family card; a word with several origins is grouped under its
-// first so it is drilled exactly once.
+// primaryOriginPart returns the etymology origin Relearn folds a missed
+// origin-bearing word's family card under, and whether it has one.
+//
+// It prefers a ROOT origin over a prefix/suffix. The origin family card exists
+// to surface the shared ROOT a set of words derive from — the whole point is to
+// group e.g. recipient, intercept, and capture under "capere", not to scatter
+// them under whichever generic prefix (re, inter, …) each happens to list first.
+// A prefixed word like "recipient" (re + capere) must therefore fold under
+// "capere", not "re". A word with several roots is grouped under its first root
+// so it is drilled exactly once; a word that carries ONLY affixes (no declared
+// root) falls back to its first origin so it still groups rather than dropping
+// out of Relearn.
+//
+// This preference is what makes grouping robust to whether or not a prefix is
+// declared as an origin: when the prefix is undeclared (older example data),
+// resolveOriginParts already drops it and only the root remains; when the prefix
+// IS declared (the shape real roots-books use), the root preference here keeps
+// the word grouped under the root instead of the prefix. Both cases now yield
+// the same root family (learning-history-invariants L2: one rule, one place).
 func primaryOriginPart(fc FreeformCard) (WordOriginPart, bool) {
+	var first WordOriginPart
+	haveFirst := false
 	for _, op := range fc.WordDetail.OriginParts {
-		if strings.TrimSpace(op.Origin) != "" {
+		if strings.TrimSpace(op.Origin) == "" {
+			continue
+		}
+		if !haveFirst {
+			first, haveFirst = op, true
+		}
+		if isRootOriginType(op.Type) {
 			return op, true
 		}
 	}
-	return WordOriginPart{}, false
+	return first, haveFirst
+}
+
+// isRootOriginType reports whether an origin's type denotes a root as opposed to
+// a prefix or suffix. The etymology schema uses "root", and treats an empty type
+// as root too (see EtymologyOrigin.Type: "'' means root").
+func isRootOriginType(originType string) bool {
+	switch strings.ToLower(strings.TrimSpace(originType)) {
+	case "", "root":
+		return true
+	default:
+		return false
+	}
 }
 
 // originEnglishForms looks up an origin's English combining-form spellings from

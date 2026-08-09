@@ -1,0 +1,40 @@
+# NESTED (new-shape) etymology source: a top-level list of UNIT events, each
+# with scenes that hold origins. This mirrors the shape a real definitions-book
+# etymology notebook uses: the event title (UNIT ONE / UNIT TWO) and the scene
+# title are the JOIN KEYS shared with the definitions notebook of the SAME `id`
+# (examples/definitions/latin-roots-book) — its unit `metadata.title` and scene
+# `metadata.title` line up one-for-one with these.
+#
+# Ordinary public-domain Latin roots. Every sentence in the paired definitions
+# notebook is invented demo prose, not copied from any published book.
+- event: "UNIT ONE"
+  scenes:
+    - scene: "cap, capt, cip (to seize)"
+      origins:
+        - origin: capere
+          type: root
+          language: Latin
+          meaning: "to seize, take, get"
+          english_forms: [cap, capt, cip]
+          forms:
+            - { form: capere, role: present_active_infinitive }
+            - { form: captum, role: supine }
+    - scene: "prefixes"
+      origins:
+        - origin: re
+          type: prefix
+          language: Latin
+          meaning: "back, again"
+          english_forms: [re]
+- event: "UNIT TWO"
+  scenes:
+    - scene: "rapt, rap (to seize)"
+      origins:
+        - origin: rapere
+          type: root
+          language: Latin
+          meaning: "to seize, snatch"
+          english_forms: [rapt, rap]
+          forms:
+            - { form: rapere, role: present_active_infinitive }
+            - { form: raptum, role: supine }

@@ -1,0 +1,5 @@
+id: latin-roots-book
+kind: Etymology
+name: "Latin Roots Book (demo, nested shape)"
+notebooks:
+  - ./origins.yml

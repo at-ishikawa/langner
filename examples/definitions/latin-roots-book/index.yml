@@ -1,0 +1,4 @@
+id: latin-roots-book
+name: "Latin Roots Book (demo, nested shape)"
+notebooks:
+  - ./definitions.yml

@@ -1,0 +1,61 @@
+# Definitions notebook JOINED to examples/etymology/latin-roots-book by the SAME
+# `id` (latin-roots-book). Its unit `metadata.title` (UNIT ONE / UNIT TWO) and
+# scene `metadata.title` mirror the etymology notebook's event/scene titles.
+#
+# rapidity is the cleanest failing case from the bug report: a SINGLE declared
+# origin `{ origin: rapere, language: Latin, from_form: rap }`, where `rapere` is
+# a declared root — no undeclared prefix, no dedup, no exotic edge. recipient and
+# deficient add multi-word-per-root grouping (both derive from a shared root via
+# a prefix) so the origin family grouping is observable.
+#
+# All example sentences are invented neutral prose (no book text, no personal
+# identifiers).
+- metadata:
+    title: "UNIT ONE"
+  scenes:
+    - metadata:
+        index: 0
+        title: "cap, capt, cip (to seize)"
+      expressions:
+        - expression: recipient
+          id: recipient-latin-roots
+          meaning: "a person who receives something"
+          part_of_speech: noun
+          pronunciation: "/rɪˈsɪpiənt/"
+          note: 're "back" + capere "to take" = one who takes back / receives'
+          examples:
+            - text: "Each recipient of the award walked up to the stage in turn."
+              highlight: recipient
+          origin_parts:
+            - { origin: re, language: Latin }
+            - { origin: capere, language: Latin, from_form: cip }
+        - expression: intercept
+          id: intercept-latin-roots
+          meaning: "to stop or catch something before it reaches its destination"
+          part_of_speech: verb
+          pronunciation: "/ˌɪntərˈsɛpt/"
+          note: 'inter "between" + capere "to take" = take in between'
+          examples:
+            - text: "The defender managed to intercept the pass near the goal."
+              highlight: intercept
+          origin_parts:
+            - { origin: inter, language: Latin }
+            - { origin: capere, language: Latin, from_form: cept }
+- metadata:
+    title: "UNIT TWO"
+  scenes:
+    - metadata:
+        index: 0
+        title: "rapt, rap (to seize)"
+      expressions:
+        - expression: rapidity
+          id: rapidity-latin-roots
+          meaning: "speed; quickness"
+          part_of_speech: noun
+          pronunciation: "/rəˈpɪdəti/"
+          note: 'from rapere "to snatch" — the quality of moving fast'
+          examples:
+            - text: "The rapidity of the change caught everyone off guard."
+              highlight: rapidity
+          origin_parts:
+            - { origin: rapere, language: Latin, from_form: rap }
