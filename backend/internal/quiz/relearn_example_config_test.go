@@ -187,69 +187,104 @@ func TestExampleData_OriginResolutionParity(t *testing.T) {
 	assert.False(t, forwardHas("factory"), "KNOWN GAP: forward quiz does not enrich etymology origin")
 }
 
-// TestExampleData_VestigialEtymologyOriginSkipIsIgnored reproduces the EXACT
-// reported symptom and its fix. A word whose origin resolves in the normal quiz
-// (primaryOrigin=true) was nevertheless shown as a PLAIN "Reverse — recall the
-// word" card in Relearn — with no origin — whenever it carried a
-// skipped_at["etymology_origin"] marker. Since #41 that marker is VESTIGIAL:
-// the standalone etymology-origin quiz is gone, Relearn has no Exclude control,
-// and nothing deliberately sets or clears the marker; the only writers left are
-// the removed quiz and the old "Don't Know" bug (4c7fd4de/991816dd). Honoring it
-// stranded real words as plain cards forever.
+// TestExampleData_OriginGroupingIndependentOfEtymologyOriginSkip is the durable
+// regression guard for the vestigial-marker bug (it replaces the temporary
+// origin-grouping diagnostic logging that first exposed it). The property it pins:
 //
-// The marker is written here through the SAME write path that produced it on the
+//	an origin-bearing word groups in Relearn under its ROOT regardless of any
+//	per-quiz-type skip state — in BOTH drill directions.
+//
+// The symptom it reproduces: a word whose origin resolves in the normal quiz
+// (primaryOrigin=true) was nevertheless shown as a PLAIN card in Relearn, with no
+// origin, whenever it carried a skipped_at["etymology_origin"] marker. Since #41
+// that marker is VESTIGIAL — the standalone etymology-origin quiz is gone, Relearn
+// has no Exclude control, and nothing deliberately sets or clears the marker; the
+// only writers left are the removed quiz and the old "Don't Know" bug
+// (4c7fd4de/991816dd). Honoring it stranded real words as plain cards forever.
+//
+// The marker is written through the SAME write path that produced it on the
 // user's disk (SkipWord / SetSkippedAt → skipped_at["etymology_origin"]), driven
-// through the real Service/Reader. After the fix, Relearn ignores it and the
-// word folds into its origin family card exactly like a word without the marker.
-// The normal-quiz skip filtering (notebook/reverse/freeform skipped_at) is a
-// separate path and is intentionally NOT exercised or changed here.
-func TestExampleData_VestigialEtymologyOriginSkipIsIgnored(t *testing.T) {
+// through the real Service/Reader. This is exactly the "seed legacy learning
+// history STATE left by a removed feature" case: example notebooks alone (which
+// carry no such marker) never reproduce it. The normal-quiz skip filtering
+// (notebook/reverse/freeform skipped_at) is a separate path and is intentionally
+// NOT exercised or changed here.
+func TestExampleData_OriginGroupingIndependentOfEtymologyOriginSkip(t *testing.T) {
 	ctx := context.Background()
-	learningDir := t.TempDir()
-	svc := newExampleService(t, learningDir)
 
-	reverse, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
-	require.NoError(t, err)
-	pick := func(expr string) *ReverseCard {
-		for i := range reverse {
-			if reverse[i].Expression == expr {
-				return &reverse[i]
+	// recordMiss drives a real miss of `expr` in the given direction through the
+	// real Service, so the Relearn pool sees a genuine misunderstood log for the
+	// series that direction replays (reverse -> ReverseLogs, recognition ->
+	// LearnedLogs).
+	recordMiss := func(t *testing.T, svc *Service, direction notebook.QuizType, expr string) {
+		t.Helper()
+		switch direction {
+		case notebook.QuizTypeReverse:
+			cards, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+			require.NoError(t, err)
+			for i := range cards {
+				if cards[i].Expression == expr {
+					require.NotEmpty(t, cards[i].WordDetail.OriginParts, "normal quiz shows origin (primaryOrigin=true)")
+					require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+					return
+				}
+			}
+		case notebook.QuizTypeNotebook:
+			cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+			require.NoError(t, err)
+			for i := range cards {
+				if cards[i].Entry == expr {
+					require.NotEmpty(t, cards[i].WordDetail.OriginParts, "normal quiz shows origin (primaryOrigin=true)")
+					require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+					return
+				}
 			}
 		}
-		return nil
+		t.Fatalf("word %q not served in direction %q", expr, direction)
 	}
-	marked := pick("deficient")   // carries the vestigial etymology_origin marker
-	sibling := pick("transact")   // no marker — the control
-	require.NotNil(t, marked)
-	require.NotNil(t, sibling)
-	require.NotEmpty(t, marked.WordDetail.OriginParts, "normal reverse quiz shows origin (primaryOrigin=true)")
 
-	// Write the vestigial skipped_at["etymology_origin"] marker via the real
-	// write path — exactly the stale marker on the user's disk.
-	require.NoError(t, svc.SkipWord(CardInfo{
-		NotebookName: marked.NotebookName, StoryTitle: marked.StoryTitle, SceneTitle: marked.SceneTitle, Expression: "deficient",
-	}, "", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}))
-	histories, err := notebook.NewLearningHistories(learningDir)
-	require.NoError(t, err)
-	require.True(t,
-		notebook.IsExpressionExcludedForQuizType(histories["roots-demo"], "", notebook.QuizTypeEtymologyOrigin, "deficient"),
-		"precondition: the vestigial etymology_origin marker is on disk")
+	for _, tc := range []struct {
+		name      string
+		direction notebook.QuizType
+	}{
+		{"reverse", notebook.QuizTypeReverse},
+		{"recognition", notebook.QuizTypeNotebook},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			learningDir := t.TempDir()
+			svc := newExampleService(t, learningDir)
 
-	require.NoError(t, svc.SaveReverseResult(ctx, *marked, GradeResult{Correct: false, Quality: 0}, 1000))
-	require.NoError(t, svc.SaveReverseResult(ctx, *sibling, GradeResult{Correct: false, Quality: 0}, 1000))
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
-	require.NoError(t, err)
+			// Set the vestigial etymology_origin skip marker on "deficient" via the
+			// real write path, and confirm it landed on disk.
+			require.NoError(t, svc.SkipWord(
+				CardInfo{NotebookName: "roots-demo", Expression: "deficient"},
+				"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}))
+			histories, err := notebook.NewLearningHistories(learningDir)
+			require.NoError(t, err)
+			require.True(t,
+				notebook.IsExpressionExcludedForQuizType(histories["roots-demo"], "", notebook.QuizTypeEtymologyOrigin, "deficient"),
+				"precondition: the vestigial etymology_origin marker is on disk")
 
-	// The marked word groups under its root DESPITE the vestigial marker.
-	card := relearnCardFor(pool, "deficient")
-	require.NotNil(t, card, "a miss never drops a word from Relearn")
-	assert.Equalf(t, notebook.QuizTypeEtymologyOrigin, card.Format,
-		"the vestigial etymology_origin marker must be IGNORED: deficient folds into its origin family card")
-	assert.Equal(t, "facere", card.OriginText)
+			recordMiss(t, svc, tc.direction, "deficient") // marked word
+			recordMiss(t, svc, tc.direction, "transact")  // unmarked control
 
-	// The unmarked sibling groups too (control).
-	sib := relearnCardFor(pool, "transact")
-	require.NotNil(t, sib)
-	assert.Equal(t, notebook.QuizTypeEtymologyOrigin, sib.Format)
-	assert.Equal(t, "agere", sib.OriginText)
+			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			require.NoError(t, err)
+
+			// The marked word groups under its root DESPITE the vestigial marker,
+			// drilled in the direction it was missed.
+			marked := relearnCardFor(pool, "deficient")
+			require.NotNil(t, marked, "a miss never drops a word from Relearn")
+			assert.Equalf(t, notebook.QuizTypeEtymologyOrigin, marked.Format,
+				"grouping must be independent of etymology_origin skip state: deficient folds into its origin family card")
+			assert.Equal(t, "facere", marked.OriginText)
+			assert.Equal(t, tc.direction, marked.Direction, "drilled in the direction it was missed")
+
+			// The unmarked sibling groups too (control).
+			sibling := relearnCardFor(pool, "transact")
+			require.NotNil(t, sibling)
+			assert.Equal(t, notebook.QuizTypeEtymologyOrigin, sibling.Format)
+			assert.Equal(t, "agere", sibling.OriginText)
+		})
+	}
 }

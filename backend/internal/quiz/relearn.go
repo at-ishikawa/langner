@@ -309,12 +309,6 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		if !ok {
 			continue // no vocab data to grade/display against
 		}
-		if originDebugEnabled() {
-			dbgOp, dbgHasOrigin := primaryOriginPart(fc)
-			dbgExcluded := notebook.IsExpressionExcludedForQuizType(histories[c.notebookName], c.id, notebook.QuizTypeEtymologyOrigin, c.expression)
-			originDebugLogf("miss expr=%q id=%q notebook=%q format=%q resolvedOriginParts=%v primaryOrigin={has:%v origin:%q} excludedEtymOrigin=%v",
-				c.expression, c.id, c.notebookName, c.format, fc.WordDetail.OriginParts, dbgHasOrigin, dbgOp.Origin, dbgExcluded)
-		}
 		// A miss of a word that carries an etymology origin — in recognition OR
 		// reverse — is re-drilled inside an origin FAMILY card: the frontend
 		// groups every such card sharing an origin into one screen (origin +
