@@ -1,13 +1,16 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { ChakraProvider, defaultSystem } from "@chakra-ui/react";
 import { RelearnOriginPost } from "./RelearnOriginPost";
-import type { RelearnCard } from "@/lib/client";
+import type { RelearnCard, SubmitRelearnAnswerResponse } from "@/lib/client";
+import { quizClient } from "@/lib/client";
 
 vi.mock("@/lib/client", () => ({
   quizClient: { submitRelearnAnswer: vi.fn() },
   QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, FREEFORM: 3, ETYMOLOGY_ORIGIN: 4, RELEARN: 7, GRAMMAR: 8 },
 }));
+
+const submitMock = vi.mocked(quizClient.submitRelearnAnswer);
 
 const word = (entry: string, noteId: number): RelearnCard =>
   ({
@@ -40,6 +43,20 @@ function renderPost(englishForms: string[]) {
   );
 }
 
+// A graded response for one word. contextScenes drives the "Where it appears"
+// section; correct=false makes the feedback sheet open automatically.
+const gradeResponse = (
+  overrides: Partial<SubmitRelearnAnswerResponse> = {},
+): SubmitRelearnAnswerResponse =>
+  ({
+    correct: false,
+    meaning: "free",
+    reason: "",
+    literal: "",
+    contextScenes: [],
+    ...overrides,
+  }) as SubmitRelearnAnswerResponse;
+
 describe("RelearnOriginPost", () => {
   it("renders the origin's english_forms as chips on the header", () => {
     renderPost(["lib", "liv"]);
@@ -52,5 +69,50 @@ describe("RelearnOriginPost", () => {
   it("omits the chip row when there are no english_forms", () => {
     renderPost([]);
     expect(screen.queryByTestId("relearn-origin-english-forms")).not.toBeInTheDocument();
+  });
+
+  it("shows the word's example scenes in the feedback sheet when it is graded with contextScenes", async () => {
+    submitMock.mockResolvedValueOnce(
+      gradeResponse({
+        contextScenes: [
+          {
+            notebookName: "nb",
+            sceneTitle: "At the library",
+            statements: ["They fought for liberty and freedom."],
+            conversations: [],
+          },
+        ] as SubmitRelearnAnswerResponse["contextScenes"],
+      }),
+    );
+    renderPost(["lib", "liv"]);
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const sheet = await screen.findByTestId("relearn-origin-feedback");
+    await waitFor(() => {
+      expect(sheet).toHaveTextContent("Where it appears");
+      expect(sheet).toHaveTextContent("They fought for liberty and freedom.");
+    });
+  });
+
+  it("renders no example scenes for a word graded without contextScenes", async () => {
+    // contextScenes absent → the `?? []` fallback → RelearnContext renders null.
+    submitMock.mockResolvedValueOnce({
+      correct: false,
+      meaning: "free",
+      reason: "",
+      literal: "",
+    } as SubmitRelearnAnswerResponse);
+    renderPost(["lib", "liv"]);
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const sheet = await screen.findByTestId("relearn-origin-feedback");
+    await waitFor(() => expect(sheet).toHaveTextContent("wrong guess"));
+    expect(sheet).not.toHaveTextContent("Where it appears");
   });
 });

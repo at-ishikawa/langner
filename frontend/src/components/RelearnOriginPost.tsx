@@ -8,6 +8,7 @@ import {
   type SubmitRelearnAnswerResponse,
 } from "@/lib/client";
 import { OriginBreakdown } from "@/components/OriginBreakdown";
+import RelearnContext from "@/components/RelearnContext";
 import { responseTimeSince } from "@/lib/responseTime";
 
 // RelearnOriginPost presents ONE etymology origin the way the etymology family
@@ -378,6 +379,14 @@ export function RelearnOriginPost({
               {selected.res.literal}
             </Text>
           )}
+          {/* Where-it-appears example scenes for the graded word, mirroring the
+              single-card Relearn screen. RelearnContext returns null on empty
+              scenes, so a word without examples renders nothing extra. */}
+          <RelearnContext
+            entry={selectedWord.entry}
+            scenes={selected.res.contextScenes ?? []}
+            exampleWords={[]}
+          />
         </Box>
       )}
     </Box>
