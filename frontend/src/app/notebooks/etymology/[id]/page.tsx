@@ -543,6 +543,25 @@ function EtymologyNotebookPage() {
     );
   }, [origins, search]);
 
+  // Group the (filtered) origins under their source-book section
+  // (sessionTitle / chapter), preserving the source declaration order of both
+  // sections and of origins within a section. A search that empties a section
+  // drops it. When no origin carries a section, everything falls into one
+  // untitled bucket so the list still renders.
+  const originSections = useMemo(() => {
+    const order: string[] = [];
+    const bySection = new Map<string, EtymologyOriginPart[]>();
+    for (const o of filteredOrigins) {
+      const section = o.sessionTitle ?? "";
+      if (!bySection.has(section)) {
+        bySection.set(section, []);
+        order.push(section);
+      }
+      bySection.get(section)!.push(o);
+    }
+    return order.map((section) => ({ section, origins: bySection.get(section)! }));
+  }, [filteredOrigins]);
+
   if (loading) {
     return (
       <Box p={4} maxW="sm" mx="auto" textAlign="center">
@@ -706,15 +725,34 @@ function EtymologyNotebookPage() {
       {/* Content */}
       <Box p={4}>
         {tab === "origins" ? (
-          <VStack align="stretch" gap={2}>
-            {filteredOrigins.map((origin, i) => (
-              <OriginCard
-                key={i}
-                origin={origin}
-                onClick={() => selectOrigin(origin.origin)}
-              />
+          <VStack align="stretch" gap={5}>
+            {originSections.map(({ section, origins: sectionOrigins }) => (
+              <Box key={section || "__unsectioned__"}>
+                {section && (
+                  <Text
+                    fontSize="xs"
+                    fontWeight="semibold"
+                    textTransform="uppercase"
+                    letterSpacing="wide"
+                    color="gray.500"
+                    _dark={{ color: "gray.400" }}
+                    mb={2}
+                  >
+                    {section}
+                  </Text>
+                )}
+                <VStack align="stretch" gap={2}>
+                  {sectionOrigins.map((origin, i) => (
+                    <OriginCard
+                      key={`${section}-${origin.origin}-${i}`}
+                      origin={origin}
+                      onClick={() => selectOrigin(origin.origin)}
+                    />
+                  ))}
+                </VStack>
+              </Box>
             ))}
-            {filteredOrigins.length === 0 && (
+            {originSections.length === 0 && (
               <Text color="fg.muted" textAlign="center">
                 No origins match your search.
               </Text>

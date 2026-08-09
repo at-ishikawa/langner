@@ -603,3 +603,79 @@ notebooks:
 	require.Len(t, resp.Msg.GetStories(), 1)
 	assert.Equal(t, "Entry 1", resp.Msg.GetStories()[0].GetEvent())
 }
+
+// TestNotebookHandler_GetEtymologyNotebook_SectionPerOrigin verifies that the
+// origins listing carries each origin's source-book section (session title) so
+// the browse page can group origins under their chapter header. This is a
+// display-only enrichment — it must not alter any learning-log key. The book
+// spans two sections in declaration order; the response must preserve that
+// order and attach the correct section to each origin.
+func TestNotebookHandler_GetEtymologyNotebook_SectionPerOrigin(t *testing.T) {
+	etymDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	bookDir := filepath.Join(etymDir, "roots")
+	require.NoError(t, os.MkdirAll(bookDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: roots
+kind: Etymology
+name: Roots
+notebooks:
+  - ./sessions.yml
+`), 0644))
+	// New-shape source: two sessions (chapters), each with origins under scenes.
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "sessions.yml"), []byte(`- event: "Chapter 1: The Body"
+  scenes:
+    - scene: "cardio (heart)"
+      origins:
+        - origin: cardio
+          type: root
+          language: Greek
+          meaning: heart
+    - scene: "derma (skin)"
+      origins:
+        - origin: derma
+          type: root
+          language: Greek
+          meaning: skin
+- event: "Chapter 2: Sending"
+  scenes:
+    - scene: "mittere (to send)"
+      origins:
+        - origin: mittere
+          type: root
+          language: Latin
+          meaning: to send
+`), 0644))
+
+	handler := NewNotebookHandler(
+		config.NotebooksConfig{
+			EtymologyDirectories:   []string{etymDir},
+			LearningNotesDirectory: learningDir,
+		},
+		config.TemplatesConfig{},
+		make(map[string]rapidapi.Response),
+		nil,
+		nil,
+		nil,
+	)
+
+	resp, err := handler.GetEtymologyNotebook(
+		context.Background(),
+		connect.NewRequest(&apiv1.GetEtymologyNotebookRequest{NotebookId: "roots"}),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+
+	origins := resp.Msg.GetOrigins()
+	require.Len(t, origins, 3)
+
+	// Declaration order preserved, and each origin carries its section.
+	assert.Equal(t, "cardio", origins[0].GetOrigin())
+	assert.Equal(t, "Chapter 1: The Body", origins[0].GetSessionTitle())
+
+	assert.Equal(t, "derma", origins[1].GetOrigin())
+	assert.Equal(t, "Chapter 1: The Body", origins[1].GetSessionTitle())
+
+	assert.Equal(t, "mittere", origins[2].GetOrigin())
+	assert.Equal(t, "Chapter 2: Sending", origins[2].GetSessionTitle())
+}
