@@ -7,9 +7,9 @@ import { quizClient, QuizType, type SubmitRelearnAnswerResponse } from "@/lib/cl
 import { AnswerInput } from "@/components/AnswerInput";
 import { FeedbackActions } from "@/components/FeedbackActions";
 import { RelearnGrammarPost } from "@/components/RelearnGrammarPost";
+import { RelearnOriginPost } from "@/components/RelearnOriginPost";
 import { useRelearnStore } from "@/store/relearnStore";
 import RelearnContext from "@/components/RelearnContext";
-import { OriginBreakdown } from "@/components/OriginBreakdown";
 
 // sourceLabel names which quiz produced the wrong answer that pooled this card —
 // and, now that relearn mirrors that quiz, which format it is presented in.
@@ -17,8 +17,6 @@ function sourceLabel(source: QuizType): string {
   switch (source) {
     case QuizType.REVERSE:
       return "Reverse — recall the word";
-    case QuizType.ETYMOLOGY_ORIGIN:
-      return "Etymology — recall the meaning";
     default:
       return "Recognition — recall the meaning";
   }
@@ -47,11 +45,12 @@ export default function RelearnSessionPage() {
   const startRef = useRef<number>(Date.now());
 
   // Words left across every remaining screen: a card is one word, a grammar
-  // post contributes one per due blank it still holds.
-  const wordsLeft = queue.reduce(
-    (n, item) => n + (item.kind === "card" ? 1 : item.post.blanks.length),
-    0,
-  );
+  // post contributes one per due blank, an origin family one per missed word.
+  const wordsLeft = queue.reduce((n, item) => {
+    if (item.kind === "card") return n + 1;
+    if (item.kind === "post") return n + item.post.blanks.length;
+    return n + item.group.words.length;
+  }, 0);
 
   // Leaving the queue empty ends the session. A direct visit with no answers
   // yet bounces back to the start screen instead of a hollow complete page.
@@ -89,21 +88,38 @@ export default function RelearnSessionPage() {
     );
   }
 
+  // An etymology origin is presented once with the missed words that share it,
+  // drilled progressively like the etymology family card (see RelearnOriginPost).
+  // Answered in a single pass and removed — never requeued.
+  if (front.kind === "origin") {
+    return (
+      <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
+        <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={3} aria-live="polite">
+          {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
+        </Text>
+        <RelearnOriginPost
+          key={`${front.group.originText} ${front.group.originMeaning}`}
+          originText={front.group.originText}
+          originMeaning={front.group.originMeaning}
+          type={front.group.type}
+          language={front.group.language}
+          englishForms={front.group.englishForms}
+          words={front.group.words}
+          onComplete={(correctCount, wordCount) => completePost(correctCount, wordCount)}
+        />
+      </Box>
+    );
+  }
+
   const current = front.card;
 
-  // Each card mirrors the quiz type it was failed in. For the reverse formats
-  // the learner produces the word/origin from the meaning; otherwise they
-  // recall the meaning from the word/origin.
+  // Each single card mirrors the quiz type it was failed in: reverse produces
+  // the word from the meaning; recognition recalls the meaning from the word.
+  // (Etymology-origin misses are grouped into origin family posts above.)
   const isReverse = current.sourceQuizType === QuizType.REVERSE;
-  const isEtymology = current.sourceQuizType === QuizType.ETYMOLOGY_ORIGIN;
   const promptText = isReverse ? current.meaning : current.entry;
-  const answerLabel = isReverse ? (isEtymology ? "The origin" : "The word") : "Your meaning";
-  const answerPlaceholder = isReverse
-    ? isEtymology
-      ? "Type the origin"
-      : "Type the word"
-    : "Type the meaning";
-  const etymologyBadge = [current.type, current.language].filter(Boolean).join(" · ");
+  const answerLabel = isReverse ? "The word" : "Your meaning";
+  const answerPlaceholder = isReverse ? "Type the word" : "Type the meaning";
 
   const submit = async (isSkipped: boolean) => {
     setSubmitting(true);
@@ -151,11 +167,6 @@ export default function RelearnSessionPage() {
         <Heading size="lg" textAlign="center" data-testid="relearn-prompt">
           {promptText}
         </Heading>
-        {isEtymology && etymologyBadge && (
-          <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} textAlign="center" mt={1}>
-            {etymologyBadge}
-          </Text>
-        )}
 
         {/* Hints: examples for recognition, masked contexts for reverse. */}
         {!isReverse && current.examples.length > 0 && (
@@ -168,7 +179,7 @@ export default function RelearnSessionPage() {
             ))}
           </Box>
         )}
-        {isReverse && !isEtymology && current.contexts.length > 0 && (
+        {isReverse && current.contexts.length > 0 && (
           <Box mt={3} display="flex" flexDirection="column" gap={1}>
             {current.contexts.map((c, i) => (
               <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }}>
@@ -213,48 +224,12 @@ export default function RelearnSessionPage() {
               noteId={current.noteId}
               isOverridden={override !== null}
               isSkipped={false}
+              showExclude={false}
               nextLabel="Next"
               onNext={() => void handleNext()}
               onOverride={() => setOverride(!feedback.correct)}
               onUndo={() => setOverride(null)}
             >
-              {/* Etymology origin details — mirrors the etymology-origin quiz
-                  feedback (QuizResultCard): the roots with their meanings, the
-                  pronunciation, and the literal gloss. The origin_parts already
-                  flow on the relearn response's word_detail; literal arrives on
-                  the response's dedicated field. Only shown for etymology
-                  cards; every field is guarded so a missing value renders
-                  nothing. */}
-              {isEtymology && (
-                <Box display="flex" flexDirection="column" gap={1}>
-                  {feedback.wordDetail?.pronunciation && (
-                    <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }}>
-                      /{feedback.wordDetail.pronunciation}/
-                    </Text>
-                  )}
-                  {feedback.wordDetail?.originParts && feedback.wordDetail.originParts.length > 0 && (
-                    <Box>
-                      <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} mb={1}>
-                        Origin
-                      </Text>
-                      <OriginBreakdown
-                        parts={feedback.wordDetail.originParts.map((p) => ({
-                          origin: p.origin,
-                          meaning: p.meaning,
-                          language: p.language,
-                          type: p.type,
-                        }))}
-                      />
-                    </Box>
-                  )}
-                  {feedback.literal && (
-                    <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} fontStyle="italic">
-                      {feedback.literal}
-                    </Text>
-                  )}
-                </Box>
-              )}
-
               {/* Show the word, its correct meaning, and what the learner typed
                   so they can see exactly what was off. */}
               <Box display="flex" flexDirection="column" gap={1}>
@@ -286,8 +261,7 @@ export default function RelearnSessionPage() {
               <RelearnContext
                 entry={current.entry}
                 scenes={feedback.contextScenes ?? []}
-                exampleWords={feedback.exampleWords ?? []}
-                graphContext={feedback.graphContext}
+                exampleWords={[]}
               />
             </FeedbackActions>
           )}

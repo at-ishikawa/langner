@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,6 +144,11 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	assert.Equal(t, 0, storySummary.ReviewCount)
 	// Only misunderstood answers in fixture → no words eligible for reverse quiz
 	assert.Equal(t, 0, storySummary.ReverseReviewCount)
+	// VocabularyCount is STRUCTURAL: the scene has one definition
+	// ("preposterous"), so it is 1 even though ReviewCount is 0. This is
+	// what keeps a with-vocabulary notebook on the Vocabulary tab
+	// regardless of studied/due state (decoupled from ReviewCount).
+	assert.Equal(t, 1, storySummary.VocabularyCount)
 
 	vocabSummary, ok := summaryMap["test-vocab"]
 	require.True(t, ok)
@@ -154,6 +160,59 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	// with story notebooks.
 	assert.Equal(t, 0, vocabSummary.ReviewCount)
 	assert.Equal(t, 0, vocabSummary.ReverseReviewCount)
+	// One flashcard card → structural VocabularyCount 1 despite ReviewCount 0.
+	assert.Equal(t, 1, vocabSummary.VocabularyCount)
+}
+
+// The standalone etymology-origin quiz was removed, but etymology notebooks
+// must stay browsable from the Learn hub's Etymology tab. LoadNotebookSummaries
+// therefore still lists each etymology notebook with Kind "Etymology" and its
+// origin count so the frontend can render the browse link.
+func TestService_LoadNotebookSummaries_IncludesEtymologyNotebooks(t *testing.T) {
+	etymDir := t.TempDir()
+	learningDir := t.TempDir()
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+
+	book := filepath.Join(etymDir, "word-roots")
+	require.NoError(t, os.MkdirAll(book, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(book, "index.yml"), []byte(`id: word-roots
+kind: Etymology
+name: Word Roots
+notebooks:
+  - ./s1.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(book, "s1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: "graph"
+    type: root
+    language: Greek
+    meaning: to write
+  - origin: "tele"
+    type: prefix
+    language: Greek
+    meaning: far
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		EtymologyDirectories:   []string{etymDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(gomock.NewController(t)), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	summaries, err := svc.LoadNotebookSummaries(false)
+	require.NoError(t, err)
+
+	var etym *NotebookSummary
+	for i := range summaries {
+		if summaries[i].NotebookID == "word-roots" {
+			etym = &summaries[i]
+		}
+	}
+	require.NotNil(t, etym, "etymology notebook must still be listed for browsing")
+	assert.Equal(t, "Word Roots", etym.Name)
+	assert.Equal(t, "Etymology", etym.Kind)
+	assert.Equal(t, 2, etym.EtymologyReviewCount)
 }
 
 func TestService_LoadNotebookSummaries_ReverseReviewCount(t *testing.T) {
@@ -322,6 +381,45 @@ func TestService_LoadCards_FlashcardNotebook(t *testing.T) {
 	assert.Empty(t, cards[0].SceneTitle)
 	require.Len(t, cards[0].Examples, 1)
 	assert.Equal(t, "It was pure serendipity that they met.", cards[0].Examples[0].Text)
+}
+
+// TestService_LoadCards_FlashcardHighlight pins the forward path: a per-example
+// {text, highlight} carries the exact surface word (an irregular inflection the
+// lemma can't derive) all the way onto the standard-quiz Card so the frontend
+// can bold it.
+func TestService_LoadCards_FlashcardHighlight(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	flashcardsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	vocabDir := filepath.Join(flashcardsDir, "irregulars")
+	require.NoError(t, os.MkdirAll(vocabDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "index.yml"), []byte(`id: irregulars
+name: Irregular Verbs
+notebooks:
+  - ./cards.yml
+`), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "cards.yml"), []byte(`- title: "Past Tense"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "go"
+      meaning: "to move or travel"
+      examples:
+        - text: "She went home early yesterday."
+          highlight: "went"
+`), 0644))
+
+	svc := NewService(config.NotebooksConfig{
+		FlashcardsDirectories:  []string{flashcardsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	cards, err := svc.LoadCards([]string{"irregulars"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	require.Len(t, cards[0].Examples, 1)
+	assert.Equal(t, "She went home early yesterday.", cards[0].Examples[0].Text)
+	assert.Equal(t, "went", cards[0].Examples[0].Highlight)
 }
 
 // TestService_LoadCards_FlashcardNotebook_HidesFreeformWrongWhenNotIncludingUnstudied
@@ -747,6 +845,67 @@ notebooks:
 	require.NotNil(t, book)
 	assert.Equal(t, 2, book.ReverseReviewCount,
 		"summary ReverseReviewCount with includeUnstudied must match the 2 reverse cards loaded")
+}
+
+// TestService_LoadCards_DefinitionsBook_SurfacesExamples verifies that a
+// definitions-book (incl. etymology-derived) word's `examples:` sentences
+// reach the standard quiz Card (forward) and the reverse Card's masked
+// Contexts (reverse). Before the fix, loadDefinitionCards never read
+// note.Examples (Card.Examples stayed nil) and loadDefinitionReverseCards
+// built no Contexts, so definitions words showed no example sentence while
+// flashcard words did.
+func TestService_LoadCards_DefinitionsBook_SurfacesExamples(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defsDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	const example = "His grasp of the language was barely passable at first, but it improved."
+
+	bookDir := filepath.Join(defsDir, "examples-defs")
+	require.NoError(t, os.MkdirAll(bookDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "index.yml"), []byte(`id: examples-defs
+notebooks:
+  - ./session1.yml
+`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(bookDir, "session1.yml"), []byte(`- metadata:
+    title: "Session 1"
+  scenes:
+    - metadata:
+        index: 0
+        title: "roots"
+      expressions:
+        - expression: "passable"
+          meaning: "good enough, but not excellent"
+          examples:
+            - "`+example+`"
+`), 0o644))
+
+	svc := NewService(config.NotebooksConfig{
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+
+	// Forward: the standard quiz Card must carry the example sentence.
+	cards, err := svc.LoadCards([]string{"examples-defs"}, true, nil)
+	require.NoError(t, err)
+	require.Len(t, cards, 1)
+	require.Len(t, cards[0].Examples, 1,
+		"definitions-book word must surface its example sentence (was nil before the fix)")
+	assert.Equal(t, example, cards[0].Examples[0].Text)
+
+	// Reverse: the reverse Card must carry a masked context built from the
+	// same example, with the expression masked out.
+	reverse, err := svc.LoadReverseCards([]string{"examples-defs"}, false, true, nil)
+	require.NoError(t, err)
+	require.Len(t, reverse, 1)
+	require.Len(t, reverse[0].Contexts, 1,
+		"definitions-book reverse card must build masked contexts (was empty before the fix)")
+	assert.Equal(t, example, reverse[0].Contexts[0].Context)
+	assert.NotContains(t, strings.ToLower(reverse[0].Contexts[0].MaskedContext), "passable",
+		"the expression must be masked out of the reverse context")
+	assert.Contains(t, reverse[0].Contexts[0].MaskedContext, "______",
+		"masking must replace the expression with the blank marker")
 }
 
 // TestService_LoadDefinitionWords_RespectsFreeformSkip exercises the
@@ -2032,6 +2191,7 @@ func TestMaskWord(t *testing.T) {
 		context    string
 		expression string
 		definition string
+		highlight  string
 		want       string
 	}{
 		{
@@ -2077,11 +2237,21 @@ func TestMaskWord(t *testing.T) {
 			definition: "break the ice",
 			want:       "She used the term ______ during the meeting",
 		},
+		{
+			// Irregular inflection the lemma can't derive: lemma "go" never
+			// substring-matches "went", so only the per-example highlight
+			// masks it. Without this the reverse quiz would leak the answer.
+			name:       "irregular highlight masked",
+			context:    "She went home early yesterday.",
+			expression: "go",
+			highlight:  "went",
+			want:       "She ______ home early yesterday.",
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := maskWord(tt.context, tt.expression, tt.definition)
+			got := maskWord(tt.context, tt.expression, tt.definition, tt.highlight)
 			assert.Equal(t, tt.want, got)
 		})
 	}

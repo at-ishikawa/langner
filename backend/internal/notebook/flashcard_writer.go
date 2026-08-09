@@ -102,7 +102,7 @@ func convertFlashcardNotebook(nb FlashcardNotebook) assets.FlashcardNotebook {
 			Expression:    card.Expression,
 			Definition:    card.Definition,
 			Meaning:       card.Meaning,
-			Examples:      card.Examples,
+			Examples:      card.Examples.Texts(),
 			Pronunciation: card.Pronunciation,
 			PartOfSpeech:  card.PartOfSpeech,
 			Origin:        card.Origin,

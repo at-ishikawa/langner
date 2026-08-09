@@ -47,6 +47,13 @@ func relearnCardID(card quiz.RelearnCard) int64 {
 		_, _ = io.WriteString(h, "\x1f")
 		_, _ = io.WriteString(h, card.Incorrect)
 	}
+	if card.IsEtymology() {
+		// Fold in the origin so a word grouped under an origin gets an id
+		// distinct from the same word's plain recognition card, and so two words
+		// that share an entry+meaning under different origins stay separate.
+		_, _ = io.WriteString(h, "\x1f")
+		_, _ = io.WriteString(h, card.OriginText)
+	}
 	return int64(h.Sum64() >> 1)
 }
 
@@ -90,7 +97,7 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 		fresh[noteID] = card
 		var examples []*apiv1.Example
 		for _, ex := range card.Examples {
-			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker})
+			examples = append(examples, &apiv1.Example{Text: ex.Text, Speaker: ex.Speaker, Highlight: ex.Highlight})
 		}
 		var contexts []*apiv1.ContextSentence
 		for _, c := range card.Contexts {
@@ -107,6 +114,9 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 			Language:       card.Language,
 			Content:        card.Content,
 			Incorrect:      card.Incorrect,
+			OriginText:     card.OriginText,
+			OriginMeaning:  card.OriginMeaning,
+			EnglishForms:   card.EnglishForms,
 		})
 	}
 
@@ -202,11 +212,11 @@ func (h *QuizHandler) gradeRelearn(ctx context.Context, card quiz.RelearnCard, a
 	switch card.Format {
 	case notebook.QuizTypeReverse:
 		return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
-	case notebook.QuizTypeEtymologyOrigin:
-		return h.svc.GradeEtymologyOriginMeaning(ctx, card.EtymologyCard(), answer, responseTimeMs)
 	case notebook.QuizTypeGrammar:
 		return h.svc.GradeGrammarBlank(ctx, card.Content, card.GrammarCard(), answer, responseTimeMs)
 	default:
+		// Recognition and etymology-origin cards both grade the typed meaning
+		// against the word's own gloss via the vocab card.
 		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
 	}
 }
@@ -224,15 +234,10 @@ func (h *QuizHandler) buildRelearnResponse(ctx context.Context, card quiz.Relear
 		ContextScenes: toProtoRelearnScenes(card.ContextScenes),
 	}
 	if card.IsEtymology() {
+		// The origin breakdown (word_detail.origin_parts) and the literal gloss
+		// already give the learner the etymology feedback; the origin header of
+		// the family card is rendered on the frontend from origin_text/meaning.
 		resp.Literal = card.Literal
-		ec := card.EtymologyCard()
-		for _, w := range ec.Words {
-			resp.ExampleWords = append(resp.ExampleWords, w.Expression)
-		}
-		if r, err := h.svc.NewReader(); err == nil {
-			concepts := loadBookConcepts(ctx, r, ec.NotebookName)
-			resp.GraphContext = buildGraphContextForCard(ctx, r, ec, concepts)
-		}
 	}
 	if card.IsGrammar() {
 		gc := card.GrammarCard()

@@ -12,3 +12,12 @@ Feature: Home navigation
     When I follow the "Quiz" link
     Then I should be on the Quiz page
     And I see the quiz mode "Standard"
+
+  # covers route: /history — the day-by-day History list linked from the home
+  # page. The Analytics scenarios open Day Detail (/history/[date]) directly, so
+  # this is the only scenario that lands on the bare /history list route.
+  Scenario: Open the History list from home
+    Given I am on the home page
+    When I follow the "History" link
+    Then I should be on the History page
+    And I see the heading "History"

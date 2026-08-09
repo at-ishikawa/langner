@@ -1018,45 +1018,6 @@ func containsStr(s, substr string) bool {
 	return len(s) >= len(substr) && (s == substr || len(s) > 0 && strings.Contains(s, substr))
 }
 
-func TestLearningHistoryExpression_AddRecordWithQualityForEtymology(t *testing.T) {
-	tests := []struct {
-		name       string
-		isCorrect  bool
-		wantStatus LearnedStatus
-	}{
-		{
-			name:       "origin correct",
-			isCorrect:  true,
-			wantStatus: LearnedStatusUnderstood,
-		},
-		{
-			name:       "origin incorrect",
-			isCorrect:  false,
-			wantStatus: LearnedStatusMisunderstood,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			exp := LearningHistoryExpression{
-				Expression: "inspect",
-			}
-
-			quality := 4
-			if !tt.isCorrect {
-				quality = 1
-			}
-
-			exp.AddRecordWithQualityForEtymology(&SM2Calculator{}, tt.isCorrect, true, quality, 5000, QuizTypeEtymologyOrigin)
-
-			logs := exp.GetLogsForQuizType(QuizTypeEtymologyOrigin)
-			require.Len(t, logs, 1)
-			assert.Equal(t, tt.wantStatus, logs[0].Status)
-			assert.Equal(t, string(QuizTypeEtymologyOrigin), logs[0].QuizType)
-		})
-	}
-}
-
 func TestLearningHistoryExpression_NeedsEtymologyReview(t *testing.T) {
 	now := time.Now()
 	oneHourAgo := now.Add(-1 * time.Hour)

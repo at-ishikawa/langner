@@ -302,8 +302,8 @@ func TestYAMLRepository_DayBoundaryLocalZone(t *testing.T) {
 func TestYAMLRepository_EtymologyOriginToday(t *testing.T) {
 	dir := t.TempDir()
 	today := time.Now().UTC().Format("2006-01-02")
-	// Fixture mirrors what AddRecordWithQualityForEtymology writes for a
-	// misunderstood etymology answer on the word-power-made-easy notebook.
+	// Fixture mirrors a legacy misunderstood etymology-origin answer on the
+	// word-power-made-easy notebook — analytics still reads such logs.
 	body := `- metadata:
     id: word-power-made-easy
     title: "Word Power Made Easy"

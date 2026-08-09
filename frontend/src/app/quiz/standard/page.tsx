@@ -18,6 +18,7 @@ import { BatchFeedback } from "@/components/BatchFeedback";
 import { standardResultToItem } from "@/lib/quizResultItems";
 import { useQuizResultActions } from "@/lib/useQuizResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
+import { highlightExpression } from "@/lib/highlight";
 
 type QuizPhase = "answering" | "grading" | "batch-feedback";
 
@@ -27,23 +28,6 @@ interface BufferedAnswer {
   displayAnswer: string;
   responseTimeMs: bigint;
   isSkipped?: boolean;
-}
-
-function highlightExpression(
-  text: string,
-  expression: string,
-): React.ReactNode[] {
-  const escaped = expression.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const parts = text.split(new RegExp(`(${escaped})`, "gi"));
-  return parts.map((part, i) =>
-    i % 2 === 1 ? (
-      <Text as="span" key={i} fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }}>
-        {part}
-      </Text>
-    ) : (
-      <React.Fragment key={i}>{part}</React.Fragment>
-    ),
-  );
 }
 
 export default function QuizCardPage() {
@@ -212,7 +196,6 @@ export default function QuizCardPage() {
       {phase === "batch-feedback" ? (
         <BatchFeedback
           items={batchItems}
-          isEtymology={false}
           isFinal={isFinalCard}
           onContinue={handleContinue}
           onSeeResults={handleSeeResults}
@@ -249,7 +232,11 @@ export default function QuizCardPage() {
                 <Text key={i} fontSize="md" color="fg.muted">
                   {ex.speaker && <>{ex.speaker}: &ldquo;</>}
                   {!ex.speaker && <>&ldquo;</>}
-                  {highlightExpression(ex.text, card.originalEntry || card.entry)}
+                  {highlightExpression(
+                    ex.text,
+                    [card.originalEntry, card.entry],
+                    ex.highlight,
+                  )}
                   &rdquo;
                 </Text>
               ))}

@@ -375,8 +375,15 @@ func TestLoadNotebookSummaries_JournalTaggedKind(t *testing.T) {
 		switch s.Kind {
 		case "Journal":
 			journalKind = true
+			// This journal has only statements (prose) and no scene
+			// definitions, so it structurally has zero vocabulary. The
+			// Vocabulary tab gates on VocabularyCount > 0, so this empty
+			// journal drops out of the picker.
+			assert.Equal(t, 0, s.VocabularyCount, "definition-less journal must have VocabularyCount 0")
 		case "Grammar":
 			grammarKind = true
+			// Grammar summaries are correction drills, never vocabulary.
+			assert.Equal(t, 0, s.VocabularyCount, "grammar summary must have VocabularyCount 0")
 		default:
 			t.Errorf("journal notebook must not be plain vocabulary (kind %q)", s.Kind)
 		}

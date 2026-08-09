@@ -69,6 +69,21 @@ describe("FeedbackActions", () => {
     expect(screen.getByText("Excluded from quizzes")).toBeInTheDocument();
   });
 
+  it("does not render the Exclude button when showExclude=false", () => {
+    renderComponent({ showExclude: false, onSkip: vi.fn(), noteId: BigInt(1) });
+    expect(screen.queryByText("Exclude from Quizzes")).not.toBeInTheDocument();
+  });
+
+  it("does not render the Excluded label when showExclude=false even if isSkipped=true", () => {
+    renderComponent({ showExclude: false, isSkipped: true, onSkip: vi.fn() });
+    expect(screen.queryByText("Excluded from quizzes")).not.toBeInTheDocument();
+  });
+
+  it("still renders the override button when showExclude=false", () => {
+    renderComponent({ showExclude: false, isCorrect: false, onOverride: vi.fn() });
+    expect(screen.getByText("Mark as Correct")).toBeInTheDocument();
+  });
+
   it("calls onNext when Next button clicked", () => {
     const onNext = vi.fn();
     renderComponent({ onNext });

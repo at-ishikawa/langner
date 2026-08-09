@@ -498,37 +498,6 @@ func (exp *LearningHistoryExpression) AddRecordWithQualityForReverse(
 	exp.ReverseLogs = append([]LearningRecord{tentative}, exp.ReverseLogs...)
 }
 
-// AddRecordWithQualityForEtymology adds a new learning record for the
-// etymology-origin quiz with SM-2 quality data. The record is appended to the
-// WORD's own EtymologyOriginLogs series (invariants L1/L4) — one series per
-// word, never per origin.
-func (exp *LearningHistoryExpression) AddRecordWithQualityForEtymology(
-	calculator IntervalCalculator,
-	isCorrect, isKnownWord bool,
-	quality int,
-	responseTimeMs int64,
-	quizType QuizType,
-) {
-	status := LearnedStatusMisunderstood
-	if isCorrect {
-		if isKnownWord {
-			status = LearnedStatusUnderstood
-		} else {
-			status = LearnedStatusCanBeUsed
-		}
-	}
-
-	tentative := LearningRecord{
-		Status:         status,
-		LearnedAt:      NewDate(),
-		Quality:        quality,
-		ResponseTimeMs: responseTimeMs,
-		QuizType:       string(quizType),
-	}
-	tentative.IntervalDays, _ = calculator.NextIntervalForWrite(exp.EtymologyOriginLogs, tentative)
-	exp.EtymologyOriginLogs = append([]LearningRecord{tentative}, exp.EtymologyOriginLogs...)
-}
-
 // NeedsEtymologyReview returns true if the expression needs etymology quiz review
 func (exp LearningHistoryExpression) NeedsEtymologyReview(quizType QuizType) bool {
 	logs := exp.GetLogsForQuizType(quizType)

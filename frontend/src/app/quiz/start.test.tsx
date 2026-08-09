@@ -12,7 +12,6 @@ vi.mock("@/lib/client", () => ({
     startQuiz: vi.fn(),
     startReverseQuiz: vi.fn(),
     startFreeformQuiz: vi.fn(),
-    startEtymologyOriginQuiz: vi.fn(),
   },
 }));
 
@@ -36,7 +35,15 @@ function renderPage() {
 }
 
 const mockNotebooks = [
-  { notebookId: "english-phrases", name: "English Phrases", reviewCount: 2, reverseReviewCount: 1 },
+  // vocabularyCount > 0 so the notebook passes the Vocabulary tab's structural
+  // gate (a notebook with due reviews necessarily has vocabulary entries).
+  {
+    notebookId: "english-phrases",
+    name: "English Phrases",
+    reviewCount: 2,
+    reverseReviewCount: 1,
+    vocabularyCount: 2,
+  },
 ];
 
 const mockFlashcards = [

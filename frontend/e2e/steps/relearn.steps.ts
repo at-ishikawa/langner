@@ -133,8 +133,7 @@ When(
 
 // Navigates the working queue to the grammar POST holding the due blank for
 // {string}, then STOPS on it without answering — so a following step can
-// exercise "See answers" or the per-blank Exclude control. Two kinds of card
-// may sit in front of the target:
+// exercise "See answers". Two kinds of card may sit in front of the target:
 //   - a single vocab/etymology card → skipped via its "Don't Know" shortcut (a
 //     skip-for-now, not an exclude);
 //   - ANOTHER grammar post (a miss pooled by an earlier scenario in the same
@@ -210,26 +209,14 @@ Then(
   },
 );
 
-// Taps the PER-BLANK Exclude control next to the struck span for {string}. This
-// is the ONLY deliberate exclusion — it calls SkipWord (SetSkippedAt) and
-// removes the correction from future quizzes (see quiz-ui-invariants.md).
-When(
-  "I tap Exclude on the grammar relearn blank for {string}",
-  async ({ page }, incorrect: string) => {
-    await page.getByRole("button", { name: `Exclude "${incorrect}" from quizzes` }).click();
-  },
-);
-
-// After Exclude, the blank leaves the active post and reads "excluded" — it is
-// neither answered nor marked incorrect.
+// Relearn re-drills missed corrections and persists nothing, so the grammar
+// relearn post offers NO Exclude control anywhere (ungraded blank, graded pill,
+// or pinned feedback sheet). Exclusion is done only in the normal quizzes (see
+// quiz-ui-invariants.md).
 Then(
-  "the grammar relearn blank for {string} is excluded",
-  async ({ page }, incorrect: string) => {
-    const post = page.getByTestId("relearn-grammar-post");
-    await expect(post).toContainText(/excluded/i);
-    // The blank is no longer an answerable input and is not a graded pill.
-    await expect(page.getByLabel(`Correction for "${incorrect}"`)).toHaveCount(0);
-    await expect(page.getByRole("button", { name: `${incorrect} — incorrect` })).toHaveCount(0);
+  "the grammar relearn post has no Exclude control",
+  async ({ page }) => {
+    await expect(page.getByRole("button", { name: /Exclude/i })).toHaveCount(0);
   },
 );
 

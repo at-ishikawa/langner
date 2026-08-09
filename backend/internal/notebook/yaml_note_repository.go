@@ -497,7 +497,7 @@ func (r *YAMLNoteRepository) Create(_ context.Context, note *NoteRecord) error {
 	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
 		return fmt.Errorf("create dir: %w", err)
 	}
-	newNote := Note{Expression: note.Usage, Meaning: note.Meaning, PartOfSpeech: note.PartOfSpeech, Examples: note.Examples}
+	newNote := Note{Expression: note.Usage, Meaning: note.Meaning, PartOfSpeech: note.PartOfSpeech, Examples: ExamplesFromStrings(note.Examples)}
 	var definitions []Definitions
 	if data, err := os.ReadFile(filePath); err == nil && len(data) > 0 {
 		existing, err := ReadDefinitionsFromBytes(data)

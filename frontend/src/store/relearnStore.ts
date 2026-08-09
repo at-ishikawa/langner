@@ -29,9 +29,27 @@ export interface RelearnPostGroup {
   blanks: RelearnCard[];
 }
 
+// RelearnOriginGroup is one etymology origin shown once, with the missed words
+// that share it listed as a family. Every card of the group carries the same
+// originText + originMeaning (the grouping key); type/language head the origin.
+// Presentation only — each word still grades through its own SubmitRelearnAnswer
+// call keyed by its note_id, exactly like a recognition card.
+export interface RelearnOriginGroup {
+  originText: string;
+  originMeaning: string;
+  type: string;
+  language: string;
+  // englishForms are the origin's English combining-form spellings (e.g. the
+  // Latin root "liber" → ["lib", "liv"]). A per-origin value, so it is taken
+  // from the first card of the group and shown on the origin header.
+  englishForms: string[];
+  words: RelearnCard[];
+}
+
 export type RelearnItem =
   | { kind: "card"; card: RelearnCard }
-  | { kind: "post"; post: RelearnPostGroup };
+  | { kind: "post"; post: RelearnPostGroup }
+  | { kind: "origin"; group: RelearnOriginGroup };
 
 interface RelearnState {
   queue: RelearnItem[];
@@ -44,24 +62,45 @@ interface RelearnState {
 }
 
 // groupIntoItems turns the flat pool the server returns into per-screen items:
-// non-grammar cards stay one-per-screen; grammar corrections that share a post
-// fold into a single post screen, in first-seen order.
+// recognition/reverse cards stay one-per-screen; grammar corrections that share
+// a post fold into a single post screen; etymology-origin cards that share an
+// origin fold into a single origin family screen — all in first-seen order.
 function groupIntoItems(cards: RelearnCard[]): RelearnItem[] {
   const items: RelearnItem[] = [];
   const postByContent = new Map<string, RelearnPostGroup>();
+  const originByKey = new Map<string, RelearnOriginGroup>();
   for (const card of cards) {
-    if (card.sourceQuizType !== QuizType.GRAMMAR) {
-      items.push({ kind: "card", card });
+    if (card.sourceQuizType === QuizType.GRAMMAR) {
+      const existing = postByContent.get(card.content);
+      if (existing) {
+        existing.blanks.push(card);
+        continue;
+      }
+      const post: RelearnPostGroup = { content: card.content, blanks: [card] };
+      postByContent.set(card.content, post);
+      items.push({ kind: "post", post });
       continue;
     }
-    const existing = postByContent.get(card.content);
-    if (existing) {
-      existing.blanks.push(card);
+    if (card.sourceQuizType === QuizType.ETYMOLOGY_ORIGIN) {
+      const key = `${card.originText} ${card.originMeaning}`;
+      const existing = originByKey.get(key);
+      if (existing) {
+        existing.words.push(card);
+        continue;
+      }
+      const group: RelearnOriginGroup = {
+        originText: card.originText,
+        originMeaning: card.originMeaning,
+        type: card.type,
+        language: card.language,
+        englishForms: card.englishForms ?? [],
+        words: [card],
+      };
+      originByKey.set(key, group);
+      items.push({ kind: "origin", group });
       continue;
     }
-    const post: RelearnPostGroup = { content: card.content, blanks: [card] };
-    postByContent.set(card.content, post);
-    items.push({ kind: "post", post });
+    items.push({ kind: "card", card });
   }
   return items;
 }

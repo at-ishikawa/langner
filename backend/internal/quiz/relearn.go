@@ -34,7 +34,10 @@ type RelearnContextScene struct {
 //
 //	QuizTypeNotebook          recognition: show Entry, ask the Meaning
 //	QuizTypeReverse           production:  show Meaning + masked Contexts, ask Entry
-//	QuizTypeEtymologyOrigin   show Entry (origin), ask the Meaning
+//	QuizTypeEtymologyOrigin   an origin-bearing recognition miss: show Entry
+//	                          (word), ask the Meaning — carries OriginText/
+//	                          OriginMeaning so the frontend groups every card
+//	                          sharing an origin into one family card.
 //	QuizTypeGrammar           correction: show Content with Incorrect struck
 //	                          through, ask for the fix — the live grammar
 //	                          quiz's own inline-correction card, reused as-is.
@@ -48,12 +51,25 @@ type RelearnCard struct {
 	Meaning      string
 	NotebookName string
 
-	// Etymology display extras (empty for vocab cards).
-	OriginType string
-	Language   string
+	// Etymology display extras (empty for vocab cards). OriginText is the
+	// source-language origin the missed word derives from (e.g. "facere") and
+	// OriginMeaning is that origin's English gloss; together with OriginType and
+	// Language they form the origin header of the Relearn family card. Every
+	// etymology card sharing an OriginText/OriginMeaning is grouped by the
+	// frontend into ONE family card listing the missed words under that origin.
+	OriginType    string
+	Language      string
+	OriginText    string
+	OriginMeaning string
+	// EnglishForms are the origin's English combining-form spellings (e.g. the
+	// Latin root "liber" surfaces as ["lib", "liv"]). Resolved from the full
+	// EtymologyOrigin definition (the vocab word's origin_parts don't carry
+	// them) and shown as chips on the origin header of the Relearn family card.
+	// Study context only — never quizzed. Empty for non-etymology cards.
+	EnglishForms []string
 	// Literal is the etymology literal gloss (e.g. `de "down" + facere = "made
 	// down"`), sourced from the word's definitions note (Note.Note). Shown on the
-	// etymology-origin Relearn feedback, mirroring the quiz. Empty for other formats.
+	// etymology Relearn feedback. Empty for other formats.
 	Literal string
 
 	// Grammar display extras (empty for vocab/etymology cards). Content is
@@ -71,19 +87,18 @@ type RelearnCard struct {
 	Images        []string
 	ContextScenes []RelearnContextScene
 
-	// Grading inputs — one populated per Format.
-	vocabCard     Card
-	reverseCard   ReverseCard
-	etymologyCard EtymologyOriginCard
-	grammarCard   GrammarBlank
+	// Grading inputs — one populated per Format. An etymology-origin card is an
+	// origin-bearing recognition miss, so it is graded through vocabCard too.
+	vocabCard   Card
+	reverseCard ReverseCard
+	grammarCard GrammarBlank
 }
 
-// VocabCard, ReverseCard, EtymologyCard, GrammarCard return the card the
-// matching pure grader consumes for this Format.
-func (c RelearnCard) VocabCard() Card                    { return c.vocabCard }
-func (c RelearnCard) ReverseCard() ReverseCard           { return c.reverseCard }
-func (c RelearnCard) EtymologyCard() EtymologyOriginCard { return c.etymologyCard }
-func (c RelearnCard) GrammarCard() GrammarBlank          { return c.grammarCard }
+// VocabCard, ReverseCard, GrammarCard return the card the matching pure grader
+// consumes for this Format.
+func (c RelearnCard) VocabCard() Card           { return c.vocabCard }
+func (c RelearnCard) ReverseCard() ReverseCard  { return c.reverseCard }
+func (c RelearnCard) GrammarCard() GrammarBlank { return c.grammarCard }
 
 // IsEtymology reports whether the card's Format is the etymology mode.
 func (c RelearnCard) IsEtymology() bool {
@@ -111,14 +126,14 @@ type relearnCandidate struct {
 }
 
 // LoadRelearnPool builds the Relearn Quiz pool: for every learning-log series
-// (recognition, reverse, etymology origin) whose
-// most-recent log within [windowStart, now] has status "misunderstood", it
-// emits one card that mirrors that series' quiz type. A word failed in several
-// types produces several cards.
+// (recognition, reverse) whose most-recent log within [windowStart, now] has
+// status "misunderstood", it emits one card that mirrors that series' quiz type.
+// A word failed in several types produces several cards. A recognition miss of a
+// word that carries an etymology origin is emitted as an origin-family card so
+// the frontend can group missed words by their shared root.
 //
-// It reads the YAML learning histories directly — the source of truth and the
-// only place etymology-origin results are stored — so the pool spans both
-// vocabulary and etymology words regardless of whether a database is
+// It reads the YAML learning histories directly — the source of truth — so the
+// pool spans every notebook regardless of whether a database is
 // configured. It writes nothing, and persists nothing: every in-window wrong
 // word appears in every session until it ages out of the window or is answered
 // correctly in a real quiz, so the learner can re-drill it as often as needed.
@@ -213,6 +228,11 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	if err != nil {
 		return nil, fmt.Errorf("init reader for relearn concepts: %w", err)
 	}
+	// originMap keys the full EtymologyOrigin definitions (origin|language,
+	// lowered) — the same index the vocab load path uses (buildOriginMap) — so
+	// an origin-family relearn card can carry the origin's english_forms, which
+	// the word's own origin_parts do not hold.
+	originMap := buildOriginMap(reader)
 	conceptByNotebook := map[string]map[string]*conceptInfo{}
 	conceptFor := func(notebookName, expression string) *conceptInfo {
 		idx, ok := conceptByNotebook[notebookName]
@@ -263,33 +283,6 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			}
 			continue
 		}
-		if c.format == notebook.QuizTypeEtymologyOrigin {
-			// The etymology-origin schedule is now per-WORD: a missed item is a
-			// derived word (its EtymologyOriginLogs series lives on the word's
-			// own learning-history entry), not the origin. Re-drill the word by
-			// asking its meaning — exactly how the origin card quizzes it
-			// (GradeEtymologyWordAnswer against the word's meaning) — resolving
-			// the word through the same vocab index and skipping any word the
-			// learner excluded from the etymology-origin quiz (invariant L2).
-			if notebook.IsExpressionExcludedForQuizType(
-				histories[c.notebookName], c.id, notebook.QuizTypeEtymologyOrigin, c.expression,
-			) {
-				continue
-			}
-			fc, ok := resolveWord(c)
-			if !ok {
-				continue // no word data to grade/display against
-			}
-			cards = append(cards, RelearnCard{
-				Format: c.format, Entry: c.expression, Meaning: fc.Meaning, NotebookName: c.notebookName,
-				WordDetail: fc.WordDetail, Images: fc.Images, Literal: fc.Literal,
-				ContextScenes: relearnScenesFromCard(fc),
-				// Grade the meaning against the word's own gloss, so a re-drill
-				// matches how the origin card scored it.
-				etymologyCard: EtymologyOriginCard{Meaning: fc.Meaning},
-			})
-			continue
-		}
 		// Resolve by id first (mirrors MatchesEntry: an id-bearing failed
 		// entry resolves to its own card, so same-spelling homographs never
 		// collide). Fall back to the sense-less expression lookups for
@@ -297,6 +290,39 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		fc, ok := resolveWord(c)
 		if !ok {
 			continue // no vocab data to grade/display against
+		}
+		// A recognition miss of a word that carries an etymology origin is
+		// re-drilled as an origin FAMILY card: the frontend groups every such
+		// card sharing an origin into one screen (origin + meaning + the missed
+		// words), which is what helps the learner see the shared root. It is
+		// graded like a recognition card — the typed meaning against the word's
+		// own gloss. A word the learner excluded from its origin family
+		// (skipped_at for QuizTypeEtymologyOrigin) falls back to a plain
+		// recognition card: a normal miss must never drop a word from Relearn
+		// (quiz-ui-invariants U1). Reverse misses stay reverse cards.
+		if c.format == notebook.QuizTypeNotebook {
+			if op, hasOrigin := primaryOriginPart(fc); hasOrigin &&
+				!notebook.IsExpressionExcludedForQuizType(histories[c.notebookName], c.id, notebook.QuizTypeEtymologyOrigin, c.expression) {
+				// An origin-bearing word is graded exactly like a recognition
+				// card (type the meaning) via its vocabCard — the etymology
+				// dimension is presentation only (the origin header + grouping).
+				cards = append(cards, RelearnCard{
+					Format: notebook.QuizTypeEtymologyOrigin, Entry: fc.Expression, Meaning: fc.Meaning,
+					NotebookName: c.notebookName,
+					OriginType:   op.Type, Language: op.Language,
+					OriginText: op.Origin, OriginMeaning: op.Meaning,
+					EnglishForms: originEnglishForms(originMap, op.Origin, op.Language),
+					WordDetail:   fc.WordDetail, Images: fc.Images, Literal: fc.Literal,
+					ContextScenes: relearnScenesFromCard(fc),
+					Examples:      relearnExamplesFromContexts(fc.Contexts),
+					vocabCard: Card{
+						NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
+						Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
+						Contexts: relearnRecognitionContexts(fc), WordDetail: fc.WordDetail, Images: fc.Images,
+					},
+				})
+				continue
+			}
 		}
 		// If this word is a family-concept member, present and grade it under
 		// the concept head + umbrella meaning, exactly as the standard quiz
@@ -346,17 +372,18 @@ type relearnSeriesSpec struct {
 
 // relearnSeries returns the independent log series an expression can carry,
 // each mapped to the relearn card format that mirrors it. Notebook and freeform
-// share LearnedLogs and both replay as recognition; the etymology-origin series
-// (now per-WORD, not per-origin) replays as an etymology card that re-drills the
-// word by asking its meaning.
+// share LearnedLogs and both replay as recognition; ReverseLogs replay as a
+// reverse card. Etymology is no longer a separate series — an etymology word is
+// a normal vocabulary word, so a missed word that carries an origin surfaces
+// through its recognition series and is regrouped by origin at pool-build time.
 //
 // metadataType is the owning LearningHistory's Metadata.Type — the same
 // value flatTypeForStory (learning_history.go) derives at write time for the
 // flat "journal" bucket. A grammar entry only ever writes LearnedLogs (see
 // SaveGrammarBlank), so it gets a single series mapped to QuizTypeGrammar
-// instead of the vocab/etymology series; reusing this one check (rather than
-// re-deriving "is this a grammar entry" from the expression shape) is what
-// keeps this classification symmetric with the writer (L2).
+// instead of the vocab series; reusing this one check (rather than re-deriving
+// "is this a grammar entry" from the expression shape) is what keeps this
+// classification symmetric with the writer (L2).
 func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression) []relearnSeriesSpec {
 	if metadataType == string(notebook.QuizTypeGrammar) {
 		return []relearnSeriesSpec{
@@ -366,7 +393,6 @@ func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression)
 	return []relearnSeriesSpec{
 		{logs: expr.LearnedLogs, format: notebook.QuizTypeNotebook},
 		{logs: expr.ReverseLogs, format: notebook.QuizTypeReverse},
-		{logs: expr.EtymologyOriginLogs, format: notebook.QuizTypeEtymologyOrigin},
 	}
 }
 
@@ -450,7 +476,7 @@ func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 		}
 		out = append(out, ReverseContext{
 			Context:       text,
-			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression),
+			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, ""),
 		})
 	}
 	return out
@@ -498,6 +524,40 @@ func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 		SceneTitle:   card.SceneTitle,
 		Statements:   statements,
 	}}
+}
+
+// primaryOriginPart returns the first etymology origin a vocabulary word derives
+// from, and whether it has one. Relearn groups a missed origin-bearing word into
+// this origin's family card; a word with several origins is grouped under its
+// first so it is drilled exactly once.
+func primaryOriginPart(fc FreeformCard) (WordOriginPart, bool) {
+	for _, op := range fc.WordDetail.OriginParts {
+		if strings.TrimSpace(op.Origin) != "" {
+			return op, true
+		}
+	}
+	return WordOriginPart{}, false
+}
+
+// originEnglishForms looks up an origin's English combining-form spellings from
+// the shared origin index, matching the origin the same way resolveOriginParts
+// does: by (origin|language) first, then by origin alone (case-insensitive).
+// Returns nil when the origin is unknown or has no english_forms.
+func originEnglishForms(originMap map[string]notebook.EtymologyOrigin, origin, language string) []string {
+	if len(originMap) == 0 || strings.TrimSpace(origin) == "" {
+		return nil
+	}
+	key := strings.ToLower(origin + "|" + language)
+	if o, ok := originMap[key]; ok {
+		return o.EnglishForms
+	}
+	prefix := strings.ToLower(strings.TrimSpace(origin)) + "|"
+	for k, o := range originMap {
+		if strings.HasPrefix(k, prefix) {
+			return o.EnglishForms
+		}
+	}
+	return nil
 }
 
 // relearnExamplesFromContexts exposes the card's context sentences as examples

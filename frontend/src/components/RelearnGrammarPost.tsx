@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Button, Input, Spinner, Text } from "@chakra-ui/react";
 import {
   quizClient,
-  QuizType as ProtoQuizType,
   type RelearnCard,
   type SubmitRelearnAnswerResponse,
 } from "@/lib/client";
@@ -25,20 +24,18 @@ import { responseTimeSince } from "@/lib/responseTime";
 // own note_id — grouping is purely presentation, so the per-correction grading
 // path (and relearn's write-nothing guarantee) is unchanged.
 //
-// The model has NO skip / "Don't know" (see .claude/rules/quiz-ui-invariants):
+// Relearn re-drills missed corrections and persists NOTHING (see
+// .claude/rules/quiz-ui-invariants). There is no skip / "Don't know" and no
+// Exclude control here — a blank is one of two states:
 //
 //   - unanswered  → on "See answers" it is graded INCORRECT (a normal miss).
 //                   SubmitRelearnAnswer persists nothing, so the correction
 //                   stays "misunderstood" in the learning history and therefore
 //                   stays DUE, returning in the next Relearn session.
 //   - answered    → correct / incorrect from the grader.
-//   - Excluded    → the learner deliberately removed this correction from all
-//                   future quizzes. This is the ONLY thing that excludes: it
-//                   calls SkipWord (SetSkippedAt) — the same RPC every other
-//                   relearn / quiz card uses — never a normal or empty answer.
 //
-// A normal miss (incorrect) MUST NOT set the exclude marker; only the Exclude
-// button does.
+// Excluding a correction from future quizzes is done only in the normal quizzes;
+// a Relearn miss never writes any state.
 
 interface GradedBlank {
   answer: string;
@@ -63,11 +60,6 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [results, setResults] = useState<Record<string, GradedBlank>>({});
   const [grading, setGrading] = useState<string[]>([]);
-  // excluded holds the keys the learner deliberately removed from future
-  // quizzes via SkipWord. An excluded blank is neither answered nor graded and
-  // is dropped from the post's active blanks (denominator and remaining count).
-  const [excluded, setExcluded] = useState<string[]>([]);
-  const [excluding, setExcluding] = useState<string[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
@@ -89,11 +81,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
     return map;
   }, [blanks]);
 
-  const isExcluded = (key: string) => excluded.includes(key);
-  // A blank is "done" for navigation once it is graded, grading, or excluded —
-  // an excluded blank is never focused or graded again.
-  const isDone = (key: string) =>
-    key in results || grading.includes(key) || isExcluded(key);
+  // A blank is "done" for navigation once it is graded or grading — it is never
+  // focused or graded again.
+  const isDone = (key: string) => key in results || grading.includes(key);
   const nextUnansweredAfter = (afterIndex: number): string | null => {
     for (let i = afterIndex + 1; i < orderedKeys.length; i++) {
       if (!isDone(orderedKeys[i])) return orderedKeys[i];
@@ -104,12 +94,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
     return null;
   };
 
-  // Excluded blanks leave the post entirely — they don't count toward the
-  // score, the remaining tally, or the answers reported on completion.
-  const activeKeys = orderedKeys.filter((k) => !isExcluded(k));
-  const gradedCount = activeKeys.filter((k) => k in results).length;
-  const correctCount = activeKeys.filter((k) => results[k]?.res.correct).length;
-  const remainingCount = activeKeys.filter((k) => !isDone(k)).length;
+  const gradedCount = orderedKeys.filter((k) => k in results).length;
+  const correctCount = orderedKeys.filter((k) => results[k]?.res.correct).length;
+  const remainingCount = orderedKeys.filter((k) => !isDone(k)).length;
   const selected = selectedKey ? results[selectedKey] : undefined;
   const selectedBlank = selectedKey ? blankByKey.get(selectedKey) : undefined;
 
@@ -158,39 +145,16 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
     void grade(blank, value, true);
   };
 
-  // Exclude THIS correction from all future quizzes. This is the deliberate
-  // exclude action — it calls SkipWord (SetSkippedAt) for the blank's
-  // (notebook, senseID), the same RPC every other relearn / quiz card uses. It
-  // never grades the blank incorrect; the correction simply leaves the pool.
-  const excludeBlank = async (blank: RelearnCard) => {
-    const key = blank.noteId.toString();
-    if (isExcluded(key) || excluding.includes(key)) return;
-    setExcluding((e) => [...e, key]);
-    try {
-      await quizClient.skipWord({
-        noteId: blank.noteId,
-        quizTypes: [ProtoQuizType.GRAMMAR],
-      });
-      setExcluded((ex) => (ex.includes(key) ? ex : [...ex, key]));
-      setError(null);
-      setSelectedKey((sel) => (sel === key ? null : sel));
-    } catch {
-      setError("Couldn't exclude that correction. Try again.");
-    } finally {
-      setExcluding((e) => e.filter((k) => k !== key));
-    }
-  };
-
   // Reveal any still-empty blanks by grading them INCORRECT (a normal miss —
-  // never skipped, never excluded), then open the first not-correct blank so an
-  // answer is visible right away. Excluded blanks are left untouched.
+  // never skipped), then open the first not-correct blank so an answer is
+  // visible right away.
   const revealAnswers = async () => {
     const remaining = blanks.filter((b) => !isDone(b.noteId.toString()));
     await Promise.all(remaining.map((b) => grade(b, "", false)));
     const firstToShow =
-      activeKeys.find((k) => results[k] && !results[k].res.correct) ??
+      orderedKeys.find((k) => results[k] && !results[k].res.correct) ??
       remaining[0]?.noteId.toString() ??
-      activeKeys[0];
+      orderedKeys[0];
     if (firstToShow) setSelectedKey(firstToShow);
   };
 
@@ -204,17 +168,10 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           Grammar — fix the mistakes
         </Text>
         <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
-          {correctCount} / {activeKeys.length} correct
+          {correctCount} / {orderedKeys.length} correct
           {grading.length > 0 ? " · grading…" : ""}
         </Text>
       </Box>
-
-      <Text fontSize="xs" color="fg.muted" mb={2}>
-        Type each fix and press Enter. Tap “See answers” to reveal the rest —
-        anything you didn’t answer is marked incorrect and stays due. Use
-        “Exclude” to drop a correction from future quizzes. Tap a graded word for
-        details.
-      </Text>
 
       {/* The whole post, mistakes fixed in place — one screen, all due blanks.
           overflowWrap/wordBreak keep long prose and long unbroken tokens inside
@@ -241,23 +198,6 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           const indexInOrder = orderedKeys.indexOf(key);
           const graded = results[key];
           const isGrading = grading.includes(key);
-
-          // Excluded → a muted, non-interactive marker; it no longer counts.
-          if (isExcluded(key)) {
-            return (
-              <Text
-                as="span"
-                key={i}
-                mx={0.5}
-                color="gray.500"
-                _dark={{ color: "gray.400" }}
-                fontStyle="italic"
-                aria-label={`${seg.blank.incorrect || "correction"} — excluded from quizzes`}
-              >
-                {seg.blank.incorrect} <Text as="span" fontSize="xs">(excluded)</Text>
-              </Text>
-            );
-          }
 
           // Graded → tappable pill.
           if (graded) {
@@ -321,10 +261,9 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
             );
           }
 
-          // Not yet graded → the wrong span with an inline textbox and a
-          // per-blank "Exclude" (the deliberate remove-from-quizzes action).
-          // inline-flex + flexWrap keeps the group together but lets it wrap
-          // within the viewport instead of forcing a horizontal scroll.
+          // Not yet graded → the wrong span with an inline textbox. inline-flex +
+          // flexWrap keeps the group together but lets it wrap within the
+          // viewport instead of forcing a horizontal scroll.
           return (
             <Text
               as="span"
@@ -371,22 +310,6 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
                 }}
                 onBlur={() => commitBlank(seg.blank, indexInOrder)}
               />
-              <Button
-                size="xs"
-                variant="ghost"
-                colorPalette="gray"
-                verticalAlign="baseline"
-                loading={excluding.includes(key)}
-                // onMouseDown so the click registers before the input's onBlur
-                // commits a typed answer — Exclude must never grade the blank.
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  void excludeBlank(seg.blank);
-                }}
-                aria-label={`Exclude "${seg.blank.incorrect}" from quizzes`}
-              >
-                Exclude
-              </Button>
             </Text>
           );
         })}
@@ -401,7 +324,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           colorPalette="purple"
           w="full"
           size="lg"
-          onClick={() => onComplete(correctCount, activeKeys.length)}
+          onClick={() => onComplete(correctCount, orderedKeys.length)}
           data-testid="relearn-grammar-next"
         >
           Next
@@ -426,8 +349,7 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           visible without scrolling past the Next button on a long post — the
           live grammar quiz's own labelled body (Mistake / You wrote / Suggested
           / Why you missed it / Grammar note). Session-only: relearn persists
-          nothing, so there is no override-to-history footer — but the blank can
-          still be Excluded from here. */}
+          nothing, so there is no override-to-history footer. */}
       {selected && selectedBlank && (
         <Box
           position="fixed"
@@ -471,18 +393,6 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
             grammarNote={selected.res.grammarNote}
             correctAnswerTestId="relearn-answer"
           />
-          <Button
-            mt={2}
-            size="xs"
-            w="full"
-            variant="outline"
-            colorPalette="gray"
-            loading={selectedKey ? excluding.includes(selectedKey) : false}
-            onClick={() => void excludeBlank(selectedBlank)}
-            aria-label={`Exclude "${selectedBlank.incorrect}" from quizzes`}
-          >
-            Exclude from quizzes
-          </Button>
         </Box>
       )}
     </Box>

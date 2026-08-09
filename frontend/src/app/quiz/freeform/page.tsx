@@ -165,8 +165,7 @@ export default function FreeformQuizPage() {
         <VStack align="stretch" gap={4}>
           <BatchFeedback
             items={batchItems}
-            isEtymology={false}
-            isFinal={false}
+              isFinal={false}
             onContinue={handleNext}
             onSeeResults={() => router.push("/quiz/complete")}
             onOverride={handleOverride}

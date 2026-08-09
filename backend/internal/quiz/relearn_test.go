@@ -465,85 +465,39 @@ func TestLoadRelearnPool_GrammarTwoBlanksKeepsBothBlanks(t *testing.T) {
 	assert.True(t, incorrects["go"], "the second span survives (was dropped before the fix)")
 }
 
-// TestLoadRelearnPool_EtymologyWordMiss pins the etymology half of the fix: the
-// etymology-origin schedule migrated to PER-WORD (a word's EtymologyOriginLogs
-// series lives on the word's own entry, keyed by the word, not the origin). A
-// missed etymology word must resurface in the Relearn pool as an etymology card
-// keyed by the WORD, graded against the word's OWN meaning — exactly how the
-// origin card quizzed it. Before the fix the pool resolved etymology candidates
-// through an origin-keyed index, so a word-keyed miss (expression "describe",
-// not origin "scribo") never resolved and was silently dropped. An excluded or
-// re-learned word must NOT be in the pool.
-func TestLoadRelearnPool_EtymologyWordMiss(t *testing.T) {
-	svc, bookID, _ := etymologyFixture(t, singleSenseEtymYAML, singleSenseDefsYAML)
+// etymologyRelearnFixture wires an etymology notebook (an origin with its
+// gloss) and a matching definitions notebook whose words carry origin_parts
+// referencing that origin, plus a learning history in which those words were
+// recently missed as normal vocabulary (a "misunderstood" recognition log).
+// This is the on-disk shape LoadRelearnPool reads to build origin-family cards
+// from missed vocabulary words — etymology is no longer a standalone quiz.
+func etymologyRelearnFixture(t *testing.T, missed ...string) *Service {
+	t.Helper()
+	dir := t.TempDir()
+	etymDir := filepath.Join(dir, "etymology")
+	defsDir := filepath.Join(dir, "definitions")
+	learningDir := filepath.Join(dir, "learning")
+	const bookID = "roots"
 
-	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
-	require.NoError(t, err)
-	require.Len(t, cards, 1)
-	// Answer the whole family WRONG via the real per-word write path, so each
-	// word's EtymologyOriginLogs holds a "misunderstood" miss (symmetric L2).
-	answerCard(t, svc, cards[0], false)
-
-	etymByEntry := func(cards []RelearnCard) map[string]RelearnCard {
-		out := map[string]RelearnCard{}
-		for _, c := range cards {
-			if c.Format == notebook.QuizTypeEtymologyOrigin {
-				out[c.Entry] = c
-			}
-		}
-		return out
-	}
-
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
-	require.NoError(t, err)
-	got := etymByEntry(pool)
-	require.Contains(t, got, "describe", "a missed etymology word must enter the pool by WORD, not origin")
-	require.Contains(t, got, "inscribe")
-	// The card re-drills the WORD against its OWN meaning — the same reference
-	// GradeEtymologyOriginMeaning scores against.
-	assert.Equal(t, "to represent in words", got["describe"].Meaning)
-	assert.Equal(t, got["describe"].Meaning, got["describe"].EtymologyCard().Meaning,
-		"the grading reference is the word's own meaning")
-	assert.True(t, got["describe"].IsEtymology())
-
-	// Exclude "describe" (the SAME SkipWord path every card uses): it drops from
-	// the pool; "inscribe" stays due.
-	require.NoError(t, svc.SkipWord(
-		CardInfo{NotebookName: bookID, StoryTitle: "Session 1", SceneTitle: "S1", Expression: "describe"},
-		"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
-	))
-	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
-	require.NoError(t, err)
-	got = etymByEntry(pool)
-	assert.NotContains(t, got, "describe", "an excluded etymology word must leave the pool")
-	assert.Contains(t, got, "inscribe", "excluding one word must not drop the other")
-
-	// Re-learn "inscribe" (answer the remaining family correct): its latest log
-	// is no longer "misunderstood", so it too leaves the pool.
-	cards, err = svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
-	require.NoError(t, err)
-	require.Len(t, cards, 1)
-	answerCard(t, svc, cards[0], true)
-	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
-	require.NoError(t, err)
-	assert.NotContains(t, etymByEntry(pool), "inscribe", "a re-learned etymology word must leave the pool")
-}
-
-// TestLoadRelearnPool_EtymologyCardCarriesOriginDetails pins the Relearn
-// etymology feedback contract: a pooled etymology-origin card must carry the
-// origin roots WITH their meanings (WordDetail.OriginParts) and the literal
-// gloss (sourced from the word's definitions note) so the Relearn feedback can
-// mirror the etymology-origin quiz feedback (origin breakdown + literal).
-func TestLoadRelearnPool_EtymologyCardCarriesOriginDetails(t *testing.T) {
-	const etymYAML = `metadata:
+	etymBook := filepath.Join(etymDir, bookID)
+	require.NoError(t, os.MkdirAll(etymBook, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "index.yml"), []byte(
+		"id: roots\nkind: Etymology\nname: Roots\nnotebooks:\n  - ./s1.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "s1.yml"), []byte(`metadata:
   title: "Session 1"
 origins:
   - origin: "scribo"
     type: root
     language: Latin
     meaning: to write
-`
-	const defsYAML = `- metadata:
+    english_forms: [scrib, script]
+`), 0644))
+
+	defsBook := filepath.Join(defsDir, bookID)
+	require.NoError(t, os.MkdirAll(defsBook, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "index.yml"), []byte(
+		"id: roots\nnotebooks:\n  - ./s1.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(defsBook, "s1.yml"), []byte(`- metadata:
     title: "Session 1"
   scenes:
   - metadata:
@@ -555,13 +509,94 @@ origins:
       note: 'de "down" + scribo "write" = "write down"'
       origin_parts:
       - origin: scribo
-`
-	svc, bookID, _ := etymologyFixture(t, etymYAML, defsYAML)
+    - expression: inscribe
+      meaning: to write or carve on a surface
+      origin_parts:
+      - origin: scribo
+`), 0644))
 
-	cards, err := svc.LoadEtymologyOriginCards([]string{bookID}, true, false, nil)
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	recent := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	exprs := ""
+	for _, w := range missed {
+		exprs += fmt.Sprintf(`    - expression: %s
+      type: vocabulary
+      learned_logs:
+        - status: misunderstood
+          learned_at: "%s"
+`, w, recent)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, bookID+".yml"), []byte(
+		"- metadata:\n    id: roots\n    title: \"Session 1\"\n    type: definition\n  expressions:\n"+exprs), 0644))
+
+	ctrl := gomock.NewController(t)
+	return NewService(config.NotebooksConfig{
+		EtymologyDirectories:   []string{etymDir},
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil),
+		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
+}
+
+func etymRelearnByEntry(cards []RelearnCard) map[string]RelearnCard {
+	out := map[string]RelearnCard{}
+	for _, c := range cards {
+		if c.Format == notebook.QuizTypeEtymologyOrigin {
+			out[c.Entry] = c
+		}
+	}
+	return out
+}
+
+// TestLoadRelearnPool_EtymologyOriginFamilyCard pins the new model: a missed
+// vocabulary word that carries an etymology origin surfaces in the Relearn pool
+// as a QUIZ_TYPE_ETYMOLOGY_ORIGIN card carrying the origin header
+// (OriginText/OriginMeaning) so the frontend groups every card sharing an origin
+// into one family card, while it is still graded against the word's own meaning.
+func TestLoadRelearnPool_EtymologyOriginFamilyCard(t *testing.T) {
+	svc := etymologyRelearnFixture(t, "describe", "inscribe")
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
-	require.Len(t, cards, 1)
-	answerCard(t, svc, cards[0], false) // fail the family so the word enters the pool
+	got := etymRelearnByEntry(pool)
+	require.Contains(t, got, "describe", "a missed origin-bearing word must enter the pool as a family card")
+	require.Contains(t, got, "inscribe")
+	// Origin header shared by the family; grading reference is the word's meaning.
+	assert.Equal(t, "scribo", got["describe"].OriginText)
+	assert.Equal(t, "to write", got["describe"].OriginMeaning)
+	assert.Equal(t, "to represent in words", got["describe"].Meaning)
+	assert.True(t, got["describe"].IsEtymology())
+
+	// Exclude "describe" from its origin family (the same SkipWord path every
+	// card uses). It leaves the origin grouping — but a normal miss must never
+	// drop a word from Relearn (quiz-ui-invariants U1), so it reappears as a
+	// plain recognition card. "inscribe" is untouched.
+	require.NoError(t, svc.SkipWord(
+		CardInfo{NotebookName: "roots", Expression: "describe"},
+		"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
+	))
+	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	assert.NotContains(t, etymRelearnByEntry(pool), "describe",
+		"excluding from the family drops the origin grouping")
+	assert.Contains(t, etymRelearnByEntry(pool), "inscribe", "excluding one word must not drop the other")
+	stillDue := false
+	for _, c := range pool {
+		if c.Entry == "describe" && c.Format == notebook.QuizTypeNotebook {
+			stillDue = true
+		}
+	}
+	assert.True(t, stillDue, "a normal miss must keep the word due as a recognition card (U1)")
+}
+
+// TestLoadRelearnPool_EtymologyCardCarriesOriginDetails pins the Relearn
+// etymology feedback contract: a pooled origin-family card must carry the origin
+// roots WITH their meanings (WordDetail.OriginParts) and the literal gloss
+// (sourced from the word's definitions note) so the feedback shows the origin
+// breakdown + literal like every other vocabulary card's feedback.
+func TestLoadRelearnPool_EtymologyCardCarriesOriginDetails(t *testing.T) {
+	svc := etymologyRelearnFixture(t, "describe")
 
 	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
@@ -572,13 +607,27 @@ origins:
 			describe = &pool[i]
 		}
 	}
-	require.NotNil(t, describe, "the missed etymology word must be pooled")
+	require.NotNil(t, describe, "the missed origin-bearing word must be pooled as a family card")
 
-	// Origin roots WITH their meanings flow on the card's WordDetail — the same
-	// data toProtoWordDetail copies straight onto the response's word_detail.
 	require.Len(t, describe.WordDetail.OriginParts, 1)
 	assert.Equal(t, "scribo", describe.WordDetail.OriginParts[0].Origin)
 	assert.Equal(t, "to write", describe.WordDetail.OriginParts[0].Meaning)
 	// The literal gloss flows from the word's definitions note field.
 	assert.Equal(t, `de "down" + scribo "write" = "write down"`, describe.Literal)
+}
+
+// TestLoadRelearnPool_EtymologyCardCarriesEnglishForms pins that an origin-family
+// card carries the origin's english_forms (the English combining-form spellings)
+// resolved from the full EtymologyOrigin definition — the word's own origin_parts
+// do not carry them, so the relearn builder must look them up via the origin map.
+func TestLoadRelearnPool_EtymologyCardCarriesEnglishForms(t *testing.T) {
+	svc := etymologyRelearnFixture(t, "describe")
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	got := etymRelearnByEntry(pool)
+	require.Contains(t, got, "describe")
+	assert.Equal(t, []string{"scrib", "script"}, got["describe"].EnglishForms,
+		"the origin's english_forms must be threaded onto the relearn family card")
 }

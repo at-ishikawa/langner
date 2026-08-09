@@ -1,28 +1,22 @@
 "use client";
 
 import { Box, Heading, Text, VStack } from "@chakra-ui/react";
-import { QuizResultCard, type EtymologyWordItem, type ResultItem } from "./QuizResultCard";
+import { QuizResultCard, type ResultItem } from "./QuizResultCard";
 
 interface QuizResultsGroupedListProps {
   items: ResultItem[];
-  isEtymology: boolean;
   onOverride: (item: ResultItem) => void;
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
   onResume: (item: ResultItem) => void;
-  onOverrideWord?: (item: ResultItem, word: EtymologyWordItem) => void;
-  onExcludeWord?: (item: ResultItem, word: EtymologyWordItem) => void;
 }
 
 export function QuizResultsGroupedList({
   items,
-  isEtymology,
   onOverride,
   onUndo,
   onSkip,
   onResume,
-  onOverrideWord,
-  onExcludeWord,
 }: QuizResultsGroupedListProps) {
   const correctResults = items.filter((r) => r.correct && !r.isSkipped);
   const incorrectResults = items.filter((r) => !r.correct && !r.isSkipped);
@@ -40,13 +34,10 @@ export function QuizResultsGroupedList({
               <QuizResultCard
                 key={r.key}
                 item={r}
-                isEtymology={isEtymology}
                 onOverride={onOverride}
                 onUndo={onUndo}
                 onSkip={onSkip}
                 onResume={onResume}
-                onOverrideWord={onOverrideWord}
-                onExcludeWord={onExcludeWord}
               />
             ))}
           </VStack>
@@ -63,13 +54,10 @@ export function QuizResultsGroupedList({
               <QuizResultCard
                 key={r.key}
                 item={r}
-                isEtymology={isEtymology}
                 onOverride={onOverride}
                 onUndo={onUndo}
                 onSkip={onSkip}
                 onResume={onResume}
-                onOverrideWord={onOverrideWord}
-                onExcludeWord={onExcludeWord}
               />
             ))}
           </VStack>
@@ -86,13 +74,10 @@ export function QuizResultsGroupedList({
               <QuizResultCard
                 key={r.key}
                 item={r}
-                isEtymology={isEtymology}
                 onOverride={onOverride}
                 onUndo={onUndo}
                 onSkip={onSkip}
                 onResume={onResume}
-                onOverrideWord={onOverrideWord}
-                onExcludeWord={onExcludeWord}
               />
             ))}
           </VStack>

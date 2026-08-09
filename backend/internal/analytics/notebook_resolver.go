@@ -280,7 +280,7 @@ func findVocabNote(notes []notebook.Note, id, expression string) (WordMetadata, 
 		}
 		meta := WordMetadata{Meaning: n.Meaning}
 		if len(n.Examples) > 0 {
-			meta.ExampleSentence = n.Examples[0]
+			meta.ExampleSentence = n.Examples[0].Text
 		}
 		return meta, n, true
 	}

@@ -29,9 +29,11 @@ const (
 	QuizType_QUIZ_TYPE_STANDARD    QuizType = 1
 	QuizType_QUIZ_TYPE_REVERSE     QuizType = 2
 	QuizType_QUIZ_TYPE_FREEFORM    QuizType = 3
-	// QUIZ_TYPE_ETYMOLOGY_ORIGIN is the single etymology quiz mode: one screen
-	// per (origin, sense) showing the origin with its full session-scoped word
-	// family, with the user typing each word's meaning. The former per-word
+	// QUIZ_TYPE_ETYMOLOGY_ORIGIN is no longer a standalone quiz mode. Etymology
+	// words are quizzed through the normal vocabulary quizzes; this value now
+	// only labels the origin-grouped family card the Relearn quiz builds from
+	// missed vocabulary words, and tags the per-word etymology exclusion
+	// (skipped_at) that drops a word from that family card. The former per-word
 	// breakdown/assembly/freeform etymology modes (values 5, 6) are removed.
 	QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN QuizType = 4
 	// QUIZ_TYPE_RELEARN is a label-only value used by the Relearn Quiz to tag
@@ -142,7 +144,7 @@ func (x GraphPrompt_Shape) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GraphPrompt_Shape.Descriptor instead.
 func (GraphPrompt_Shape) EnumDescriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{37, 0}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{35, 0}
 }
 
 type GraphNode_Kind int32
@@ -197,7 +199,7 @@ func (x GraphNode_Kind) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use GraphNode_Kind.Descriptor instead.
 func (GraphNode_Kind) EnumDescriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{38, 0}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{36, 0}
 }
 
 type GetQuizOptionsRequest struct {
@@ -317,8 +319,16 @@ type NotebookSummary struct {
 	// grammar_review_count is the per-notebook due count for the grammar quiz
 	// (journal notebooks). Zero for non-journal notebooks.
 	GrammarReviewCount int32 `protobuf:"varint,10,opt,name=grammar_review_count,json=grammarReviewCount,proto3" json:"grammar_review_count,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// vocabulary_count is the STRUCTURAL number of vocabulary entries the
+	// notebook has (definitions in a definitions book, scene definitions across
+	// a story/journal, or flashcard cards) — i.e. how many words COULD be
+	// quizzed, independent of spaced-repetition/studied state. Unlike
+	// review_count (SR-due), it does not change with the "Include unstudied"
+	// toggle. Grammar summaries are 0. The Vocabulary tab lists a notebook iff
+	// this is > 0, so grammar-only and definition-less journal rows drop out.
+	VocabularyCount int32 `protobuf:"varint,11,opt,name=vocabulary_count,json=vocabularyCount,proto3" json:"vocabulary_count,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *NotebookSummary) Reset() {
@@ -417,6 +427,13 @@ func (x *NotebookSummary) GetEtymologyReverseReviewCount() int32 {
 func (x *NotebookSummary) GetGrammarReviewCount() int32 {
 	if x != nil {
 		return x.GrammarReviewCount
+	}
+	return 0
+}
+
+func (x *NotebookSummary) GetVocabularyCount() int32 {
+	if x != nil {
+		return x.VocabularyCount
 	}
 	return 0
 }
@@ -768,9 +785,13 @@ func (x *Flashcard) GetConceptMeaning() string {
 }
 
 type Example struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Text          string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
-	Speaker       string                 `protobuf:"bytes,2,opt,name=speaker,proto3" json:"speaker,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Text    string                 `protobuf:"bytes,1,opt,name=text,proto3" json:"text,omitempty"`
+	Speaker string                 `protobuf:"bytes,2,opt,name=speaker,proto3" json:"speaker,omitempty"`
+	// highlight is the exact surface word/phrase to bold in this sentence
+	// (e.g. "went" for lemma "go"). Empty means fall back to the auto
+	// whole-word lemma rule on the client.
+	Highlight     string `protobuf:"bytes,3,opt,name=highlight,proto3" json:"highlight,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -815,6 +836,13 @@ func (x *Example) GetText() string {
 func (x *Example) GetSpeaker() string {
 	if x != nil {
 		return x.Speaker
+	}
+	return ""
+}
+
+func (x *Example) GetHighlight() string {
+	if x != nil {
+		return x.Highlight
 	}
 	return ""
 }
@@ -2624,223 +2652,9 @@ func (*ResumeWordResponse) Descriptor() ([]byte, []int) {
 	return file_api_v1_quiz_proto_rawDescGZIP(), []int{34}
 }
 
-// EtymologyFamilyWord is one derived word shown on an origin card. word_id is
-// the ephemeral id the client echoes back on submit; expression is the word
-// whose meaning the user is asked to type.
-type EtymologyFamilyWord struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	WordId     int64                  `protobuf:"varint,1,opt,name=word_id,json=wordId,proto3" json:"word_id,omitempty"`
-	Expression string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
-	// pronunciation is per-word study context shown as a hint while the learner
-	// types the meaning. It does not reveal the meaning, so it is safe on the
-	// answering screen. Example sentences and the literal gloss are deliberately
-	// NOT carried on the card (they'd leak the answer); they are returned on the
-	// feedback response instead (see EtymologyWordResult).
-	Pronunciation string `protobuf:"bytes,3,opt,name=pronunciation,proto3" json:"pronunciation,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EtymologyFamilyWord) Reset() {
-	*x = EtymologyFamilyWord{}
-	mi := &file_api_v1_quiz_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EtymologyFamilyWord) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EtymologyFamilyWord) ProtoMessage() {}
-
-func (x *EtymologyFamilyWord) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EtymologyFamilyWord.ProtoReflect.Descriptor instead.
-func (*EtymologyFamilyWord) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{35}
-}
-
-func (x *EtymologyFamilyWord) GetWordId() int64 {
-	if x != nil {
-		return x.WordId
-	}
-	return 0
-}
-
-func (x *EtymologyFamilyWord) GetExpression() string {
-	if x != nil {
-		return x.Expression
-	}
-	return ""
-}
-
-func (x *EtymologyFamilyWord) GetPronunciation() string {
-	if x != nil {
-		return x.Pronunciation
-	}
-	return ""
-}
-
-// EtymologyOriginCard is one screen: a single (origin, sense) shown with the
-// full session-scoped family of words that derive from it. The user types each
-// family word's meaning while the origin and family stay visible as context.
-type EtymologyOriginCard struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	CardId   int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	Origin   string                 `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
-	Type     string                 `protobuf:"bytes,3,opt,name=type,proto3" json:"type,omitempty"`
-	Language string                 `protobuf:"bytes,4,opt,name=language,proto3" json:"language,omitempty"`
-	// meaning is the origin's own English gloss, shown as header context.
-	Meaning      string `protobuf:"bytes,5,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	NotebookName string `protobuf:"bytes,6,opt,name=notebook_name,json=notebookName,proto3" json:"notebook_name,omitempty"`
-	// session_title is the metadata.title of the etymology session that defined
-	// this origin sense; it disambiguates the same origin string across sessions.
-	SessionTitle string `protobuf:"bytes,7,opt,name=session_title,json=sessionTitle,proto3" json:"session_title,omitempty"`
-	// sense disambiguates same-session multi-sense origins. Empty for single-sense.
-	Sense string                 `protobuf:"bytes,8,opt,name=sense,proto3" json:"sense,omitempty"`
-	Forms []*EtymologyOriginForm `protobuf:"bytes,9,rep,name=forms,proto3" json:"forms,omitempty"`
-	// words is the full session-scoped word family to give meanings for.
-	Words []*EtymologyFamilyWord `protobuf:"bytes,10,rep,name=words,proto3" json:"words,omitempty"`
-	// english_forms are the English combining-form spellings this origin
-	// surfaces as inside English words (e.g. facere → fac, fic, fect). Study
-	// context shown in the origin header; distinct from `forms` (the origin's
-	// source-language principal parts). Never quizzed.
-	EnglishForms []string `protobuf:"bytes,11,rep,name=english_forms,json=englishForms,proto3" json:"english_forms,omitempty"`
-	// note is the origin's free-text pedagogical hint (e.g. "Be on the lookout
-	// for words with fic, fect, and fy…"). Study context; never quizzed.
-	Note          string `protobuf:"bytes,12,opt,name=note,proto3" json:"note,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EtymologyOriginCard) Reset() {
-	*x = EtymologyOriginCard{}
-	mi := &file_api_v1_quiz_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EtymologyOriginCard) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EtymologyOriginCard) ProtoMessage() {}
-
-func (x *EtymologyOriginCard) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EtymologyOriginCard.ProtoReflect.Descriptor instead.
-func (*EtymologyOriginCard) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *EtymologyOriginCard) GetCardId() int64 {
-	if x != nil {
-		return x.CardId
-	}
-	return 0
-}
-
-func (x *EtymologyOriginCard) GetOrigin() string {
-	if x != nil {
-		return x.Origin
-	}
-	return ""
-}
-
-func (x *EtymologyOriginCard) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
-func (x *EtymologyOriginCard) GetLanguage() string {
-	if x != nil {
-		return x.Language
-	}
-	return ""
-}
-
-func (x *EtymologyOriginCard) GetMeaning() string {
-	if x != nil {
-		return x.Meaning
-	}
-	return ""
-}
-
-func (x *EtymologyOriginCard) GetNotebookName() string {
-	if x != nil {
-		return x.NotebookName
-	}
-	return ""
-}
-
-func (x *EtymologyOriginCard) GetSessionTitle() string {
-	if x != nil {
-		return x.SessionTitle
-	}
-	return ""
-}
-
-func (x *EtymologyOriginCard) GetSense() string {
-	if x != nil {
-		return x.Sense
-	}
-	return ""
-}
-
-func (x *EtymologyOriginCard) GetForms() []*EtymologyOriginForm {
-	if x != nil {
-		return x.Forms
-	}
-	return nil
-}
-
-func (x *EtymologyOriginCard) GetWords() []*EtymologyFamilyWord {
-	if x != nil {
-		return x.Words
-	}
-	return nil
-}
-
-func (x *EtymologyOriginCard) GetEnglishForms() []string {
-	if x != nil {
-		return x.EnglishForms
-	}
-	return nil
-}
-
-func (x *EtymologyOriginCard) GetNote() string {
-	if x != nil {
-		return x.Note
-	}
-	return ""
-}
-
-// GraphPrompt is a small subgraph. In the etymology-origin quiz it is served
-// only as read-only elaborative scaffolding (no blank) on feedback, and is
-// also reused by the Relearn quiz feedback.
+// GraphPrompt is a small subgraph served as read-only elaborative scaffolding
+// (no blank) on the browse etymology mindmap and, when present, on quiz
+// feedback.
 type GraphPrompt struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Shape GraphPrompt_Shape      `protobuf:"varint,1,opt,name=shape,proto3,enum=api.v1.GraphPrompt_Shape" json:"shape,omitempty"`
@@ -2855,7 +2669,7 @@ type GraphPrompt struct {
 
 func (x *GraphPrompt) Reset() {
 	*x = GraphPrompt{}
-	mi := &file_api_v1_quiz_proto_msgTypes[37]
+	mi := &file_api_v1_quiz_proto_msgTypes[35]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2867,7 +2681,7 @@ func (x *GraphPrompt) String() string {
 func (*GraphPrompt) ProtoMessage() {}
 
 func (x *GraphPrompt) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[37]
+	mi := &file_api_v1_quiz_proto_msgTypes[35]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2880,7 +2694,7 @@ func (x *GraphPrompt) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphPrompt.ProtoReflect.Descriptor instead.
 func (*GraphPrompt) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{37}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{35}
 }
 
 func (x *GraphPrompt) GetShape() GraphPrompt_Shape {
@@ -2938,7 +2752,7 @@ type GraphNode struct {
 
 func (x *GraphNode) Reset() {
 	*x = GraphNode{}
-	mi := &file_api_v1_quiz_proto_msgTypes[38]
+	mi := &file_api_v1_quiz_proto_msgTypes[36]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2950,7 +2764,7 @@ func (x *GraphNode) String() string {
 func (*GraphNode) ProtoMessage() {}
 
 func (x *GraphNode) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[38]
+	mi := &file_api_v1_quiz_proto_msgTypes[36]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2963,7 +2777,7 @@ func (x *GraphNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphNode.ProtoReflect.Descriptor instead.
 func (*GraphNode) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{38}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{36}
 }
 
 func (x *GraphNode) GetId() string {
@@ -3021,7 +2835,7 @@ type GraphEdge struct {
 
 func (x *GraphEdge) Reset() {
 	*x = GraphEdge{}
-	mi := &file_api_v1_quiz_proto_msgTypes[39]
+	mi := &file_api_v1_quiz_proto_msgTypes[37]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3033,7 +2847,7 @@ func (x *GraphEdge) String() string {
 func (*GraphEdge) ProtoMessage() {}
 
 func (x *GraphEdge) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[39]
+	mi := &file_api_v1_quiz_proto_msgTypes[37]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3046,7 +2860,7 @@ func (x *GraphEdge) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GraphEdge.ProtoReflect.Descriptor instead.
 func (*GraphEdge) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{39}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{37}
 }
 
 func (x *GraphEdge) GetFrom() string {
@@ -3070,532 +2884,6 @@ func (x *GraphEdge) GetType() string {
 	return ""
 }
 
-type StartEtymologyOriginQuizRequest struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	EtymologyNotebookIds []string               `protobuf:"bytes,1,rep,name=etymology_notebook_ids,json=etymologyNotebookIds,proto3" json:"etymology_notebook_ids,omitempty"`
-	IncludeUnstudied     bool                   `protobuf:"varint,2,opt,name=include_unstudied,json=includeUnstudied,proto3" json:"include_unstudied,omitempty"`
-	// notebook_sections, when non-empty, replaces etymology_notebook_ids and
-	// narrows the quiz to specific sessions within each etymology notebook.
-	NotebookSections []*NotebookSection `protobuf:"bytes,3,rep,name=notebook_sections,json=notebookSections,proto3" json:"notebook_sections,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
-}
-
-func (x *StartEtymologyOriginQuizRequest) Reset() {
-	*x = StartEtymologyOriginQuizRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[40]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StartEtymologyOriginQuizRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StartEtymologyOriginQuizRequest) ProtoMessage() {}
-
-func (x *StartEtymologyOriginQuizRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[40]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StartEtymologyOriginQuizRequest.ProtoReflect.Descriptor instead.
-func (*StartEtymologyOriginQuizRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{40}
-}
-
-func (x *StartEtymologyOriginQuizRequest) GetEtymologyNotebookIds() []string {
-	if x != nil {
-		return x.EtymologyNotebookIds
-	}
-	return nil
-}
-
-func (x *StartEtymologyOriginQuizRequest) GetIncludeUnstudied() bool {
-	if x != nil {
-		return x.IncludeUnstudied
-	}
-	return false
-}
-
-func (x *StartEtymologyOriginQuizRequest) GetNotebookSections() []*NotebookSection {
-	if x != nil {
-		return x.NotebookSections
-	}
-	return nil
-}
-
-type StartEtymologyOriginQuizResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Cards         []*EtymologyOriginCard `protobuf:"bytes,1,rep,name=cards,proto3" json:"cards,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *StartEtymologyOriginQuizResponse) Reset() {
-	*x = StartEtymologyOriginQuizResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[41]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *StartEtymologyOriginQuizResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*StartEtymologyOriginQuizResponse) ProtoMessage() {}
-
-func (x *StartEtymologyOriginQuizResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[41]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use StartEtymologyOriginQuizResponse.ProtoReflect.Descriptor instead.
-func (*StartEtymologyOriginQuizResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{41}
-}
-
-func (x *StartEtymologyOriginQuizResponse) GetCards() []*EtymologyOriginCard {
-	if x != nil {
-		return x.Cards
-	}
-	return nil
-}
-
-// EtymologyWordAnswer is the user's typed meaning for one family word on the
-// card, keyed by the word_id echoed from EtymologyFamilyWord. There is no
-// "skip"/"don't know" control: a word the learner leaves blank is graded
-// INCORRECT (a normal miss that stays due), exactly like a wrong typed answer.
-type EtymologyWordAnswer struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	WordId        int64                  `protobuf:"varint,1,opt,name=word_id,json=wordId,proto3" json:"word_id,omitempty"`
-	Answer        string                 `protobuf:"bytes,2,opt,name=answer,proto3" json:"answer,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EtymologyWordAnswer) Reset() {
-	*x = EtymologyWordAnswer{}
-	mi := &file_api_v1_quiz_proto_msgTypes[42]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EtymologyWordAnswer) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EtymologyWordAnswer) ProtoMessage() {}
-
-func (x *EtymologyWordAnswer) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[42]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EtymologyWordAnswer.ProtoReflect.Descriptor instead.
-func (*EtymologyWordAnswer) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{42}
-}
-
-func (x *EtymologyWordAnswer) GetWordId() int64 {
-	if x != nil {
-		return x.WordId
-	}
-	return 0
-}
-
-func (x *EtymologyWordAnswer) GetAnswer() string {
-	if x != nil {
-		return x.Answer
-	}
-	return ""
-}
-
-type SubmitEtymologyOriginAnswerRequest struct {
-	state  protoimpl.MessageState `protogen:"open.v1"`
-	CardId int64                  `protobuf:"varint,1,opt,name=card_id,json=cardId,proto3" json:"card_id,omitempty"`
-	// answers holds one entry per family word, each carrying the typed meaning
-	// (empty answer = graded incorrect). There is no per-word or whole-card skip.
-	Answers        []*EtymologyWordAnswer `protobuf:"bytes,2,rep,name=answers,proto3" json:"answers,omitempty"`
-	ResponseTimeMs int64                  `protobuf:"varint,3,opt,name=response_time_ms,json=responseTimeMs,proto3" json:"response_time_ms,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
-}
-
-func (x *SubmitEtymologyOriginAnswerRequest) Reset() {
-	*x = SubmitEtymologyOriginAnswerRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[43]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubmitEtymologyOriginAnswerRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubmitEtymologyOriginAnswerRequest) ProtoMessage() {}
-
-func (x *SubmitEtymologyOriginAnswerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[43]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubmitEtymologyOriginAnswerRequest.ProtoReflect.Descriptor instead.
-func (*SubmitEtymologyOriginAnswerRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{43}
-}
-
-func (x *SubmitEtymologyOriginAnswerRequest) GetCardId() int64 {
-	if x != nil {
-		return x.CardId
-	}
-	return 0
-}
-
-func (x *SubmitEtymologyOriginAnswerRequest) GetAnswers() []*EtymologyWordAnswer {
-	if x != nil {
-		return x.Answers
-	}
-	return nil
-}
-
-func (x *SubmitEtymologyOriginAnswerRequest) GetResponseTimeMs() int64 {
-	if x != nil {
-		return x.ResponseTimeMs
-	}
-	return 0
-}
-
-// EtymologyWordResult is the per-word feedback for one family word. It is
-// display-only — the origin carries a single learning-log series, not one per
-// word. A word the learner left blank comes back as incorrect (correct=false),
-// not as a distinct "skipped" state.
-type EtymologyWordResult struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	WordId         int64                  `protobuf:"varint,1,opt,name=word_id,json=wordId,proto3" json:"word_id,omitempty"`
-	Expression     string                 `protobuf:"bytes,2,opt,name=expression,proto3" json:"expression,omitempty"`
-	Correct        bool                   `protobuf:"varint,3,opt,name=correct,proto3" json:"correct,omitempty"`
-	CorrectMeaning string                 `protobuf:"bytes,4,opt,name=correct_meaning,json=correctMeaning,proto3" json:"correct_meaning,omitempty"`
-	Reason         string                 `protobuf:"bytes,5,opt,name=reason,proto3" json:"reason,omitempty"`
-	// pronunciation, examples, and literal are per-word study context revealed
-	// on the feedback screen alongside the graded meaning. examples (example
-	// sentences) and literal (the assembled literal gloss, e.g.
-	// `de "down" + facere = "made down"`) are returned here rather than on the
-	// card so they never leak the answer while the learner is typing.
-	Pronunciation string   `protobuf:"bytes,7,opt,name=pronunciation,proto3" json:"pronunciation,omitempty"`
-	Examples      []string `protobuf:"bytes,8,rep,name=examples,proto3" json:"examples,omitempty"`
-	Literal       string   `protobuf:"bytes,9,opt,name=literal,proto3" json:"literal,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *EtymologyWordResult) Reset() {
-	*x = EtymologyWordResult{}
-	mi := &file_api_v1_quiz_proto_msgTypes[44]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *EtymologyWordResult) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*EtymologyWordResult) ProtoMessage() {}
-
-func (x *EtymologyWordResult) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[44]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use EtymologyWordResult.ProtoReflect.Descriptor instead.
-func (*EtymologyWordResult) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{44}
-}
-
-func (x *EtymologyWordResult) GetWordId() int64 {
-	if x != nil {
-		return x.WordId
-	}
-	return 0
-}
-
-func (x *EtymologyWordResult) GetExpression() string {
-	if x != nil {
-		return x.Expression
-	}
-	return ""
-}
-
-func (x *EtymologyWordResult) GetCorrect() bool {
-	if x != nil {
-		return x.Correct
-	}
-	return false
-}
-
-func (x *EtymologyWordResult) GetCorrectMeaning() string {
-	if x != nil {
-		return x.CorrectMeaning
-	}
-	return ""
-}
-
-func (x *EtymologyWordResult) GetReason() string {
-	if x != nil {
-		return x.Reason
-	}
-	return ""
-}
-
-func (x *EtymologyWordResult) GetPronunciation() string {
-	if x != nil {
-		return x.Pronunciation
-	}
-	return ""
-}
-
-func (x *EtymologyWordResult) GetExamples() []string {
-	if x != nil {
-		return x.Examples
-	}
-	return nil
-}
-
-func (x *EtymologyWordResult) GetLiteral() string {
-	if x != nil {
-		return x.Literal
-	}
-	return ""
-}
-
-type SubmitEtymologyOriginAnswerResponse struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// correct is the aggregate origin result: true only when every family word
-	// was answered correctly. It drives the ONE learning-log entry written for
-	// the origin's (session, sense) series.
-	Correct        bool   `protobuf:"varint,1,opt,name=correct,proto3" json:"correct,omitempty"`
-	Origin         string `protobuf:"bytes,2,opt,name=origin,proto3" json:"origin,omitempty"`
-	Meaning        string `protobuf:"bytes,3,opt,name=meaning,proto3" json:"meaning,omitempty"`
-	NextReviewDate string `protobuf:"bytes,4,opt,name=next_review_date,json=nextReviewDate,proto3" json:"next_review_date,omitempty"`
-	LearnedAt      string `protobuf:"bytes,5,opt,name=learned_at,json=learnedAt,proto3" json:"learned_at,omitempty"`
-	// note_id is an ephemeral id for the answered origin so Override/Skip can
-	// target the origin's series after grading.
-	NoteId        int64                  `protobuf:"varint,6,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
-	SenseId       string                 `protobuf:"bytes,7,opt,name=sense_id,json=senseId,proto3" json:"sense_id,omitempty"`
-	Results       []*EtymologyWordResult `protobuf:"bytes,8,rep,name=results,proto3" json:"results,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) Reset() {
-	*x = SubmitEtymologyOriginAnswerResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[45]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SubmitEtymologyOriginAnswerResponse) ProtoMessage() {}
-
-func (x *SubmitEtymologyOriginAnswerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[45]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SubmitEtymologyOriginAnswerResponse.ProtoReflect.Descriptor instead.
-func (*SubmitEtymologyOriginAnswerResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{45}
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetCorrect() bool {
-	if x != nil {
-		return x.Correct
-	}
-	return false
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetOrigin() string {
-	if x != nil {
-		return x.Origin
-	}
-	return ""
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetMeaning() string {
-	if x != nil {
-		return x.Meaning
-	}
-	return ""
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetNextReviewDate() string {
-	if x != nil {
-		return x.NextReviewDate
-	}
-	return ""
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetLearnedAt() string {
-	if x != nil {
-		return x.LearnedAt
-	}
-	return ""
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetNoteId() int64 {
-	if x != nil {
-		return x.NoteId
-	}
-	return 0
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetSenseId() string {
-	if x != nil {
-		return x.SenseId
-	}
-	return ""
-}
-
-func (x *SubmitEtymologyOriginAnswerResponse) GetResults() []*EtymologyWordResult {
-	if x != nil {
-		return x.Results
-	}
-	return nil
-}
-
-type BatchSubmitEtymologyOriginAnswersRequest struct {
-	state         protoimpl.MessageState                `protogen:"open.v1"`
-	Answers       []*SubmitEtymologyOriginAnswerRequest `protobuf:"bytes,1,rep,name=answers,proto3" json:"answers,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BatchSubmitEtymologyOriginAnswersRequest) Reset() {
-	*x = BatchSubmitEtymologyOriginAnswersRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[46]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BatchSubmitEtymologyOriginAnswersRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BatchSubmitEtymologyOriginAnswersRequest) ProtoMessage() {}
-
-func (x *BatchSubmitEtymologyOriginAnswersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[46]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BatchSubmitEtymologyOriginAnswersRequest.ProtoReflect.Descriptor instead.
-func (*BatchSubmitEtymologyOriginAnswersRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{46}
-}
-
-func (x *BatchSubmitEtymologyOriginAnswersRequest) GetAnswers() []*SubmitEtymologyOriginAnswerRequest {
-	if x != nil {
-		return x.Answers
-	}
-	return nil
-}
-
-type BatchSubmitEtymologyOriginAnswersResponse struct {
-	state         protoimpl.MessageState                 `protogen:"open.v1"`
-	Responses     []*SubmitEtymologyOriginAnswerResponse `protobuf:"bytes,1,rep,name=responses,proto3" json:"responses,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BatchSubmitEtymologyOriginAnswersResponse) Reset() {
-	*x = BatchSubmitEtymologyOriginAnswersResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[47]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BatchSubmitEtymologyOriginAnswersResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BatchSubmitEtymologyOriginAnswersResponse) ProtoMessage() {}
-
-func (x *BatchSubmitEtymologyOriginAnswersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[47]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BatchSubmitEtymologyOriginAnswersResponse.ProtoReflect.Descriptor instead.
-func (*BatchSubmitEtymologyOriginAnswersResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{47}
-}
-
-func (x *BatchSubmitEtymologyOriginAnswersResponse) GetResponses() []*SubmitEtymologyOriginAnswerResponse {
-	if x != nil {
-		return x.Responses
-	}
-	return nil
-}
-
 type StartRelearnQuizRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// window_hours is the look-back window for the wrong-word pool. 0 means
@@ -3609,7 +2897,7 @@ type StartRelearnQuizRequest struct {
 
 func (x *StartRelearnQuizRequest) Reset() {
 	*x = StartRelearnQuizRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[48]
+	mi := &file_api_v1_quiz_proto_msgTypes[38]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3621,7 +2909,7 @@ func (x *StartRelearnQuizRequest) String() string {
 func (*StartRelearnQuizRequest) ProtoMessage() {}
 
 func (x *StartRelearnQuizRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[48]
+	mi := &file_api_v1_quiz_proto_msgTypes[38]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3634,7 +2922,7 @@ func (x *StartRelearnQuizRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartRelearnQuizRequest.ProtoReflect.Descriptor instead.
 func (*StartRelearnQuizRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{48}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{38}
 }
 
 func (x *StartRelearnQuizRequest) GetWindowHours() int32 {
@@ -3653,7 +2941,7 @@ type StartRelearnQuizResponse struct {
 
 func (x *StartRelearnQuizResponse) Reset() {
 	*x = StartRelearnQuizResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[49]
+	mi := &file_api_v1_quiz_proto_msgTypes[39]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3665,7 +2953,7 @@ func (x *StartRelearnQuizResponse) String() string {
 func (*StartRelearnQuizResponse) ProtoMessage() {}
 
 func (x *StartRelearnQuizResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[49]
+	mi := &file_api_v1_quiz_proto_msgTypes[39]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3678,7 +2966,7 @@ func (x *StartRelearnQuizResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartRelearnQuizResponse.ProtoReflect.Descriptor instead.
 func (*StartRelearnQuizResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{49}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{39}
 }
 
 func (x *StartRelearnQuizResponse) GetCards() []*RelearnCard {
@@ -3697,11 +2985,16 @@ type RelearnCard struct {
 	Entry string `protobuf:"bytes,2,opt,name=entry,proto3" json:"entry,omitempty"`
 	// source_quiz_type is the format the card is presented and graded in — the
 	// quiz type it was failed in: QUIZ_TYPE_STANDARD (recognition: show entry,
-	// ask meaning), QUIZ_TYPE_REVERSE (show meaning + contexts, ask entry), or
-	// QUIZ_TYPE_ETYMOLOGY_ORIGIN (show origin, ask its meaning). Never persisted.
+	// ask meaning) or QUIZ_TYPE_REVERSE (show meaning + contexts, ask entry).
+	// QUIZ_TYPE_ETYMOLOGY_ORIGIN tags a missed vocabulary word that carries an
+	// etymology origin: it is a recognition card (entry=word, ask its meaning),
+	// but also carries origin_text / origin_meaning so the frontend groups every
+	// such card sharing an origin into ONE origin-family card (origin + meaning +
+	// the missed words). Never persisted. See quiz-ui-invariants.
 	SourceQuizType QuizType `protobuf:"varint,3,opt,name=source_quiz_type,json=sourceQuizType,proto3,enum=api.v1.QuizType" json:"source_quiz_type,omitempty"`
-	// meaning is the prompt for reverse / etymology-reverse cards and the
-	// expected answer otherwise. Always sent so feedback can show both sides.
+	// meaning is the prompt for reverse cards and the expected answer otherwise —
+	// for an etymology card it is the WORD's own meaning. Always sent so feedback
+	// can show both sides.
 	Meaning  string             `protobuf:"bytes,4,opt,name=meaning,proto3" json:"meaning,omitempty"`
 	Examples []*Example         `protobuf:"bytes,5,rep,name=examples,proto3" json:"examples,omitempty"` // recognition hint
 	Contexts []*ContextSentence `protobuf:"bytes,6,rep,name=contexts,proto3" json:"contexts,omitempty"` // reverse hint (masked)
@@ -3711,15 +3004,28 @@ type RelearnCard struct {
 	// source_quiz_type is QUIZ_TYPE_GRAMMAR: the live grammar quiz's inline-
 	// correction card is reused to present these — the full entry text with
 	// the missed span struck through and an inline box for the fix.
-	Content       string `protobuf:"bytes,9,opt,name=content,proto3" json:"content,omitempty"`      // the journal entry's full text (grammar)
-	Incorrect     string `protobuf:"bytes,10,opt,name=incorrect,proto3" json:"incorrect,omitempty"` // the mistaken span to correct, struck through in content
+	Content   string `protobuf:"bytes,9,opt,name=content,proto3" json:"content,omitempty"`      // the journal entry's full text (grammar)
+	Incorrect string `protobuf:"bytes,10,opt,name=incorrect,proto3" json:"incorrect,omitempty"` // the mistaken span to correct, struck through in content
+	// Etymology origin grouping (populated only when source_quiz_type is
+	// QUIZ_TYPE_ETYMOLOGY_ORIGIN). origin_text is the source-language origin the
+	// missed word derives from (e.g. "facere"); origin_meaning is that origin's
+	// English gloss. Every etymology card sharing an origin_text/origin_meaning
+	// is rendered as one family card: the origin header (origin_text +
+	// origin_meaning + type + language) over the missed words. Empty otherwise.
+	OriginText    string `protobuf:"bytes,11,opt,name=origin_text,json=originText,proto3" json:"origin_text,omitempty"`
+	OriginMeaning string `protobuf:"bytes,12,opt,name=origin_meaning,json=originMeaning,proto3" json:"origin_meaning,omitempty"`
+	// english_forms are the origin's English combining-form spellings (e.g. the
+	// Latin root "liber" surfaces as ["lib", "liv"]). Shown as chips on the
+	// origin header of the Relearn family card. Study context only — never
+	// quizzed. Empty for non-etymology cards.
+	EnglishForms  []string `protobuf:"bytes,13,rep,name=english_forms,json=englishForms,proto3" json:"english_forms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *RelearnCard) Reset() {
 	*x = RelearnCard{}
-	mi := &file_api_v1_quiz_proto_msgTypes[50]
+	mi := &file_api_v1_quiz_proto_msgTypes[40]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3731,7 +3037,7 @@ func (x *RelearnCard) String() string {
 func (*RelearnCard) ProtoMessage() {}
 
 func (x *RelearnCard) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[50]
+	mi := &file_api_v1_quiz_proto_msgTypes[40]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3744,7 +3050,7 @@ func (x *RelearnCard) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelearnCard.ProtoReflect.Descriptor instead.
 func (*RelearnCard) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{50}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{40}
 }
 
 func (x *RelearnCard) GetNoteId() int64 {
@@ -3817,6 +3123,27 @@ func (x *RelearnCard) GetIncorrect() string {
 	return ""
 }
 
+func (x *RelearnCard) GetOriginText() string {
+	if x != nil {
+		return x.OriginText
+	}
+	return ""
+}
+
+func (x *RelearnCard) GetOriginMeaning() string {
+	if x != nil {
+		return x.OriginMeaning
+	}
+	return ""
+}
+
+func (x *RelearnCard) GetEnglishForms() []string {
+	if x != nil {
+		return x.EnglishForms
+	}
+	return nil
+}
+
 type SubmitRelearnAnswerRequest struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	NoteId int64                  `protobuf:"varint,1,opt,name=note_id,json=noteId,proto3" json:"note_id,omitempty"`
@@ -3830,7 +3157,7 @@ type SubmitRelearnAnswerRequest struct {
 
 func (x *SubmitRelearnAnswerRequest) Reset() {
 	*x = SubmitRelearnAnswerRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[51]
+	mi := &file_api_v1_quiz_proto_msgTypes[41]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3842,7 +3169,7 @@ func (x *SubmitRelearnAnswerRequest) String() string {
 func (*SubmitRelearnAnswerRequest) ProtoMessage() {}
 
 func (x *SubmitRelearnAnswerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[51]
+	mi := &file_api_v1_quiz_proto_msgTypes[41]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3855,7 +3182,7 @@ func (x *SubmitRelearnAnswerRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitRelearnAnswerRequest.ProtoReflect.Descriptor instead.
 func (*SubmitRelearnAnswerRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{51}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{41}
 }
 
 func (x *SubmitRelearnAnswerRequest) GetNoteId() int64 {
@@ -3893,12 +3220,9 @@ type SubmitRelearnAnswerResponse struct {
 	Reason     string                 `protobuf:"bytes,3,opt,name=reason,proto3" json:"reason,omitempty"`
 	WordDetail *WordDetail            `protobuf:"bytes,4,opt,name=word_detail,json=wordDetail,proto3" json:"word_detail,omitempty"`
 	Images     []string               `protobuf:"bytes,5,rep,name=images,proto3" json:"images,omitempty"`
-	// Rich Learn-page context, assembled read-only from notebook/etymology data:
-	// the scenes the word appears in, the etymology relation graph, and related
-	// words. All optional — omitted sub-parts render nothing.
+	// Rich Learn-page context, assembled read-only from notebook data: the scenes
+	// the word appears in. Optional — omitted when there is nothing to show.
 	ContextScenes []*RelearnContextScene `protobuf:"bytes,6,rep,name=context_scenes,json=contextScenes,proto3" json:"context_scenes,omitempty"`
-	GraphContext  *GraphPrompt           `protobuf:"bytes,7,opt,name=graph_context,json=graphContext,proto3" json:"graph_context,omitempty"`
-	ExampleWords  []string               `protobuf:"bytes,8,rep,name=example_words,json=exampleWords,proto3" json:"example_words,omitempty"`
 	// Grammar feedback extras (empty for vocab/etymology cards), populated
 	// when the graded card's source_quiz_type was QUIZ_TYPE_GRAMMAR — mirrors
 	// what the live grammar quiz's feedback card shows (see
@@ -3919,7 +3243,7 @@ type SubmitRelearnAnswerResponse struct {
 
 func (x *SubmitRelearnAnswerResponse) Reset() {
 	*x = SubmitRelearnAnswerResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[52]
+	mi := &file_api_v1_quiz_proto_msgTypes[42]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3931,7 +3255,7 @@ func (x *SubmitRelearnAnswerResponse) String() string {
 func (*SubmitRelearnAnswerResponse) ProtoMessage() {}
 
 func (x *SubmitRelearnAnswerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[52]
+	mi := &file_api_v1_quiz_proto_msgTypes[42]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3944,7 +3268,7 @@ func (x *SubmitRelearnAnswerResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitRelearnAnswerResponse.ProtoReflect.Descriptor instead.
 func (*SubmitRelearnAnswerResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{52}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{42}
 }
 
 func (x *SubmitRelearnAnswerResponse) GetCorrect() bool {
@@ -3985,20 +3309,6 @@ func (x *SubmitRelearnAnswerResponse) GetImages() []string {
 func (x *SubmitRelearnAnswerResponse) GetContextScenes() []*RelearnContextScene {
 	if x != nil {
 		return x.ContextScenes
-	}
-	return nil
-}
-
-func (x *SubmitRelearnAnswerResponse) GetGraphContext() *GraphPrompt {
-	if x != nil {
-		return x.GraphContext
-	}
-	return nil
-}
-
-func (x *SubmitRelearnAnswerResponse) GetExampleWords() []string {
-	if x != nil {
-		return x.ExampleWords
 	}
 	return nil
 }
@@ -4046,7 +3356,7 @@ type RelearnContextScene struct {
 
 func (x *RelearnContextScene) Reset() {
 	*x = RelearnContextScene{}
-	mi := &file_api_v1_quiz_proto_msgTypes[53]
+	mi := &file_api_v1_quiz_proto_msgTypes[43]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4058,7 +3368,7 @@ func (x *RelearnContextScene) String() string {
 func (*RelearnContextScene) ProtoMessage() {}
 
 func (x *RelearnContextScene) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[53]
+	mi := &file_api_v1_quiz_proto_msgTypes[43]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4071,7 +3381,7 @@ func (x *RelearnContextScene) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelearnContextScene.ProtoReflect.Descriptor instead.
 func (*RelearnContextScene) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{53}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{43}
 }
 
 func (x *RelearnContextScene) GetNotebookName() string {
@@ -4112,7 +3422,7 @@ type RelearnConversationLine struct {
 
 func (x *RelearnConversationLine) Reset() {
 	*x = RelearnConversationLine{}
-	mi := &file_api_v1_quiz_proto_msgTypes[54]
+	mi := &file_api_v1_quiz_proto_msgTypes[44]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4124,7 +3434,7 @@ func (x *RelearnConversationLine) String() string {
 func (*RelearnConversationLine) ProtoMessage() {}
 
 func (x *RelearnConversationLine) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[54]
+	mi := &file_api_v1_quiz_proto_msgTypes[44]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4137,7 +3447,7 @@ func (x *RelearnConversationLine) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RelearnConversationLine.ProtoReflect.Descriptor instead.
 func (*RelearnConversationLine) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{54}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{44}
 }
 
 func (x *RelearnConversationLine) GetSpeaker() string {
@@ -4163,7 +3473,7 @@ type BatchSubmitRelearnAnswersRequest struct {
 
 func (x *BatchSubmitRelearnAnswersRequest) Reset() {
 	*x = BatchSubmitRelearnAnswersRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[55]
+	mi := &file_api_v1_quiz_proto_msgTypes[45]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4175,7 +3485,7 @@ func (x *BatchSubmitRelearnAnswersRequest) String() string {
 func (*BatchSubmitRelearnAnswersRequest) ProtoMessage() {}
 
 func (x *BatchSubmitRelearnAnswersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[55]
+	mi := &file_api_v1_quiz_proto_msgTypes[45]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4188,7 +3498,7 @@ func (x *BatchSubmitRelearnAnswersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchSubmitRelearnAnswersRequest.ProtoReflect.Descriptor instead.
 func (*BatchSubmitRelearnAnswersRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{55}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{45}
 }
 
 func (x *BatchSubmitRelearnAnswersRequest) GetAnswers() []*SubmitRelearnAnswerRequest {
@@ -4207,7 +3517,7 @@ type BatchSubmitRelearnAnswersResponse struct {
 
 func (x *BatchSubmitRelearnAnswersResponse) Reset() {
 	*x = BatchSubmitRelearnAnswersResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[56]
+	mi := &file_api_v1_quiz_proto_msgTypes[46]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4219,7 +3529,7 @@ func (x *BatchSubmitRelearnAnswersResponse) String() string {
 func (*BatchSubmitRelearnAnswersResponse) ProtoMessage() {}
 
 func (x *BatchSubmitRelearnAnswersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[56]
+	mi := &file_api_v1_quiz_proto_msgTypes[46]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4232,7 +3542,7 @@ func (x *BatchSubmitRelearnAnswersResponse) ProtoReflect() protoreflect.Message 
 
 // Deprecated: Use BatchSubmitRelearnAnswersResponse.ProtoReflect.Descriptor instead.
 func (*BatchSubmitRelearnAnswersResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{56}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{46}
 }
 
 func (x *BatchSubmitRelearnAnswersResponse) GetResponses() []*SubmitRelearnAnswerResponse {
@@ -4256,7 +3566,7 @@ type StartGrammarQuizRequest struct {
 
 func (x *StartGrammarQuizRequest) Reset() {
 	*x = StartGrammarQuizRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[57]
+	mi := &file_api_v1_quiz_proto_msgTypes[47]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4268,7 +3578,7 @@ func (x *StartGrammarQuizRequest) String() string {
 func (*StartGrammarQuizRequest) ProtoMessage() {}
 
 func (x *StartGrammarQuizRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[57]
+	mi := &file_api_v1_quiz_proto_msgTypes[47]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4281,7 +3591,7 @@ func (x *StartGrammarQuizRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartGrammarQuizRequest.ProtoReflect.Descriptor instead.
 func (*StartGrammarQuizRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{57}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{47}
 }
 
 func (x *StartGrammarQuizRequest) GetNotebookIds() []string {
@@ -4314,7 +3624,7 @@ type StartGrammarQuizResponse struct {
 
 func (x *StartGrammarQuizResponse) Reset() {
 	*x = StartGrammarQuizResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[58]
+	mi := &file_api_v1_quiz_proto_msgTypes[48]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4326,7 +3636,7 @@ func (x *StartGrammarQuizResponse) String() string {
 func (*StartGrammarQuizResponse) ProtoMessage() {}
 
 func (x *StartGrammarQuizResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[58]
+	mi := &file_api_v1_quiz_proto_msgTypes[48]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4339,7 +3649,7 @@ func (x *StartGrammarQuizResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartGrammarQuizResponse.ProtoReflect.Descriptor instead.
 func (*StartGrammarQuizResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{58}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{48}
 }
 
 func (x *StartGrammarQuizResponse) GetPosts() []*GrammarPostCard {
@@ -4365,7 +3675,7 @@ type GrammarPostCard struct {
 
 func (x *GrammarPostCard) Reset() {
 	*x = GrammarPostCard{}
-	mi := &file_api_v1_quiz_proto_msgTypes[59]
+	mi := &file_api_v1_quiz_proto_msgTypes[49]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4377,7 +3687,7 @@ func (x *GrammarPostCard) String() string {
 func (*GrammarPostCard) ProtoMessage() {}
 
 func (x *GrammarPostCard) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[59]
+	mi := &file_api_v1_quiz_proto_msgTypes[49]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4390,7 +3700,7 @@ func (x *GrammarPostCard) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrammarPostCard.ProtoReflect.Descriptor instead.
 func (*GrammarPostCard) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{59}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{49}
 }
 
 func (x *GrammarPostCard) GetNotebookId() string {
@@ -4445,7 +3755,7 @@ type GrammarBlank struct {
 
 func (x *GrammarBlank) Reset() {
 	*x = GrammarBlank{}
-	mi := &file_api_v1_quiz_proto_msgTypes[60]
+	mi := &file_api_v1_quiz_proto_msgTypes[50]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4457,7 +3767,7 @@ func (x *GrammarBlank) String() string {
 func (*GrammarBlank) ProtoMessage() {}
 
 func (x *GrammarBlank) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[60]
+	mi := &file_api_v1_quiz_proto_msgTypes[50]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4470,7 +3780,7 @@ func (x *GrammarBlank) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrammarBlank.ProtoReflect.Descriptor instead.
 func (*GrammarBlank) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{60}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{50}
 }
 
 func (x *GrammarBlank) GetNoteId() int64 {
@@ -4525,7 +3835,7 @@ type SubmitGrammarPostRequest struct {
 
 func (x *SubmitGrammarPostRequest) Reset() {
 	*x = SubmitGrammarPostRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[61]
+	mi := &file_api_v1_quiz_proto_msgTypes[51]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4537,7 +3847,7 @@ func (x *SubmitGrammarPostRequest) String() string {
 func (*SubmitGrammarPostRequest) ProtoMessage() {}
 
 func (x *SubmitGrammarPostRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[61]
+	mi := &file_api_v1_quiz_proto_msgTypes[51]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4550,7 +3860,7 @@ func (x *SubmitGrammarPostRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitGrammarPostRequest.ProtoReflect.Descriptor instead.
 func (*SubmitGrammarPostRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{61}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{51}
 }
 
 func (x *SubmitGrammarPostRequest) GetAnswers() []*GrammarBlankAnswer {
@@ -4572,7 +3882,7 @@ type GrammarBlankAnswer struct {
 
 func (x *GrammarBlankAnswer) Reset() {
 	*x = GrammarBlankAnswer{}
-	mi := &file_api_v1_quiz_proto_msgTypes[62]
+	mi := &file_api_v1_quiz_proto_msgTypes[52]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4584,7 +3894,7 @@ func (x *GrammarBlankAnswer) String() string {
 func (*GrammarBlankAnswer) ProtoMessage() {}
 
 func (x *GrammarBlankAnswer) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[62]
+	mi := &file_api_v1_quiz_proto_msgTypes[52]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4597,7 +3907,7 @@ func (x *GrammarBlankAnswer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrammarBlankAnswer.ProtoReflect.Descriptor instead.
 func (*GrammarBlankAnswer) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{62}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{52}
 }
 
 func (x *GrammarBlankAnswer) GetNoteId() int64 {
@@ -4637,7 +3947,7 @@ type SubmitGrammarPostResponse struct {
 
 func (x *SubmitGrammarPostResponse) Reset() {
 	*x = SubmitGrammarPostResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[63]
+	mi := &file_api_v1_quiz_proto_msgTypes[53]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4649,7 +3959,7 @@ func (x *SubmitGrammarPostResponse) String() string {
 func (*SubmitGrammarPostResponse) ProtoMessage() {}
 
 func (x *SubmitGrammarPostResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[63]
+	mi := &file_api_v1_quiz_proto_msgTypes[53]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4662,7 +3972,7 @@ func (x *SubmitGrammarPostResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SubmitGrammarPostResponse.ProtoReflect.Descriptor instead.
 func (*SubmitGrammarPostResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{63}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{53}
 }
 
 func (x *SubmitGrammarPostResponse) GetResults() []*GrammarBlankResult {
@@ -4692,7 +4002,7 @@ type GrammarBlankResult struct {
 
 func (x *GrammarBlankResult) Reset() {
 	*x = GrammarBlankResult{}
-	mi := &file_api_v1_quiz_proto_msgTypes[64]
+	mi := &file_api_v1_quiz_proto_msgTypes[54]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4704,7 +4014,7 @@ func (x *GrammarBlankResult) String() string {
 func (*GrammarBlankResult) ProtoMessage() {}
 
 func (x *GrammarBlankResult) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[64]
+	mi := &file_api_v1_quiz_proto_msgTypes[54]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4717,7 +4027,7 @@ func (x *GrammarBlankResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrammarBlankResult.ProtoReflect.Descriptor instead.
 func (*GrammarBlankResult) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{64}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{54}
 }
 
 func (x *GrammarBlankResult) GetNoteId() int64 {
@@ -4805,7 +4115,7 @@ type ListGrammarMistakesRequest struct {
 
 func (x *ListGrammarMistakesRequest) Reset() {
 	*x = ListGrammarMistakesRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[65]
+	mi := &file_api_v1_quiz_proto_msgTypes[55]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4817,7 +4127,7 @@ func (x *ListGrammarMistakesRequest) String() string {
 func (*ListGrammarMistakesRequest) ProtoMessage() {}
 
 func (x *ListGrammarMistakesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[65]
+	mi := &file_api_v1_quiz_proto_msgTypes[55]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4830,7 +4140,7 @@ func (x *ListGrammarMistakesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGrammarMistakesRequest.ProtoReflect.Descriptor instead.
 func (*ListGrammarMistakesRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{65}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{55}
 }
 
 func (x *ListGrammarMistakesRequest) GetNotebookId() string {
@@ -4856,7 +4166,7 @@ type ListGrammarMistakesResponse struct {
 
 func (x *ListGrammarMistakesResponse) Reset() {
 	*x = ListGrammarMistakesResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[66]
+	mi := &file_api_v1_quiz_proto_msgTypes[56]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4868,7 +4178,7 @@ func (x *ListGrammarMistakesResponse) String() string {
 func (*ListGrammarMistakesResponse) ProtoMessage() {}
 
 func (x *ListGrammarMistakesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[66]
+	mi := &file_api_v1_quiz_proto_msgTypes[56]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4881,7 +4191,7 @@ func (x *ListGrammarMistakesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListGrammarMistakesResponse.ProtoReflect.Descriptor instead.
 func (*ListGrammarMistakesResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{66}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{56}
 }
 
 func (x *ListGrammarMistakesResponse) GetMistakes() []*GrammarMistake {
@@ -4920,7 +4230,7 @@ type GrammarMistake struct {
 
 func (x *GrammarMistake) Reset() {
 	*x = GrammarMistake{}
-	mi := &file_api_v1_quiz_proto_msgTypes[67]
+	mi := &file_api_v1_quiz_proto_msgTypes[57]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -4932,7 +4242,7 @@ func (x *GrammarMistake) String() string {
 func (*GrammarMistake) ProtoMessage() {}
 
 func (x *GrammarMistake) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[67]
+	mi := &file_api_v1_quiz_proto_msgTypes[57]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4945,7 +4255,7 @@ func (x *GrammarMistake) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GrammarMistake.ProtoReflect.Descriptor instead.
 func (*GrammarMistake) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{67}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{57}
 }
 
 func (x *GrammarMistake) GetSenseId() string {
@@ -5021,7 +4331,7 @@ type ExcludeGrammarMistakeRequest struct {
 
 func (x *ExcludeGrammarMistakeRequest) Reset() {
 	*x = ExcludeGrammarMistakeRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[68]
+	mi := &file_api_v1_quiz_proto_msgTypes[58]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5033,7 +4343,7 @@ func (x *ExcludeGrammarMistakeRequest) String() string {
 func (*ExcludeGrammarMistakeRequest) ProtoMessage() {}
 
 func (x *ExcludeGrammarMistakeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[68]
+	mi := &file_api_v1_quiz_proto_msgTypes[58]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5046,7 +4356,7 @@ func (x *ExcludeGrammarMistakeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExcludeGrammarMistakeRequest.ProtoReflect.Descriptor instead.
 func (*ExcludeGrammarMistakeRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{68}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{58}
 }
 
 func (x *ExcludeGrammarMistakeRequest) GetNotebookId() string {
@@ -5071,7 +4381,7 @@ type ExcludeGrammarMistakeResponse struct {
 
 func (x *ExcludeGrammarMistakeResponse) Reset() {
 	*x = ExcludeGrammarMistakeResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[69]
+	mi := &file_api_v1_quiz_proto_msgTypes[59]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5083,7 +4393,7 @@ func (x *ExcludeGrammarMistakeResponse) String() string {
 func (*ExcludeGrammarMistakeResponse) ProtoMessage() {}
 
 func (x *ExcludeGrammarMistakeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[69]
+	mi := &file_api_v1_quiz_proto_msgTypes[59]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5096,7 +4406,7 @@ func (x *ExcludeGrammarMistakeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExcludeGrammarMistakeResponse.ProtoReflect.Descriptor instead.
 func (*ExcludeGrammarMistakeResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{69}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{59}
 }
 
 type ResumeGrammarMistakeRequest struct {
@@ -5109,7 +4419,7 @@ type ResumeGrammarMistakeRequest struct {
 
 func (x *ResumeGrammarMistakeRequest) Reset() {
 	*x = ResumeGrammarMistakeRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[70]
+	mi := &file_api_v1_quiz_proto_msgTypes[60]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5121,7 +4431,7 @@ func (x *ResumeGrammarMistakeRequest) String() string {
 func (*ResumeGrammarMistakeRequest) ProtoMessage() {}
 
 func (x *ResumeGrammarMistakeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[70]
+	mi := &file_api_v1_quiz_proto_msgTypes[60]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5134,7 +4444,7 @@ func (x *ResumeGrammarMistakeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeGrammarMistakeRequest.ProtoReflect.Descriptor instead.
 func (*ResumeGrammarMistakeRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{70}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{60}
 }
 
 func (x *ResumeGrammarMistakeRequest) GetNotebookId() string {
@@ -5159,7 +4469,7 @@ type ResumeGrammarMistakeResponse struct {
 
 func (x *ResumeGrammarMistakeResponse) Reset() {
 	*x = ResumeGrammarMistakeResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[71]
+	mi := &file_api_v1_quiz_proto_msgTypes[61]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5171,7 +4481,7 @@ func (x *ResumeGrammarMistakeResponse) String() string {
 func (*ResumeGrammarMistakeResponse) ProtoMessage() {}
 
 func (x *ResumeGrammarMistakeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[71]
+	mi := &file_api_v1_quiz_proto_msgTypes[61]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5184,7 +4494,7 @@ func (x *ResumeGrammarMistakeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeGrammarMistakeResponse.ProtoReflect.Descriptor instead.
 func (*ResumeGrammarMistakeResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{71}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{61}
 }
 
 type ExcludeEtymologyWordRequest struct {
@@ -5203,7 +4513,7 @@ type ExcludeEtymologyWordRequest struct {
 
 func (x *ExcludeEtymologyWordRequest) Reset() {
 	*x = ExcludeEtymologyWordRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[72]
+	mi := &file_api_v1_quiz_proto_msgTypes[62]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5215,7 +4525,7 @@ func (x *ExcludeEtymologyWordRequest) String() string {
 func (*ExcludeEtymologyWordRequest) ProtoMessage() {}
 
 func (x *ExcludeEtymologyWordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[72]
+	mi := &file_api_v1_quiz_proto_msgTypes[62]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5228,7 +4538,7 @@ func (x *ExcludeEtymologyWordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExcludeEtymologyWordRequest.ProtoReflect.Descriptor instead.
 func (*ExcludeEtymologyWordRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{72}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{62}
 }
 
 func (x *ExcludeEtymologyWordRequest) GetNotebookId() string {
@@ -5253,7 +4563,7 @@ type ExcludeEtymologyWordResponse struct {
 
 func (x *ExcludeEtymologyWordResponse) Reset() {
 	*x = ExcludeEtymologyWordResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[73]
+	mi := &file_api_v1_quiz_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5265,7 +4575,7 @@ func (x *ExcludeEtymologyWordResponse) String() string {
 func (*ExcludeEtymologyWordResponse) ProtoMessage() {}
 
 func (x *ExcludeEtymologyWordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[73]
+	mi := &file_api_v1_quiz_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5278,7 +4588,7 @@ func (x *ExcludeEtymologyWordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExcludeEtymologyWordResponse.ProtoReflect.Descriptor instead.
 func (*ExcludeEtymologyWordResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{73}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{63}
 }
 
 type ResumeEtymologyWordRequest struct {
@@ -5291,7 +4601,7 @@ type ResumeEtymologyWordRequest struct {
 
 func (x *ResumeEtymologyWordRequest) Reset() {
 	*x = ResumeEtymologyWordRequest{}
-	mi := &file_api_v1_quiz_proto_msgTypes[74]
+	mi := &file_api_v1_quiz_proto_msgTypes[64]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5303,7 +4613,7 @@ func (x *ResumeEtymologyWordRequest) String() string {
 func (*ResumeEtymologyWordRequest) ProtoMessage() {}
 
 func (x *ResumeEtymologyWordRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[74]
+	mi := &file_api_v1_quiz_proto_msgTypes[64]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5316,7 +4626,7 @@ func (x *ResumeEtymologyWordRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeEtymologyWordRequest.ProtoReflect.Descriptor instead.
 func (*ResumeEtymologyWordRequest) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{74}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{64}
 }
 
 func (x *ResumeEtymologyWordRequest) GetNotebookId() string {
@@ -5341,7 +4651,7 @@ type ResumeEtymologyWordResponse struct {
 
 func (x *ResumeEtymologyWordResponse) Reset() {
 	*x = ResumeEtymologyWordResponse{}
-	mi := &file_api_v1_quiz_proto_msgTypes[75]
+	mi := &file_api_v1_quiz_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5353,7 +4663,7 @@ func (x *ResumeEtymologyWordResponse) String() string {
 func (*ResumeEtymologyWordResponse) ProtoMessage() {}
 
 func (x *ResumeEtymologyWordResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_v1_quiz_proto_msgTypes[75]
+	mi := &file_api_v1_quiz_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5366,7 +4676,7 @@ func (x *ResumeEtymologyWordResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeEtymologyWordResponse.ProtoReflect.Descriptor instead.
 func (*ResumeEtymologyWordResponse) Descriptor() ([]byte, []int) {
-	return file_api_v1_quiz_proto_rawDescGZIP(), []int{75}
+	return file_api_v1_quiz_proto_rawDescGZIP(), []int{65}
 }
 
 var File_api_v1_quiz_proto protoreflect.FileDescriptor
@@ -5377,7 +4687,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x15GetQuizOptionsRequest\x12+\n" +
 	"\x11include_unstudied\x18\x01 \x01(\bR\x10includeUnstudied\"O\n" +
 	"\x16GetQuizOptionsResponse\x125\n" +
-	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xb9\x03\n" +
+	"\tnotebooks\x18\x01 \x03(\v2\x17.api.v1.NotebookSummaryR\tnotebooks\"\xe4\x03\n" +
 	"\x0fNotebookSummary\x12\x1f\n" +
 	"\vnotebook_id\x18\x01 \x01(\tR\n" +
 	"notebookId\x12\x12\n" +
@@ -5391,7 +4701,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\bsections\x18\b \x03(\v2\x1e.api.v1.NotebookSectionSummaryR\bsections\x12C\n" +
 	"\x1eetymology_reverse_review_count\x18\t \x01(\x05R\x1betymologyReverseReviewCount\x120\n" +
 	"\x14grammar_review_count\x18\n" +
-	" \x01(\x05R\x12grammarReviewCount\"\xb0\x02\n" +
+	" \x01(\x05R\x12grammarReviewCount\x12)\n" +
+	"\x10vocabulary_count\x18\v \x01(\x05R\x0fvocabularyCount\"\xb0\x02\n" +
 	"\x16NotebookSectionSummary\x12\x14\n" +
 	"\x05title\x18\x01 \x01(\tR\x05title\x12!\n" +
 	"\freview_count\x18\x02 \x01(\x05R\vreviewCount\x120\n" +
@@ -5418,10 +4729,11 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x0eoriginal_entry\x18\x04 \x01(\tR\roriginalEntry\x12!\n" +
 	"\fconcept_head\x18\x05 \x01(\tR\vconceptHead\x12'\n" +
 	"\x0fconcept_members\x18\x06 \x03(\tR\x0econceptMembers\x12'\n" +
-	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\"7\n" +
+	"\x0fconcept_meaning\x18\a \x01(\tR\x0econceptMeaning\"U\n" +
 	"\aExample\x12\x12\n" +
 	"\x04text\x18\x01 \x01(\tR\x04text\x12\x18\n" +
-	"\aspeaker\x18\x02 \x01(\tR\aspeaker\"\xf7\x01\n" +
+	"\aspeaker\x18\x02 \x01(\tR\aspeaker\x12\x1c\n" +
+	"\thighlight\x18\x03 \x01(\tR\thighlight\"\xf7\x01\n" +
 	"\n" +
 	"WordDetail\x12\x16\n" +
 	"\x06origin\x18\x01 \x01(\tR\x06origin\x12$\n" +
@@ -5582,27 +4894,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x129\n" +
 	"\n" +
 	"quiz_types\x18\x03 \x03(\x0e2\x10.api.v1.QuizTypeB\b\xbaH\x05\x92\x01\x02\b\x01R\tquizTypesJ\x04\b\x02\x10\x03R\tquiz_type\"\x14\n" +
-	"\x12ResumeWordResponse\"t\n" +
-	"\x13EtymologyFamilyWord\x12\x17\n" +
-	"\aword_id\x18\x01 \x01(\x03R\x06wordId\x12\x1e\n" +
-	"\n" +
-	"expression\x18\x02 \x01(\tR\n" +
-	"expression\x12$\n" +
-	"\rpronunciation\x18\x03 \x01(\tR\rpronunciation\"\x8f\x03\n" +
-	"\x13EtymologyOriginCard\x12\x17\n" +
-	"\acard_id\x18\x01 \x01(\x03R\x06cardId\x12\x16\n" +
-	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\x12\x1a\n" +
-	"\blanguage\x18\x04 \x01(\tR\blanguage\x12\x18\n" +
-	"\ameaning\x18\x05 \x01(\tR\ameaning\x12#\n" +
-	"\rnotebook_name\x18\x06 \x01(\tR\fnotebookName\x12#\n" +
-	"\rsession_title\x18\a \x01(\tR\fsessionTitle\x12\x14\n" +
-	"\x05sense\x18\b \x01(\tR\x05sense\x121\n" +
-	"\x05forms\x18\t \x03(\v2\x1b.api.v1.EtymologyOriginFormR\x05forms\x121\n" +
-	"\x05words\x18\n" +
-	" \x03(\v2\x1b.api.v1.EtymologyFamilyWordR\x05words\x12#\n" +
-	"\renglish_forms\x18\v \x03(\tR\fenglishForms\x12\x12\n" +
-	"\x04note\x18\f \x01(\tR\x04note\"\x84\x02\n" +
+	"\x12ResumeWordResponse\"\x84\x02\n" +
 	"\vGraphPrompt\x12/\n" +
 	"\x05shape\x18\x01 \x01(\x0e2\x19.api.v1.GraphPrompt.ShapeR\x05shape\x12'\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x11.api.v1.GraphNodeR\x05nodes\x12'\n" +
@@ -5630,52 +4922,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\tGraphEdge\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
 	"\x02to\x18\x02 \x01(\tR\x02to\x12\x12\n" +
-	"\x04type\x18\x03 \x01(\tR\x04type\"\xca\x01\n" +
-	"\x1fStartEtymologyOriginQuizRequest\x124\n" +
-	"\x16etymology_notebook_ids\x18\x01 \x03(\tR\x14etymologyNotebookIds\x12+\n" +
-	"\x11include_unstudied\x18\x02 \x01(\bR\x10includeUnstudied\x12D\n" +
-	"\x11notebook_sections\x18\x03 \x03(\v2\x17.api.v1.NotebookSectionR\x10notebookSections\"U\n" +
-	" StartEtymologyOriginQuizResponse\x121\n" +
-	"\x05cards\x18\x01 \x03(\v2\x1b.api.v1.EtymologyOriginCardR\x05cards\"U\n" +
-	"\x13EtymologyWordAnswer\x12\x17\n" +
-	"\aword_id\x18\x01 \x01(\x03R\x06wordId\x12\x16\n" +
-	"\x06answer\x18\x02 \x01(\tR\x06answerJ\x04\b\x03\x10\x04R\askipped\"\xb9\x01\n" +
-	"\"SubmitEtymologyOriginAnswerRequest\x12 \n" +
-	"\acard_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06cardId\x125\n" +
-	"\aanswers\x18\x02 \x03(\v2\x1b.api.v1.EtymologyWordAnswerR\aanswers\x12(\n" +
-	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMsJ\x04\b\x04\x10\x05R\n" +
-	"is_skipped\"\x94\x02\n" +
-	"\x13EtymologyWordResult\x12\x17\n" +
-	"\aword_id\x18\x01 \x01(\x03R\x06wordId\x12\x1e\n" +
-	"\n" +
-	"expression\x18\x02 \x01(\tR\n" +
-	"expression\x12\x18\n" +
-	"\acorrect\x18\x03 \x01(\bR\acorrect\x12'\n" +
-	"\x0fcorrect_meaning\x18\x04 \x01(\tR\x0ecorrectMeaning\x12\x16\n" +
-	"\x06reason\x18\x05 \x01(\tR\x06reason\x12$\n" +
-	"\rpronunciation\x18\a \x01(\tR\rpronunciation\x12\x1a\n" +
-	"\bexamples\x18\b \x03(\tR\bexamples\x12\x18\n" +
-	"\aliteral\x18\t \x01(\tR\aliteralJ\x04\b\x06\x10\aR\askipped\"\xba\x02\n" +
-	"#SubmitEtymologyOriginAnswerResponse\x12\x18\n" +
-	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x16\n" +
-	"\x06origin\x18\x02 \x01(\tR\x06origin\x12\x18\n" +
-	"\ameaning\x18\x03 \x01(\tR\ameaning\x12(\n" +
-	"\x10next_review_date\x18\x04 \x01(\tR\x0enextReviewDate\x12\x1d\n" +
-	"\n" +
-	"learned_at\x18\x05 \x01(\tR\tlearnedAt\x12\x17\n" +
-	"\anote_id\x18\x06 \x01(\x03R\x06noteId\x12\x19\n" +
-	"\bsense_id\x18\a \x01(\tR\asenseId\x125\n" +
-	"\aresults\x18\b \x03(\v2\x1b.api.v1.EtymologyWordResultR\aresultsJ\x04\b\t\x10\n" +
-	"R\rgraph_context\"z\n" +
-	"(BatchSubmitEtymologyOriginAnswersRequest\x12N\n" +
-	"\aanswers\x18\x01 \x03(\v2*.api.v1.SubmitEtymologyOriginAnswerRequestB\b\xbaH\x05\x92\x01\x02\b\x01R\aanswers\"v\n" +
-	")BatchSubmitEtymologyOriginAnswersResponse\x12I\n" +
-	"\tresponses\x18\x01 \x03(\v2+.api.v1.SubmitEtymologyOriginAnswerResponseR\tresponses\"H\n" +
+	"\x04type\x18\x03 \x01(\tR\x04type\"H\n" +
 	"\x17StartRelearnQuizRequest\x12-\n" +
 	"\fwindow_hours\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xa8\x01(\x00R\vwindowHours\"E\n" +
 	"\x18StartRelearnQuizResponse\x12)\n" +
-	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xdc\x02\n" +
+	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xc9\x03\n" +
 	"\vRelearnCard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
 	"\x05entry\x18\x02 \x01(\tR\x05entry\x12:\n" +
@@ -5687,13 +4939,17 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\blanguage\x18\b \x01(\tR\blanguage\x12\x18\n" +
 	"\acontent\x18\t \x01(\tR\acontent\x12\x1c\n" +
 	"\tincorrect\x18\n" +
-	" \x01(\tR\tincorrect\"\x9f\x01\n" +
+	" \x01(\tR\tincorrect\x12\x1f\n" +
+	"\vorigin_text\x18\v \x01(\tR\n" +
+	"originText\x12%\n" +
+	"\x0eorigin_meaning\x18\f \x01(\tR\roriginMeaning\x12#\n" +
+	"\renglish_forms\x18\r \x03(\tR\fenglishForms\"\x9f\x01\n" +
 	"\x1aSubmitRelearnAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +
 	"\x10response_time_ms\x18\x03 \x01(\x03R\x0eresponseTimeMs\x12\x1d\n" +
 	"\n" +
-	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xd9\x03\n" +
+	"is_skipped\x18\x04 \x01(\bR\tisSkipped\"\xa4\x03\n" +
 	"\x1bSubmitRelearnAnswerResponse\x12\x18\n" +
 	"\acorrect\x18\x01 \x01(\bR\acorrect\x12\x18\n" +
 	"\ameaning\x18\x02 \x01(\tR\ameaning\x12\x16\n" +
@@ -5701,14 +4957,12 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\vword_detail\x18\x04 \x01(\v2\x12.api.v1.WordDetailR\n" +
 	"wordDetail\x12\x16\n" +
 	"\x06images\x18\x05 \x03(\tR\x06images\x12B\n" +
-	"\x0econtext_scenes\x18\x06 \x03(\v2\x1b.api.v1.RelearnContextSceneR\rcontextScenes\x128\n" +
-	"\rgraph_context\x18\a \x01(\v2\x13.api.v1.GraphPromptR\fgraphContext\x12#\n" +
-	"\rexample_words\x18\b \x03(\tR\fexampleWords\x12%\n" +
+	"\x0econtext_scenes\x18\x06 \x03(\v2\x1b.api.v1.RelearnContextSceneR\rcontextScenes\x12%\n" +
 	"\x0ecorrect_answer\x18\t \x01(\tR\rcorrectAnswer\x12\x1a\n" +
 	"\bcategory\x18\n" +
 	" \x01(\tR\bcategory\x12!\n" +
 	"\fgrammar_note\x18\v \x01(\tR\vgrammarNote\x12\x18\n" +
-	"\aliteral\x18\f \x01(\tR\aliteral\"\xc2\x01\n" +
+	"\aliteral\x18\f \x01(\tR\aliteralJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\rgraph_contextR\rexample_words\"\xc2\x01\n" +
 	"\x13RelearnContextScene\x12#\n" +
 	"\rnotebook_name\x18\x01 \x01(\tR\fnotebookName\x12\x1f\n" +
 	"\vscene_title\x18\x02 \x01(\tR\n" +
@@ -5817,7 +5071,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x12QUIZ_TYPE_FREEFORM\x10\x03\x12\x1e\n" +
 	"\x1aQUIZ_TYPE_ETYMOLOGY_ORIGIN\x10\x04\x12\x15\n" +
 	"\x11QUIZ_TYPE_RELEARN\x10\a\x12\x15\n" +
-	"\x11QUIZ_TYPE_GRAMMAR\x10\b\"\x04\b\x05\x10\x05\"\x04\b\x06\x10\x062\x98\x13\n" +
+	"\x11QUIZ_TYPE_GRAMMAR\x10\b\"\x04\b\x05\x10\x05\"\x04\b\x06\x10\x062\xa6\x10\n" +
 	"\vQuizService\x12O\n" +
 	"\x0eGetQuizOptions\x12\x1d.api.v1.GetQuizOptionsRequest\x1a\x1e.api.v1.GetQuizOptionsResponse\x12@\n" +
 	"\tStartQuiz\x12\x18.api.v1.StartQuizRequest\x1a\x19.api.v1.StartQuizResponse\x12I\n" +
@@ -5832,10 +5086,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\x12UndoOverrideAnswer\x12!.api.v1.UndoOverrideAnswerRequest\x1a\".api.v1.UndoOverrideAnswerResponse\x12=\n" +
 	"\bSkipWord\x12\x17.api.v1.SkipWordRequest\x1a\x18.api.v1.SkipWordResponse\x12C\n" +
 	"\n" +
-	"ResumeWord\x12\x19.api.v1.ResumeWordRequest\x1a\x1a.api.v1.ResumeWordResponse\x12m\n" +
-	"\x18StartEtymologyOriginQuiz\x12'.api.v1.StartEtymologyOriginQuizRequest\x1a(.api.v1.StartEtymologyOriginQuizResponse\x12v\n" +
-	"\x1bSubmitEtymologyOriginAnswer\x12*.api.v1.SubmitEtymologyOriginAnswerRequest\x1a+.api.v1.SubmitEtymologyOriginAnswerResponse\x12\x88\x01\n" +
-	"!BatchSubmitEtymologyOriginAnswers\x120.api.v1.BatchSubmitEtymologyOriginAnswersRequest\x1a1.api.v1.BatchSubmitEtymologyOriginAnswersResponse\x12a\n" +
+	"ResumeWord\x12\x19.api.v1.ResumeWordRequest\x1a\x1a.api.v1.ResumeWordResponse\x12a\n" +
 	"\x14ExcludeEtymologyWord\x12#.api.v1.ExcludeEtymologyWordRequest\x1a$.api.v1.ExcludeEtymologyWordResponse\x12^\n" +
 	"\x13ResumeEtymologyWord\x12\".api.v1.ResumeEtymologyWordRequest\x1a#.api.v1.ResumeEtymologyWordResponse\x12U\n" +
 	"\x10StartRelearnQuiz\x12\x1f.api.v1.StartRelearnQuizRequest\x1a .api.v1.StartRelearnQuizResponse\x12^\n" +
@@ -5860,89 +5111,78 @@ func file_api_v1_quiz_proto_rawDescGZIP() []byte {
 }
 
 var file_api_v1_quiz_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 77)
+var file_api_v1_quiz_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
 var file_api_v1_quiz_proto_goTypes = []any{
-	(QuizType)(0),                                     // 0: api.v1.QuizType
-	(GraphPrompt_Shape)(0),                            // 1: api.v1.GraphPrompt.Shape
-	(GraphNode_Kind)(0),                               // 2: api.v1.GraphNode.Kind
-	(*GetQuizOptionsRequest)(nil),                     // 3: api.v1.GetQuizOptionsRequest
-	(*GetQuizOptionsResponse)(nil),                    // 4: api.v1.GetQuizOptionsResponse
-	(*NotebookSummary)(nil),                           // 5: api.v1.NotebookSummary
-	(*NotebookSectionSummary)(nil),                    // 6: api.v1.NotebookSectionSummary
-	(*NotebookSection)(nil),                           // 7: api.v1.NotebookSection
-	(*StartQuizRequest)(nil),                          // 8: api.v1.StartQuizRequest
-	(*StartQuizResponse)(nil),                         // 9: api.v1.StartQuizResponse
-	(*Flashcard)(nil),                                 // 10: api.v1.Flashcard
-	(*Example)(nil),                                   // 11: api.v1.Example
-	(*WordDetail)(nil),                                // 12: api.v1.WordDetail
-	(*WordOriginPart)(nil),                            // 13: api.v1.WordOriginPart
-	(*SubmitAnswerRequest)(nil),                       // 14: api.v1.SubmitAnswerRequest
-	(*SubmitAnswerResponse)(nil),                      // 15: api.v1.SubmitAnswerResponse
-	(*BatchSubmitAnswersRequest)(nil),                 // 16: api.v1.BatchSubmitAnswersRequest
-	(*BatchSubmitAnswersResponse)(nil),                // 17: api.v1.BatchSubmitAnswersResponse
-	(*StartReverseQuizRequest)(nil),                   // 18: api.v1.StartReverseQuizRequest
-	(*StartReverseQuizResponse)(nil),                  // 19: api.v1.StartReverseQuizResponse
-	(*ReverseFlashcard)(nil),                          // 20: api.v1.ReverseFlashcard
-	(*ContextSentence)(nil),                           // 21: api.v1.ContextSentence
-	(*SubmitReverseAnswerRequest)(nil),                // 22: api.v1.SubmitReverseAnswerRequest
-	(*SubmitReverseAnswerResponse)(nil),               // 23: api.v1.SubmitReverseAnswerResponse
-	(*BatchSubmitReverseAnswersRequest)(nil),          // 24: api.v1.BatchSubmitReverseAnswersRequest
-	(*BatchSubmitReverseAnswersResponse)(nil),         // 25: api.v1.BatchSubmitReverseAnswersResponse
-	(*StartFreeformQuizRequest)(nil),                  // 26: api.v1.StartFreeformQuizRequest
-	(*StartFreeformQuizResponse)(nil),                 // 27: api.v1.StartFreeformQuizResponse
-	(*SubmitFreeformAnswerRequest)(nil),               // 28: api.v1.SubmitFreeformAnswerRequest
-	(*SubmitFreeformAnswerResponse)(nil),              // 29: api.v1.SubmitFreeformAnswerResponse
-	(*OverrideAnswerRequest)(nil),                     // 30: api.v1.OverrideAnswerRequest
-	(*OverrideAnswerResponse)(nil),                    // 31: api.v1.OverrideAnswerResponse
-	(*UndoOverrideAnswerRequest)(nil),                 // 32: api.v1.UndoOverrideAnswerRequest
-	(*UndoOverrideAnswerResponse)(nil),                // 33: api.v1.UndoOverrideAnswerResponse
-	(*SkipWordRequest)(nil),                           // 34: api.v1.SkipWordRequest
-	(*SkipWordResponse)(nil),                          // 35: api.v1.SkipWordResponse
-	(*ResumeWordRequest)(nil),                         // 36: api.v1.ResumeWordRequest
-	(*ResumeWordResponse)(nil),                        // 37: api.v1.ResumeWordResponse
-	(*EtymologyFamilyWord)(nil),                       // 38: api.v1.EtymologyFamilyWord
-	(*EtymologyOriginCard)(nil),                       // 39: api.v1.EtymologyOriginCard
-	(*GraphPrompt)(nil),                               // 40: api.v1.GraphPrompt
-	(*GraphNode)(nil),                                 // 41: api.v1.GraphNode
-	(*GraphEdge)(nil),                                 // 42: api.v1.GraphEdge
-	(*StartEtymologyOriginQuizRequest)(nil),           // 43: api.v1.StartEtymologyOriginQuizRequest
-	(*StartEtymologyOriginQuizResponse)(nil),          // 44: api.v1.StartEtymologyOriginQuizResponse
-	(*EtymologyWordAnswer)(nil),                       // 45: api.v1.EtymologyWordAnswer
-	(*SubmitEtymologyOriginAnswerRequest)(nil),        // 46: api.v1.SubmitEtymologyOriginAnswerRequest
-	(*EtymologyWordResult)(nil),                       // 47: api.v1.EtymologyWordResult
-	(*SubmitEtymologyOriginAnswerResponse)(nil),       // 48: api.v1.SubmitEtymologyOriginAnswerResponse
-	(*BatchSubmitEtymologyOriginAnswersRequest)(nil),  // 49: api.v1.BatchSubmitEtymologyOriginAnswersRequest
-	(*BatchSubmitEtymologyOriginAnswersResponse)(nil), // 50: api.v1.BatchSubmitEtymologyOriginAnswersResponse
-	(*StartRelearnQuizRequest)(nil),                   // 51: api.v1.StartRelearnQuizRequest
-	(*StartRelearnQuizResponse)(nil),                  // 52: api.v1.StartRelearnQuizResponse
-	(*RelearnCard)(nil),                               // 53: api.v1.RelearnCard
-	(*SubmitRelearnAnswerRequest)(nil),                // 54: api.v1.SubmitRelearnAnswerRequest
-	(*SubmitRelearnAnswerResponse)(nil),               // 55: api.v1.SubmitRelearnAnswerResponse
-	(*RelearnContextScene)(nil),                       // 56: api.v1.RelearnContextScene
-	(*RelearnConversationLine)(nil),                   // 57: api.v1.RelearnConversationLine
-	(*BatchSubmitRelearnAnswersRequest)(nil),          // 58: api.v1.BatchSubmitRelearnAnswersRequest
-	(*BatchSubmitRelearnAnswersResponse)(nil),         // 59: api.v1.BatchSubmitRelearnAnswersResponse
-	(*StartGrammarQuizRequest)(nil),                   // 60: api.v1.StartGrammarQuizRequest
-	(*StartGrammarQuizResponse)(nil),                  // 61: api.v1.StartGrammarQuizResponse
-	(*GrammarPostCard)(nil),                           // 62: api.v1.GrammarPostCard
-	(*GrammarBlank)(nil),                              // 63: api.v1.GrammarBlank
-	(*SubmitGrammarPostRequest)(nil),                  // 64: api.v1.SubmitGrammarPostRequest
-	(*GrammarBlankAnswer)(nil),                        // 65: api.v1.GrammarBlankAnswer
-	(*SubmitGrammarPostResponse)(nil),                 // 66: api.v1.SubmitGrammarPostResponse
-	(*GrammarBlankResult)(nil),                        // 67: api.v1.GrammarBlankResult
-	(*ListGrammarMistakesRequest)(nil),                // 68: api.v1.ListGrammarMistakesRequest
-	(*ListGrammarMistakesResponse)(nil),               // 69: api.v1.ListGrammarMistakesResponse
-	(*GrammarMistake)(nil),                            // 70: api.v1.GrammarMistake
-	(*ExcludeGrammarMistakeRequest)(nil),              // 71: api.v1.ExcludeGrammarMistakeRequest
-	(*ExcludeGrammarMistakeResponse)(nil),             // 72: api.v1.ExcludeGrammarMistakeResponse
-	(*ResumeGrammarMistakeRequest)(nil),               // 73: api.v1.ResumeGrammarMistakeRequest
-	(*ResumeGrammarMistakeResponse)(nil),              // 74: api.v1.ResumeGrammarMistakeResponse
-	(*ExcludeEtymologyWordRequest)(nil),               // 75: api.v1.ExcludeEtymologyWordRequest
-	(*ExcludeEtymologyWordResponse)(nil),              // 76: api.v1.ExcludeEtymologyWordResponse
-	(*ResumeEtymologyWordRequest)(nil),                // 77: api.v1.ResumeEtymologyWordRequest
-	(*ResumeEtymologyWordResponse)(nil),               // 78: api.v1.ResumeEtymologyWordResponse
-	nil,                                               // 79: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
-	(*EtymologyOriginForm)(nil),                       // 80: api.v1.EtymologyOriginForm
+	(QuizType)(0),                             // 0: api.v1.QuizType
+	(GraphPrompt_Shape)(0),                    // 1: api.v1.GraphPrompt.Shape
+	(GraphNode_Kind)(0),                       // 2: api.v1.GraphNode.Kind
+	(*GetQuizOptionsRequest)(nil),             // 3: api.v1.GetQuizOptionsRequest
+	(*GetQuizOptionsResponse)(nil),            // 4: api.v1.GetQuizOptionsResponse
+	(*NotebookSummary)(nil),                   // 5: api.v1.NotebookSummary
+	(*NotebookSectionSummary)(nil),            // 6: api.v1.NotebookSectionSummary
+	(*NotebookSection)(nil),                   // 7: api.v1.NotebookSection
+	(*StartQuizRequest)(nil),                  // 8: api.v1.StartQuizRequest
+	(*StartQuizResponse)(nil),                 // 9: api.v1.StartQuizResponse
+	(*Flashcard)(nil),                         // 10: api.v1.Flashcard
+	(*Example)(nil),                           // 11: api.v1.Example
+	(*WordDetail)(nil),                        // 12: api.v1.WordDetail
+	(*WordOriginPart)(nil),                    // 13: api.v1.WordOriginPart
+	(*SubmitAnswerRequest)(nil),               // 14: api.v1.SubmitAnswerRequest
+	(*SubmitAnswerResponse)(nil),              // 15: api.v1.SubmitAnswerResponse
+	(*BatchSubmitAnswersRequest)(nil),         // 16: api.v1.BatchSubmitAnswersRequest
+	(*BatchSubmitAnswersResponse)(nil),        // 17: api.v1.BatchSubmitAnswersResponse
+	(*StartReverseQuizRequest)(nil),           // 18: api.v1.StartReverseQuizRequest
+	(*StartReverseQuizResponse)(nil),          // 19: api.v1.StartReverseQuizResponse
+	(*ReverseFlashcard)(nil),                  // 20: api.v1.ReverseFlashcard
+	(*ContextSentence)(nil),                   // 21: api.v1.ContextSentence
+	(*SubmitReverseAnswerRequest)(nil),        // 22: api.v1.SubmitReverseAnswerRequest
+	(*SubmitReverseAnswerResponse)(nil),       // 23: api.v1.SubmitReverseAnswerResponse
+	(*BatchSubmitReverseAnswersRequest)(nil),  // 24: api.v1.BatchSubmitReverseAnswersRequest
+	(*BatchSubmitReverseAnswersResponse)(nil), // 25: api.v1.BatchSubmitReverseAnswersResponse
+	(*StartFreeformQuizRequest)(nil),          // 26: api.v1.StartFreeformQuizRequest
+	(*StartFreeformQuizResponse)(nil),         // 27: api.v1.StartFreeformQuizResponse
+	(*SubmitFreeformAnswerRequest)(nil),       // 28: api.v1.SubmitFreeformAnswerRequest
+	(*SubmitFreeformAnswerResponse)(nil),      // 29: api.v1.SubmitFreeformAnswerResponse
+	(*OverrideAnswerRequest)(nil),             // 30: api.v1.OverrideAnswerRequest
+	(*OverrideAnswerResponse)(nil),            // 31: api.v1.OverrideAnswerResponse
+	(*UndoOverrideAnswerRequest)(nil),         // 32: api.v1.UndoOverrideAnswerRequest
+	(*UndoOverrideAnswerResponse)(nil),        // 33: api.v1.UndoOverrideAnswerResponse
+	(*SkipWordRequest)(nil),                   // 34: api.v1.SkipWordRequest
+	(*SkipWordResponse)(nil),                  // 35: api.v1.SkipWordResponse
+	(*ResumeWordRequest)(nil),                 // 36: api.v1.ResumeWordRequest
+	(*ResumeWordResponse)(nil),                // 37: api.v1.ResumeWordResponse
+	(*GraphPrompt)(nil),                       // 38: api.v1.GraphPrompt
+	(*GraphNode)(nil),                         // 39: api.v1.GraphNode
+	(*GraphEdge)(nil),                         // 40: api.v1.GraphEdge
+	(*StartRelearnQuizRequest)(nil),           // 41: api.v1.StartRelearnQuizRequest
+	(*StartRelearnQuizResponse)(nil),          // 42: api.v1.StartRelearnQuizResponse
+	(*RelearnCard)(nil),                       // 43: api.v1.RelearnCard
+	(*SubmitRelearnAnswerRequest)(nil),        // 44: api.v1.SubmitRelearnAnswerRequest
+	(*SubmitRelearnAnswerResponse)(nil),       // 45: api.v1.SubmitRelearnAnswerResponse
+	(*RelearnContextScene)(nil),               // 46: api.v1.RelearnContextScene
+	(*RelearnConversationLine)(nil),           // 47: api.v1.RelearnConversationLine
+	(*BatchSubmitRelearnAnswersRequest)(nil),  // 48: api.v1.BatchSubmitRelearnAnswersRequest
+	(*BatchSubmitRelearnAnswersResponse)(nil), // 49: api.v1.BatchSubmitRelearnAnswersResponse
+	(*StartGrammarQuizRequest)(nil),           // 50: api.v1.StartGrammarQuizRequest
+	(*StartGrammarQuizResponse)(nil),          // 51: api.v1.StartGrammarQuizResponse
+	(*GrammarPostCard)(nil),                   // 52: api.v1.GrammarPostCard
+	(*GrammarBlank)(nil),                      // 53: api.v1.GrammarBlank
+	(*SubmitGrammarPostRequest)(nil),          // 54: api.v1.SubmitGrammarPostRequest
+	(*GrammarBlankAnswer)(nil),                // 55: api.v1.GrammarBlankAnswer
+	(*SubmitGrammarPostResponse)(nil),         // 56: api.v1.SubmitGrammarPostResponse
+	(*GrammarBlankResult)(nil),                // 57: api.v1.GrammarBlankResult
+	(*ListGrammarMistakesRequest)(nil),        // 58: api.v1.ListGrammarMistakesRequest
+	(*ListGrammarMistakesResponse)(nil),       // 59: api.v1.ListGrammarMistakesResponse
+	(*GrammarMistake)(nil),                    // 60: api.v1.GrammarMistake
+	(*ExcludeGrammarMistakeRequest)(nil),      // 61: api.v1.ExcludeGrammarMistakeRequest
+	(*ExcludeGrammarMistakeResponse)(nil),     // 62: api.v1.ExcludeGrammarMistakeResponse
+	(*ResumeGrammarMistakeRequest)(nil),       // 63: api.v1.ResumeGrammarMistakeRequest
+	(*ResumeGrammarMistakeResponse)(nil),      // 64: api.v1.ResumeGrammarMistakeResponse
+	(*ExcludeEtymologyWordRequest)(nil),       // 65: api.v1.ExcludeEtymologyWordRequest
+	(*ExcludeEtymologyWordResponse)(nil),      // 66: api.v1.ExcludeEtymologyWordResponse
+	(*ResumeEtymologyWordRequest)(nil),        // 67: api.v1.ResumeEtymologyWordRequest
+	(*ResumeEtymologyWordResponse)(nil),       // 68: api.v1.ResumeEtymologyWordResponse
+	nil,                                       // 69: api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 }
 var file_api_v1_quiz_proto_depIdxs = []int32{
 	5,  // 0: api.v1.GetQuizOptionsResponse.notebooks:type_name -> api.v1.NotebookSummary
@@ -5960,97 +5200,82 @@ var file_api_v1_quiz_proto_depIdxs = []int32{
 	12, // 12: api.v1.SubmitReverseAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	22, // 13: api.v1.BatchSubmitReverseAnswersRequest.answers:type_name -> api.v1.SubmitReverseAnswerRequest
 	23, // 14: api.v1.BatchSubmitReverseAnswersResponse.responses:type_name -> api.v1.SubmitReverseAnswerResponse
-	79, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
+	69, // 15: api.v1.StartFreeformQuizResponse.expression_next_review_date:type_name -> api.v1.StartFreeformQuizResponse.ExpressionNextReviewDateEntry
 	12, // 16: api.v1.SubmitFreeformAnswerResponse.word_detail:type_name -> api.v1.WordDetail
 	0,  // 17: api.v1.OverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
 	0,  // 18: api.v1.UndoOverrideAnswerRequest.quiz_type:type_name -> api.v1.QuizType
 	0,  // 19: api.v1.SkipWordRequest.quiz_types:type_name -> api.v1.QuizType
 	0,  // 20: api.v1.ResumeWordRequest.quiz_types:type_name -> api.v1.QuizType
-	80, // 21: api.v1.EtymologyOriginCard.forms:type_name -> api.v1.EtymologyOriginForm
-	38, // 22: api.v1.EtymologyOriginCard.words:type_name -> api.v1.EtymologyFamilyWord
-	1,  // 23: api.v1.GraphPrompt.shape:type_name -> api.v1.GraphPrompt.Shape
-	41, // 24: api.v1.GraphPrompt.nodes:type_name -> api.v1.GraphNode
-	42, // 25: api.v1.GraphPrompt.edges:type_name -> api.v1.GraphEdge
-	2,  // 26: api.v1.GraphNode.kind:type_name -> api.v1.GraphNode.Kind
-	7,  // 27: api.v1.StartEtymologyOriginQuizRequest.notebook_sections:type_name -> api.v1.NotebookSection
-	39, // 28: api.v1.StartEtymologyOriginQuizResponse.cards:type_name -> api.v1.EtymologyOriginCard
-	45, // 29: api.v1.SubmitEtymologyOriginAnswerRequest.answers:type_name -> api.v1.EtymologyWordAnswer
-	47, // 30: api.v1.SubmitEtymologyOriginAnswerResponse.results:type_name -> api.v1.EtymologyWordResult
-	46, // 31: api.v1.BatchSubmitEtymologyOriginAnswersRequest.answers:type_name -> api.v1.SubmitEtymologyOriginAnswerRequest
-	48, // 32: api.v1.BatchSubmitEtymologyOriginAnswersResponse.responses:type_name -> api.v1.SubmitEtymologyOriginAnswerResponse
-	53, // 33: api.v1.StartRelearnQuizResponse.cards:type_name -> api.v1.RelearnCard
-	0,  // 34: api.v1.RelearnCard.source_quiz_type:type_name -> api.v1.QuizType
-	11, // 35: api.v1.RelearnCard.examples:type_name -> api.v1.Example
-	21, // 36: api.v1.RelearnCard.contexts:type_name -> api.v1.ContextSentence
-	12, // 37: api.v1.SubmitRelearnAnswerResponse.word_detail:type_name -> api.v1.WordDetail
-	56, // 38: api.v1.SubmitRelearnAnswerResponse.context_scenes:type_name -> api.v1.RelearnContextScene
-	40, // 39: api.v1.SubmitRelearnAnswerResponse.graph_context:type_name -> api.v1.GraphPrompt
-	57, // 40: api.v1.RelearnContextScene.conversations:type_name -> api.v1.RelearnConversationLine
-	54, // 41: api.v1.BatchSubmitRelearnAnswersRequest.answers:type_name -> api.v1.SubmitRelearnAnswerRequest
-	55, // 42: api.v1.BatchSubmitRelearnAnswersResponse.responses:type_name -> api.v1.SubmitRelearnAnswerResponse
-	7,  // 43: api.v1.StartGrammarQuizRequest.notebook_sections:type_name -> api.v1.NotebookSection
-	62, // 44: api.v1.StartGrammarQuizResponse.posts:type_name -> api.v1.GrammarPostCard
-	63, // 45: api.v1.GrammarPostCard.blanks:type_name -> api.v1.GrammarBlank
-	65, // 46: api.v1.SubmitGrammarPostRequest.answers:type_name -> api.v1.GrammarBlankAnswer
-	67, // 47: api.v1.SubmitGrammarPostResponse.results:type_name -> api.v1.GrammarBlankResult
-	70, // 48: api.v1.ListGrammarMistakesResponse.mistakes:type_name -> api.v1.GrammarMistake
-	3,  // 49: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
-	8,  // 50: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
-	14, // 51: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
-	16, // 52: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
-	18, // 53: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
-	22, // 54: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
-	24, // 55: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
-	26, // 56: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
-	28, // 57: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
-	30, // 58: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
-	32, // 59: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
-	34, // 60: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
-	36, // 61: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
-	43, // 62: api.v1.QuizService.StartEtymologyOriginQuiz:input_type -> api.v1.StartEtymologyOriginQuizRequest
-	46, // 63: api.v1.QuizService.SubmitEtymologyOriginAnswer:input_type -> api.v1.SubmitEtymologyOriginAnswerRequest
-	49, // 64: api.v1.QuizService.BatchSubmitEtymologyOriginAnswers:input_type -> api.v1.BatchSubmitEtymologyOriginAnswersRequest
-	75, // 65: api.v1.QuizService.ExcludeEtymologyWord:input_type -> api.v1.ExcludeEtymologyWordRequest
-	77, // 66: api.v1.QuizService.ResumeEtymologyWord:input_type -> api.v1.ResumeEtymologyWordRequest
-	51, // 67: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
-	54, // 68: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
-	58, // 69: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
-	60, // 70: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
-	64, // 71: api.v1.QuizService.SubmitGrammarPost:input_type -> api.v1.SubmitGrammarPostRequest
-	68, // 72: api.v1.QuizService.ListGrammarMistakes:input_type -> api.v1.ListGrammarMistakesRequest
-	71, // 73: api.v1.QuizService.ExcludeGrammarMistake:input_type -> api.v1.ExcludeGrammarMistakeRequest
-	73, // 74: api.v1.QuizService.ResumeGrammarMistake:input_type -> api.v1.ResumeGrammarMistakeRequest
-	4,  // 75: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
-	9,  // 76: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
-	15, // 77: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
-	17, // 78: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
-	19, // 79: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
-	23, // 80: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
-	25, // 81: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
-	27, // 82: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
-	29, // 83: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
-	31, // 84: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
-	33, // 85: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
-	35, // 86: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
-	37, // 87: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
-	44, // 88: api.v1.QuizService.StartEtymologyOriginQuiz:output_type -> api.v1.StartEtymologyOriginQuizResponse
-	48, // 89: api.v1.QuizService.SubmitEtymologyOriginAnswer:output_type -> api.v1.SubmitEtymologyOriginAnswerResponse
-	50, // 90: api.v1.QuizService.BatchSubmitEtymologyOriginAnswers:output_type -> api.v1.BatchSubmitEtymologyOriginAnswersResponse
-	76, // 91: api.v1.QuizService.ExcludeEtymologyWord:output_type -> api.v1.ExcludeEtymologyWordResponse
-	78, // 92: api.v1.QuizService.ResumeEtymologyWord:output_type -> api.v1.ResumeEtymologyWordResponse
-	52, // 93: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
-	55, // 94: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
-	59, // 95: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
-	61, // 96: api.v1.QuizService.StartGrammarQuiz:output_type -> api.v1.StartGrammarQuizResponse
-	66, // 97: api.v1.QuizService.SubmitGrammarPost:output_type -> api.v1.SubmitGrammarPostResponse
-	69, // 98: api.v1.QuizService.ListGrammarMistakes:output_type -> api.v1.ListGrammarMistakesResponse
-	72, // 99: api.v1.QuizService.ExcludeGrammarMistake:output_type -> api.v1.ExcludeGrammarMistakeResponse
-	74, // 100: api.v1.QuizService.ResumeGrammarMistake:output_type -> api.v1.ResumeGrammarMistakeResponse
-	75, // [75:101] is the sub-list for method output_type
-	49, // [49:75] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	1,  // 21: api.v1.GraphPrompt.shape:type_name -> api.v1.GraphPrompt.Shape
+	39, // 22: api.v1.GraphPrompt.nodes:type_name -> api.v1.GraphNode
+	40, // 23: api.v1.GraphPrompt.edges:type_name -> api.v1.GraphEdge
+	2,  // 24: api.v1.GraphNode.kind:type_name -> api.v1.GraphNode.Kind
+	43, // 25: api.v1.StartRelearnQuizResponse.cards:type_name -> api.v1.RelearnCard
+	0,  // 26: api.v1.RelearnCard.source_quiz_type:type_name -> api.v1.QuizType
+	11, // 27: api.v1.RelearnCard.examples:type_name -> api.v1.Example
+	21, // 28: api.v1.RelearnCard.contexts:type_name -> api.v1.ContextSentence
+	12, // 29: api.v1.SubmitRelearnAnswerResponse.word_detail:type_name -> api.v1.WordDetail
+	46, // 30: api.v1.SubmitRelearnAnswerResponse.context_scenes:type_name -> api.v1.RelearnContextScene
+	47, // 31: api.v1.RelearnContextScene.conversations:type_name -> api.v1.RelearnConversationLine
+	44, // 32: api.v1.BatchSubmitRelearnAnswersRequest.answers:type_name -> api.v1.SubmitRelearnAnswerRequest
+	45, // 33: api.v1.BatchSubmitRelearnAnswersResponse.responses:type_name -> api.v1.SubmitRelearnAnswerResponse
+	7,  // 34: api.v1.StartGrammarQuizRequest.notebook_sections:type_name -> api.v1.NotebookSection
+	52, // 35: api.v1.StartGrammarQuizResponse.posts:type_name -> api.v1.GrammarPostCard
+	53, // 36: api.v1.GrammarPostCard.blanks:type_name -> api.v1.GrammarBlank
+	55, // 37: api.v1.SubmitGrammarPostRequest.answers:type_name -> api.v1.GrammarBlankAnswer
+	57, // 38: api.v1.SubmitGrammarPostResponse.results:type_name -> api.v1.GrammarBlankResult
+	60, // 39: api.v1.ListGrammarMistakesResponse.mistakes:type_name -> api.v1.GrammarMistake
+	3,  // 40: api.v1.QuizService.GetQuizOptions:input_type -> api.v1.GetQuizOptionsRequest
+	8,  // 41: api.v1.QuizService.StartQuiz:input_type -> api.v1.StartQuizRequest
+	14, // 42: api.v1.QuizService.SubmitAnswer:input_type -> api.v1.SubmitAnswerRequest
+	16, // 43: api.v1.QuizService.BatchSubmitAnswers:input_type -> api.v1.BatchSubmitAnswersRequest
+	18, // 44: api.v1.QuizService.StartReverseQuiz:input_type -> api.v1.StartReverseQuizRequest
+	22, // 45: api.v1.QuizService.SubmitReverseAnswer:input_type -> api.v1.SubmitReverseAnswerRequest
+	24, // 46: api.v1.QuizService.BatchSubmitReverseAnswers:input_type -> api.v1.BatchSubmitReverseAnswersRequest
+	26, // 47: api.v1.QuizService.StartFreeformQuiz:input_type -> api.v1.StartFreeformQuizRequest
+	28, // 48: api.v1.QuizService.SubmitFreeformAnswer:input_type -> api.v1.SubmitFreeformAnswerRequest
+	30, // 49: api.v1.QuizService.OverrideAnswer:input_type -> api.v1.OverrideAnswerRequest
+	32, // 50: api.v1.QuizService.UndoOverrideAnswer:input_type -> api.v1.UndoOverrideAnswerRequest
+	34, // 51: api.v1.QuizService.SkipWord:input_type -> api.v1.SkipWordRequest
+	36, // 52: api.v1.QuizService.ResumeWord:input_type -> api.v1.ResumeWordRequest
+	65, // 53: api.v1.QuizService.ExcludeEtymologyWord:input_type -> api.v1.ExcludeEtymologyWordRequest
+	67, // 54: api.v1.QuizService.ResumeEtymologyWord:input_type -> api.v1.ResumeEtymologyWordRequest
+	41, // 55: api.v1.QuizService.StartRelearnQuiz:input_type -> api.v1.StartRelearnQuizRequest
+	44, // 56: api.v1.QuizService.SubmitRelearnAnswer:input_type -> api.v1.SubmitRelearnAnswerRequest
+	48, // 57: api.v1.QuizService.BatchSubmitRelearnAnswers:input_type -> api.v1.BatchSubmitRelearnAnswersRequest
+	50, // 58: api.v1.QuizService.StartGrammarQuiz:input_type -> api.v1.StartGrammarQuizRequest
+	54, // 59: api.v1.QuizService.SubmitGrammarPost:input_type -> api.v1.SubmitGrammarPostRequest
+	58, // 60: api.v1.QuizService.ListGrammarMistakes:input_type -> api.v1.ListGrammarMistakesRequest
+	61, // 61: api.v1.QuizService.ExcludeGrammarMistake:input_type -> api.v1.ExcludeGrammarMistakeRequest
+	63, // 62: api.v1.QuizService.ResumeGrammarMistake:input_type -> api.v1.ResumeGrammarMistakeRequest
+	4,  // 63: api.v1.QuizService.GetQuizOptions:output_type -> api.v1.GetQuizOptionsResponse
+	9,  // 64: api.v1.QuizService.StartQuiz:output_type -> api.v1.StartQuizResponse
+	15, // 65: api.v1.QuizService.SubmitAnswer:output_type -> api.v1.SubmitAnswerResponse
+	17, // 66: api.v1.QuizService.BatchSubmitAnswers:output_type -> api.v1.BatchSubmitAnswersResponse
+	19, // 67: api.v1.QuizService.StartReverseQuiz:output_type -> api.v1.StartReverseQuizResponse
+	23, // 68: api.v1.QuizService.SubmitReverseAnswer:output_type -> api.v1.SubmitReverseAnswerResponse
+	25, // 69: api.v1.QuizService.BatchSubmitReverseAnswers:output_type -> api.v1.BatchSubmitReverseAnswersResponse
+	27, // 70: api.v1.QuizService.StartFreeformQuiz:output_type -> api.v1.StartFreeformQuizResponse
+	29, // 71: api.v1.QuizService.SubmitFreeformAnswer:output_type -> api.v1.SubmitFreeformAnswerResponse
+	31, // 72: api.v1.QuizService.OverrideAnswer:output_type -> api.v1.OverrideAnswerResponse
+	33, // 73: api.v1.QuizService.UndoOverrideAnswer:output_type -> api.v1.UndoOverrideAnswerResponse
+	35, // 74: api.v1.QuizService.SkipWord:output_type -> api.v1.SkipWordResponse
+	37, // 75: api.v1.QuizService.ResumeWord:output_type -> api.v1.ResumeWordResponse
+	66, // 76: api.v1.QuizService.ExcludeEtymologyWord:output_type -> api.v1.ExcludeEtymologyWordResponse
+	68, // 77: api.v1.QuizService.ResumeEtymologyWord:output_type -> api.v1.ResumeEtymologyWordResponse
+	42, // 78: api.v1.QuizService.StartRelearnQuiz:output_type -> api.v1.StartRelearnQuizResponse
+	45, // 79: api.v1.QuizService.SubmitRelearnAnswer:output_type -> api.v1.SubmitRelearnAnswerResponse
+	49, // 80: api.v1.QuizService.BatchSubmitRelearnAnswers:output_type -> api.v1.BatchSubmitRelearnAnswersResponse
+	51, // 81: api.v1.QuizService.StartGrammarQuiz:output_type -> api.v1.StartGrammarQuizResponse
+	56, // 82: api.v1.QuizService.SubmitGrammarPost:output_type -> api.v1.SubmitGrammarPostResponse
+	59, // 83: api.v1.QuizService.ListGrammarMistakes:output_type -> api.v1.ListGrammarMistakesResponse
+	62, // 84: api.v1.QuizService.ExcludeGrammarMistake:output_type -> api.v1.ExcludeGrammarMistakeResponse
+	64, // 85: api.v1.QuizService.ResumeGrammarMistake:output_type -> api.v1.ResumeGrammarMistakeResponse
+	63, // [63:86] is the sub-list for method output_type
+	40, // [40:63] is the sub-list for method input_type
+	40, // [40:40] is the sub-list for extension type_name
+	40, // [40:40] is the sub-list for extension extendee
+	0,  // [0:40] is the sub-list for field type_name
 }
 
 func init() { file_api_v1_quiz_proto_init() }
@@ -6066,7 +5291,7 @@ func file_api_v1_quiz_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_api_v1_quiz_proto_rawDesc), len(file_api_v1_quiz_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   77,
+			NumMessages:   67,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

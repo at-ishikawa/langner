@@ -12,9 +12,11 @@ enum QuizType {
   QUIZ_TYPE_STANDARD = 1;
   QUIZ_TYPE_REVERSE = 2;
   QUIZ_TYPE_FREEFORM = 3;
-  // QUIZ_TYPE_ETYMOLOGY_ORIGIN is the single etymology quiz mode: one screen
-  // per (origin, sense) showing the origin with its full session-scoped word
-  // family, with the user typing each word's meaning. The former per-word
+  // QUIZ_TYPE_ETYMOLOGY_ORIGIN is no longer a standalone quiz mode. Etymology
+  // words are quizzed through the normal vocabulary quizzes; this value now
+  // only labels the origin-grouped family card the Relearn quiz builds from
+  // missed vocabulary words, and tags the per-word etymology exclusion
+  // (skipped_at) that drops a word from that family card. The former per-word
   // breakdown/assembly/freeform etymology modes (values 5, 6) are removed.
   QUIZ_TYPE_ETYMOLOGY_ORIGIN = 4;
   reserved 5, 6;
@@ -42,24 +44,17 @@ service QuizService {
   rpc UndoOverrideAnswer(UndoOverrideAnswerRequest) returns (UndoOverrideAnswerResponse);
   rpc SkipWord(SkipWordRequest) returns (SkipWordResponse);
   rpc ResumeWord(ResumeWordRequest) returns (ResumeWordResponse);
-  // Etymology Origin Quiz — the single etymology mode. StartEtymologyOriginQuiz
-  // returns one card per (origin, sense) with its full session-scoped word
-  // family; SubmitEtymologyOriginAnswer grades every family word the user typed
-  // and records ONE learning-log entry for the origin's (session, sense) series.
-  rpc StartEtymologyOriginQuiz(StartEtymologyOriginQuizRequest) returns (StartEtymologyOriginQuizResponse);
-  rpc SubmitEtymologyOriginAnswer(SubmitEtymologyOriginAnswerRequest) returns (SubmitEtymologyOriginAnswerResponse);
-  rpc BatchSubmitEtymologyOriginAnswers(BatchSubmitEtymologyOriginAnswersRequest) returns (BatchSubmitEtymologyOriginAnswersResponse);
-  // ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived family word's
-  // etymology-origin exclusion by its stable (notebook_id, expression) — the
-  // same SkipWord / ResumeWord path (skipped_at) every other card's Exclude
-  // uses, WITHOUT a DB note_id. buildOriginFamilies reads the same key
-  // (IsExpressionExcludedForQuizType), so excluding a word drops it from its
-  // origin family in every future etymology-origin quiz; an origin whose whole
-  // family is excluded is no longer offered. Used by BOTH the browse
-  // origin-detail Learn page and the etymology-origin quiz feedback card
-  // (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
-  // definitions-book id that owns the word (EtymologyDefinition.notebook_name /
-  // the origin card's notebook_name) — the same id the loader reads under.
+  // ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived word's
+  // etymology exclusion by its stable (notebook_id, expression) — the same
+  // SkipWord / ResumeWord path (skipped_at) every other card's Exclude uses,
+  // WITHOUT a DB note_id. Etymology words are quizzed through the normal
+  // vocabulary quizzes; this exclusion drops a word from the origin-grouped
+  // family card the Relearn quiz builds from missed vocabulary words (and from
+  // the browse origin-detail Learn page), reading the same key
+  // (IsExpressionExcludedForQuizType) the family builder reads. Used by the
+  // browse origin-detail page and the Relearn origin family card's per-word
+  // Exclude (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
+  // definitions-book id that owns the word — the same id the builder reads under.
   rpc ExcludeEtymologyWord(ExcludeEtymologyWordRequest) returns (ExcludeEtymologyWordResponse);
   rpc ResumeEtymologyWord(ResumeEtymologyWordRequest) returns (ResumeEtymologyWordResponse);
 
@@ -126,6 +121,14 @@ message NotebookSummary {
   // grammar_review_count is the per-notebook due count for the grammar quiz
   // (journal notebooks). Zero for non-journal notebooks.
   int32 grammar_review_count = 10;
+  // vocabulary_count is the STRUCTURAL number of vocabulary entries the
+  // notebook has (definitions in a definitions book, scene definitions across
+  // a story/journal, or flashcard cards) — i.e. how many words COULD be
+  // quizzed, independent of spaced-repetition/studied state. Unlike
+  // review_count (SR-due), it does not change with the "Include unstudied"
+  // toggle. Grammar summaries are 0. The Vocabulary tab lists a notebook iff
+  // this is > 0, so grammar-only and definition-less journal rows drop out.
+  int32 vocabulary_count = 11;
 }
 
 // NotebookSectionSummary holds the display title and per-mode review counts
@@ -182,6 +185,10 @@ message Flashcard {
 message Example {
   string text = 1;
   string speaker = 2;
+  // highlight is the exact surface word/phrase to bold in this sentence
+  // (e.g. "went" for lemma "go"). Empty means fall back to the auto
+  // whole-word lemma rule on the client.
+  string highlight = 3;
 }
 
 message WordDetail {
@@ -448,58 +455,9 @@ message ResumeWordRequest {
 
 message ResumeWordResponse {}
 
-// Etymology Origin Quiz Messages
-
-// EtymologyOriginForm (an inflectional/morphological form of an origin, e.g. a
-// Latin principal part) is defined in notebook.proto and reused here for the
-// origin header context.
-
-// EtymologyFamilyWord is one derived word shown on an origin card. word_id is
-// the ephemeral id the client echoes back on submit; expression is the word
-// whose meaning the user is asked to type.
-message EtymologyFamilyWord {
-  int64 word_id = 1;
-  string expression = 2;
-  // pronunciation is per-word study context shown as a hint while the learner
-  // types the meaning. It does not reveal the meaning, so it is safe on the
-  // answering screen. Example sentences and the literal gloss are deliberately
-  // NOT carried on the card (they'd leak the answer); they are returned on the
-  // feedback response instead (see EtymologyWordResult).
-  string pronunciation = 3;
-}
-
-// EtymologyOriginCard is one screen: a single (origin, sense) shown with the
-// full session-scoped family of words that derive from it. The user types each
-// family word's meaning while the origin and family stay visible as context.
-message EtymologyOriginCard {
-  int64 card_id = 1;
-  string origin = 2;
-  string type = 3;
-  string language = 4;
-  // meaning is the origin's own English gloss, shown as header context.
-  string meaning = 5;
-  string notebook_name = 6;
-  // session_title is the metadata.title of the etymology session that defined
-  // this origin sense; it disambiguates the same origin string across sessions.
-  string session_title = 7;
-  // sense disambiguates same-session multi-sense origins. Empty for single-sense.
-  string sense = 8;
-  repeated EtymologyOriginForm forms = 9;
-  // words is the full session-scoped word family to give meanings for.
-  repeated EtymologyFamilyWord words = 10;
-  // english_forms are the English combining-form spellings this origin
-  // surfaces as inside English words (e.g. facere → fac, fic, fect). Study
-  // context shown in the origin header; distinct from `forms` (the origin's
-  // source-language principal parts). Never quizzed.
-  repeated string english_forms = 11;
-  // note is the origin's free-text pedagogical hint (e.g. "Be on the lookout
-  // for words with fic, fect, and fy…"). Study context; never quizzed.
-  string note = 12;
-}
-
-// GraphPrompt is a small subgraph. In the etymology-origin quiz it is served
-// only as read-only elaborative scaffolding (no blank) on feedback, and is
-// also reused by the Relearn quiz feedback.
+// GraphPrompt is a small subgraph served as read-only elaborative scaffolding
+// (no blank) on the browse etymology mindmap and, when present, on quiz
+// feedback.
 message GraphPrompt {
   enum Shape {
     SHAPE_UNSPECIFIED = 0;
@@ -552,95 +510,6 @@ message GraphEdge {
   string type = 3;
 }
 
-message StartEtymologyOriginQuizRequest {
-  repeated string etymology_notebook_ids = 1;
-  bool include_unstudied = 2;
-  // notebook_sections, when non-empty, replaces etymology_notebook_ids and
-  // narrows the quiz to specific sessions within each etymology notebook.
-  repeated NotebookSection notebook_sections = 3;
-}
-
-message StartEtymologyOriginQuizResponse {
-  repeated EtymologyOriginCard cards = 1;
-}
-
-// EtymologyWordAnswer is the user's typed meaning for one family word on the
-// card, keyed by the word_id echoed from EtymologyFamilyWord. There is no
-// "skip"/"don't know" control: a word the learner leaves blank is graded
-// INCORRECT (a normal miss that stays due), exactly like a wrong typed answer.
-message EtymologyWordAnswer {
-  int64 word_id = 1;
-  string answer = 2;
-  reserved 3;
-  reserved "skipped";
-}
-
-message SubmitEtymologyOriginAnswerRequest {
-  int64 card_id = 1 [(buf.validate.field).int64.gt = 0];
-  // answers holds one entry per family word, each carrying the typed meaning
-  // (empty answer = graded incorrect). There is no per-word or whole-card skip.
-  repeated EtymologyWordAnswer answers = 2;
-  int64 response_time_ms = 3;
-  reserved 4;
-  reserved "is_skipped";
-}
-
-// EtymologyWordResult is the per-word feedback for one family word. It is
-// display-only — the origin carries a single learning-log series, not one per
-// word. A word the learner left blank comes back as incorrect (correct=false),
-// not as a distinct "skipped" state.
-message EtymologyWordResult {
-  int64 word_id = 1;
-  string expression = 2;
-  bool correct = 3;
-  string correct_meaning = 4;
-  string reason = 5;
-  reserved 6;
-  reserved "skipped";
-  // pronunciation, examples, and literal are per-word study context revealed
-  // on the feedback screen alongside the graded meaning. examples (example
-  // sentences) and literal (the assembled literal gloss, e.g.
-  // `de "down" + facere = "made down"`) are returned here rather than on the
-  // card so they never leak the answer while the learner is typing.
-  string pronunciation = 7;
-  repeated string examples = 8;
-  string literal = 9;
-}
-
-message SubmitEtymologyOriginAnswerResponse {
-  // correct is the aggregate origin result: true only when every family word
-  // was answered correctly. It drives the ONE learning-log entry written for
-  // the origin's (session, sense) series.
-  bool correct = 1;
-  string origin = 2;
-  string meaning = 3;
-  string next_review_date = 4;
-  string learned_at = 5;
-  // note_id is an ephemeral id for the answered origin so Override/Skip can
-  // target the origin's series after grading.
-  int64 note_id = 6;
-  string sense_id = 7;
-  repeated EtymologyWordResult results = 8;
-  // Removed: graph_context (elaborative "concept cluster" scaffolding). It
-  // was leftover code carried over from the old standard-mode etymology
-  // quiz's feedback screen and rendered a confusing, unrelated "Fill in the
-  // blank to complete this concept" block on the etymology-origin feedback
-  // screen. The per-word breakdown (results, above) already gives the
-  // learner this quiz mode's feedback.
-  reserved 9;
-  reserved "graph_context";
-}
-
-message BatchSubmitEtymologyOriginAnswersRequest {
-  repeated SubmitEtymologyOriginAnswerRequest answers = 1 [
-    (buf.validate.field).repeated.min_items = 1
-  ];
-}
-
-message BatchSubmitEtymologyOriginAnswersResponse {
-  repeated SubmitEtymologyOriginAnswerResponse responses = 1;
-}
-
 // Relearn Quiz Messages
 //
 // The Relearn Quiz gathers every word answered incorrectly across all quiz
@@ -671,11 +540,16 @@ message RelearnCard {
   string entry = 2;
   // source_quiz_type is the format the card is presented and graded in — the
   // quiz type it was failed in: QUIZ_TYPE_STANDARD (recognition: show entry,
-  // ask meaning), QUIZ_TYPE_REVERSE (show meaning + contexts, ask entry), or
-  // QUIZ_TYPE_ETYMOLOGY_ORIGIN (show origin, ask its meaning). Never persisted.
+  // ask meaning) or QUIZ_TYPE_REVERSE (show meaning + contexts, ask entry).
+  // QUIZ_TYPE_ETYMOLOGY_ORIGIN tags a missed vocabulary word that carries an
+  // etymology origin: it is a recognition card (entry=word, ask its meaning),
+  // but also carries origin_text / origin_meaning so the frontend groups every
+  // such card sharing an origin into ONE origin-family card (origin + meaning +
+  // the missed words). Never persisted. See quiz-ui-invariants.
   QuizType source_quiz_type = 3;
-  // meaning is the prompt for reverse / etymology-reverse cards and the
-  // expected answer otherwise. Always sent so feedback can show both sides.
+  // meaning is the prompt for reverse cards and the expected answer otherwise —
+  // for an etymology card it is the WORD's own meaning. Always sent so feedback
+  // can show both sides.
   string meaning = 4;
   repeated Example examples = 5;          // recognition hint
   repeated ContextSentence contexts = 6;  // reverse hint (masked)
@@ -688,6 +562,20 @@ message RelearnCard {
   // the missed span struck through and an inline box for the fix.
   string content = 9;    // the journal entry's full text (grammar)
   string incorrect = 10; // the mistaken span to correct, struck through in content
+
+  // Etymology origin grouping (populated only when source_quiz_type is
+  // QUIZ_TYPE_ETYMOLOGY_ORIGIN). origin_text is the source-language origin the
+  // missed word derives from (e.g. "facere"); origin_meaning is that origin's
+  // English gloss. Every etymology card sharing an origin_text/origin_meaning
+  // is rendered as one family card: the origin header (origin_text +
+  // origin_meaning + type + language) over the missed words. Empty otherwise.
+  string origin_text = 11;
+  string origin_meaning = 12;
+  // english_forms are the origin's English combining-form spellings (e.g. the
+  // Latin root "liber" surfaces as ["lib", "liv"]). Shown as chips on the
+  // origin header of the Relearn family card. Study context only — never
+  // quizzed. Empty for non-etymology cards.
+  repeated string english_forms = 13;
 }
 
 message SubmitRelearnAnswerRequest {
@@ -707,12 +595,16 @@ message SubmitRelearnAnswerResponse {
   WordDetail word_detail = 4;
   repeated string images = 5;
 
-  // Rich Learn-page context, assembled read-only from notebook/etymology data:
-  // the scenes the word appears in, the etymology relation graph, and related
-  // words. All optional — omitted sub-parts render nothing.
+  // Rich Learn-page context, assembled read-only from notebook data: the scenes
+  // the word appears in. Optional — omitted when there is nothing to show.
   repeated RelearnContextScene context_scenes = 6;
-  GraphPrompt graph_context = 7;
-  repeated string example_words = 8;
+  // Removed: graph_context (7) and example_words (8) — the etymology relation
+  // graph and related-words scaffolding. They were only ever populated by the
+  // standalone etymology-origin quiz's feedback path, which no longer exists
+  // (etymology is quizzed as vocabulary; the origin family card lives in
+  // Relearn). Nothing populates them, so they are reserved rather than sent.
+  reserved 7, 8;
+  reserved "graph_context", "example_words";
 
   // Grammar feedback extras (empty for vocab/etymology cards), populated
   // when the graded card's source_quiz_type was QUIZ_TYPE_GRAMMAR — mirrors

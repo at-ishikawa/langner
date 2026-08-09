@@ -55,6 +55,12 @@ Then("I should be on the Quiz page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz(\/?|$)/);
 });
 
+// covers route: /history — the bare History list. Anchored so it matches
+// /history and /history?<query> but not the /history/[date] Day Detail page.
+Then("I should be on the History page", async ({ page }) => {
+  await expect(page).toHaveURL(/\/history(\?|$)/);
+});
+
 // covers route: /quiz/complete
 Then("I should be on the Quiz Complete page", async ({ page }) => {
   await expect(page).toHaveURL(/\/quiz\/complete/);
@@ -75,6 +81,14 @@ Then("I see the heading {string}", async ({ page }, name: string) => {
 
 Then("I see the notebook {string}", async ({ page }, name: string) => {
   await expect(page.getByText(name).first()).toBeVisible();
+});
+
+// Negative counterpart: the notebook must be absent from the picker entirely.
+// Used to assert the Vocabulary tab hides a notebook with no vocabulary (an
+// empty journal, or a grammar-only summary) — including the Journal+Grammar
+// duplicate id, which collapses to nothing when the journal has no words.
+Then("I do not see the notebook {string}", async ({ page }, name: string) => {
+  await expect(page.getByText(name)).toHaveCount(0);
 });
 
 Then("I see the word {string}", async ({ page }, entry: string) => {

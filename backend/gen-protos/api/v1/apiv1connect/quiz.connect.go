@@ -69,15 +69,6 @@ const (
 	QuizServiceSkipWordProcedure = "/api.v1.QuizService/SkipWord"
 	// QuizServiceResumeWordProcedure is the fully-qualified name of the QuizService's ResumeWord RPC.
 	QuizServiceResumeWordProcedure = "/api.v1.QuizService/ResumeWord"
-	// QuizServiceStartEtymologyOriginQuizProcedure is the fully-qualified name of the QuizService's
-	// StartEtymologyOriginQuiz RPC.
-	QuizServiceStartEtymologyOriginQuizProcedure = "/api.v1.QuizService/StartEtymologyOriginQuiz"
-	// QuizServiceSubmitEtymologyOriginAnswerProcedure is the fully-qualified name of the QuizService's
-	// SubmitEtymologyOriginAnswer RPC.
-	QuizServiceSubmitEtymologyOriginAnswerProcedure = "/api.v1.QuizService/SubmitEtymologyOriginAnswer"
-	// QuizServiceBatchSubmitEtymologyOriginAnswersProcedure is the fully-qualified name of the
-	// QuizService's BatchSubmitEtymologyOriginAnswers RPC.
-	QuizServiceBatchSubmitEtymologyOriginAnswersProcedure = "/api.v1.QuizService/BatchSubmitEtymologyOriginAnswers"
 	// QuizServiceExcludeEtymologyWordProcedure is the fully-qualified name of the QuizService's
 	// ExcludeEtymologyWord RPC.
 	QuizServiceExcludeEtymologyWordProcedure = "/api.v1.QuizService/ExcludeEtymologyWord"
@@ -125,24 +116,17 @@ type QuizServiceClient interface {
 	UndoOverrideAnswer(context.Context, *connect.Request[v1.UndoOverrideAnswerRequest]) (*connect.Response[v1.UndoOverrideAnswerResponse], error)
 	SkipWord(context.Context, *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error)
 	ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error)
-	// Etymology Origin Quiz — the single etymology mode. StartEtymologyOriginQuiz
-	// returns one card per (origin, sense) with its full session-scoped word
-	// family; SubmitEtymologyOriginAnswer grades every family word the user typed
-	// and records ONE learning-log entry for the origin's (session, sense) series.
-	StartEtymologyOriginQuiz(context.Context, *connect.Request[v1.StartEtymologyOriginQuizRequest]) (*connect.Response[v1.StartEtymologyOriginQuizResponse], error)
-	SubmitEtymologyOriginAnswer(context.Context, *connect.Request[v1.SubmitEtymologyOriginAnswerRequest]) (*connect.Response[v1.SubmitEtymologyOriginAnswerResponse], error)
-	BatchSubmitEtymologyOriginAnswers(context.Context, *connect.Request[v1.BatchSubmitEtymologyOriginAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyOriginAnswersResponse], error)
-	// ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived family word's
-	// etymology-origin exclusion by its stable (notebook_id, expression) — the
-	// same SkipWord / ResumeWord path (skipped_at) every other card's Exclude
-	// uses, WITHOUT a DB note_id. buildOriginFamilies reads the same key
-	// (IsExpressionExcludedForQuizType), so excluding a word drops it from its
-	// origin family in every future etymology-origin quiz; an origin whose whole
-	// family is excluded is no longer offered. Used by BOTH the browse
-	// origin-detail Learn page and the etymology-origin quiz feedback card
-	// (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
-	// definitions-book id that owns the word (EtymologyDefinition.notebook_name /
-	// the origin card's notebook_name) — the same id the loader reads under.
+	// ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived word's
+	// etymology exclusion by its stable (notebook_id, expression) — the same
+	// SkipWord / ResumeWord path (skipped_at) every other card's Exclude uses,
+	// WITHOUT a DB note_id. Etymology words are quizzed through the normal
+	// vocabulary quizzes; this exclusion drops a word from the origin-grouped
+	// family card the Relearn quiz builds from missed vocabulary words (and from
+	// the browse origin-detail Learn page), reading the same key
+	// (IsExpressionExcludedForQuizType) the family builder reads. Used by the
+	// browse origin-detail page and the Relearn origin family card's per-word
+	// Exclude (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
+	// definitions-book id that owns the word — the same id the builder reads under.
 	ExcludeEtymologyWord(context.Context, *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error)
 	ResumeEtymologyWord(context.Context, *connect.Request[v1.ResumeEtymologyWordRequest]) (*connect.Response[v1.ResumeEtymologyWordResponse], error)
 	// Relearn Quiz — a practice-only quiz over recently-missed words. It writes
@@ -259,24 +243,6 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(quizServiceMethods.ByName("ResumeWord")),
 			connect.WithClientOptions(opts...),
 		),
-		startEtymologyOriginQuiz: connect.NewClient[v1.StartEtymologyOriginQuizRequest, v1.StartEtymologyOriginQuizResponse](
-			httpClient,
-			baseURL+QuizServiceStartEtymologyOriginQuizProcedure,
-			connect.WithSchema(quizServiceMethods.ByName("StartEtymologyOriginQuiz")),
-			connect.WithClientOptions(opts...),
-		),
-		submitEtymologyOriginAnswer: connect.NewClient[v1.SubmitEtymologyOriginAnswerRequest, v1.SubmitEtymologyOriginAnswerResponse](
-			httpClient,
-			baseURL+QuizServiceSubmitEtymologyOriginAnswerProcedure,
-			connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyOriginAnswer")),
-			connect.WithClientOptions(opts...),
-		),
-		batchSubmitEtymologyOriginAnswers: connect.NewClient[v1.BatchSubmitEtymologyOriginAnswersRequest, v1.BatchSubmitEtymologyOriginAnswersResponse](
-			httpClient,
-			baseURL+QuizServiceBatchSubmitEtymologyOriginAnswersProcedure,
-			connect.WithSchema(quizServiceMethods.ByName("BatchSubmitEtymologyOriginAnswers")),
-			connect.WithClientOptions(opts...),
-		),
 		excludeEtymologyWord: connect.NewClient[v1.ExcludeEtymologyWordRequest, v1.ExcludeEtymologyWordResponse](
 			httpClient,
 			baseURL+QuizServiceExcludeEtymologyWordProcedure,
@@ -342,32 +308,29 @@ func NewQuizServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 
 // quizServiceClient implements QuizServiceClient.
 type quizServiceClient struct {
-	getQuizOptions                    *connect.Client[v1.GetQuizOptionsRequest, v1.GetQuizOptionsResponse]
-	startQuiz                         *connect.Client[v1.StartQuizRequest, v1.StartQuizResponse]
-	submitAnswer                      *connect.Client[v1.SubmitAnswerRequest, v1.SubmitAnswerResponse]
-	batchSubmitAnswers                *connect.Client[v1.BatchSubmitAnswersRequest, v1.BatchSubmitAnswersResponse]
-	startReverseQuiz                  *connect.Client[v1.StartReverseQuizRequest, v1.StartReverseQuizResponse]
-	submitReverseAnswer               *connect.Client[v1.SubmitReverseAnswerRequest, v1.SubmitReverseAnswerResponse]
-	batchSubmitReverseAnswers         *connect.Client[v1.BatchSubmitReverseAnswersRequest, v1.BatchSubmitReverseAnswersResponse]
-	startFreeformQuiz                 *connect.Client[v1.StartFreeformQuizRequest, v1.StartFreeformQuizResponse]
-	submitFreeformAnswer              *connect.Client[v1.SubmitFreeformAnswerRequest, v1.SubmitFreeformAnswerResponse]
-	overrideAnswer                    *connect.Client[v1.OverrideAnswerRequest, v1.OverrideAnswerResponse]
-	undoOverrideAnswer                *connect.Client[v1.UndoOverrideAnswerRequest, v1.UndoOverrideAnswerResponse]
-	skipWord                          *connect.Client[v1.SkipWordRequest, v1.SkipWordResponse]
-	resumeWord                        *connect.Client[v1.ResumeWordRequest, v1.ResumeWordResponse]
-	startEtymologyOriginQuiz          *connect.Client[v1.StartEtymologyOriginQuizRequest, v1.StartEtymologyOriginQuizResponse]
-	submitEtymologyOriginAnswer       *connect.Client[v1.SubmitEtymologyOriginAnswerRequest, v1.SubmitEtymologyOriginAnswerResponse]
-	batchSubmitEtymologyOriginAnswers *connect.Client[v1.BatchSubmitEtymologyOriginAnswersRequest, v1.BatchSubmitEtymologyOriginAnswersResponse]
-	excludeEtymologyWord              *connect.Client[v1.ExcludeEtymologyWordRequest, v1.ExcludeEtymologyWordResponse]
-	resumeEtymologyWord               *connect.Client[v1.ResumeEtymologyWordRequest, v1.ResumeEtymologyWordResponse]
-	startRelearnQuiz                  *connect.Client[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse]
-	submitRelearnAnswer               *connect.Client[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse]
-	batchSubmitRelearnAnswers         *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
-	startGrammarQuiz                  *connect.Client[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse]
-	submitGrammarPost                 *connect.Client[v1.SubmitGrammarPostRequest, v1.SubmitGrammarPostResponse]
-	listGrammarMistakes               *connect.Client[v1.ListGrammarMistakesRequest, v1.ListGrammarMistakesResponse]
-	excludeGrammarMistake             *connect.Client[v1.ExcludeGrammarMistakeRequest, v1.ExcludeGrammarMistakeResponse]
-	resumeGrammarMistake              *connect.Client[v1.ResumeGrammarMistakeRequest, v1.ResumeGrammarMistakeResponse]
+	getQuizOptions            *connect.Client[v1.GetQuizOptionsRequest, v1.GetQuizOptionsResponse]
+	startQuiz                 *connect.Client[v1.StartQuizRequest, v1.StartQuizResponse]
+	submitAnswer              *connect.Client[v1.SubmitAnswerRequest, v1.SubmitAnswerResponse]
+	batchSubmitAnswers        *connect.Client[v1.BatchSubmitAnswersRequest, v1.BatchSubmitAnswersResponse]
+	startReverseQuiz          *connect.Client[v1.StartReverseQuizRequest, v1.StartReverseQuizResponse]
+	submitReverseAnswer       *connect.Client[v1.SubmitReverseAnswerRequest, v1.SubmitReverseAnswerResponse]
+	batchSubmitReverseAnswers *connect.Client[v1.BatchSubmitReverseAnswersRequest, v1.BatchSubmitReverseAnswersResponse]
+	startFreeformQuiz         *connect.Client[v1.StartFreeformQuizRequest, v1.StartFreeformQuizResponse]
+	submitFreeformAnswer      *connect.Client[v1.SubmitFreeformAnswerRequest, v1.SubmitFreeformAnswerResponse]
+	overrideAnswer            *connect.Client[v1.OverrideAnswerRequest, v1.OverrideAnswerResponse]
+	undoOverrideAnswer        *connect.Client[v1.UndoOverrideAnswerRequest, v1.UndoOverrideAnswerResponse]
+	skipWord                  *connect.Client[v1.SkipWordRequest, v1.SkipWordResponse]
+	resumeWord                *connect.Client[v1.ResumeWordRequest, v1.ResumeWordResponse]
+	excludeEtymologyWord      *connect.Client[v1.ExcludeEtymologyWordRequest, v1.ExcludeEtymologyWordResponse]
+	resumeEtymologyWord       *connect.Client[v1.ResumeEtymologyWordRequest, v1.ResumeEtymologyWordResponse]
+	startRelearnQuiz          *connect.Client[v1.StartRelearnQuizRequest, v1.StartRelearnQuizResponse]
+	submitRelearnAnswer       *connect.Client[v1.SubmitRelearnAnswerRequest, v1.SubmitRelearnAnswerResponse]
+	batchSubmitRelearnAnswers *connect.Client[v1.BatchSubmitRelearnAnswersRequest, v1.BatchSubmitRelearnAnswersResponse]
+	startGrammarQuiz          *connect.Client[v1.StartGrammarQuizRequest, v1.StartGrammarQuizResponse]
+	submitGrammarPost         *connect.Client[v1.SubmitGrammarPostRequest, v1.SubmitGrammarPostResponse]
+	listGrammarMistakes       *connect.Client[v1.ListGrammarMistakesRequest, v1.ListGrammarMistakesResponse]
+	excludeGrammarMistake     *connect.Client[v1.ExcludeGrammarMistakeRequest, v1.ExcludeGrammarMistakeResponse]
+	resumeGrammarMistake      *connect.Client[v1.ResumeGrammarMistakeRequest, v1.ResumeGrammarMistakeResponse]
 }
 
 // GetQuizOptions calls api.v1.QuizService.GetQuizOptions.
@@ -435,21 +398,6 @@ func (c *quizServiceClient) ResumeWord(ctx context.Context, req *connect.Request
 	return c.resumeWord.CallUnary(ctx, req)
 }
 
-// StartEtymologyOriginQuiz calls api.v1.QuizService.StartEtymologyOriginQuiz.
-func (c *quizServiceClient) StartEtymologyOriginQuiz(ctx context.Context, req *connect.Request[v1.StartEtymologyOriginQuizRequest]) (*connect.Response[v1.StartEtymologyOriginQuizResponse], error) {
-	return c.startEtymologyOriginQuiz.CallUnary(ctx, req)
-}
-
-// SubmitEtymologyOriginAnswer calls api.v1.QuizService.SubmitEtymologyOriginAnswer.
-func (c *quizServiceClient) SubmitEtymologyOriginAnswer(ctx context.Context, req *connect.Request[v1.SubmitEtymologyOriginAnswerRequest]) (*connect.Response[v1.SubmitEtymologyOriginAnswerResponse], error) {
-	return c.submitEtymologyOriginAnswer.CallUnary(ctx, req)
-}
-
-// BatchSubmitEtymologyOriginAnswers calls api.v1.QuizService.BatchSubmitEtymologyOriginAnswers.
-func (c *quizServiceClient) BatchSubmitEtymologyOriginAnswers(ctx context.Context, req *connect.Request[v1.BatchSubmitEtymologyOriginAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyOriginAnswersResponse], error) {
-	return c.batchSubmitEtymologyOriginAnswers.CallUnary(ctx, req)
-}
-
 // ExcludeEtymologyWord calls api.v1.QuizService.ExcludeEtymologyWord.
 func (c *quizServiceClient) ExcludeEtymologyWord(ctx context.Context, req *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error) {
 	return c.excludeEtymologyWord.CallUnary(ctx, req)
@@ -515,24 +463,17 @@ type QuizServiceHandler interface {
 	UndoOverrideAnswer(context.Context, *connect.Request[v1.UndoOverrideAnswerRequest]) (*connect.Response[v1.UndoOverrideAnswerResponse], error)
 	SkipWord(context.Context, *connect.Request[v1.SkipWordRequest]) (*connect.Response[v1.SkipWordResponse], error)
 	ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error)
-	// Etymology Origin Quiz — the single etymology mode. StartEtymologyOriginQuiz
-	// returns one card per (origin, sense) with its full session-scoped word
-	// family; SubmitEtymologyOriginAnswer grades every family word the user typed
-	// and records ONE learning-log entry for the origin's (session, sense) series.
-	StartEtymologyOriginQuiz(context.Context, *connect.Request[v1.StartEtymologyOriginQuizRequest]) (*connect.Response[v1.StartEtymologyOriginQuizResponse], error)
-	SubmitEtymologyOriginAnswer(context.Context, *connect.Request[v1.SubmitEtymologyOriginAnswerRequest]) (*connect.Response[v1.SubmitEtymologyOriginAnswerResponse], error)
-	BatchSubmitEtymologyOriginAnswers(context.Context, *connect.Request[v1.BatchSubmitEtymologyOriginAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyOriginAnswersResponse], error)
-	// ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived family word's
-	// etymology-origin exclusion by its stable (notebook_id, expression) — the
-	// same SkipWord / ResumeWord path (skipped_at) every other card's Exclude
-	// uses, WITHOUT a DB note_id. buildOriginFamilies reads the same key
-	// (IsExpressionExcludedForQuizType), so excluding a word drops it from its
-	// origin family in every future etymology-origin quiz; an origin whose whole
-	// family is excluded is no longer offered. Used by BOTH the browse
-	// origin-detail Learn page and the etymology-origin quiz feedback card
-	// (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
-	// definitions-book id that owns the word (EtymologyDefinition.notebook_name /
-	// the origin card's notebook_name) — the same id the loader reads under.
+	// ExcludeEtymologyWord / ResumeEtymologyWord toggle ONE derived word's
+	// etymology exclusion by its stable (notebook_id, expression) — the same
+	// SkipWord / ResumeWord path (skipped_at) every other card's Exclude uses,
+	// WITHOUT a DB note_id. Etymology words are quizzed through the normal
+	// vocabulary quizzes; this exclusion drops a word from the origin-grouped
+	// family card the Relearn quiz builds from missed vocabulary words (and from
+	// the browse origin-detail Learn page), reading the same key
+	// (IsExpressionExcludedForQuizType) the family builder reads. Used by the
+	// browse origin-detail page and the Relearn origin family card's per-word
+	// Exclude (quiz-ui-invariants U1/U2, learning-history L2). notebook_id is the
+	// definitions-book id that owns the word — the same id the builder reads under.
 	ExcludeEtymologyWord(context.Context, *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error)
 	ResumeEtymologyWord(context.Context, *connect.Request[v1.ResumeEtymologyWordRequest]) (*connect.Response[v1.ResumeEtymologyWordResponse], error)
 	// Relearn Quiz — a practice-only quiz over recently-missed words. It writes
@@ -645,24 +586,6 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(quizServiceMethods.ByName("ResumeWord")),
 		connect.WithHandlerOptions(opts...),
 	)
-	quizServiceStartEtymologyOriginQuizHandler := connect.NewUnaryHandler(
-		QuizServiceStartEtymologyOriginQuizProcedure,
-		svc.StartEtymologyOriginQuiz,
-		connect.WithSchema(quizServiceMethods.ByName("StartEtymologyOriginQuiz")),
-		connect.WithHandlerOptions(opts...),
-	)
-	quizServiceSubmitEtymologyOriginAnswerHandler := connect.NewUnaryHandler(
-		QuizServiceSubmitEtymologyOriginAnswerProcedure,
-		svc.SubmitEtymologyOriginAnswer,
-		connect.WithSchema(quizServiceMethods.ByName("SubmitEtymologyOriginAnswer")),
-		connect.WithHandlerOptions(opts...),
-	)
-	quizServiceBatchSubmitEtymologyOriginAnswersHandler := connect.NewUnaryHandler(
-		QuizServiceBatchSubmitEtymologyOriginAnswersProcedure,
-		svc.BatchSubmitEtymologyOriginAnswers,
-		connect.WithSchema(quizServiceMethods.ByName("BatchSubmitEtymologyOriginAnswers")),
-		connect.WithHandlerOptions(opts...),
-	)
 	quizServiceExcludeEtymologyWordHandler := connect.NewUnaryHandler(
 		QuizServiceExcludeEtymologyWordProcedure,
 		svc.ExcludeEtymologyWord,
@@ -751,12 +674,6 @@ func NewQuizServiceHandler(svc QuizServiceHandler, opts ...connect.HandlerOption
 			quizServiceSkipWordHandler.ServeHTTP(w, r)
 		case QuizServiceResumeWordProcedure:
 			quizServiceResumeWordHandler.ServeHTTP(w, r)
-		case QuizServiceStartEtymologyOriginQuizProcedure:
-			quizServiceStartEtymologyOriginQuizHandler.ServeHTTP(w, r)
-		case QuizServiceSubmitEtymologyOriginAnswerProcedure:
-			quizServiceSubmitEtymologyOriginAnswerHandler.ServeHTTP(w, r)
-		case QuizServiceBatchSubmitEtymologyOriginAnswersProcedure:
-			quizServiceBatchSubmitEtymologyOriginAnswersHandler.ServeHTTP(w, r)
 		case QuizServiceExcludeEtymologyWordProcedure:
 			quizServiceExcludeEtymologyWordHandler.ServeHTTP(w, r)
 		case QuizServiceResumeEtymologyWordProcedure:
@@ -836,18 +753,6 @@ func (UnimplementedQuizServiceHandler) SkipWord(context.Context, *connect.Reques
 
 func (UnimplementedQuizServiceHandler) ResumeWord(context.Context, *connect.Request[v1.ResumeWordRequest]) (*connect.Response[v1.ResumeWordResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.ResumeWord is not implemented"))
-}
-
-func (UnimplementedQuizServiceHandler) StartEtymologyOriginQuiz(context.Context, *connect.Request[v1.StartEtymologyOriginQuizRequest]) (*connect.Response[v1.StartEtymologyOriginQuizResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.StartEtymologyOriginQuiz is not implemented"))
-}
-
-func (UnimplementedQuizServiceHandler) SubmitEtymologyOriginAnswer(context.Context, *connect.Request[v1.SubmitEtymologyOriginAnswerRequest]) (*connect.Response[v1.SubmitEtymologyOriginAnswerResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.SubmitEtymologyOriginAnswer is not implemented"))
-}
-
-func (UnimplementedQuizServiceHandler) BatchSubmitEtymologyOriginAnswers(context.Context, *connect.Request[v1.BatchSubmitEtymologyOriginAnswersRequest]) (*connect.Response[v1.BatchSubmitEtymologyOriginAnswersResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("api.v1.QuizService.BatchSubmitEtymologyOriginAnswers is not implemented"))
 }
 
 func (UnimplementedQuizServiceHandler) ExcludeEtymologyWord(context.Context, *connect.Request[v1.ExcludeEtymologyWordRequest]) (*connect.Response[v1.ExcludeEtymologyWordResponse], error) {

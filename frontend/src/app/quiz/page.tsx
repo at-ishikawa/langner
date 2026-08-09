@@ -22,9 +22,8 @@ import { useQuizStore } from "@/store/quizStore";
 import RelearnStart from "@/components/RelearnStart";
 import GrammarStart from "@/components/GrammarStart";
 
-type Tab = "vocabulary" | "etymology" | "relearn" | "grammar";
+type Tab = "vocabulary" | "relearn" | "grammar";
 type VocabMode = "standard" | "reverse" | "freeform";
-type EtyMode = "origin";
 
 const vocabularyModes: { key: VocabMode; title: string; description: string }[] = [
   { key: "standard", title: "Standard", description: "See a word, type its meaning" },
@@ -32,15 +31,10 @@ const vocabularyModes: { key: VocabMode; title: string; description: string }[] 
   { key: "freeform", title: "Freeform", description: "Type any word and its meaning" },
 ];
 
-const etymologyModes: { key: EtyMode; title: string; description: string }[] = [
-  { key: "origin", title: "Etymology Origin", description: "See an origin and its word family; type each derived word's meaning" },
-];
-
 export default function QuizHubPage() {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("vocabulary");
   const [selectedVocabMode, setSelectedVocabMode] = useState<VocabMode | null>(null);
-  const [selectedEtyMode, setSelectedEtyMode] = useState<EtyMode | null>(null);
 
   const [notebooks, setNotebooks] = useState<NotebookSummary[]>([]);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -61,7 +55,6 @@ export default function QuizHubPage() {
   const setFreeformExpressions = useQuizStore((s) => s.setFreeformExpressions);
   const setFreeformNextReviewDates = useQuizStore((s) => s.setFreeformNextReviewDates);
   const setQuizType = useQuizStore((s) => s.setQuizType);
-  const setEtymologyOriginCards = useQuizStore((s) => s.setEtymologyOriginCards);
   const feedbackInterval = useQuizStore((s) => s.feedbackInterval);
   const setFeedbackInterval = useQuizStore((s) => s.setFeedbackInterval);
   const [feedbackIntervalText, setFeedbackIntervalText] = useState(
@@ -98,26 +91,32 @@ export default function QuizHubPage() {
       });
   }, [includeUnstudied]);
 
-  const selectedMode = tab === "vocabulary" ? selectedVocabMode : selectedEtyMode;
+  const selectedMode = selectedVocabMode;
 
   const isFreeformMode = tab === "vocabulary" && selectedVocabMode === "freeform";
 
-  // Notebook lists. Hide notebooks with zero review count for the selected
-  // mode; when includeUnstudied is on (or in freeform, which always covers
-  // unstudied words) we can't know the unstudied count so show all of them.
+  // Notebook lists. The Vocabulary tab lists a notebook iff it STRUCTURALLY
+  // has vocabulary entries (vocabularyCount > 0) and isn't owned by another
+  // tab — Etymology and Grammar notebooks are excluded here (etymology words
+  // are quizzed as ordinary vocabulary; grammar has its own tab).
+  // This structural gate is independent of studied/due state, so it runs for
+  // both toggle positions: it drops grammar-only rows and definition-less
+  // journals, and collapses a Journal+Grammar duplicate id (grammar carries
+  // no vocabulary) to at most one row. The separate SR/due filter below still
+  // governs studied-vs-unstudied among a WITH-vocabulary notebook's words —
+  // vocabularyCount is never conflated with reviewCount.
   const displayedNotebooks = useMemo(() => {
-    const base = notebooks.filter((n) =>
-      tab === "vocabulary" ? n.kind !== "Etymology" : n.kind === "Etymology",
-    );
+    const base = notebooks.filter((n) => {
+      // Vocabulary tab: exclude other tabs' kinds and empty notebooks.
+      if (n.kind === "Etymology" || n.kind === "Grammar") return false;
+      return n.vocabularyCount > 0;
+    });
     if (includeUnstudied || isFreeformMode) return base;
     return base.filter((n) => {
-      if (tab === "etymology") {
-        return n.etymologyReviewCount > 0;
-      }
       if (selectedVocabMode === "reverse") return n.reverseReviewCount > 0;
       return n.reviewCount > 0;
     });
-  }, [notebooks, tab, includeUnstudied, isFreeformMode, selectedVocabMode]);
+  }, [notebooks, includeUnstudied, isFreeformMode, selectedVocabMode]);
 
   // Drop selections that are hidden by the current filter so the user doesn't
   // accidentally start a quiz referencing notebooks they can no longer see.
@@ -238,12 +237,7 @@ export default function QuizHubPage() {
   const pickModeCount = (counts: {
     reviewCount: number;
     reverseReviewCount: number;
-    etymologyReviewCount: number;
-    etymologyReverseReviewCount: number;
   }): number => {
-    if (tab === "etymology") {
-      return counts.etymologyReviewCount;
-    }
     if (selectedVocabMode === "reverse") return counts.reverseReviewCount;
     return counts.reviewCount;
   };
@@ -272,13 +266,8 @@ export default function QuizHubPage() {
   };
 
   const handleModeSelect = (mode: string) => {
-    if (tab === "vocabulary") {
-      const m = mode as VocabMode;
-      setSelectedVocabMode(selectedVocabMode === m ? null : m);
-    } else {
-      const m = mode as EtyMode;
-      setSelectedEtyMode(selectedEtyMode === m ? null : m);
-    }
+    const m = mode as VocabMode;
+    setSelectedVocabMode(selectedVocabMode === m ? null : m);
     setSelectedIds(new Set());
     setSectionSelections(new Map());
     setExpandedIds(new Set());
@@ -349,34 +338,13 @@ export default function QuizHubPage() {
           setFreeformNextReviewDates(res.expressionNextReviewDate ?? {});
           router.push("/quiz/freeform");
         }
-      } else {
-        setQuizType("etymology-origin");
-        const res = await quizClient.startEtymologyOriginQuiz({
-          notebookSections,
-          includeUnstudied,
-        });
-        setEtymologyOriginCards(
-          (res.cards ?? []).map((c) => ({
-            cardId: c.cardId, origin: c.origin, type: c.type,
-            language: c.language, meaning: c.meaning,
-            notebookName: c.notebookName, sessionTitle: c.sessionTitle,
-            sense: c.sense,
-            forms: (c.forms ?? []).map((f) => ({ form: f.form, role: f.role, note: f.note })),
-            englishForms: c.englishForms ?? [],
-            note: c.note,
-            words: (c.words ?? []).map((w) => ({
-              wordId: w.wordId, expression: w.expression, pronunciation: w.pronunciation,
-            })),
-          })),
-        );
-        router.push("/quiz/etymology-origin");
       }
     } finally {
       setStarting(false);
     }
   };
 
-  const modes = tab === "vocabulary" ? vocabularyModes : etymologyModes;
+  const modes = vocabularyModes;
 
   if (loading) {
     return (
@@ -400,10 +368,10 @@ export default function QuizHubPage() {
         </Box>
       </Box>
 
-      {/* Tabs — Vocabulary / Etymology switch mode cards in place; Relearn is a
-          cross-quiz-type flow whose tab navigates to its own start screen. */}
+      {/* Tabs — Vocabulary switches mode cards in place; Relearn and Grammar are
+          cross-quiz-type flows whose tabs navigate to their own start screens. */}
       <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200" display="flex">
-        {(["vocabulary", "etymology", "relearn", "grammar"] as Tab[]).map((t) => (
+        {(["vocabulary", "relearn", "grammar"] as Tab[]).map((t) => (
           <Box
             key={t}
             flex={1}
@@ -419,7 +387,7 @@ export default function QuizHubPage() {
               color={tab === t ? "blue.600" : "gray.500"}
               _dark={{ color: tab === t ? "blue.300" : "gray.400" }}
             >
-              {t === "vocabulary" ? "Vocabulary" : t === "etymology" ? "Etymology" : t === "relearn" ? "Relearn" : "Grammar"}
+              {t === "vocabulary" ? "Vocabulary" : t === "relearn" ? "Relearn" : "Grammar"}
             </Text>
             {tab === t && (
               <Box
@@ -524,11 +492,6 @@ export default function QuizHubPage() {
             <Text fontWeight="medium" fontSize="sm" mb={1}>
               Select notebooks
             </Text>
-            {tab === "etymology" && (
-              <Text fontSize="xs" color="gray.500" mb={2}>
-                Only notebooks with etymology data are shown
-              </Text>
-            )}
 
             {displayedNotebooks.length === 0 ? (
               <Text fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} mt={2}>

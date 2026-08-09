@@ -10,7 +10,7 @@ vi.mock("@/lib/client", () => ({
   quizClient: {
     startRelearnQuiz: (...args: unknown[]) => startRelearnQuiz(...args),
   },
-  QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, GRAMMAR: 8 },
+  QuizType: { QUIZ_TYPE_UNSPECIFIED: 0, STANDARD: 1, REVERSE: 2, FREEFORM: 3, ETYMOLOGY_ORIGIN: 4, RELEARN: 7, GRAMMAR: 8 },
 }));
 
 const pushMock = vi.fn();

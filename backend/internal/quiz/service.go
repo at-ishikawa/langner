@@ -128,6 +128,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReviewCount:          countStoryDefinitions(filtered),
 			ReverseReviewCount:   reverseCount,
 			EtymologyReviewCount: etymCount,
+			VocabularyCount:      countStoryDefinitions(stories),
 			LatestDate:           latestDate,
 			Kind:                 kind,
 			HasContent:           storyHasContent(stories),
@@ -167,6 +168,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			ReviewCount:          countFlashcardCards(filtered),
 			ReverseReviewCount:   reverseCount,
 			EtymologyReviewCount: etymCount,
+			VocabularyCount:      countFlashcardCards(notebooks),
 			LatestDate:           latestDate,
 			Sections:             flashcardSectionSummaries(notebooks, filtered, learningHistories[id], includeUnstudied),
 		})
@@ -197,18 +199,31 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			Name:               nbID,
 			ReviewCount:        reviewCount,
 			ReverseReviewCount: reverseCount,
+			VocabularyCount:    countDefinitionEntries(defs, conceptHeads),
 			Kind:               "Books",
 			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
 			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID], includeUnstudied, conceptHeads),
 		})
 	}
 
-	// Add etymology notebooks
-	etymSummaries, err := s.LoadEtymologyNotebookSummaries(includeUnstudied)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load etymology notebook summaries: %w", err)
+	// Add etymology notebooks so they stay browsable from the Learn hub's
+	// Etymology tab. The standalone etymology-origin quiz was removed (etymology
+	// words are quizzed as ordinary vocabulary), so there is no per-word due
+	// schedule to compute here — the summary just lists each etymology notebook
+	// with its origin count so a learner can still open and read it.
+	for id, index := range reader.GetEtymologyIndexes() {
+		origins, err := reader.ReadEtymologyNotebook(id)
+		if err != nil {
+			continue
+		}
+		summaries = append(summaries, NotebookSummary{
+			NotebookID:           id,
+			Name:                 index.Name,
+			EtymologyReviewCount: len(origins),
+			Kind:                 "Etymology",
+			LatestDate:           index.LatestDate,
+		})
 	}
-	summaries = append(summaries, etymSummaries...)
 
 	// Add stories that have grammar annotations (grammar quiz)
 	grammarSummaries, err := s.LoadGrammarStorySummaries()
@@ -471,7 +486,7 @@ func (s *Service) loadFlashcardCards(
 
 			var examples []Example
 			for _, ex := range card.Examples {
-				examples = append(examples, Example{Text: ex})
+				examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
 			}
 
 			cards = append(cards, Card{
@@ -658,6 +673,37 @@ func countStoryDefinitions(stories []notebook.StoryNotebook) int {
 		}
 	}
 	return len(seen)
+}
+
+// countDefinitionEntries returns the STRUCTURAL number of vocabulary entries a
+// definitions-only book has — every note with a meaning, deduped by concept
+// head (mirroring how the quiz surfaces one card per concept). It applies no
+// spaced-repetition/skip gate and ignores includeUnstudied, so it reports how
+// many words COULD be quizzed rather than how many are currently due. Used to
+// decide whether the book appears on the Vocabulary tab at all.
+func countDefinitionEntries(defs map[string]map[string][]notebook.Note, conceptHeads map[string]string) int {
+	seenConcept := make(map[string]bool)
+	count := 0
+	for storyTitle, sceneDefs := range defs {
+		for sceneTitle, notes := range sceneDefs {
+			for i := range notes {
+				note := &notes[i]
+				if note.Meaning == "" {
+					continue
+				}
+				if _, isConceptExpr := conceptHeads[note.Expression]; isConceptExpr {
+					canonical := canonicalDefinitionExpression(note.Expression, conceptHeads)
+					conceptKey := storyTitle + "|" + sceneTitle + "|" + canonical
+					if seenConcept[conceptKey] {
+						continue
+					}
+					seenConcept[conceptKey] = true
+				}
+				count++
+			}
+		}
+	}
+	return count
 }
 
 func countStoryEtymologyDefinitions(stories []notebook.StoryNotebook) int {
@@ -1062,13 +1108,20 @@ func (s *Service) loadFlashcardReverseCards(
 
 			var contexts []ReverseContext
 			for _, ex := range card.Examples {
-				if strings.Contains(strings.ToLower(ex), strings.ToLower(card.Expression)) {
-					masked := maskWord(ex, card.Expression, card.Definition)
-					contexts = append(contexts, ReverseContext{
-						Context:       ex,
-						MaskedContext: masked,
-					})
+				textLower := strings.ToLower(ex.Text)
+				// An irregular highlight (e.g. lemma "go", highlight "went")
+				// may not contain the expression as a substring, so also
+				// accept an example whose highlight surface form is present.
+				hasExpr := strings.Contains(textLower, strings.ToLower(card.Expression))
+				hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
+				if !hasExpr && !hasHighlight {
+					continue
 				}
+				masked := maskWord(ex.Text, card.Expression, card.Definition, ex.Highlight)
+				contexts = append(contexts, ReverseContext{
+					Context:       ex.Text,
+					MaskedContext: masked,
+				})
 			}
 
 			if listMissingContext {
@@ -1103,10 +1156,17 @@ func (s *Service) loadFlashcardReverseCards(
 	return cards, nil
 }
 
-func maskWord(context, expression, definition string) string {
+// maskWord blanks out every occurrence of the expression, its Definition
+// alt-form, and the per-example highlight (any of which may be empty). The
+// highlight covers irregular inflections the lemma can't derive (e.g. lemma
+// "go", highlight "went"), so the reverse quiz never leaks the answer.
+func maskWord(context, expression, definition, highlight string) string {
 	context = maskOccurrences(context, expression)
 	if definition != "" {
 		context = maskOccurrences(context, definition)
+	}
+	if highlight != "" {
+		context = maskOccurrences(context, highlight)
 	}
 	return context
 }
@@ -1183,7 +1243,7 @@ func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note)
 		}
 
 		cleaned := notebook.ConvertMarkersInText(conv.Quote, nil, notebook.ConversionStylePlain, "")
-		masked := maskWord(cleaned, definition.Expression, definition.Definition)
+		masked := maskWord(cleaned, definition.Expression, definition.Definition, "")
 		contexts = append(contexts, ReverseContext{
 			Context:       cleaned,
 			MaskedContext: masked,
@@ -1474,7 +1534,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 			var contexts []inference.Context
 			for _, ex := range card.Examples {
 				contexts = append(contexts, inference.Context{
-					Context:             ex,
+					Context:             ex.Text,
 					ReferenceDefinition: card.Meaning,
 				})
 			}
@@ -1969,6 +2029,13 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 				} else {
 					originalEntry = note.Expression
 				}
+				// Mirror loadFlashcardCards: surface each entry's example
+				// sentences so definitions-book / etymology-derived words
+				// show their examples in the standard quiz.
+				var examples []Example
+				for _, ex := range note.Examples {
+					examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
+				}
 				card := Card{
 					ID:            note.ID,
 					NotebookName:  bookID,
@@ -1977,6 +2044,7 @@ func loadDefinitionCards(reader *notebook.Reader, bookID string, learningHistori
 					Entry:         entry,
 					OriginalEntry: originalEntry,
 					Meaning:       note.Meaning,
+					Examples:      examples,
 					WordDetail:    buildWordDetail(&note, originMap),
 				}
 				// Decorate via byMember so non-head members of non-family
@@ -2042,12 +2110,35 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 					expression = note.Definition
 					altForm = note.Expression
 				}
+				// Mirror loadFlashcardReverseCards: build masked example
+				// contexts so a definitions-book word behaves like a
+				// flashcard word in reverse mode (same expression/definition
+				// masking).
+				var contexts []ReverseContext
+				for _, ex := range note.Examples {
+					textLower := strings.ToLower(ex.Text)
+					// An irregular highlight (e.g. lemma "go", highlight
+					// "went") may not contain the expression as a substring,
+					// so also accept an example whose highlight surface form
+					// is present.
+					hasExpr := strings.Contains(textLower, strings.ToLower(note.Expression))
+					hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
+					if !hasExpr && !hasHighlight {
+						continue
+					}
+					masked := maskWord(ex.Text, note.Expression, note.Definition, ex.Highlight)
+					contexts = append(contexts, ReverseContext{
+						Context:       ex.Text,
+						MaskedContext: masked,
+					})
+				}
 				card := ReverseCard{
 					ID:           note.ID,
 					NotebookName: bookID,
 					StoryTitle:   storyTitle,
 					SceneTitle:   sceneTitle,
 					Meaning:      note.Meaning,
+					Contexts:     contexts,
 					Expression:   expression,
 					AltForm:      altForm,
 					WordDetail:   buildWordDetail(&note, originMap),

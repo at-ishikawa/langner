@@ -419,7 +419,7 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 							{
 								Expression: "break the ice",
 								Meaning:    "to initiate social interaction in an awkward situation",
-								Examples:   []string{"She told a joke to break the ice at the party."},
+								Examples:   notebook.Examples{{Text: "She told a joke to break the ice at the party."}},
 							},
 						},
 					},
@@ -520,7 +520,7 @@ func TestNewFreeformQuizCLI_LoadsAllDirectoryTypes(t *testing.T) {
 							{
 								Expression: "break the ice",
 								Meaning:    "to initiate social interaction",
-								Examples:   []string{"She told a joke to break the ice."},
+								Examples:   notebook.Examples{{Text: "She told a joke to break the ice."}},
 							},
 						},
 					},

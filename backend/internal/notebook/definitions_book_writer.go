@@ -121,7 +121,7 @@ func collapseDefinitionConceptsForExport(
 			Definition:    note.Definition,
 			Expression:    note.Expression,
 			Meaning:       note.Meaning,
-			Examples:      note.Examples,
+			Examples:      note.Examples.Texts(),
 			Pronunciation: note.Pronunciation,
 			PartOfSpeech:  note.PartOfSpeech,
 			Origin:        note.Origin,

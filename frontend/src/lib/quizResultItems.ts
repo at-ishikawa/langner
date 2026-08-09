@@ -2,7 +2,6 @@ import type {
   QuizResult,
   ReverseQuizResult,
   FreeformResult,
-  EtymologyOriginResult,
   WordDetail,
 } from "@/store/quizStore";
 import type { OriginPartDisplay, ResultItem } from "@/components/QuizResultCard";
@@ -85,35 +84,5 @@ export function freeformResultToItem(r: FreeformResult, index: number): ResultIt
     partOfSpeech: r.wordDetail?.partOfSpeech,
     originBreakdown: buildOriginBreakdown(r.wordDetail),
     wordDetail: r.wordDetail,
-  };
-}
-
-export function etymologyResultToItem(r: EtymologyOriginResult, index: number): ResultItem {
-  return {
-    index,
-    key: r.noteId ? r.noteId.toString() : `ety-${index}`,
-    entry: r.origin,
-    meaning: r.meaning,
-    correct: r.correct,
-    noteId: r.noteId,
-    senseId: r.senseId,
-    // notebookName is the word's home definitions-book id (== the loader's
-    // bookID). Threaded onto ResultItem so the feedback card's per-word Exclude
-    // can call ExcludeEtymologyWord(notebookId, expression) without a DB note id.
-    notebookName: r.notebookName,
-    learnedAt: r.learnedAt,
-    isOverridden: r.isOverridden,
-    isSkipped: r.isSkipped,
-    originalCorrect: r.isOverridden ? !r.correct : r.correct,
-    originBreakdown: [{
-      origin: r.origin,
-      meaning: r.meaning,
-      language: r.language,
-      type: r.type,
-    }],
-    etymologyForms: r.forms?.map((f) => f.form).filter(Boolean),
-    etymologyEnglishForms: r.englishForms,
-    etymologyNote: r.note,
-    etymologyWords: r.words,
   };
 }

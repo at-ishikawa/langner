@@ -1,12 +1,11 @@
 "use client";
 
 import { Box, Button, Heading, Text } from "@chakra-ui/react";
-import { type EtymologyWordItem, type ResultItem } from "./QuizResultCard";
+import { type ResultItem } from "./QuizResultCard";
 import { QuizResultsGroupedList } from "./QuizResultsGroupedList";
 
 interface BatchFeedbackProps {
   items: ResultItem[];
-  isEtymology: boolean;
   isFinal: boolean;
   onContinue: () => void;
   onSeeResults: () => void;
@@ -14,13 +13,10 @@ interface BatchFeedbackProps {
   onUndo: (item: ResultItem) => void;
   onSkip: (item: ResultItem) => void;
   onResume: (item: ResultItem) => void;
-  onOverrideWord?: (item: ResultItem, word: EtymologyWordItem) => void;
-  onExcludeWord?: (item: ResultItem, word: EtymologyWordItem) => void;
 }
 
 export function BatchFeedback({
   items,
-  isEtymology,
   isFinal,
   onContinue,
   onSeeResults,
@@ -28,8 +24,6 @@ export function BatchFeedback({
   onUndo,
   onSkip,
   onResume,
-  onOverrideWord,
-  onExcludeWord,
 }: BatchFeedbackProps) {
   const correctCount = items.filter((r) => r.correct && !r.isSkipped).length;
   const incorrectCount = items.filter((r) => !r.correct && !r.isSkipped).length;
@@ -52,13 +46,10 @@ export function BatchFeedback({
       <Box pb={20}>
         <QuizResultsGroupedList
           items={items}
-          isEtymology={isEtymology}
           onOverride={onOverride}
           onUndo={onUndo}
           onSkip={onSkip}
           onResume={onResume}
-          onOverrideWord={onOverrideWord}
-          onExcludeWord={onExcludeWord}
         />
       </Box>
 
