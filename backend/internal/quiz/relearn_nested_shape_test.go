@@ -30,9 +30,14 @@ func TestExampleData_NestedShapeOriginGroupsInRelearn(t *testing.T) {
 		word   string
 		origin string
 	}{
-		{"rapidity", "rapere"},   // single declared root — the task's cleanest case
-		{"recipient", "capere"},  // re (prefix) + capere (root): must fold under the ROOT
-		{"intercept", "capere"},  // inter (prefix) + capere (root): must fold under the ROOT
+		{"rapidity", "rapere"},    // single declared root — the task's cleanest case
+		{"recipient", "capere"},   // re (prefix) + capere (root): must fold under the ROOT
+		{"deceptive", "capere"},   // de (prefix) + capere (root): must fold under the ROOT
+		{"prologue", "logos"},     // pro (Greek prefix) + logos (Greek root): cross-language
+		{"illogical", "logos"},    // in (Latin prefix) + logos (Greek root): cross-language
+		{"possessive", "posse"},   // posse root, multi-sense (sense: able)
+		{"potent", "potens"},      // potens root, multi-sense (sense: powerful)
+		{"dominion", "dominari"},  // dominari root, multi-sense (sense: rule)
 	} {
 		t.Run(tc.word+"/reverse", func(t *testing.T) {
 			svc := newExampleService(t, t.TempDir())

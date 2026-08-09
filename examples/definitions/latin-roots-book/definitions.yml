@@ -1,15 +1,11 @@
 # Definitions notebook JOINED to examples/etymology/latin-roots-book by the SAME
-# `id` (latin-roots-book). Its unit `metadata.title` (UNIT ONE / UNIT TWO) and
-# scene `metadata.title` mirror the etymology notebook's event/scene titles.
+# `id` (latin-roots-book); each unit `metadata.title` mirrors the etymology
+# notebook's event title. The words deliberately reference the awkward origins in
+# that notebook: prefix+root pairs, a CROSS-LANGUAGE ref (Greek `pro`/`logos` and
+# Latin `in` vs Greek), and MULTI-SENSE roots pinned by `sense:`.
 #
-# rapidity is the cleanest failing case from the bug report: a SINGLE declared
-# origin `{ origin: rapere, language: Latin, from_form: rap }`, where `rapere` is
-# a declared root — no undeclared prefix, no dedup, no exotic edge. recipient and
-# deficient add multi-word-per-root grouping (both derive from a shared root via
-# a prefix) so the origin family grouping is observable.
-#
-# All example sentences are invented neutral prose (no book text, no personal
-# identifiers).
+# rapidity is the bug report's cleanest case: a SINGLE declared root `rapere`.
+# All sentences are invented neutral prose (no book text, no personal data).
 - metadata:
     title: "UNIT ONE"
   scenes:
@@ -21,25 +17,23 @@
           id: recipient-latin-roots
           meaning: "a person who receives something"
           part_of_speech: noun
-          pronunciation: "/rɪˈsɪpiənt/"
           note: 're "back" + capere "to take" = one who takes back / receives'
           examples:
-            - text: "Each recipient of the award walked up to the stage in turn."
+            - text: "Each recipient of the grant signed the ledger in turn."
               highlight: recipient
           origin_parts:
             - { origin: re, language: Latin }
             - { origin: capere, language: Latin, from_form: cip }
-        - expression: intercept
-          id: intercept-latin-roots
-          meaning: "to stop or catch something before it reaches its destination"
-          part_of_speech: verb
-          pronunciation: "/ˌɪntərˈsɛpt/"
-          note: 'inter "between" + capere "to take" = take in between'
+        - expression: deceptive
+          id: deceptive-latin-roots
+          meaning: "giving a misleading impression"
+          part_of_speech: adjective
+          note: 'de "away" + capere "to take" = taken away from the truth'
           examples:
-            - text: "The defender managed to intercept the pass near the goal."
-              highlight: intercept
+            - text: "The calm surface of the lake was deceptive; the current ran fast beneath."
+              highlight: deceptive
           origin_parts:
-            - { origin: inter, language: Latin }
+            - { origin: de, language: Latin }
             - { origin: capere, language: Latin, from_form: cept }
 - metadata:
     title: "UNIT TWO"
@@ -52,10 +46,82 @@
           id: rapidity-latin-roots
           meaning: "speed; quickness"
           part_of_speech: noun
-          pronunciation: "/rəˈpɪdəti/"
           note: 'from rapere "to snatch" — the quality of moving fast'
           examples:
             - text: "The rapidity of the change caught everyone off guard."
               highlight: rapidity
           origin_parts:
             - { origin: rapere, language: Latin, from_form: rap }
+- metadata:
+    title: "UNIT THREE"
+  scenes:
+    - metadata:
+        index: 0
+        title: "pot, poss (power / ability)"
+      expressions:
+        - expression: possessive
+          id: possessive-latin-roots
+          meaning: "relating to ownership; wanting to keep for oneself"
+          part_of_speech: adjective
+          note: 'from posse "to be able" (sense: able)'
+          examples:
+            - text: "The toddler grew possessive of the one toy she liked best."
+              highlight: possessive
+          origin_parts:
+            - { origin: posse, language: Latin, sense: able, from_form: poss }
+        - expression: potent
+          id: potent-latin-roots
+          meaning: "having great power or effect"
+          part_of_speech: adjective
+          note: 'from potens "powerful" (sense: powerful)'
+          examples:
+            - text: "The remedy was surprisingly potent for something so simple."
+              highlight: potent
+          origin_parts:
+            - { origin: potens, language: Latin, sense: powerful, from_form: pot }
+- metadata:
+    title: "UNIT FOUR"
+  scenes:
+    - metadata:
+        index: 0
+        title: "dom (rule / house)"
+      expressions:
+        - expression: dominion
+          id: dominion-latin-roots
+          meaning: "sovereignty; control over a territory"
+          part_of_speech: noun
+          note: 'from dominari "to rule" (sense: rule)'
+          examples:
+            - text: "The old maps marked the boundaries of each ruler's dominion."
+              highlight: dominion
+          origin_parts:
+            - { origin: dominari, language: Latin, sense: rule, from_form: domin }
+- metadata:
+    title: "UNIT FIVE"
+  scenes:
+    - metadata:
+        index: 0
+        title: "log (word / study)"
+      expressions:
+        - expression: prologue
+          id: prologue-latin-roots
+          meaning: "an introductory section of a work"
+          part_of_speech: noun
+          note: 'pro "before" (Greek) + logos "word" (Greek)'
+          examples:
+            - text: "The prologue sets the scene years before the main events."
+              highlight: prologue
+          origin_parts:
+            - { origin: pro, language: Greek }
+            - { origin: logos, language: Greek, from_form: logue }
+        - expression: illogical
+          id: illogical-latin-roots
+          meaning: "lacking sense or sound reasoning"
+          part_of_speech: adjective
+          note: 'in "not" (Latin) + logos "reason" (Greek)'
+          examples:
+            - text: "It would be illogical to pack for snow when the forecast says heat."
+              highlight: illogical
+          origin_parts:
+            - { origin: in, language: Latin, from_form: il }
+            - { origin: logos, language: Greek }

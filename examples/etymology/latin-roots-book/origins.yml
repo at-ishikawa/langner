@@ -1,12 +1,21 @@
-# NESTED (new-shape) etymology source: a top-level list of UNIT events, each
-# with scenes that hold origins. This mirrors the shape a real definitions-book
-# etymology notebook uses: the event title (UNIT ONE / UNIT TWO) and the scene
-# title are the JOIN KEYS shared with the definitions notebook of the SAME `id`
-# (examples/definitions/latin-roots-book) — its unit `metadata.title` and scene
-# `metadata.title` line up one-for-one with these.
+# NESTED (new-shape) etymology source in the user's REAL structural shape: a
+# top-level list of ~7 UNIT events, each with its own scenes INCLUDING a
+# per-unit `- scene: "prefixes"` block. Deliberately exercises the awkward
+# conditions a real roots-book hits, which a minimal 2-unit example does not:
 #
-# Ordinary public-domain Latin roots. Every sentence in the paired definitions
-# notebook is invented demo prose, not copied from any published book.
+#   * the SAME prefix origin declared in MULTIPLE units with different meanings
+#     (duplicate `origin|language` keys across the file): de|latin, con|latin,
+#     re|latin, in|latin all appear more than once.
+#   * CROSS-LANGUAGE duplicates: `in` declared as BOTH Latin and Greek, `pro`
+#     as BOTH Latin and Greek — so in|latin and in|greek must coexist and a
+#     word ref must pick the right language.
+#   * MULTI-SENSE roots sharing english_forms, disambiguated by `sense:`:
+#     potens(powerful)/posse(able) both surface as pot/poss; dominari(rule)/
+#     domus(house) both surface as dom.
+#
+# Ordinary public-domain Latin/Greek roots. Every paired definitions sentence is
+# invented demo prose, not copied from any book. Unit titles are the JOIN KEYS
+# shared with examples/definitions/latin-roots-book (same `id`).
 - event: "UNIT ONE"
   scenes:
     - scene: "cap, capt, cip (to seize)"
@@ -15,17 +24,22 @@
           type: root
           language: Latin
           meaning: "to seize, take, get"
-          english_forms: [cap, capt, cip]
+          english_forms: [cap, capt, cip, cept]
           forms:
             - { form: capere, role: present_active_infinitive }
             - { form: captum, role: supine }
     - scene: "prefixes"
       origins:
-        - origin: re
+        - origin: de
           type: prefix
           language: Latin
-          meaning: "back, again"
-          english_forms: [re]
+          meaning: "down, off"
+          english_forms: [de]
+        - origin: in
+          type: prefix
+          language: Latin
+          meaning: "not"
+          english_forms: [in, il, im, ir]
 - event: "UNIT TWO"
   scenes:
     - scene: "rapt, rap (to seize)"
@@ -38,3 +52,144 @@
           forms:
             - { form: rapere, role: present_active_infinitive }
             - { form: raptum, role: supine }
+    - scene: "prefixes"
+      origins:
+        - origin: de
+          type: prefix
+          language: Latin
+          meaning: "away, from"
+          english_forms: [de]
+        - origin: con
+          type: prefix
+          language: Latin
+          meaning: "with, together"
+          english_forms: [con, com, col]
+        - origin: re
+          type: prefix
+          language: Latin
+          meaning: "back, again"
+          english_forms: [re]
+        - origin: in
+          type: prefix
+          language: Latin
+          meaning: "into, in"
+          english_forms: [in, im]
+- event: "UNIT THREE"
+  scenes:
+    - scene: "pot, poss (power / ability)"
+      origins:
+        - origin: potens
+          type: root
+          language: Latin
+          sense: powerful
+          meaning: "powerful, able"
+          english_forms: [pot, poss]
+        - origin: posse
+          type: root
+          language: Latin
+          sense: able
+          meaning: "to be able"
+          english_forms: [pot, poss]
+    - scene: "prefixes"
+      origins:
+        - origin: con
+          type: prefix
+          language: Latin
+          meaning: "thoroughly"
+          english_forms: [con, com]
+        - origin: re
+          type: prefix
+          language: Latin
+          meaning: "again"
+          english_forms: [re]
+- event: "UNIT FOUR"
+  scenes:
+    - scene: "dom (rule / house)"
+      origins:
+        - origin: dominari
+          type: root
+          language: Latin
+          sense: rule
+          meaning: "to rule, master"
+          english_forms: [dom, domin]
+        - origin: domus
+          type: root
+          language: Latin
+          sense: house
+          meaning: "house, home"
+          english_forms: [dom, domest]
+    - scene: "prefixes"
+      origins:
+        - origin: con
+          type: prefix
+          language: Latin
+          meaning: "together"
+          english_forms: [con, com]
+- event: "UNIT FIVE"
+  scenes:
+    - scene: "log (word / study)"
+      origins:
+        - origin: logos
+          type: root
+          language: Greek
+          meaning: "word, reason, study"
+          english_forms: [log, logue, logy]
+    - scene: "prefixes"
+      origins:
+        - origin: pro
+          type: prefix
+          language: Latin
+          meaning: "forward, forth"
+          english_forms: [pro]
+- event: "UNIT SIX"
+  scenes:
+    - scene: "capt review"
+      origins:
+        - origin: capere
+          type: root
+          language: Latin
+          meaning: "to take (review)"
+          english_forms: [cap, capt, cept]
+    - scene: "prefixes"
+      origins:
+        - origin: de
+          type: prefix
+          language: Latin
+          meaning: "reversal"
+          english_forms: [de]
+        - origin: con
+          type: prefix
+          language: Latin
+          meaning: "intensive"
+          english_forms: [con]
+        - origin: re
+          type: prefix
+          language: Latin
+          meaning: "back"
+          english_forms: [re]
+- event: "UNIT SEVEN"
+  scenes:
+    - scene: "Greek prefixes and roots"
+      origins:
+        - origin: in
+          type: prefix
+          language: Greek
+          meaning: "in, within (Greek)"
+          english_forms: [in, en, em]
+        - origin: pro
+          type: prefix
+          language: Greek
+          meaning: "before (Greek)"
+          english_forms: [pro]
+    - scene: "prefixes"
+      origins:
+        - origin: de
+          type: prefix
+          language: Latin
+          meaning: "down"
+          english_forms: [de]
+        - origin: re
+          type: prefix
+          language: Latin
+          meaning: "back, again"
+          english_forms: [re]
