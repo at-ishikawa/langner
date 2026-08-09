@@ -39,6 +39,7 @@ export interface RelearnOriginPostProps {
   originMeaning: string;
   type: string;
   language: string;
+  englishForms: string[];
   words: RelearnCard[];
   onComplete: (correctCount: number, wordCount: number) => void;
 }
@@ -48,6 +49,7 @@ export function RelearnOriginPost({
   originMeaning,
   type,
   language,
+  englishForms,
   words,
   onComplete,
 }: RelearnOriginPostProps) {
@@ -170,7 +172,7 @@ export function RelearnOriginPost({
         maxW="100%"
         data-testid="relearn-origin-post"
       >
-        <OriginHeader originText={originText} originBadge={originBadge} originMeaning={originMeaning} />
+        <OriginHeader originText={originText} originBadge={originBadge} originMeaning={originMeaning} englishForms={englishForms} />
 
         <Box display="flex" flexDirection="column" gap={2} mt={3}>
           {words.map((word, indexInOrder) => {
@@ -383,8 +385,20 @@ export function RelearnOriginPost({
 }
 
 // OriginHeader renders the origin header: the source-language root, an optional
-// type/language badge, and the origin's English gloss.
-function OriginHeader({ originText, originBadge, originMeaning }: { originText: string; originBadge: string; originMeaning: string }) {
+// type/language badge, the origin's English gloss, and — when present — its
+// English combining-form spellings as small chips (study context for learning
+// the derived vocabulary; e.g. the Latin root "liber" → lib, liv).
+function OriginHeader({
+  originText,
+  originBadge,
+  originMeaning,
+  englishForms,
+}: {
+  originText: string;
+  originBadge: string;
+  originMeaning: string;
+  englishForms: string[];
+}) {
   return (
     <Box>
       <Text fontSize="lg" fontWeight="bold" overflowWrap="anywhere">{originText}</Text>
@@ -393,6 +407,27 @@ function OriginHeader({ originText, originBadge, originMeaning }: { originText: 
       )}
       {originMeaning && (
         <Text fontSize="sm" color="gray.700" _dark={{ color: "gray.200" }}>{originMeaning}</Text>
+      )}
+      {englishForms.length > 0 && (
+        <Box display="flex" flexWrap="wrap" gap={1} mt={2} data-testid="relearn-origin-english-forms">
+          {englishForms.map((form) => (
+            <Text
+              key={form}
+              as="span"
+              fontSize="xs"
+              fontWeight="medium"
+              px={2}
+              py={0.5}
+              borderRadius="md"
+              bg="purple.100"
+              color="purple.700"
+              _dark={{ bg: "purple.900", color: "purple.200" }}
+              overflowWrap="anywhere"
+            >
+              {form}
+            </Text>
+          ))}
+        </Box>
       )}
     </Box>
   );

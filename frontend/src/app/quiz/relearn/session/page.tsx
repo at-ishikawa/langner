@@ -103,6 +103,7 @@ export default function RelearnSessionPage() {
           originMeaning={front.group.originMeaning}
           type={front.group.type}
           language={front.group.language}
+          englishForms={front.group.englishForms}
           words={front.group.words}
           onComplete={(correctCount, wordCount) => completePost(correctCount, wordCount)}
         />

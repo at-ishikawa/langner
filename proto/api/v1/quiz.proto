@@ -571,6 +571,11 @@ message RelearnCard {
   // origin_meaning + type + language) over the missed words. Empty otherwise.
   string origin_text = 11;
   string origin_meaning = 12;
+  // english_forms are the origin's English combining-form spellings (e.g. the
+  // Latin root "liber" surfaces as ["lib", "liv"]). Shown as chips on the
+  // origin header of the Relearn family card. Study context only — never
+  // quizzed. Empty for non-etymology cards.
+  repeated string english_forms = 13;
 }
 
 message SubmitRelearnAnswerRequest {

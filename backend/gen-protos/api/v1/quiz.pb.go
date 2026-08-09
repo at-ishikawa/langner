@@ -3014,6 +3014,11 @@ type RelearnCard struct {
 	// origin_meaning + type + language) over the missed words. Empty otherwise.
 	OriginText    string `protobuf:"bytes,11,opt,name=origin_text,json=originText,proto3" json:"origin_text,omitempty"`
 	OriginMeaning string `protobuf:"bytes,12,opt,name=origin_meaning,json=originMeaning,proto3" json:"origin_meaning,omitempty"`
+	// english_forms are the origin's English combining-form spellings (e.g. the
+	// Latin root "liber" surfaces as ["lib", "liv"]). Shown as chips on the
+	// origin header of the Relearn family card. Study context only — never
+	// quizzed. Empty for non-etymology cards.
+	EnglishForms  []string `protobuf:"bytes,13,rep,name=english_forms,json=englishForms,proto3" json:"english_forms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3130,6 +3135,13 @@ func (x *RelearnCard) GetOriginMeaning() string {
 		return x.OriginMeaning
 	}
 	return ""
+}
+
+func (x *RelearnCard) GetEnglishForms() []string {
+	if x != nil {
+		return x.EnglishForms
+	}
+	return nil
 }
 
 type SubmitRelearnAnswerRequest struct {
@@ -4915,7 +4927,7 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	"\fwindow_hours\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xa8\x01(\x00R\vwindowHours\"E\n" +
 	"\x18StartRelearnQuizResponse\x12)\n" +
-	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xa4\x03\n" +
+	"\x05cards\x18\x01 \x03(\v2\x13.api.v1.RelearnCardR\x05cards\"\xc9\x03\n" +
 	"\vRelearnCard\x12\x17\n" +
 	"\anote_id\x18\x01 \x01(\x03R\x06noteId\x12\x14\n" +
 	"\x05entry\x18\x02 \x01(\tR\x05entry\x12:\n" +
@@ -4930,7 +4942,8 @@ const file_api_v1_quiz_proto_rawDesc = "" +
 	" \x01(\tR\tincorrect\x12\x1f\n" +
 	"\vorigin_text\x18\v \x01(\tR\n" +
 	"originText\x12%\n" +
-	"\x0eorigin_meaning\x18\f \x01(\tR\roriginMeaning\"\x9f\x01\n" +
+	"\x0eorigin_meaning\x18\f \x01(\tR\roriginMeaning\x12#\n" +
+	"\renglish_forms\x18\r \x03(\tR\fenglishForms\"\x9f\x01\n" +
 	"\x1aSubmitRelearnAnswerRequest\x12 \n" +
 	"\anote_id\x18\x01 \x01(\x03B\a\xbaH\x04\"\x02 \x00R\x06noteId\x12\x16\n" +
 	"\x06answer\x18\x02 \x01(\tR\x06answer\x12(\n" +

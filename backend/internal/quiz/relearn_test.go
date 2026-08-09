@@ -490,6 +490,7 @@ origins:
     type: root
     language: Latin
     meaning: to write
+    english_forms: [scrib, script]
 `), 0644))
 
 	defsBook := filepath.Join(defsDir, bookID)
@@ -613,4 +614,20 @@ func TestLoadRelearnPool_EtymologyCardCarriesOriginDetails(t *testing.T) {
 	assert.Equal(t, "to write", describe.WordDetail.OriginParts[0].Meaning)
 	// The literal gloss flows from the word's definitions note field.
 	assert.Equal(t, `de "down" + scribo "write" = "write down"`, describe.Literal)
+}
+
+// TestLoadRelearnPool_EtymologyCardCarriesEnglishForms pins that an origin-family
+// card carries the origin's english_forms (the English combining-form spellings)
+// resolved from the full EtymologyOrigin definition — the word's own origin_parts
+// do not carry them, so the relearn builder must look them up via the origin map.
+func TestLoadRelearnPool_EtymologyCardCarriesEnglishForms(t *testing.T) {
+	svc := etymologyRelearnFixture(t, "describe")
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	got := etymRelearnByEntry(pool)
+	require.Contains(t, got, "describe")
+	assert.Equal(t, []string{"scrib", "script"}, got["describe"].EnglishForms,
+		"the origin's english_forms must be threaded onto the relearn family card")
 }

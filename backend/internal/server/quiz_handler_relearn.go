@@ -116,6 +116,7 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 			Incorrect:      card.Incorrect,
 			OriginText:     card.OriginText,
 			OriginMeaning:  card.OriginMeaning,
+			EnglishForms:   card.EnglishForms,
 		})
 	}
 

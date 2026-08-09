@@ -39,6 +39,10 @@ export interface RelearnOriginGroup {
   originMeaning: string;
   type: string;
   language: string;
+  // englishForms are the origin's English combining-form spellings (e.g. the
+  // Latin root "liber" → ["lib", "liv"]). A per-origin value, so it is taken
+  // from the first card of the group and shown on the origin header.
+  englishForms: string[];
   words: RelearnCard[];
 }
 
@@ -89,6 +93,7 @@ function groupIntoItems(cards: RelearnCard[]): RelearnItem[] {
         originMeaning: card.originMeaning,
         type: card.type,
         language: card.language,
+        englishForms: card.englishForms ?? [],
         words: [card],
       };
       originByKey.set(key, group);

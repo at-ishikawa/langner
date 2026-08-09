@@ -61,6 +61,12 @@ type RelearnCard struct {
 	Language      string
 	OriginText    string
 	OriginMeaning string
+	// EnglishForms are the origin's English combining-form spellings (e.g. the
+	// Latin root "liber" surfaces as ["lib", "liv"]). Resolved from the full
+	// EtymologyOrigin definition (the vocab word's origin_parts don't carry
+	// them) and shown as chips on the origin header of the Relearn family card.
+	// Study context only — never quizzed. Empty for non-etymology cards.
+	EnglishForms []string
 	// Literal is the etymology literal gloss (e.g. `de "down" + facere = "made
 	// down"`), sourced from the word's definitions note (Note.Note). Shown on the
 	// etymology Relearn feedback. Empty for other formats.
@@ -90,8 +96,8 @@ type RelearnCard struct {
 
 // VocabCard, ReverseCard, GrammarCard return the card the matching pure grader
 // consumes for this Format.
-func (c RelearnCard) VocabCard() Card          { return c.vocabCard }
-func (c RelearnCard) ReverseCard() ReverseCard { return c.reverseCard }
+func (c RelearnCard) VocabCard() Card           { return c.vocabCard }
+func (c RelearnCard) ReverseCard() ReverseCard  { return c.reverseCard }
 func (c RelearnCard) GrammarCard() GrammarBlank { return c.grammarCard }
 
 // IsEtymology reports whether the card's Format is the etymology mode.
@@ -222,6 +228,11 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	if err != nil {
 		return nil, fmt.Errorf("init reader for relearn concepts: %w", err)
 	}
+	// originMap keys the full EtymologyOrigin definitions (origin|language,
+	// lowered) — the same index the vocab load path uses (buildOriginMap) — so
+	// an origin-family relearn card can carry the origin's english_forms, which
+	// the word's own origin_parts do not hold.
+	originMap := buildOriginMap(reader)
 	conceptByNotebook := map[string]map[string]*conceptInfo{}
 	conceptFor := func(notebookName, expression string) *conceptInfo {
 		idx, ok := conceptByNotebook[notebookName]
@@ -299,7 +310,8 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 					Format: notebook.QuizTypeEtymologyOrigin, Entry: fc.Expression, Meaning: fc.Meaning,
 					NotebookName: c.notebookName,
 					OriginType:   op.Type, Language: op.Language,
-					OriginText:   op.Origin, OriginMeaning: op.Meaning,
+					OriginText: op.Origin, OriginMeaning: op.Meaning,
+					EnglishForms: originEnglishForms(originMap, op.Origin, op.Language),
 					WordDetail:   fc.WordDetail, Images: fc.Images, Literal: fc.Literal,
 					ContextScenes: relearnScenesFromCard(fc),
 					Examples:      relearnExamplesFromContexts(fc.Contexts),
@@ -525,6 +537,27 @@ func primaryOriginPart(fc FreeformCard) (WordOriginPart, bool) {
 		}
 	}
 	return WordOriginPart{}, false
+}
+
+// originEnglishForms looks up an origin's English combining-form spellings from
+// the shared origin index, matching the origin the same way resolveOriginParts
+// does: by (origin|language) first, then by origin alone (case-insensitive).
+// Returns nil when the origin is unknown or has no english_forms.
+func originEnglishForms(originMap map[string]notebook.EtymologyOrigin, origin, language string) []string {
+	if len(originMap) == 0 || strings.TrimSpace(origin) == "" {
+		return nil
+	}
+	key := strings.ToLower(origin + "|" + language)
+	if o, ok := originMap[key]; ok {
+		return o.EnglishForms
+	}
+	prefix := strings.ToLower(strings.TrimSpace(origin)) + "|"
+	for k, o := range originMap {
+		if strings.HasPrefix(k, prefix) {
+			return o.EnglishForms
+		}
+	}
+	return nil
 }
 
 // relearnExamplesFromContexts exposes the card's context sentences as examples
