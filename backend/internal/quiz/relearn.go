@@ -311,8 +311,9 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		}
 		if originDebugEnabled() {
 			dbgOp, dbgHasOrigin := primaryOriginPart(fc)
-			originDebugLogf("miss expr=%q id=%q notebook=%q format=%q resolvedOriginParts=%v primaryOrigin={has:%v origin:%q}",
-				c.expression, c.id, c.notebookName, c.format, fc.WordDetail.OriginParts, dbgHasOrigin, dbgOp.Origin)
+			dbgExcluded := notebook.IsExpressionExcludedForQuizType(histories[c.notebookName], c.id, notebook.QuizTypeEtymologyOrigin, c.expression)
+			originDebugLogf("miss expr=%q id=%q notebook=%q format=%q resolvedOriginParts=%v primaryOrigin={has:%v origin:%q} excludedEtymOrigin=%v",
+				c.expression, c.id, c.notebookName, c.format, fc.WordDetail.OriginParts, dbgHasOrigin, dbgOp.Origin, dbgExcluded)
 		}
 		// A miss of a word that carries an etymology origin — in recognition OR
 		// reverse — is re-drilled inside an origin FAMILY card: the frontend
@@ -320,15 +321,23 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		// meaning + the missed words), which is what helps the learner see the
 		// shared root. Each word is still graded in the direction it was missed
 		// (recognition: typed meaning vs gloss; reverse: typed word vs
-		// expression). A word the learner excluded from its origin family
-		// (skipped_at for QuizTypeEtymologyOrigin) falls back to a plain card in
-		// its own direction: a normal miss must never drop a word from Relearn
-		// (quiz-ui-invariants U1). Directions are collected here and emitted as
-		// one card per word after the loop so a word missed both ways is shown
-		// once.
+		// expression). Directions are collected here and emitted as one card per
+		// word after the loop so a word missed both ways is shown once.
+		//
+		// Grouping depends ONLY on the word carrying a resolvable origin. It is
+		// deliberately NOT gated on a per-quiz-type "etymology_origin" skip
+		// marker: since #41 the standalone etymology-origin quiz is gone, Relearn
+		// has no Exclude control, and NOTHING deliberately sets or clears that
+		// marker anymore (quiz-ui-invariants). Any surviving "etymology_origin"
+		// skip is therefore vestigial — written only by the removed quiz or by
+		// the old "Don't Know" bug (4c7fd4de/991816dd) — and honoring it here
+		// only suppressed the family card for words whose origin resolves fine,
+		// leaving them stuck as plain "Reverse — recall the word" cards forever
+		// (the reported symptom). The normal-quiz skip filtering (notebook /
+		// reverse / freeform skipped_at, enforced by the card loaders) is a
+		// separate, correct path and is untouched.
 		if c.format == notebook.QuizTypeNotebook || c.format == notebook.QuizTypeReverse {
-			if op, hasOrigin := primaryOriginPart(fc); hasOrigin &&
-				!notebook.IsExpressionExcludedForQuizType(histories[c.notebookName], c.id, notebook.QuizTypeEtymologyOrigin, c.expression) {
+			if op, hasOrigin := primaryOriginPart(fc); hasOrigin {
 				key := strings.ToLower(c.notebookName) + relearnKeySep + c.id + relearnKeySep + strings.ToLower(strings.TrimSpace(c.expression))
 				p, ok := etymByWord[key]
 				if !ok {

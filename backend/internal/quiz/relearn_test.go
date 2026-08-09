@@ -569,26 +569,22 @@ func TestLoadRelearnPool_EtymologyOriginFamilyCard(t *testing.T) {
 	assert.Equal(t, "to represent in words", got["describe"].Meaning)
 	assert.True(t, got["describe"].IsEtymology())
 
-	// Exclude "describe" from its origin family (the same SkipWord path every
-	// card uses). It leaves the origin grouping — but a normal miss must never
-	// drop a word from Relearn (quiz-ui-invariants U1), so it reappears as a
-	// plain recognition card. "inscribe" is untouched.
+	// A vestigial skipped_at["etymology_origin"] marker on "describe" (the marker
+	// the removed etymology-origin quiz and the old "Don't Know" bug used to
+	// write; nothing sets or clears it post-#41) must be IGNORED: grouping depends
+	// only on the word carrying a resolvable origin. "describe" stays folded into
+	// its origin family card, exactly like the untouched "inscribe".
 	require.NoError(t, svc.SkipWord(
 		CardInfo{NotebookName: "roots", Expression: "describe"},
 		"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
 	))
 	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
-	assert.NotContains(t, etymRelearnByEntry(pool), "describe",
-		"excluding from the family drops the origin grouping")
-	assert.Contains(t, etymRelearnByEntry(pool), "inscribe", "excluding one word must not drop the other")
-	stillDue := false
-	for _, c := range pool {
-		if c.Entry == "describe" && c.Format == notebook.QuizTypeNotebook {
-			stillDue = true
-		}
-	}
-	assert.True(t, stillDue, "a normal miss must keep the word due as a recognition card (U1)")
+	got = etymRelearnByEntry(pool)
+	assert.Contains(t, got, "describe",
+		"a vestigial etymology_origin marker must not drop the origin grouping")
+	assert.Equal(t, "scribo", got["describe"].OriginText)
+	assert.Contains(t, got, "inscribe", "the sibling word is unaffected")
 }
 
 // TestLoadRelearnPool_EtymologyCardCarriesOriginDetails pins the Relearn
