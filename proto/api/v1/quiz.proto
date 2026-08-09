@@ -576,6 +576,18 @@ message RelearnCard {
   // origin header of the Relearn family card. Study context only — never
   // quizzed. Empty for non-etymology cards.
   repeated string english_forms = 13;
+
+  // origin_direction is the direction ONE grouped word of an origin-family card
+  // is drilled in — the quiz type it was missed in. Set only when
+  // source_quiz_type is QUIZ_TYPE_ETYMOLOGY_ORIGIN; QUIZ_TYPE_UNSPECIFIED for
+  // every other card. A family card can now MIX directions: a word missed in
+  // recognition is drilled as QUIZ_TYPE_STANDARD (show the word, ask its
+  // meaning), a word missed in reverse as QUIZ_TYPE_REVERSE (show the meaning +
+  // masked contexts, ask the word). Both are still grouped under the shared
+  // origin header. A word missed in BOTH directions is drilled ONCE, as
+  // QUIZ_TYPE_REVERSE (produce-the-word is the stronger recall), so it never
+  // appears twice in one family card.
+  QuizType origin_direction = 14;
 }
 
 message SubmitRelearnAnswerRequest {

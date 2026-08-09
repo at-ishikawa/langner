@@ -785,3 +785,143 @@ func TestLoadRelearnPool_EtymologyNotebookWordGroups(t *testing.T) {
 	assert.Equal(t, "to say aloud for another to record", got["dictate"].Meaning)
 	assert.Equal(t, []string{"dict", "dic"}, got["dictate"].EnglishForms)
 }
+
+// originDirectionFixture wires a flashcard notebook whose words carry an
+// etymology origin (resolved against an etymology book) with example sentences,
+// and a learning history where each word's miss direction is controlled:
+// recognitionMissed → a notebook (recognition) miss, reverseMissed → a reverse
+// miss. A word in BOTH is missed both ways. Flashcards (unlike definitions
+// books) build Contexts from examples, so the origin family card carries the
+// feedback scenes reverse words previously lacked.
+func originDirectionFixture(t *testing.T, recognitionMissed, reverseMissed []string) *Service {
+	t.Helper()
+	dir := t.TempDir()
+	flashcardsDir := filepath.Join(dir, "flashcards")
+	etymDir := filepath.Join(dir, "etymology")
+	learningDir := filepath.Join(dir, "learning")
+
+	etymBook := filepath.Join(etymDir, "roots")
+	require.NoError(t, os.MkdirAll(etymBook, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "index.yml"), []byte(
+		"id: roots\nkind: Etymology\nname: Roots\nnotebooks:\n  - ./s1.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "s1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: "stare"
+    type: root
+    language: Latin
+    meaning: to stand
+    english_forms: [st, sta]
+`), 0644))
+
+	vocabDir := filepath.Join(flashcardsDir, "roots")
+	require.NoError(t, os.MkdirAll(vocabDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "index.yml"), []byte(
+		"id: roots\nname: Roots\nnotebooks:\n  - ./cards.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "cards.yml"), []byte(`- title: "Roots"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "constant"
+      meaning: "steadfast and unchanging"
+      examples:
+        - "She stayed constant through every hardship."
+      origin_parts:
+        - origin: stare
+    - expression: "obstinate"
+      meaning: "stubbornly firm and unyielding"
+      examples:
+        - "He was obstinate and refused to move."
+      origin_parts:
+        - origin: stare
+`), 0644))
+
+	inSet := func(set []string, w string) bool {
+		for _, s := range set {
+			if s == w {
+				return true
+			}
+		}
+		return false
+	}
+	recent := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	exprs := ""
+	for _, w := range []string{"constant", "obstinate"} {
+		if !inSet(recognitionMissed, w) && !inSet(reverseMissed, w) {
+			continue
+		}
+		exprs += fmt.Sprintf("    - expression: %q\n      type: vocabulary\n", w)
+		if inSet(recognitionMissed, w) {
+			exprs += fmt.Sprintf("      learned_logs:\n        - status: misunderstood\n          learned_at: %q\n          quiz_type: notebook\n", recent)
+		}
+		if inSet(reverseMissed, w) {
+			exprs += fmt.Sprintf("      reverse_logs:\n        - status: misunderstood\n          learned_at: %q\n          quiz_type: reverse\n", recent)
+		}
+	}
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "roots.yml"), []byte(
+		"- metadata:\n    id: roots\n    title: \"Roots\"\n    type: flashcard\n  expressions:\n"+exprs), 0644))
+
+	ctrl := gomock.NewController(t)
+	return NewService(config.NotebooksConfig{
+		FlashcardsDirectories:  []string{flashcardsDir},
+		EtymologyDirectories:   []string{etymDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+}
+
+// TestLoadRelearnPool_ReverseOriginMissCarriesReverseDirection pins that a
+// reverse-missed origin word and a recognition-missed sibling BOTH become
+// origin family cards under the same origin, each tagged with the direction it
+// was missed in — reverse carries a gradeable reverseCard, recognition a
+// vocabCard, and the reverse card carries its example scenes for feedback.
+func TestLoadRelearnPool_ReverseOriginMissCarriesReverseDirection(t *testing.T) {
+	svc := originDirectionFixture(t, []string{"obstinate"}, []string{"constant"})
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	got := etymRelearnByEntry(pool)
+
+	require.Contains(t, got, "constant", "a reverse-missed origin word must group as a family card")
+	require.Contains(t, got, "obstinate", "a recognition-missed origin word must group as a family card")
+
+	// Same origin header for the whole family.
+	assert.Equal(t, "stare", got["constant"].OriginText)
+	assert.Equal(t, got["constant"].OriginText, got["obstinate"].OriginText)
+
+	// Per-word direction and the grading card that matches it.
+	assert.Equal(t, notebook.QuizTypeReverse, got["constant"].Direction)
+	assert.Equal(t, "constant", got["constant"].ReverseCard().Expression,
+		"a reverse family word grades produce-the-word against its expression")
+	assert.Equal(t, notebook.QuizTypeNotebook, got["obstinate"].Direction)
+	assert.Equal(t, "obstinate", got["obstinate"].VocabCard().Entry,
+		"a recognition family word grades the meaning via its vocab card")
+
+	// The reverse word carries its example statement for the feedback scenes —
+	// parity with recognition (previously reverse words showed none here).
+	require.NotEmpty(t, got["constant"].ContextScenes)
+	assert.Equal(t, []string{"She stayed constant through every hardship."},
+		got["constant"].ContextScenes[0].Statements)
+}
+
+// TestLoadRelearnPool_OriginMissBothDirectionsDedup pins the both-directions
+// choice: a word missed in recognition AND reverse yields exactly ONE origin
+// family card, drilled in the reverse direction (produce-the-word).
+func TestLoadRelearnPool_OriginMissBothDirectionsDedup(t *testing.T) {
+	svc := originDirectionFixture(t, []string{"constant"}, []string{"constant"})
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	var count int
+	var direction notebook.QuizType
+	for _, c := range pool {
+		if c.Entry == "constant" {
+			count++
+			direction = c.Direction
+		}
+	}
+	assert.Equal(t, 1, count, "a word missed both ways must be drilled once, not twice")
+	assert.Equal(t, notebook.QuizTypeReverse, direction,
+		"a word missed both ways is drilled in the reverse direction")
+}

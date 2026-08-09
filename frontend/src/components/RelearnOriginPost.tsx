@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Button, Input, Spinner, Text } from "@chakra-ui/react";
 import {
   quizClient,
+  QuizType,
   type RelearnCard,
   type SubmitRelearnAnswerResponse,
 } from "@/lib/client";
@@ -13,10 +14,19 @@ import { responseTimeSince } from "@/lib/responseTime";
 
 // RelearnOriginPost presents ONE etymology origin the way the etymology family
 // card does: the origin (with its meaning) heads the screen, and every missed
-// word that shares that origin is listed with an inline box for its meaning.
+// word that shares that origin is listed with an inline box to recall it. A
+// family can MIX directions — each word is drilled in the direction it was
+// missed (originDirection):
+//
+//   - recognition (STANDARD / unset) → show the WORD, type its MEANING.
+//   - reverse (REVERSE)              → show the MEANING (+ masked contexts),
+//                                       type the WORD.
+//
 // Each word grades individually through SubmitRelearnAnswer keyed by its own
-// note_id — grouping is purely presentation, so the per-word grading path (and
-// relearn's write-nothing guarantee) is unchanged.
+// note_id — the backend picks the matching grader from the card's direction, so
+// a reverse word is graded produce-the-word (not the meaning grader). Grouping
+// is purely presentation, so the per-word grading path (and relearn's
+// write-nothing guarantee) is unchanged.
 //
 // Relearn re-drills missed words and persists NOTHING (see
 // .claude/rules/quiz-ui-invariants). There is no skip / "Don't know" and no
@@ -153,7 +163,7 @@ export function RelearnOriginPost({
     <Box pb={selected ? 80 : 0} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium">
-          Etymology — recall each word&rsquo;s meaning
+          Etymology — recall each word
         </Text>
         <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
           {correctCount} / {orderedKeys.length} correct
@@ -235,6 +245,51 @@ export function RelearnOriginPost({
               );
             }
 
+            const reverse = word.originDirection === QuizType.REVERSE;
+            const input = (
+              <Input
+                ref={(el: HTMLInputElement | null) => {
+                  if (el) inputRefs.current.set(key, el);
+                  else inputRefs.current.delete(key);
+                }}
+                size="sm"
+                display="inline-block"
+                w="auto"
+                minW="8rem"
+                maxW="100%"
+                aria-label={reverse ? `Word for "${word.meaning}"` : `Meaning for "${word.entry}"`}
+                placeholder={reverse ? "the word" : "meaning"}
+                value={inputs[key] ?? ""}
+                onFocus={() => focusTimeRef.current.set(key, Date.now())}
+                onChange={(e) => setInput(key, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitWord(word, indexInOrder);
+                  }
+                }}
+                onBlur={() => commitWord(word, indexInOrder)}
+              />
+            );
+
+            // Reverse: show the MEANING (and masked contexts) as the prompt and
+            // ask for the word. Recognition: show the WORD and ask its meaning.
+            if (reverse) {
+              return (
+                <Box key={key} display="flex" flexDirection="column" gap={1} maxW="100%">
+                  <Text fontWeight="semibold" color="gray.700" _dark={{ color: "gray.200" }} overflowWrap="anywhere">
+                    {word.meaning}
+                  </Text>
+                  {word.contexts.map((c, i) => (
+                    <Text key={i} fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} overflowWrap="anywhere">
+                      {c.maskedContext || c.context}
+                    </Text>
+                  ))}
+                  {input}
+                </Box>
+              );
+            }
+
             return (
               <Box
                 key={key}
@@ -247,29 +302,7 @@ export function RelearnOriginPost({
                 <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }} overflowWrap="anywhere">
                   {word.entry}
                 </Text>
-                <Input
-                  ref={(el: HTMLInputElement | null) => {
-                    if (el) inputRefs.current.set(key, el);
-                    else inputRefs.current.delete(key);
-                  }}
-                  size="sm"
-                  display="inline-block"
-                  w="auto"
-                  minW="8rem"
-                  maxW="100%"
-                  aria-label={`Meaning for "${word.entry}"`}
-                  placeholder="meaning"
-                  value={inputs[key] ?? ""}
-                  onFocus={() => focusTimeRef.current.set(key, Date.now())}
-                  onChange={(e) => setInput(key, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitWord(word, indexInOrder);
-                    }
-                  }}
-                  onBlur={() => commitWord(word, indexInOrder)}
-                />
+                {input}
               </Box>
             );
           })}

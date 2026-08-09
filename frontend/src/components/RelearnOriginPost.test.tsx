@@ -12,14 +12,21 @@ vi.mock("@/lib/client", () => ({
 
 const submitMock = vi.mocked(quizClient.submitRelearnAnswer);
 
-const word = (entry: string, noteId: number): RelearnCard =>
+// originDirection: 1 (STANDARD/recognition — the default) or 2 (REVERSE).
+const word = (
+  entry: string,
+  noteId: number,
+  originDirection = 1,
+  contexts: RelearnCard["contexts"] = [],
+): RelearnCard =>
   ({
     entry,
     noteId: BigInt(noteId),
     sourceQuizType: 4,
+    originDirection,
     meaning: `${entry}-meaning`,
     examples: [],
-    contexts: [],
+    contexts,
     type: "root",
     language: "Latin",
     originText: "liber",
@@ -94,6 +101,67 @@ describe("RelearnOriginPost", () => {
     await waitFor(() => {
       expect(sheet).toHaveTextContent("Where it appears");
       expect(sheet).toHaveTextContent("They fought for liberty and freedom.");
+    });
+  });
+
+  it("renders a reverse-direction word as meaning + a word input, and a recognition word as word + a meaning input, under one origin header", () => {
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={["lib", "liv"]}
+          words={[
+            // liberty missed in REVERSE (2): show the meaning, ask the word.
+            word("liberty", 1, 2, [
+              { context: "They fought for liberty.", maskedContext: "They fought for ____." },
+            ] as RelearnCard["contexts"]),
+            // liberal missed in recognition (1): show the word, ask the meaning.
+            word("liberal", 2, 1),
+          ]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    // One shared origin header.
+    expect(screen.getByTestId("relearn-origin-post")).toHaveTextContent("liber");
+
+    // Reverse word: prompt is the meaning + masked context, input asks for the word.
+    expect(screen.getByText("liberty-meaning")).toBeInTheDocument();
+    expect(screen.getByText("They fought for ____.")).toBeInTheDocument();
+    expect(screen.getByLabelText('Word for "liberty-meaning"')).toBeInTheDocument();
+
+    // Recognition word: input asks for the meaning.
+    expect(screen.getByLabelText('Meaning for "liberal"')).toBeInTheDocument();
+  });
+
+  it("grades a reverse-direction word by the WORD the learner types", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: true }));
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1, 2)]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Word for "liberty-meaning"');
+    fireEvent.change(input, { target: { value: "liberty" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(submitMock).toHaveBeenCalledWith(
+        expect.objectContaining({ noteId: BigInt(1), answer: "liberty", isSkipped: false }),
+      );
     });
   });
 

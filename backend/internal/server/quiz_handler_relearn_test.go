@@ -51,6 +51,8 @@ notebooks:
       meaning: "the third thing"
     - expression: "delta"
       meaning: "a change or difference"
+      examples:
+        - "The delta between the two readings was small."
     - expression: "epsilon"
       meaning: "the fifth thing"
 `), 0644))
@@ -654,4 +656,218 @@ func TestRelearn_GrammarExcludeSetsSkippedAtAndRemovesFromPool(t *testing.T) {
 	// Real-state check 2: reload the pool — the correction is gone.
 	next := startRelearn(t, h, 24)
 	assert.Empty(t, next, "an excluded correction must not appear in the Relearn pool")
+}
+
+// newRelearnOriginTestHandler builds a QuizHandler over a flashcard notebook
+// whose words carry an etymology origin (resolved against an etymology book),
+// each with an example sentence. The learning history controls, per word, the
+// direction(s) it was missed in: `recognitionMissed` words have a misunderstood
+// recognition (notebook) log, `reverseMissed` words a misunderstood reverse log.
+// A word may be in both. This is the on-disk shape LoadRelearnPool folds into
+// origin family cards, now for reverse misses too.
+func newRelearnOriginTestHandler(t *testing.T, recognitionMissed, reverseMissed []string) *QuizHandler {
+	t.Helper()
+	flashcardsDir := t.TempDir()
+	etymDir := t.TempDir()
+	learningDir := t.TempDir()
+
+	// Etymology book defining the shared origin, so the words' origin_parts
+	// resolve and each missed word groups under it.
+	etymBook := filepath.Join(etymDir, "roots")
+	require.NoError(t, os.MkdirAll(etymBook, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "index.yml"), []byte(
+		"id: roots\nkind: Etymology\nname: Roots\nnotebooks:\n  - ./s1.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "s1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: "stare"
+    type: root
+    language: Latin
+    meaning: to stand
+    english_forms: [st, sta]
+`), 0644))
+
+	// Three flashcard words that all derive from "stare", each with one example
+	// sentence so the feedback context scenes are non-empty.
+	vocabDir := filepath.Join(flashcardsDir, "roots")
+	require.NoError(t, os.MkdirAll(vocabDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "index.yml"), []byte(
+		"id: roots\nname: Roots\nnotebooks:\n  - ./cards.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "cards.yml"), []byte(`- title: "Roots"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "constant"
+      meaning: "steadfast and unchanging"
+      examples:
+        - "She stayed constant through every hardship."
+      origin_parts:
+        - origin: stare
+    - expression: "obstinate"
+      meaning: "stubbornly firm and unyielding"
+      examples:
+        - "He was obstinate and refused to move."
+      origin_parts:
+        - origin: stare
+    - expression: "circumstance"
+      meaning: "a condition or surrounding fact"
+      examples:
+        - "The circumstance changed everything."
+      origin_parts:
+        - origin: stare
+`), 0644))
+
+	recent := time.Now().Add(-30 * time.Minute).Format(time.RFC3339)
+	inSet := func(set []string, w string) bool {
+		for _, s := range set {
+			if s == w {
+				return true
+			}
+		}
+		return false
+	}
+	exprs := ""
+	for _, w := range []string{"constant", "obstinate", "circumstance"} {
+		if !inSet(recognitionMissed, w) && !inSet(reverseMissed, w) {
+			continue
+		}
+		exprs += fmt.Sprintf("    - expression: %q\n", w)
+		if inSet(recognitionMissed, w) {
+			exprs += fmt.Sprintf(`      learned_logs:
+        - status: "misunderstood"
+          learned_at: %q
+          quiz_type: "notebook"
+`, recent)
+		}
+		if inSet(reverseMissed, w) {
+			exprs += fmt.Sprintf(`      reverse_logs:
+        - status: "misunderstood"
+          learned_at: %q
+          quiz_type: "reverse"
+`, recent)
+		}
+	}
+	history := "- metadata:\n    notebook_id: roots\n    title: \"Roots\"\n    type: \"flashcard\"\n  expressions:\n" + exprs
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "roots.yml"), []byte(history), 0644))
+
+	svc := quiz.NewService(config.NotebooksConfig{
+		FlashcardsDirectories:  []string{flashcardsDir},
+		EtymologyDirectories:   []string{etymDir},
+		LearningNotesDirectory: learningDir,
+	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	return NewQuizHandler(svc)
+}
+
+// TestRelearn_ReverseOriginMissGroupsWithDirection pins the core of this change:
+// an origin-bearing word missed in REVERSE folds into the SAME origin family
+// card as a recognition-missed sibling, but each keeps the direction it was
+// missed in. Recognition → origin_direction STANDARD (ask the meaning); reverse
+// → origin_direction REVERSE (ask the word), both under one origin header.
+func TestRelearn_ReverseOriginMissGroupsWithDirection(t *testing.T) {
+	h := newRelearnOriginTestHandler(t, []string{"obstinate"}, []string{"constant"})
+	byEntry := relearnEntries(startRelearn(t, h, 24))
+
+	constant := byEntry["constant"]
+	obstinate := byEntry["obstinate"]
+	require.NotNil(t, constant, "a reverse-missed origin word must enter the pool")
+	require.NotNil(t, obstinate, "a recognition-missed origin word must enter the pool")
+
+	// Both are etymology-origin family cards under the SAME origin.
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN, constant.GetSourceQuizType())
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN, obstinate.GetSourceQuizType())
+	assert.Equal(t, "stare", constant.GetOriginText())
+	assert.Equal(t, constant.GetOriginText(), obstinate.GetOriginText(), "both fold under one origin")
+	assert.Equal(t, constant.GetOriginMeaning(), obstinate.GetOriginMeaning())
+
+	// Direction is carried per word.
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_REVERSE, constant.GetOriginDirection(),
+		"a reverse-missed word is drilled in the reverse direction inside the family card")
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_STANDARD, obstinate.GetOriginDirection(),
+		"a recognition-missed word is drilled in the recognition direction")
+
+	// The reverse word prompts with the meaning and hints with masked contexts;
+	// the recognition word carries examples.
+	assert.Equal(t, "steadfast and unchanging", constant.GetMeaning())
+	assert.NotEmpty(t, constant.GetContexts(), "reverse family word carries masked contexts as its hint")
+	assert.NotEmpty(t, obstinate.GetExamples(), "recognition family word carries examples as its hint")
+}
+
+// TestRelearn_ReverseOriginWordGradedByTheWord pins that a reverse-direction
+// family word is graded produce-the-word (typed word vs expression), NOT by the
+// recognition meaning grader. Typing the WORD is correct; typing the MEANING is
+// wrong — end to end through SubmitRelearnAnswer.
+func TestRelearn_ReverseOriginWordGradedByTheWord(t *testing.T) {
+	submit := func(answer string) *apiv1.SubmitRelearnAnswerResponse {
+		h := newRelearnOriginTestHandler(t, nil, []string{"constant"})
+		id := relearnEntries(startRelearn(t, h, 24))["constant"].GetNoteId()
+		resp, err := h.SubmitRelearnAnswer(context.Background(),
+			connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: id, Answer: answer}))
+		require.NoError(t, err)
+		return resp.Msg
+	}
+	assert.True(t, submit("constant").GetCorrect(), "typing the WORD is correct for a reverse family word")
+	assert.False(t, submit("steadfast and unchanging").GetCorrect(),
+		"typing the MEANING must be wrong for a reverse family word (not the recognition grader)")
+}
+
+// TestRelearn_ReverseOriginWordFeedbackHasExampleScenes pins the reverse-examples
+// parity fix: a reverse-direction family word's feedback carries its example
+// statement(s) in context_scenes, exactly like a recognition word — so the
+// "Where it appears" example is shown for reverse misses too.
+func TestRelearn_ReverseOriginWordFeedbackHasExampleScenes(t *testing.T) {
+	h := newRelearnOriginTestHandler(t, nil, []string{"constant"})
+	id := relearnEntries(startRelearn(t, h, 24))["constant"].GetNoteId()
+	resp, err := h.SubmitRelearnAnswer(context.Background(),
+		connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: id, Answer: "constant"}))
+	require.NoError(t, err)
+
+	scenes := resp.Msg.GetContextScenes()
+	require.NotEmpty(t, scenes, "a reverse family word's feedback must carry its example scenes")
+	var statements []string
+	for _, s := range scenes {
+		statements = append(statements, s.GetStatements()...)
+	}
+	assert.Contains(t, statements, "She stayed constant through every hardship.",
+		"the reverse word's example statement must appear in feedback like a recognition word's")
+}
+
+// TestRelearn_OriginMissBothDirectionsDrilledOnce pins the both-directions dedup
+// choice: a word missed in BOTH recognition and reverse appears ONCE in its
+// family card, drilled in the reverse direction (produce-the-word is the
+// stronger recall test), never twice.
+func TestRelearn_OriginMissBothDirectionsDrilledOnce(t *testing.T) {
+	h := newRelearnOriginTestHandler(t, []string{"circumstance"}, []string{"circumstance"})
+	cards := startRelearn(t, h, 24)
+
+	var circ []*apiv1.RelearnCard
+	for _, c := range cards {
+		if c.GetEntry() == "circumstance" {
+			circ = append(circ, c)
+		}
+	}
+	require.Len(t, circ, 1, "a word missed both ways must be drilled once, not shown twice")
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN, circ[0].GetSourceQuizType())
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_REVERSE, circ[0].GetOriginDirection(),
+		"a word missed both ways is drilled in the reverse direction")
+}
+
+// TestRelearn_ReverseStandaloneCardFeedbackHasExampleScenes pins that a reverse
+// miss that stays a plain standalone card (no origin) still shows its example
+// statement(s) in feedback via context_scenes — parity with recognition. The
+// example flows from the word's contexts into relearnScenesFromCard for reverse
+// too; only the answering-screen hint differs (masked contexts vs examples).
+func TestRelearn_ReverseStandaloneCardFeedbackHasExampleScenes(t *testing.T) {
+	h, _ := newRelearnTestHandler(t)
+	delta := relearnByEntryType(startRelearn(t, h, 24))["delta/QUIZ_TYPE_REVERSE"]
+	require.NotNil(t, delta)
+
+	resp, err := h.SubmitRelearnAnswer(context.Background(),
+		connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{NoteId: delta.GetNoteId(), Answer: "delta"}))
+	require.NoError(t, err)
+
+	var statements []string
+	for _, s := range resp.Msg.GetContextScenes() {
+		statements = append(statements, s.GetStatements()...)
+	}
+	assert.Contains(t, statements, "The delta between the two readings was small.",
+		"a standalone reverse card must surface its example statement in feedback like recognition")
 }

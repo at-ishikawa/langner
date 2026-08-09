@@ -104,19 +104,20 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 			contexts = append(contexts, &apiv1.ContextSentence{Context: c.Context, MaskedContext: c.MaskedContext})
 		}
 		protoCards = append(protoCards, &apiv1.RelearnCard{
-			NoteId:         noteID,
-			Entry:          card.Entry,
-			SourceQuizType: notebookQuizTypeToProto(card.Format),
-			Meaning:        card.Meaning,
-			Examples:       examples,
-			Contexts:       contexts,
-			Type:           card.OriginType,
-			Language:       card.Language,
-			Content:        card.Content,
-			Incorrect:      card.Incorrect,
-			OriginText:     card.OriginText,
-			OriginMeaning:  card.OriginMeaning,
-			EnglishForms:   card.EnglishForms,
+			NoteId:          noteID,
+			Entry:           card.Entry,
+			SourceQuizType:  notebookQuizTypeToProto(card.Format),
+			Meaning:         card.Meaning,
+			Examples:        examples,
+			Contexts:        contexts,
+			Type:            card.OriginType,
+			Language:        card.Language,
+			Content:         card.Content,
+			Incorrect:       card.Incorrect,
+			OriginText:      card.OriginText,
+			OriginMeaning:   card.OriginMeaning,
+			EnglishForms:    card.EnglishForms,
+			OriginDirection: notebookQuizTypeToProto(card.Direction),
 		})
 	}
 
@@ -214,9 +215,17 @@ func (h *QuizHandler) gradeRelearn(ctx context.Context, card quiz.RelearnCard, a
 		return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
 	case notebook.QuizTypeGrammar:
 		return h.svc.GradeGrammarBlank(ctx, card.Content, card.GrammarCard(), answer, responseTimeMs)
+	case notebook.QuizTypeEtymologyOrigin:
+		// An origin family word is graded in the direction it was missed: a
+		// reverse word produces the word (reverseCard), a recognition word types
+		// the meaning (vocabCard). Grouping is presentation only — the grader is
+		// the same one that quiz uses, so there is no second log series (L4).
+		if card.Direction == notebook.QuizTypeReverse {
+			return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
+		}
+		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
 	default:
-		// Recognition and etymology-origin cards both grade the typed meaning
-		// against the word's own gloss via the vocab card.
+		// Recognition cards grade the typed meaning against the word's own gloss.
 		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
 	}
 }
