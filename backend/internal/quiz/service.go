@@ -1481,12 +1481,25 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 // appendEtymologyNotebookWords adds each etymology-notebook embedded,
 // origin-bearing definition to cards, unless another loader already provided a
 // card for the same canonical expression (see the dedup rule in LoadAllWords).
+//
+// When another loader DID provide the word but that canonical card carries no
+// origin_parts of its own (e.g. a plain definitions/story/flashcard entry for a
+// word whose etymology lives only in the etymology notebook), the etymology
+// copy's resolved origin is MERGED onto the canonical card rather than dropped.
+// The origin is metadata that selects the word's one log series, never a second
+// series (learning-history-invariants L1/L4), so enriching the canonical card
+// keeps a single card while letting a miss enter the ETYMOLOGY_ORIGIN grouping
+// branch in LoadRelearnPool. Without this, the canonical card stays origin-less,
+// primaryOriginPart is false, and the word shows as a plain (recognition OR
+// reverse) card instead of folding into its origin family card.
 func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard, originMap map[string]notebook.EtymologyOrigin) []FreeformCard {
-	seen := make(map[string]bool, len(cards))
-	for _, c := range cards {
+	// byExpr maps each canonical/original expression to the indices of the
+	// existing cards that carry it, so a duplicate etymology def can enrich them.
+	byExpr := make(map[string][]int, len(cards))
+	for i, c := range cards {
 		for _, e := range []string{c.Expression, c.OriginalExpression} {
 			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
-				seen[e] = true
+				byExpr[e] = append(byExpr[e], i)
 			}
 		}
 	}
@@ -1500,10 +1513,25 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 			expression = def.Definition
 		}
 		key := strings.ToLower(strings.TrimSpace(expression))
-		if key == "" || seen[key] {
-			continue // another loader already owns this word's canonical series
+		if key == "" {
+			continue
 		}
-		seen[key] = true
+		if existing, ok := byExpr[key]; ok {
+			// Another loader already owns this word's canonical series. Fill the
+			// origin gap on any such card that has none of its own, so the word
+			// still groups by origin — without forking a second card/series.
+			resolved := resolveOriginParts(def.OriginParts, originMap)
+			for _, i := range existing {
+				if len(cards[i].WordDetail.OriginParts) == 0 && len(resolved) > 0 {
+					cards[i].WordDetail.OriginParts = resolved
+				}
+				if cards[i].Literal == "" {
+					cards[i].Literal = def.Note
+				}
+			}
+			continue
+		}
+		byExpr[key] = nil // mark seen so a repeated etymology def doesn't duplicate
 
 		// buildWordDetail resolves origin_parts against originMap so
 		// primaryOriginPart returns the origin and the miss enters the existing
