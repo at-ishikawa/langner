@@ -15,11 +15,16 @@ import { QuizType, type RelearnCard } from "@/lib/client";
 //
 // Loop rule for a card: the front card is the current one; a correct answer
 // removes it (and increments clearedCount), a wrong or skipped answer moves it
-// to the back so it comes around again later in the same session. A grammar
-// post mirrors the live grammar quiz instead — it is answered in one pass and
-// removed (completePost), never requeued. The session ends when the queue is
-// empty. totalAnswers counts every answer (it exceeds clearedCount because
-// re-queued cards are answered more than once).
+// to the back so it comes around again later in the same session. An origin
+// family screen mirrors this at the GROUP level (completeOrigin): the words
+// answered correctly clear, and the words answered wrong re-queue as a smaller
+// family screen at the back so they come around again this session — the origin
+// loop only ends once every word in it is answered correctly. A grammar post is
+// the exception: it mirrors the live grammar quiz and is answered in one pass
+// and removed (completePost), never requeued (a missed blank is simply due next
+// session). The session ends when the queue is empty. totalAnswers counts every
+// answer (it exceeds clearedCount because re-queued cards/words are answered
+// more than once).
 
 // RelearnPostGroup is one journal post shown once, with its due corrections as
 // inline blanks answered progressively. Every blank of a post carries the same
@@ -44,6 +49,12 @@ export interface RelearnOriginGroup {
   // from the first card of the group and shown on the origin header.
   englishForms: string[];
   words: RelearnCard[];
+  // attempt counts how many times this origin family has been (re-)queued: 0 on
+  // first appearance, +1 each time its still-wrong words re-queue. It is not
+  // shown — it only makes the React key of a re-queued family unique so the
+  // origin screen remounts fresh (a family whose wrong words are the SAME set
+  // would otherwise keep the same key, and its per-word grading state, on retry).
+  attempt: number;
 }
 
 export type RelearnItem =
@@ -58,6 +69,7 @@ interface RelearnState {
   seedQueue: (cards: RelearnCard[]) => void;
   resolveFront: (correct: boolean) => void;
   completePost: (correctCount: number, blankCount: number) => void;
+  completeOrigin: (wrongWords: RelearnCard[], correctCount: number) => void;
   reset: () => void;
 }
 
@@ -95,6 +107,7 @@ function groupIntoItems(cards: RelearnCard[]): RelearnItem[] {
         language: card.language,
         englishForms: card.englishForms ?? [],
         words: [card],
+        attempt: 0,
       };
       originByKey.set(key, group);
       items.push({ kind: "origin", group });
@@ -144,6 +157,33 @@ export const useRelearnStore = create<RelearnState>((set) => ({
         clearedCount: state.clearedCount + correctCount,
         totalAnswers: state.totalAnswers + blankCount,
       };
+    }),
+  // completeOrigin ends one pass over the front origin family. Every word in the
+  // family was answered this pass, so it counts as many attempts as the family
+  // has words (totalAnswers) and clears the ones answered correctly this pass
+  // (clearedCount). The still-wrong words re-queue as a smaller family screen at
+  // the BACK — same origin header, only the missed words — so they come around
+  // again this session and each word clears exactly once, when it is finally
+  // right (mirrors resolveFront's card loop, at the group level). When every
+  // word was correct there is nothing to re-queue and the family is dropped.
+  completeOrigin: (wrongWords, correctCount) =>
+    set((state) => {
+      const [front, ...rest] = state.queue;
+      if (!front || front.kind !== "origin") {
+        return {};
+      }
+      const counts = {
+        clearedCount: state.clearedCount + correctCount,
+        totalAnswers: state.totalAnswers + front.group.words.length,
+      };
+      if (wrongWords.length === 0) {
+        return { ...counts, queue: rest };
+      }
+      const retry: RelearnItem = {
+        kind: "origin",
+        group: { ...front.group, words: wrongWords, attempt: front.group.attempt + 1 },
+      };
+      return { ...counts, queue: [...rest, retry] };
     }),
   reset: () => set(initialState),
 }));

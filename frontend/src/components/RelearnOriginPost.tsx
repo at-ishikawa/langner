@@ -34,11 +34,14 @@ import { responseTimeSince } from "@/lib/responseTime";
 //
 //   - unanswered  → on "See answers" it is graded INCORRECT (a normal miss).
 //                   SubmitRelearnAnswer persists nothing, so the word stays
-//                   "misunderstood" and therefore DUE, returning next session.
+//                   "misunderstood" and therefore DUE.
 //   - answered    → correct / incorrect from the grader.
 //
-// Excluding a word from future quizzes is done only in the normal quizzes; a
-// Relearn miss never writes any state.
+// On "Next", onComplete reports the words answered WRONG (unanswered→incorrect
+// included) so the caller can re-queue just those as a smaller family screen and
+// re-drill them this session until they are answered correctly — mirroring the
+// single-card re-drill at the group level. Excluding a word from future quizzes
+// is done only in the normal quizzes; a Relearn miss never writes any state.
 
 interface GradedWord {
   answer: string;
@@ -52,7 +55,10 @@ export interface RelearnOriginPostProps {
   language: string;
   englishForms: string[];
   words: RelearnCard[];
-  onComplete: (correctCount: number, wordCount: number) => void;
+  // onComplete fires on "Next" with the words answered WRONG this pass
+  // (unanswered→incorrect included) and how many were correct. The caller
+  // re-queues the wrong words so they are re-drilled this session.
+  onComplete: (wrongWords: RelearnCard[], correctCount: number) => void;
 }
 
 export function RelearnOriginPost({
@@ -318,7 +324,12 @@ export function RelearnOriginPost({
           colorPalette="purple"
           w="full"
           size="lg"
-          onClick={() => onComplete(correctCount, orderedKeys.length)}
+          onClick={() =>
+            onComplete(
+              words.filter((w) => results[w.noteId.toString()]?.res.correct !== true),
+              correctCount,
+            )
+          }
           data-testid="relearn-origin-next"
         >
           Next
