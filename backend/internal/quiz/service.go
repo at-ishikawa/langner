@@ -248,6 +248,17 @@ func buildOriginMap(reader *notebook.Reader) map[string]notebook.EtymologyOrigin
 			originMap[key] = o
 		}
 	}
+	if originDebugEnabled() {
+		keys := make([]string, 0, len(originMap))
+		for k := range originMap {
+			keys = append(keys, k)
+			if len(keys) >= 50 {
+				break
+			}
+		}
+		sort.Strings(keys)
+		originDebugLogf("originMap built: %d keys = %v", len(originMap), keys)
+	}
 	return originMap
 }
 
@@ -1528,6 +1539,10 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 				if cards[i].Literal == "" {
 					cards[i].Literal = def.Note
 				}
+				if originDebugEnabled() {
+					originDebugLogf("etymology-enrich expr=%q notebook=%q canonical=%q rawOriginRefs=%v resolvedFromEtymology=%v canonicalResolvedNow=%v",
+						expression, def.NotebookName, cards[i].Expression, def.OriginParts, resolved, cards[i].WordDetail.OriginParts)
+				}
 			}
 			continue
 		}
@@ -1553,6 +1568,7 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 			WordDetail:         buildWordDetail(&note, originMap),
 			Literal:            def.Note,
 		})
+		originDebugLogWord(expression, note.ID, def.NotebookName, def.OriginParts, cards[len(cards)-1].WordDetail.OriginParts)
 	}
 	return cards
 }
@@ -1597,6 +1613,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 					Images:             definition.Images,
 					Literal:            definition.Note,
 				})
+				originDebugLogWord(expression, definition.ID, notebookID, definition.OriginParts, cards[len(cards)-1].WordDetail.OriginParts)
 			}
 		}
 	}
@@ -1648,6 +1665,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 				Images:       card.Images,
 				Literal:      card.Note,
 			})
+			originDebugLogWord(expression, card.ID, notebookID, card.OriginParts, cards[len(cards)-1].WordDetail.OriginParts)
 		}
 	}
 
@@ -2299,6 +2317,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					card.ConceptHead = head
 				}
 				cards = append(cards, card)
+				originDebugLogWord(expression, note.ID, bookID, note.OriginParts, card.WordDetail.OriginParts)
 			}
 		}
 	}
