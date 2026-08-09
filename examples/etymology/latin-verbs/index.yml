@@ -1,0 +1,5 @@
+id: latin-verbs
+kind: Etymology
+name: "Latin Verb Roots (demo)"
+notebooks:
+  - ./origins.yml

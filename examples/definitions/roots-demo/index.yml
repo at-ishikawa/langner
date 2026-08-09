@@ -1,0 +1,4 @@
+id: roots-demo
+name: "Latin Root Words (demo)"
+notebooks:
+  - ./definitions.yml
