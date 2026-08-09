@@ -1457,7 +1457,76 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 		cards = append(cards, defWords...)
 	}
 
+	// Etymology-notebook embedded words: origin-bearing definitions that live
+	// INSIDE a dedicated etymology notebook (config etymology_directories).
+	// Before this they were surfaced on the etymology browse page but never
+	// loaded as quiz cards, so they were neither quizzable as ordinary
+	// vocabulary nor groupable by origin in Relearn. Load them as ordinary
+	// FreeformCards so they flow through the SAME paths as every other word
+	// (the freeform quiz here, and the relearn vocab index, which is built from
+	// LoadAllWords).
+	//
+	// Canonical-dedup rule (learning-history-invariants L1/L4 — exactly one log
+	// series per word): a story / flashcard / definitions entry ALWAYS wins. An
+	// etymology-notebook copy is added ONLY when no other loader already
+	// provides that expression, deduped case-insensitively on the canonical
+	// expression. So a word embedded in an etymology notebook AND present in a
+	// definitions/story/flashcard book keeps a single canonical card, and
+	// therefore a single learning-log series.
+	cards = appendEtymologyNotebookWords(reader, cards, originMap)
+
 	return cards, nil
+}
+
+// appendEtymologyNotebookWords adds each etymology-notebook embedded,
+// origin-bearing definition to cards, unless another loader already provided a
+// card for the same canonical expression (see the dedup rule in LoadAllWords).
+func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard, originMap map[string]notebook.EtymologyOrigin) []FreeformCard {
+	seen := make(map[string]bool, len(cards))
+	for _, c := range cards {
+		for _, e := range []string{c.Expression, c.OriginalExpression} {
+			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+				seen[e] = true
+			}
+		}
+	}
+
+	for _, def := range reader.ReadEtymologyNotebookDefinitions() {
+		// Canonicalize with Definition precedence — the same rule the
+		// definitions-book loader uses — so a word present in both a
+		// definitions book and an etymology notebook deduplicates.
+		expression := def.Expression
+		if def.Definition != "" {
+			expression = def.Definition
+		}
+		key := strings.ToLower(strings.TrimSpace(expression))
+		if key == "" || seen[key] {
+			continue // another loader already owns this word's canonical series
+		}
+		seen[key] = true
+
+		// buildWordDetail resolves origin_parts against originMap so
+		// primaryOriginPart returns the origin and the miss enters the existing
+		// ETYMOLOGY_ORIGIN grouping branch in LoadRelearnPool.
+		note := notebook.Note{
+			Expression:   def.Expression,
+			Definition:   def.Definition,
+			Meaning:      def.Meaning,
+			PartOfSpeech: def.PartOfSpeech,
+			Note:         def.Note,
+			OriginParts:  def.OriginParts,
+		}
+		cards = append(cards, FreeformCard{
+			NotebookName:       def.NotebookName,
+			StoryTitle:         def.SessionTitle,
+			Expression:         expression,
+			OriginalExpression: def.Expression,
+			Meaning:            def.Meaning,
+			WordDetail:         buildWordDetail(&note, originMap),
+			Literal:            def.Note,
+		})
+	}
+	return cards
 }
 
 func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {

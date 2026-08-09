@@ -585,6 +585,43 @@ func (r *Reader) ReadAllEtymologyDefinitions() []EtymologyDefinitionEntry {
 	return allDefs
 }
 
+// ReadEtymologyNotebookDefinitions reads origin-bearing definitions embedded
+// ONLY in dedicated etymology-notebook session files (config
+// etymology_directories) — the subset of ReadAllEtymologyDefinitions that no
+// other card loader ever sees. Story- and flashcard-embedded etymology
+// definitions are already loaded by their own loaders; the words that live
+// INSIDE an etymology notebook are the gap: they were surfaced on the etymology
+// browse page but never became quiz cards. NotebookName is set to the index ID
+// (not the display Name) so the learning-log write/read path stays symmetric
+// with every other loader (learning-history-invariants L2).
+func (r *Reader) ReadEtymologyNotebookDefinitions() []EtymologyDefinitionEntry {
+	var defs []EtymologyDefinitionEntry
+	seen := make(map[string]bool) // guard against a notebook listed twice
+	for _, index := range r.etymologyIndexes {
+		for _, nbPath := range index.NotebookPaths {
+			path := filepath.Join(index.Path, nbPath)
+			if seen[path] {
+				continue
+			}
+			seen[path] = true
+			wrapped, err := readYamlFile[etymologySessionFile](path)
+			if err != nil {
+				continue
+			}
+			sessionTitle := strings.TrimSpace(wrapped.Metadata.Title)
+			for _, def := range wrapped.Definitions {
+				if len(def.OriginParts) == 0 {
+					continue
+				}
+				def.NotebookName = index.ID
+				def.SessionTitle = sessionTitle
+				defs = append(defs, def)
+			}
+		}
+	}
+	return defs
+}
+
 // GetEtymologyIndexes returns the etymology indexes map.
 func (r *Reader) GetEtymologyIndexes() map[string]EtymologyIndex {
 	return r.etymologyIndexes
