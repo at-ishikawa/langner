@@ -95,11 +95,16 @@ type EtymologyIndex struct {
 
 // EtymologyDefinitionEntry is a definition with origin_parts in an etymology session file.
 type EtymologyDefinitionEntry struct {
-	Definition   string          `yaml:"definition"`
-	Expression   string          `yaml:"expression"`
-	Meaning      string          `yaml:"meaning"`
-	PartOfSpeech string          `yaml:"part_of_speech"`
-	Note         string          `yaml:"note"`
+	Definition   string `yaml:"definition"`
+	Expression   string `yaml:"expression"`
+	Meaning      string `yaml:"meaning"`
+	PartOfSpeech string `yaml:"part_of_speech"`
+	Note         string `yaml:"note"`
+	// Examples are the word's own usage sentences, same shape as a definitions
+	// note's `examples:` (plain string or {text, highlight}). Without this field
+	// the etymology-notebook loader silently dropped them, so an etymology-only
+	// word showed no example sentence when it surfaced as a quiz / Relearn card.
+	Examples     Examples        `yaml:"examples,omitempty"`
 	OriginParts  []OriginPartRef `yaml:"origin_parts"`
 	NotebookName string          `yaml:"-"` // set at read time
 	SessionTitle string          `yaml:"-"` // set at read time from session metadata.title
@@ -135,12 +140,12 @@ type EtymologySessionMetadata struct {
 // New-shape source files use the per-event/scenes structure mirroring
 // definitions notebooks:
 //
-//	- event: "Session 13"
-//	  date: 2025-01-15
-//	  scenes:
-//	    - scene: "ana (up, back)"
-//	      origins:
-//	        - origin: ...
+//   - event: "Session 13"
+//     date: 2025-01-15
+//     scenes:
+//   - scene: "ana (up, back)"
+//     origins:
+//   - origin: ...
 //
 // The reader detects which shape a file uses and normalises both into a
 // unified in-memory representation where every origin carries a

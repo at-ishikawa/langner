@@ -324,6 +324,10 @@ export function RelearnOriginPost({
           colorPalette="purple"
           w="full"
           size="lg"
+          // A word committed just before Next is still grading; leaving Next
+          // enabled lets the learner advance past it and discard the in-flight
+          // grade (the reported bug). Disable Next until every grade has landed.
+          disabled={grading.length > 0}
           onClick={() =>
             onComplete(
               words.filter((w) => results[w.noteId.toString()]?.res.correct !== true),
@@ -332,7 +336,7 @@ export function RelearnOriginPost({
           }
           data-testid="relearn-origin-next"
         >
-          Next
+          {grading.length > 0 ? "Grading…" : "Next"}
         </Button>
       )}
       {error && (

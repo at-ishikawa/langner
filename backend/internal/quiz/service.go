@@ -1408,9 +1408,9 @@ type FreeformCard struct {
 	// scene prose), a plain definitions entry carries its sentences HERE — so the
 	// Relearn example/context helpers draw from both Contexts and Examples, and a
 	// definitions word shows a usage sentence like it does in the normal quiz.
-	Examples           []Example
-	WordDetail         WordDetail
-	Images             []string
+	Examples   []Example
+	WordDetail WordDetail
+	Images     []string
 	// Literal is the etymology literal gloss stored in the word's free-text
 	// note field (Note.Note) — e.g. `de "down" + facere = "made down"`. Carried
 	// so the etymology-origin Relearn feedback can show it, mirroring the quiz.
@@ -1523,6 +1523,13 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 		if key == "" {
 			continue
 		}
+		// The word's own usage sentences from the etymology note's `examples:`,
+		// carried onto the card so it shows an example when quizzed or re-drilled
+		// in Relearn — the same as a definitions-book word.
+		var examples []Example
+		for _, ex := range def.Examples {
+			examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
+		}
 		if existing, ok := byExpr[key]; ok {
 			// Another loader already owns this word's canonical series. Fill the
 			// origin gap on any such card that has none of its own, so the word
@@ -1534,6 +1541,9 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 				}
 				if cards[i].Literal == "" {
 					cards[i].Literal = def.Note
+				}
+				if len(cards[i].Examples) == 0 && len(examples) > 0 {
+					cards[i].Examples = examples
 				}
 			}
 			continue
@@ -1557,6 +1567,7 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 			Expression:         expression,
 			OriginalExpression: def.Expression,
 			Meaning:            def.Meaning,
+			Examples:           examples,
 			WordDetail:         buildWordDetail(&note, originMap),
 			Literal:            def.Note,
 		})

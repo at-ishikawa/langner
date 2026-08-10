@@ -165,6 +165,43 @@ describe("RelearnOriginPost", () => {
     });
   });
 
+  it("disables Next while a committed word is still grading, then enables it once the grade lands", async () => {
+    // A single-word family: committing the one word makes remainingCount 0, so
+    // the Next control renders — but the grade is still in flight. Next must be
+    // disabled until it lands, or tapping it discards the ungraded answer.
+    let resolveGrade!: (r: SubmitRelearnAnswerResponse) => void;
+    submitMock.mockReturnValueOnce(
+      new Promise<SubmitRelearnAnswerResponse>((resolve) => {
+        resolveGrade = resolve;
+      }),
+    );
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Grading in flight → Next is present but disabled.
+    const next = await screen.findByTestId("relearn-origin-next");
+    expect(next).toBeDisabled();
+
+    resolveGrade(gradeResponse({ correct: true }));
+
+    await waitFor(() => expect(screen.getByTestId("relearn-origin-next")).toBeEnabled());
+  });
+
   it("renders no example scenes for a word graded without contextScenes", async () => {
     // contextScenes absent → the `?? []` fallback → RelearnContext renders null.
     submitMock.mockResolvedValueOnce({

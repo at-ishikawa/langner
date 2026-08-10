@@ -145,8 +145,13 @@ type relearnCandidate struct {
 // It reads the YAML learning histories directly — the source of truth — so the
 // pool spans every notebook regardless of whether a database is
 // configured. It writes nothing, and persists nothing: every in-window wrong
-// word appears in every session until it ages out of the window or is answered
-// correctly in a real quiz, so the learner can re-drill it as often as needed.
+// vocabulary word appears in every session until it ages out of the window or is
+// answered correctly in a real quiz, so the learner can re-drill it as often as
+// needed. Grammar corrections are NOT window-limited — a still-"misunderstood"
+// correction is re-derived from due-state and reappears every session until it
+// is answered correctly in the live grammar quiz. A word deliberately excluded
+// from a quiz mode (per-quiz-type skipped_at set via SkipWord) never enters the
+// pool, matching the normal card loaders (quiz-ui-invariants U1).
 func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) {
 	histories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
@@ -161,8 +166,27 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			if len(sp.logs) == 0 {
 				continue
 			}
+			// A word deliberately EXCLUDED from a quiz mode carries a per-quiz-type
+			// skipped_at marker (set only via SkipWord). Every normal card loader
+			// filters those out, so the Relearn pool must too — an excluded word
+			// must never be re-drilled (quiz-ui-invariants U1). This gates on the
+			// ACTIVE exclude marker (notebook / reverse / grammar); it is distinct
+			// from the vestigial "etymology_origin" marker the origin-family
+			// grouping below deliberately ignores.
+			if expr.SkippedAt.IsSkipped(sp.format) {
+				continue
+			}
 			latest := sp.logs[0] // newest-first
-			if latest.LearnedAt.Before(windowStart) || latest.Status != notebook.LearnedStatusMisunderstood {
+			if latest.Status != notebook.LearnedStatusMisunderstood {
+				continue
+			}
+			// Grammar corrections are re-derived from their due-state, NOT the
+			// recent-miss window: a still-"misunderstood" correction stays in the
+			// pool every session until it is answered correctly in the live grammar
+			// quiz (which is what "learned" means for a correction). Vocabulary
+			// misses keep the recent-miss window — the normal quiz re-serves them,
+			// refreshing the timestamp — so they age out when no longer practiced.
+			if sp.format != notebook.QuizTypeGrammar && latest.LearnedAt.Before(windowStart) {
 				continue
 			}
 			// Key by id when present so same-spelling homographs stay
@@ -679,7 +703,7 @@ func primaryOriginPart(fc FreeformCard) (WordOriginPart, bool) {
 
 // isRootOriginType reports whether an origin's type denotes a root as opposed to
 // a prefix or suffix. The etymology schema uses "root", and treats an empty type
-// as root too (see EtymologyOrigin.Type: "'' means root").
+// as root too (see EtymologyOrigin.Type: "” means root").
 func isRootOriginType(originType string) bool {
 	switch strings.ToLower(strings.TrimSpace(originType)) {
 	case "", "root":

@@ -324,10 +324,14 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           colorPalette="purple"
           w="full"
           size="lg"
+          // A blank committed just before Next is still grading; disable Next
+          // until every grade has landed so an in-flight grade is never
+          // discarded by advancing past it (mirrors the origin family card).
+          disabled={grading.length > 0}
           onClick={() => onComplete(correctCount, orderedKeys.length)}
           data-testid="relearn-grammar-next"
         >
-          Next
+          {grading.length > 0 ? "Grading…" : "Next"}
         </Button>
       )}
       {error && (

@@ -31,9 +31,9 @@ origins:
       - { form: egi,     role: perfect_active }
       - { form: actum,   role: supine, note: "produces nominal derivations (action, transact)" }
 
-# A word whose etymology lives ONLY here (embedded definition), with no copy in
-# any definitions/story/flashcard book. It is loaded as an ordinary vocabulary
-# card by the quiz service and, when missed, folds into the facere family.
+# Words whose etymology lives ONLY here (embedded definition), with no copy in
+# any definitions/story/flashcard book. They are loaded as ordinary vocabulary
+# cards by the quiz service and, when missed, fold into the facere family.
 definitions:
   - expression: factory
     meaning: "a building where goods are manufactured"
@@ -42,5 +42,18 @@ definitions:
     examples:
       - text: "The old factory on the river was converted into apartments."
         highlight: factory
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: fact }
+
+  # An etymology-notebook-ONLY word that carries a usage sentence. It exercises
+  # the etymology-notebook `examples:` path end to end: the sentence must survive
+  # onto the loaded card and appear on the word's Relearn origin family card.
+  - expression: benefactor
+    meaning: "a person who gives money or help to a good cause"
+    part_of_speech: noun
+    note: 'bene ("well") + fact (from facere, "to make/do") + -or (one who)'
+    examples:
+      - text: "A generous benefactor paid for the new library wing."
+        highlight: benefactor
     origin_parts:
       - { origin: facere, language: Latin, from_form: fact }
