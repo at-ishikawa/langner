@@ -1,0 +1,51 @@
+# Demo vocabulary words that carry an etymology `origin_parts` reference to the
+# roots declared in examples/etymology/latin-verbs. They are ordinary
+# definitions-book words: quizzed by the normal vocabulary quizzes, and — when
+# missed — folded into their origin family card in Relearn.
+#
+# Deliberately tricky, mirroring real notebooks:
+#   - `deficient` / `transact`: the FIRST origin ref (`de`, `trans`) is a prefix
+#     NOT declared as an origin, while the second (`facere` / `agere`) is. The
+#     `from_form` (`fic` / `act`) is an english_form, not a Latin principal part.
+#   - `factory`: carries NO origin_parts here — its etymology lives only in the
+#     latin-verbs etymology notebook (the dedup case: the plain entry wins the
+#     canonical card and the origin must merge onto it).
+- metadata:
+    title: "Root Words"
+  scenes:
+    - metadata:
+        index: 0
+        title: "fac / ag"
+      expressions:
+        - expression: deficient
+          id: deficient-demo
+          meaning: "not having enough of something; lacking"
+          part_of_speech: adjective
+          pronunciation: "/dɪˈfɪʃənt/"
+          note: 'de "down" + facere "to make" = made less'
+          examples:
+            - text: "The report was deficient in detail and had to be rewritten."
+              highlight: deficient
+          origin_parts:
+            - { origin: de, language: Latin }
+            - { origin: facere, language: Latin, from_form: fic }
+        - expression: transact
+          id: transact-demo
+          meaning: "to conduct or carry out business"
+          part_of_speech: verb
+          pronunciation: "/trænˈzækt/"
+          note: 'trans "across" + agere "to drive" = drive across (a deal)'
+          examples:
+            - text: "They transact most of their business online these days."
+              highlight: transact
+          origin_parts:
+            - { origin: trans, language: Latin }
+            - { origin: agere, language: Latin, from_form: act }
+        - expression: factory
+          id: factory-demo
+          meaning: "a building where goods are manufactured"
+          part_of_speech: noun
+          pronunciation: "/ˈfæktəri/"
+          examples:
+            - text: "She toured the factory where the cars are assembled."
+              highlight: factory

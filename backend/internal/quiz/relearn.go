@@ -34,10 +34,12 @@ type RelearnContextScene struct {
 //
 //	QuizTypeNotebook          recognition: show Entry, ask the Meaning
 //	QuizTypeReverse           production:  show Meaning + masked Contexts, ask Entry
-//	QuizTypeEtymologyOrigin   an origin-bearing recognition miss: show Entry
-//	                          (word), ask the Meaning — carries OriginText/
-//	                          OriginMeaning so the frontend groups every card
-//	                          sharing an origin into one family card.
+//	QuizTypeEtymologyOrigin   an origin-bearing miss (recognition OR reverse):
+//	                          carries OriginText/OriginMeaning so the frontend
+//	                          groups every card sharing an origin into one family
+//	                          card. Direction selects how the word is drilled
+//	                          within it — recognition (show word, ask meaning) or
+//	                          reverse (show meaning + masked contexts, ask word).
 //	QuizTypeGrammar           correction: show Content with Incorrect struck
 //	                          through, ask for the fix — the live grammar
 //	                          quiz's own inline-correction card, reused as-is.
@@ -50,6 +52,14 @@ type RelearnCard struct {
 	Entry        string
 	Meaning      string
 	NotebookName string
+
+	// Direction is set ONLY for a QuizTypeEtymologyOrigin card: the direction
+	// the grouped word is drilled in — the quiz type it was missed in. It is
+	// QuizTypeNotebook (recognition: show the word, ask its meaning, grade via
+	// vocabCard) or QuizTypeReverse (production: show the meaning + masked
+	// contexts, ask the word, grade via reverseCard). One origin family card can
+	// mix directions. Empty for every non-etymology Format.
+	Direction notebook.QuizType
 
 	// Etymology display extras (empty for vocab cards). OriginText is the
 	// source-language origin the missed word derives from (e.g. "facere") and
@@ -246,6 +256,14 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return idx[expression]
 	}
 
+	// Origin-bearing vocabulary misses (recognition AND reverse) are folded into
+	// origin family cards. A word missed in several directions must appear ONCE
+	// in its family, drilled in a single direction, so collect its directions
+	// here first and emit one card per word after the candidate loop. etymOrder
+	// preserves first-seen order for a stable pool.
+	etymByWord := map[string]*etymPending{}
+	var etymOrder []string
+
 	cards := make([]RelearnCard, 0, len(candidates))
 	for _, c := range candidates {
 		if c.format == notebook.QuizTypeGrammar {
@@ -291,36 +309,39 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		if !ok {
 			continue // no vocab data to grade/display against
 		}
-		// A recognition miss of a word that carries an etymology origin is
-		// re-drilled as an origin FAMILY card: the frontend groups every such
-		// card sharing an origin into one screen (origin + meaning + the missed
-		// words), which is what helps the learner see the shared root. It is
-		// graded like a recognition card — the typed meaning against the word's
-		// own gloss. A word the learner excluded from its origin family
-		// (skipped_at for QuizTypeEtymologyOrigin) falls back to a plain
-		// recognition card: a normal miss must never drop a word from Relearn
-		// (quiz-ui-invariants U1). Reverse misses stay reverse cards.
-		if c.format == notebook.QuizTypeNotebook {
-			if op, hasOrigin := primaryOriginPart(fc); hasOrigin &&
-				!notebook.IsExpressionExcludedForQuizType(histories[c.notebookName], c.id, notebook.QuizTypeEtymologyOrigin, c.expression) {
-				// An origin-bearing word is graded exactly like a recognition
-				// card (type the meaning) via its vocabCard — the etymology
-				// dimension is presentation only (the origin header + grouping).
-				cards = append(cards, RelearnCard{
-					Format: notebook.QuizTypeEtymologyOrigin, Entry: fc.Expression, Meaning: fc.Meaning,
-					NotebookName: c.notebookName,
-					OriginType:   op.Type, Language: op.Language,
-					OriginText: op.Origin, OriginMeaning: op.Meaning,
-					EnglishForms: originEnglishForms(originMap, op.Origin, op.Language),
-					WordDetail:   fc.WordDetail, Images: fc.Images, Literal: fc.Literal,
-					ContextScenes: relearnScenesFromCard(fc),
-					Examples:      relearnExamplesFromContexts(fc.Contexts),
-					vocabCard: Card{
-						NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
-						Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
-						Contexts: relearnRecognitionContexts(fc), WordDetail: fc.WordDetail, Images: fc.Images,
-					},
-				})
+		// A miss of a word that carries an etymology origin — in recognition OR
+		// reverse — is re-drilled inside an origin FAMILY card: the frontend
+		// groups every such card sharing an origin into one screen (origin +
+		// meaning + the missed words), which is what helps the learner see the
+		// shared root. Each word is still graded in the direction it was missed
+		// (recognition: typed meaning vs gloss; reverse: typed word vs
+		// expression). Directions are collected here and emitted as one card per
+		// word after the loop so a word missed both ways is shown once.
+		//
+		// Grouping depends ONLY on the word carrying a resolvable origin. It is
+		// deliberately NOT gated on a per-quiz-type "etymology_origin" skip
+		// marker: since #41 the standalone etymology-origin quiz is gone, Relearn
+		// has no Exclude control, and NOTHING deliberately sets or clears that
+		// marker anymore (quiz-ui-invariants). Any surviving "etymology_origin"
+		// skip is therefore vestigial — written only by the removed quiz or by
+		// the old "Don't Know" bug (4c7fd4de/991816dd) — and honoring it here
+		// only suppressed the family card for words whose origin resolves fine,
+		// leaving them stuck as plain "Reverse — recall the word" cards forever
+		// (the reported symptom). The normal-quiz skip filtering (notebook /
+		// reverse / freeform skipped_at, enforced by the card loaders) is a
+		// separate, correct path and is untouched.
+		if c.format == notebook.QuizTypeNotebook || c.format == notebook.QuizTypeReverse {
+			if op, hasOrigin := primaryOriginPart(fc); hasOrigin {
+				key := strings.ToLower(c.notebookName) + relearnKeySep + c.id + relearnKeySep + strings.ToLower(strings.TrimSpace(c.expression))
+				p, ok := etymByWord[key]
+				if !ok {
+					p = &etymPending{fc: fc, op: op, notebookName: c.notebookName}
+					etymByWord[key] = p
+					etymOrder = append(etymOrder, key)
+				}
+				if c.format == notebook.QuizTypeReverse {
+					p.reverse = true
+				}
 				continue
 			}
 		}
@@ -348,7 +369,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 				WordDetail: fc.WordDetail, Images: fc.Images,
 			}
 		} else {
-			card.Examples = relearnExamplesFromContexts(fc.Contexts)
+			card.Examples = relearnExampleHints(fc)
 			card.vocabCard = Card{
 				NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
 				Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
@@ -357,10 +378,74 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		}
 		cards = append(cards, card)
 	}
+
+	// Emit one origin family card per origin-bearing word, in the direction it
+	// was missed. A word missed in BOTH directions is drilled ONCE, in the
+	// reverse direction — producing the word is the stronger recall test — so it
+	// is never rendered twice in one family card (design choice, see doc above).
+	for _, key := range etymOrder {
+		p := etymByWord[key]
+		direction := notebook.QuizTypeNotebook
+		if p.reverse {
+			direction = notebook.QuizTypeReverse
+		}
+		cards = append(cards, buildEtymologyOriginCard(p.fc, p.op, direction, p.notebookName, originMap))
+	}
+
 	// One line so a short pool can be diagnosed from the server log: how many
 	// wrong words were in the window vs. how many matched a gradeable card.
 	slog.Info("relearn pool built", "in_window_misunderstood", candidatesFound, "matched_cards", len(cards))
 	return cards, nil
+}
+
+// etymPending accumulates the directions one origin-bearing word was missed in
+// before it is emitted as a single origin family card (a word missed both ways
+// is drilled once). fc and op are resolved once; they do not depend on the miss
+// direction.
+type etymPending struct {
+	fc           FreeformCard
+	op           WordOriginPart
+	notebookName string
+	// reverse is set when the word was missed in the reverse quiz. A word missed
+	// only in recognition leaves it false (the default direction); a word missed
+	// in reverse — with or without a recognition miss too — is drilled reverse.
+	reverse bool
+}
+
+// buildEtymologyOriginCard assembles the origin family card for one missed
+// word, drilled in the given direction. Recognition grades the typed meaning
+// against the word's gloss (vocabCard); reverse grades the typed word against
+// the expression (reverseCard) and shows the meaning + masked contexts. Both
+// carry the same origin header and the same feedback context scenes, so a
+// reverse word shows its example statements exactly like a recognition word
+// (quiz-ui-invariants U3).
+func buildEtymologyOriginCard(fc FreeformCard, op WordOriginPart, direction notebook.QuizType, notebookName string, originMap map[string]notebook.EtymologyOrigin) RelearnCard {
+	card := RelearnCard{
+		Format: notebook.QuizTypeEtymologyOrigin, Direction: direction,
+		Entry: fc.Expression, Meaning: fc.Meaning, NotebookName: notebookName,
+		OriginType: op.Type, Language: op.Language,
+		OriginText: op.Origin, OriginMeaning: op.Meaning,
+		EnglishForms: originEnglishForms(originMap, op.Origin, op.Language),
+		WordDetail:   fc.WordDetail, Images: fc.Images, Literal: fc.Literal,
+		ContextScenes: relearnScenesFromCard(fc),
+	}
+	if direction == notebook.QuizTypeReverse {
+		masked := relearnMaskedContexts(fc)
+		card.Contexts = masked
+		card.reverseCard = ReverseCard{
+			NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
+			Meaning: fc.Meaning, Contexts: masked, Expression: fc.Expression, AltForm: fc.OriginalExpression,
+			WordDetail: fc.WordDetail, Images: fc.Images,
+		}
+		return card
+	}
+	card.Examples = relearnExampleHints(fc)
+	card.vocabCard = Card{
+		NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
+		Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
+		Contexts: relearnRecognitionContexts(fc), WordDetail: fc.WordDetail, Images: fc.Images,
+	}
+	return card
 }
 
 // relearnSeriesSpec describes one learning-log series to inspect for a wrong
@@ -466,18 +551,34 @@ func (s *Service) relearnGrammarIndex() (map[string][]relearnGrammarEntry, error
 
 // relearnMaskedContexts builds reverse-quiz-style masked contexts from a vocab
 // card: the sentences the word appears in, with the word blanked out so it can
-// serve as a hint without giving away the answer.
+// serve as a hint without giving away the answer. It draws from BOTH the card's
+// story-scene Contexts AND its own `examples:` sentences (fc.Examples) — a plain
+// definitions/flashcard word carries its usage only in Examples, so without this
+// a reverse relearn card for such a word would show no hint at all. Each example
+// is masked by its per-example Highlight (the exact surface form to hide) in
+// addition to the Expression/OriginalExpression, so an inflected form the lemma
+// can't match is still blanked and the answer word is never revealed. Sentences
+// are de-duplicated by text so a word carrying the same sentence in both lists
+// is shown once.
 func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 	var out []ReverseContext
-	for _, c := range fc.Contexts {
-		text := strings.TrimSpace(c.Context)
-		if text == "" {
-			continue
+	seen := map[string]bool{}
+	add := func(text, highlight string) {
+		text = strings.TrimSpace(text)
+		if text == "" || seen[strings.ToLower(text)] {
+			return
 		}
+		seen[strings.ToLower(text)] = true
 		out = append(out, ReverseContext{
 			Context:       text,
-			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, ""),
+			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, highlight),
 		})
+	}
+	for _, c := range fc.Contexts {
+		add(c.Context, "")
+	}
+	for _, ex := range fc.Examples {
+		add(ex.Text, ex.Highlight)
 	}
 	return out
 }
@@ -507,14 +608,28 @@ func relearnRecognitionContexts(fc FreeformCard) []inference.Context {
 	return out
 }
 
-// relearnScenesFromCard turns a vocab card's contexts into a single context
-// scene keyed by the card's scene, rendered as prose on the feedback screen.
+// relearnScenesFromCard turns a vocab card's usage sentences into a single
+// context scene keyed by the card's scene, rendered as FULL prose (word visible)
+// on the feedback screen. It draws from BOTH the story-scene Contexts AND the
+// card's own `examples:` sentences (fc.Examples), so a definitions/flashcard word
+// — whose sentences live only in Examples — shows its example in feedback, in
+// both directions. Sentences are de-duplicated by text.
 func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 	var statements []string
-	for _, c := range card.Contexts {
-		if s := strings.TrimSpace(c.Context); s != "" {
-			statements = append(statements, s)
+	seen := map[string]bool{}
+	add := func(text string) {
+		text = strings.TrimSpace(text)
+		if text == "" || seen[strings.ToLower(text)] {
+			return
 		}
+		seen[strings.ToLower(text)] = true
+		statements = append(statements, text)
+	}
+	for _, c := range card.Contexts {
+		add(c.Context)
+	}
+	for _, ex := range card.Examples {
+		add(ex.Text)
 	}
 	if len(statements) == 0 {
 		return nil
@@ -526,17 +641,52 @@ func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 	}}
 }
 
-// primaryOriginPart returns the first etymology origin a vocabulary word derives
-// from, and whether it has one. Relearn groups a missed origin-bearing word into
-// this origin's family card; a word with several origins is grouped under its
-// first so it is drilled exactly once.
+// primaryOriginPart returns the etymology origin Relearn folds a missed
+// origin-bearing word's family card under, and whether it has one.
+//
+// It prefers a ROOT origin over a prefix/suffix. The origin family card exists
+// to surface the shared ROOT a set of words derive from — the whole point is to
+// group e.g. recipient, intercept, and capture under "capere", not to scatter
+// them under whichever generic prefix (re, inter, …) each happens to list first.
+// A prefixed word like "recipient" (re + capere) must therefore fold under
+// "capere", not "re". A word with several roots is grouped under its first root
+// so it is drilled exactly once; a word that carries ONLY affixes (no declared
+// root) falls back to its first origin so it still groups rather than dropping
+// out of Relearn.
+//
+// This preference is what makes grouping robust to whether or not a prefix is
+// declared as an origin: when the prefix is undeclared (older example data),
+// resolveOriginParts already drops it and only the root remains; when the prefix
+// IS declared (the shape real roots-books use), the root preference here keeps
+// the word grouped under the root instead of the prefix. Both cases now yield
+// the same root family (learning-history-invariants L2: one rule, one place).
 func primaryOriginPart(fc FreeformCard) (WordOriginPart, bool) {
+	var first WordOriginPart
+	haveFirst := false
 	for _, op := range fc.WordDetail.OriginParts {
-		if strings.TrimSpace(op.Origin) != "" {
+		if strings.TrimSpace(op.Origin) == "" {
+			continue
+		}
+		if !haveFirst {
+			first, haveFirst = op, true
+		}
+		if isRootOriginType(op.Type) {
 			return op, true
 		}
 	}
-	return WordOriginPart{}, false
+	return first, haveFirst
+}
+
+// isRootOriginType reports whether an origin's type denotes a root as opposed to
+// a prefix or suffix. The etymology schema uses "root", and treats an empty type
+// as root too (see EtymologyOrigin.Type: "'' means root").
+func isRootOriginType(originType string) bool {
+	switch strings.ToLower(strings.TrimSpace(originType)) {
+	case "", "root":
+		return true
+	default:
+		return false
+	}
 }
 
 // originEnglishForms looks up an origin's English combining-form spellings from
@@ -560,14 +710,27 @@ func originEnglishForms(originMap map[string]notebook.EtymologyOrigin, origin, l
 	return nil
 }
 
-// relearnExamplesFromContexts exposes the card's context sentences as examples
-// so the recognition answering screen can show a hint, like the standard quiz.
-func relearnExamplesFromContexts(contexts []inference.Context) []Example {
+// relearnExampleHints exposes the card's usage sentences as examples so the
+// recognition answering screen can show a hint, like the standard quiz. It draws
+// from BOTH the story-scene Contexts AND the card's own `examples:` sentences
+// (fc.Examples) — so a definitions/flashcard word shows its example hint —
+// carrying each example's Highlight through and de-duplicating by text.
+func relearnExampleHints(fc FreeformCard) []Example {
 	var out []Example
-	for _, c := range contexts {
-		if s := strings.TrimSpace(c.Context); s != "" {
-			out = append(out, Example{Text: s})
+	seen := map[string]bool{}
+	add := func(text, speaker, highlight string) {
+		text = strings.TrimSpace(text)
+		if text == "" || seen[strings.ToLower(text)] {
+			return
 		}
+		seen[strings.ToLower(text)] = true
+		out = append(out, Example{Text: text, Speaker: speaker, Highlight: highlight})
+	}
+	for _, c := range fc.Contexts {
+		add(c.Context, "", "")
+	}
+	for _, ex := range fc.Examples {
+		add(ex.Text, ex.Speaker, ex.Highlight)
 	}
 	return out
 }

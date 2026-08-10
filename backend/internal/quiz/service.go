@@ -1402,6 +1402,13 @@ type FreeformCard struct {
 	OriginalExpression string // text form as it appears in the story (Note.Expression)
 	Meaning            string
 	Contexts           []inference.Context
+	// Examples are the word's own usage sentences from the note's `examples:`
+	// (definitions / flashcard words), each with an optional Highlight naming the
+	// exact surface form to mask in the reverse direction. Unlike Contexts (story
+	// scene prose), a plain definitions entry carries its sentences HERE — so the
+	// Relearn example/context helpers draw from both Contexts and Examples, and a
+	// definitions word shows a usage sentence like it does in the normal quiz.
+	Examples           []Example
 	WordDetail         WordDetail
 	Images             []string
 	// Literal is the etymology literal gloss stored in the word's free-text
@@ -1457,7 +1464,104 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 		cards = append(cards, defWords...)
 	}
 
+	// Etymology-notebook embedded words: origin-bearing definitions that live
+	// INSIDE a dedicated etymology notebook (config etymology_directories).
+	// Before this they were surfaced on the etymology browse page but never
+	// loaded as quiz cards, so they were neither quizzable as ordinary
+	// vocabulary nor groupable by origin in Relearn. Load them as ordinary
+	// FreeformCards so they flow through the SAME paths as every other word
+	// (the freeform quiz here, and the relearn vocab index, which is built from
+	// LoadAllWords).
+	//
+	// Canonical-dedup rule (learning-history-invariants L1/L4 — exactly one log
+	// series per word): a story / flashcard / definitions entry ALWAYS wins. An
+	// etymology-notebook copy is added ONLY when no other loader already
+	// provides that expression, deduped case-insensitively on the canonical
+	// expression. So a word embedded in an etymology notebook AND present in a
+	// definitions/story/flashcard book keeps a single canonical card, and
+	// therefore a single learning-log series.
+	cards = appendEtymologyNotebookWords(reader, cards, originMap)
+
 	return cards, nil
+}
+
+// appendEtymologyNotebookWords adds each etymology-notebook embedded,
+// origin-bearing definition to cards, unless another loader already provided a
+// card for the same canonical expression (see the dedup rule in LoadAllWords).
+//
+// When another loader DID provide the word but that canonical card carries no
+// origin_parts of its own (e.g. a plain definitions/story/flashcard entry for a
+// word whose etymology lives only in the etymology notebook), the etymology
+// copy's resolved origin is MERGED onto the canonical card rather than dropped.
+// The origin is metadata that selects the word's one log series, never a second
+// series (learning-history-invariants L1/L4), so enriching the canonical card
+// keeps a single card while letting a miss enter the ETYMOLOGY_ORIGIN grouping
+// branch in LoadRelearnPool. Without this, the canonical card stays origin-less,
+// primaryOriginPart is false, and the word shows as a plain (recognition OR
+// reverse) card instead of folding into its origin family card.
+func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard, originMap map[string]notebook.EtymologyOrigin) []FreeformCard {
+	// byExpr maps each canonical/original expression to the indices of the
+	// existing cards that carry it, so a duplicate etymology def can enrich them.
+	byExpr := make(map[string][]int, len(cards))
+	for i, c := range cards {
+		for _, e := range []string{c.Expression, c.OriginalExpression} {
+			if e = strings.ToLower(strings.TrimSpace(e)); e != "" {
+				byExpr[e] = append(byExpr[e], i)
+			}
+		}
+	}
+
+	for _, def := range reader.ReadEtymologyNotebookDefinitions() {
+		// Canonicalize with Definition precedence — the same rule the
+		// definitions-book loader uses — so a word present in both a
+		// definitions book and an etymology notebook deduplicates.
+		expression := def.Expression
+		if def.Definition != "" {
+			expression = def.Definition
+		}
+		key := strings.ToLower(strings.TrimSpace(expression))
+		if key == "" {
+			continue
+		}
+		if existing, ok := byExpr[key]; ok {
+			// Another loader already owns this word's canonical series. Fill the
+			// origin gap on any such card that has none of its own, so the word
+			// still groups by origin — without forking a second card/series.
+			resolved := resolveOriginParts(def.OriginParts, originMap)
+			for _, i := range existing {
+				if len(cards[i].WordDetail.OriginParts) == 0 && len(resolved) > 0 {
+					cards[i].WordDetail.OriginParts = resolved
+				}
+				if cards[i].Literal == "" {
+					cards[i].Literal = def.Note
+				}
+			}
+			continue
+		}
+		byExpr[key] = nil // mark seen so a repeated etymology def doesn't duplicate
+
+		// buildWordDetail resolves origin_parts against originMap so
+		// primaryOriginPart returns the origin and the miss enters the existing
+		// ETYMOLOGY_ORIGIN grouping branch in LoadRelearnPool.
+		note := notebook.Note{
+			Expression:   def.Expression,
+			Definition:   def.Definition,
+			Meaning:      def.Meaning,
+			PartOfSpeech: def.PartOfSpeech,
+			Note:         def.Note,
+			OriginParts:  def.OriginParts,
+		}
+		cards = append(cards, FreeformCard{
+			NotebookName:       def.NotebookName,
+			StoryTitle:         def.SessionTitle,
+			Expression:         expression,
+			OriginalExpression: def.Expression,
+			Meaning:            def.Meaning,
+			WordDetail:         buildWordDetail(&note, originMap),
+			Literal:            def.Note,
+		})
+	}
+	return cards
 }
 
 func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, originMap map[string]notebook.EtymologyOrigin) ([]FreeformCard, error) {
@@ -2187,6 +2291,14 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 				if note.Definition != "" {
 					expression = note.Definition
 				}
+				// A definitions entry carries its usage sentences in `examples:`
+				// (not story scene prose), so surface them on the card — this is
+				// what lets Relearn show a definitions word's example, masked while
+				// asking (reverse) and full in feedback, like the normal quiz.
+				var examples []Example
+				for _, ex := range note.Examples {
+					examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
+				}
 				card := FreeformCard{
 					ID:                 note.ID,
 					NotebookName:       bookID,
@@ -2195,6 +2307,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					Expression:         expression,
 					OriginalExpression: note.Expression,
 					Meaning:            note.Meaning,
+					Examples:           examples,
 					WordDetail:         buildWordDetail(&note, originMap),
 					Literal:            note.Note,
 				}

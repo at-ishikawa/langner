@@ -4,18 +4,29 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Button, Input, Spinner, Text } from "@chakra-ui/react";
 import {
   quizClient,
+  QuizType,
   type RelearnCard,
   type SubmitRelearnAnswerResponse,
 } from "@/lib/client";
 import { OriginBreakdown } from "@/components/OriginBreakdown";
+import RelearnContext from "@/components/RelearnContext";
 import { responseTimeSince } from "@/lib/responseTime";
 
 // RelearnOriginPost presents ONE etymology origin the way the etymology family
 // card does: the origin (with its meaning) heads the screen, and every missed
-// word that shares that origin is listed with an inline box for its meaning.
+// word that shares that origin is listed with an inline box to recall it. A
+// family can MIX directions — each word is drilled in the direction it was
+// missed (originDirection):
+//
+//   - recognition (STANDARD / unset) → show the WORD, type its MEANING.
+//   - reverse (REVERSE)              → show the MEANING (+ masked contexts),
+//                                       type the WORD.
+//
 // Each word grades individually through SubmitRelearnAnswer keyed by its own
-// note_id — grouping is purely presentation, so the per-word grading path (and
-// relearn's write-nothing guarantee) is unchanged.
+// note_id — the backend picks the matching grader from the card's direction, so
+// a reverse word is graded produce-the-word (not the meaning grader). Grouping
+// is purely presentation, so the per-word grading path (and relearn's
+// write-nothing guarantee) is unchanged.
 //
 // Relearn re-drills missed words and persists NOTHING (see
 // .claude/rules/quiz-ui-invariants). There is no skip / "Don't know" and no
@@ -23,11 +34,14 @@ import { responseTimeSince } from "@/lib/responseTime";
 //
 //   - unanswered  → on "See answers" it is graded INCORRECT (a normal miss).
 //                   SubmitRelearnAnswer persists nothing, so the word stays
-//                   "misunderstood" and therefore DUE, returning next session.
+//                   "misunderstood" and therefore DUE.
 //   - answered    → correct / incorrect from the grader.
 //
-// Excluding a word from future quizzes is done only in the normal quizzes; a
-// Relearn miss never writes any state.
+// On "Next", onComplete reports the words answered WRONG (unanswered→incorrect
+// included) so the caller can re-queue just those as a smaller family screen and
+// re-drill them this session until they are answered correctly — mirroring the
+// single-card re-drill at the group level. Excluding a word from future quizzes
+// is done only in the normal quizzes; a Relearn miss never writes any state.
 
 interface GradedWord {
   answer: string;
@@ -41,7 +55,10 @@ export interface RelearnOriginPostProps {
   language: string;
   englishForms: string[];
   words: RelearnCard[];
-  onComplete: (correctCount: number, wordCount: number) => void;
+  // onComplete fires on "Next" with the words answered WRONG this pass
+  // (unanswered→incorrect included) and how many were correct. The caller
+  // re-queues the wrong words so they are re-drilled this session.
+  onComplete: (wrongWords: RelearnCard[], correctCount: number) => void;
 }
 
 export function RelearnOriginPost({
@@ -152,7 +169,7 @@ export function RelearnOriginPost({
     <Box pb={selected ? 80 : 0} maxW="100%">
       <Box display="flex" justifyContent="space-between" mb={2}>
         <Text fontSize="xs" color="purple.500" _dark={{ color: "purple.300" }} fontWeight="medium">
-          Etymology — recall each word&rsquo;s meaning
+          Etymology — recall each word
         </Text>
         <Text fontSize="xs" color="gray.500" _dark={{ color: "gray.400" }} aria-live="polite">
           {correctCount} / {orderedKeys.length} correct
@@ -234,6 +251,51 @@ export function RelearnOriginPost({
               );
             }
 
+            const reverse = word.originDirection === QuizType.REVERSE;
+            const input = (
+              <Input
+                ref={(el: HTMLInputElement | null) => {
+                  if (el) inputRefs.current.set(key, el);
+                  else inputRefs.current.delete(key);
+                }}
+                size="sm"
+                display="inline-block"
+                w="auto"
+                minW="8rem"
+                maxW="100%"
+                aria-label={reverse ? `Word for "${word.meaning}"` : `Meaning for "${word.entry}"`}
+                placeholder={reverse ? "the word" : "meaning"}
+                value={inputs[key] ?? ""}
+                onFocus={() => focusTimeRef.current.set(key, Date.now())}
+                onChange={(e) => setInput(key, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    commitWord(word, indexInOrder);
+                  }
+                }}
+                onBlur={() => commitWord(word, indexInOrder)}
+              />
+            );
+
+            // Reverse: show the MEANING (and masked contexts) as the prompt and
+            // ask for the word. Recognition: show the WORD and ask its meaning.
+            if (reverse) {
+              return (
+                <Box key={key} display="flex" flexDirection="column" gap={1} maxW="100%">
+                  <Text fontWeight="semibold" color="gray.700" _dark={{ color: "gray.200" }} overflowWrap="anywhere">
+                    {word.meaning}
+                  </Text>
+                  {word.contexts.map((c, i) => (
+                    <Text key={i} fontSize="sm" color="gray.500" _dark={{ color: "gray.400" }} overflowWrap="anywhere">
+                      {c.maskedContext || c.context}
+                    </Text>
+                  ))}
+                  {input}
+                </Box>
+              );
+            }
+
             return (
               <Box
                 key={key}
@@ -246,29 +308,7 @@ export function RelearnOriginPost({
                 <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }} overflowWrap="anywhere">
                   {word.entry}
                 </Text>
-                <Input
-                  ref={(el: HTMLInputElement | null) => {
-                    if (el) inputRefs.current.set(key, el);
-                    else inputRefs.current.delete(key);
-                  }}
-                  size="sm"
-                  display="inline-block"
-                  w="auto"
-                  minW="8rem"
-                  maxW="100%"
-                  aria-label={`Meaning for "${word.entry}"`}
-                  placeholder="meaning"
-                  value={inputs[key] ?? ""}
-                  onFocus={() => focusTimeRef.current.set(key, Date.now())}
-                  onChange={(e) => setInput(key, e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      commitWord(word, indexInOrder);
-                    }
-                  }}
-                  onBlur={() => commitWord(word, indexInOrder)}
-                />
+                {input}
               </Box>
             );
           })}
@@ -284,7 +324,12 @@ export function RelearnOriginPost({
           colorPalette="purple"
           w="full"
           size="lg"
-          onClick={() => onComplete(correctCount, orderedKeys.length)}
+          onClick={() =>
+            onComplete(
+              words.filter((w) => results[w.noteId.toString()]?.res.correct !== true),
+              correctCount,
+            )
+          }
           data-testid="relearn-origin-next"
         >
           Next
@@ -378,6 +423,14 @@ export function RelearnOriginPost({
               {selected.res.literal}
             </Text>
           )}
+          {/* Where-it-appears example scenes for the graded word, mirroring the
+              single-card Relearn screen. RelearnContext returns null on empty
+              scenes, so a word without examples renders nothing extra. */}
+          <RelearnContext
+            entry={selectedWord.entry}
+            scenes={selected.res.contextScenes ?? []}
+            exampleWords={[]}
+          />
         </Box>
       )}
     </Box>

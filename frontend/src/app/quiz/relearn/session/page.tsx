@@ -30,6 +30,7 @@ export default function RelearnSessionPage() {
   const totalAnswers = useRelearnStore((s) => s.totalAnswers);
   const resolveFront = useRelearnStore((s) => s.resolveFront);
   const completePost = useRelearnStore((s) => s.completePost);
+  const completeOrigin = useRelearnStore((s) => s.completeOrigin);
 
   const front = queue[0];
   const [phase, setPhase] = useState<Phase>("answering");
@@ -90,7 +91,10 @@ export default function RelearnSessionPage() {
 
   // An etymology origin is presented once with the missed words that share it,
   // drilled progressively like the etymology family card (see RelearnOriginPost).
-  // Answered in a single pass and removed — never requeued.
+  // Words answered wrong re-queue as a smaller family screen (completeOrigin) so
+  // they are re-drilled this session until answered correctly; when all are
+  // correct the family is dropped. The key includes group.attempt so a re-queued
+  // family remounts fresh even when its wrong words are the same set.
   if (front.kind === "origin") {
     return (
       <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
@@ -98,14 +102,14 @@ export default function RelearnSessionPage() {
           {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
         </Text>
         <RelearnOriginPost
-          key={`${front.group.originText} ${front.group.originMeaning}`}
+          key={`${front.group.originText} ${front.group.originMeaning} #${front.group.attempt}`}
           originText={front.group.originText}
           originMeaning={front.group.originMeaning}
           type={front.group.type}
           language={front.group.language}
           englishForms={front.group.englishForms}
           words={front.group.words}
-          onComplete={(correctCount, wordCount) => completePost(correctCount, wordCount)}
+          onComplete={(wrongWords, correctCount) => completeOrigin(wrongWords, correctCount)}
         />
       </Box>
     );

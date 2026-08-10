@@ -1,0 +1,46 @@
+metadata:
+  title: "fac / ag verb roots"
+
+# Two productive Latin verb roots and the English combining forms they surface
+# as. `english_forms` lists the spellings that appear in derived English words
+# (a definition's `origin_parts` may point at the root via `from_form: <one of
+# these>`); `forms` lists the Latin principal parts. These are ordinary,
+# public-domain etymology facts used as demo data.
+origins:
+  - origin: facere
+    type: root
+    language: Latin
+    meaning: "to make, do"
+    english_forms: [fac, fact, fic, fect, fy]
+    note: "Surfaces as fac/fact/fic/fect/fy (factory, deficient, effect, magnify)."
+    forms:
+      - { form: facio,   role: present_active_indicative }
+      - { form: facere,  role: present_active_infinitive }
+      - { form: feci,    role: perfect_active }
+      - { form: factum,  role: supine, note: "produces nominal derivations (faction, factory)" }
+
+  - origin: agere
+    type: root
+    language: Latin
+    meaning: "to drive, do, act"
+    english_forms: [ag, act, ig]
+    note: "Surfaces as ag/act/ig (agent, transact, navigate)."
+    forms:
+      - { form: ago,     role: present_active_indicative }
+      - { form: agere,   role: present_active_infinitive }
+      - { form: egi,     role: perfect_active }
+      - { form: actum,   role: supine, note: "produces nominal derivations (action, transact)" }
+
+# A word whose etymology lives ONLY here (embedded definition), with no copy in
+# any definitions/story/flashcard book. It is loaded as an ordinary vocabulary
+# card by the quiz service and, when missed, folds into the facere family.
+definitions:
+  - expression: factory
+    meaning: "a building where goods are manufactured"
+    part_of_speech: noun
+    note: 'fact (from facere, "to make") + -ory (place)'
+    examples:
+      - text: "The old factory on the river was converted into apartments."
+        highlight: factory
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: fact }

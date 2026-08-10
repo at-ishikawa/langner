@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -568,26 +569,22 @@ func TestLoadRelearnPool_EtymologyOriginFamilyCard(t *testing.T) {
 	assert.Equal(t, "to represent in words", got["describe"].Meaning)
 	assert.True(t, got["describe"].IsEtymology())
 
-	// Exclude "describe" from its origin family (the same SkipWord path every
-	// card uses). It leaves the origin grouping — but a normal miss must never
-	// drop a word from Relearn (quiz-ui-invariants U1), so it reappears as a
-	// plain recognition card. "inscribe" is untouched.
+	// A vestigial skipped_at["etymology_origin"] marker on "describe" (the marker
+	// the removed etymology-origin quiz and the old "Don't Know" bug used to
+	// write; nothing sets or clears it post-#41) must be IGNORED: grouping depends
+	// only on the word carrying a resolvable origin. "describe" stays folded into
+	// its origin family card, exactly like the untouched "inscribe".
 	require.NoError(t, svc.SkipWord(
 		CardInfo{NotebookName: "roots", Expression: "describe"},
 		"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
 	))
 	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
-	assert.NotContains(t, etymRelearnByEntry(pool), "describe",
-		"excluding from the family drops the origin grouping")
-	assert.Contains(t, etymRelearnByEntry(pool), "inscribe", "excluding one word must not drop the other")
-	stillDue := false
-	for _, c := range pool {
-		if c.Entry == "describe" && c.Format == notebook.QuizTypeNotebook {
-			stillDue = true
-		}
-	}
-	assert.True(t, stillDue, "a normal miss must keep the word due as a recognition card (U1)")
+	got = etymRelearnByEntry(pool)
+	assert.Contains(t, got, "describe",
+		"a vestigial etymology_origin marker must not drop the origin grouping")
+	assert.Equal(t, "scribo", got["describe"].OriginText)
+	assert.Contains(t, got, "inscribe", "the sibling word is unaffected")
 }
 
 // TestLoadRelearnPool_EtymologyCardCarriesOriginDetails pins the Relearn
@@ -630,4 +627,297 @@ func TestLoadRelearnPool_EtymologyCardCarriesEnglishForms(t *testing.T) {
 	require.Contains(t, got, "describe")
 	assert.Equal(t, []string{"scrib", "script"}, got["describe"].EnglishForms,
 		"the origin's english_forms must be threaded onto the relearn family card")
+}
+
+// etymologyEmbeddedFixture wires an etymology notebook whose session file
+// EMBEDS its own origin-bearing definitions (a `definitions:` block inside the
+// etymology YAML) — the exact shape that, before this fix, was surfaced on the
+// etymology browse page but never loaded by any quiz-card loader. `dupWord`, if
+// non-empty, is ALSO placed in a separate definitions book so the dedup rule can
+// be exercised: the definitions-book entry must win and the etymology-notebook
+// copy must be skipped (learning-history-invariants L1/L4 — one series per word).
+func etymologyEmbeddedFixture(t *testing.T, dupWord string, missed ...string) *Service {
+	t.Helper()
+	dir := t.TempDir()
+	etymDir := filepath.Join(dir, "etymology")
+	defsDir := filepath.Join(dir, "definitions")
+	learningDir := filepath.Join(dir, "learning")
+	const etymID = "etym-roots"
+
+	etymBook := filepath.Join(etymDir, etymID)
+	require.NoError(t, os.MkdirAll(etymBook, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "index.yml"), []byte(
+		"id: "+etymID+"\nkind: Etymology\nname: Etym Roots\nnotebooks:\n  - ./s1.yml\n"), 0644))
+	// Legacy wrapped shape with an embedded definitions block. "dictate" and
+	// "predict" both derive from the origin "dict".
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "s1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: "dict"
+    type: root
+    language: Latin
+    meaning: to say, to speak
+    english_forms: [dict, dic]
+definitions:
+  - expression: dictate
+    meaning: to say aloud for another to record
+    note: 'dict "say" = "say aloud"'
+    origin_parts:
+      - origin: dict
+  - expression: predict
+    meaning: to say beforehand
+    origin_parts:
+      - origin: dict
+`), 0644))
+
+	// A separate definitions book. When dupWord is set it contains that word so
+	// the same expression exists in BOTH books; the definitions copy is canonical.
+	if dupWord != "" {
+		defsBook := filepath.Join(defsDir, "defs")
+		require.NoError(t, os.MkdirAll(defsBook, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(defsBook, "index.yml"), []byte(
+			"id: defs\nnotebooks:\n  - ./s1.yml\n"), 0644))
+		require.NoError(t, os.WriteFile(filepath.Join(defsBook, "s1.yml"), []byte(`- metadata:
+    title: "Book 1"
+  scenes:
+  - metadata:
+      index: 0
+      title: S1
+    expressions:
+    - expression: `+dupWord+`
+      meaning: canonical meaning from the definitions book
+`), 0644))
+	}
+
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	recent := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	exprs := ""
+	for _, w := range missed {
+		exprs += fmt.Sprintf(`    - expression: %s
+      type: vocabulary
+      learned_logs:
+        - status: misunderstood
+          learned_at: "%s"
+`, w, recent)
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, etymID+".yml"), []byte(
+		"- metadata:\n    id: "+etymID+"\n    title: \"Session 1\"\n    type: definition\n  expressions:\n"+exprs), 0644))
+
+	ctrl := gomock.NewController(t)
+	return NewService(config.NotebooksConfig{
+		EtymologyDirectories:   []string{etymDir},
+		DefinitionsDirectories: []string{defsDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil),
+		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
+}
+
+func freeformByExpr(cards []FreeformCard) map[string][]FreeformCard {
+	out := map[string][]FreeformCard{}
+	for _, c := range cards {
+		out[strings.ToLower(c.Expression)] = append(out[strings.ToLower(c.Expression)], c)
+	}
+	return out
+}
+
+// TestLoadAllWords_IncludesEtymologyNotebookWord pins the core fix: an
+// origin-bearing definition embedded INSIDE an etymology notebook becomes an
+// ordinary vocabulary card (quizzable) with its origin resolved.
+func TestLoadAllWords_IncludesEtymologyNotebookWord(t *testing.T) {
+	svc := etymologyEmbeddedFixture(t, "")
+
+	words, err := svc.LoadAllWords()
+	require.NoError(t, err)
+	byExpr := freeformByExpr(words)
+
+	require.Contains(t, byExpr, "dictate", "an etymology-notebook embedded word must now be quizzable")
+	require.Len(t, byExpr["dictate"], 1, "exactly one canonical card per word")
+	card := byExpr["dictate"][0]
+	assert.Equal(t, "etym-roots", card.NotebookName, "NotebookName must be the etymology book ID for symmetric read/write")
+	assert.Equal(t, "to say aloud for another to record", card.Meaning)
+	require.Len(t, card.WordDetail.OriginParts, 1, "origin_parts must resolve against the etymology origin map")
+	assert.Equal(t, "dict", card.WordDetail.OriginParts[0].Origin)
+	assert.Equal(t, "to say, to speak", card.WordDetail.OriginParts[0].Meaning)
+	_, hasOrigin := primaryOriginPart(card)
+	assert.True(t, hasOrigin, "the word must carry a primary origin so it groups in Relearn")
+}
+
+// TestLoadAllWords_DedupEtymologyVsDefinitions pins the canonical-dedup rule
+// (L1/L4): a word present in BOTH an etymology notebook and a definitions book
+// loads exactly once, and the definitions-book entry wins.
+func TestLoadAllWords_DedupEtymologyVsDefinitions(t *testing.T) {
+	svc := etymologyEmbeddedFixture(t, "predict")
+
+	words, err := svc.LoadAllWords()
+	require.NoError(t, err)
+	byExpr := freeformByExpr(words)
+
+	require.Len(t, byExpr["predict"], 1, "a word in both books must produce ONE card (one log series)")
+	assert.Equal(t, "defs", byExpr["predict"][0].NotebookName,
+		"the definitions-book entry is canonical; the etymology-notebook copy is skipped")
+	assert.Equal(t, "canonical meaning from the definitions book", byExpr["predict"][0].Meaning)
+	// The non-duplicated etymology-notebook word is still loaded.
+	require.Contains(t, byExpr, "dictate")
+	require.Len(t, byExpr["dictate"], 1)
+}
+
+// TestLoadRelearnPool_EtymologyNotebookWordGroups pins that a missed
+// etymology-notebook embedded word enters the Relearn pool as a
+// QUIZ_TYPE_ETYMOLOGY_ORIGIN card (with origin header) so the frontend groups it
+// by origin — the same treatment definitions-book origin words already get.
+func TestLoadRelearnPool_EtymologyNotebookWordGroups(t *testing.T) {
+	svc := etymologyEmbeddedFixture(t, "", "dictate", "predict")
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	got := etymRelearnByEntry(pool)
+
+	require.Contains(t, got, "dictate", "a missed etymology-notebook word must group as a family card")
+	require.Contains(t, got, "predict")
+	assert.True(t, got["dictate"].IsEtymology())
+	assert.Equal(t, "dict", got["dictate"].OriginText)
+	assert.Equal(t, "to say, to speak", got["dictate"].OriginMeaning)
+	assert.Equal(t, "to say aloud for another to record", got["dictate"].Meaning)
+	assert.Equal(t, []string{"dict", "dic"}, got["dictate"].EnglishForms)
+}
+
+// originDirectionFixture wires a flashcard notebook whose words carry an
+// etymology origin (resolved against an etymology book) with example sentences,
+// and a learning history where each word's miss direction is controlled:
+// recognitionMissed → a notebook (recognition) miss, reverseMissed → a reverse
+// miss. A word in BOTH is missed both ways. Flashcards (unlike definitions
+// books) build Contexts from examples, so the origin family card carries the
+// feedback scenes reverse words previously lacked.
+func originDirectionFixture(t *testing.T, recognitionMissed, reverseMissed []string) *Service {
+	t.Helper()
+	dir := t.TempDir()
+	flashcardsDir := filepath.Join(dir, "flashcards")
+	etymDir := filepath.Join(dir, "etymology")
+	learningDir := filepath.Join(dir, "learning")
+
+	etymBook := filepath.Join(etymDir, "roots")
+	require.NoError(t, os.MkdirAll(etymBook, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "index.yml"), []byte(
+		"id: roots\nkind: Etymology\nname: Roots\nnotebooks:\n  - ./s1.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(etymBook, "s1.yml"), []byte(`metadata:
+  title: "Session 1"
+origins:
+  - origin: "stare"
+    type: root
+    language: Latin
+    meaning: to stand
+    english_forms: [st, sta]
+`), 0644))
+
+	vocabDir := filepath.Join(flashcardsDir, "roots")
+	require.NoError(t, os.MkdirAll(vocabDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "index.yml"), []byte(
+		"id: roots\nname: Roots\nnotebooks:\n  - ./cards.yml\n"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(vocabDir, "cards.yml"), []byte(`- title: "Roots"
+  date: 2025-01-15T00:00:00Z
+  cards:
+    - expression: "constant"
+      meaning: "steadfast and unchanging"
+      examples:
+        - "She stayed constant through every hardship."
+      origin_parts:
+        - origin: stare
+    - expression: "obstinate"
+      meaning: "stubbornly firm and unyielding"
+      examples:
+        - "He was obstinate and refused to move."
+      origin_parts:
+        - origin: stare
+`), 0644))
+
+	inSet := func(set []string, w string) bool {
+		for _, s := range set {
+			if s == w {
+				return true
+			}
+		}
+		return false
+	}
+	recent := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	exprs := ""
+	for _, w := range []string{"constant", "obstinate"} {
+		if !inSet(recognitionMissed, w) && !inSet(reverseMissed, w) {
+			continue
+		}
+		exprs += fmt.Sprintf("    - expression: %q\n      type: vocabulary\n", w)
+		if inSet(recognitionMissed, w) {
+			exprs += fmt.Sprintf("      learned_logs:\n        - status: misunderstood\n          learned_at: %q\n          quiz_type: notebook\n", recent)
+		}
+		if inSet(reverseMissed, w) {
+			exprs += fmt.Sprintf("      reverse_logs:\n        - status: misunderstood\n          learned_at: %q\n          quiz_type: reverse\n", recent)
+		}
+	}
+	require.NoError(t, os.MkdirAll(learningDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "roots.yml"), []byte(
+		"- metadata:\n    id: roots\n    title: \"Roots\"\n    type: flashcard\n  expressions:\n"+exprs), 0644))
+
+	ctrl := gomock.NewController(t)
+	return NewService(config.NotebooksConfig{
+		FlashcardsDirectories:  []string{flashcardsDir},
+		EtymologyDirectories:   []string{etymDir},
+		LearningNotesDirectory: learningDir,
+	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+}
+
+// TestLoadRelearnPool_ReverseOriginMissCarriesReverseDirection pins that a
+// reverse-missed origin word and a recognition-missed sibling BOTH become
+// origin family cards under the same origin, each tagged with the direction it
+// was missed in — reverse carries a gradeable reverseCard, recognition a
+// vocabCard, and the reverse card carries its example scenes for feedback.
+func TestLoadRelearnPool_ReverseOriginMissCarriesReverseDirection(t *testing.T) {
+	svc := originDirectionFixture(t, []string{"obstinate"}, []string{"constant"})
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	got := etymRelearnByEntry(pool)
+
+	require.Contains(t, got, "constant", "a reverse-missed origin word must group as a family card")
+	require.Contains(t, got, "obstinate", "a recognition-missed origin word must group as a family card")
+
+	// Same origin header for the whole family.
+	assert.Equal(t, "stare", got["constant"].OriginText)
+	assert.Equal(t, got["constant"].OriginText, got["obstinate"].OriginText)
+
+	// Per-word direction and the grading card that matches it.
+	assert.Equal(t, notebook.QuizTypeReverse, got["constant"].Direction)
+	assert.Equal(t, "constant", got["constant"].ReverseCard().Expression,
+		"a reverse family word grades produce-the-word against its expression")
+	assert.Equal(t, notebook.QuizTypeNotebook, got["obstinate"].Direction)
+	assert.Equal(t, "obstinate", got["obstinate"].VocabCard().Entry,
+		"a recognition family word grades the meaning via its vocab card")
+
+	// The reverse word carries its example statement for the feedback scenes —
+	// parity with recognition (previously reverse words showed none here).
+	require.NotEmpty(t, got["constant"].ContextScenes)
+	assert.Equal(t, []string{"She stayed constant through every hardship."},
+		got["constant"].ContextScenes[0].Statements)
+}
+
+// TestLoadRelearnPool_OriginMissBothDirectionsDedup pins the both-directions
+// choice: a word missed in recognition AND reverse yields exactly ONE origin
+// family card, drilled in the reverse direction (produce-the-word).
+func TestLoadRelearnPool_OriginMissBothDirectionsDedup(t *testing.T) {
+	svc := originDirectionFixture(t, []string{"constant"}, []string{"constant"})
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+
+	var count int
+	var direction notebook.QuizType
+	for _, c := range pool {
+		if c.Entry == "constant" {
+			count++
+			direction = c.Direction
+		}
+	}
+	assert.Equal(t, 1, count, "a word missed both ways must be drilled once, not twice")
+	assert.Equal(t, notebook.QuizTypeReverse, direction,
+		"a word missed both ways is drilled in the reverse direction")
 }
