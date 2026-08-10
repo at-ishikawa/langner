@@ -1402,6 +1402,13 @@ type FreeformCard struct {
 	OriginalExpression string // text form as it appears in the story (Note.Expression)
 	Meaning            string
 	Contexts           []inference.Context
+	// Examples are the word's own usage sentences from the note's `examples:`
+	// (definitions / flashcard words), each with an optional Highlight naming the
+	// exact surface form to mask in the reverse direction. Unlike Contexts (story
+	// scene prose), a plain definitions entry carries its sentences HERE — so the
+	// Relearn example/context helpers draw from both Contexts and Examples, and a
+	// definitions word shows a usage sentence like it does in the normal quiz.
+	Examples           []Example
 	WordDetail         WordDetail
 	Images             []string
 	// Literal is the etymology literal gloss stored in the word's free-text
@@ -2284,6 +2291,14 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 				if note.Definition != "" {
 					expression = note.Definition
 				}
+				// A definitions entry carries its usage sentences in `examples:`
+				// (not story scene prose), so surface them on the card — this is
+				// what lets Relearn show a definitions word's example, masked while
+				// asking (reverse) and full in feedback, like the normal quiz.
+				var examples []Example
+				for _, ex := range note.Examples {
+					examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
+				}
 				card := FreeformCard{
 					ID:                 note.ID,
 					NotebookName:       bookID,
@@ -2292,6 +2307,7 @@ func loadDefinitionWords(reader *notebook.Reader, bookID string, originMap map[s
 					Expression:         expression,
 					OriginalExpression: note.Expression,
 					Meaning:            note.Meaning,
+					Examples:           examples,
 					WordDetail:         buildWordDetail(&note, originMap),
 					Literal:            note.Note,
 				}

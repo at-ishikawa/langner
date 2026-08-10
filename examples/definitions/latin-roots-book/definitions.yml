@@ -125,3 +125,21 @@
           origin_parts:
             - { origin: in, language: Latin, from_form: il }
             - { origin: logos, language: Greek }
+# A plain definitions word with NO origin_parts (so a reverse miss stays a single
+# reverse card, not an origin family card) whose example uses an INFLECTED form:
+# the highlight names the exact surface form ("abated") so reverse masking hides
+# it — masking by the lemma "abate" alone would leak the answer.
+- metadata:
+    title: "GENERAL VOCABULARY"
+  scenes:
+    - metadata:
+        index: 0
+        title: "words with no declared root"
+      expressions:
+        - expression: abate
+          id: abate-latin-roots
+          meaning: "to become less intense or widespread"
+          part_of_speech: verb
+          examples:
+            - text: "The storm abated overnight and the roads were clear by morning."
+              highlight: abated

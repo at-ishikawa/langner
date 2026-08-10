@@ -369,7 +369,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 				WordDetail: fc.WordDetail, Images: fc.Images,
 			}
 		} else {
-			card.Examples = relearnExamplesFromContexts(fc.Contexts)
+			card.Examples = relearnExampleHints(fc)
 			card.vocabCard = Card{
 				NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
 				Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
@@ -439,7 +439,7 @@ func buildEtymologyOriginCard(fc FreeformCard, op WordOriginPart, direction note
 		}
 		return card
 	}
-	card.Examples = relearnExamplesFromContexts(fc.Contexts)
+	card.Examples = relearnExampleHints(fc)
 	card.vocabCard = Card{
 		NotebookName: fc.NotebookName, StoryTitle: fc.StoryTitle, SceneTitle: fc.SceneTitle,
 		Entry: fc.Expression, OriginalEntry: fc.OriginalExpression, Meaning: fc.Meaning,
@@ -551,18 +551,34 @@ func (s *Service) relearnGrammarIndex() (map[string][]relearnGrammarEntry, error
 
 // relearnMaskedContexts builds reverse-quiz-style masked contexts from a vocab
 // card: the sentences the word appears in, with the word blanked out so it can
-// serve as a hint without giving away the answer.
+// serve as a hint without giving away the answer. It draws from BOTH the card's
+// story-scene Contexts AND its own `examples:` sentences (fc.Examples) — a plain
+// definitions/flashcard word carries its usage only in Examples, so without this
+// a reverse relearn card for such a word would show no hint at all. Each example
+// is masked by its per-example Highlight (the exact surface form to hide) in
+// addition to the Expression/OriginalExpression, so an inflected form the lemma
+// can't match is still blanked and the answer word is never revealed. Sentences
+// are de-duplicated by text so a word carrying the same sentence in both lists
+// is shown once.
 func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 	var out []ReverseContext
-	for _, c := range fc.Contexts {
-		text := strings.TrimSpace(c.Context)
-		if text == "" {
-			continue
+	seen := map[string]bool{}
+	add := func(text, highlight string) {
+		text = strings.TrimSpace(text)
+		if text == "" || seen[strings.ToLower(text)] {
+			return
 		}
+		seen[strings.ToLower(text)] = true
 		out = append(out, ReverseContext{
 			Context:       text,
-			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, ""),
+			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, highlight),
 		})
+	}
+	for _, c := range fc.Contexts {
+		add(c.Context, "")
+	}
+	for _, ex := range fc.Examples {
+		add(ex.Text, ex.Highlight)
 	}
 	return out
 }
@@ -592,14 +608,28 @@ func relearnRecognitionContexts(fc FreeformCard) []inference.Context {
 	return out
 }
 
-// relearnScenesFromCard turns a vocab card's contexts into a single context
-// scene keyed by the card's scene, rendered as prose on the feedback screen.
+// relearnScenesFromCard turns a vocab card's usage sentences into a single
+// context scene keyed by the card's scene, rendered as FULL prose (word visible)
+// on the feedback screen. It draws from BOTH the story-scene Contexts AND the
+// card's own `examples:` sentences (fc.Examples), so a definitions/flashcard word
+// — whose sentences live only in Examples — shows its example in feedback, in
+// both directions. Sentences are de-duplicated by text.
 func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 	var statements []string
-	for _, c := range card.Contexts {
-		if s := strings.TrimSpace(c.Context); s != "" {
-			statements = append(statements, s)
+	seen := map[string]bool{}
+	add := func(text string) {
+		text = strings.TrimSpace(text)
+		if text == "" || seen[strings.ToLower(text)] {
+			return
 		}
+		seen[strings.ToLower(text)] = true
+		statements = append(statements, text)
+	}
+	for _, c := range card.Contexts {
+		add(c.Context)
+	}
+	for _, ex := range card.Examples {
+		add(ex.Text)
 	}
 	if len(statements) == 0 {
 		return nil
@@ -680,14 +710,27 @@ func originEnglishForms(originMap map[string]notebook.EtymologyOrigin, origin, l
 	return nil
 }
 
-// relearnExamplesFromContexts exposes the card's context sentences as examples
-// so the recognition answering screen can show a hint, like the standard quiz.
-func relearnExamplesFromContexts(contexts []inference.Context) []Example {
+// relearnExampleHints exposes the card's usage sentences as examples so the
+// recognition answering screen can show a hint, like the standard quiz. It draws
+// from BOTH the story-scene Contexts AND the card's own `examples:` sentences
+// (fc.Examples) — so a definitions/flashcard word shows its example hint —
+// carrying each example's Highlight through and de-duplicating by text.
+func relearnExampleHints(fc FreeformCard) []Example {
 	var out []Example
-	for _, c := range contexts {
-		if s := strings.TrimSpace(c.Context); s != "" {
-			out = append(out, Example{Text: s})
+	seen := map[string]bool{}
+	add := func(text, speaker, highlight string) {
+		text = strings.TrimSpace(text)
+		if text == "" || seen[strings.ToLower(text)] {
+			return
 		}
+		seen[strings.ToLower(text)] = true
+		out = append(out, Example{Text: text, Speaker: speaker, Highlight: highlight})
+	}
+	for _, c := range fc.Contexts {
+		add(c.Context, "", "")
+	}
+	for _, ex := range fc.Examples {
+		add(ex.Text, ex.Speaker, ex.Highlight)
 	}
 	return out
 }
