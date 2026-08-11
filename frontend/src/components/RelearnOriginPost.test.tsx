@@ -255,6 +255,114 @@ describe("RelearnOriginPost", () => {
     await waitFor(() => expect(screen.getByTestId("relearn-origin-next")).toBeEnabled());
   });
 
+  it("flips a ✓ word to ✗ (in-session, no network) so it re-drills this session", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: true }));
+    const onComplete = vi.fn();
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={onComplete}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Graded correct → chip is correct. A correct word does NOT auto-open its
+    // sheet, so the learner taps the chip to review/flip it.
+    const chip = await screen.findByRole("button", { name: "liberty — correct" });
+    const callsAfterGrade = submitMock.mock.calls.length;
+    fireEvent.click(chip);
+
+    const flip = await screen.findByTestId("relearn-origin-override");
+    expect(flip).toHaveTextContent("Mark as Incorrect");
+    fireEvent.click(flip);
+
+    // Chip now reflects the override, and NO extra grading call fired.
+    await screen.findByRole("button", { name: "liberty — incorrect" });
+    expect(submitMock.mock.calls.length).toBe(callsAfterGrade);
+
+    // On Next the flipped word is reported wrong → completeOrigin re-queues it.
+    fireEvent.click(screen.getByTestId("relearn-origin-next"));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    const [wrongWords, correctCount] = onComplete.mock.calls[0] as [RelearnCard[], number];
+    expect(wrongWords.map((w) => w.entry)).toContain("liberty");
+    expect(correctCount).toBe(0);
+  });
+
+  it("flips a ✗ word to ✓ so it drops from this session", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: false }));
+    const onComplete = vi.fn();
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={onComplete}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Wrong answers auto-open the sheet.
+    await screen.findByTestId("relearn-origin-feedback");
+    const flip = await screen.findByTestId("relearn-origin-override");
+    expect(flip).toHaveTextContent("Mark as Correct");
+    fireEvent.click(flip);
+
+    await screen.findByRole("button", { name: "liberty — correct" });
+
+    fireEvent.click(screen.getByTestId("relearn-origin-next"));
+    const [wrongWords, correctCount] = onComplete.mock.calls[0] as [RelearnCard[], number];
+    expect(wrongWords).toHaveLength(0);
+    expect(correctCount).toBe(1);
+  });
+
+  it("Undo restores the grader's verdict", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: true }));
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "liberty — correct" }));
+    fireEvent.click(await screen.findByTestId("relearn-origin-override")); // → incorrect
+    await screen.findByRole("button", { name: "liberty — incorrect" });
+
+    fireEvent.click(await screen.findByTestId("relearn-origin-override-undo"));
+    // Back to the grader's verdict, and the flip control returns.
+    await screen.findByRole("button", { name: "liberty — correct" });
+    expect(screen.getByTestId("relearn-origin-override")).toHaveTextContent("Mark as Incorrect");
+  });
+
   it("renders no example scenes for a word graded without contextScenes", async () => {
     // contextScenes absent → the `?? []` fallback → RelearnContext renders null.
     submitMock.mockResolvedValueOnce({

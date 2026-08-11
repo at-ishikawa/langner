@@ -75,6 +75,12 @@ export function RelearnOriginPost({
   const [grading, setGrading] = useState<string[]>([]);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // overrides holds a per-word in-session verdict that overrides the grader's
+  // (a key present means overridden; the value is the learner's verdict). It is
+  // LOCAL state only — Relearn persists nothing (quiz-ui-invariants U1). Flipping
+  // a ✓ word to ✗ makes onComplete re-queue it so it re-drills THIS session
+  // (completeOrigin); flipping a ✗ word to ✓ drops it. No RPC, no skipped_at.
+  const [overrides, setOverrides] = useState<Record<string, boolean>>({});
   const inputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const rowRefs = useRef<Map<string, HTMLElement>>(new Map());
   const focusTimeRef = useRef<Map<string, number>>(new Map());
@@ -99,11 +105,28 @@ export function RelearnOriginPost({
     return null;
   };
 
+  // effectiveCorrect is the verdict shown/counted for a word: the learner's
+  // override when set, otherwise the grader's result. undefined for an
+  // un-graded word.
+  const effectiveCorrect = (key: string): boolean | undefined =>
+    key in overrides ? overrides[key] : results[key]?.res.correct;
+
+  const toggleOverride = (key: string) =>
+    setOverrides((o) => ({ ...o, [key]: !results[key]?.res.correct }));
+  const undoOverride = (key: string) =>
+    setOverrides((o) => {
+      const next = { ...o };
+      delete next[key];
+      return next;
+    });
+
   const gradedCount = orderedKeys.filter((k) => k in results).length;
-  const correctCount = orderedKeys.filter((k) => results[k]?.res.correct).length;
+  const correctCount = orderedKeys.filter((k) => effectiveCorrect(k) === true).length;
   const remainingCount = orderedKeys.filter((k) => !isDone(k)).length;
   const selected = selectedKey ? results[selectedKey] : undefined;
   const selectedWord = selectedKey ? wordByKey.get(selectedKey) : undefined;
+  const selectedCorrect = selectedKey ? effectiveCorrect(selectedKey) === true : false;
+  const selectedOverridden = selectedKey ? selectedKey in overrides : false;
 
   // Keep the selected row scrolled into view alongside the pinned feedback sheet,
   // so the word and its meaning/why are visible together — never buried below the
@@ -199,7 +222,9 @@ export function RelearnOriginPost({
 
             if (graded) {
               const isSel = key === selectedKey;
-              const c = graded.res.correct
+              // Reflect the learner's in-session override on the chip too.
+              const chipCorrect = effectiveCorrect(key) === true;
+              const c = chipCorrect
                 ? { bg: "green.100", darkBg: "green.900", color: "green.700", darkColor: "green.200", glyph: "✓" }
                 : { bg: "red.100", darkBg: "red.900", color: "red.700", darkColor: "red.200", glyph: "✗" };
               return (
@@ -212,7 +237,7 @@ export function RelearnOriginPost({
                   role="button"
                   tabIndex={0}
                   aria-pressed={isSel}
-                  aria-label={`${word.entry} — ${graded.res.correct ? "correct" : "incorrect"}`}
+                  aria-label={`${word.entry} — ${chipCorrect ? "correct" : "incorrect"}`}
                   onClick={() => setSelectedKey(key)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -335,7 +360,10 @@ export function RelearnOriginPost({
           disabled={grading.length > 0}
           onClick={() =>
             onComplete(
-              words.filter((w) => results[w.noteId.toString()]?.res.correct !== true),
+              // Words the learner ends this pass on as NOT correct re-drill this
+              // session — honouring an in-session override (a ✓ flipped to ✗
+              // re-queues; a ✗ flipped to ✓ drops).
+              words.filter((w) => effectiveCorrect(w.noteId.toString()) !== true),
               correctCount,
             )
           }
@@ -386,15 +414,48 @@ export function RelearnOriginPost({
             <Text
               fontSize="xs"
               fontWeight="bold"
-              color={selected.res.correct ? "green.600" : "red.600"}
-              _dark={{ color: selected.res.correct ? "green.300" : "red.300" }}
+              color={selectedCorrect ? "green.600" : "red.600"}
+              _dark={{ color: selectedCorrect ? "green.300" : "red.300" }}
             >
-              {selected.res.correct ? "✓ Correct" : "✗ Incorrect"}
+              {selectedCorrect ? "✓ Correct" : "✗ Incorrect"}
+              {selectedOverridden && (
+                <Text as="span" fontWeight="normal" fontStyle="italic"> (overridden)</Text>
+              )}
             </Text>
             <Button size="xs" variant="ghost" onClick={() => setSelectedKey(null)} aria-label="Close details">
               ✕
             </Button>
           </Box>
+
+          {/* In-session Mark-as-Correct/Incorrect override — LOCAL only, mirrors
+              the single-card Relearn screen. Flipping a ✓ word to ✗ re-drills it
+              this session; flipping ✗ to ✓ drops it. Persists nothing (no RPC, no
+              skipped_at). See .claude/rules/quiz-ui-invariants.md. */}
+          {selectedKey && (
+            selectedOverridden ? (
+              <Button
+                size="xs"
+                variant="outline"
+                colorPalette="gray"
+                mb={2}
+                onClick={() => undoOverride(selectedKey)}
+                data-testid="relearn-origin-override-undo"
+              >
+                Undo override
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="outline"
+                colorPalette={selectedCorrect ? "red" : "blue"}
+                mb={2}
+                onClick={() => toggleOverride(selectedKey)}
+                data-testid="relearn-origin-override"
+              >
+                {selectedCorrect ? "Mark as Incorrect" : "Mark as Correct"}
+              </Button>
+            )
+          )}
 
           <Text fontWeight="bold">{selectedWord.entry}</Text>
           <Text fontSize="sm" mb={1}>
@@ -404,7 +465,7 @@ export function RelearnOriginPost({
             </Text>
           </Text>
           {selected.answer.trim() && (
-            <Text fontSize="sm" color={selected.res.correct ? "gray.500" : "red.600"} _dark={{ color: selected.res.correct ? "gray.400" : "red.300" }}>
+            <Text fontSize="sm" color={selectedCorrect ? "gray.500" : "red.600"} _dark={{ color: selectedCorrect ? "gray.400" : "red.300" }}>
               <Text as="span" fontWeight="semibold">Your answer: </Text>
               {selected.answer}
             </Text>
