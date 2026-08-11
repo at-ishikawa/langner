@@ -18,6 +18,7 @@ const word = (
   noteId: number,
   originDirection = 1,
   contexts: RelearnCard["contexts"] = [],
+  examples: RelearnCard["examples"] = [],
 ): RelearnCard =>
   ({
     entry,
@@ -25,7 +26,7 @@ const word = (
     sourceQuizType: 4,
     originDirection,
     meaning: `${entry}-meaning`,
-    examples: [],
+    examples,
     contexts,
     type: "root",
     language: "Latin",
@@ -163,6 +164,58 @@ describe("RelearnOriginPost", () => {
         expect.objectContaining({ noteId: BigInt(1), answer: "liberty", isSkipped: false }),
       );
     });
+  });
+
+  it("shows a recognition word's example as usage context WHILE ASKING (before any grading)", () => {
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[
+            // recognition (1): word shown, recall meaning → full example is a hint.
+            word("liberty", 1, 1, [], [
+              { text: "They fought for liberty and freedom.", speaker: "", highlight: "liberty" },
+            ] as RelearnCard["examples"]),
+          ]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    // The word is still being asked (its meaning input is present, no grade yet)…
+    expect(screen.getByLabelText('Meaning for "liberty"')).toBeInTheDocument();
+    // …and the FULL example is already on screen as usage context.
+    expect(screen.getByText("They fought for liberty and freedom.")).toBeInTheDocument();
+  });
+
+  it("shows a reverse word's example MASKED while asking, without revealing the answer", () => {
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[
+            // reverse (2): meaning shown, recall the word → example is masked.
+            word("liberty", 1, 2, [
+              { context: "They fought for liberty.", maskedContext: "They fought for ____." },
+            ] as RelearnCard["contexts"]),
+          ]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    expect(screen.getByLabelText('Word for "liberty-meaning"')).toBeInTheDocument();
+    // The masked hint is shown; the answer word is NOT revealed.
+    expect(screen.getByText("They fought for ____.")).toBeInTheDocument();
+    expect(screen.queryByText("They fought for liberty.")).not.toBeInTheDocument();
   });
 
   it("disables Next while a committed word is still grading, then enables it once the grade lands", async () => {

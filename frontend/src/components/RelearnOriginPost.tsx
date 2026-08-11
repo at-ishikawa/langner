@@ -297,18 +297,23 @@ export function RelearnOriginPost({
             }
 
             return (
-              <Box
-                key={key}
-                display="inline-flex"
-                flexWrap="wrap"
-                alignItems="baseline"
-                gap={2}
-                maxW="100%"
-              >
-                <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }} overflowWrap="anywhere">
-                  {word.entry}
-                </Text>
-                {input}
+              <Box key={key} display="flex" flexDirection="column" gap={1} maxW="100%">
+                <Box display="inline-flex" flexWrap="wrap" alignItems="baseline" gap={2} maxW="100%">
+                  <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }} overflowWrap="anywhere">
+                    {word.entry}
+                  </Text>
+                  {input}
+                </Box>
+                {/* Full example as usage context while asking — the same hint the
+                    single-card recognition screen shows. Reverse words mask the
+                    word instead (the contexts branch above); recognition shows it
+                    in full because the WORD, not the answer, is on screen. */}
+                {word.examples.map((ex, i) => (
+                  <Text key={i} fontSize="sm" color="gray.600" _dark={{ color: "gray.300" }} overflowWrap="anywhere">
+                    {ex.speaker ? `${ex.speaker}: ` : ""}
+                    {ex.text}
+                  </Text>
+                ))}
               </Box>
             );
           })}
