@@ -580,10 +580,11 @@ func (s *Service) relearnGrammarIndex() (map[string][]relearnGrammarEntry, error
 // definitions/flashcard word carries its usage only in Examples, so without this
 // a reverse relearn card for such a word would show no hint at all. Each example
 // is masked by its per-example Highlight (the exact surface form to hide) in
-// addition to the Expression/OriginalExpression, so an inflected form the lemma
-// can't match is still blanked and the answer word is never revealed. Sentences
-// are de-duplicated by text so a word carrying the same sentence in both lists
-// is shown once.
+// addition to the Expression/OriginalExpression. An example whose answer masking
+// leaves visible — an inflected surface form with no highlight (e.g. "evicted"
+// for lemma "evict") — is DROPPED rather than shown (reverseHintContext), so the
+// reverse hint never reveals the answer. Sentences are de-duplicated by text so a
+// word carrying the same sentence in both lists is shown once.
 func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 	var out []ReverseContext
 	seen := map[string]bool{}
@@ -593,10 +594,12 @@ func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 			return
 		}
 		seen[strings.ToLower(text)] = true
-		out = append(out, ReverseContext{
-			Context:       text,
-			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, highlight),
-		})
+		// Only show the example if masking actually hid the answer; an inflected
+		// form with no highlight would otherwise leak the word (reverse must never
+		// reveal the answer).
+		if rc, ok := reverseHintContext(text, fc.Expression, fc.OriginalExpression, highlight); ok {
+			out = append(out, rc)
+		}
 	}
 	for _, c := range fc.Contexts {
 		add(c.Context, "")

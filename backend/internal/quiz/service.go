@@ -1116,20 +1116,13 @@ func (s *Service) loadFlashcardReverseCards(
 
 			var contexts []ReverseContext
 			for _, ex := range card.Examples {
-				textLower := strings.ToLower(ex.Text)
-				// An irregular highlight (e.g. lemma "go", highlight "went")
-				// may not contain the expression as a substring, so also
-				// accept an example whose highlight surface form is present.
-				hasExpr := strings.Contains(textLower, strings.ToLower(card.Expression))
-				hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
-				if !hasExpr && !hasHighlight {
-					continue
+				// Show the example only if masking actually hid the answer; an
+				// inflected surface form the lemma can't whole-word match is only
+				// shown when a highlight names it, otherwise it is dropped so the
+				// reverse hint never reveals the answer.
+				if rc, ok := reverseHintContext(ex.Text, card.Expression, card.Definition, ex.Highlight); ok {
+					contexts = append(contexts, rc)
 				}
-				masked := maskWord(ex.Text, card.Expression, card.Definition, ex.Highlight)
-				contexts = append(contexts, ReverseContext{
-					Context:       ex.Text,
-					MaskedContext: masked,
-				})
 			}
 
 			if listMissingContext {
@@ -1177,6 +1170,29 @@ func maskWord(context, expression, definition, highlight string) string {
 		context = maskOccurrences(context, highlight)
 	}
 	return context
+}
+
+// reverseHintContext masks the answer in one example sentence for a reverse-quiz
+// hint and reports whether it is SAFE to show. maskOccurrences only blanks
+// WHOLE-word matches of the expression / alt form / highlight, so an inflected
+// surface form the lemma cannot match (e.g. lemma "evict" in "evicted") is left
+// visible unless a highlight names it. Rather than reveal the answer, this drops
+// any example whose masked text STILL contains the expression / alt form /
+// highlight as a substring — so a reverse surface NEVER renders an unmasked
+// example containing the answer (an inflected example must carry a `highlight`
+// to be shown). ok=false means "do not show this example as a reverse hint".
+func reverseHintContext(text, expression, altForm, highlight string) (ReverseContext, bool) {
+	masked := maskWord(text, expression, altForm, highlight)
+	low := strings.ToLower(masked)
+	for _, target := range []string{expression, altForm, highlight} {
+		if target == "" {
+			continue
+		}
+		if strings.Contains(low, strings.ToLower(target)) {
+			return ReverseContext{}, false
+		}
+	}
+	return ReverseContext{Context: text, MaskedContext: masked}, true
 }
 
 // maskOccurrences replaces every case-insensitive occurrence of target in
@@ -2257,21 +2273,13 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				// masking).
 				var contexts []ReverseContext
 				for _, ex := range note.Examples {
-					textLower := strings.ToLower(ex.Text)
-					// An irregular highlight (e.g. lemma "go", highlight
-					// "went") may not contain the expression as a substring,
-					// so also accept an example whose highlight surface form
-					// is present.
-					hasExpr := strings.Contains(textLower, strings.ToLower(note.Expression))
-					hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
-					if !hasExpr && !hasHighlight {
-						continue
+					// Show the example only if masking actually hid the answer; an
+					// inflected surface form the lemma can't whole-word match is only
+					// shown when a highlight names it, otherwise it is dropped so the
+					// reverse hint never reveals the answer.
+					if rc, ok := reverseHintContext(ex.Text, note.Expression, note.Definition, ex.Highlight); ok {
+						contexts = append(contexts, rc)
 					}
-					masked := maskWord(ex.Text, note.Expression, note.Definition, ex.Highlight)
-					contexts = append(contexts, ReverseContext{
-						Context:       ex.Text,
-						MaskedContext: masked,
-					})
 				}
 				card := ReverseCard{
 					ID:           note.ID,

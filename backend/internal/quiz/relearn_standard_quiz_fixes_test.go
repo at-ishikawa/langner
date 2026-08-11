@@ -2,6 +2,7 @@ package quiz
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -170,4 +171,80 @@ func TestExampleData_GrammarMissStaysDueAcrossWindow(t *testing.T) {
 
 	assert.Nil(t, relearnCardFor(pool, "deficient"),
 		"a vocabulary miss outside the window is NOT re-drilled (window still applies to vocab)")
+}
+
+// TestExampleData_ReverseHintNeverRevealsAnswer pins fix: on a REVERSE relearn
+// card for an etymology-notebook word, the shown example hint must NEVER reveal
+// the answer's surface form.
+//
+//   - enact: its example uses the inflected "enacted" WITH a highlight naming it,
+//     so the reverse hint is shown with "enacted" blanked.
+//   - react: its example uses the inflected "reacted" with NO highlight, so the
+//     lemma "react" cannot whole-word match it — the leaky example is DROPPED
+//     from the reverse hint (never shown unmasked). The full sentence still
+//     appears in the FEEDBACK scene (answer visible after grading).
+//
+// Driven through the real config: LoadAllWords -> SaveFreeformResult (records
+// both series, so the pool drills the word in reverse) -> LoadRelearnPool.
+func TestExampleData_ReverseHintNeverRevealsAnswer(t *testing.T) {
+	ctx := context.Background()
+
+	reverseCardFor := func(t *testing.T, word string) *RelearnCard {
+		t.Helper()
+		svc := newExampleService(t, t.TempDir())
+		all, err := svc.LoadAllWords()
+		require.NoError(t, err)
+		var card *FreeformCard
+		for i := range all {
+			if all[i].Expression == word {
+				card = &all[i]
+			}
+		}
+		require.NotNilf(t, card, "%q must load", word)
+		require.NoError(t, svc.SaveFreeformResult(ctx, *card, FreeformGradeResult{Correct: false, Quality: 1}, 1000))
+		pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+		require.NoError(t, err)
+		rc := relearnCardFor(pool, word)
+		require.NotNilf(t, rc, "%q must be in the pool", word)
+		require.Equal(t, notebook.QuizTypeEtymologyOrigin, rc.Format)
+		require.Equal(t, notebook.QuizTypeReverse, rc.Direction, "a freeform miss drills reverse")
+		return rc
+	}
+
+	t.Run("inflected example WITH highlight is shown masked", func(t *testing.T) {
+		rc := reverseCardFor(t, "enact")
+		require.NotEmpty(t, rc.Contexts, "the highlighted example must be shown as a masked hint")
+		var found *ReverseContext
+		for i := range rc.Contexts {
+			if containsFold(rc.Contexts[i].Context, "enacted") {
+				found = &rc.Contexts[i]
+			}
+		}
+		require.NotNil(t, found, "the enacted example must be present as a hint")
+		assert.Contains(t, found.MaskedContext, "______", "the answer must be blanked")
+		assert.NotContains(t, strings.ToLower(found.MaskedContext), "enacted",
+			"the reverse hint must NOT reveal the inflected answer")
+	})
+
+	t.Run("inflected example WITHOUT highlight is dropped, never shown unmasked", func(t *testing.T) {
+		rc := reverseCardFor(t, "react")
+		for i := range rc.Contexts {
+			assert.NotContainsf(t, strings.ToLower(rc.Contexts[i].MaskedContext), "reacted",
+				"a reverse hint must never reveal the answer; the un-highlightable example must be dropped (got %q)",
+				rc.Contexts[i].MaskedContext)
+		}
+		// The full example still exists for the FEEDBACK view (answer visible
+		// only after grading), so we didn't lose the sentence entirely.
+		var feedback []string
+		for _, sc := range rc.ContextScenes {
+			feedback = append(feedback, sc.Statements...)
+		}
+		foundFull := false
+		for _, s := range feedback {
+			if containsFold(s, "reacted") {
+				foundFull = true
+			}
+		}
+		assert.True(t, foundFull, "the full example remains available in feedback")
+	})
 }
