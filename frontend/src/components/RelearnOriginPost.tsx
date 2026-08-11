@@ -346,8 +346,19 @@ export function RelearnOriginPost({
       </Box>
 
       {remainingCount > 0 ? (
-        <Button colorPalette="blue" w="full" size="lg" onClick={() => void revealAnswers()}>
-          See answers ({remainingCount} left)
+        <Button
+          colorPalette="blue"
+          w="full"
+          size="lg"
+          // Both action buttons must be unclickable while any word is grading: a
+          // word committed just before "See answers" is still in flight, and
+          // advancing would grade the rest empty and open feedback mid-grade,
+          // racing the committed answer. (revealAnswers already skips grading
+          // words via isDone, so even a stray tap can't re-grade one empty.)
+          disabled={grading.length > 0}
+          onClick={() => void revealAnswers()}
+        >
+          {grading.length > 0 ? "Grading…" : `See answers (${remainingCount} left)`}
         </Button>
       ) : (
         <Button

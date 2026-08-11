@@ -316,8 +316,17 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
       </Box>
 
       {remainingCount > 0 ? (
-        <Button colorPalette="blue" w="full" size="lg" onClick={() => void revealAnswers()}>
-          See answers ({remainingCount} left)
+        <Button
+          colorPalette="blue"
+          w="full"
+          size="lg"
+          // Disable while any blank is grading so a blank committed just before
+          // "See answers" isn't raced (revealAnswers already skips grading blanks
+          // via isDone; this also prevents opening feedback mid-grade).
+          disabled={grading.length > 0}
+          onClick={() => void revealAnswers()}
+        >
+          {grading.length > 0 ? "Grading…" : `See answers (${remainingCount} left)`}
         </Button>
       ) : (
         <Button

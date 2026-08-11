@@ -363,6 +363,52 @@ describe("RelearnOriginPost", () => {
     expect(screen.getByTestId("relearn-origin-override")).toHaveTextContent("Mark as Incorrect");
   });
 
+  it("disables 'See answers' while a word is grading, and never empty-submits the in-flight word", async () => {
+    submitMock.mockClear(); // this file shares the module-level mock across tests
+    let resolveGrade!: (r: SubmitRelearnAnswerResponse) => void;
+    submitMock.mockReturnValueOnce(
+      new Promise<SubmitRelearnAnswerResponse>((resolve) => {
+        resolveGrade = resolve;
+      }),
+    );
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1), word("liberal", 2)]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    // Commit the first word → it starts grading while the second is still
+    // un-answered, so the "See answers (1 left)" control is on screen.
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // The action button is present but DISABLED while grading (shows "Grading…").
+    const grading = await screen.findByRole("button", { name: /Grading/i });
+    expect(grading).toBeDisabled();
+    // The committed real answer was submitted; the in-flight word is never
+    // re-submitted with an empty answer.
+    expect(submitMock).toHaveBeenCalledTimes(1);
+    expect(submitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: BigInt(1), answer: "freedom" }),
+    );
+
+    // Once the grade lands, "See answers" is enabled again.
+    resolveGrade(gradeResponse({ correct: true }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /See answers/i })).toBeEnabled(),
+    );
+    expect(submitMock).toHaveBeenCalledTimes(1);
+  });
+
   it("renders no example scenes for a word graded without contextScenes", async () => {
     // contextScenes absent → the `?? []` fallback → RelearnContext renders null.
     submitMock.mockResolvedValueOnce({
