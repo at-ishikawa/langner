@@ -34,6 +34,17 @@ origins:
 # Words whose etymology lives ONLY here (embedded definition), with no copy in
 # any definitions/story/flashcard book. They are loaded as ordinary vocabulary
 # cards by the quiz service and, when missed, fold into the facere family.
+#
+#   - `factory` ALSO has a plain copy in examples/definitions/roots-demo, so the
+#     dedup rule merges this origin onto that canonical (id-bearing) card.
+#   - `benefactor` and `artifice` have NO copy anywhere else, so each is
+#     surfaced as a brand-new quiz card straight from this etymology notebook.
+#     `benefactor` carries a usage sentence to exercise the etymology-notebook
+#     `examples:` path end to end (the sentence must survive onto the loaded
+#     card and appear on the Relearn origin family card). `artifice` is the
+#     awkward id case: an etymology-only word that must still carry a stable
+#     note id so the quiz feedback can offer the "Mark as Correct" override
+#     (learning-history-invariants L2).
 definitions:
   - expression: factory
     meaning: "a building where goods are manufactured"
@@ -57,3 +68,16 @@ definitions:
         highlight: benefactor
     origin_parts:
       - { origin: facere, language: Latin, from_form: fact }
+
+  # An etymology-notebook-ONLY word with no copy anywhere else, so it surfaces as
+  # a brand-new quiz card. It must still carry a stable note id so the quiz
+  # feedback can offer the "Mark as Correct" override (learning-history L2).
+  - expression: artifice
+    meaning: "clever or cunning devices used to deceive; ingenuity"
+    part_of_speech: noun
+    note: 'arti (art) + fic (from facere, "to make") = made by skill'
+    examples:
+      - text: "The magician's whole act depended on artifice and misdirection."
+        highlight: artifice
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: fic }
