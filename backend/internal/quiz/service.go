@@ -508,6 +508,14 @@ func (s *Service) loadFlashcardCards(
 
 // GradeNotebookAnswer grades a meaning answer and returns the result.
 func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer string, responseTimeMs int64) (GradeResult, error) {
+	// An empty / whitespace-only answer is a miss — grade it wrong
+	// deterministically without the LLM (mirrors GradeGrammarBlank). This is the
+	// "unanswered → incorrect" path (quiz-ui-invariants U1): revealing answers in
+	// Relearn for a word the learner never typed must record a normal miss, not a
+	// pass the model might return for a blank.
+	if strings.TrimSpace(answer) == "" {
+		return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}, nil
+	}
 	results, err := s.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
 		Expressions: []inference.Expression{
 			{
@@ -1329,6 +1337,13 @@ func needsReverseFlashcardReview(
 
 // GradeReverseAnswer grades a reverse quiz answer (user guesses the word from meaning/context).
 func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answer string, responseTimeMs int64) (GradeResult, error) {
+	// An empty / whitespace-only answer is a miss — grade it wrong
+	// deterministically without the LLM (mirrors GradeGrammarBlank), the
+	// "unanswered → incorrect" path (quiz-ui-invariants U1). Without this a blank
+	// reverse answer was sent to ValidateWordForm, which could classify it correct.
+	if strings.TrimSpace(answer) == "" {
+		return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}, nil
+	}
 	var contextStr string
 	if len(card.Contexts) > 0 {
 		contextStr = card.Contexts[0].Context

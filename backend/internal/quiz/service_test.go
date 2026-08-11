@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1322,7 +1323,7 @@ func TestService_GradeNotebookAnswer_InferenceError(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestService_GradeNotebookAnswer_EmptyAnswers(t *testing.T) {
+func TestService_GradeNotebookAnswer_NoResults(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
 	svc := newTestService(t, mockClient)
@@ -1335,6 +1336,46 @@ func TestService_GradeNotebookAnswer_EmptyAnswers(t *testing.T) {
 
 	_, err := svc.GradeNotebookAnswer(context.Background(), card, "some answer", 1000)
 	require.Error(t, err)
+}
+
+// TestService_GradeNotebookAnswer_EmptyIsWrongWithoutLLM pins that an empty /
+// whitespace-only recognition answer is graded incorrect DETERMINISTICALLY — the
+// "unanswered → incorrect" path (quiz-ui-invariants U1). The mock asserts the
+// inference client is NEVER called for a blank (Times(0)), so a blank can never
+// be graded correct by the model. This is the Relearn "See answers" case.
+func TestService_GradeNotebookAnswer_EmptyIsWrongWithoutLLM(t *testing.T) {
+	for _, answer := range []string{"", "   ", "\t\n"} {
+		t.Run("answer="+strconv.Quote(answer), func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockClient := mock_inference.NewMockClient(ctrl)
+			svc := newTestService(t, mockClient)
+
+			mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Times(0)
+
+			got, err := svc.GradeNotebookAnswer(context.Background(), Card{Entry: "preposterous"}, answer, 1000)
+			require.NoError(t, err)
+			assert.False(t, got.Correct, "an empty recognition answer must be wrong")
+		})
+	}
+}
+
+// TestService_GradeReverseAnswer_EmptyIsWrongWithoutLLM is the reverse-quiz
+// counterpart: an empty / whitespace-only produce-the-word answer is graded
+// incorrect without a ValidateWordForm call.
+func TestService_GradeReverseAnswer_EmptyIsWrongWithoutLLM(t *testing.T) {
+	for _, answer := range []string{"", "   ", "\t\n"} {
+		t.Run("answer="+strconv.Quote(answer), func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			mockClient := mock_inference.NewMockClient(ctrl)
+			svc := newTestService(t, mockClient)
+
+			mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Times(0)
+
+			got, err := svc.GradeReverseAnswer(context.Background(), ReverseCard{Expression: "liberty", Meaning: "freedom"}, answer, 1000)
+			require.NoError(t, err)
+			assert.False(t, got.Correct, "an empty reverse answer must be wrong")
+		})
+	}
 }
 
 // ---------- SaveResult ----------
