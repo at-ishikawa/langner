@@ -95,6 +95,7 @@ type EtymologyIndex struct {
 
 // EtymologyDefinitionEntry is a definition with origin_parts in an etymology session file.
 type EtymologyDefinitionEntry struct {
+	ID           string          `yaml:"id"`
 	Definition   string          `yaml:"definition"`
 	Expression   string          `yaml:"expression"`
 	Meaning      string          `yaml:"meaning"`
@@ -111,6 +112,60 @@ func (e EtymologyDefinitionEntry) GetExpression() string {
 		return e.Expression
 	}
 	return e.Definition
+}
+
+// NoteID returns the stable learning-log identity (Note.ID) for an
+// etymology-notebook definition. It is the SINGLE place the canonical key for
+// these words is computed, so every card built from an etymology definition —
+// and therefore both the learning-log write and the GetLatestLearnedInfo read
+// that flow through that card — resolves to the same key
+// (learning-history-invariants L2/L3).
+//
+// An explicit `id:` in the YAML wins (matching every other definition entry,
+// and letting `langner assign-ids` disambiguate homographs). Otherwise a
+// deterministic id is derived from (NotebookName, SessionTitle, expression),
+// all of which are stable across reloads, so the same on-disk entry always
+// yields the same id. Without a stable id these words carried ID="" and the
+// Submit response returned an empty sense_id, so the quiz feedback's
+// Mark-as-Correct / Undo override had nothing to target the exact sense with
+// (it fell back to fragile whole-history name matching, which cannot
+// disambiguate a homograph).
+func (e EtymologyDefinitionEntry) NoteID() string {
+	if e.ID != "" {
+		return e.ID
+	}
+	return deriveEtymologyNoteID(e.NotebookName, e.SessionTitle, e.GetExpression())
+}
+
+// deriveEtymologyNoteID builds a deterministic, human-readable id for an
+// etymology-notebook definition that ships without an explicit `id:`. The
+// "etym-" prefix marks it as derived so it never collides with an
+// author-assigned id.
+func deriveEtymologyNoteID(notebookName, sessionTitle, expression string) string {
+	slug := slugifyID(notebookName + "-" + sessionTitle + "-" + expression)
+	if slug == "" {
+		return ""
+	}
+	return "etym-" + slug
+}
+
+// slugifyID lowercases s and collapses every run of non-alphanumeric
+// characters into a single dash, trimming leading/trailing dashes.
+func slugifyID(s string) string {
+	var b strings.Builder
+	lastDash := true // trim leading dashes
+	for _, r := range strings.ToLower(s) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			b.WriteRune(r)
+			lastDash = false
+			continue
+		}
+		if !lastDash {
+			b.WriteByte('-')
+			lastDash = true
+		}
+	}
+	return strings.TrimRight(b.String(), "-")
 }
 
 // EtymologySessionMetadata contains required metadata for an etymology session
@@ -135,12 +190,12 @@ type EtymologySessionMetadata struct {
 // New-shape source files use the per-event/scenes structure mirroring
 // definitions notebooks:
 //
-//	- event: "Session 13"
-//	  date: 2025-01-15
-//	  scenes:
-//	    - scene: "ana (up, back)"
-//	      origins:
-//	        - origin: ...
+//   - event: "Session 13"
+//     date: 2025-01-15
+//     scenes:
+//   - scene: "ana (up, back)"
+//     origins:
+//   - origin: ...
 //
 // The reader detects which shape a file uses and normalises both into a
 // unified in-memory representation where every origin carries a

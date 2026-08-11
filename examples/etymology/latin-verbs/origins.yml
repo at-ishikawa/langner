@@ -34,6 +34,13 @@ origins:
 # A word whose etymology lives ONLY here (embedded definition), with no copy in
 # any definitions/story/flashcard book. It is loaded as an ordinary vocabulary
 # card by the quiz service and, when missed, folds into the facere family.
+#
+#   - `factory` ALSO has a plain copy in examples/definitions/roots-demo, so the
+#     dedup rule merges this origin onto that canonical (id-bearing) card.
+#   - `artifice` has NO copy anywhere else, so it is surfaced as a brand-new
+#     quiz card straight from this etymology notebook. It is the awkward case
+#     that must still carry a stable note id so the quiz feedback can offer the
+#     "Mark as Correct" override (learning-history-invariants L2).
 definitions:
   - expression: factory
     meaning: "a building where goods are manufactured"
@@ -44,3 +51,12 @@ definitions:
         highlight: factory
     origin_parts:
       - { origin: facere, language: Latin, from_form: fact }
+  - expression: artifice
+    meaning: "clever or cunning devices used to deceive; ingenuity"
+    part_of_speech: noun
+    note: 'arti (art) + fic (from facere, "to make") = made by skill'
+    examples:
+      - text: "The magician's whole act depended on artifice and misdirection."
+        highlight: artifice
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: fic }

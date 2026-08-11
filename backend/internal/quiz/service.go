@@ -1408,9 +1408,9 @@ type FreeformCard struct {
 	// scene prose), a plain definitions entry carries its sentences HERE — so the
 	// Relearn example/context helpers draw from both Contexts and Examples, and a
 	// definitions word shows a usage sentence like it does in the normal quiz.
-	Examples           []Example
-	WordDetail         WordDetail
-	Images             []string
+	Examples   []Example
+	WordDetail WordDetail
+	Images     []string
 	// Literal is the etymology literal gloss stored in the word's free-text
 	// note field (Note.Note) — e.g. `de "down" + facere = "made down"`. Carried
 	// so the etymology-origin Relearn feedback can show it, mirroring the quiz.
@@ -1543,7 +1543,17 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 		// buildWordDetail resolves origin_parts against originMap so
 		// primaryOriginPart returns the origin and the miss enters the existing
 		// ETYMOLOGY_ORIGIN grouping branch in LoadRelearnPool.
+		//
+		// def.NoteID() supplies the stable sense id (learning-history-invariants
+		// L2): it flows into FreeformCard.ID, so SaveFreeformResult writes the
+		// log under this key AND GetLatestLearnedInfo reads it back under the
+		// same key, and the Submit response carries a non-empty sense_id the
+		// override RPC can target. Without it these words had ID="" — an empty
+		// sense_id — so the feedback's Mark-as-Correct override could not
+		// identify the exact record.
+		noteID := def.NoteID()
 		note := notebook.Note{
+			ID:           noteID,
 			Expression:   def.Expression,
 			Definition:   def.Definition,
 			Meaning:      def.Meaning,
@@ -1552,6 +1562,7 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 			OriginParts:  def.OriginParts,
 		}
 		cards = append(cards, FreeformCard{
+			ID:                 noteID,
 			NotebookName:       def.NotebookName,
 			StoryTitle:         def.SessionTitle,
 			Expression:         expression,
