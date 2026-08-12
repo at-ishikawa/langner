@@ -1,0 +1,5 @@
+id: roots-untyped
+kind: Etymology
+name: "Untyped roots (demo)"
+notebooks:
+  - ./origins.yml

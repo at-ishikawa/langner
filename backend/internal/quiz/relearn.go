@@ -769,49 +769,58 @@ func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 // primaryOriginPart returns the etymology origin Relearn folds a missed
 // origin-bearing word's family card under, and whether it has one.
 //
-// It prefers a ROOT origin over a prefix/suffix. The origin family card exists
-// to surface the shared ROOT a set of words derive from — the whole point is to
-// group e.g. recipient, intercept, and capture under "capere", not to scatter
-// them under whichever generic prefix (re, inter, …) each happens to list first.
-// A prefixed word like "recipient" (re + capere) must therefore fold under
-// "capere", not "re". A word with several roots is grouped under its first root
-// so it is drilled exactly once; a word that carries ONLY affixes (no declared
-// root) falls back to its first origin so it still groups rather than dropping
-// out of Relearn.
+// The origin family card exists to surface the shared ROOT a set of words derive
+// from — the whole point is to group e.g. recipient, intercept, and capture under
+// "capere", not to scatter them under whichever generic prefix (re, inter, …)
+// each happens to list first. It resolves the root two ways, covering both
+// notebook shapes:
 //
-// This preference is what makes grouping robust to whether or not a prefix is
-// declared as an origin: when the prefix is undeclared (older example data),
-// resolveOriginParts already drops it and only the root remains; when the prefix
-// IS declared (the shape real roots-books use), the root preference here keeps
-// the word grouped under the root instead of the prefix. Both cases now yield
-// the same root family (learning-history-invariants L2: one rule, one place).
+//   - When a part is EXPLICITLY typed "root" (the well-typed shape: prefixes
+//     typed prefix/suffix, root typed root), that part wins.
+//   - When NO part is explicitly typed root — the common shape where origins
+//     carry no `type` at all — the etymology convention is prefix(es) FIRST and
+//     the ROOT LAST, so the LAST part is taken as the root. Using the last part
+//     (not the first) is what keeps every prefixed sibling folding under the
+//     shared root instead of scattering under its own prefix; picking the first
+//     untyped part folded a prefixed word like "abduct" (ab + ducere) under "ab"
+//     instead of "ducere", emptying the root's family (the reported bug).
+//
+// A single-part word returns that part (root-only, or affix-only when the root
+// was undeclared and dropped by resolveOriginParts, so it still groups rather
+// than dropping out of Relearn). The SAME result keys both the drilled-word
+// folding and the related-words family, so a card always matches its family
+// (learning-history-invariants L2: one rule, one place).
 func primaryOriginPart(fc FreeformCard) (WordOriginPart, bool) {
-	var first WordOriginPart
-	haveFirst := false
+	parts := make([]WordOriginPart, 0, len(fc.WordDetail.OriginParts))
 	for _, op := range fc.WordDetail.OriginParts {
-		if strings.TrimSpace(op.Origin) == "" {
-			continue
+		if strings.TrimSpace(op.Origin) != "" {
+			parts = append(parts, op)
 		}
-		if !haveFirst {
-			first, haveFirst = op, true
-		}
-		if isRootOriginType(op.Type) {
+	}
+	if len(parts) == 0 {
+		return WordOriginPart{}, false
+	}
+	// Prefer a part EXPLICITLY typed "root" (the well-typed notebook shape:
+	// prefixes are type "prefix"/"suffix", the root type "root").
+	for _, op := range parts {
+		if isExplicitRootType(op.Type) {
 			return op, true
 		}
 	}
-	return first, haveFirst
+	// No part is explicitly typed root — the common shape where origins carry no
+	// `type` at all. The etymology convention is prefix(es) FIRST and the ROOT
+	// LAST, so the last part is the root. Using the last (not the first) part is
+	// what keeps every prefixed sibling folding under the shared root instead of
+	// scattering under its own prefix. A single-part word returns that part.
+	return parts[len(parts)-1], true
 }
 
-// isRootOriginType reports whether an origin's type denotes a root as opposed to
-// a prefix or suffix. The etymology schema uses "root", and treats an empty type
-// as root too (see EtymologyOrigin.Type: "” means root").
-func isRootOriginType(originType string) bool {
-	switch strings.ToLower(strings.TrimSpace(originType)) {
-	case "", "root":
-		return true
-	default:
-		return false
-	}
+// isExplicitRootType reports whether an origin's type explicitly denotes a root.
+// Only the literal "root" counts — an EMPTY type is NOT treated as root here, so
+// an untyped prefix (empty type) never wins over the root-last rule in
+// primaryOriginPart. (Prefix/suffix are the other explicit types.)
+func isExplicitRootType(originType string) bool {
+	return strings.EqualFold(strings.TrimSpace(originType), "root")
 }
 
 // originEnglishForms looks up an origin's English combining-form spellings from

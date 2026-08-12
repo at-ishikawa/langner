@@ -398,3 +398,68 @@ func TestExampleData_RelatedFamilyRealRootsBook(t *testing.T) {
 	assert.NotEmpty(t, related["deceptive"])
 	assert.NotContains(t, related, "recipient", "the drilled word is excluded from related")
 }
+
+// TestExampleData_RelatedFamilyUntypedRootLast pins the fix for origins declared
+// WITHOUT a `type` field, where the etymology convention is prefix(es) first and
+// the ROOT LAST (examples/etymology/roots-untyped). With untyped parts the old
+// code folded a prefixed word under its FIRST part (the prefix) — abduct→"ab",
+// subduct→"sub" — scattering them out of the ducere family so the origin card
+// showed no relatives. After the fix every ducere word folds under the root, so
+// a missed word's card lists its same-root siblings. Covered recognition AND
+// reverse (a freeform miss records both series; drills reverse).
+func TestExampleData_RelatedFamilyUntypedRootLast(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name      string
+		direction notebook.QuizType
+	}{
+		{"recognition", notebook.QuizTypeNotebook},
+		{"reverse", notebook.QuizTypeReverse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newExampleService(t, t.TempDir())
+
+			switch tc.direction {
+			case notebook.QuizTypeReverse:
+				cards, err := svc.LoadReverseCards([]string{"roots-untyped"}, false, true, nil)
+				require.NoError(t, err)
+				missed := false
+				for i := range cards {
+					if cards[i].Expression == "abduct" {
+						require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						missed = true
+					}
+				}
+				require.True(t, missed, "reverse quiz must serve abduct")
+			default:
+				cards, err := svc.LoadCards([]string{"roots-untyped"}, true, nil)
+				require.NoError(t, err)
+				missed := false
+				for i := range cards {
+					if cards[i].Entry == "abduct" {
+						require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						missed = true
+					}
+				}
+				require.True(t, missed, "standard quiz must serve abduct")
+			}
+
+			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			require.NoError(t, err)
+			card := relearnCardFor(pool, "abduct")
+			require.NotNil(t, card, "the missed word must be in the pool")
+			require.Equalf(t, "ducere", card.OriginText,
+				"a prefixed word with untyped parts must fold under the ROOT (last part), not its prefix")
+
+			related := map[string]string{}
+			for _, m := range card.RelatedWords {
+				related[m.Word] = m.Meaning
+			}
+			assert.Containsf(t, related, "subduct", "same-root sibling (another prefix) must be listed; got %v", related)
+			assert.Containsf(t, related, "ductile", "root-only sibling must be listed; got %v", related)
+			assert.NotEmpty(t, related["subduct"])
+			assert.NotContains(t, related, "abduct", "the drilled word is excluded from related")
+		})
+	}
+}
