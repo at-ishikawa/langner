@@ -34,8 +34,13 @@ import { responseTimeSince } from "@/lib/responseTime";
 //                   stays DUE, returning in the next Relearn session.
 //   - answered    → correct / incorrect from the grader.
 //
-// Excluding a correction from future quizzes is done only in the normal quizzes;
-// a Relearn miss never writes any state.
+// On "Next", onComplete reports the blanks answered wrong this pass; the store
+// re-queues them as a smaller post so they are re-drilled THIS session until
+// every blank is correct (like the origin family card and single cards). This is
+// queue-only — SubmitRelearnAnswer still persists nothing, so a blank not
+// answered correctly is also still due next session. Excluding a correction from
+// future quizzes is done only in the normal quizzes; a Relearn miss never writes
+// any state.
 
 interface GradedBlank {
   answer: string;
@@ -45,7 +50,11 @@ interface GradedBlank {
 export interface RelearnGrammarPostProps {
   content: string;
   blanks: RelearnCard[];
-  onComplete: (correctCount: number, blankCount: number) => void;
+  // onComplete fires on "Next" with the blanks answered WRONG this pass
+  // (unanswered→incorrect are graded wrong by "See answers", so they are
+  // included) and the number answered correctly. The wrong blanks re-queue as a
+  // smaller post this session (completeGrammarPost); the counts tally the pass.
+  onComplete: (wrongBlanks: RelearnCard[], correctCount: number) => void;
 }
 
 function pillStatus(g: GradedBlank): "correct" | "incorrect" {
@@ -337,7 +346,15 @@ export function RelearnGrammarPost({ content, blanks, onComplete }: RelearnGramm
           // until every grade has landed so an in-flight grade is never
           // discarded by advancing past it (mirrors the origin family card).
           disabled={grading.length > 0}
-          onClick={() => onComplete(correctCount, orderedKeys.length)}
+          onClick={() =>
+            // Next is shown only once every blank is graded (remainingCount ===
+            // 0), so results[key] is present for all — a blank re-drills this
+            // session when its graded result is not correct.
+            onComplete(
+              blanks.filter((b) => !results[b.noteId.toString()]?.res.correct),
+              correctCount,
+            )
+          }
           data-testid="relearn-grammar-next"
         >
           {grading.length > 0 ? "Grading…" : "Next"}

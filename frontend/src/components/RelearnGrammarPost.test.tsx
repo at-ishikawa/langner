@@ -68,4 +68,47 @@ describe("RelearnGrammarPost", () => {
     );
     expect(submitMock).toHaveBeenCalledTimes(1);
   });
+
+  it("reports the blanks answered wrong (with the correct count) on Next", async () => {
+    // Blank 1 grades correct, blank 2 (unanswered → incorrect via See answers)
+    // grades wrong. Next must report exactly blank 2 as wrong, with 1 correct.
+    submitMock.mockImplementation(async ({ noteId }) =>
+      gradeResponse({
+        correct: noteId === BigInt(1),
+        correctAnswer: "at school",
+        category: "preposition",
+        grammarNote: "Use 'at school'.",
+      }),
+    );
+    const onComplete = vi.fn();
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnGrammarPost
+          content={CONTENT}
+          blanks={[blank("the John", 1), blank("in school", 2)]}
+          onComplete={onComplete}
+        />
+      </ChakraProvider>,
+    );
+
+    // Answer the first blank correctly.
+    const input = screen.getByLabelText('Correction for "the John"');
+    fireEvent.change(input, { target: { value: "John" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /See answers/i })).toBeEnabled(),
+    );
+
+    // See answers grades the still-empty second blank INCORRECT.
+    fireEvent.click(screen.getByRole("button", { name: /See answers/i }));
+    const next = await screen.findByTestId("relearn-grammar-next");
+    await waitFor(() => expect(next).toBeEnabled());
+
+    fireEvent.click(next);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    const [wrongBlanks, correctCount] = onComplete.mock.calls[0];
+    expect(wrongBlanks).toHaveLength(1);
+    expect(wrongBlanks[0]).toMatchObject({ noteId: BigInt(2), incorrect: "in school" });
+    expect(correctCount).toBe(1);
+  });
 });
