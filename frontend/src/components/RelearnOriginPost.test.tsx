@@ -409,6 +409,79 @@ describe("RelearnOriginPost", () => {
     expect(submitMock).toHaveBeenCalledTimes(1);
   });
 
+  const related = [
+    { word: "induce", meaning: "to lead in / bring about" },
+  ] as unknown as RelearnCard["relatedWords"];
+
+  it("hides related words during the question state, in BOTH recognition and reverse", () => {
+    const { unmount } = render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1, 1)]}
+          relatedWords={related}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+    // Recognition question state: the reference must NOT be shown.
+    expect(screen.getByLabelText('Meaning for "liberty"')).toBeInTheDocument();
+    expect(screen.queryByTestId("relearn-origin-related")).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1, 2)]}
+          relatedWords={related}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+    // Reverse question state: also NOT shown (would hint the answer).
+    expect(screen.getByLabelText('Word for "liberty-meaning"')).toBeInTheDocument();
+    expect(screen.queryByTestId("relearn-origin-related")).not.toBeInTheDocument();
+  });
+
+  it("shows related words (word + meaning) AFTER answering, excluding the drilled word", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: true }));
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1, 1)]}
+          relatedWords={related}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    expect(screen.queryByTestId("relearn-origin-related")).not.toBeInTheDocument();
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const section = await screen.findByTestId("relearn-origin-related");
+    expect(section).toHaveTextContent("induce");
+    expect(section).toHaveTextContent("to lead in / bring about");
+    // The drilled word is not part of the related reference.
+    expect(section).not.toHaveTextContent("liberty");
+  });
+
   it("renders no example scenes for a word graded without contextScenes", async () => {
     // contextScenes absent → the `?? []` fallback → RelearnContext renders null.
     submitMock.mockResolvedValueOnce({

@@ -588,6 +588,21 @@ message RelearnCard {
   // QUIZ_TYPE_REVERSE (produce-the-word is the stronger recall), so it never
   // appears twice in one family card.
   QuizType origin_direction = 14;
+
+  // related_words are the OTHER words sharing this card's origin that are NOT
+  // being drilled on this card — display-only reference so the learner sees the
+  // wider word family. Populated only for QUIZ_TYPE_ETYMOLOGY_ORIGIN cards, and
+  // shown by the frontend ONLY after answering (never during the question, to
+  // avoid hinting a reverse answer). Excludes the drilled words and any word
+  // whose skipped_at exclude marker is set. Never quizzed, never persisted.
+  repeated OriginFamilyMember related_words = 15;
+}
+
+// OriginFamilyMember is one word from an origin family shown as post-answer
+// reference on the Relearn origin card: the word and a short meaning/gloss.
+message OriginFamilyMember {
+  string word = 1;
+  string meaning = 2;
 }
 
 message SubmitRelearnAnswerRequest {

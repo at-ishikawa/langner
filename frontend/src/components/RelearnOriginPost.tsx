@@ -55,6 +55,10 @@ export interface RelearnOriginPostProps {
   language: string;
   englishForms: string[];
   words: RelearnCard[];
+  // relatedWords are the OTHER words from this origin (word + short meaning),
+  // shown as display-only reference AFTER the card is answered. The backend
+  // already excludes the drilled words and any excluded sibling. Default [].
+  relatedWords?: RelearnCard["relatedWords"];
   // onComplete fires on "Next" with the words answered WRONG this pass
   // (unanswered→incorrect included) and how many were correct. The caller
   // re-queues the wrong words so they are re-drilled this session.
@@ -68,6 +72,7 @@ export function RelearnOriginPost({
   language,
   englishForms,
   words,
+  relatedWords = [],
   onComplete,
 }: RelearnOriginPostProps) {
   const [inputs, setInputs] = useState<Record<string, string>>({});
@@ -344,6 +349,40 @@ export function RelearnOriginPost({
           })}
         </Box>
       </Box>
+
+      {/* Related words from this origin — display-only reference (word + short
+          meaning), shown ONLY after every word on the card is answered
+          (remainingCount === 0), never during the question state (so it can't
+          hint a reverse answer). The backend already excludes the drilled words
+          and any excluded sibling. Sits above the Next button so it stays
+          visible without covering the controls (U3). */}
+      {remainingCount === 0 && relatedWords.length > 0 && (
+        <Box
+          mb={3}
+          p={3}
+          bg="gray.50"
+          _dark={{ bg: "gray.800", borderColor: "gray.700" }}
+          borderWidth="1px"
+          borderColor="gray.200"
+          borderRadius="lg"
+          maxW="100%"
+          data-testid="relearn-origin-related"
+        >
+          <Text fontSize="xs" fontWeight="medium" color="gray.500" _dark={{ color: "gray.400" }} mb={2}>
+            Related words from this origin
+          </Text>
+          <Box display="flex" flexDirection="column" gap={1}>
+            {relatedWords.map((m) => (
+              <Text key={m.word} fontSize="sm" overflowWrap="anywhere">
+                <Text as="span" fontWeight="semibold">{m.word}</Text>
+                {m.meaning ? (
+                  <Text as="span" color="gray.600" _dark={{ color: "gray.300" }}> — {m.meaning}</Text>
+                ) : null}
+              </Text>
+            ))}
+          </Box>
+        </Box>
+      )}
 
       {remainingCount > 0 ? (
         <Button

@@ -103,6 +103,10 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 		for _, c := range card.Contexts {
 			contexts = append(contexts, &apiv1.ContextSentence{Context: c.Context, MaskedContext: c.MaskedContext})
 		}
+		var relatedWords []*apiv1.OriginFamilyMember
+		for _, m := range card.RelatedWords {
+			relatedWords = append(relatedWords, &apiv1.OriginFamilyMember{Word: m.Word, Meaning: m.Meaning})
+		}
 		protoCards = append(protoCards, &apiv1.RelearnCard{
 			NoteId:          noteID,
 			Entry:           card.Entry,
@@ -118,6 +122,7 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 			OriginMeaning:   card.OriginMeaning,
 			EnglishForms:    card.EnglishForms,
 			OriginDirection: notebookQuizTypeToProto(card.Direction),
+			RelatedWords:    relatedWords,
 		})
 	}
 

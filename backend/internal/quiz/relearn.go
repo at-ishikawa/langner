@@ -16,6 +16,13 @@ type RelearnConversationLine struct {
 	Quote   string
 }
 
+// OriginFamilyMember is one word of an origin family shown as post-answer
+// reference on the Relearn origin card: the word and a short meaning/gloss.
+type OriginFamilyMember struct {
+	Word    string
+	Meaning string
+}
+
 // RelearnContextScene groups the prose statements and conversation lines in
 // which a word appears within a single scene. Assembled read-only from
 // notebook data for the Relearn feedback screen.
@@ -81,6 +88,12 @@ type RelearnCard struct {
 	// down"`), sourced from the word's definitions note (Note.Note). Shown on the
 	// etymology Relearn feedback. Empty for other formats.
 	Literal string
+	// RelatedWords are the OTHER words sharing this card's origin that are NOT
+	// drilled on this card — display-only reference (word + short meaning) shown
+	// AFTER answering so the learner sees the wider family. Excludes the drilled
+	// words and any word whose skipped_at exclude marker is set. Populated only
+	// for QuizTypeEtymologyOrigin cards; never quizzed, never persisted.
+	RelatedWords []OriginFamilyMember
 
 	// Grammar display extras (empty for vocab/etymology cards). Content is
 	// the journal entry's full text; Incorrect is the mistaken span struck
@@ -222,10 +235,16 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return nil, nil
 	}
 
-	vocabByID, vocabByExpr, vocabByNotebookExpr, err := s.relearnVocabIndex()
+	words, err := s.LoadAllWords()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load words for relearn pool: %w", err)
 	}
+	vocabByID, vocabByExpr, vocabByNotebookExpr := relearnVocabIndex(words)
+	// originFamilies groups every non-excluded word by the SAME origin its miss
+	// would fold under (primaryOriginPart), so an origin card can show the wider
+	// word family as post-answer reference. Excluded words (skipped_at) are left
+	// out (fix #1: Relearn never surfaces excluded words).
+	originFamilies := buildRelearnOriginFamilies(words, histories)
 	grammarByID, err := s.relearnGrammarIndex()
 	if err != nil {
 		return nil, err
@@ -403,6 +422,18 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		cards = append(cards, card)
 	}
 
+	// The set of DRILLED words per origin, so the related-words reference on each
+	// family card excludes the words the card itself quizzes.
+	drilledByOrigin := map[string]map[string]bool{}
+	for _, key := range etymOrder {
+		p := etymByWord[key]
+		ok := originFamilyKey(p.op.Origin, p.op.Language)
+		if drilledByOrigin[ok] == nil {
+			drilledByOrigin[ok] = map[string]bool{}
+		}
+		drilledByOrigin[ok][strings.ToLower(strings.TrimSpace(p.fc.Expression))] = true
+	}
+
 	// Emit one origin family card per origin-bearing word, in the direction it
 	// was missed. A word missed in BOTH directions is drilled ONCE, in the
 	// reverse direction — producing the word is the stronger recall test — so it
@@ -413,7 +444,10 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		if p.reverse {
 			direction = notebook.QuizTypeReverse
 		}
-		cards = append(cards, buildEtymologyOriginCard(p.fc, p.op, direction, p.notebookName, originMap))
+		card := buildEtymologyOriginCard(p.fc, p.op, direction, p.notebookName, originMap)
+		originKey := originFamilyKey(p.op.Origin, p.op.Language)
+		card.RelatedWords = relatedOriginWords(originFamilies[originKey], drilledByOrigin[originKey])
+		cards = append(cards, card)
 	}
 
 	// One line so a short pool can be diagnosed from the server log: how many
@@ -505,15 +539,12 @@ func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression)
 	}
 }
 
-// relearnVocabIndex loads every vocabulary word once and indexes it by stable
-// id (the canonical key), and — as a legacy fallback for id-less candidates —
-// also by (notebook, expression) and by expression alone, so the pool can
-// resolve a wrong word to its meaning and context.
-func (s *Service) relearnVocabIndex() (byID map[string]FreeformCard, byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard, err error) {
-	words, err := s.LoadAllWords()
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("load words for relearn pool: %w", err)
-	}
+// relearnVocabIndex indexes the given vocabulary words by stable id (the
+// canonical key), and — as a legacy fallback for id-less candidates — also by
+// (notebook, expression) and by expression alone, so the pool can resolve a
+// wrong word to its meaning and context. The caller loads the words once (with
+// s.LoadAllWords) and shares the slice with the origin-family builder.
+func relearnVocabIndex(words []FreeformCard) (byID map[string]FreeformCard, byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard) {
 	byID = make(map[string]FreeformCard, len(words))
 	byExpr = make(map[string]FreeformCard, len(words))
 	byNotebookExpr = make(map[string]FreeformCard, len(words))
@@ -530,7 +561,74 @@ func (s *Service) relearnVocabIndex() (byID map[string]FreeformCard, byExpr map[
 			byNotebookExpr[strings.ToLower(w.NotebookName)+relearnKeySep+e] = w
 		}
 	}
-	return byID, byExpr, byNotebookExpr, nil
+	return byID, byExpr, byNotebookExpr
+}
+
+// originFamilyKey is the shared (origin|language) key, lowercased, that both the
+// origin-family index and the per-card lookup use, so grouping stays a
+// single-rule, single-place decision (learning-history-invariants L2).
+func originFamilyKey(origin, language string) string {
+	return strings.ToLower(strings.TrimSpace(origin) + "|" + strings.TrimSpace(language))
+}
+
+// buildRelearnOriginFamilies groups every word by the SAME origin its miss would
+// fold under (primaryOriginPart), so an origin card can show the wider word
+// family as post-answer reference. A word whose exclude marker (skipped_at) is
+// set for any vocab quiz type is left out (fix #1: Relearn never surfaces
+// excluded words). Members are de-duplicated by expression within each origin.
+func buildRelearnOriginFamilies(words []FreeformCard, histories map[string][]notebook.LearningHistory) map[string][]OriginFamilyMember {
+	families := map[string][]OriginFamilyMember{}
+	seen := map[string]map[string]bool{}
+	for _, w := range words {
+		op, ok := primaryOriginPart(w)
+		if !ok {
+			continue
+		}
+		expr := strings.TrimSpace(w.Expression)
+		if expr == "" || vocabWordExcluded(histories, w) {
+			continue
+		}
+		key := originFamilyKey(op.Origin, op.Language)
+		exprLow := strings.ToLower(expr)
+		if seen[key] == nil {
+			seen[key] = map[string]bool{}
+		}
+		if seen[key][exprLow] {
+			continue
+		}
+		seen[key][exprLow] = true
+		families[key] = append(families[key], OriginFamilyMember{Word: expr, Meaning: w.Meaning})
+	}
+	return families
+}
+
+// vocabWordExcluded reports whether a word carries the exclude marker
+// (skipped_at) for any vocabulary quiz type — the same marker the card loaders
+// and the Relearn pool filter on. Such a word is never shown as a related word.
+func vocabWordExcluded(histories map[string][]notebook.LearningHistory, fc FreeformCard) bool {
+	hs := histories[fc.NotebookName]
+	for _, qt := range []notebook.QuizType{notebook.QuizTypeNotebook, notebook.QuizTypeReverse, notebook.QuizTypeFreeform} {
+		if notebook.IsExpressionExcludedForQuizType(hs, fc.ID, qt, fc.Expression, fc.OriginalExpression) {
+			return true
+		}
+	}
+	return false
+}
+
+// relatedOriginWords returns the family members that are NOT among the drilled
+// words on this card (the card already quizzes those), preserving order.
+func relatedOriginWords(family []OriginFamilyMember, drilled map[string]bool) []OriginFamilyMember {
+	if len(family) == 0 {
+		return nil
+	}
+	var out []OriginFamilyMember
+	for _, m := range family {
+		if drilled[strings.ToLower(strings.TrimSpace(m.Word))] {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // relearnGrammarEntry pairs a due grammar blank with the post it belongs to,

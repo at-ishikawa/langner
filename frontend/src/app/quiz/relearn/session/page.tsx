@@ -108,6 +108,7 @@ export default function RelearnSessionPage() {
           type={front.group.type}
           language={front.group.language}
           englishForms={front.group.englishForms}
+          relatedWords={front.group.relatedWords}
           words={front.group.words}
           onComplete={(wrongWords, correctCount) => completeOrigin(wrongWords, correctCount)}
         />

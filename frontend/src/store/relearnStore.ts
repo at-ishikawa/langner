@@ -48,6 +48,11 @@ export interface RelearnOriginGroup {
   // Latin root "liber" → ["lib", "liv"]). A per-origin value, so it is taken
   // from the first card of the group and shown on the origin header.
   englishForms: string[];
+  // relatedWords are the OTHER words sharing this origin that are NOT drilled on
+  // this card — display-only reference (word + short meaning) shown AFTER
+  // answering. A per-origin value taken from the first card of the group; the
+  // backend already excludes the drilled words and any excluded sibling.
+  relatedWords: RelearnCard["relatedWords"];
   words: RelearnCard[];
   // attempt counts how many times this origin family has been (re-)queued: 0 on
   // first appearance, +1 each time its still-wrong words re-queue. It is not
@@ -106,6 +111,7 @@ function groupIntoItems(cards: RelearnCard[]): RelearnItem[] {
         type: card.type,
         language: card.language,
         englishForms: card.englishForms ?? [],
+        relatedWords: card.relatedWords ?? [],
         words: [card],
         attempt: 0,
       };

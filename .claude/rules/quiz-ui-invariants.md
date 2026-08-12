@@ -37,6 +37,16 @@ The single-card vocab/reverse Relearn screen (`FeedbackActions` inside `quiz/rel
 
 "Relearn persists nothing" is about the **backend/learning-history** (no log, no `skipped_at`, no RPC). It does **not** forbid an **in-session override** that only reshapes the working queue for the current session. Both the single-card Relearn screen (`session/page.tsx`, `const effective = override ?? feedback.correct; resolveFront(effective)`) and the origin family card (`RelearnOriginPost.tsx`, a per-word `overrides` map feeding `effectiveCorrect`) let the learner flip a grader verdict — e.g. mark a wrongly-✓ word as ✗ so it re-drills this session (its wrong words re-queue via `completeOrigin`), or mark a ✗ word ✓ so it drops. This is **local React state only**: it calls no RPC, sets no `is_skipped`, and writes no `skipped_at`. It is NOT skip and NOT exclude (U1/U2 untouched) — a re-drilled word is simply still due next session like any other Relearn miss. Do not "remove it as a violation": it is the intended parity between the origin card and the single-card screen.
 
+### Relearn origin card shows a POST-ANSWER, display-only "related words" reference
+
+The origin family card (`RelearnOriginPost.tsx`) shows, **only after the card is answered** (`remainingCount === 0`), a "Related words from this origin" section: the OTHER words sharing this origin, each as **word + short meaning**. It is pure reference — **not quizzed, no input, no grading, no RPC, no persistence** — so U1/U2 are untouched. Rules that must hold:
+
+- **Hidden during the question state**, for BOTH recognition and reverse. Never render it while any word on the card is still being asked — in reverse a same-root sibling could hint the answer.
+- **Excludes the drilled words** (they are the quiz items on this card) and **excludes any word whose `skipped_at` exclude marker is set** (consistent with "Relearn never surfaces excluded words"). Deduped.
+- Sourced from the SAME origin resolution the card already uses: the backend groups every non-excluded vocabulary word by its `primaryOriginPart` (`buildRelearnOriginFamilies` in `internal/quiz/relearn.go`), reusing the one folding rule (L2) — it does NOT fork a second origin lookup. Carried on `RelearnCard.related_words` (`OriginFamilyMember{word, meaning}`) and threaded through `relearnStore` (`RelearnOriginGroup.relatedWords`).
+
+Do not move it into the question state or drop the drilled/`skipped_at` exclusions.
+
 ## U2 — Skip and exclude are separate flags/paths, end to end
 
 Keep "skip / don't-know" and "exclude" as **distinct flags and distinct code paths** at every layer: frontend action → request field → backend grade/write.

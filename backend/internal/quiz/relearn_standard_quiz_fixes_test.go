@@ -248,3 +248,80 @@ func TestExampleData_ReverseHintNeverRevealsAnswer(t *testing.T) {
 		assert.True(t, foundFull, "the full example remains available in feedback")
 	})
 }
+
+// TestExampleData_OriginCardShowsRelatedFamily pins the post-answer "related
+// words from this origin" reference on the Relearn origin card, driven through
+// the real example config:
+//
+//   - a missed word (deficient → facere) produces the origin card;
+//   - RelatedWords lists the OTHER facere words with their meanings;
+//   - the DRILLED word itself (deficient) is excluded;
+//   - a sibling EXCLUDED via the real SkipWord path (factory) is excluded.
+//
+// Covered for both a recognition miss and a reverse miss (the reference is
+// attached in either direction).
+func TestExampleData_OriginCardShowsRelatedFamily(t *testing.T) {
+	ctx := context.Background()
+
+	for _, tc := range []struct {
+		name      string
+		direction notebook.QuizType
+	}{
+		{"recognition", notebook.QuizTypeNotebook},
+		{"reverse", notebook.QuizTypeReverse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := newExampleService(t, t.TempDir())
+
+			// Exclude a facere sibling from quizzes via the real SkipWord path.
+			require.NoError(t, svc.SkipWord(
+				CardInfo{NotebookName: "roots-demo", Expression: "factory", ID: "factory-demo"},
+				"", []notebook.QuizType{notebook.QuizTypeNotebook}))
+
+			// Miss deficient in the given direction through the real quiz path.
+			switch tc.direction {
+			case notebook.QuizTypeReverse:
+				cards, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+				require.NoError(t, err)
+				missed := false
+				for i := range cards {
+					if cards[i].Expression == "deficient" {
+						require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						missed = true
+					}
+				}
+				require.True(t, missed, "reverse quiz must serve deficient")
+			default:
+				cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+				require.NoError(t, err)
+				missed := false
+				for i := range cards {
+					if cards[i].Entry == "deficient" {
+						require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						missed = true
+					}
+				}
+				require.True(t, missed, "standard quiz must serve deficient")
+			}
+
+			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			require.NoError(t, err)
+			card := relearnCardFor(pool, "deficient")
+			require.NotNil(t, card, "the missed word must be in the pool")
+			require.Equal(t, notebook.QuizTypeEtymologyOrigin, card.Format)
+			require.Equal(t, "facere", card.OriginText)
+
+			related := map[string]string{}
+			for _, m := range card.RelatedWords {
+				related[m.Word] = m.Meaning
+			}
+			// A non-missed, non-excluded facere sibling appears WITH its meaning.
+			require.Contains(t, related, "benefactor", "related family should list the sibling")
+			assert.NotEmpty(t, related["benefactor"], "each related word carries a meaning")
+			// The drilled word itself is NOT listed (it's the quiz item).
+			assert.NotContains(t, related, "deficient", "the drilled word is excluded from related")
+			// The skipped_at-excluded sibling is NOT listed.
+			assert.NotContains(t, related, "factory", "an excluded sibling is never surfaced")
+		})
+	}
+}
