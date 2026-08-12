@@ -49,3 +49,16 @@
           examples:
             - text: "She toured the factory where the cars are assembled."
               highlight: factory
+        # Inlines ONLY the declared prefix `con`; the `facere` root is declared
+        # for this word in the etymology notebook (latin-verbs). Its root must be
+        # MERGED on so it folds under facere with its siblings, not under `con`.
+        - expression: confection
+          id: confection-demo
+          meaning: "a sweet food made by an elaborate process"
+          part_of_speech: noun
+          pronunciation: "/kənˈfɛkʃən/"
+          examples:
+            - text: "The baker arranged each confection in the window."
+              highlight: confection
+          origin_parts:
+            - { origin: con, language: Latin }

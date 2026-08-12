@@ -274,6 +274,30 @@ func resolveOriginParts(refs []notebook.OriginPartRef, originMap map[string]note
 	return parts
 }
 
+// mergeOriginParts returns base plus every part of extra whose (origin|language)
+// is not already present in base, preserving order. Used to complete a word's
+// origin from the etymology notebook (adding a root the inline origin_parts
+// omitted) without duplicating or reordering what the word already declared.
+func mergeOriginParts(base, extra []WordOriginPart) []WordOriginPart {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]bool, len(base))
+	for _, p := range base {
+		seen[strings.ToLower(p.Origin+"|"+p.Language)] = true
+	}
+	out := base
+	for _, p := range extra {
+		key := strings.ToLower(p.Origin + "|" + p.Language)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	return out
+}
+
 func buildWordDetail(note *notebook.Note, originMap map[string]notebook.EtymologyOrigin) WordDetail {
 	return WordDetail{
 		Origin:        note.Origin,
@@ -1562,14 +1586,20 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 			examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
 		}
 		if existing, ok := byExpr[key]; ok {
-			// Another loader already owns this word's canonical series. Fill the
-			// origin gap on any such card that has none of its own, so the word
-			// still groups by origin — without forking a second card/series.
+			// Another loader already owns this word's canonical series. MERGE the
+			// etymology notebook's resolved origin parts onto that card, adding any
+			// the inline origin_parts lack — crucially the ROOT. Merging (not just
+			// filling when empty) is what keeps origin resolution UNIFIED: a
+			// definitions entry that inlined only a declared PREFIX (e.g. `de`) but
+			// left the root to the etymology notebook would otherwise resolve to a
+			// prefix-only origin and fold under the prefix, while a sibling that
+			// inlined the full prefix+root folds under the root — so they scatter
+			// into different families and the origin card shows no relatives. After
+			// the merge every word that shares the root resolves to it the SAME
+			// way, regardless of how completely its origin was declared inline.
 			resolved := resolveOriginParts(def.OriginParts, originMap)
 			for _, i := range existing {
-				if len(cards[i].WordDetail.OriginParts) == 0 && len(resolved) > 0 {
-					cards[i].WordDetail.OriginParts = resolved
-				}
+				cards[i].WordDetail.OriginParts = mergeOriginParts(cards[i].WordDetail.OriginParts, resolved)
 				if cards[i].Literal == "" {
 					cards[i].Literal = def.Note
 				}

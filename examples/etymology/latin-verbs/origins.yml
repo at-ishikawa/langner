@@ -31,6 +31,14 @@ origins:
       - { form: egi,     role: perfect_active }
       - { form: actum,   role: supine, note: "produces nominal derivations (action, transact)" }
 
+  # A declared prefix, so a definitions entry can inline ONLY the prefix and
+  # leave the root to be completed from this notebook (the merge case below).
+  - origin: con
+    type: prefix
+    language: Latin
+    meaning: "with, together"
+    english_forms: [con, com]
+
 # Words whose etymology lives ONLY here (embedded definition), with no copy in
 # any definitions/story/flashcard book. They are loaded as ordinary vocabulary
 # cards by the quiz service and, when missed, fold into the facere family.
@@ -97,6 +105,19 @@ definitions:
       - text: "The crowd reacted with loud cheers."
     origin_parts:
       - { origin: agere, language: Latin, from_form: act }
+
+  # confection is ALSO defined in the definitions book (roots-demo) where it
+  # inlines only the declared prefix `con` and leaves the root here. This full
+  # declaration lets appendEtymologyNotebookWords MERGE the missing `facere` root
+  # onto the definitions card, so confection folds under facere (the root) like
+  # its siblings — not under the `con` prefix.
+  - expression: confection
+    meaning: "a sweet food made by an elaborate process"
+    part_of_speech: noun
+    note: 'con- ("together") + fect (from facere, "to make") = something put together'
+    origin_parts:
+      - { origin: con, language: Latin }
+      - { origin: facere, language: Latin, from_form: fect }
 
   # An etymology-notebook-ONLY word with no copy anywhere else, so it surfaces as
   # a brand-new quiz card. It must still carry a stable note id so the quiz

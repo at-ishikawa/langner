@@ -325,3 +325,76 @@ func TestExampleData_OriginCardShowsRelatedFamily(t *testing.T) {
 		})
 	}
 }
+
+// TestExampleData_RelatedFamilyResolvesOriginUniformly pins the fix for the
+// empty/short related-family bug: a definitions word that inlines ONLY a declared
+// prefix and leaves the ROOT to the etymology notebook must still fold under the
+// root and appear in the origin card's related family — resolved the SAME way as
+// siblings that inlined the full origin. Before the fix it folded under the
+// prefix ("con") and was missing from the facere family. Driven through the real
+// example config (confection: inline [con] in roots-demo, root facere completed
+// from latin-verbs).
+func TestExampleData_RelatedFamilyResolvesOriginUniformly(t *testing.T) {
+	ctx := context.Background()
+	svc := newExampleService(t, t.TempDir())
+
+	cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+	require.NoError(t, err)
+	missed := false
+	for i := range cards {
+		if cards[i].Entry == "deficient" {
+			require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+			missed = true
+		}
+	}
+	require.True(t, missed, "standard quiz must serve deficient")
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	card := relearnCardFor(pool, "deficient")
+	require.NotNil(t, card)
+	require.Equal(t, "facere", card.OriginText)
+
+	related := map[string]string{}
+	for _, m := range card.RelatedWords {
+		related[m.Word] = m.Meaning
+	}
+	assert.Containsf(t, related, "confection",
+		"a word whose root is completed via the etymology notebook must fold under the root and appear as related; got %v", related)
+	assert.NotEmpty(t, related["confection"], "each related word carries a meaning")
+}
+
+// TestExampleData_RelatedFamilyRealRootsBook drives the user's real-shape roots
+// book (latin-roots-book: definitions joined to an etymology notebook of the same
+// id, every word carrying inline prefix+root origin_parts): missing one word
+// surfaces its same-root siblings (declared under different prefixes / different
+// units) as related, with meanings, excluding the drilled word.
+func TestExampleData_RelatedFamilyRealRootsBook(t *testing.T) {
+	ctx := context.Background()
+	svc := newExampleService(t, t.TempDir())
+
+	cards, err := svc.LoadCards([]string{"latin-roots-book"}, true, nil)
+	require.NoError(t, err)
+	missed := false
+	for i := range cards {
+		if cards[i].Entry == "recipient" {
+			require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+			missed = true
+		}
+	}
+	require.True(t, missed, "standard quiz must serve recipient")
+
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	require.NoError(t, err)
+	card := relearnCardFor(pool, "recipient")
+	require.NotNil(t, card)
+	require.Equal(t, "capere", card.OriginText)
+
+	related := map[string]string{}
+	for _, m := range card.RelatedWords {
+		related[m.Word] = m.Meaning
+	}
+	assert.Containsf(t, related, "deceptive", "same-root sibling under a different prefix is listed; got %v", related)
+	assert.NotEmpty(t, related["deceptive"])
+	assert.NotContains(t, related, "recipient", "the drilled word is excluded from related")
+}
