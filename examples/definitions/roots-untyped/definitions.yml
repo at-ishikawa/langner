@@ -1,0 +1,48 @@
+# Words sharing the `ducere` root, in the user's real shape: one scene grouped by
+# the root, every expression carrying inline `origin_parts` with NO `type` field,
+# prefixes FIRST and the ROOT LAST, with `from_form` on the root part. The
+# referenced origins are declared (untyped) in examples/etymology/roots-untyped.
+#
+# The family must group ALL of these under `ducere`:
+#   - ductile: root only.
+#   - abduct / subduct: prefix + root. With untyped parts, picking the FIRST
+#     root-or-untyped part folds these under their PREFIX (ab / sub) instead of
+#     the root, scattering them out of the ducere family — the reported bug.
+#
+# Generic public-domain Latin derivations; invented neutral sentences.
+- metadata:
+    title: "lead roots"
+  scenes:
+    - metadata:
+        index: 0
+        title: "duc (to lead)"
+      expressions:
+        - expression: ductile
+          id: ductile-untyped
+          meaning: "able to be drawn out into a thin wire; easily led"
+          part_of_speech: adjective
+          examples:
+            - text: "Copper is ductile enough to be pulled into fine wire."
+              highlight: ductile
+          origin_parts:
+            - { origin: ducere, language: Latin, from_form: duct }
+        - expression: abduct
+          id: abduct-untyped
+          meaning: "to take someone away by force"
+          part_of_speech: verb
+          examples:
+            - text: "The film opens as masked riders abduct the envoy."
+              highlight: abduct
+          origin_parts:
+            - { origin: ab, language: Latin }
+            - { origin: ducere, language: Latin, from_form: duct }
+        - expression: subduct
+          id: subduct-untyped
+          meaning: "to draw or lead away underneath"
+          part_of_speech: verb
+          examples:
+            - text: "Over ages the ocean plate is subducted beneath the continent."
+              highlight: subducted
+          origin_parts:
+            - { origin: sub, language: Latin }
+            - { origin: ducere, language: Latin, from_form: duct }

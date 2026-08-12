@@ -274,6 +274,30 @@ func resolveOriginParts(refs []notebook.OriginPartRef, originMap map[string]note
 	return parts
 }
 
+// mergeOriginParts returns base plus every part of extra whose (origin|language)
+// is not already present in base, preserving order. Used to complete a word's
+// origin from the etymology notebook (adding a root the inline origin_parts
+// omitted) without duplicating or reordering what the word already declared.
+func mergeOriginParts(base, extra []WordOriginPart) []WordOriginPart {
+	if len(extra) == 0 {
+		return base
+	}
+	seen := make(map[string]bool, len(base))
+	for _, p := range base {
+		seen[strings.ToLower(p.Origin+"|"+p.Language)] = true
+	}
+	out := base
+	for _, p := range extra {
+		key := strings.ToLower(p.Origin + "|" + p.Language)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, p)
+	}
+	return out
+}
+
 func buildWordDetail(note *notebook.Note, originMap map[string]notebook.EtymologyOrigin) WordDetail {
 	return WordDetail{
 		Origin:        note.Origin,
@@ -508,6 +532,14 @@ func (s *Service) loadFlashcardCards(
 
 // GradeNotebookAnswer grades a meaning answer and returns the result.
 func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer string, responseTimeMs int64) (GradeResult, error) {
+	// An empty / whitespace-only answer is a miss — grade it wrong
+	// deterministically without the LLM (mirrors GradeGrammarBlank). This is the
+	// "unanswered → incorrect" path (quiz-ui-invariants U1): revealing answers in
+	// Relearn for a word the learner never typed must record a normal miss, not a
+	// pass the model might return for a blank.
+	if strings.TrimSpace(answer) == "" {
+		return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}, nil
+	}
 	results, err := s.openaiClient.AnswerMeanings(ctx, inference.AnswerMeaningsRequest{
 		Expressions: []inference.Expression{
 			{
@@ -1108,20 +1140,13 @@ func (s *Service) loadFlashcardReverseCards(
 
 			var contexts []ReverseContext
 			for _, ex := range card.Examples {
-				textLower := strings.ToLower(ex.Text)
-				// An irregular highlight (e.g. lemma "go", highlight "went")
-				// may not contain the expression as a substring, so also
-				// accept an example whose highlight surface form is present.
-				hasExpr := strings.Contains(textLower, strings.ToLower(card.Expression))
-				hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
-				if !hasExpr && !hasHighlight {
-					continue
+				// Show the example only if masking actually hid the answer; an
+				// inflected surface form the lemma can't whole-word match is only
+				// shown when a highlight names it, otherwise it is dropped so the
+				// reverse hint never reveals the answer.
+				if rc, ok := reverseHintContext(ex.Text, card.Expression, card.Definition, ex.Highlight); ok {
+					contexts = append(contexts, rc)
 				}
-				masked := maskWord(ex.Text, card.Expression, card.Definition, ex.Highlight)
-				contexts = append(contexts, ReverseContext{
-					Context:       ex.Text,
-					MaskedContext: masked,
-				})
 			}
 
 			if listMissingContext {
@@ -1169,6 +1194,29 @@ func maskWord(context, expression, definition, highlight string) string {
 		context = maskOccurrences(context, highlight)
 	}
 	return context
+}
+
+// reverseHintContext masks the answer in one example sentence for a reverse-quiz
+// hint and reports whether it is SAFE to show. maskOccurrences only blanks
+// WHOLE-word matches of the expression / alt form / highlight, so an inflected
+// surface form the lemma cannot match (e.g. lemma "evict" in "evicted") is left
+// visible unless a highlight names it. Rather than reveal the answer, this drops
+// any example whose masked text STILL contains the expression / alt form /
+// highlight as a substring — so a reverse surface NEVER renders an unmasked
+// example containing the answer (an inflected example must carry a `highlight`
+// to be shown). ok=false means "do not show this example as a reverse hint".
+func reverseHintContext(text, expression, altForm, highlight string) (ReverseContext, bool) {
+	masked := maskWord(text, expression, altForm, highlight)
+	low := strings.ToLower(masked)
+	for _, target := range []string{expression, altForm, highlight} {
+		if target == "" {
+			continue
+		}
+		if strings.Contains(low, strings.ToLower(target)) {
+			return ReverseContext{}, false
+		}
+	}
+	return ReverseContext{Context: text, MaskedContext: masked}, true
 }
 
 // maskOccurrences replaces every case-insensitive occurrence of target in
@@ -1329,6 +1377,13 @@ func needsReverseFlashcardReview(
 
 // GradeReverseAnswer grades a reverse quiz answer (user guesses the word from meaning/context).
 func (s *Service) GradeReverseAnswer(ctx context.Context, card ReverseCard, answer string, responseTimeMs int64) (GradeResult, error) {
+	// An empty / whitespace-only answer is a miss — grade it wrong
+	// deterministically without the LLM (mirrors GradeGrammarBlank), the
+	// "unanswered → incorrect" path (quiz-ui-invariants U1). Without this a blank
+	// reverse answer was sent to ValidateWordForm, which could classify it correct.
+	if strings.TrimSpace(answer) == "" {
+		return GradeResult{Correct: false, Reason: "No answer provided.", Quality: int(notebook.QualityWrong)}, nil
+	}
 	var contextStr string
 	if len(card.Contexts) > 0 {
 		contextStr = card.Contexts[0].Context
@@ -1408,9 +1463,9 @@ type FreeformCard struct {
 	// scene prose), a plain definitions entry carries its sentences HERE — so the
 	// Relearn example/context helpers draw from both Contexts and Examples, and a
 	// definitions word shows a usage sentence like it does in the normal quiz.
-	Examples           []Example
-	WordDetail         WordDetail
-	Images             []string
+	Examples   []Example
+	WordDetail WordDetail
+	Images     []string
 	// Literal is the etymology literal gloss stored in the word's free-text
 	// note field (Note.Note) — e.g. `de "down" + facere = "made down"`. Carried
 	// so the etymology-origin Relearn feedback can show it, mirroring the quiz.
@@ -1523,17 +1578,33 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 		if key == "" {
 			continue
 		}
+		// The word's own usage sentences from the etymology note's `examples:`,
+		// carried onto the card so it shows an example when quizzed or re-drilled
+		// in Relearn — the same as a definitions-book word.
+		var examples []Example
+		for _, ex := range def.Examples {
+			examples = append(examples, Example{Text: ex.Text, Highlight: ex.Highlight})
+		}
 		if existing, ok := byExpr[key]; ok {
-			// Another loader already owns this word's canonical series. Fill the
-			// origin gap on any such card that has none of its own, so the word
-			// still groups by origin — without forking a second card/series.
+			// Another loader already owns this word's canonical series. MERGE the
+			// etymology notebook's resolved origin parts onto that card, adding any
+			// the inline origin_parts lack — crucially the ROOT. Merging (not just
+			// filling when empty) is what keeps origin resolution UNIFIED: a
+			// definitions entry that inlined only a declared PREFIX (e.g. `de`) but
+			// left the root to the etymology notebook would otherwise resolve to a
+			// prefix-only origin and fold under the prefix, while a sibling that
+			// inlined the full prefix+root folds under the root — so they scatter
+			// into different families and the origin card shows no relatives. After
+			// the merge every word that shares the root resolves to it the SAME
+			// way, regardless of how completely its origin was declared inline.
 			resolved := resolveOriginParts(def.OriginParts, originMap)
 			for _, i := range existing {
-				if len(cards[i].WordDetail.OriginParts) == 0 && len(resolved) > 0 {
-					cards[i].WordDetail.OriginParts = resolved
-				}
+				cards[i].WordDetail.OriginParts = mergeOriginParts(cards[i].WordDetail.OriginParts, resolved)
 				if cards[i].Literal == "" {
 					cards[i].Literal = def.Note
+				}
+				if len(cards[i].Examples) == 0 && len(examples) > 0 {
+					cards[i].Examples = examples
 				}
 			}
 			continue
@@ -1543,7 +1614,17 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 		// buildWordDetail resolves origin_parts against originMap so
 		// primaryOriginPart returns the origin and the miss enters the existing
 		// ETYMOLOGY_ORIGIN grouping branch in LoadRelearnPool.
+		//
+		// def.NoteID() supplies the stable sense id (learning-history-invariants
+		// L2): it flows into FreeformCard.ID, so SaveFreeformResult writes the
+		// log under this key AND GetLatestLearnedInfo reads it back under the
+		// same key, and the Submit response carries a non-empty sense_id the
+		// override RPC can target. Without it these words had ID="" — an empty
+		// sense_id — so the feedback's Mark-as-Correct override could not
+		// identify the exact record.
+		noteID := def.NoteID()
 		note := notebook.Note{
+			ID:           noteID,
 			Expression:   def.Expression,
 			Definition:   def.Definition,
 			Meaning:      def.Meaning,
@@ -1552,11 +1633,13 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 			OriginParts:  def.OriginParts,
 		}
 		cards = append(cards, FreeformCard{
+			ID:                 noteID,
 			NotebookName:       def.NotebookName,
 			StoryTitle:         def.SessionTitle,
 			Expression:         expression,
 			OriginalExpression: def.Expression,
 			Meaning:            def.Meaning,
+			Examples:           examples,
 			WordDetail:         buildWordDetail(&note, originMap),
 			Literal:            def.Note,
 		})
@@ -2220,21 +2303,13 @@ func loadDefinitionReverseCards(reader *notebook.Reader, bookID string, learning
 				// masking).
 				var contexts []ReverseContext
 				for _, ex := range note.Examples {
-					textLower := strings.ToLower(ex.Text)
-					// An irregular highlight (e.g. lemma "go", highlight
-					// "went") may not contain the expression as a substring,
-					// so also accept an example whose highlight surface form
-					// is present.
-					hasExpr := strings.Contains(textLower, strings.ToLower(note.Expression))
-					hasHighlight := ex.Highlight != "" && strings.Contains(textLower, strings.ToLower(ex.Highlight))
-					if !hasExpr && !hasHighlight {
-						continue
+					// Show the example only if masking actually hid the answer; an
+					// inflected surface form the lemma can't whole-word match is only
+					// shown when a highlight names it, otherwise it is dropped so the
+					// reverse hint never reveals the answer.
+					if rc, ok := reverseHintContext(ex.Text, note.Expression, note.Definition, ex.Highlight); ok {
+						contexts = append(contexts, rc)
 					}
-					masked := maskWord(ex.Text, note.Expression, note.Definition, ex.Highlight)
-					contexts = append(contexts, ReverseContext{
-						Context:       ex.Text,
-						MaskedContext: masked,
-					})
 				}
 				card := ReverseCard{
 					ID:           note.ID,

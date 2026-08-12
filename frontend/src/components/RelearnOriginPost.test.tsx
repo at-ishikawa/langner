@@ -18,6 +18,7 @@ const word = (
   noteId: number,
   originDirection = 1,
   contexts: RelearnCard["contexts"] = [],
+  examples: RelearnCard["examples"] = [],
 ): RelearnCard =>
   ({
     entry,
@@ -25,7 +26,7 @@ const word = (
     sourceQuizType: 4,
     originDirection,
     meaning: `${entry}-meaning`,
-    examples: [],
+    examples,
     contexts,
     type: "root",
     language: "Latin",
@@ -163,6 +164,322 @@ describe("RelearnOriginPost", () => {
         expect.objectContaining({ noteId: BigInt(1), answer: "liberty", isSkipped: false }),
       );
     });
+  });
+
+  it("shows a recognition word's example as usage context WHILE ASKING (before any grading)", () => {
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[
+            // recognition (1): word shown, recall meaning → full example is a hint.
+            word("liberty", 1, 1, [], [
+              { text: "They fought for liberty and freedom.", speaker: "", highlight: "liberty" },
+            ] as RelearnCard["examples"]),
+          ]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    // The word is still being asked (its meaning input is present, no grade yet)…
+    expect(screen.getByLabelText('Meaning for "liberty"')).toBeInTheDocument();
+    // …and the FULL example is already on screen as usage context.
+    expect(screen.getByText("They fought for liberty and freedom.")).toBeInTheDocument();
+  });
+
+  it("shows a reverse word's example MASKED while asking, without revealing the answer", () => {
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[
+            // reverse (2): meaning shown, recall the word → example is masked.
+            word("liberty", 1, 2, [
+              { context: "They fought for liberty.", maskedContext: "They fought for ____." },
+            ] as RelearnCard["contexts"]),
+          ]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    expect(screen.getByLabelText('Word for "liberty-meaning"')).toBeInTheDocument();
+    // The masked hint is shown; the answer word is NOT revealed.
+    expect(screen.getByText("They fought for ____.")).toBeInTheDocument();
+    expect(screen.queryByText("They fought for liberty.")).not.toBeInTheDocument();
+  });
+
+  it("disables Next while a committed word is still grading, then enables it once the grade lands", async () => {
+    // A single-word family: committing the one word makes remainingCount 0, so
+    // the Next control renders — but the grade is still in flight. Next must be
+    // disabled until it lands, or tapping it discards the ungraded answer.
+    let resolveGrade!: (r: SubmitRelearnAnswerResponse) => void;
+    submitMock.mockReturnValueOnce(
+      new Promise<SubmitRelearnAnswerResponse>((resolve) => {
+        resolveGrade = resolve;
+      }),
+    );
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Grading in flight → Next is present but disabled.
+    const next = await screen.findByTestId("relearn-origin-next");
+    expect(next).toBeDisabled();
+
+    resolveGrade(gradeResponse({ correct: true }));
+
+    await waitFor(() => expect(screen.getByTestId("relearn-origin-next")).toBeEnabled());
+  });
+
+  it("flips a ✓ word to ✗ (in-session, no network) so it re-drills this session", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: true }));
+    const onComplete = vi.fn();
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={onComplete}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Graded correct → chip is correct. A correct word does NOT auto-open its
+    // sheet, so the learner taps the chip to review/flip it.
+    const chip = await screen.findByRole("button", { name: "liberty — correct" });
+    const callsAfterGrade = submitMock.mock.calls.length;
+    fireEvent.click(chip);
+
+    const flip = await screen.findByTestId("relearn-origin-override");
+    expect(flip).toHaveTextContent("Mark as Incorrect");
+    fireEvent.click(flip);
+
+    // Chip now reflects the override, and NO extra grading call fired.
+    await screen.findByRole("button", { name: "liberty — incorrect" });
+    expect(submitMock.mock.calls.length).toBe(callsAfterGrade);
+
+    // On Next the flipped word is reported wrong → completeOrigin re-queues it.
+    fireEvent.click(screen.getByTestId("relearn-origin-next"));
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    const [wrongWords, correctCount] = onComplete.mock.calls[0] as [RelearnCard[], number];
+    expect(wrongWords.map((w) => w.entry)).toContain("liberty");
+    expect(correctCount).toBe(0);
+  });
+
+  it("flips a ✗ word to ✓ so it drops from this session", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: false }));
+    const onComplete = vi.fn();
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={onComplete}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "wrong guess" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // Wrong answers auto-open the sheet.
+    await screen.findByTestId("relearn-origin-feedback");
+    const flip = await screen.findByTestId("relearn-origin-override");
+    expect(flip).toHaveTextContent("Mark as Correct");
+    fireEvent.click(flip);
+
+    await screen.findByRole("button", { name: "liberty — correct" });
+
+    fireEvent.click(screen.getByTestId("relearn-origin-next"));
+    const [wrongWords, correctCount] = onComplete.mock.calls[0] as [RelearnCard[], number];
+    expect(wrongWords).toHaveLength(0);
+    expect(correctCount).toBe(1);
+  });
+
+  it("Undo restores the grader's verdict", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: true }));
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1)]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "liberty — correct" }));
+    fireEvent.click(await screen.findByTestId("relearn-origin-override")); // → incorrect
+    await screen.findByRole("button", { name: "liberty — incorrect" });
+
+    fireEvent.click(await screen.findByTestId("relearn-origin-override-undo"));
+    // Back to the grader's verdict, and the flip control returns.
+    await screen.findByRole("button", { name: "liberty — correct" });
+    expect(screen.getByTestId("relearn-origin-override")).toHaveTextContent("Mark as Incorrect");
+  });
+
+  it("disables 'See answers' while a word is grading, and never empty-submits the in-flight word", async () => {
+    submitMock.mockClear(); // this file shares the module-level mock across tests
+    let resolveGrade!: (r: SubmitRelearnAnswerResponse) => void;
+    submitMock.mockReturnValueOnce(
+      new Promise<SubmitRelearnAnswerResponse>((resolve) => {
+        resolveGrade = resolve;
+      }),
+    );
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1), word("liberal", 2)]}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    // Commit the first word → it starts grading while the second is still
+    // un-answered, so the "See answers (1 left)" control is on screen.
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    // The action button is present but DISABLED while grading (shows "Grading…").
+    const grading = await screen.findByRole("button", { name: /Grading/i });
+    expect(grading).toBeDisabled();
+    // The committed real answer was submitted; the in-flight word is never
+    // re-submitted with an empty answer.
+    expect(submitMock).toHaveBeenCalledTimes(1);
+    expect(submitMock).toHaveBeenCalledWith(
+      expect.objectContaining({ noteId: BigInt(1), answer: "freedom" }),
+    );
+
+    // Once the grade lands, "See answers" is enabled again.
+    resolveGrade(gradeResponse({ correct: true }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /See answers/i })).toBeEnabled(),
+    );
+    expect(submitMock).toHaveBeenCalledTimes(1);
+  });
+
+  const related = [
+    { word: "induce", meaning: "to lead in / bring about" },
+  ] as unknown as RelearnCard["relatedWords"];
+
+  it("hides related words during the question state, in BOTH recognition and reverse", () => {
+    const { unmount } = render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1, 1)]}
+          relatedWords={related}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+    // Recognition question state: the reference must NOT be shown.
+    expect(screen.getByLabelText('Meaning for "liberty"')).toBeInTheDocument();
+    expect(screen.queryByTestId("relearn-origin-related")).not.toBeInTheDocument();
+    unmount();
+
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1, 2)]}
+          relatedWords={related}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+    // Reverse question state: also NOT shown (would hint the answer).
+    expect(screen.getByLabelText('Word for "liberty-meaning"')).toBeInTheDocument();
+    expect(screen.queryByTestId("relearn-origin-related")).not.toBeInTheDocument();
+  });
+
+  it("shows related words (word + meaning) AFTER answering, excluding the drilled word", async () => {
+    submitMock.mockResolvedValueOnce(gradeResponse({ correct: true }));
+    render(
+      <ChakraProvider value={defaultSystem}>
+        <RelearnOriginPost
+          originText="liber"
+          originMeaning="free"
+          type="root"
+          language="Latin"
+          englishForms={[]}
+          words={[word("liberty", 1, 1)]}
+          relatedWords={related}
+          onComplete={vi.fn()}
+        />
+      </ChakraProvider>,
+    );
+
+    expect(screen.queryByTestId("relearn-origin-related")).not.toBeInTheDocument();
+
+    const input = screen.getByLabelText('Meaning for "liberty"');
+    fireEvent.change(input, { target: { value: "freedom" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const section = await screen.findByTestId("relearn-origin-related");
+    expect(section).toHaveTextContent("induce");
+    expect(section).toHaveTextContent("to lead in / bring about");
+    // The drilled word is not part of the related reference.
+    expect(section).not.toHaveTextContent("liberty");
   });
 
   it("renders no example scenes for a word graded without contextScenes", async () => {

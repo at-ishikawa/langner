@@ -31,9 +31,28 @@ origins:
       - { form: egi,     role: perfect_active }
       - { form: actum,   role: supine, note: "produces nominal derivations (action, transact)" }
 
-# A word whose etymology lives ONLY here (embedded definition), with no copy in
-# any definitions/story/flashcard book. It is loaded as an ordinary vocabulary
-# card by the quiz service and, when missed, folds into the facere family.
+  # A declared prefix, so a definitions entry can inline ONLY the prefix and
+  # leave the root to be completed from this notebook (the merge case below).
+  - origin: con
+    type: prefix
+    language: Latin
+    meaning: "with, together"
+    english_forms: [con, com]
+
+# Words whose etymology lives ONLY here (embedded definition), with no copy in
+# any definitions/story/flashcard book. They are loaded as ordinary vocabulary
+# cards by the quiz service and, when missed, fold into the facere family.
+#
+#   - `factory` ALSO has a plain copy in examples/definitions/roots-demo, so the
+#     dedup rule merges this origin onto that canonical (id-bearing) card.
+#   - `benefactor` and `artifice` have NO copy anywhere else, so each is
+#     surfaced as a brand-new quiz card straight from this etymology notebook.
+#     `benefactor` carries a usage sentence to exercise the etymology-notebook
+#     `examples:` path end to end (the sentence must survive onto the loaded
+#     card and appear on the Relearn origin family card). `artifice` is the
+#     awkward id case: an etymology-only word that must still carry a stable
+#     note id so the quiz feedback can offer the "Mark as Correct" override
+#     (learning-history-invariants L2).
 definitions:
   - expression: factory
     meaning: "a building where goods are manufactured"
@@ -44,3 +63,71 @@ definitions:
         highlight: factory
     origin_parts:
       - { origin: facere, language: Latin, from_form: fact }
+
+  # An etymology-notebook-ONLY word that carries a usage sentence. It exercises
+  # the etymology-notebook `examples:` path end to end: the sentence must survive
+  # onto the loaded card and appear on the word's Relearn origin family card.
+  - expression: benefactor
+    meaning: "a person who gives money or help to a good cause"
+    part_of_speech: noun
+    note: 'bene ("well") + fact (from facere, "to make/do") + -or (one who)'
+    examples:
+      - text: "A generous benefactor paid for the new library wing."
+        highlight: benefactor
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: fact }
+
+  # An etymology-notebook-only word whose example uses an INFLECTED surface form
+  # ("enacted", not the lemma "enact"). In the REVERSE direction the answer word
+  # must be blanked in the shown example, so the inflected form carries an
+  # explicit `highlight`. This pins that the reverse hint never reveals the answer
+  # for etymology-notebook words (the lemma alone cannot match "enacted").
+  - expression: enact
+    meaning: "to make (a bill or proposal) into law"
+    part_of_speech: verb
+    note: 'en- ("in") + act (from agere, "to drive/do")'
+    examples:
+      - text: "The council enacted the new rule after a long debate."
+        highlight: enacted
+    origin_parts:
+      - { origin: agere, language: Latin, from_form: act }
+
+  # An etymology-notebook word whose example ALSO uses an inflected form
+  # ("reacted") but WITHOUT a highlight. The lemma "react" cannot whole-word
+  # match "reacted", so the reverse hint would reveal the answer — the loader must
+  # instead DROP this example from the reverse hint (an inflected example needs a
+  # highlight to be shown). Recognition still shows it in full.
+  - expression: react
+    meaning: "to act in response to something"
+    part_of_speech: verb
+    note: 're- ("back") + act (from agere, "to drive/do")'
+    examples:
+      - text: "The crowd reacted with loud cheers."
+    origin_parts:
+      - { origin: agere, language: Latin, from_form: act }
+
+  # confection is ALSO defined in the definitions book (roots-demo) where it
+  # inlines only the declared prefix `con` and leaves the root here. This full
+  # declaration lets appendEtymologyNotebookWords MERGE the missing `facere` root
+  # onto the definitions card, so confection folds under facere (the root) like
+  # its siblings — not under the `con` prefix.
+  - expression: confection
+    meaning: "a sweet food made by an elaborate process"
+    part_of_speech: noun
+    note: 'con- ("together") + fect (from facere, "to make") = something put together'
+    origin_parts:
+      - { origin: con, language: Latin }
+      - { origin: facere, language: Latin, from_form: fect }
+
+  # An etymology-notebook-ONLY word with no copy anywhere else, so it surfaces as
+  # a brand-new quiz card. It must still carry a stable note id so the quiz
+  # feedback can offer the "Mark as Correct" override (learning-history L2).
+  - expression: artifice
+    meaning: "clever or cunning devices used to deceive; ingenuity"
+    part_of_speech: noun
+    note: 'arti (art) + fic (from facere, "to make") = made by skill'
+    examples:
+      - text: "The magician's whole act depended on artifice and misdirection."
+        highlight: artifice
+    origin_parts:
+      - { origin: facere, language: Latin, from_form: fic }

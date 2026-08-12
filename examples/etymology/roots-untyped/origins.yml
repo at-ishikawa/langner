@@ -1,0 +1,27 @@
+# Reproduces a real notebook shape: a root and its prefixes declared WITHOUT a
+# `type` field. Because the origins carry no explicit `type`, every resolved
+# origin_part is untyped — so the "which part is the root?" decision cannot rely
+# on the type. The etymology convention here is prefix(es) first, ROOT LAST.
+#
+# Generic public-domain Latin root (ducere, "to lead") and neutral prefixes — no
+# user data. Joined to examples/definitions/roots-untyped by the same `id`.
+- event: "lead roots"
+  scenes:
+    - scene: "duc (to lead)"
+      origins:
+        # Root — declared with NO type (so type is empty, not "root").
+        - origin: ducere
+          language: Latin
+          meaning: "to lead"
+          english_forms: [duc, duct]
+        # Prefixes — ALSO declared with NO type, so they survive origin
+        # resolution as untyped parts (this is what makes a prefixed word able
+        # to mis-fold under its prefix when the root is picked by position).
+        - origin: ab
+          language: Latin
+          meaning: "away, from"
+          english_forms: [ab]
+        - origin: sub
+          language: Latin
+          meaning: "under"
+          english_forms: [sub]

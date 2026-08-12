@@ -16,6 +16,13 @@ type RelearnConversationLine struct {
 	Quote   string
 }
 
+// OriginFamilyMember is one word of an origin family shown as post-answer
+// reference on the Relearn origin card: the word and a short meaning/gloss.
+type OriginFamilyMember struct {
+	Word    string
+	Meaning string
+}
+
 // RelearnContextScene groups the prose statements and conversation lines in
 // which a word appears within a single scene. Assembled read-only from
 // notebook data for the Relearn feedback screen.
@@ -81,6 +88,12 @@ type RelearnCard struct {
 	// down"`), sourced from the word's definitions note (Note.Note). Shown on the
 	// etymology Relearn feedback. Empty for other formats.
 	Literal string
+	// RelatedWords are the OTHER words sharing this card's origin that are NOT
+	// drilled on this card — display-only reference (word + short meaning) shown
+	// AFTER answering so the learner sees the wider family. Excludes the drilled
+	// words and any word whose skipped_at exclude marker is set. Populated only
+	// for QuizTypeEtymologyOrigin cards; never quizzed, never persisted.
+	RelatedWords []OriginFamilyMember
 
 	// Grammar display extras (empty for vocab/etymology cards). Content is
 	// the journal entry's full text; Incorrect is the mistaken span struck
@@ -145,8 +158,13 @@ type relearnCandidate struct {
 // It reads the YAML learning histories directly — the source of truth — so the
 // pool spans every notebook regardless of whether a database is
 // configured. It writes nothing, and persists nothing: every in-window wrong
-// word appears in every session until it ages out of the window or is answered
-// correctly in a real quiz, so the learner can re-drill it as often as needed.
+// vocabulary word appears in every session until it ages out of the window or is
+// answered correctly in a real quiz, so the learner can re-drill it as often as
+// needed. Grammar corrections are NOT window-limited — a still-"misunderstood"
+// correction is re-derived from due-state and reappears every session until it
+// is answered correctly in the live grammar quiz. A word deliberately excluded
+// from a quiz mode (per-quiz-type skipped_at set via SkipWord) never enters the
+// pool, matching the normal card loaders (quiz-ui-invariants U1).
 func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) {
 	histories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
@@ -161,8 +179,27 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			if len(sp.logs) == 0 {
 				continue
 			}
+			// A word deliberately EXCLUDED from a quiz mode carries a per-quiz-type
+			// skipped_at marker (set only via SkipWord). Every normal card loader
+			// filters those out, so the Relearn pool must too — an excluded word
+			// must never be re-drilled (quiz-ui-invariants U1). This gates on the
+			// ACTIVE exclude marker (notebook / reverse / grammar); it is distinct
+			// from the vestigial "etymology_origin" marker the origin-family
+			// grouping below deliberately ignores.
+			if expr.SkippedAt.IsSkipped(sp.format) {
+				continue
+			}
 			latest := sp.logs[0] // newest-first
-			if latest.LearnedAt.Before(windowStart) || latest.Status != notebook.LearnedStatusMisunderstood {
+			if latest.Status != notebook.LearnedStatusMisunderstood {
+				continue
+			}
+			// Grammar corrections are re-derived from their due-state, NOT the
+			// recent-miss window: a still-"misunderstood" correction stays in the
+			// pool every session until it is answered correctly in the live grammar
+			// quiz (which is what "learned" means for a correction). Vocabulary
+			// misses keep the recent-miss window — the normal quiz re-serves them,
+			// refreshing the timestamp — so they age out when no longer practiced.
+			if sp.format != notebook.QuizTypeGrammar && latest.LearnedAt.Before(windowStart) {
 				continue
 			}
 			// Key by id when present so same-spelling homographs stay
@@ -198,10 +235,16 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		return nil, nil
 	}
 
-	vocabByID, vocabByExpr, vocabByNotebookExpr, err := s.relearnVocabIndex()
+	words, err := s.LoadAllWords()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("load words for relearn pool: %w", err)
 	}
+	vocabByID, vocabByExpr, vocabByNotebookExpr := relearnVocabIndex(words)
+	// originFamilies groups every non-excluded word by the SAME origin its miss
+	// would fold under (primaryOriginPart), so an origin card can show the wider
+	// word family as post-answer reference. Excluded words (skipped_at) are left
+	// out (fix #1: Relearn never surfaces excluded words).
+	originFamilies := buildRelearnOriginFamilies(words)
 	grammarByID, err := s.relearnGrammarIndex()
 	if err != nil {
 		return nil, err
@@ -379,6 +422,18 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		cards = append(cards, card)
 	}
 
+	// The set of DRILLED words per origin, so the related-words reference on each
+	// family card excludes the words the card itself quizzes.
+	drilledByOrigin := map[string]map[string]bool{}
+	for _, key := range etymOrder {
+		p := etymByWord[key]
+		ok := originFamilyKey(p.op.Origin, p.op.Language)
+		if drilledByOrigin[ok] == nil {
+			drilledByOrigin[ok] = map[string]bool{}
+		}
+		drilledByOrigin[ok][strings.ToLower(strings.TrimSpace(p.fc.Expression))] = true
+	}
+
 	// Emit one origin family card per origin-bearing word, in the direction it
 	// was missed. A word missed in BOTH directions is drilled ONCE, in the
 	// reverse direction — producing the word is the stronger recall test — so it
@@ -389,7 +444,10 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		if p.reverse {
 			direction = notebook.QuizTypeReverse
 		}
-		cards = append(cards, buildEtymologyOriginCard(p.fc, p.op, direction, p.notebookName, originMap))
+		card := buildEtymologyOriginCard(p.fc, p.op, direction, p.notebookName, originMap)
+		originKey := originFamilyKey(p.op.Origin, p.op.Language)
+		card.RelatedWords = relatedOriginWords(originFamilies[originKey], drilledByOrigin[originKey])
+		cards = append(cards, card)
 	}
 
 	// One line so a short pool can be diagnosed from the server log: how many
@@ -481,15 +539,12 @@ func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression)
 	}
 }
 
-// relearnVocabIndex loads every vocabulary word once and indexes it by stable
-// id (the canonical key), and — as a legacy fallback for id-less candidates —
-// also by (notebook, expression) and by expression alone, so the pool can
-// resolve a wrong word to its meaning and context.
-func (s *Service) relearnVocabIndex() (byID map[string]FreeformCard, byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard, err error) {
-	words, err := s.LoadAllWords()
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("load words for relearn pool: %w", err)
-	}
+// relearnVocabIndex indexes the given vocabulary words by stable id (the
+// canonical key), and — as a legacy fallback for id-less candidates — also by
+// (notebook, expression) and by expression alone, so the pool can resolve a
+// wrong word to its meaning and context. The caller loads the words once (with
+// s.LoadAllWords) and shares the slice with the origin-family builder.
+func relearnVocabIndex(words []FreeformCard) (byID map[string]FreeformCard, byExpr map[string]FreeformCard, byNotebookExpr map[string]FreeformCard) {
 	byID = make(map[string]FreeformCard, len(words))
 	byExpr = make(map[string]FreeformCard, len(words))
 	byNotebookExpr = make(map[string]FreeformCard, len(words))
@@ -506,7 +561,69 @@ func (s *Service) relearnVocabIndex() (byID map[string]FreeformCard, byExpr map[
 			byNotebookExpr[strings.ToLower(w.NotebookName)+relearnKeySep+e] = w
 		}
 	}
-	return byID, byExpr, byNotebookExpr, nil
+	return byID, byExpr, byNotebookExpr
+}
+
+// originFamilyKey is the shared (origin|language) key, lowercased, that both the
+// origin-family index and the per-card lookup use, so grouping stays a
+// single-rule, single-place decision (learning-history-invariants L2).
+func originFamilyKey(origin, language string) string {
+	return strings.ToLower(strings.TrimSpace(origin) + "|" + strings.TrimSpace(language))
+}
+
+// buildRelearnOriginFamilies groups every word by the SAME origin its miss would
+// fold under (primaryOriginPart), so an origin card can show the wider word
+// family as post-answer reference. This is display-only REFERENCE, so it does
+// NOT filter skipped_at-excluded words: a word the learner excluded from quizzes
+// (learned it, turned quizzing off) is exactly a known same-origin word worth
+// showing. Only the quiz/drilled pool filters skipped_at (fix #1); this reference
+// must not. Members are de-duplicated by expression within each origin. The
+// drilled words are removed later by relatedOriginWords.
+func buildRelearnOriginFamilies(words []FreeformCard) map[string][]OriginFamilyMember {
+	families := map[string][]OriginFamilyMember{}
+	seen := map[string]map[string]bool{}
+	for _, w := range words {
+		op, ok := primaryOriginPart(w)
+		if !ok {
+			continue
+		}
+		expr := strings.TrimSpace(w.Expression)
+		if expr == "" {
+			continue
+		}
+		// NOTE: the related-words list is display-only REFERENCE, so it does NOT
+		// filter skipped_at-excluded words. A word the learner excluded from
+		// quizzes (they learned it and turned quizzing off) is exactly a "known
+		// word from this origin" worth showing as reference. Only the DRILLED /
+		// quiz pool filters skipped_at (fix #1); this reference must not.
+		key := originFamilyKey(op.Origin, op.Language)
+		exprLow := strings.ToLower(expr)
+		if seen[key] == nil {
+			seen[key] = map[string]bool{}
+		}
+		if seen[key][exprLow] {
+			continue
+		}
+		seen[key][exprLow] = true
+		families[key] = append(families[key], OriginFamilyMember{Word: expr, Meaning: w.Meaning})
+	}
+	return families
+}
+
+// relatedOriginWords returns the family members that are NOT among the drilled
+// words on this card (the card already quizzes those), preserving order.
+func relatedOriginWords(family []OriginFamilyMember, drilled map[string]bool) []OriginFamilyMember {
+	if len(family) == 0 {
+		return nil
+	}
+	var out []OriginFamilyMember
+	for _, m := range family {
+		if drilled[strings.ToLower(strings.TrimSpace(m.Word))] {
+			continue
+		}
+		out = append(out, m)
+	}
+	return out
 }
 
 // relearnGrammarEntry pairs a due grammar blank with the post it belongs to,
@@ -556,10 +673,11 @@ func (s *Service) relearnGrammarIndex() (map[string][]relearnGrammarEntry, error
 // definitions/flashcard word carries its usage only in Examples, so without this
 // a reverse relearn card for such a word would show no hint at all. Each example
 // is masked by its per-example Highlight (the exact surface form to hide) in
-// addition to the Expression/OriginalExpression, so an inflected form the lemma
-// can't match is still blanked and the answer word is never revealed. Sentences
-// are de-duplicated by text so a word carrying the same sentence in both lists
-// is shown once.
+// addition to the Expression/OriginalExpression. An example whose answer masking
+// leaves visible — an inflected surface form with no highlight (e.g. "evicted"
+// for lemma "evict") — is DROPPED rather than shown (reverseHintContext), so the
+// reverse hint never reveals the answer. Sentences are de-duplicated by text so a
+// word carrying the same sentence in both lists is shown once.
 func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 	var out []ReverseContext
 	seen := map[string]bool{}
@@ -569,10 +687,12 @@ func relearnMaskedContexts(fc FreeformCard) []ReverseContext {
 			return
 		}
 		seen[strings.ToLower(text)] = true
-		out = append(out, ReverseContext{
-			Context:       text,
-			MaskedContext: maskWord(text, fc.Expression, fc.OriginalExpression, highlight),
-		})
+		// Only show the example if masking actually hid the answer; an inflected
+		// form with no highlight would otherwise leak the word (reverse must never
+		// reveal the answer).
+		if rc, ok := reverseHintContext(text, fc.Expression, fc.OriginalExpression, highlight); ok {
+			out = append(out, rc)
+		}
 	}
 	for _, c := range fc.Contexts {
 		add(c.Context, "")
@@ -644,49 +764,58 @@ func relearnScenesFromCard(card FreeformCard) []RelearnContextScene {
 // primaryOriginPart returns the etymology origin Relearn folds a missed
 // origin-bearing word's family card under, and whether it has one.
 //
-// It prefers a ROOT origin over a prefix/suffix. The origin family card exists
-// to surface the shared ROOT a set of words derive from — the whole point is to
-// group e.g. recipient, intercept, and capture under "capere", not to scatter
-// them under whichever generic prefix (re, inter, …) each happens to list first.
-// A prefixed word like "recipient" (re + capere) must therefore fold under
-// "capere", not "re". A word with several roots is grouped under its first root
-// so it is drilled exactly once; a word that carries ONLY affixes (no declared
-// root) falls back to its first origin so it still groups rather than dropping
-// out of Relearn.
+// The origin family card exists to surface the shared ROOT a set of words derive
+// from — the whole point is to group e.g. recipient, intercept, and capture under
+// "capere", not to scatter them under whichever generic prefix (re, inter, …)
+// each happens to list first. It resolves the root two ways, covering both
+// notebook shapes:
 //
-// This preference is what makes grouping robust to whether or not a prefix is
-// declared as an origin: when the prefix is undeclared (older example data),
-// resolveOriginParts already drops it and only the root remains; when the prefix
-// IS declared (the shape real roots-books use), the root preference here keeps
-// the word grouped under the root instead of the prefix. Both cases now yield
-// the same root family (learning-history-invariants L2: one rule, one place).
+//   - When a part is EXPLICITLY typed "root" (the well-typed shape: prefixes
+//     typed prefix/suffix, root typed root), that part wins.
+//   - When NO part is explicitly typed root — the common shape where origins
+//     carry no `type` at all — the etymology convention is prefix(es) FIRST and
+//     the ROOT LAST, so the LAST part is taken as the root. Using the last part
+//     (not the first) is what keeps every prefixed sibling folding under the
+//     shared root instead of scattering under its own prefix; picking the first
+//     untyped part folded a prefixed word like "abduct" (ab + ducere) under "ab"
+//     instead of "ducere", emptying the root's family (the reported bug).
+//
+// A single-part word returns that part (root-only, or affix-only when the root
+// was undeclared and dropped by resolveOriginParts, so it still groups rather
+// than dropping out of Relearn). The SAME result keys both the drilled-word
+// folding and the related-words family, so a card always matches its family
+// (learning-history-invariants L2: one rule, one place).
 func primaryOriginPart(fc FreeformCard) (WordOriginPart, bool) {
-	var first WordOriginPart
-	haveFirst := false
+	parts := make([]WordOriginPart, 0, len(fc.WordDetail.OriginParts))
 	for _, op := range fc.WordDetail.OriginParts {
-		if strings.TrimSpace(op.Origin) == "" {
-			continue
+		if strings.TrimSpace(op.Origin) != "" {
+			parts = append(parts, op)
 		}
-		if !haveFirst {
-			first, haveFirst = op, true
-		}
-		if isRootOriginType(op.Type) {
+	}
+	if len(parts) == 0 {
+		return WordOriginPart{}, false
+	}
+	// Prefer a part EXPLICITLY typed "root" (the well-typed notebook shape:
+	// prefixes are type "prefix"/"suffix", the root type "root").
+	for _, op := range parts {
+		if isExplicitRootType(op.Type) {
 			return op, true
 		}
 	}
-	return first, haveFirst
+	// No part is explicitly typed root — the common shape where origins carry no
+	// `type` at all. The etymology convention is prefix(es) FIRST and the ROOT
+	// LAST, so the last part is the root. Using the last (not the first) part is
+	// what keeps every prefixed sibling folding under the shared root instead of
+	// scattering under its own prefix. A single-part word returns that part.
+	return parts[len(parts)-1], true
 }
 
-// isRootOriginType reports whether an origin's type denotes a root as opposed to
-// a prefix or suffix. The etymology schema uses "root", and treats an empty type
-// as root too (see EtymologyOrigin.Type: "'' means root").
-func isRootOriginType(originType string) bool {
-	switch strings.ToLower(strings.TrimSpace(originType)) {
-	case "", "root":
-		return true
-	default:
-		return false
-	}
+// isExplicitRootType reports whether an origin's type explicitly denotes a root.
+// Only the literal "root" counts — an EMPTY type is NOT treated as root here, so
+// an untyped prefix (empty type) never wins over the root-last rule in
+// primaryOriginPart. (Prefix/suffix are the other explicit types.)
+func isExplicitRootType(originType string) bool {
+	return strings.EqualFold(strings.TrimSpace(originType), "root")
 }
 
 // originEnglishForms looks up an origin's English combining-form spellings from

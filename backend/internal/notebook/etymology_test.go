@@ -362,3 +362,50 @@ func TestPickBestSceneForOrigin_EarliestRule(t *testing.T) {
 	assert.Equal(t, "alpha-scene", got,
 		"earliest scene in the book wins, regardless of alphabetical order")
 }
+
+func TestEtymologyDefinitionEntry_NoteID(t *testing.T) {
+	tests := []struct {
+		name string
+		def  EtymologyDefinitionEntry
+		want string
+	}{
+		{
+			name: "explicit id wins",
+			def:  EtymologyDefinitionEntry{ID: "artifice-1", Expression: "artifice", NotebookName: "latin-verbs", SessionTitle: "fac / ag"},
+			want: "artifice-1",
+		},
+		{
+			name: "derived from notebook, session and expression",
+			def:  EtymologyDefinitionEntry{Expression: "artifice", NotebookName: "latin-verbs", SessionTitle: "fac / ag verb roots"},
+			want: "etym-latin-verbs-fac-ag-verb-roots-artifice",
+		},
+		{
+			name: "falls back to definition when expression empty",
+			def:  EtymologyDefinitionEntry{Definition: "make less", NotebookName: "roots", SessionTitle: "s1"},
+			want: "etym-roots-s1-make-less",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, tt.def.NoteID())
+		})
+	}
+}
+
+func TestSlugifyID(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{name: "spaces and slashes collapse to single dash", in: "fac / ag verb roots", want: "fac-ag-verb-roots"},
+		{name: "trims leading and trailing punctuation", in: "  --Hello!!  ", want: "hello"},
+		{name: "digits kept", in: "Session 13", want: "session-13"},
+		{name: "empty", in: "   ", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.want, slugifyID(tt.in))
+		})
+	}
+}

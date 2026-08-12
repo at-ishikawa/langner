@@ -117,6 +117,94 @@ func relearnEntries(cards []*apiv1.RelearnCard) map[string]*apiv1.RelearnCard {
 	return out
 }
 
+// newExampleRelearnHandler builds a QuizHandler over the repo's examples/ tree
+// (the same directories config.example.yml wires), with the learning-notes dir
+// redirected to a caller-owned temp dir. It uses the substring mock grader
+// (mock.NewClient) — any answer NOT starting with "wrong" is graded CORRECT —
+// which is exactly what makes the empty-answer test meaningful: a blank ("")
+// would be graded correct if it reached the grader, so the test fails unless the
+// empty→incorrect short-circuit is in place.
+func newExampleRelearnHandler(t *testing.T, learningDir string) *QuizHandler {
+	t.Helper()
+	dir, err := os.Getwd()
+	require.NoError(t, err)
+	root := ""
+	for dir != "/" {
+		if _, statErr := os.Stat(filepath.Join(dir, "config.example.yml")); statErr == nil {
+			root = dir
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
+	if root == "" {
+		t.Skip("repo root (config.example.yml) not found")
+	}
+	ex := filepath.Join(root, "examples")
+	svc := quiz.NewService(config.NotebooksConfig{
+		StoriesDirectories:     []string{filepath.Join(ex, "stories")},
+		JournalsDirectories:    []string{filepath.Join(ex, "journals")},
+		FlashcardsDirectories:  []string{filepath.Join(ex, "flashcards")},
+		BooksDirectories:       []string{filepath.Join(ex, "books")},
+		DefinitionsDirectories: []string{filepath.Join(ex, "definitions")},
+		EtymologyDirectories:   []string{filepath.Join(ex, "etymology")},
+		GrammarsDirectories:    []string{filepath.Join(ex, "grammars")},
+		LearningNotesDirectory: learningDir,
+	}, mock.NewClient(), make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil),
+		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
+	return NewQuizHandler(svc)
+}
+
+// TestRelearn_OriginCardEmptyAnswerIsIncorrect pins the reported bug fix through
+// the exact frontend "See answers" path: RelearnOriginPost sends an EMPTY answer
+// for an un-typed word via SubmitRelearnAnswer, and it must grade INCORRECT — the
+// "unanswered → incorrect" contract (quiz-ui-invariants U1). It drives the real
+// example config + handler: a recognition miss of an origin-bearing word
+// (deficient → facere) is recorded through the real quiz path, so the Relearn
+// pool emits its origin family card; then an empty SubmitRelearnAnswer against
+// that card is asserted wrong. With the substring mock grader an empty answer
+// would be graded CORRECT if it reached the grader, so this fails without the
+// empty→incorrect short-circuit in GradeNotebookAnswer.
+func TestRelearn_OriginCardEmptyAnswerIsIncorrect(t *testing.T) {
+	ctx := context.Background()
+	learningDir := t.TempDir()
+	h := newExampleRelearnHandler(t, learningDir)
+
+	// Record a recognition miss of deficient through the real service path so it
+	// surfaces as an origin family card in the pool.
+	svc := h.svc
+	cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+	require.NoError(t, err)
+	missed := false
+	for i := range cards {
+		if cards[i].Entry == "deficient" {
+			require.NoError(t, svc.SaveResult(ctx, cards[i], quiz.GradeResult{Correct: false, Quality: 1}, 1000))
+			missed = true
+		}
+	}
+	require.True(t, missed, "standard quiz must serve deficient")
+
+	pool := startRelearn(t, h, 24)
+	var card *apiv1.RelearnCard
+	for _, c := range pool {
+		if c.GetEntry() == "deficient" {
+			card = c
+		}
+	}
+	require.NotNil(t, card, "the recognition-missed origin word must be in the pool")
+	require.Equal(t, apiv1.QuizType_QUIZ_TYPE_ETYMOLOGY_ORIGIN, card.GetSourceQuizType(),
+		"deficient folds into its origin family card")
+
+	// "See answers" for the un-typed word → empty answer, is_skipped=false.
+	resp, err := h.SubmitRelearnAnswer(ctx, connect.NewRequest(&apiv1.SubmitRelearnAnswerRequest{
+		NoteId: card.GetNoteId(),
+		Answer: "",
+	}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.GetCorrect(),
+		"an unanswered origin-card word must grade INCORRECT, not correct")
+}
+
 func startRelearn(t *testing.T, h *QuizHandler, windowHours int32) []*apiv1.RelearnCard {
 	t.Helper()
 	resp, err := h.StartRelearnQuiz(context.Background(),
