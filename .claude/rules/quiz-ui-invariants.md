@@ -42,10 +42,11 @@ The single-card vocab/reverse Relearn screen (`FeedbackActions` inside `quiz/rel
 The origin family card (`RelearnOriginPost.tsx`) shows, **only after the card is answered** (`remainingCount === 0`), a "Related words from this origin" section: the OTHER words sharing this origin, each as **word + short meaning**. It is pure reference — **not quizzed, no input, no grading, no RPC, no persistence** — so U1/U2 are untouched. Rules that must hold:
 
 - **Hidden during the question state**, for BOTH recognition and reverse. Never render it while any word on the card is still being asked — in reverse a same-root sibling could hint the answer.
-- **Excludes the drilled words** (they are the quiz items on this card) and **excludes any word whose `skipped_at` exclude marker is set** (consistent with "Relearn never surfaces excluded words"). Deduped.
-- Sourced from the SAME origin resolution the card already uses: the backend groups every non-excluded vocabulary word by its `primaryOriginPart` (`buildRelearnOriginFamilies` in `internal/quiz/relearn.go`), reusing the one folding rule (L2) — it does NOT fork a second origin lookup. Carried on `RelearnCard.related_words` (`OriginFamilyMember{word, meaning}`) and threaded through `relearnStore` (`RelearnOriginGroup.relatedWords`).
+- **Excludes the drilled words** (they are the quiz items on this card). Deduped.
+- **Does NOT filter `skipped_at`-excluded words.** This is display-only *reference*, not a quiz pool. A word the learner excluded from quizzes (they learned it and turned quizzing off) is exactly a known same-origin word worth showing — so it MUST still appear here. `skipped_at` filtering belongs ONLY to the quiz/drilled pool (fix #1: excluded words are never *quizzed*), a separate code path (the card loaders / the `consider` step of `LoadRelearnPool`). The family builder must not reach for it. (This corrects an earlier spec: the reference is not "Relearn never surfaces excluded words" — that rule is about drilling, not reference.)
+- Sourced from the SAME origin resolution the card already uses: the backend groups every vocabulary word by its `primaryOriginPart` (`buildRelearnOriginFamilies` in `internal/quiz/relearn.go`), reusing the one folding rule (L2) — it does NOT fork a second origin lookup. Carried on `RelearnCard.related_words` (`OriginFamilyMember{word, meaning}`) and threaded through `relearnStore` (`RelearnOriginGroup.relatedWords`).
 
-Do not move it into the question state or drop the drilled/`skipped_at` exclusions.
+Do not move it into the question state, do not drop the drilled-word exclusion, and do not re-add a `skipped_at` filter here.
 
 ## U2 — Skip and exclude are separate flags/paths, end to end
 

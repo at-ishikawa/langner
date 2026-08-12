@@ -244,7 +244,7 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	// would fold under (primaryOriginPart), so an origin card can show the wider
 	// word family as post-answer reference. Excluded words (skipped_at) are left
 	// out (fix #1: Relearn never surfaces excluded words).
-	originFamilies := buildRelearnOriginFamilies(words, histories)
+	originFamilies := buildRelearnOriginFamilies(words)
 	grammarByID, err := s.relearnGrammarIndex()
 	if err != nil {
 		return nil, err
@@ -573,10 +573,13 @@ func originFamilyKey(origin, language string) string {
 
 // buildRelearnOriginFamilies groups every word by the SAME origin its miss would
 // fold under (primaryOriginPart), so an origin card can show the wider word
-// family as post-answer reference. A word whose exclude marker (skipped_at) is
-// set for any vocab quiz type is left out (fix #1: Relearn never surfaces
-// excluded words). Members are de-duplicated by expression within each origin.
-func buildRelearnOriginFamilies(words []FreeformCard, histories map[string][]notebook.LearningHistory) map[string][]OriginFamilyMember {
+// family as post-answer reference. This is display-only REFERENCE, so it does
+// NOT filter skipped_at-excluded words: a word the learner excluded from quizzes
+// (learned it, turned quizzing off) is exactly a known same-origin word worth
+// showing. Only the quiz/drilled pool filters skipped_at (fix #1); this reference
+// must not. Members are de-duplicated by expression within each origin. The
+// drilled words are removed later by relatedOriginWords.
+func buildRelearnOriginFamilies(words []FreeformCard) map[string][]OriginFamilyMember {
 	families := map[string][]OriginFamilyMember{}
 	seen := map[string]map[string]bool{}
 	for _, w := range words {
@@ -585,9 +588,14 @@ func buildRelearnOriginFamilies(words []FreeformCard, histories map[string][]not
 			continue
 		}
 		expr := strings.TrimSpace(w.Expression)
-		if expr == "" || vocabWordExcluded(histories, w) {
+		if expr == "" {
 			continue
 		}
+		// NOTE: the related-words list is display-only REFERENCE, so it does NOT
+		// filter skipped_at-excluded words. A word the learner excluded from
+		// quizzes (they learned it and turned quizzing off) is exactly a "known
+		// word from this origin" worth showing as reference. Only the DRILLED /
+		// quiz pool filters skipped_at (fix #1); this reference must not.
 		key := originFamilyKey(op.Origin, op.Language)
 		exprLow := strings.ToLower(expr)
 		if seen[key] == nil {
@@ -600,19 +608,6 @@ func buildRelearnOriginFamilies(words []FreeformCard, histories map[string][]not
 		families[key] = append(families[key], OriginFamilyMember{Word: expr, Meaning: w.Meaning})
 	}
 	return families
-}
-
-// vocabWordExcluded reports whether a word carries the exclude marker
-// (skipped_at) for any vocabulary quiz type — the same marker the card loaders
-// and the Relearn pool filter on. Such a word is never shown as a related word.
-func vocabWordExcluded(histories map[string][]notebook.LearningHistory, fc FreeformCard) bool {
-	hs := histories[fc.NotebookName]
-	for _, qt := range []notebook.QuizType{notebook.QuizTypeNotebook, notebook.QuizTypeReverse, notebook.QuizTypeFreeform} {
-		if notebook.IsExpressionExcludedForQuizType(hs, fc.ID, qt, fc.Expression, fc.OriginalExpression) {
-			return true
-		}
-	}
-	return false
 }
 
 // relatedOriginWords returns the family members that are NOT among the drilled

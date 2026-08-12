@@ -256,7 +256,10 @@ func TestExampleData_ReverseHintNeverRevealsAnswer(t *testing.T) {
 //   - a missed word (deficient → facere) produces the origin card;
 //   - RelatedWords lists the OTHER facere words with their meanings;
 //   - the DRILLED word itself (deficient) is excluded;
-//   - a sibling EXCLUDED via the real SkipWord path (factory) is excluded.
+//   - a sibling EXCLUDED from quizzes via the real SkipWord path (factory) is
+//     STILL listed — the related list is display-only reference, and a word the
+//     learner excluded (learned, quizzing off) is exactly a known same-origin
+//     word worth showing. Only the quiz/drilled pool filters skipped_at.
 //
 // Covered for both a recognition miss and a reverse miss (the reference is
 // attached in either direction).
@@ -315,13 +318,15 @@ func TestExampleData_OriginCardShowsRelatedFamily(t *testing.T) {
 			for _, m := range card.RelatedWords {
 				related[m.Word] = m.Meaning
 			}
-			// A non-missed, non-excluded facere sibling appears WITH its meaning.
+			// A non-missed sibling appears WITH its meaning.
 			require.Contains(t, related, "benefactor", "related family should list the sibling")
 			assert.NotEmpty(t, related["benefactor"], "each related word carries a meaning")
 			// The drilled word itself is NOT listed (it's the quiz item).
 			assert.NotContains(t, related, "deficient", "the drilled word is excluded from related")
-			// The skipped_at-excluded sibling is NOT listed.
-			assert.NotContains(t, related, "factory", "an excluded sibling is never surfaced")
+			// The skipped_at-excluded sibling IS listed — display-only reference
+			// does not hide known words the learner turned quizzing off for.
+			assert.Contains(t, related, "factory", "a quiz-excluded sibling is still shown as reference")
+			assert.NotEmpty(t, related["factory"], "the excluded sibling carries its meaning")
 		})
 	}
 }
@@ -460,6 +465,96 @@ func TestExampleData_RelatedFamilyUntypedRootLast(t *testing.T) {
 			assert.Containsf(t, related, "ductile", "root-only sibling must be listed; got %v", related)
 			assert.NotEmpty(t, related["subduct"])
 			assert.NotContains(t, related, "abduct", "the drilled word is excluded from related")
+		})
+	}
+}
+
+// TestExampleData_RelatedFamilyIncludesQuizExcludedSiblings mirrors the user's
+// real state: several same-root siblings were LEARNED and excluded from quizzes
+// (skipped_at set for notebook + reverse via the real SkipWord path), while one
+// sibling is still drilled. The related-words reference must INCLUDE those
+// excluded siblings (they are known same-origin words worth showing) and exclude
+// only the drilled word. Before this change the family builder filtered
+// skipped_at words out, so the drilled card showed an empty family. Covers
+// recognition and reverse; seeds the leftover skipped_at STATE through the real
+// write path (verify-data-features-with-example-notebooks.md).
+func TestExampleData_RelatedFamilyIncludesQuizExcludedSiblings(t *testing.T) {
+	ctx := context.Background()
+
+	excluded := []struct{ expr, id string }{
+		{"factory", "factory-demo"},
+		{"confection", "confection-demo"},
+	}
+
+	for _, tc := range []struct {
+		name      string
+		direction notebook.QuizType
+	}{
+		{"recognition", notebook.QuizTypeNotebook},
+		{"reverse", notebook.QuizTypeReverse},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			learningDir := t.TempDir()
+			svc := newExampleService(t, learningDir)
+
+			// Seed the leftover state: exclude the facere siblings from quizzes.
+			for _, w := range excluded {
+				require.NoError(t, svc.SkipWord(
+					CardInfo{NotebookName: "roots-demo", Expression: w.expr, ID: w.id},
+					"", []notebook.QuizType{notebook.QuizTypeNotebook, notebook.QuizTypeReverse}))
+			}
+			histories, err := notebook.NewLearningHistories(learningDir)
+			require.NoError(t, err)
+			for _, w := range excluded {
+				require.Truef(t,
+					notebook.IsExpressionExcludedForQuizType(histories["roots-demo"], w.id, notebook.QuizTypeNotebook, w.expr),
+					"precondition: %q must be excluded from quizzes on disk", w.expr)
+			}
+
+			// Miss the un-excluded sibling in the given direction.
+			switch tc.direction {
+			case notebook.QuizTypeReverse:
+				cards, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+				require.NoError(t, err)
+				missed := false
+				for i := range cards {
+					if cards[i].Expression == "deficient" {
+						require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						missed = true
+					}
+				}
+				require.True(t, missed, "reverse quiz must serve deficient")
+			default:
+				cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+				require.NoError(t, err)
+				missed := false
+				for i := range cards {
+					if cards[i].Entry == "deficient" {
+						require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						missed = true
+					}
+				}
+				require.True(t, missed, "standard quiz must serve deficient")
+			}
+
+			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			require.NoError(t, err)
+			card := relearnCardFor(pool, "deficient")
+			require.NotNil(t, card)
+			require.Equal(t, "facere", card.OriginText)
+
+			related := map[string]string{}
+			for _, m := range card.RelatedWords {
+				related[m.Word] = m.Meaning
+			}
+			// The quiz-excluded siblings are STILL shown as reference, with meanings.
+			for _, w := range excluded {
+				assert.Containsf(t, related, w.expr,
+					"a quiz-excluded sibling must still appear as related reference; got %v", related)
+				assert.NotEmptyf(t, related[w.expr], "%q carries its meaning", w.expr)
+			}
+			// Only the drilled word is excluded from the reference.
+			assert.NotContains(t, related, "deficient", "the drilled word is excluded from related")
 		})
 	}
 }
