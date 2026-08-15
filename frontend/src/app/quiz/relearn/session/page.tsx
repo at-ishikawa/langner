@@ -29,7 +29,7 @@ export default function RelearnSessionPage() {
   const queue = useRelearnStore((s) => s.queue);
   const totalAnswers = useRelearnStore((s) => s.totalAnswers);
   const resolveFront = useRelearnStore((s) => s.resolveFront);
-  const completePost = useRelearnStore((s) => s.completePost);
+  const completeGrammarPost = useRelearnStore((s) => s.completeGrammarPost);
   const completeOrigin = useRelearnStore((s) => s.completeOrigin);
 
   const front = queue[0];
@@ -71,8 +71,11 @@ export default function RelearnSessionPage() {
   }
 
   // A grammar post is presented once with all its due blanks, drilled
-  // progressively like the live grammar quiz (see RelearnGrammarPost). It is
-  // answered in a single pass and removed — never requeued.
+  // progressively like the live grammar quiz (see RelearnGrammarPost). Blanks
+  // answered wrong re-queue as a smaller post (completeGrammarPost) so they are
+  // re-drilled this session until answered correctly; when all are correct the
+  // post is dropped. The key includes post.attempt so a re-queued post remounts
+  // fresh even when its wrong blanks are the same set (mirrors the origin card).
   if (front.kind === "post") {
     return (
       <Box maxW="sm" mx="auto" bg="gray.50" _dark={{ bg: "gray.900" }} minH="100vh" p={4}>
@@ -80,10 +83,10 @@ export default function RelearnSessionPage() {
           {wordsLeft} {wordsLeft === 1 ? "word" : "words"} left
         </Text>
         <RelearnGrammarPost
-          key={front.post.content}
+          key={`${front.post.content} #${front.post.attempt}`}
           content={front.post.content}
           blanks={front.post.blanks}
-          onComplete={(correctCount, blankCount) => completePost(correctCount, blankCount)}
+          onComplete={(wrongBlanks, correctCount) => completeGrammarPost(wrongBlanks, correctCount)}
         />
       </Box>
     );

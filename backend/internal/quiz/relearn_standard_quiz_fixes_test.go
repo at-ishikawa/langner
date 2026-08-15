@@ -2,6 +2,8 @@ package quiz
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -126,25 +128,78 @@ func TestExampleData_EtymologyNotebookExampleShownInRelearn(t *testing.T) {
 	assert.True(t, foundInHint, "the etymology word's example must show as an answering hint")
 }
 
-// TestExampleData_GrammarMissStaysDueAcrossWindow pins fix #3: a missed grammar
-// correction is re-derived from due-state, NOT the recent-miss window, so it
-// keeps reappearing in Relearn every session until it is answered correctly —
-// while a vocabulary miss is still window-limited. Both misses are recorded now
-// and the pool is queried with a windowStart in the FUTURE (so both logs predate
-// it): the grammar correction survives, the vocabulary miss drops out (control).
-func TestExampleData_GrammarMissStaysDueAcrossWindow(t *testing.T) {
+// grammarCardByIncorrect returns the pooled grammar Relearn card whose struck
+// span matches, or nil. Grammar cards carry no vocab Entry, so relearnCardFor
+// (which keys on Entry) cannot find them.
+func grammarCardByIncorrect(pool []RelearnCard, incorrect string) *RelearnCard {
+	for i := range pool {
+		if pool[i].Format == notebook.QuizTypeGrammar && pool[i].Incorrect == incorrect {
+			return &pool[i]
+		}
+	}
+	return nil
+}
+
+// TestExampleData_GrammarMissRespectsRecencyWindow pins the fix: a grammar
+// correction honors the SAME recent-miss window as vocabulary, so an OLD grammar
+// mistake the learner hasn't practiced lately ages out of the Relearn pool while
+// a RECENT one stays. This reverses the earlier behavior (grammar was exempt from
+// the window and reappeared every session forever).
+//
+// It seeds the leftover learning-history STATE the way the rule requires: the
+// real write path (SaveGrammarBlank) can only stamp time.Now(), so the OLD miss
+// is written as on-disk learning-history YAML in the real shape (the exact shape
+// SaveGrammarBlank produces — metadata.type grammar, flat "journal" bucket, a
+// misunderstood learned_log keyed by the correction senseID) with an explicit
+// backdated learned_at. The RECENT grammar miss and the vocabulary control go
+// through the real quiz save paths.
+//
+// Assertions with a 24h window:
+//   - the OLD grammar correction (learned_at 72h ago) is EXCLUDED;
+//   - the RECENT grammar correction (learned_at 1h ago) is INCLUDED;
+//   - a recent vocabulary miss still appears (vocab window unchanged).
+//
+// A widened window (7 days) is also queried to PROVE the seed is valid and it is
+// purely the window filtering the old correction out — with the wide window BOTH
+// grammar corrections appear (this reproduces the pre-fix behavior: before the
+// fix, the old correction appeared under the 24h window too).
+func TestExampleData_GrammarMissRespectsRecencyWindow(t *testing.T) {
 	ctx := context.Background()
-	svc := newExampleService(t, t.TempDir())
+	learningDir := t.TempDir()
+	svc := newExampleService(t, learningDir)
 
-	// Miss one grammar correction through the real grammar path.
-	posts, err := svc.LoadGrammarPosts("journal", nil)
-	require.NoError(t, err)
-	require.NotEmpty(t, posts, "the example journal must have due grammar corrections")
-	require.NotEmpty(t, posts[0].Blanks)
-	blank := posts[0].Blanks[0]
-	require.NoError(t, svc.SaveGrammarBlank(ctx, "journal", blank.SenseID, GradeResult{Correct: false, Quality: 0}, 1000))
+	// Two real corrections from the example journal's "Party" entry (scene 0).
+	const (
+		oldSenseID      = "journal-party-the-john"
+		oldIncorrect    = "the John"
+		recentSenseID   = "journal-party-in-school"
+		recentIncorrect = "in school"
+	)
 
-	// Miss one vocabulary word through the real reverse path (the control).
+	// Seed the OLD grammar miss as on-disk learning-history YAML in the real
+	// shape, with an explicit backdated timestamp (SaveGrammarBlank cannot
+	// backdate). This is the exact file SaveGrammarBlank writes for a journal.
+	oldAt := time.Now().Add(-72 * time.Hour).UTC().Format(time.RFC3339)
+	journalYAML := "- metadata:\n" +
+		"    id: journal\n" +
+		"    title: journal\n" +
+		"    type: grammar\n" +
+		"  expressions:\n" +
+		"    - expression: " + oldSenseID + "\n" +
+		"      id: " + oldSenseID + "\n" +
+		"      learned_logs:\n" +
+		"        - status: misunderstood\n" +
+		"          learned_at: \"" + oldAt + "\"\n" +
+		"          quality: 0\n" +
+		"          quiz_type: grammar\n" +
+		"          interval_days: 1\n"
+	require.NoError(t, os.WriteFile(filepath.Join(learningDir, "journal.yml"), []byte(journalYAML), 0o644))
+
+	// Miss the RECENT grammar correction through the real grammar path (now).
+	// Create() merges into the existing journal.yml alongside the seeded entry.
+	require.NoError(t, svc.SaveGrammarBlank(ctx, "journal", recentSenseID, GradeResult{Correct: false, Quality: 0}, 1000))
+
+	// Recent vocabulary control through the real reverse path (now).
 	reverse, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
 	require.NoError(t, err)
 	missed := false
@@ -156,21 +211,25 @@ func TestExampleData_GrammarMissStaysDueAcrossWindow(t *testing.T) {
 	}
 	require.True(t, missed, "reverse quiz must serve deficient")
 
-	// windowStart AFTER both misses: both logs are "before the window".
-	pool, err := svc.LoadRelearnPool(time.Now().Add(time.Hour))
+	// 24h window: the old grammar correction ages out; the recent one stays.
+	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
+	assert.Nil(t, grammarCardByIncorrect(pool, oldIncorrect),
+		"an OLD grammar correction (outside the window) must NOT be re-drilled after the fix")
+	assert.NotNil(t, grammarCardByIncorrect(pool, recentIncorrect),
+		"a RECENT grammar correction (inside the window) must stay in the pool")
+	assert.NotNil(t, relearnCardFor(pool, "deficient"),
+		"a recent vocabulary miss still appears (vocab window behavior unchanged)")
 
-	var grammar *RelearnCard
-	for i := range pool {
-		if pool[i].Format == notebook.QuizTypeGrammar && pool[i].Incorrect == blank.Incorrect {
-			grammar = &pool[i]
-		}
-	}
-	require.NotNil(t, grammar,
-		"a still-misunderstood grammar correction must stay in Relearn regardless of the window")
-
-	assert.Nil(t, relearnCardFor(pool, "deficient"),
-		"a vocabulary miss outside the window is NOT re-drilled (window still applies to vocab)")
+	// Wide 7-day window: proves the seed is valid and it is ONLY the window
+	// filtering — with a wide-enough window BOTH corrections appear (this is the
+	// pre-fix behavior the fix removes for the narrow window).
+	wide, err := svc.LoadRelearnPool(time.Now().Add(-7 * 24 * time.Hour))
+	require.NoError(t, err)
+	assert.NotNil(t, grammarCardByIncorrect(wide, oldIncorrect),
+		"the old correction IS in the pool when the window is wide enough (seed is valid)")
+	assert.NotNil(t, grammarCardByIncorrect(wide, recentIncorrect),
+		"the recent correction is in the wide window too")
 }
 
 // TestExampleData_ReverseHintNeverRevealsAnswer pins fix: on a REVERSE relearn

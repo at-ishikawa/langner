@@ -158,13 +158,16 @@ type relearnCandidate struct {
 // It reads the YAML learning histories directly — the source of truth — so the
 // pool spans every notebook regardless of whether a database is
 // configured. It writes nothing, and persists nothing: every in-window wrong
-// vocabulary word appears in every session until it ages out of the window or is
-// answered correctly in a real quiz, so the learner can re-drill it as often as
-// needed. Grammar corrections are NOT window-limited — a still-"misunderstood"
-// correction is re-derived from due-state and reappears every session until it
-// is answered correctly in the live grammar quiz. A word deliberately excluded
-// from a quiz mode (per-quiz-type skipped_at set via SkipWord) never enters the
-// pool, matching the normal card loaders (quiz-ui-invariants U1).
+// item — vocabulary AND grammar — appears in every session until it ages out of
+// the window or is answered correctly in a real quiz, so the learner can
+// re-drill it as often as needed. Grammar corrections honor the SAME recent-miss
+// window as vocabulary: an old grammar mistake the learner hasn't practiced
+// lately ages out of the Relearn re-drill pool. Ageing out does NOT lose it — the
+// live grammar quiz still serves a still-"misunderstood" correction (always due
+// via NeedsForwardReview), so missing it again there re-records a fresh miss that
+// brings it back into the window. A word deliberately excluded from a quiz mode
+// (per-quiz-type skipped_at set via SkipWord) never enters the pool, matching the
+// normal card loaders (quiz-ui-invariants U1).
 func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) {
 	histories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
@@ -193,13 +196,16 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			if latest.Status != notebook.LearnedStatusMisunderstood {
 				continue
 			}
-			// Grammar corrections are re-derived from their due-state, NOT the
-			// recent-miss window: a still-"misunderstood" correction stays in the
-			// pool every session until it is answered correctly in the live grammar
-			// quiz (which is what "learned" means for a correction). Vocabulary
-			// misses keep the recent-miss window — the normal quiz re-serves them,
-			// refreshing the timestamp — so they age out when no longer practiced.
-			if sp.format != notebook.QuizTypeGrammar && latest.LearnedAt.Before(windowStart) {
+			// Every series — vocabulary AND grammar — honors the recent-miss
+			// window: a miss older than windowStart ages out of the Relearn
+			// re-drill pool, so the learner is not re-shown stale problems they
+			// have not practiced lately. This applies to grammar corrections too
+			// (a still-"misunderstood" correction the learner hasn't touched in a
+			// while drops out here). It is not lost: the live grammar quiz still
+			// serves it (misunderstood is always due via NeedsForwardReview), and
+			// missing it again there re-records a fresh miss that brings it back
+			// into the window.
+			if latest.LearnedAt.Before(windowStart) {
 				continue
 			}
 			// Key by id when present so same-spelling homographs stay

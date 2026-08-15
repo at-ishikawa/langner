@@ -19,12 +19,17 @@ import { QuizType, type RelearnCard } from "@/lib/client";
 // family screen mirrors this at the GROUP level (completeOrigin): the words
 // answered correctly clear, and the words answered wrong re-queue as a smaller
 // family screen at the back so they come around again this session — the origin
-// loop only ends once every word in it is answered correctly. A grammar post is
-// the exception: it mirrors the live grammar quiz and is answered in one pass
-// and removed (completePost), never requeued (a missed blank is simply due next
-// session). The session ends when the queue is empty. totalAnswers counts every
-// answer (it exceeds clearedCount because re-queued cards/words are answered
-// more than once).
+// loop only ends once every word in it is answered correctly. A grammar post
+// mirrors this too (completeGrammarPost): the blanks answered correctly clear,
+// and the blanks answered wrong re-queue as a smaller post — same post text,
+// only the still-missed blanks — at the back, so they are re-drilled this
+// session until every blank of the post is answered correctly. The session ends
+// when the queue is empty. totalAnswers counts every answer (it exceeds
+// clearedCount because re-queued cards/words/blanks are answered more than once).
+//
+// Relearn persists nothing regardless: re-queuing only reshapes this session's
+// working queue (no backend write, no skip/exclude), so a blank not answered
+// correctly is still due next session too.
 
 // RelearnPostGroup is one journal post shown once, with its due corrections as
 // inline blanks answered progressively. Every blank of a post carries the same
@@ -32,6 +37,13 @@ import { QuizType, type RelearnCard } from "@/lib/client";
 export interface RelearnPostGroup {
   content: string;
   blanks: RelearnCard[];
+  // attempt counts how many times this post has been (re-)queued: 0 on first
+  // appearance, +1 each time its still-wrong blanks re-queue. It is not shown —
+  // it only makes the React key of a re-queued post unique so the grammar post
+  // remounts fresh (a post whose wrong blanks are the SAME set would otherwise
+  // keep the same key, and its per-blank grading state, on retry). Mirrors
+  // RelearnOriginGroup.attempt.
+  attempt: number;
 }
 
 // RelearnOriginGroup is one etymology origin shown once, with the missed words
@@ -73,7 +85,7 @@ interface RelearnState {
   totalAnswers: number;
   seedQueue: (cards: RelearnCard[]) => void;
   resolveFront: (correct: boolean) => void;
-  completePost: (correctCount: number, blankCount: number) => void;
+  completeGrammarPost: (wrongBlanks: RelearnCard[], correctCount: number) => void;
   completeOrigin: (wrongWords: RelearnCard[], correctCount: number) => void;
   reset: () => void;
 }
@@ -93,7 +105,7 @@ function groupIntoItems(cards: RelearnCard[]): RelearnItem[] {
         existing.blanks.push(card);
         continue;
       }
-      const post: RelearnPostGroup = { content: card.content, blanks: [card] };
+      const post: RelearnPostGroup = { content: card.content, blanks: [card], attempt: 0 };
       postByContent.set(card.content, post);
       items.push({ kind: "post", post });
       continue;
@@ -152,17 +164,32 @@ export const useRelearnStore = create<RelearnState>((set) => ({
         totalAnswers: state.totalAnswers + 1,
       };
     }),
-  completePost: (correctCount, blankCount) =>
+  // completeGrammarPost ends one pass over the front grammar post. Every blank
+  // was answered this pass, so it counts as many attempts as the post has blanks
+  // (totalAnswers) and clears the ones answered correctly this pass
+  // (clearedCount). The still-wrong blanks re-queue as a smaller post at the BACK
+  // — same post text, only the missed blanks — so they come around again this
+  // session and each blank clears exactly once, when it is finally right (mirrors
+  // completeOrigin at the post level). When every blank was correct there is
+  // nothing to re-queue and the post is dropped.
+  completeGrammarPost: (wrongBlanks, correctCount) =>
     set((state) => {
-      if (state.queue.length === 0) {
+      const [front, ...rest] = state.queue;
+      if (!front || front.kind !== "post") {
         return {};
       }
-      const [, ...rest] = state.queue;
-      return {
-        queue: rest,
+      const counts = {
         clearedCount: state.clearedCount + correctCount,
-        totalAnswers: state.totalAnswers + blankCount,
+        totalAnswers: state.totalAnswers + front.post.blanks.length,
       };
+      if (wrongBlanks.length === 0) {
+        return { ...counts, queue: rest };
+      }
+      const retry: RelearnItem = {
+        kind: "post",
+        post: { ...front.post, blanks: wrongBlanks, attempt: front.post.attempt + 1 },
+      };
+      return { ...counts, queue: [...rest, retry] };
     }),
   // completeOrigin ends one pass over the front origin family. Every word in the
   // family was answered this pass, so it counts as many attempts as the family

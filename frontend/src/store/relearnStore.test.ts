@@ -43,6 +43,15 @@ function frontOriginWords(): RelearnCard[] {
   return front.group.words;
 }
 
+// frontPostBlanks reads the blanks of the front grammar post screen (the one
+// completeGrammarPost acts on), as the session page passes them into
+// RelearnGrammarPost.
+function frontPostBlanks(): RelearnCard[] {
+  const front = useRelearnStore.getState().queue[0];
+  if (front?.kind !== "post") throw new Error("front is not a post screen");
+  return front.post.blanks;
+}
+
 describe("useRelearnStore", () => {
   beforeEach(() => {
     useRelearnStore.getState().reset();
@@ -129,21 +138,79 @@ describe("useRelearnStore", () => {
     expect(q[1].kind).toBe("post");
     if (q[1].kind === "post") {
       expect(q[1].post.blanks.map((b) => b.incorrect)).toEqual(["the John", "go"]);
+      expect(q[1].post.attempt).toBe(0);
     }
   });
 
-  it("completePost removes the post screen and tallies its blanks", () => {
+  // A grammar post re-queues the blanks answered WRONG so they are re-drilled
+  // this session — the post-level analogue of completeOrigin / resolveFront.
+  it("completeGrammarPost re-queues only the wrong blanks and clears only the correct ones", () => {
+    const post = "Yesterday the John called me and I go home fast.";
+    useRelearnStore
+      .getState()
+      .seedQueue([
+        grammarCard(post, "the John"),
+        grammarCard(post, "go"),
+        grammarCard(post, "fast"),
+        card("beta"),
+      ]);
+    const blanks = frontPostBlanks();
+    // 1 correct (the John), 2 wrong (go, fast).
+    const wrong = [blanks[1], blanks[2]];
+    useRelearnStore.getState().completeGrammarPost(wrong, 1);
+
+    const s = useRelearnStore.getState();
+    // The card screen stays; the post re-queues behind it as a smaller post.
+    expect(s.queue).toHaveLength(2);
+    expect(s.queue[0]).toMatchObject({ kind: "card" });
+    expect(s.queue[1].kind).toBe("post");
+    if (s.queue[1].kind === "post") {
+      expect(s.queue[1].post.blanks.map((b) => b.incorrect)).toEqual(["go", "fast"]);
+      expect(s.queue[1].post.content).toBe(post); // same post text
+      expect(s.queue[1].post.attempt).toBe(1); // re-queued → unique remount key
+    }
+    // Only the correct blank clears; every blank this pass is one answer.
+    expect(s.clearedCount).toBe(1);
+    expect(s.totalAnswers).toBe(3);
+  });
+
+  it("completeGrammarPost all-correct on the re-queued post empties the queue with correct counts", () => {
+    const post = "Yesterday the John called me and I go home.";
+    useRelearnStore
+      .getState()
+      .seedQueue([grammarCard(post, "the John"), grammarCard(post, "go")]);
+    const first = frontPostBlanks();
+    useRelearnStore.getState().completeGrammarPost([first[1]], 1); // 1 re-queued (go)
+    // Second pass over the 1-blank post, correct.
+    useRelearnStore.getState().completeGrammarPost([], 1);
+
+    const s = useRelearnStore.getState();
+    expect(s.queue).toEqual([]);
+    // 1 cleared on the first pass + 1 on the retry = both, each counted once.
+    expect(s.clearedCount).toBe(2);
+    // 2 answers on the first pass + 1 on the retry.
+    expect(s.totalAnswers).toBe(3);
+  });
+
+  it("completeGrammarPost all-correct on the first pass drops the post and re-queues nothing", () => {
     const post = "Yesterday the John called me and I go home.";
     useRelearnStore
       .getState()
       .seedQueue([grammarCard(post, "the John"), grammarCard(post, "go"), card("beta")]);
-    // Two blanks, one correct.
-    useRelearnStore.getState().completePost(1, 2);
+    useRelearnStore.getState().completeGrammarPost([], 2);
     const s = useRelearnStore.getState();
     expect(s.queue).toHaveLength(1);
     expect(entries(s.queue)).toEqual(["beta"]);
-    expect(s.clearedCount).toBe(1);
+    expect(s.clearedCount).toBe(2);
     expect(s.totalAnswers).toBe(2);
+  });
+
+  it("completeGrammarPost on an empty queue is a no-op", () => {
+    useRelearnStore.getState().completeGrammarPost([], 0);
+    const s = useRelearnStore.getState();
+    expect(s.queue).toEqual([]);
+    expect(s.clearedCount).toBe(0);
+    expect(s.totalAnswers).toBe(0);
   });
 
   // Etymology-origin cards that share an origin fold into ONE family screen, and
