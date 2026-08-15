@@ -326,7 +326,7 @@ func newExpressionFromOrigin(o notebook.EtymologyOriginRecord, logs []LearningLo
 // re-sorting so callers' GetLatestStatus / GetLatestLogs sees the same
 // [0] entry the YAML loader would have surfaced.
 func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.LearningHistoryExpression {
-	var learnedLogs, reverseLogs, breakdownLogs, assemblyLogs []notebook.LearningRecord
+	var learnedLogs, reverseLogs, originLogs []notebook.LearningRecord
 	convert := func(l LearningLog) notebook.LearningRecord {
 		return notebook.LearningRecord{
 			Status:         notebook.LearnedStatus(l.Status),
@@ -337,40 +337,28 @@ func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.
 			IntervalDays:   l.IntervalDays,
 		}
 	}
+	// Route each log to the SAME slot GetLogsForQuizType /
+	// SetLogsForQuizType use so the DB-reconstructed expression is
+	// symmetric with the writer (learning-history invariant L2):
+	// reverse → ReverseLogs, etymology_origin → EtymologyOriginLogs,
+	// everything else (notebook, freeform, grammar, legacy empty) →
+	// LearnedLogs. Freeform records stay in LearnedLogs carrying their
+	// own QuizType, exactly as the YAML reader surfaced them.
 	for _, l := range logs {
 		rec := convert(l)
-		switch l.QuizType {
-		case string(notebook.QuizTypeReverse):
+		switch notebook.QuizType(l.QuizType) {
+		case notebook.QuizTypeReverse:
 			reverseLogs = append(reverseLogs, rec)
-		case string(notebook.QuizTypeFreeform):
-			// Freeform tests both directions: append to LearnedLogs
-			// AND ReverseLogs so GetLogsForQuizType returns the entry
-			// regardless of which slot the caller queries. Mirrors how
-			// SaveResult's updater wrote two records when the YAML
-			// path was authoritative.
-			learnedLogs = append(learnedLogs, rec)
-			reverseLogs = append(reverseLogs, rec)
-		case string(notebook.QuizTypeEtymologyStandard):
-			breakdownLogs = append(breakdownLogs, rec)
-		case string(notebook.QuizTypeEtymologyReverse):
-			assemblyLogs = append(assemblyLogs, rec)
-		case string(notebook.QuizTypeEtymologyFreeform):
-			// Etymology Freeform writes a single DB row with this
-			// quiz_type; SetLogsForQuizType / GetLogsForQuizType
-			// expect both etymology slots populated. Duplicate the
-			// record into both so a follow-up Override or read sees
-			// the entry on either lookup side.
-			breakdownLogs = append(breakdownLogs, rec)
-			assemblyLogs = append(assemblyLogs, rec)
+		case notebook.QuizTypeEtymologyOrigin:
+			originLogs = append(originLogs, rec)
 		default:
 			learnedLogs = append(learnedLogs, rec)
 		}
 	}
 	return notebook.LearningHistoryExpression{
-		Expression:             expression,
-		LearnedLogs:            learnedLogs,
-		ReverseLogs:            reverseLogs,
-		EtymologyBreakdownLogs: breakdownLogs,
-		EtymologyAssemblyLogs:  assemblyLogs,
+		Expression:          expression,
+		LearnedLogs:         learnedLogs,
+		ReverseLogs:         reverseLogs,
+		EtymologyOriginLogs: originLogs,
 	}
 }

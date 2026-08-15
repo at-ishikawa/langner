@@ -330,11 +330,11 @@ func mergeStringKeys[V any](a, b map[string]V) []string {
 
 // tallyByQuizType routes each record into the learned or reverse count
 // by its quiz_type, falling back to defaultQuizType when the record
-// didn't specify one. reverse counts as reverse; etymology_breakdown /
-// etymology_assembly are not tallied here (they live in their own YAML
-// slots and aren't part of the learned/reverse round-trip counts);
-// everything else (notebook, freeform, etymology_freeform) counts as
-// learned — matching buildExpression's slot routing on export.
+// didn't specify one. reverse counts as reverse; etymology_origin is not
+// tallied here (it lives in its own YAML slot and isn't part of the
+// learned/reverse round-trip counts); everything else (notebook,
+// freeform) counts as learned — matching buildExpression's slot routing
+// on export.
 func tallyByQuizType(es *LearningExpressionStats, recs []notebook.LearningRecord, defaultQuizType notebook.QuizType) {
 	for _, rec := range recs {
 		qt := notebook.QuizType(rec.QuizType)
@@ -344,7 +344,7 @@ func tallyByQuizType(es *LearningExpressionStats, recs []notebook.LearningRecord
 		switch qt {
 		case notebook.QuizTypeReverse:
 			es.ReverseLogCount++
-		case notebook.QuizTypeEtymologyStandard, notebook.QuizTypeEtymologyReverse:
+		case notebook.QuizTypeEtymologyOrigin:
 			// not counted in learned/reverse
 		default:
 			es.LearnedLogCount++

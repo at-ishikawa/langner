@@ -157,9 +157,8 @@ func (s *StateSeeder) seedFlashcards(ctx context.Context, result *StateSeedResul
 // once. Each expression contributes:
 //   - one note_skip_flags row per (quizType, timestamp) in SkippedAt,
 //     or one origin_skip_flags row when the expression is an origin
-//   - one learning_logs row per EtymologyBreakdownLogs / EtymologyAssemblyLogs
-//     entry (these are the rows the old SaveEtymologyOriginResult wrote
-//     to YAML; migration 016 made them DB-backed via origin_id)
+//   - one learning_logs row per EtymologyOriginLogs entry (the origin's
+//     single etymology_origin log series, DB-backed via origin_id)
 func (s *StateSeeder) seedSkipFlagsAndEtymologyLogs(ctx context.Context, result *StateSeedResult) error {
 	if s.learningSrc == nil {
 		return nil
@@ -308,12 +307,11 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 // NotebookNotes to belong to, so the export's per-notebook YAML walk
 // never visits it).
 //
-// All four slots — LearnedLogs, ReverseLogs, EtymologyBreakdownLogs,
-// EtymologyAssemblyLogs — get the same treatment. Each record's
-// quiz_type is preserved exactly, falling back to the per-slot default
-// only when the record itself didn't specify one. That keeps round-
-// trip lossless against YAML that parks freeform/etymology_freeform
-// records in any slot.
+// All three slots — LearnedLogs, ReverseLogs, EtymologyOriginLogs —
+// get the same treatment. Each record's quiz_type is preserved exactly,
+// falling back to the per-slot default only when the record itself
+// didn't specify one. That keeps round-trip lossless against YAML that
+// parks freeform records in any slot.
 func (s *StateSeeder) persistEtymologyLogsForExpression(
 	ctx context.Context,
 	nbID string,
@@ -325,7 +323,7 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 		return nil
 	}
 	if len(expr.LearnedLogs) == 0 && len(expr.ReverseLogs) == 0 &&
-		len(expr.EtymologyBreakdownLogs) == 0 && len(expr.EtymologyAssemblyLogs) == 0 {
+		len(expr.EtymologyOriginLogs) == 0 {
 		return nil
 	}
 	// Match the origin by (notebookID, lower(origin)). Without a session
@@ -383,21 +381,9 @@ func (s *StateSeeder) persistEtymologyLogsForExpression(
 	if err := writeLogs(expr.ReverseLogs, notebook.QuizTypeReverse); err != nil {
 		return err
 	}
-	if err := writeLogs(expr.EtymologyBreakdownLogs, notebook.QuizTypeEtymologyStandard); err != nil {
-		return err
-	}
-	// An etymology_freeform answer is mirrored into BOTH the breakdown
-	// and assembly YAML slots because both directions were exercised.
-	// On the DB side that's one event, already written via the
-	// breakdown loop, so drop the assembly freeform mirror. Mirrors the
-	// dedup ImportLearningLogs applies for vocab notes — without it,
-	// sync-db's re-import doubles every etymology_freeform origin log
-	// and validate-db catches it on the round-trip.
-	assemblyLogs := expr.EtymologyAssemblyLogs
-	if len(assemblyLogs) > 0 && anyFreeformIn(expr.EtymologyBreakdownLogs) {
-		assemblyLogs = filterOutFreeform(assemblyLogs)
-	}
-	if err := writeLogs(assemblyLogs, notebook.QuizTypeEtymologyReverse); err != nil {
+	// Etymology is a single log series per word on the origin (invariant
+	// L1/L4): one EtymologyOriginLogs slot with quiz_type etymology_origin.
+	if err := writeLogs(expr.EtymologyOriginLogs, notebook.QuizTypeEtymologyOrigin); err != nil {
 		return err
 	}
 	return nil

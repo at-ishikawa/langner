@@ -360,14 +360,13 @@ func buildExpression(
 	entry string,
 	logs []LearningLog,
 ) notebook.LearningHistoryExpression {
-	// Route each log into the matching slot on LearningHistoryExpression.
-	// The original implementation lumped everything that wasn't reverse
-	// into learned_logs, which destroyed quiz_type information on
-	// round-trip: a word with etymology_breakdown_logs / etymology_
-	// assembly_logs in the source YAML came back with all of them merged
-	// into learned_logs (e.g. gauche with 1 source learned log + 7
-	// etymology logs exported as 8 learned logs). Match each YAML slot
-	// to the quiz_type values that get stored there at import time.
+	// Route each log into the matching slot on LearningHistoryExpression,
+	// mirroring GetLogsForQuizType/SetLogsForQuizType (learning-history
+	// invariant L2). The original implementation lumped everything that
+	// wasn't reverse into learned_logs, which destroyed quiz_type
+	// information on round-trip: a word's etymology_origin_logs came back
+	// merged into learned_logs. Match each YAML slot to the quiz_type
+	// values that get stored there at import time.
 	var learnedLogs, reverseLogs, originLogs []LearningLog
 	for _, log := range logs {
 		switch log.QuizType {

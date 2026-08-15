@@ -837,10 +837,16 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 			},
 		},
 		{
-			// Etymology origins carry a single log series
-			// (EtymologyOriginLogs, quiz_type=etymology_origin). Each log
-			// must import as exactly one DB row with the correct quiz type.
-			name: "etymology_origin logs are imported once per event",
+			// Under DB-only state, an etymology-origin expression's logs are
+			// owned by the StateSeeder (persisted against etymology_origins.id
+			// via origin_id), NOT attached to a note here. ImportLearningLogs
+			// must SKIP origin-typed expressions so their logs never conflate
+			// onto a same-named vocabulary note (learning-history L1/L4) — a
+			// phantom/vocab note has no notebook_notes to export under, which
+			// would drop the origin's logs on the YAML round-trip. Runtime
+			// import-db still imports them: seeder.SeedAll →
+			// persistEtymologyLogsForExpression writes each origin log once.
+			name: "etymology_origin expression is skipped (routed to StateSeeder)",
 			setup: func(learningSource *mock_datasync.MockLearningSource, noteRepo *mock_notebook.MockNoteRepository, learningRepo *mock_learning.MockLearningRepository) {
 				noteRepo.EXPECT().FindAll(gomock.Any()).Return([]notebook.NoteRecord{
 					{ID: 1, Entry: "alter", NotebookNotes: []notebook.NotebookNote{{NotebookID: "wpme"}}},
@@ -856,18 +862,9 @@ func TestImporter_ImportLearningLogs(t *testing.T) {
 						},
 					},
 				}, nil)
-				learningRepo.EXPECT().BatchCreate(gomock.Any(), gomock.Any()).
-					DoAndReturn(func(_ context.Context, logs []*learning.LearningLog) error {
-						require.Len(t, logs, 2, "each etymology_origin log imports as one row")
-						for _, l := range logs {
-							assert.Equal(t, string(notebook.QuizTypeEtymologyOrigin), l.QuizType)
-						}
-						return nil
-					})
+				// No BatchCreate: the origin expression is not imported here.
 			},
-			want: &ImportLearningLogsResult{
-				LearningNew: 2,
-			},
+			want: &ImportLearningLogsResult{},
 		},
 		{
 			name: "duplicate reverse log is skipped",
