@@ -40,6 +40,7 @@ const mockEtymologyResponse = {
       language: "Greek",
       meaning: "to write",
       wordCount: 4,
+      sessionTitle: "Chapter 1: Writing",
     },
     {
       origin: "tele",
@@ -47,6 +48,7 @@ const mockEtymologyResponse = {
       language: "Greek",
       meaning: "far",
       wordCount: 3,
+      sessionTitle: "Chapter 1: Writing",
     },
     {
       origin: "scrib",
@@ -54,6 +56,7 @@ const mockEtymologyResponse = {
       language: "Latin",
       meaning: "to write",
       wordCount: 2,
+      sessionTitle: "Chapter 2: Motion",
     },
   ],
   definitions: [
@@ -147,6 +150,45 @@ describe("EtymologyNotebookPage - Origin List", () => {
     expect(screen.getByText("4 words")).toBeInTheDocument();
     expect(screen.getByText("3 words")).toBeInTheDocument();
     expect(screen.getByText("2 words")).toBeInTheDocument();
+  });
+
+  it("groups origins under prominent section headings", async () => {
+    vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
+    renderPage();
+    await waitFor(() => {
+      // Sections render as real headings (prominent), not faint captions,
+      // and carry the source-book section title plus an origin count.
+      expect(
+        screen.getByRole("heading", { name: /Chapter 1: Writing/ }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("heading", { name: /Chapter 2: Motion/ }),
+      ).toBeInTheDocument();
+    });
+    // Origins still render under their sections.
+    expect(screen.getByText("graph")).toBeInTheDocument();
+    expect(screen.getByText("tele")).toBeInTheDocument();
+    expect(screen.getByText("scrib")).toBeInTheDocument();
+  });
+
+  it("drops sections with no matching origins when searching", async () => {
+    vi.mocked(client.notebookClient.getEtymologyNotebook).mockResolvedValue(mockEtymologyResponse);
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /Chapter 1: Writing/ })).toBeInTheDocument(),
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("Search origins or meanings..."), {
+      target: { value: "tele" },
+    });
+
+    await waitFor(() => {
+      // Only the section that still has a matching origin remains.
+      expect(screen.getByRole("heading", { name: /Chapter 1: Writing/ })).toBeInTheDocument();
+      expect(screen.queryByRole("heading", { name: /Chapter 2: Motion/ })).not.toBeInTheDocument();
+      expect(screen.getByText("tele")).toBeInTheDocument();
+      expect(screen.queryByText("scrib")).not.toBeInTheDocument();
+    });
   });
 
   it("renders summary footer with origin and word counts", async () => {

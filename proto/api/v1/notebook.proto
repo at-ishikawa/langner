@@ -185,6 +185,12 @@ message EtymologyOriginPart {
   // declared concept. Populated on the top-level origins listing so chips
   // can render concept membership without an extra round-trip.
   repeated string concept_keys = 8;
+  // session_title is the source book's section (chapter) this origin was
+  // declared in — the surrounding event / metadata.title. Populated on the
+  // top-level origins listing so the browse page can group origins under
+  // their section header. Display-only; it does not affect any learning log
+  // key. Empty on parts emitted inside an EtymologyDefinition.
+  string session_title = 9;
 }
 
 message EtymologyDefinition {

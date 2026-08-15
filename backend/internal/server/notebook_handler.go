@@ -902,13 +902,14 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 			conceptKeys = keys
 		}
 		protoOrigins = append(protoOrigins, &apiv1.EtymologyOriginPart{
-			Origin:      o.Origin,
-			Type:        o.Type,
-			Language:    o.Language,
-			Meaning:     o.Meaning,
-			WordCount:   int32(originWordCounts[originKey(o.Origin, o.SessionTitle)]),
-			Forms:       forms,
-			ConceptKeys: conceptKeys,
+			Origin:       o.Origin,
+			Type:         o.Type,
+			Language:     o.Language,
+			Meaning:      o.Meaning,
+			WordCount:    int32(originWordCounts[originKey(o.Origin, o.SessionTitle)]),
+			Forms:        forms,
+			ConceptKeys:  conceptKeys,
+			SessionTitle: o.SessionTitle,
 		})
 	}
 

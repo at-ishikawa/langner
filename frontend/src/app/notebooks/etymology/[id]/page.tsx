@@ -153,9 +153,10 @@ function OriginCard({
 }) {
   return (
     <Box
-      p={3}
+      p={4}
       borderWidth="1px"
-      borderRadius="lg"
+      borderColor="gray.200"
+      borderRadius="10px"
       bg="white"
       _dark={{ bg: "gray.800", borderColor: "gray.600" }}
       _hover={{ bg: "gray.50" }}
@@ -431,9 +432,9 @@ function ByMeaningView({
       {filtered.map((group, i) => (
         <Box
           key={i}
-          p={3}
+          p={4}
           borderWidth="1px"
-          borderRadius="lg"
+          borderRadius="10px"
           bg="white"
           _dark={{ bg: "gray.800", borderColor: "gray.600" }}
           borderColor="gray.200"
@@ -543,6 +544,25 @@ function EtymologyNotebookPage() {
     );
   }, [origins, search]);
 
+  // Group the (filtered) origins under their source-book section
+  // (sessionTitle / chapter), preserving the source declaration order of both
+  // sections and of origins within a section. A search that empties a section
+  // drops it. When no origin carries a section, everything falls into one
+  // untitled bucket so the list still renders.
+  const originSections = useMemo(() => {
+    const order: string[] = [];
+    const bySection = new Map<string, EtymologyOriginPart[]>();
+    for (const o of filteredOrigins) {
+      const section = o.sessionTitle ?? "";
+      if (!bySection.has(section)) {
+        bySection.set(section, []);
+        order.push(section);
+      }
+      bySection.get(section)!.push(o);
+    }
+    return order.map((section) => ({ section, origins: bySection.get(section)! }));
+  }, [filteredOrigins]);
+
   if (loading) {
     return (
       <Box p={4} maxW="sm" mx="auto" textAlign="center">
@@ -580,12 +600,7 @@ function EtymologyNotebookPage() {
       <Box bg="white" _dark={{ bg: "gray.800", borderColor: "gray.600" }} borderBottomWidth="1px" borderColor="gray.200">
         <Box px={4} pt={2}>
           <Link href="/learn">
-            <Text
-              color="gray.500"
-              _dark={{ color: "gray.400" }}
-              fontSize="xs"
-              _hover={{ textDecoration: "underline" }}
-            >
+            <Text color="blue.600" _dark={{ color: "blue.300" }} fontSize="xs">
               &lt; Learn
             </Text>
           </Link>
@@ -706,15 +721,26 @@ function EtymologyNotebookPage() {
       {/* Content */}
       <Box p={4}>
         {tab === "origins" ? (
-          <VStack align="stretch" gap={2}>
-            {filteredOrigins.map((origin, i) => (
-              <OriginCard
-                key={i}
-                origin={origin}
-                onClick={() => selectOrigin(origin.origin)}
-              />
+          <VStack align="stretch" gap={5}>
+            {originSections.map(({ section, origins: sectionOrigins }) => (
+              <Box key={section || "__unsectioned__"}>
+                {section && (
+                  <Heading size="sm" mb={2} color="fg.muted">
+                    {section} &middot; {sectionOrigins.length}
+                  </Heading>
+                )}
+                <VStack align="stretch" gap={2}>
+                  {sectionOrigins.map((origin, i) => (
+                    <OriginCard
+                      key={`${section}-${origin.origin}-${i}`}
+                      origin={origin}
+                      onClick={() => selectOrigin(origin.origin)}
+                    />
+                  ))}
+                </VStack>
+              </Box>
             ))}
-            {filteredOrigins.length === 0 && (
+            {originSections.length === 0 && (
               <Text color="fg.muted" textAlign="center">
                 No origins match your search.
               </Text>

@@ -1284,7 +1284,13 @@ type EtymologyOriginPart struct {
 	// within the same book. Empty when the origin isn't a member of any
 	// declared concept. Populated on the top-level origins listing so chips
 	// can render concept membership without an extra round-trip.
-	ConceptKeys   []string `protobuf:"bytes,8,rep,name=concept_keys,json=conceptKeys,proto3" json:"concept_keys,omitempty"`
+	ConceptKeys []string `protobuf:"bytes,8,rep,name=concept_keys,json=conceptKeys,proto3" json:"concept_keys,omitempty"`
+	// session_title is the source book's section (chapter) this origin was
+	// declared in — the surrounding event / metadata.title. Populated on the
+	// top-level origins listing so the browse page can group origins under
+	// their section header. Display-only; it does not affect any learning log
+	// key. Empty on parts emitted inside an EtymologyDefinition.
+	SessionTitle  string `protobuf:"bytes,9,opt,name=session_title,json=sessionTitle,proto3" json:"session_title,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1373,6 +1379,13 @@ func (x *EtymologyOriginPart) GetConceptKeys() []string {
 		return x.ConceptKeys
 	}
 	return nil
+}
+
+func (x *EtymologyOriginPart) GetSessionTitle() string {
+	if x != nil {
+		return x.SessionTitle
+	}
+	return ""
 }
 
 type EtymologyDefinition struct {
@@ -2021,7 +2034,7 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"\x13EtymologyOriginForm\x12\x12\n" +
 	"\x04form\x18\x01 \x01(\tR\x04form\x12\x12\n" +
 	"\x04role\x18\x02 \x01(\tR\x04role\x12\x12\n" +
-	"\x04note\x18\x03 \x01(\tR\x04note\"\x89\x02\n" +
+	"\x04note\x18\x03 \x01(\tR\x04note\"\xae\x02\n" +
 	"\x13EtymologyOriginPart\x12\x16\n" +
 	"\x06origin\x18\x01 \x01(\tR\x06origin\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12\x1a\n" +
@@ -2031,7 +2044,8 @@ const file_api_v1_notebook_proto_rawDesc = "" +
 	"word_count\x18\x05 \x01(\x05R\twordCount\x121\n" +
 	"\x05forms\x18\x06 \x03(\v2\x1b.api.v1.EtymologyOriginFormR\x05forms\x12\x1b\n" +
 	"\tfrom_form\x18\a \x01(\tR\bfromForm\x12!\n" +
-	"\fconcept_keys\x18\b \x03(\tR\vconceptKeys\"\x8c\x03\n" +
+	"\fconcept_keys\x18\b \x03(\tR\vconceptKeys\x12#\n" +
+	"\rsession_title\x18\t \x01(\tR\fsessionTitle\"\x8c\x03\n" +
 	"\x13EtymologyDefinition\x12\x1e\n" +
 	"\n" +
 	"expression\x18\x01 \x01(\tR\n" +
