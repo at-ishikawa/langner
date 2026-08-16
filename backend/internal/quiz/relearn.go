@@ -236,6 +236,17 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 		}
 	}
 
+	// One failed WORD must be re-asked once, not once per track. A freeform miss
+	// mirror-writes BOTH the recognition (LearnedLogs) and the reverse
+	// (ReverseLogs) series (yaml_repository freeform dual-write), and a word can
+	// also be genuinely missed in both the standard and the reverse quiz — either
+	// way it is a single failed word. Collapse the two vocab series of the same
+	// word into one candidate so K failed words yield exactly K re-ask cards,
+	// deduped by expression (grammar candidates, keyed by correction span rather
+	// than expression, are never merged). Origin-bearing words are already folded
+	// once via etymByWord below; collapsing first leaves that path unchanged.
+	candidates = collapseVocabDirections(candidates)
+
 	candidatesFound := len(candidates)
 	if candidatesFound == 0 {
 		return nil, nil
@@ -543,6 +554,41 @@ func relearnSeries(metadataType string, expr notebook.LearningHistoryExpression)
 		{logs: expr.LearnedLogs, format: notebook.QuizTypeNotebook},
 		{logs: expr.ReverseLogs, format: notebook.QuizTypeReverse},
 	}
+}
+
+// collapseVocabDirections folds the recognition (notebook) and reverse candidates
+// of the SAME word (keyed by notebook + id + expression) into a single candidate,
+// so one failed word is re-asked once rather than once per learning-history track.
+// When a word was missed in both directions it is drilled in REVERSE — producing
+// the word is the stronger recall test, the same both-directions rule the origin
+// family card uses (buildEtymologyOriginCard). Grammar candidates are keyed by
+// correction span, not expression, so they are passed through untouched (two
+// distinct blanks of one post must each survive). latestWrong keeps the most
+// recent of the merged series so window ageing is unaffected.
+func collapseVocabDirections(candidates map[string]relearnCandidate) map[string]relearnCandidate {
+	out := make(map[string]relearnCandidate, len(candidates))
+	for _, c := range candidates {
+		if c.format == notebook.QuizTypeGrammar {
+			out[string(c.format)+relearnKeySep+c.notebookName+relearnKeySep+strings.ToLower(strings.TrimSpace(c.expression))+relearnKeySep+c.id] = c
+			continue
+		}
+		wordKey := c.notebookName + relearnKeySep + c.id + relearnKeySep + strings.ToLower(strings.TrimSpace(c.expression))
+		existing, ok := out[wordKey]
+		if !ok {
+			out[wordKey] = c
+			continue
+		}
+		// Prefer the reverse direction; keep the most recent miss timestamp.
+		merged := existing
+		if c.format == notebook.QuizTypeReverse {
+			merged.format = notebook.QuizTypeReverse
+		}
+		if c.latestWrong.After(merged.latestWrong) {
+			merged.latestWrong = c.latestWrong
+		}
+		out[wordKey] = merged
+	}
+	return out
 }
 
 // relearnVocabIndex indexes the given vocabulary words by stable id (the

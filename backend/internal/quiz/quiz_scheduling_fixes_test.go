@@ -1,0 +1,191 @@
+package quiz
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+
+	"github.com/at-ishikawa/langner/internal/config"
+	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/learning"
+	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
+	"github.com/at-ishikawa/langner/internal/notebook"
+)
+
+// These tests drive the REAL Service/Reader built from examples/ through
+// config.example.yml's directories (see newExampleService / exampleNotebooksConfig)
+// and seed the leftover learning-history STATE that triggers each bug on disk — no
+// hand-built card. They are the reproductions for the two spaced-repetition
+// scheduling bugs, kept as regression guards.
+//
+// Deterministic time: NeedsReverseReview compares learned_at+interval_days against
+// time.Now() and has no clock seam; the whole codebase's SR tests pin behavior with
+// timestamps RELATIVE to now (e.g. relearn_standard_quiz_fixes_test.go backdates by
+// -72h). These follow the same idiom — a 90-day interval reviewed 2 days ago is
+// firmly inside its interval (not due) and one reviewed 91 days ago is firmly past
+// it (due) — which exercises the exact 2026-08-16 (excluded) / 2026-11-12 (included)
+// boundary the report describes without an invasive clock refactor.
+
+// newExampleServiceShuffleDisabled builds the example Service with a caller-chosen
+// DisableShuffle so a test can exercise the flashcard reverse due-check, which the
+// loader bypasses only when shuffle is disabled (test mode).
+func newExampleServiceWithShuffle(t *testing.T, learningDir string, disableShuffle bool) *Service {
+	t.Helper()
+	ctrl := gomock.NewController(t)
+	return NewService(
+		exampleNotebooksConfig(t, learningDir),
+		mock_inference.NewMockClient(ctrl),
+		make(map[string]rapidapi.Response),
+		learning.NewYAMLLearningRepository(learningDir, nil),
+		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: disableShuffle},
+	)
+}
+
+// TestExampleData_ReverseEligibilityIsTrackPure pins BUG 2: reverse-quiz
+// eligibility must be computed ONLY from the reverse track. A word answered
+// correctly only in REVERSE (a 90-day interval set 2 days ago) is inside its
+// reverse interval and must NOT be re-asked in reverse — even with the
+// includeUnstudied toggle on — and must reappear once its interval has elapsed.
+//
+// Before the fix the story/flashcard reverse gates decided "studied" from the
+// FORWARD track (HasFreeformAnswer / HasAnyCorrectAnswer), so a reverse-only word
+// looked pristine and, under includeUnstudied, was served regardless of its
+// reverse due-date (the two tracks crossed). Covered on the story path (always
+// due-checked) and the flashcard path (due-checked only with shuffle enabled).
+func TestExampleData_ReverseEligibilityIsTrackPure(t *testing.T) {
+	// reverseOnlySeed writes a single expression whose ONLY history is one correct
+	// reverse log (interval 90) `daysAgo` in the past, in the on-disk shape the real
+	// reverse write path produces. No forward/freeform answer — the crux of the bug.
+	reverseOnlySeed := func(metadata, scene, expr string, daysAgo int) string {
+		at := time.Now().Add(-time.Duration(daysAgo) * 24 * time.Hour).UTC().Format(time.RFC3339)
+		if scene == "" { // flashcard shape: flat expressions under the notebook
+			return "- metadata:\n    title: " + metadata + "\n  expressions:\n" +
+				"    - expression: " + expr + "\n" +
+				"      reverse_logs:\n" +
+				"        - status: understood\n" +
+				"          learned_at: \"" + at + "\"\n" +
+				"          quality: 5\n" +
+				"          quiz_type: reverse\n" +
+				"          interval_days: 90\n"
+		}
+		return "- metadata:\n    title: " + metadata + "\n  scenes:\n" +
+			"    - metadata:\n        title: " + scene + "\n      expressions:\n" +
+			"        - expression: " + expr + "\n" +
+			"          reverse_logs:\n" +
+			"            - status: understood\n" +
+			"              learned_at: \"" + at + "\"\n" +
+			"              quality: 5\n" +
+			"              quiz_type: reverse\n" +
+			"              interval_days: 90\n"
+	}
+
+	served := func(t *testing.T, svc *Service, notebookID, word string) bool {
+		t.Helper()
+		cards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil) // includeUnstudied=true
+		require.NoError(t, err)
+		for _, c := range cards {
+			if c.Expression == word {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("story path", func(t *testing.T) {
+		// "hang out" occurs once in the Friends example (unlike "break the ice"),
+		// so the deduped reverse card is the one this seed's history covers.
+		const nb, file = "friends", "friends.yml"
+		const meta, scene, word = "Friends S01E01 - The Pilot", "Central Perk - Morning Coffee", "hang out"
+
+		learningDir := t.TempDir()
+		svc := newExampleService(t, learningDir)
+
+		require.NoError(t, os.WriteFile(filepath.Join(learningDir, file),
+			[]byte(reverseOnlySeed(meta, scene, word, 2)), 0o644))
+		assert.False(t, served(t, svc, nb, word),
+			"a reverse-only word inside its 90-day reverse interval must NOT be re-asked in reverse, even with includeUnstudied")
+
+		require.NoError(t, os.WriteFile(filepath.Join(learningDir, file),
+			[]byte(reverseOnlySeed(meta, scene, word, 91)), 0o644))
+		assert.True(t, served(t, svc, nb, word),
+			"once its reverse interval has elapsed the word is due for reverse again")
+	})
+
+	t.Run("flashcard path", func(t *testing.T) {
+		const nb, file = "vocabulary", "vocabulary.yml"
+		const meta, word = "English Vocabulary Examples", "ephemeral"
+
+		learningDir := t.TempDir()
+		// Flashcard reverse due-check runs only when shuffle is NOT disabled.
+		svc := newExampleServiceWithShuffle(t, learningDir, false)
+
+		require.NoError(t, os.WriteFile(filepath.Join(learningDir, file),
+			[]byte(reverseOnlySeed(meta, "", word, 2)), 0o644))
+		assert.False(t, served(t, svc, nb, word),
+			"a reverse-only flashcard inside its 90-day reverse interval must NOT be re-asked in reverse, even with includeUnstudied")
+
+		require.NoError(t, os.WriteFile(filepath.Join(learningDir, file),
+			[]byte(reverseOnlySeed(meta, "", word, 91)), 0o644))
+		assert.True(t, served(t, svc, nb, word),
+			"once its reverse interval has elapsed the flashcard is due for reverse again")
+	})
+}
+
+// TestExampleData_RelearnReAskDedupsByExpression pins BUG 1: the end-of-session
+// re-ask round (the Relearn pool) must contain EXACTLY the set of expressions
+// failed this session, deduped by expression — K failed → K re-ask cards.
+//
+// A freeform miss mirror-writes BOTH the recognition (LearnedLogs) and reverse
+// (ReverseLogs) series, so before the fix ONE failed word produced TWO relearn
+// cards (recognition + reverse); 4 failed words → 8 cards. Driven end to end
+// through the real freeform save path and LoadRelearnPool.
+func TestExampleData_RelearnReAskDedupsByExpression(t *testing.T) {
+	ctx := context.Background()
+	// Plain (origin-free) flashcard words, so each miss is a plain vocab card, not
+	// an origin family card (origin words already fold to one card by a separate
+	// path). Failing more than one proves the count scales 1:1 with failures.
+	words := []string{"serendipity", "ephemeral", "ubiquitous", "juxtapose"}
+
+	for _, K := range []int{0, 1, 4} {
+		learningDir := t.TempDir()
+		svc := newExampleService(t, learningDir)
+		all, err := svc.LoadAllWords()
+		require.NoError(t, err)
+
+		failed := map[string]bool{}
+		for _, w := range words[:K] {
+			var card *FreeformCard
+			for i := range all {
+				if all[i].Expression == w {
+					card = &all[i]
+				}
+			}
+			require.NotNilf(t, card, "example flashcard %q must load", w)
+			require.NoError(t, svc.SaveFreeformResult(ctx, *card, FreeformGradeResult{Correct: false, Quality: 1}, 1000))
+			failed[w] = true
+		}
+
+		pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+		require.NoError(t, err)
+
+		require.Lenf(t, pool, K,
+			"re-ask round must hold exactly the %d expressions failed this session, deduped by expression (got %d cards)", K, len(pool))
+
+		byExpr := map[string]int{}
+		for _, c := range pool {
+			byExpr[c.Entry]++
+			assert.Truef(t, failed[c.Entry], "re-ask card %q was not failed this session (no due-date selection may feed the round)", c.Entry)
+			assert.Equalf(t, notebook.QuizTypeReverse, c.Format,
+				"a freeform miss re-drills in reverse (the stronger recall test), once")
+		}
+		for w := range failed {
+			assert.Equalf(t, 1, byExpr[w], "%q must appear exactly once in the re-ask round", w)
+		}
+	}
+}
