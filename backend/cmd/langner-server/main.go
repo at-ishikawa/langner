@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/spf13/cobra"
 	"connectrpc.com/connect"
+	"github.com/spf13/cobra"
 
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/analytics"
@@ -95,16 +95,17 @@ func run(ctx context.Context) error {
 	var learningRepo learning.LearningRepository = yamlLearningRepo
 	var noteRepo notebook.NoteRepository
 	var defsDir string
-	if len(cfg.Notebooks.DefinitionsDirectories) > 0 && cfg.Notebooks.DefinitionsDirectories[0] != "" { defsDir = cfg.Notebooks.DefinitionsDirectories[0] }
+	if len(cfg.Notebooks.DefinitionsDirectories) > 0 && cfg.Notebooks.DefinitionsDirectories[0] != "" {
+		defsDir = cfg.Notebooks.DefinitionsDirectories[0]
+	}
 	yamlNoteRepo := notebook.NewYAMLNoteRepositoryWithDefsDir(defsDir)
 	noteRepo = yamlNoteRepo
 
-	// Analytics always reads from YAML: the on-disk learning history files are
-	// the only place etymology quiz results are persisted today —
-	// SaveEtymologyOriginResult writes YAML directly and does not go through
-	// the learning repository, so the DB's learning_logs has only vocab rows.
-	// Once etymology gets first-class DB storage we can swap this for a
-	// hybrid that pulls vocab from DB and etymology from YAML.
+	// Analytics reads through the same learning-history seam the quiz service
+	// uses: the DB-backed store when a database is connected (see the
+	// historyStore built in the DB branch below), else the on-disk YAML
+	// learning_notes files. The store is applied to yamlAnalyticsRepo inside
+	// that branch via WithHistoryStore; here we start from the YAML reader.
 	yamlAnalyticsRepo := analytics.NewYAMLRepository(cfg.Notebooks.LearningNotesDirectory)
 	// Journals are read alongside stories (they share the story format, see
 	// quiz.Service.newReader) so a grammar attempt's notebook — a journal —
@@ -126,8 +127,16 @@ func run(ctx context.Context) error {
 	} else {
 		yamlAnalyticsRepo = yamlAnalyticsRepo.WithMetadataResolver(analytics.NewNotebookMetadataResolver(reader))
 	}
-	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
 
+	// historyStore is the DB-backed READ side for learning history, wired only
+	// when a database is connected. It reconstructs the same per-notebook
+	// LearningHistory shape the YAML reader produced (notes + learning_logs +
+	// skip flags + etymology origins), keyed by the SAME canonical storage key
+	// the write path used (note_id / origin_id, quiz_type→slot), so reads stay
+	// symmetric with writes (learning-history invariant L2). Nil in YAML-only
+	// mode, in which case the quiz service and analytics fall back to reading
+	// the on-disk learning_notes files.
+	var historyStore learning.HistoryStore
 	if cfg.Database.Host != "" && cfg.Database.Password != "" {
 		db, err := database.Open(cfg.Database)
 		if err != nil {
@@ -140,11 +149,24 @@ func run(ctx context.Context) error {
 			dbNoteRepo := notebook.NewDBNoteRepository(db)
 			learningRepo = learning.NewMultiLearningRepository(yamlLearningRepo, dbLearningRepo)
 			noteRepo = notebook.NewMultiNoteRepository(yamlNoteRepo, dbNoteRepo)
-			slog.Info("database connected, dual storage enabled")
+			// Reads resolve straight from the DB repositories (source of
+			// truth), not the Multi wrappers used for dual-write.
+			historyStore = learning.NewDBHistoryStore(
+				dbNoteRepo,
+				dbLearningRepo,
+				notebook.NewDBEtymologyOriginRepository(db),
+				notebook.NewDBSkipFlagRepository(db),
+			)
+			yamlAnalyticsRepo = yamlAnalyticsRepo.WithHistoryStore(historyStore)
+			slog.Info("database connected, dual storage enabled; learning-history reads served from DB")
 		}
 	}
+	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
 
 	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
+	// Swap the quiz service's learning-history reads to the DB store when one
+	// was built above; a nil store keeps the YAML fallback.
+	svc.SetHistoryStore(historyStore)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,

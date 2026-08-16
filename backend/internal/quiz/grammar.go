@@ -62,9 +62,9 @@ func (s *Service) LoadGrammarPosts(notebookID string, entryTitles []string) ([]G
 		name = index.Name
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
-		return nil, fmt.Errorf("NewLearningHistories() > %w", err)
+		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
 	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
 
@@ -161,9 +161,9 @@ func (s *Service) LoadGrammarMistakes(notebookID string, entryTitles []string) (
 	if err != nil {
 		return nil, fmt.Errorf("ReadStoryNotebooks(%s) > %w", notebookID, err)
 	}
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
-		return nil, fmt.Errorf("NewLearningHistories() > %w", err)
+		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
 	expByMistake := grammarExpressionsByID(learningHistories[notebookID])
 
@@ -240,9 +240,9 @@ func (s *Service) LoadGrammarStorySummaries() ([]NotebookSummary, error) {
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
 	}
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
-		return nil, fmt.Errorf("NewLearningHistories() > %w", err)
+		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
 	storyIndexes := reader.GetStoryIndexes()
 

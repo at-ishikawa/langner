@@ -169,7 +169,7 @@ type relearnCandidate struct {
 // (per-quiz-type skipped_at set via SkipWord) never enters the pool, matching the
 // normal card loaders (quiz-ui-invariants U1).
 func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) {
-	histories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	histories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
