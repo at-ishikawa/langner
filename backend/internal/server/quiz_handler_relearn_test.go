@@ -251,12 +251,26 @@ func TestRelearn_VocabResponseHasNoLiteral(t *testing.T) {
 	assert.Empty(t, resp.Msg.GetLiteral(), "a vocab relearn response carries no etymology literal")
 }
 
-func TestRelearn_WordFailedInTwoTypesYieldsTwoCards(t *testing.T) {
+// TestRelearn_WordFailedInTwoTypesYieldsOneCard pins the re-ask dedup
+// (quiz-scheduling bug 1): a word missed in BOTH the standard and the reverse
+// quiz is ONE failed word, so the end-of-session re-ask round holds it ONCE —
+// drilled in reverse (producing the word is the stronger recall test, the same
+// both-directions rule the origin family card uses). Before the dedup epsilon
+// surfaced a recognition card AND a reverse card, inflating the round (K failed
+// words could yield up to 2K cards).
+func TestRelearn_WordFailedInTwoTypesYieldsOneCard(t *testing.T) {
 	h, _ := newRelearnTestHandler(t)
-	byKey := relearnByEntryType(startRelearn(t, h, 24))
+	cards := startRelearn(t, h, 24)
 
-	assert.Contains(t, byKey, "epsilon/QUIZ_TYPE_STANDARD", "recognition card for the standard failure")
-	assert.Contains(t, byKey, "epsilon/QUIZ_TYPE_REVERSE", "reverse card for the reverse failure")
+	var epsilon []*apiv1.RelearnCard
+	for _, c := range cards {
+		if c.GetEntry() == "epsilon" {
+			epsilon = append(epsilon, c)
+		}
+	}
+	require.Len(t, epsilon, 1, "a word failed in two types is re-asked once (deduped by expression)")
+	assert.Equal(t, apiv1.QuizType_QUIZ_TYPE_REVERSE, epsilon[0].GetSourceQuizType(),
+		"a both-directions miss re-drills in reverse, once")
 }
 
 func TestRelearn_ReverseCardIsGradedByTheWordNotTheMeaning(t *testing.T) {

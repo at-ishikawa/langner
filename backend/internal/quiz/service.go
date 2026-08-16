@@ -779,6 +779,13 @@ func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []
 				if !isEligibleForReverseQuiz(def) {
 					continue
 				}
+				// Mirror loadStoryReverseCards: a word excluded from the reverse
+				// quiz (skipped_at set via SkipWord) is never served, so it must
+				// not be counted either — otherwise the start-screen badge
+				// over-counts vs LoadReverseCards (display = reality).
+				if isExpressionSkippedInHistory(histories, story.Event, scene.Title, def, notebook.QuizTypeReverse, nil) {
+					continue
+				}
 				if needsReverseReview(histories, story.Event, scene.Title, def, includeUnstudied) {
 					expr := def.Expression
 					if def.Definition != "" {
@@ -798,6 +805,11 @@ func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, historie
 		for i := range nb.Cards {
 			card := &nb.Cards[i]
 			if !isEligibleForReverseQuiz(card) {
+				continue
+			}
+			// Mirror loadFlashcardReverseCards: a reverse-skipped_at word is
+			// never served, so exclude it from the count too (display = reality).
+			if isExpressionSkippedInHistory(histories, nb.Title, "", card, notebook.QuizTypeReverse, nil) {
 				continue
 			}
 			if needsReverseFlashcardReview(histories, nb.Title, card, includeUnstudied) {
@@ -1300,6 +1312,31 @@ func buildReverseContexts(scene *notebook.StoryScene, definition *notebook.Note)
 	return contexts
 }
 
+// reverseSeriesDue decides reverse-quiz eligibility from ONLY the reverse
+// track — the single rule every reverse loader (story, flashcard, definitions)
+// shares so the two SR tracks can never cross (learning-history-invariants L2).
+//
+// Once a word has ANY reverse history its reverse SR interval is authoritative:
+// a not-due reverse word is never re-asked and a recent FORWARD review never
+// makes it look due for reverse. A word with no reverse history yet is gated by
+// `studied`: a learned word becomes due for its first reverse pass, otherwise
+// the includeUnstudied toggle decides.
+//
+// Bug it fixes: the story/flashcard gates keyed "studied" off the FORWARD track
+// (HasFreeformAnswer / HasAnyCorrectAnswer), so a word answered correctly only
+// in reverse (no forward answer) fell through to `return includeUnstudied` and,
+// with the toggle on, was re-asked in reverse even inside its reverse interval —
+// ignoring reverse_logs[0] entirely.
+func reverseSeriesDue(expr notebook.LearningHistoryExpression, includeUnstudied, studied bool) bool {
+	if len(expr.ReverseLogs) > 0 {
+		return expr.NeedsReverseReview()
+	}
+	if studied {
+		return true
+	}
+	return includeUnstudied
+}
+
 // needsReverseReview reports whether a story word should appear in the
 // reverse quiz. includeUnstudied mirrors the standard-quiz toggle: words
 // that haven't cleared the freeform/correct prerequisite (or have no
@@ -1326,17 +1363,12 @@ func needsReverseReview(
 					continue
 				}
 
-				// Words must be answered in freeform first AND have at
-				// least one correct answer before becoming eligible for
-				// reverse quiz — unless the user opted into unstudied words.
-				if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-					return includeUnstudied
-				}
-
-				if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
-					return false
-				}
-				return true
+				// Words must be answered in freeform first AND have at least one
+				// correct answer before becoming eligible for reverse quiz —
+				// unless the user opted into unstudied words. Once the word has
+				// reverse history, its reverse SR interval is authoritative
+				// regardless of the forward gate (reverseSeriesDue).
+				return reverseSeriesDue(expr, includeUnstudied, expr.HasFreeformAnswer() && expr.HasAnyCorrectAnswer())
 			}
 		}
 	}
@@ -1359,17 +1391,12 @@ func needsReverseFlashcardReview(
 				continue
 			}
 
-			// Words must be answered in freeform first AND have at
-			// least one correct answer before becoming eligible for
-			// reverse quiz — unless the user opted into unstudied words.
-			if !expr.HasFreeformAnswer() || !expr.HasAnyCorrectAnswer() {
-				return includeUnstudied
-			}
-
-			if len(expr.ReverseLogs) > 0 && !expr.NeedsReverseReview() {
-				return false
-			}
-			return true
+			// Words must be answered in freeform first AND have at least one
+			// correct answer before becoming eligible for reverse quiz — unless
+			// the user opted into unstudied words. Once the word has reverse
+			// history, its reverse SR interval is authoritative regardless of the
+			// forward gate (reverseSeriesDue).
+			return reverseSeriesDue(expr, includeUnstudied, expr.HasFreeformAnswer() && expr.HasAnyCorrectAnswer())
 		}
 	}
 	return includeUnstudied
@@ -2483,13 +2510,12 @@ func needsDefinitionReverseReview(
 				if expr.Expression != primary && (secondary == "" || expr.Expression != secondary) {
 					continue
 				}
-				// Same studied/unstudied split as needsDefinitionReview:
-				// a correct answer in ANY direction means SR governs.
-				// includeUnstudied only gates pristine words.
-				if expr.HasAnyCorrectAnswerInAnyDirection() {
-					return expr.NeedsReverseReview()
-				}
-				return includeUnstudied
+				// Same studied/unstudied split as needsDefinitionReview: a correct
+				// answer in ANY direction means SR governs; includeUnstudied only
+				// gates pristine words. Reverse eligibility is decided from the
+				// reverse track alone (reverseSeriesDue), so a recent forward
+				// review never re-asks a not-due reverse word.
+				return reverseSeriesDue(expr, includeUnstudied, expr.HasAnyCorrectAnswerInAnyDirection())
 			}
 		}
 	}
