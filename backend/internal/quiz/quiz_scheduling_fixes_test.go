@@ -284,3 +284,124 @@ func TestExampleData_ReverseReviewCountExcludesNotDueReverseOnly(t *testing.T) {
 		})
 	}
 }
+
+// reverseCardsContain reports whether the served reverse cards include word.
+func reverseCardsContain(cards []ReverseCard, word string) bool {
+	for i := range cards {
+		if cards[i].Expression == word {
+			return true
+		}
+	}
+	return false
+}
+
+// TestExampleData_ReverseReviewCountEqualsLoaded pins the start-screen invariant
+// display = reality: the reverse "words available" badge
+// (NotebookSummary.ReverseReviewCount) MUST equal the number of cards the reverse
+// quiz actually serves (len(LoadReverseCards(...))) for the same notebook +
+// includeUnstudied. The badge over-counted because the count helpers
+// (countReverseStoryDefinitions / countReverseFlashcardCards) omitted the reverse
+// skipped_at filter that the loaders (loadStoryReverseCards / loadFlashcardReverseCards)
+// apply — so a word excluded from the reverse quiz still inflated the badge (14 vs 12).
+//
+// The STORY subtest is the discriminator: it (1) asserts count == loaded on the
+// pristine notebook, (2) excludes one served word from the reverse quiz via the
+// real SkipWord path (CardInfoFromReverseCard — exactly what the Exclude button
+// sends), then (3) asserts count still == loaded AND both dropped by exactly one
+// (the skipped word is gone from both). Before the fix step 3 FAILS: the count
+// ignored the skip, so it stayed at the baseline while the loader dropped the word
+// (count > loaded).
+//
+// A general sweep then asserts count == loaded for EVERY example notebook (stories,
+// flashcards, and definitions books — whose count, countDefinitionNotes, already
+// folds concepts and applies skip), locking the invariant in across the board.
+// Concept-collapse is definitions-only (buildConceptIndex reads definitions books),
+// so the story/flashcard skip filter is the whole story/flashcard gap.
+func TestExampleData_ReverseReviewCountEqualsLoaded(t *testing.T) {
+	loadedLen := func(t *testing.T, svc *Service, id string) int {
+		t.Helper()
+		cards, err := svc.LoadReverseCards([]string{id}, false, true, nil)
+		require.NoError(t, err)
+		return len(cards)
+	}
+
+	// Story: excluding a served word from the reverse quiz drops BOTH the badge
+	// and the loaded set by one, and they stay equal. This is the fix's proof —
+	// before the fix the badge kept counting the reverse-excluded word.
+	t.Run("story: reverse-excluded word drops count and loaded together", func(t *testing.T) {
+		const notebookID, word = "friends", "hang out"
+		svc := newExampleService(t, t.TempDir())
+
+		base := reverseCountFor(t, svc, notebookID)
+		cards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil)
+		require.NoError(t, err)
+		require.Equalf(t, len(cards), base, "precondition: count must equal loaded before any skip")
+		require.Truef(t, reverseCardsContain(cards, word), "precondition: %q must be served", word)
+
+		var target *ReverseCard
+		for i := range cards {
+			if cards[i].Expression == word {
+				target = &cards[i]
+			}
+		}
+		require.NotNil(t, target)
+		require.NoError(t, svc.SkipWord(CardInfoFromReverseCard(*target), "", []notebook.QuizType{notebook.QuizTypeReverse}))
+
+		after := reverseCountFor(t, svc, notebookID)
+		assert.Equalf(t, loadedLen(t, svc, notebookID), after,
+			"count must equal loaded after excluding a reverse word (display = reality)")
+		assert.Equalf(t, base-1, after,
+			"a reverse-skipped word must drop the badge by one (it is no longer served)")
+		postCards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil)
+		require.NoError(t, err)
+		assert.Falsef(t, reverseCardsContain(postCards, word), "the excluded word must not be served")
+	})
+
+	// Flashcard: the invariant count == loaded holds — and keeps holding through a
+	// SkipWord attempt because the count and loader apply the identical
+	// isExpressionSkippedInHistory. NOTE: a flashcard reverse card hardcodes
+	// StoryTitle "flashcards", so SkipWord stores the marker under
+	// Metadata.Title="flashcards" while the reverse loaders look it up by the
+	// notebook's real title — so the flashcard reverse Exclude does not currently
+	// take effect (a SEPARATE, pre-existing exclude bug, flagged as follow-up).
+	// Either way the badge tracks the loader, which is what this pins.
+	t.Run("flashcard: count == loaded through a skip attempt", func(t *testing.T) {
+		const notebookID, word = "vocabulary", "serendipity"
+		svc := newExampleService(t, t.TempDir())
+
+		base := reverseCountFor(t, svc, notebookID)
+		require.Equalf(t, loadedLen(t, svc, notebookID), base, "count == loaded on the pristine flashcard notebook")
+
+		cards, err := svc.LoadReverseCards([]string{notebookID}, false, true, nil)
+		require.NoError(t, err)
+		var target *ReverseCard
+		for i := range cards {
+			if cards[i].Expression == word {
+				target = &cards[i]
+			}
+		}
+		require.NotNil(t, target)
+		require.NoError(t, svc.SkipWord(CardInfoFromReverseCard(*target), "", []notebook.QuizType{notebook.QuizTypeReverse}))
+
+		assert.Equalf(t, loadedLen(t, svc, notebookID), reverseCountFor(t, svc, notebookID),
+			"count must equal loaded after a skip attempt (both apply the same filter)")
+	})
+
+	// General invariant across every example notebook: the badge equals the served
+	// count. Covers definitions books (concepts + skip via countDefinitionNotes).
+	t.Run("all example notebooks: count == loaded", func(t *testing.T) {
+		svc := newExampleService(t, t.TempDir())
+		summaries, err := svc.LoadNotebookSummaries(true)
+		require.NoError(t, err)
+		checked := 0
+		for _, s := range summaries {
+			if s.ReverseReviewCount == 0 {
+				continue
+			}
+			assert.Equalf(t, loadedLen(t, svc, s.NotebookID), s.ReverseReviewCount,
+				"notebook %q: ReverseReviewCount must equal len(LoadReverseCards)", s.NotebookID)
+			checked++
+		}
+		require.Greater(t, checked, 0, "at least one example notebook must have reverse cards to check")
+	})
+}

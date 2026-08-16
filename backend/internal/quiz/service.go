@@ -779,6 +779,13 @@ func countReverseStoryDefinitions(stories []notebook.StoryNotebook, histories []
 				if !isEligibleForReverseQuiz(def) {
 					continue
 				}
+				// Mirror loadStoryReverseCards: a word excluded from the reverse
+				// quiz (skipped_at set via SkipWord) is never served, so it must
+				// not be counted either — otherwise the start-screen badge
+				// over-counts vs LoadReverseCards (display = reality).
+				if isExpressionSkippedInHistory(histories, story.Event, scene.Title, def, notebook.QuizTypeReverse, nil) {
+					continue
+				}
 				if needsReverseReview(histories, story.Event, scene.Title, def, includeUnstudied) {
 					expr := def.Expression
 					if def.Definition != "" {
@@ -798,6 +805,11 @@ func countReverseFlashcardCards(notebooks []notebook.FlashcardNotebook, historie
 		for i := range nb.Cards {
 			card := &nb.Cards[i]
 			if !isEligibleForReverseQuiz(card) {
+				continue
+			}
+			// Mirror loadFlashcardReverseCards: a reverse-skipped_at word is
+			// never served, so exclude it from the count too (display = reality).
+			if isExpressionSkippedInHistory(histories, nb.Title, "", card, notebook.QuizTypeReverse, nil) {
 				continue
 			}
 			if needsReverseFlashcardReview(histories, nb.Title, card, includeUnstudied) {
