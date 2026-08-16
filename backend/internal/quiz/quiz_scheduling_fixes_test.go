@@ -189,3 +189,98 @@ func TestExampleData_RelearnReAskDedupsByExpression(t *testing.T) {
 		}
 	}
 }
+
+// reverseCountFor returns the start-screen reverse "words available" count
+// (NotebookSummary.ReverseReviewCount) for one notebook, with includeUnstudied=true
+// (the toggle state the user reported the bug under).
+func reverseCountFor(t *testing.T, svc *Service, notebookID string) int {
+	t.Helper()
+	summaries, err := svc.LoadNotebookSummaries(true)
+	require.NoError(t, err)
+	for i := range summaries {
+		if summaries[i].NotebookID == notebookID {
+			return summaries[i].ReverseReviewCount
+		}
+	}
+	t.Fatalf("notebook %q not found in summaries", notebookID)
+	return 0
+}
+
+// TestExampleData_ReverseReviewCountExcludesNotDueReverseOnly pins the START-SCREEN
+// surface of the same track-purity defect (the user's actual bug 1): the reverse
+// quiz's "words available" count (NotebookSummary.ReverseReviewCount) inflated by
+// including a mature, NOT-due, reverse-only word. That count flows through
+// countReverseStoryDefinitions / countReverseFlashcardCards / countDefinitionNotes,
+// which call the SAME reverse gates reverseSeriesDue now governs.
+//
+// For each path: measure the baseline count (all example words pristine → all
+// counted when includeUnstudied=true), then seed ONE word as reverse-only and NOT
+// due (mature reverse_logs[0]: understood, interval 90, reviewed ~2 days ago, with
+// NO forward/freeform log — the crux). A track-pure count drops by exactly one; a
+// forward-keyed count leaves it counted (inflated).
+//
+// Before the fix the story and flashcard counts FAIL here (the not-due reverse-only
+// word is still counted, so seeded == baseline). The definitions count already used
+// HasAnyCorrectAnswerInAnyDirection and was correct; its assertion locks that in.
+func TestExampleData_ReverseReviewCountExcludesNotDueReverseOnly(t *testing.T) {
+	// reverseOnlyNotDue writes one expression whose ONLY history is a mature,
+	// not-due reverse log (interval 90, reviewed 2 days ago), in the real on-disk
+	// shape. scene=="" selects the flat flashcard shape; otherwise the scene shape.
+	reverseOnlyNotDue := func(metadata, scene, expr, id string) string {
+		at := time.Now().Add(-2 * 24 * time.Hour).UTC().Format(time.RFC3339)
+		idLine := ""
+		if id != "" {
+			idLine = "          id: " + id + "\n"
+		}
+		if scene == "" { // flashcard: flat expressions under the notebook
+			flatID := ""
+			if id != "" {
+				flatID = "      id: " + id + "\n"
+			}
+			return "- metadata:\n    title: " + metadata + "\n  expressions:\n" +
+				"    - expression: " + expr + "\n" + flatID +
+				"      reverse_logs:\n" +
+				"        - status: understood\n" +
+				"          learned_at: \"" + at + "\"\n" +
+				"          quality: 5\n" +
+				"          quiz_type: reverse\n" +
+				"          interval_days: 90\n"
+		}
+		return "- metadata:\n    title: " + metadata + "\n  scenes:\n" +
+			"    - metadata:\n        title: " + scene + "\n      expressions:\n" +
+			"        - expression: " + expr + "\n" + idLine +
+			"          reverse_logs:\n" +
+			"            - status: understood\n" +
+			"              learned_at: \"" + at + "\"\n" +
+			"              quality: 5\n" +
+			"              quiz_type: reverse\n" +
+			"              interval_days: 90\n"
+	}
+
+	for _, tc := range []struct {
+		name              string
+		notebookID, file  string
+		metadata, scene   string
+		word, id          string
+		expectDropWithFix bool // story/flashcard: fixed; definitions: already correct
+	}{
+		{"story", "friends", "friends.yml", "Friends S01E01 - The Pilot", "Central Perk - Morning Coffee", "hang out", "", true},
+		{"flashcard", "vocabulary", "vocabulary.yml", "English Vocabulary Examples", "", "ephemeral", "", true},
+		{"definitions", "roots-demo", "roots-demo.yml", "Root Words", "fac / ag", "deficient", "deficient-demo", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			learningDir := t.TempDir()
+			svc := newExampleService(t, learningDir)
+
+			baseline := reverseCountFor(t, svc, tc.notebookID)
+			require.Greaterf(t, baseline, 0, "precondition: %q has due reverse words to count", tc.notebookID)
+
+			require.NoError(t, os.WriteFile(filepath.Join(learningDir, tc.file),
+				[]byte(reverseOnlyNotDue(tc.metadata, tc.scene, tc.word, tc.id)), 0o644))
+			seeded := reverseCountFor(t, svc, tc.notebookID)
+
+			assert.Equalf(t, baseline-1, seeded,
+				"a mature NOT-due reverse-only word must NOT inflate the reverse start-screen count (baseline %d, got %d)", baseline, seeded)
+		})
+	}
+}
