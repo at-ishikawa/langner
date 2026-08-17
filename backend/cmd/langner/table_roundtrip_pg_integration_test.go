@@ -50,18 +50,19 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	defer func() { _ = db.Close() }()
 	require.NoError(t, db.Ping())
 
-	// Start from empty tables using the SAME reset `migrate sync-db` uses:
-	// ensure the schema exists (idempotent), then TRUNCATE every data table
-	// (clearAllDataTables → RESTART IDENTITY CASCADE). We deliberately do NOT
-	// `DROP SCHEMA ... CASCADE; CREATE SCHEMA public` here: an earlier version
-	// did, and in CI the subsequent ImportAll collided on the notes
-	// (usage, entry) unique key — even though the reader produces 37 unique
-	// (usage, entry) notes, so an import into truly-empty tables cannot
-	// violate that constraint. That points at the drop/recreate leaving the
-	// tables non-empty at import time (some earlier same-DB integration test's
-	// rows), a divergence we could not pin without a live Postgres. `sync-db`
-	// runs Migrate → clearAllDataTables → ImportAll on this exact config and
-	// is green in CI, so we mirror that proven, unambiguous path.
+	// This test CLEARS and RESTORES every table, so it must own the database.
+	// In CI it runs in its OWN workflow step against a freshly-recreated
+	// (empty, table-less) public schema — never sharing a `go test` invocation
+	// with the quiz-integration packages, whose interleaved DROP SCHEMA /
+	// TRUNCATE resets against the one shared Postgres corrupted this test's
+	// state before (a stale-rows duplicate-key one run, a missing
+	// schema_migrations the next). Reset here is therefore just:
+	//   - database.Migrate: create schema_migrations + every table, and
+	//   - clearAllDataTables: TRUNCATE ... RESTART IDENTITY CASCADE
+	//     (belt-and-suspenders; a no-op on the already-empty fresh schema).
+	// clearAllDataTables must NOT touch schema_migrations — it doesn't:
+	// DataTablesInDependencyOrder excludes it (guarded by
+	// TestClearAllDataTablesCoversAllSchemaTables).
 	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
 	require.NoError(t, clearAllDataTables(ctx, db))
 
