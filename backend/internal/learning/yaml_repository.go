@@ -46,10 +46,17 @@ func (r *YAMLLearningRepository) FindByNotebookID(notebookID string) ([]notebook
 			if h.Metadata.NotebookID != notebookID {
 				continue
 			}
-			if h.Metadata.Type == "flashcard" {
-				result = append(result, h.Expressions...)
-				continue
-			}
+			// Flat blocks (flashcard, and etymology/grammar blocks whose
+			// origins/corrections sit at the top level with no scene layer)
+			// carry their expressions directly on h.Expressions. Etymology
+			// blocks in particular mark the KIND on each expression
+			// (`type: origin`) rather than on the metadata, so a
+			// `Metadata.Type == "flashcard"`-only check dropped every
+			// etymology-origin and grammar log — the importer/state-seeder
+			// then never wrote them to the DB. Emit top-level expressions
+			// for every notebook (harmless for stories, whose expressions
+			// live under scenes and whose h.Expressions is empty).
+			result = append(result, h.Expressions...)
 			for _, scene := range h.Scenes {
 				result = append(result, scene.Expressions...)
 			}
