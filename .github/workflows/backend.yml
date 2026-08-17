@@ -121,7 +121,23 @@ jobs:
       # step below uses.
       - name: Integration tests — quiz RPCs + repository against live Postgres
         working-directory: backend
-        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/ ./internal/notebook/ ./cmd/langner/
+        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/ ./internal/notebook/
+        env:
+          LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
+
+      # The table-dump round-trip test CLEARS and RESTORES every table, so it
+      # must own the database for its run. It cannot share the combined step
+      # above: the quiz-integration packages each reset the schema their own
+      # way (DROP SCHEMA / TRUNCATE) as they run in sequence against this one
+      # Postgres, and those interleaved resets corrupt the round-trip test's
+      # state (seen in CI as both a stale-rows duplicate-key AND a missing
+      # schema_migrations, depending on which sibling ran last). Give it its
+      # own step with a freshly-recreated, empty schema so nothing else touches
+      # the DB while it runs.
+      - name: Integration test — DB table-dump round-trip (isolated, fresh schema)
+        run: |
+          PGPASSWORD=password psql -h localhost -U user -d local -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+          cd backend && go test -count=1 -run TestTableDumpRoundTrip_LivePostgres_Integration ./cmd/langner/
         env:
           LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
 
