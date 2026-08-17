@@ -2,6 +2,7 @@ package learning
 
 import (
 	"context"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -212,4 +213,62 @@ func TestDBHistoryStore_LoadAll_RoutesLogsAndSkipFlags(t *testing.T) {
 	assert.Empty(t, alter.LearnedLogs)
 	assert.Empty(t, alter.ReverseLogs)
 	assert.True(t, alter.SkippedAt.IsSkipped(notebook.QuizTypeEtymologyOrigin), "origin skip flag must reconstruct onto SkippedAt")
+}
+
+// TestDBHistoryStore_LoadAll_MergesGrammarFromYAML pins the grammar-YAML
+// merge (Bucket B): grammar corrections have no note_id / origin_id, so they
+// live only in the YAML learning_notes. WithGrammarYAMLDir merges the flat
+// `type: grammar` blocks into the DB-reconstructed map so Analytics / the
+// grammar quiz / grammar Relearn see them once reads come from the DB. Only
+// grammar blocks are merged (etymology/flashcard/vocab come from the DB), so
+// nothing is double-counted. Driven against the real e2e learning_notes
+// fixtures (practice.yml = a grammar block) with EMPTY DB fakes, so anything
+// present must have come from the YAML merge.
+func TestDBHistoryStore_LoadAll_MergesGrammarFromYAML(t *testing.T) {
+	repoRoot, err := filepath.Abs("../../..")
+	require.NoError(t, err)
+	learningNotes := filepath.Join(repoRoot, "frontend", "e2e", "fixtures", "learning_notes")
+
+	empty := func() *DBHistoryStore {
+		return NewDBHistoryStore(&fakeNoteRepo{}, &fakeLearningRepo{}, &fakeOriginRepo{}, &fakeSkipFlagRepo{})
+	}
+
+	// Fail-before: without the YAML dir, grammar is absent (DB has none).
+	before, err := empty().LoadAll(context.Background())
+	require.NoError(t, err)
+	if _, ok := before["practice"]; ok {
+		t.Fatalf("grammar notebook present without WithGrammarYAMLDir — DB has no grammar rows")
+	}
+
+	// Pass-after: with the YAML dir, the grammar block merges in.
+	after, err := empty().WithGrammarYAMLDir(learningNotes).LoadAll(context.Background())
+	require.NoError(t, err)
+
+	practice := after["practice"]
+	require.NotEmpty(t, practice, "grammar notebook must merge from YAML")
+	var partySuggested *notebook.LearningHistoryExpression
+	grammarBlocks := 0
+	for i := range practice {
+		if practice[i].Metadata.Type != "grammar" {
+			continue
+		}
+		grammarBlocks++
+		for j := range practice[i].Expressions {
+			if practice[i].Expressions[j].Expression == "party-suggested" {
+				partySuggested = &practice[i].Expressions[j]
+			}
+		}
+	}
+	require.Equal(t, 1, grammarBlocks, "exactly one grammar block merged (no duplication)")
+	require.NotNil(t, partySuggested, "the seeded grammar correction must be present")
+	require.NotEmpty(t, partySuggested.LearnedLogs, "grammar correction carries its log")
+	assert.Equal(t, string(notebook.QuizTypeGrammar), partySuggested.LearnedLogs[0].QuizType,
+		"grammar log keeps quiz_type=grammar for the analytics label")
+
+	// No double-counting: the merge pulls ONLY grammar. The flat etymology
+	// blocks (word-roots / word-stems) and the idioms flashcard are NOT
+	// merged from YAML — they belong to the DB path, which is empty here.
+	for _, id := range []string{"idioms", "word-roots", "word-stems"} {
+		assert.Empty(t, after[id], "non-grammar notebook %q must not be merged from YAML", id)
+	}
 }

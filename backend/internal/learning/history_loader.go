@@ -30,6 +30,14 @@ type DBHistoryStore struct {
 	learningRepo LearningRepository
 	originRepo   notebook.EtymologyOriginRepository
 	skipFlagRepo notebook.SkipFlagRepository
+	// grammarYAMLDir, when set, is the learning_notes directory from which
+	// GRAMMAR learning history is read and merged into the DB-reconstructed
+	// map. Grammar corrections are neither notes nor etymology origins, so
+	// they have no row in the DB (no note_id / origin_id) — YAML remains
+	// their only store. Every other kind (vocabulary, flashcard, etymology
+	// origin) comes from the DB; only the flat `type: grammar` blocks are
+	// merged from YAML, so nothing is double-counted.
+	grammarYAMLDir string
 }
 
 // NewDBHistoryStore constructs the store. originRepo is optional — pass
@@ -42,6 +50,16 @@ func NewDBHistoryStore(noteRepo notebook.NoteRepository, learningRepo LearningRe
 		originRepo:   originRepo,
 		skipFlagRepo: skipFlagRepo,
 	}
+}
+
+// WithGrammarYAMLDir returns the store configured to merge GRAMMAR learning
+// history from the given learning_notes directory. Grammar has no DB home,
+// so its logs (analytics labels, grammar-quiz due state, grammar Relearn)
+// would otherwise vanish once reads are served from the DB. Pass "" to
+// disable the merge (the store then returns DB-only histories).
+func (s *DBHistoryStore) WithGrammarYAMLDir(dir string) *DBHistoryStore {
+	s.grammarYAMLDir = dir
+	return s
 }
 
 // LoadAll rebuilds the per-notebook LearningHistory map from DB rows.
@@ -140,7 +158,44 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 		mergeOriginHistories(origins, logsByOrigin, orphanNoteLogsByName, skipFlagsByOrigin, histories)
 	}
 
+	if err := s.mergeGrammarFromYAML(histories); err != nil {
+		return nil, err
+	}
+
 	return histories, nil
+}
+
+// mergeGrammarFromYAML appends the flat `type: grammar` learning-history
+// blocks from the YAML learning_notes directory into the DB-reconstructed
+// map. Grammar corrections have no DB representation (no note_id / origin_id),
+// so YAML is their only store; without this merge every DB-served surface
+// (Analytics grammar labels, the grammar quiz's due state, grammar Relearn)
+// loses them. ONLY grammar blocks are merged — vocabulary, flashcard and
+// etymology-origin history all come from the DB above — so no series is
+// double-counted (a grammar correction never also exists as a note/origin).
+func (s *DBHistoryStore) mergeGrammarFromYAML(histories map[string][]notebook.LearningHistory) error {
+	if s.grammarYAMLDir == "" {
+		return nil
+	}
+	yamlHistories, err := notebook.NewLearningHistories(s.grammarYAMLDir)
+	if err != nil {
+		return fmt.Errorf("load grammar learning histories: %w", err)
+	}
+	// Deterministic notebook order so the merged map is stable.
+	nbIDs := make([]string, 0, len(yamlHistories))
+	for nbID := range yamlHistories {
+		nbIDs = append(nbIDs, nbID)
+	}
+	sort.Strings(nbIDs)
+	for _, nbID := range nbIDs {
+		for _, h := range yamlHistories[nbID] {
+			if h.Metadata.Type != "grammar" {
+				continue
+			}
+			histories[nbID] = append(histories[nbID], h)
+		}
+	}
+	return nil
 }
 
 // buildVocabHistories walks notes + their notebook_notes links and
