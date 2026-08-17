@@ -46,6 +46,27 @@ export default function SessionCompletePage() {
     }
   }, [allResults, router]);
 
+  // [diag] TEMPORARY — F1 e2e diagnosis; remove after CI extraction. Reveals,
+  // at the summary, whether each card's mark-incorrect override stuck and
+  // whether the override gate (noteId && learnedAt) was satisfied.
+  useEffect(() => {
+    if (allResults.length > 0) {
+      console.log(
+        "[diag] standard summary " +
+          JSON.stringify(
+            allResults.map((r) => ({
+              entry: r.entry,
+              correct: r.correct,
+              isSkipped: r.isSkipped,
+              isOverridden: r.isOverridden,
+              hasLearnedAt: !!r.learnedAt,
+              hasNoteId: !!r.noteId,
+            })),
+          ),
+      );
+    }
+  }, [allResults]);
+
   const { handleOverride, handleUndo, handleSkip, handleResume } = useQuizResultActions(quizType);
 
   if (allResults.length === 0) {

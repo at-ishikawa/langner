@@ -173,6 +173,8 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
+	// [diag] TEMPORARY — F3 e2e diagnosis; remove after CI extraction.
+	slog.Info("[diag] relearn window", "window_start", windowStart.Format(time.RFC3339))
 
 	// One candidate per (format, notebook, expression); the same expression can
 	// recur across scenes (multi-sense etymology), so keep the most-recent wrong.
@@ -260,6 +262,11 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	// than expression, are never merged). Origin-bearing words are already folded
 	// once via etymByWord below; collapsing first leaves that path unchanged.
 	candidates = collapseVocabDirections(candidates)
+
+	// [diag] TEMPORARY — F3 e2e diagnosis; remove after CI extraction.
+	for k, c := range candidates {
+		slog.Info("[diag] relearn candidate", "key", k, "format", string(c.format), "notebook", c.notebookName, "expression", c.expression, "id", c.id, "latest_wrong", c.latestWrong.Format(time.RFC3339))
+	}
 
 	candidatesFound := len(candidates)
 	if candidatesFound == 0 {
@@ -484,6 +491,10 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 	// One line so a short pool can be diagnosed from the server log: how many
 	// wrong words were in the window vs. how many matched a gradeable card.
 	slog.Info("relearn pool built", "in_window_misunderstood", candidatesFound, "matched_cards", len(cards))
+	// [diag] TEMPORARY — F3 e2e diagnosis; remove after CI extraction.
+	for i, c := range cards {
+		slog.Info("[diag] relearn pool card", "idx", i, "entry", c.Entry, "format", string(c.Format), "notebook", c.NotebookName, "incorrect", c.Incorrect, "content_len", len(c.Content))
+	}
 	return cards, nil
 }
 
