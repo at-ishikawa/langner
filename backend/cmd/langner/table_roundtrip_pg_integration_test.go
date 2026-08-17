@@ -88,10 +88,15 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	_, err = importer.ImportAll(ctx, datasync.ImportOptions{})
 	require.NoError(t, err)
 
-	// Exercise the awkward columns the example may not populate:
+	// Exercise the columns / tables the example config may not populate so all
+	// 14 tables carry data through the round trip:
 	//   - a non-NULL skipped_at (nullable timestamp) on one note;
-	//   - at least one row in note_images / note_references / etymology_origin_forms
-	//     so all 14 tables carry data through the round trip.
+	//   - note_images / note_references / etymology_origin_forms; and
+	//   - definition_concepts / definition_concept_members (the example
+	//     definitions books declare no `concepts:` blocks, so both are empty
+	//     after import).
+	// Seed FK-safe: parents before children (a definition_concepts row before
+	// the definition_concept_member that references it).
 	_, err = db.ExecContext(ctx, `UPDATE notes SET skipped_at = CURRENT_TIMESTAMP WHERE id = (SELECT MIN(id) FROM notes)`)
 	require.NoError(t, err)
 	seedIfEmpty(ctx, t, db, "note_images",
@@ -100,6 +105,10 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		`INSERT INTO note_references (note_id, link, description, sort_order) SELECT MIN(id), 'https://example.com/ref', 'reference', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "etymology_origin_forms",
 		`INSERT INTO etymology_origin_forms (origin_id, form, role, note, sort_order) SELECT MIN(id), 'seed-form', 'variant', '', 0 FROM etymology_origins`)
+	seedIfEmpty(ctx, t, db, "definition_concepts",
+		`INSERT INTO definition_concepts (notebook_id, head, meaning) VALUES ('roundtrip-seed', 'seed-head', 'seed meaning')`)
+	seedIfEmpty(ctx, t, db, "definition_concept_members",
+		`INSERT INTO definition_concept_members (concept_id, expression, session_title) SELECT MIN(id), 'seed-expression', '' FROM definition_concepts`)
 
 	// Every table must actually carry rows so the round trip is meaningful —
 	// especially the six the notebook-shaped ExportAll never exported.
