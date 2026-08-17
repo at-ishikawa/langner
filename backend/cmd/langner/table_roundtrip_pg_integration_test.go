@@ -67,9 +67,16 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	loaded, err := cfg.Load()
 	require.NoError(t, err)
 
-	// Seed the DB across every content-bearing table via the REAL importer.
+	// Seed the DB across every content-bearing table via the REAL importer,
+	// using the SAME options `langner migrate import-db` uses (all-false: no
+	// dry-run, no update-existing) — the proven path that imports this exact
+	// example config into a fresh DB cleanly. Seeding with UpdateExisting=true
+	// instead tripped the notes (usage, entry) unique key on this data; that
+	// import-mode quirk is orthogonal to what this round-trip test exercises
+	// (the faithful table dump + verbatim restore), so we seed the canonical
+	// way rather than probe it here.
 	importer := newImporterFromConfig(loaded, db, io.Discard)
-	_, err = importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true})
+	_, err = importer.ImportAll(ctx, datasync.ImportOptions{})
 	require.NoError(t, err)
 
 	// Exercise the awkward columns the example may not populate:
