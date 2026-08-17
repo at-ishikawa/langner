@@ -192,6 +192,46 @@ needed. Idempotent: a no-op when the schema is already up to date.`,
 	return cmd
 }
 
+// newMigrateResetDBCommand rebuilds the database to the seeded baseline in
+// one shot: apply migrations, CLEAR every persisted-data table, re-import the
+// source YAML, and re-seed the DB-only state tables. Unlike sync-db it skips
+// the export/roundtrip diff — it is meant for the e2e harness to restore
+// per-scenario isolation quickly (the diff would add latency and can be
+// sensitive to fixtures the app has just mutated). It is the DB half of a
+// reset; the harness restores the mutated learning_notes YAML separately.
+func newMigrateResetDBCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset-db",
+		Short: "Reset the database to the seeded baseline (clear + import + seed, no roundtrip diff)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			cfg, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
+			if err := clearAllDataTables(ctx, db); err != nil {
+				return err
+			}
+			importer := newImporterFromConfig(cfg, db, io.Discard)
+			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
+				return fmt.Errorf("import source yaml: %w", err)
+			}
+			if seeder := newStateSeederFromConfig(cfg, db, io.Discard); seeder != nil {
+				if _, err := seeder.SeedAll(ctx); err != nil {
+					return fmt.Errorf("seed db-only state: %w", err)
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func newSyncDBCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync-db",
