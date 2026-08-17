@@ -115,3 +115,39 @@ func TestRepro_RelearnPool_DBOrderDropsRuntimeMiss(t *testing.T) {
 		t.Fatalf("pooled card entry = %q, want \"break the ice\"", cards[0].Entry)
 	}
 }
+
+// TestRepro_GetLatestLearnedInfo_NewestByDate pins the F1 fix: in DB mode a
+// note's logs are reconstructed in id order, so a fresh runtime answer (highest
+// id) is LAST, not at [0]. GetLatestLearnedInfo must return the newest attempt
+// by date — the override RPCs key on that date to resolve the learning_logs
+// row, so returning the stale baseline date made Mark/Undo operate on the wrong
+// (old, correct) attempt and a wrong answer would resurface as "correct".
+func TestRepro_GetLatestLearnedInfo_NewestByDate(t *testing.T) {
+	repoRoot, _ := filepath.Abs("../../..")
+	fx := filepath.Join(repoRoot, "frontend", "e2e", "fixtures")
+	cfg := config.NotebooksConfig{
+		FlashcardsDirectories:  []string{filepath.Join(fx, "flashcards")},
+		LearningNotesDirectory: filepath.Join(fx, "learning_notes"),
+	}
+
+	ts := func(s string) time.Time { tm, _ := time.Parse(time.RFC3339, s); return tm }
+	notes := []notebook.NoteRecord{{
+		ID: 1, Entry: "break the ice", Usage: "break the ice",
+		NotebookNotes: []notebook.NotebookNote{{NoteID: 1, NotebookType: "flashcard", NotebookID: "idioms", Group: "Common Idioms"}},
+	}}
+	today := time.Now().UTC()
+	// id-ASC as FindAll returns: baseline first, the fresh runtime answer LAST.
+	logs := []learning.LearningLog{
+		{ID: 1, NoteID: 1, Status: "understood", LearnedAt: ts("2025-01-01T00:00:00Z"), QuizType: "notebook", SourceNotebookID: "idioms"},
+		{ID: 2, NoteID: 1, Status: "misunderstood", LearnedAt: today, QuizType: "notebook", SourceNotebookID: "idioms"},
+	}
+	store := learning.NewDBHistoryStore(&rlNoteRepo{notes: notes}, &rlLearnRepo{logs: logs}, rlOriginRepo{}, rlSkipRepo{})
+	svc := NewService(cfg, nil, nil, nil, config.QuizConfig{})
+	svc.SetHistoryStore(store)
+
+	learnedAt, _ := svc.GetLatestLearnedInfo("idioms", "", "break the ice", notebook.QuizTypeNotebook)
+	if learnedAt != today.Format("2006-01-02") {
+		t.Fatalf("GetLatestLearnedInfo learnedAt = %q, want today %q (must pick the newest attempt by date, not logs[0])",
+			learnedAt, today.Format("2006-01-02"))
+	}
+}

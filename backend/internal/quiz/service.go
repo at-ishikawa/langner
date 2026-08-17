@@ -2049,7 +2049,20 @@ func (s *Service) GetLatestLearnedInfo(notebookName, id, expression string, quiz
 		return "", ""
 	}
 
+	// Pick the newest attempt by date. The YAML reader stores logs
+	// newest-first (prepend on write), but the DB-backed store reconstructs
+	// them in id order — so a log written at RUNTIME (highest id) lands LAST,
+	// not at [0]. Returning logs[0] there yields an OLD baseline date, which
+	// the override RPCs then use to resolve the wrong learning_logs row (the
+	// stale baseline instead of the just-answered one), so Mark/Undo operate
+	// on the wrong attempt. Selecting by LearnedAt is order-independent across
+	// both sources (first-seen wins ties, matching YAML newest-first).
 	latest := logs[0]
+	for _, l := range logs[1:] {
+		if l.LearnedAt.After(latest.LearnedAt.Time) {
+			latest = l
+		}
+	}
 	learnedAt = latest.LearnedAt.Format("2006-01-02")
 	if latest.IntervalDays > 0 {
 		nextReviewDate = latest.LearnedAt.AddDate(0, 0, latest.IntervalDays).Format("2006-01-02")

@@ -29,14 +29,6 @@ BeforeScenario(async ({ page }) => {
     if (!url || url === "about:blank") return;
     info.annotations.push({ type: "visited-url", description: url });
   });
-  // [diag] TEMPORARY — forward browser "[diag]" console lines to the test
-  // output so F1 diagnostics show up in CI. Remove after CI extraction.
-  page.on("console", (msg) => {
-    const text = msg.text();
-    if (text.includes("[diag]")) {
-      console.log(text);
-    }
-  });
 });
 
 Given("I am on the home page", async ({ page }) => {
