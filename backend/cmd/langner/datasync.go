@@ -123,7 +123,21 @@ func newExportDBCommand() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "export-db",
-		Short: "Export database to YAML files",
+		Short: "Export database to YAML files (notebook shapes + a complete, lossless per-table snapshot)",
+		Long: `Export the database to YAML under the --output directory.
+
+Two things are written:
+
+  1. The notebook-shaped YAML the app reads (stories/, books/, flashcards/,
+     definitions/, learning_notes/, dictionaries/). This is convenient for
+     re-import but is NOT a lossless mirror of the DB — it cannot represent
+     DB-only columns (note ids, skipped_at, the etymology junction tables)
+     and drops note-body fields the DB never stores.
+
+  2. A faithful, complete per-table snapshot under tables/<table>.yml: every
+     row of every persisted-data table, every column, exactly as stored.
+     This is the diffable, recoverable backup to take before moving to
+     DB-only state — nothing is silently lost.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
@@ -139,10 +153,30 @@ func newExportDBCommand() *cobra.Command {
 				return err
 			}
 
+			// Faithful, complete per-table snapshot under <output>/tables/.
+			// The notebook-shaped export above reconstructs the app's YAML
+			// formats but cannot represent DB-only columns (note ids,
+			// skipped_at, the etymology junction tables) and drops note-body
+			// fields the DB never stores — so it is not a lossless mirror of
+			// the database. This dump captures every row of every table
+			// exactly, which is what makes the data recoverable and diffable
+			// before the move to DB-only state.
+			tableResult, err := datasync.NewTableDumpExporter(db, outputDir, os.Stdout).ExportTables(ctx)
+			if err != nil {
+				return fmt.Errorf("export tables: %w", err)
+			}
+
 			fmt.Println("\nExport Summary:")
 			fmt.Printf("  Notes exported:              %d\n", result.Notes.NotesExported)
 			fmt.Printf("  Learning logs exported:      %d\n", result.Learning.LogsExported)
 			fmt.Printf("  Dictionary entries exported: %d\n", result.Dictionary.EntriesExported)
+			fmt.Printf("  Tables snapshotted:          %d (see %s)\n",
+				len(tableResult.RowsByTable), filepath.Join(outputDir, "tables"))
+			totalRows := 0
+			for _, n := range tableResult.RowsByTable {
+				totalRows += n
+			}
+			fmt.Printf("  Total rows snapshotted:      %d\n", totalRows)
 
 			return nil
 		},
@@ -530,48 +564,13 @@ func extractNotebookIDs(notes []notebook.NoteRecord) []string {
 	return ids
 }
 
-// dataTablesInDeletionOrder lists every persisted-data table in an
-// order safe for sequential DELETE: child rows (rows whose FK points
-// at another row in this list) come before their parents. The
-// validate-db roundtrip clears these before re-importing. Keep in
-// sync with schemas/migrations/ — a missing entry surfaces as a
-// foreign-key constraint error at clear time, which is exactly the
-// failure mode TestClearAllDataTablesCoversAllSchemaTables guards
-// against.
-//
-// Order rationale:
-//   - note_origin_parts depends on notes + etymology_origins + etymology_origin_forms (no CASCADE on note_id)
-//   - notebook_notes, note_images, note_references, learning_logs depend on notes
-//   - etymology_origin_forms depends on etymology_origins (CASCADE; listed for clarity)
-//   - semantic_concept_members, concept_relations CASCADE from semantic_concepts
-//   - definition_concept_members CASCADE from definition_concepts
-//   - notes, etymology_origins, semantic_concepts, definition_concepts, dictionary_entries are leaf parents
+// dataTablesInDeletionOrder is the persisted-data table list (children
+// before parents, safe for sequential DELETE) used by the validate-db /
+// sync-db clear step. The canonical list now lives in datasync alongside
+// the table-dump exporter that shares it, so a single completeness guard
+// keeps both in sync with schemas/migrations/.
 func dataTablesInDeletionOrder() []string {
-	return []string{
-		// DB-only-state tables (migration 017). Skip-flag tables FK to
-		// notes / etymology_origins and the definitions_scenes table FKs
-		// to definitions_sessions, so clear children before parents.
-		"note_skip_flags",
-		"origin_skip_flags",
-		"definitions_scenes",
-		"definitions_sessions",
-		"flashcard_decks",
-		"note_origin_parts",
-		"notebook_notes",
-		"note_images",
-		"note_references",
-		"learning_logs",
-		"grammar_corrections",
-		"etymology_origin_forms",
-		"semantic_concept_members",
-		"concept_relations",
-		"definition_concept_members",
-		"notes",
-		"etymology_origins",
-		"semantic_concepts",
-		"definition_concepts",
-		"dictionary_entries",
-	}
+	return datasync.DataTablesInDependencyOrder()
 }
 
 // clearAllDataTables wipes every persisted-data table in one
