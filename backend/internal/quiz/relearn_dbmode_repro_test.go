@@ -93,8 +93,7 @@ func TestRepro_RelearnPool_DBOrderDropsRuntimeMiss(t *testing.T) {
 		mk(2, "misunderstood", "2025-01-02T00:00:00Z", "notebook"),
 		{ID: 3, NoteID: 1, Status: "misunderstood", LearnedAt: now.Add(-1 * time.Minute), QuizType: "notebook", SourceNotebookID: "idioms"}, // fresh miss
 	}
-	store := learning.NewDBHistoryStore(&rlNoteRepo{notes: notes}, &rlLearnRepo{logs: logs}, rlOriginRepo{}, rlSkipRepo{}).
-		WithGrammarYAMLDir(cfg.LearningNotesDirectory)
+	store := learning.NewDBHistoryStore(&rlNoteRepo{notes: notes}, &rlLearnRepo{logs: logs}, rlOriginRepo{}, rlSkipRepo{}, nil)
 
 	svc := NewService(cfg, nil, nil, nil, config.QuizConfig{DisableShuffle: true})
 	svc.SetHistoryStore(store)
@@ -141,7 +140,7 @@ func TestRepro_GetLatestLearnedInfo_NewestByDate(t *testing.T) {
 		{ID: 1, NoteID: 1, Status: "understood", LearnedAt: ts("2025-01-01T00:00:00Z"), QuizType: "notebook", SourceNotebookID: "idioms"},
 		{ID: 2, NoteID: 1, Status: "misunderstood", LearnedAt: today, QuizType: "notebook", SourceNotebookID: "idioms"},
 	}
-	store := learning.NewDBHistoryStore(&rlNoteRepo{notes: notes}, &rlLearnRepo{logs: logs}, rlOriginRepo{}, rlSkipRepo{})
+	store := learning.NewDBHistoryStore(&rlNoteRepo{notes: notes}, &rlLearnRepo{logs: logs}, rlOriginRepo{}, rlSkipRepo{}, nil)
 	svc := NewService(cfg, nil, nil, nil, config.QuizConfig{})
 	svc.SetHistoryStore(store)
 

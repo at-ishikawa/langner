@@ -91,6 +91,8 @@ func newMigrateImportDBCommand() *cobra.Command {
 					fmt.Printf("  Note skip flags:      %d new\n", stateResult.NoteSkipFlagsCreated)
 					fmt.Printf("  Origin skip flags:    %d new\n", stateResult.OriginSkipFlagsCreated)
 					fmt.Printf("  Etymology logs:       %d new\n", stateResult.EtymologyLogsCreated)
+					fmt.Printf("  Grammar corrections:  %d new\n", stateResult.GrammarCorrectionsCreated)
+					fmt.Printf("  Grammar logs:         %d new\n", stateResult.GrammarLogsCreated)
 				}
 			}
 
@@ -452,8 +454,10 @@ func newStateSeederFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer)
 		notebook.NewDBDefinitionsRepository(db),
 		notebook.NewDBFlashcardDeckRepository(db),
 		notebook.NewDBSkipFlagRepository(db),
+		notebook.NewDBGrammarCorrectionRepository(db),
 		learning.NewDBLearningRepository(db),
 		learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, nil),
+		cfg.Notebooks.LearningNotesDirectory,
 		writer,
 	)
 }
@@ -545,6 +549,7 @@ func dataTablesInDeletionOrder() []string {
 		"note_images",
 		"note_references",
 		"learning_logs",
+		"grammar_corrections",
 		"etymology_origin_forms",
 		"semantic_concept_members",
 		"concept_relations",

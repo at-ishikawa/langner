@@ -156,7 +156,8 @@ func run(ctx context.Context) error {
 				dbLearningRepo,
 				notebook.NewDBEtymologyOriginRepository(db),
 				notebook.NewDBSkipFlagRepository(db),
-			).WithGrammarYAMLDir(cfg.Notebooks.LearningNotesDirectory)
+				notebook.NewDBGrammarCorrectionRepository(db),
+			)
 			yamlAnalyticsRepo = yamlAnalyticsRepo.WithHistoryStore(historyStore)
 			slog.Info("database connected, dual storage enabled; learning-history reads served from DB")
 		}

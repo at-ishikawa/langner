@@ -2,7 +2,6 @@ package learning
 
 import (
 	"context"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -93,6 +92,17 @@ func (f *fakeSkipFlagRepo) ResumeNote(context.Context, int64, string) error     
 func (f *fakeSkipFlagRepo) SkipOrigin(context.Context, int64, string, time.Time) error { return nil }
 func (f *fakeSkipFlagRepo) ResumeOrigin(context.Context, int64, string) error          { return nil }
 
+type fakeGrammarRepo struct {
+	records []notebook.GrammarCorrectionRecord
+}
+
+func (f *fakeGrammarRepo) FindAll(context.Context) ([]notebook.GrammarCorrectionRecord, error) {
+	return f.records, nil
+}
+func (f *fakeGrammarRepo) FindOrCreate(context.Context, string, string) (notebook.GrammarCorrectionRecord, error) {
+	return notebook.GrammarCorrectionRecord{}, nil
+}
+
 // findExpr locates a reconstructed expression by notebook id + spelling,
 // searching both the flat .Expressions slice (flashcards) and nested scenes
 // (stories / origins).
@@ -179,6 +189,7 @@ func TestDBHistoryStore_LoadAll_RoutesLogsAndSkipFlags(t *testing.T) {
 		&fakeLearningRepo{logs: logs},
 		&fakeOriginRepo{records: origins},
 		skipFlags,
+		nil,
 	)
 
 	histories, err := store.LoadAll(context.Background())
@@ -215,60 +226,70 @@ func TestDBHistoryStore_LoadAll_RoutesLogsAndSkipFlags(t *testing.T) {
 	assert.True(t, alter.SkippedAt.IsSkipped(notebook.QuizTypeEtymologyOrigin), "origin skip flag must reconstruct onto SkippedAt")
 }
 
-// TestDBHistoryStore_LoadAll_MergesGrammarFromYAML pins the grammar-YAML
-// merge (Bucket B): grammar corrections have no note_id / origin_id, so they
-// live only in the YAML learning_notes. WithGrammarYAMLDir merges the flat
-// `type: grammar` blocks into the DB-reconstructed map so Analytics / the
-// grammar quiz / grammar Relearn see them once reads come from the DB. Only
-// grammar blocks are merged (etymology/flashcard/vocab come from the DB), so
-// nothing is double-counted. Driven against the real e2e learning_notes
-// fixtures (practice.yml = a grammar block) with EMPTY DB fakes, so anything
-// present must have come from the YAML merge.
-func TestDBHistoryStore_LoadAll_MergesGrammarFromYAML(t *testing.T) {
-	repoRoot, err := filepath.Abs("../../..")
+// TestDBHistoryStore_LoadAll_ReconstructsGrammarFromDB pins the first-class
+// grammar DB reconstruction (migration 021): grammar corrections are now rows
+// in grammar_corrections and their learning_logs key on correction_id — no
+// YAML merge. LoadAll must rebuild one flat `type: grammar` LearningHistory per
+// grammar notebook, each correction an expression keyed by its sense_id whose
+// LearnedLogs carry quiz_type=grammar (so Analytics labels them grammar, the
+// grammar quiz's due filter and grammar Relearn see them). The current status
+// must come from the NEWEST attempt by date, not the DB id order.
+func TestDBHistoryStore_LoadAll_ReconstructsGrammarFromDB(t *testing.T) {
+	now := time.Now().UTC()
+
+	corrections := []notebook.GrammarCorrectionRecord{
+		{ID: 10, NotebookID: "journal", SenseID: "the-john"},
+		{ID: 11, NotebookID: "journal", SenseID: "suggested-to-go"},
+	}
+	// correction 10 ("the-john"): an OLD miss (lower id) then a NEWER, recent
+	// correct answer (higher id) — id order would surface the miss, date order
+	// the correct one. correction 11 ("suggested-to-go"): a single miss.
+	logs := []LearningLog{
+		{ID: 1, CorrectionID: 10, Status: "misunderstood", LearnedAt: now.Add(-48 * time.Hour), QuizType: "grammar"},
+		{ID: 2, CorrectionID: 10, Status: "understood", LearnedAt: now.Add(-1 * time.Hour), QuizType: "grammar", IntervalDays: 7},
+		{ID: 3, CorrectionID: 11, Status: "misunderstood", LearnedAt: now.Add(-48 * time.Hour), QuizType: "grammar"},
+	}
+
+	store := NewDBHistoryStore(
+		&fakeNoteRepo{},
+		&fakeLearningRepo{logs: logs},
+		&fakeOriginRepo{},
+		&fakeSkipFlagRepo{},
+		&fakeGrammarRepo{records: corrections},
+	)
+	histories, err := store.LoadAll(context.Background())
 	require.NoError(t, err)
-	learningNotes := filepath.Join(repoRoot, "frontend", "e2e", "fixtures", "learning_notes")
 
-	empty := func() *DBHistoryStore {
-		return NewDBHistoryStore(&fakeNoteRepo{}, &fakeLearningRepo{}, &fakeOriginRepo{}, &fakeSkipFlagRepo{})
+	journal := histories["journal"]
+	require.Len(t, journal, 1, "one flat grammar history per grammar notebook")
+	require.Equal(t, "grammar", journal[0].Metadata.Type)
+	require.Empty(t, journal[0].Scenes, "grammar histories are flat, not scene-nested")
+
+	byID := map[string]notebook.LearningHistoryExpression{}
+	for _, e := range journal[0].Expressions {
+		byID[e.ID] = e
 	}
+	require.Len(t, byID, 2, "one expression per correction")
 
-	// Fail-before: without the YAML dir, grammar is absent (DB has none).
-	before, err := empty().LoadAll(context.Background())
+	theJohn := byID["the-john"]
+	assert.Equal(t, "the-john", theJohn.Expression, "expression keyed by sense_id")
+	require.Len(t, theJohn.LearnedLogs, 2)
+	assert.Equal(t, string(notebook.QuizTypeGrammar), theJohn.LearnedLogs[0].QuizType,
+		"grammar log lives in LearnedLogs with quiz_type=grammar")
+	// Newest-by-date first: the current status is the later `understood`
+	// answer, NOT the older miss that has a lower DB id.
+	assert.Equal(t, notebook.LearnedStatusUnderstood, theJohn.GetLatestStatus(),
+		"current status must come from the newest attempt by date, not logs by id")
+	assert.False(t, theJohn.NeedsForwardReview(), "an understood, not-yet-due correction is not due")
+
+	suggested := byID["suggested-to-go"]
+	require.Len(t, suggested.LearnedLogs, 1)
+	assert.Equal(t, notebook.LearnedStatusMisunderstood, suggested.GetLatestStatus())
+	assert.True(t, suggested.NeedsForwardReview(), "a misunderstood correction is always due")
+
+	// Grammar is DB-only now: with a nil grammar repo, no grammar history.
+	noGrammar := NewDBHistoryStore(&fakeNoteRepo{}, &fakeLearningRepo{logs: logs}, &fakeOriginRepo{}, &fakeSkipFlagRepo{}, nil)
+	got, err := noGrammar.LoadAll(context.Background())
 	require.NoError(t, err)
-	if _, ok := before["practice"]; ok {
-		t.Fatalf("grammar notebook present without WithGrammarYAMLDir — DB has no grammar rows")
-	}
-
-	// Pass-after: with the YAML dir, the grammar block merges in.
-	after, err := empty().WithGrammarYAMLDir(learningNotes).LoadAll(context.Background())
-	require.NoError(t, err)
-
-	practice := after["practice"]
-	require.NotEmpty(t, practice, "grammar notebook must merge from YAML")
-	var partySuggested *notebook.LearningHistoryExpression
-	grammarBlocks := 0
-	for i := range practice {
-		if practice[i].Metadata.Type != "grammar" {
-			continue
-		}
-		grammarBlocks++
-		for j := range practice[i].Expressions {
-			if practice[i].Expressions[j].Expression == "party-suggested" {
-				partySuggested = &practice[i].Expressions[j]
-			}
-		}
-	}
-	require.Equal(t, 1, grammarBlocks, "exactly one grammar block merged (no duplication)")
-	require.NotNil(t, partySuggested, "the seeded grammar correction must be present")
-	require.NotEmpty(t, partySuggested.LearnedLogs, "grammar correction carries its log")
-	assert.Equal(t, string(notebook.QuizTypeGrammar), partySuggested.LearnedLogs[0].QuizType,
-		"grammar log keeps quiz_type=grammar for the analytics label")
-
-	// No double-counting: the merge pulls ONLY grammar. The flat etymology
-	// blocks (word-roots / word-stems) and the idioms flashcard are NOT
-	// merged from YAML — they belong to the DB path, which is empty here.
-	for _, id := range []string{"idioms", "word-roots", "word-stems"} {
-		assert.Empty(t, after[id], "non-grammar notebook %q must not be merged from YAML", id)
-	}
+	assert.Empty(t, got["journal"], "no grammar repo → no grammar history")
 }

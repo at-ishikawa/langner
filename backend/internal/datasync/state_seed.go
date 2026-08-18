@@ -19,6 +19,8 @@ type StateSeedResult struct {
 	NoteSkipFlagsCreated       int
 	OriginSkipFlagsCreated     int
 	EtymologyLogsCreated       int
+	GrammarCorrectionsCreated  int
+	GrammarLogsCreated         int
 }
 
 // StateSeeder populates the migration-016 tables (definitions_sessions /
@@ -26,19 +28,24 @@ type StateSeedResult struct {
 // etymology rows in learning_logs from the existing YAML. Idempotent:
 // each phase upserts so a re-run skips already-seeded rows.
 type StateSeeder struct {
-	reader        *notebook.Reader
-	noteRepo      notebook.NoteRepository
-	originRepo    notebook.EtymologyOriginRepository
-	defsRepo      notebook.DefinitionsRepository
-	flashcardRepo notebook.FlashcardDeckRepository
-	skipFlagRepo  notebook.SkipFlagRepository
-	learningRepo  learning.LearningRepository
-	learningSrc   LearningSource
-	writer        io.Writer
+	reader           *notebook.Reader
+	noteRepo         notebook.NoteRepository
+	originRepo       notebook.EtymologyOriginRepository
+	defsRepo         notebook.DefinitionsRepository
+	flashcardRepo    notebook.FlashcardDeckRepository
+	skipFlagRepo     notebook.SkipFlagRepository
+	grammarRepo      notebook.GrammarCorrectionRepository
+	learningRepo     learning.LearningRepository
+	learningSrc      LearningSource
+	learningNotesDir string
+	writer           io.Writer
 }
 
 // NewStateSeeder constructs a seeder. learningSrc is the YAML-side
-// learning history reader used to pull skip flags and etymology logs.
+// learning history reader used to pull skip flags and etymology logs;
+// learningNotesDir is that same directory, read directly to pull the flat
+// `type: grammar` blocks the grammar phase seeds. grammarRepo may be nil to
+// skip grammar seeding.
 func NewStateSeeder(
 	reader *notebook.Reader,
 	noteRepo notebook.NoteRepository,
@@ -46,20 +53,24 @@ func NewStateSeeder(
 	defsRepo notebook.DefinitionsRepository,
 	flashcardRepo notebook.FlashcardDeckRepository,
 	skipFlagRepo notebook.SkipFlagRepository,
+	grammarRepo notebook.GrammarCorrectionRepository,
 	learningRepo learning.LearningRepository,
 	learningSrc LearningSource,
+	learningNotesDir string,
 	writer io.Writer,
 ) *StateSeeder {
 	return &StateSeeder{
-		reader:        reader,
-		noteRepo:      noteRepo,
-		originRepo:    originRepo,
-		defsRepo:      defsRepo,
-		flashcardRepo: flashcardRepo,
-		skipFlagRepo:  skipFlagRepo,
-		learningRepo:  learningRepo,
-		learningSrc:   learningSrc,
-		writer:        writer,
+		reader:           reader,
+		noteRepo:         noteRepo,
+		originRepo:       originRepo,
+		defsRepo:         defsRepo,
+		flashcardRepo:    flashcardRepo,
+		skipFlagRepo:     skipFlagRepo,
+		grammarRepo:      grammarRepo,
+		learningRepo:     learningRepo,
+		learningSrc:      learningSrc,
+		learningNotesDir: learningNotesDir,
+		writer:           writer,
 	}
 }
 
@@ -76,7 +87,76 @@ func (s *StateSeeder) SeedAll(ctx context.Context) (*StateSeedResult, error) {
 	if err := s.seedSkipFlagsAndEtymologyLogs(ctx, result); err != nil {
 		return result, fmt.Errorf("seed skip flags and etymology logs: %w", err)
 	}
+	if err := s.seedGrammarCorrections(ctx, result); err != nil {
+		return result, fmt.Errorf("seed grammar corrections: %w", err)
+	}
 	return result, nil
+}
+
+// seedGrammarCorrections reads the flat `type: grammar` learning-history
+// blocks straight from the YAML learning_notes and, for each correction,
+// upserts a grammar_corrections row and writes its learning_logs keyed on
+// correction_id with quiz_type=grammar — the DB-only-state parallel of the
+// etymology-origin seed. Reading the blocks directly (rather than via
+// LearningSource.FindByNotebookID) lets us pick out ONLY grammar blocks; a
+// journal's file could also carry a vocab block, which the note-side import
+// handles separately.
+func (s *StateSeeder) seedGrammarCorrections(ctx context.Context, result *StateSeedResult) error {
+	if s.grammarRepo == nil || s.learningRepo == nil || s.learningNotesDir == "" {
+		return nil
+	}
+	histories, err := notebook.NewLearningHistories(s.learningNotesDir)
+	if err != nil {
+		return fmt.Errorf("load learning histories: %w", err)
+	}
+	for _, hs := range histories {
+		for _, h := range hs {
+			if h.Metadata.Type != "grammar" {
+				continue
+			}
+			nbID := h.Metadata.NotebookID
+			for _, expr := range h.Expressions {
+				senseID := expr.ID
+				if senseID == "" {
+					senseID = expr.Expression
+				}
+				if senseID == "" {
+					continue
+				}
+				rec, ferr := s.grammarRepo.FindOrCreate(ctx, nbID, senseID)
+				if ferr != nil {
+					return fmt.Errorf("upsert grammar correction %q in %q: %w", senseID, nbID, ferr)
+				}
+				if rec.CreatedAt.Equal(rec.UpdatedAt) {
+					result.GrammarCorrectionsCreated++
+				}
+				// Grammar logs live in the LearnedLogs slot. Preserve each
+				// record's quiz_type, falling back to "grammar" for legacy
+				// entries that didn't stamp one.
+				for _, r := range expr.LearnedLogs {
+					quizType := string(r.QuizType)
+					if quizType == "" {
+						quizType = string(notebook.QuizTypeGrammar)
+					}
+					log := &learning.LearningLog{
+						CorrectionID:     rec.ID,
+						Status:           string(r.Status),
+						LearnedAt:        r.LearnedAt.Time,
+						Quality:          r.Quality,
+						ResponseTimeMs:   int(r.ResponseTimeMs),
+						QuizType:         quizType,
+						IntervalDays:     r.IntervalDays,
+						SourceNotebookID: nbID,
+					}
+					if err := s.learningRepo.Create(ctx, log); err != nil {
+						return fmt.Errorf("insert grammar log: %w", err)
+					}
+					result.GrammarLogsCreated++
+				}
+			}
+		}
+	}
+	return nil
 }
 
 func (s *StateSeeder) seedDefinitions(ctx context.Context, result *StateSeedResult) error {

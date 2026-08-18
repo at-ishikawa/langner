@@ -30,36 +30,25 @@ type DBHistoryStore struct {
 	learningRepo LearningRepository
 	originRepo   notebook.EtymologyOriginRepository
 	skipFlagRepo notebook.SkipFlagRepository
-	// grammarYAMLDir, when set, is the learning_notes directory from which
-	// GRAMMAR learning history is read and merged into the DB-reconstructed
-	// map. Grammar corrections are neither notes nor etymology origins, so
-	// they have no row in the DB (no note_id / origin_id) — YAML remains
-	// their only store. Every other kind (vocabulary, flashcard, etymology
-	// origin) comes from the DB; only the flat `type: grammar` blocks are
-	// merged from YAML, so nothing is double-counted.
-	grammarYAMLDir string
+	// grammarRepo is optional (nil when grammar data isn't present). When
+	// set, grammar corrections are reconstructed from grammar_corrections +
+	// correction_id logs into flat `type: grammar` histories — the DB is
+	// their store now, exactly like notes for vocab and etymology_origins
+	// for origins.
+	grammarRepo notebook.GrammarCorrectionRepository
 }
 
-// NewDBHistoryStore constructs the store. originRepo is optional — pass
-// nil when etymology data isn't present; origin-typed expressions will
-// just be omitted.
-func NewDBHistoryStore(noteRepo notebook.NoteRepository, learningRepo LearningRepository, originRepo notebook.EtymologyOriginRepository, skipFlagRepo notebook.SkipFlagRepository) *DBHistoryStore {
+// NewDBHistoryStore constructs the store. originRepo and grammarRepo are
+// optional — pass nil when that data isn't present; the corresponding
+// histories are just omitted.
+func NewDBHistoryStore(noteRepo notebook.NoteRepository, learningRepo LearningRepository, originRepo notebook.EtymologyOriginRepository, skipFlagRepo notebook.SkipFlagRepository, grammarRepo notebook.GrammarCorrectionRepository) *DBHistoryStore {
 	return &DBHistoryStore{
 		noteRepo:     noteRepo,
 		learningRepo: learningRepo,
 		originRepo:   originRepo,
 		skipFlagRepo: skipFlagRepo,
+		grammarRepo:  grammarRepo,
 	}
-}
-
-// WithGrammarYAMLDir returns the store configured to merge GRAMMAR learning
-// history from the given learning_notes directory. Grammar has no DB home,
-// so its logs (analytics labels, grammar-quiz due state, grammar Relearn)
-// would otherwise vanish once reads are served from the DB. Pass "" to
-// disable the merge (the store then returns DB-only histories).
-func (s *DBHistoryStore) WithGrammarYAMLDir(dir string) *DBHistoryStore {
-	s.grammarYAMLDir = dir
-	return s
 }
 
 // LoadAll rebuilds the per-notebook LearningHistory map from DB rows.
@@ -85,6 +74,7 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 	// the reconstructed shape matches what the YAML reader produced.
 	logsByNote := make(map[int64][]LearningLog, len(logs))
 	logsByOrigin := make(map[int64][]LearningLog)
+	logsByCorrection := make(map[int64][]LearningLog)
 	for _, l := range logs {
 		if l.NoteID != 0 {
 			logsByNote[l.NoteID] = append(logsByNote[l.NoteID], l)
@@ -92,6 +82,10 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 		}
 		if l.OriginID != 0 {
 			logsByOrigin[l.OriginID] = append(logsByOrigin[l.OriginID], l)
+			continue
+		}
+		if l.CorrectionID != 0 {
+			logsByCorrection[l.CorrectionID] = append(logsByCorrection[l.CorrectionID], l)
 		}
 	}
 
@@ -158,44 +152,87 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 		mergeOriginHistories(origins, logsByOrigin, orphanNoteLogsByName, skipFlagsByOrigin, histories)
 	}
 
-	if err := s.mergeGrammarFromYAML(histories); err != nil {
-		return nil, err
+	if s.grammarRepo != nil {
+		corrections, gerr := s.grammarRepo.FindAll(ctx)
+		if gerr != nil {
+			return nil, fmt.Errorf("load grammar corrections: %w", gerr)
+		}
+		buildGrammarHistories(corrections, logsByCorrection, histories)
 	}
 
 	return histories, nil
 }
 
-// mergeGrammarFromYAML appends the flat `type: grammar` learning-history
-// blocks from the YAML learning_notes directory into the DB-reconstructed
-// map. Grammar corrections have no DB representation (no note_id / origin_id),
-// so YAML is their only store; without this merge every DB-served surface
-// (Analytics grammar labels, the grammar quiz's due state, grammar Relearn)
-// loses them. ONLY grammar blocks are merged — vocabulary, flashcard and
-// etymology-origin history all come from the DB above — so no series is
-// double-counted (a grammar correction never also exists as a note/origin).
-func (s *DBHistoryStore) mergeGrammarFromYAML(histories map[string][]notebook.LearningHistory) error {
-	if s.grammarYAMLDir == "" {
-		return nil
+// buildGrammarHistories reconstructs one flat `type: grammar` LearningHistory
+// per grammar/journal notebook from grammar_corrections + their correction_id
+// logs — the DB-only-state replacement for the old YAML merge. Each correction
+// becomes one expression keyed by its sense_id (the correction's stable id,
+// which every consumer — the grammar quiz's due filter, grammar Relearn,
+// Analytics — reads). A grammar log lives in the LearnedLogs slot carrying
+// quiz_type=grammar, matching GetLogsForQuizType(grammar).
+func buildGrammarHistories(
+	corrections []notebook.GrammarCorrectionRecord,
+	logsByCorrection map[int64][]LearningLog,
+	out map[string][]notebook.LearningHistory,
+) {
+	// Group corrections by notebook so each notebook gets ONE grammar history
+	// carrying all its corrections; preserve first-seen order per notebook and
+	// sort notebooks for a deterministic map.
+	type nbGrammar struct {
+		exprs []notebook.LearningHistoryExpression
 	}
-	yamlHistories, err := notebook.NewLearningHistories(s.grammarYAMLDir)
-	if err != nil {
-		return fmt.Errorf("load grammar learning histories: %w", err)
-	}
-	// Deterministic notebook order so the merged map is stable.
-	nbIDs := make([]string, 0, len(yamlHistories))
-	for nbID := range yamlHistories {
-		nbIDs = append(nbIDs, nbID)
-	}
-	sort.Strings(nbIDs)
-	for _, nbID := range nbIDs {
-		for _, h := range yamlHistories[nbID] {
-			if h.Metadata.Type != "grammar" {
-				continue
-			}
-			histories[nbID] = append(histories[nbID], h)
+	byNotebook := make(map[string]*nbGrammar)
+	var nbOrder []string
+	for _, c := range corrections {
+		exp := buildGrammarExpression(c.SenseID, logsByCorrection[c.ID])
+		g, ok := byNotebook[c.NotebookID]
+		if !ok {
+			g = &nbGrammar{}
+			byNotebook[c.NotebookID] = g
+			nbOrder = append(nbOrder, c.NotebookID)
 		}
+		g.exprs = append(g.exprs, exp)
 	}
-	return nil
+	sort.Strings(nbOrder)
+	for _, nbID := range nbOrder {
+		out[nbID] = append(out[nbID], notebook.LearningHistory{
+			Metadata: notebook.LearningHistoryMetadata{
+				NotebookID: nbID,
+				Type:       "grammar",
+			},
+			Expressions: byNotebook[nbID].exprs,
+		})
+	}
+}
+
+// buildGrammarExpression builds one grammar correction's expression. Its logs
+// are ordered NEWEST-FIRST by LearnedAt so GetLatestStatus / NeedsForwardReview
+// (which read LearnedLogs[0] as the latest attempt) decide a correction's
+// current status correctly — a runtime miss written with the highest DB id
+// must not be shadowed by an older log (the DB-log-ordering rule applied
+// everywhere in DB-only-state). id and expression are both the sense_id, the
+// correction's canonical key.
+func buildGrammarExpression(senseID string, logs []LearningLog) notebook.LearningHistoryExpression {
+	sorted := append([]LearningLog{}, logs...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		return sorted[i].LearnedAt.After(sorted[j].LearnedAt)
+	})
+	learnedLogs := make([]notebook.LearningRecord, 0, len(sorted))
+	for _, l := range sorted {
+		learnedLogs = append(learnedLogs, notebook.LearningRecord{
+			Status:         notebook.LearnedStatus(l.Status),
+			LearnedAt:      notebook.NewDate(l.LearnedAt),
+			Quality:        l.Quality,
+			ResponseTimeMs: int64(l.ResponseTimeMs),
+			QuizType:       l.QuizType,
+			IntervalDays:   l.IntervalDays,
+		})
+	}
+	return notebook.LearningHistoryExpression{
+		ID:          senseID,
+		Expression:  senseID,
+		LearnedLogs: learnedLogs,
+	}
 }
 
 // buildVocabHistories walks notes + their notebook_notes links and
