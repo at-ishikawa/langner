@@ -92,3 +92,65 @@ func TestDBNoteRepository_FindAll_SchemaDrift_LivePostgres_Integration(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, "break the ice", one.Usage)
 }
+
+// TestDBNoteRepository_BatchCreate_Homographs_LivePostgres_Integration
+// reproduces the second real-DB import-db failure: a homograph — two entries
+// with the SAME (usage, entry) spelling but DISTINCT sense_ids. Migration 019
+// documented that these should coexist as two rows, but it never dropped the
+// plain UNIQUE("usage", entry) from migration 001, so BatchCreate's INSERT hit
+// "duplicate key value violates unique constraint notes_usage_entry_key"
+// (SQLSTATE 23505) — exactly the user's
+// "import notes: batch create notes: insert note: duplicate key ...".
+// Migration 022 relaxes that to a partial index scoped to id-less rows.
+//
+// Requires LANGNER_INTEGRATION_DB_URL (CI's postgres:16); skipped otherwise.
+// Fails before 022 (the 2nd homograph is rejected), passes after.
+func TestDBNoteRepository_BatchCreate_Homographs_LivePostgres_Integration(t *testing.T) {
+	dsn := os.Getenv("LANGNER_INTEGRATION_DB_URL")
+	if dsn == "" {
+		t.Skip("LANGNER_INTEGRATION_DB_URL not set")
+	}
+
+	db, err := sqlx.Open("pgx", dsn)
+	require.NoError(t, err)
+	defer db.Close()
+	require.NoError(t, db.Ping())
+
+	_, err = db.Exec(`DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public`)
+	require.NoError(t, err)
+	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
+
+	repo := NewDBNoteRepository(db)
+	ctx := context.Background()
+
+	// Two homographs: same spelling "bank", distinct sense_ids. The importer's
+	// dedup keeps both, then BatchCreate must insert both.
+	homographs := []*NoteRecord{
+		{Usage: "bank", Entry: "bank", Meaning: "a financial institution", SenseID: "bank-finance",
+			NotebookNotes: []NotebookNote{{NotebookType: "book", NotebookID: "wpme", Group: "Money"}}},
+		{Usage: "bank", Entry: "bank", Meaning: "the land beside a river", SenseID: "bank-river",
+			NotebookNotes: []NotebookNote{{NotebookType: "book", NotebookID: "wpme", Group: "Geography"}}},
+	}
+	require.NoError(t, repo.BatchCreate(ctx, homographs),
+		"homographs (same spelling, distinct sense_id) must both insert — no 23505 after migration 022")
+
+	notes, err := repo.FindAll(ctx)
+	require.NoError(t, err)
+	require.Len(t, notes, 2, "both homograph rows must persist")
+	senses := map[string]bool{}
+	for _, n := range notes {
+		assert.Equal(t, "bank", n.Usage)
+		senses[n.SenseID] = true
+	}
+	assert.True(t, senses["bank-finance"] && senses["bank-river"], "both sense_ids present, got %v", senses)
+
+	// The legacy (id-less) uniqueness is PRESERVED: two id-less rows with the
+	// same spelling still collide on the partial index — they have no sense_id
+	// to distinguish them.
+	idless := []*NoteRecord{
+		{Usage: "seal", Entry: "seal", Meaning: "an animal"},
+		{Usage: "seal", Entry: "seal", Meaning: "to close"},
+	}
+	err = repo.BatchCreate(ctx, idless)
+	require.Error(t, err, "two id-less rows sharing a spelling must still be rejected (legacy uniqueness kept)")
+}

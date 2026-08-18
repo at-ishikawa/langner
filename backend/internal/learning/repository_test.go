@@ -110,7 +110,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 				QuizType: "notebook", IntervalDays: 7, SourceNotebookID: "nb-1",
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning\) VALUES \(\$1, \$2, \$3\)\s+ON CONFLICT \("usage", entry\) DO UPDATE SET "usage" = EXCLUDED\."usage"\s+RETURNING id`).
+				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning\) VALUES \(\$1, \$2, \$3\)\s+ON CONFLICT \("usage", entry\) WHERE sense_id = '' DO UPDATE SET "usage" = EXCLUDED\."usage"\s+RETURNING id`).
 					WithArgs("serendipity", "serendipity", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(61)))
 				mock.ExpectExec("INSERT INTO learning_logs").
@@ -134,7 +134,7 @@ func TestDBLearningRepository_Create(t *testing.T) {
 				QuizType: "notebook", IntervalDays: 1, SourceNotebookID: "wpme",
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery(`INSERT INTO notes .* ON CONFLICT \("usage", entry\) DO UPDATE .* RETURNING id`).
+				mock.ExpectQuery(`INSERT INTO notes .* ON CONFLICT \("usage", entry\) WHERE sense_id = '' DO UPDATE .* RETURNING id`).
 					WithArgs("cardiology", "cardiology", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(42)))
 				mock.ExpectExec("INSERT INTO learning_logs").

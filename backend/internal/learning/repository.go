@@ -208,11 +208,15 @@ func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *Learni
 		return noteID, nil
 	}
 
-	// Legacy id-less card: keep the (usage, entry) upsert.
+	// Legacy id-less card: upsert by (usage, entry). Since migration 022 the
+	// (usage, entry) uniqueness is a PARTIAL index scoped to id-less rows
+	// (WHERE sense_id = ''), so the conflict target must carry that same
+	// predicate for Postgres to infer the index. The inserted row has the ''
+	// sense_id default, so it falls under the partial index.
 	var noteID int64
 	if err := r.db.GetContext(ctx, &noteID, `
 		INSERT INTO notes ("usage", entry, meaning) VALUES ($1, $2, $3)
-		ON CONFLICT ("usage", entry) DO UPDATE SET "usage" = EXCLUDED."usage"
+		ON CONFLICT ("usage", entry) WHERE sense_id = '' DO UPDATE SET "usage" = EXCLUDED."usage"
 		RETURNING id`, usage, entry, ""); err != nil {
 		return 0, fmt.Errorf("insert note: %w", err)
 	}
