@@ -25,6 +25,18 @@ type NoteRepository interface {
 	BatchDeleteNotebookNotes(ctx context.Context, ids []int64) error
 }
 
+// Explicit column lists for every user-data read scan, matching each
+// struct's db-tagged fields. A plain SELECT * is NOT resilient to real-DB
+// schema drift: sqlx is strict, so a column with no destination field (e.g.
+// a leftover part_of_speech from the abandoned homograph approach on a user's
+// notes table) crashes the scan. Naming the columns means unknown/extra
+// columns are simply not fetched — the user's data is untouched. "usage" and
+// "group" are reserved words, so they are quoted.
+const noteColumns = `id, sense_id, "usage", entry, meaning, level, dictionary_number, concept_key, created_at, updated_at, skipped_at`
+const noteImageColumns = `id, note_id, url, sort_order, created_at, updated_at`
+const noteReferenceColumns = `id, note_id, link, description, sort_order, created_at, updated_at`
+const notebookNoteColumns = `id, note_id, notebook_type, notebook_id, "group", subgroup, created_at, updated_at`
+
 // DBNoteRepository implements NoteRepository using PostgreSQL.
 type DBNoteRepository struct {
 	db *sqlx.DB
@@ -38,7 +50,7 @@ func NewDBNoteRepository(db *sqlx.DB) *DBNoteRepository {
 // FindAll returns all notes with their images, references, and notebook notes.
 func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 	var notes []NoteRecord
-	if err := r.db.SelectContext(ctx, &notes, "SELECT * FROM notes ORDER BY id"); err != nil {
+	if err := r.db.SelectContext(ctx, &notes, "SELECT "+noteColumns+" FROM notes ORDER BY id"); err != nil {
 		return nil, fmt.Errorf("load all notes: %w", err)
 	}
 	if err := r.loadRelations(ctx, notes); err != nil {
@@ -50,7 +62,7 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 // FindByID returns a single note by ID with its notebook notes.
 func (r *DBNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) {
 	var note NoteRecord
-	if err := r.db.GetContext(ctx, &note, `SELECT * FROM notes WHERE id = $1`, id); err != nil {
+	if err := r.db.GetContext(ctx, &note, `SELECT `+noteColumns+` FROM notes WHERE id = $1`, id); err != nil {
 		return nil, fmt.Errorf("find note by id %d: %w", id, err)
 	}
 	notes := []NoteRecord{note}
@@ -246,7 +258,7 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 		noteMap[notes[i].ID] = &notes[i]
 	}
 
-	query, args, err := sqlx.In("SELECT * FROM note_images WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
+	query, args, err := sqlx.In("SELECT "+noteImageColumns+" FROM note_images WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
 	if err != nil {
 		return fmt.Errorf("build note images query: %w", err)
 	}
@@ -259,7 +271,7 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 		n.Images = append(n.Images, img)
 	}
 
-	query, args, err = sqlx.In("SELECT * FROM note_references WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
+	query, args, err = sqlx.In("SELECT "+noteReferenceColumns+" FROM note_references WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
 	if err != nil {
 		return fmt.Errorf("build note references query: %w", err)
 	}
@@ -272,7 +284,7 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 		n.References = append(n.References, ref)
 	}
 
-	query, args, err = sqlx.In("SELECT * FROM notebook_notes WHERE note_id IN (?) ORDER BY id", noteIDs)
+	query, args, err = sqlx.In("SELECT "+notebookNoteColumns+" FROM notebook_notes WHERE note_id IN (?) ORDER BY id", noteIDs)
 	if err != nil {
 		return fmt.Errorf("build notebook notes query: %w", err)
 	}
