@@ -31,12 +31,19 @@ import (
 // migration that adds a table but forgets its export is caught immediately.
 func DataTablesInDependencyOrder() []string {
 	return []string{
-		"note_origin_parts",
-		"notebook_notes",
-		"note_images",
-		"note_references",
-		"learning_logs",
-		"etymology_origin_forms",
+		// Skip-flag / DB-only-state children (migrations 020, 021).
+		"note_skip_flags",        // -> notes
+		"origin_skip_flags",      // -> etymology_origins
+		"definitions_scenes",     // -> definitions_sessions
+		"definitions_sessions",   // leaf parent
+		"flashcard_decks",        // leaf parent
+		"note_origin_parts",      // -> notes, etymology_origins, etymology_origin_forms
+		"notebook_notes",         // -> notes
+		"note_images",            // -> notes
+		"note_references",        // -> notes
+		"learning_logs",          // -> notes, etymology_origins, grammar_corrections
+		"grammar_corrections",    // leaf parent (learning_logs.correction_id -> here)
+		"etymology_origin_forms", // -> etymology_origins
 		"semantic_concept_members",
 		"concept_relations",
 		"definition_concept_members",
@@ -152,7 +159,11 @@ func (imp *TableDumpImporter) ImportTables(ctx context.Context) (*TableDumpResul
 		if err != nil {
 			return nil, err
 		}
-		if err := imp.insertRows(ctx, table, rows); err != nil {
+		tsCols, err := imp.timestampColumns(ctx, table)
+		if err != nil {
+			return nil, err
+		}
+		if err := imp.insertRows(ctx, table, rows, tsCols); err != nil {
 			return nil, err
 		}
 		res.RowsByTable[table] = len(rows)
@@ -161,7 +172,30 @@ func (imp *TableDumpImporter) ImportTables(ctx context.Context) (*TableDumpResul
 	return res, nil
 }
 
-func (imp *TableDumpImporter) insertRows(ctx context.Context, table string, rows []map[string]any) error {
+// timestampColumns returns the set of columns on the table whose type is a
+// timestamp, sourced from the live schema rather than a column-name heuristic.
+// normalizeValue renders every timestamp as an RFC3339 string for YAML, so on
+// restore those columns must be parsed back to time.Time before insert — and
+// the schema is the only reliable way to know which columns those are (the
+// `date`-named TIMESTAMP columns on definitions_sessions / flashcard_decks do
+// not end in "_at").
+func (imp *TableDumpImporter) timestampColumns(ctx context.Context, table string) (map[string]bool, error) {
+	var cols []string
+	if err := imp.db.SelectContext(ctx, &cols,
+		`SELECT column_name FROM information_schema.columns
+		 WHERE table_schema = 'public' AND table_name = $1 AND data_type LIKE 'timestamp%'`,
+		table,
+	); err != nil {
+		return nil, fmt.Errorf("read timestamp columns for %s: %w", table, err)
+	}
+	set := make(map[string]bool, len(cols))
+	for _, c := range cols {
+		set[c] = true
+	}
+	return set, nil
+}
+
+func (imp *TableDumpImporter) insertRows(ctx context.Context, table string, rows []map[string]any, tsCols map[string]bool) error {
 	for _, row := range rows {
 		cols := make([]string, 0, len(row))
 		for k := range row {
@@ -175,7 +209,7 @@ func (imp *TableDumpImporter) insertRows(ctx context.Context, table string, rows
 		for i, c := range cols {
 			quoted[i] = `"` + c + `"`
 			placeholders[i] = fmt.Sprintf("$%d", i+1)
-			args[i] = denormalizeValue(c, row[c])
+			args[i] = denormalizeValue(row[c], tsCols[c])
 		}
 		// table + column names are internal allowlist/identifier values, not
 		// user input; values are parameterised.
@@ -217,15 +251,15 @@ func normalizeValue(v any) any {
 }
 
 // denormalizeValue converts a YAML-decoded value back into a form the DB
-// driver accepts for INSERT. Timestamp columns (suffix "_at" in this schema:
-// created_at, updated_at, learned_at, skipped_at) are parsed back into
-// time.Time; every other value inserts as-is (pgx coerces int/float/bool/
-// string, and a JSON string into a jsonb column).
-func denormalizeValue(col string, v any) any {
+// driver accepts for INSERT. Timestamp columns (identified from the live
+// schema, not a name heuristic) are parsed back into time.Time; every other
+// value inserts as-is (pgx coerces int/float/bool/string, and a JSON string
+// into a jsonb column).
+func denormalizeValue(v any, isTimestamp bool) any {
 	if v == nil {
 		return nil
 	}
-	if strings.HasSuffix(col, "_at") {
+	if isTimestamp {
 		if s, ok := v.(string); ok {
 			if parsed, err := time.Parse(time.RFC3339Nano, s); err == nil {
 				return parsed
