@@ -73,19 +73,26 @@ func TestDBNoteRepository_FindAll_SchemaDrift_LivePostgres_Integration(t *testin
 
 	repo := NewDBNoteRepository(db)
 
-	// FindAll must succeed despite the stray columns and return the note with
-	// its relations fully populated.
+	// FindAll must succeed despite the stray columns. Scope the assertions to
+	// OUR row (by id): the integration DB is shared across packages in one
+	// `go test` run, so FindAll may include rows other live-PG tests inserted.
 	notes, err := repo.FindAll(context.Background())
 	require.NoError(t, err, "FindAll must tolerate an unknown/extra column on a drifted DB")
-	require.Len(t, notes, 1)
-	assert.Equal(t, "break the ice", notes[0].Usage)
-	assert.Equal(t, "break the ice", notes[0].Entry)
-	require.Len(t, notes[0].NotebookNotes, 1)
-	assert.Equal(t, "idioms", notes[0].NotebookNotes[0].NotebookID)
-	require.Len(t, notes[0].Images, 1)
-	assert.Equal(t, "https://example.com/ice.png", notes[0].Images[0].URL)
+	var target *NoteRecord
+	for i := range notes {
+		if notes[i].ID == noteID {
+			target = &notes[i]
+		}
+	}
+	require.NotNil(t, target, "our inserted note must be returned by FindAll")
+	assert.Equal(t, "break the ice", target.Usage)
+	assert.Equal(t, "break the ice", target.Entry)
+	require.Len(t, target.NotebookNotes, 1)
+	assert.Equal(t, "idioms", target.NotebookNotes[0].NotebookID)
+	require.Len(t, target.Images, 1)
+	assert.Equal(t, "https://example.com/ice.png", target.Images[0].URL)
 	// The drifted column is simply not read; the mapped fields are intact.
-	assert.Empty(t, notes[0].PartOfSpeech, "part_of_speech is db:\"-\", never scanned from the DB")
+	assert.Empty(t, target.PartOfSpeech, "part_of_speech is db:\"-\", never scanned from the DB")
 
 	// FindByID must be drift-resilient too (same SELECT).
 	one, err := repo.FindByID(context.Background(), noteID)
@@ -134,15 +141,22 @@ func TestDBNoteRepository_BatchCreate_Homographs_LivePostgres_Integration(t *tes
 	require.NoError(t, repo.BatchCreate(ctx, homographs),
 		"homographs (same spelling, distinct sense_id) must both insert — no 23505 after migration 022")
 
+	// Scope to OUR "bank" rows — the integration DB is shared across packages
+	// in one `go test` run, so FindAll may include rows other live-PG tests
+	// inserted (assert on our rows, never the global count).
 	notes, err := repo.FindAll(ctx)
 	require.NoError(t, err)
-	require.Len(t, notes, 2, "both homograph rows must persist")
-	senses := map[string]bool{}
+	banks := map[string]NoteRecord{}
 	for _, n := range notes {
-		assert.Equal(t, "bank", n.Usage)
-		senses[n.SenseID] = true
+		if n.Usage == "bank" {
+			banks[n.SenseID] = n
+		}
 	}
-	assert.True(t, senses["bank-finance"] && senses["bank-river"], "both sense_ids present, got %v", senses)
+	require.Len(t, banks, 2, "both homograph rows must persist (scoped to usage=bank)")
+	require.Contains(t, banks, "bank-finance")
+	require.Contains(t, banks, "bank-river")
+	assert.Equal(t, "a financial institution", banks["bank-finance"].Meaning)
+	assert.Equal(t, "the land beside a river", banks["bank-river"].Meaning)
 
 	// The legacy (id-less) uniqueness is PRESERVED: two id-less rows with the
 	// same spelling still collide on the partial index — they have no sense_id
