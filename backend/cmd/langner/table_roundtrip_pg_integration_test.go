@@ -88,15 +88,26 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	_, err = importer.ImportAll(ctx, datasync.ImportOptions{})
 	require.NoError(t, err)
 
-	// Exercise the columns / tables the example config may not populate so all
-	// 14 tables carry data through the round trip:
+	// Seed the DB-only-state tables the same way `import-db` does (PR #26):
+	// definitions_sessions/scenes, flashcard_decks, note/origin skip flags,
+	// grammar_corrections + grammar logs. Runs after ImportAll so its FK
+	// parents (notes, etymology_origins) already exist.
+	if seeder := newStateSeederFromConfig(loaded, db, io.Discard); seeder != nil {
+		_, err = seeder.SeedAll(ctx)
+		require.NoError(t, err)
+	}
+
+	// Exercise the columns / tables the example config leaves empty so ALL 20
+	// tables carry data through the round trip:
 	//   - a non-NULL skipped_at (nullable timestamp) on one note;
-	//   - note_images / note_references / etymology_origin_forms; and
-	//   - definition_concepts / definition_concept_members (the example
-	//     definitions books declare no `concepts:` blocks, so both are empty
-	//     after import).
-	// Seed FK-safe: parents before children (a definition_concepts row before
-	// the definition_concept_member that references it).
+	//   - note_images / note_references / etymology_origin_forms;
+	//   - definition_concepts / definition_concept_members (no `concepts:`
+	//     blocks in the example); and
+	//   - the DB-only-state tables that stay empty on this example: the skip
+	//     flags (nothing is excluded) and grammar_corrections + a grammar
+	//     learning_log (config.example.yml has no `type: grammar` history), so
+	//     learning_logs.correction_id round-trips non-NULL too.
+	// Seed FK-safe: parents before children.
 	_, err = db.ExecContext(ctx, `UPDATE notes SET skipped_at = CURRENT_TIMESTAMP WHERE id = (SELECT MIN(id) FROM notes)`)
 	require.NoError(t, err)
 	seedIfEmpty(ctx, t, db, "note_images",
@@ -109,9 +120,30 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 		`INSERT INTO definition_concepts (notebook_id, head, meaning) VALUES ('roundtrip-seed', 'seed-head', 'seed meaning')`)
 	seedIfEmpty(ctx, t, db, "definition_concept_members",
 		`INSERT INTO definition_concept_members (concept_id, expression, session_title) SELECT MIN(id), 'seed-expression', '' FROM definition_concepts`)
+	// definitions_sessions/scenes + flashcard_decks: normally seeded by
+	// SeedAll from the example books; seed-if-empty is a safety net.
+	seedIfEmpty(ctx, t, db, "definitions_sessions",
+		`INSERT INTO definitions_sessions (notebook_id, title, notebook_file, sort_order) VALUES ('roundtrip-seed', 'seed session', '', 0)`)
+	seedIfEmpty(ctx, t, db, "definitions_scenes",
+		`INSERT INTO definitions_scenes (session_id, title, scene_index, sort_order) SELECT MIN(id), 'seed scene', 0, 0 FROM definitions_sessions`)
+	seedIfEmpty(ctx, t, db, "flashcard_decks",
+		`INSERT INTO flashcard_decks (notebook_id, title, description, sort_order) VALUES ('roundtrip-seed', 'seed deck', '', 0)`)
+	seedIfEmpty(ctx, t, db, "note_skip_flags",
+		`INSERT INTO note_skip_flags (note_id, quiz_type, skipped_at) SELECT MIN(id), 'notebook', CURRENT_TIMESTAMP FROM notes`)
+	seedIfEmpty(ctx, t, db, "origin_skip_flags",
+		`INSERT INTO origin_skip_flags (origin_id, quiz_type, skipped_at) SELECT MIN(id), 'etymology_origin', CURRENT_TIMESTAMP FROM etymology_origins`)
+	seedIfEmpty(ctx, t, db, "grammar_corrections",
+		`INSERT INTO grammar_corrections (notebook_id, sense_id) VALUES ('roundtrip-seed', 'seed-correction')`)
+	// A grammar learning_log (note_id NULL, correction_id set) so the new
+	// learning_logs.correction_id column carries a non-NULL value through the
+	// dump -> restore -> dump round trip.
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO learning_logs (correction_id, status, learned_at, quiz_type, source_notebook_id)
+		 SELECT MIN(id), 'understood', CURRENT_TIMESTAMP, 'grammar', 'roundtrip-seed' FROM grammar_corrections`)
+	require.NoError(t, err)
 
 	// Every table must actually carry rows so the round trip is meaningful —
-	// especially the six the notebook-shaped ExportAll never exported.
+	// especially the tables the notebook-shaped ExportAll never exported.
 	for _, table := range datasync.DataTablesInDependencyOrder() {
 		assert.Positivef(t, countRows(ctx, t, db, table), "table %q must be populated for a meaningful round trip", table)
 	}

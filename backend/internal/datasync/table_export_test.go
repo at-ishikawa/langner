@@ -98,13 +98,13 @@ func TestTableDumpSerializationRoundTrip(t *testing.T) {
 	require.Len(t, readBack, 1)
 	row := readBack[0]
 
-	// Timestamp column denormalises back to the same instant.
-	gotTime, ok := denormalizeValue("created_at", row["created_at"]).(time.Time)
-	require.True(t, ok, "created_at must denormalise to time.Time")
+	// Timestamp column (isTimestamp=true) denormalises back to the same instant.
+	gotTime, ok := denormalizeValue(row["created_at"], true).(time.Time)
+	require.True(t, ok, "a timestamp column must denormalise to time.Time")
 	assert.True(t, ts.Equal(gotTime), "timestamp round-trip: want %s got %s", ts, gotTime)
 
 	// A NULL column round-trips as nil (not the empty string or a zero time).
-	assert.Nil(t, denormalizeValue("skipped_at", row["skipped_at"]))
+	assert.Nil(t, denormalizeValue(row["skipped_at"], true))
 
 	// Text, JSON, bool and integers survive unchanged.
 	assert.Equal(t, "break the ice", row["usage"])
