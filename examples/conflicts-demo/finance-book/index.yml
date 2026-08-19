@@ -1,0 +1,4 @@
+id: finance-book
+name: "Conflicts Demo — Finance (id-less homographs, intentionally broken)"
+notebooks:
+  - ./definitions.yml

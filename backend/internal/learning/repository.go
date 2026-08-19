@@ -92,19 +92,42 @@ func NewDBLearningRepository(db *sqlx.DB) *DBLearningRepository {
 	return &DBLearningRepository{db: db}
 }
 
+// selectLearningLogColumns lists the columns explicitly because note_id
+// and origin_id are both nullable since migration 017 — COALESCE both
+// to zero so the int64 fields scan cleanly (a plain SELECT * would fail
+// to scan a NULL into int64).
+const selectLearningLogColumns = `SELECT id, COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0) AS origin_id, COALESCE(correction_id, 0) AS correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, concept_key, easiness_factor, source_notebook_id, created_at, updated_at FROM learning_logs`
+
 // FindAll returns all learning logs.
 func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, error) {
 	var logs []LearningLog
-	if err := r.db.SelectContext(ctx, &logs, "SELECT * FROM learning_logs ORDER BY id"); err != nil {
+	if err := r.db.SelectContext(ctx, &logs, selectLearningLogColumns+" ORDER BY id"); err != nil {
 		return nil, fmt.Errorf("load all learning logs: %w", err)
 	}
 	return logs, nil
 }
 
-// Create inserts a single learning log.
-// If NoteID is 0 and Expression is set, it will find or create the note on demand.
+// Create inserts a single learning log. It resolves the row's target
+// (note / origin / grammar correction) before inserting:
+//   - CorrectionID already set (the StateSeeder path) → insert as-is.
+//   - a grammar attempt (quiz_type=grammar with a SenseID, no target yet) →
+//     find-or-create the grammar_corrections row and key on correction_id.
+//     Grammar corrections are not notes, so they must NOT fall through to
+//     ensureNoteExists (which would spawn a phantom note that the reader
+//     never reconstructs).
+//   - a vocab attempt (NoteID 0 with an Expression) → find-or-create the note.
+//   - an etymology-origin attempt already carries OriginID (Expression empty).
 func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) error {
-	if log.NoteID == 0 && log.Expression != "" {
+	switch {
+	case log.CorrectionID != 0:
+		// Target already resolved (seeder pre-sets correction_id).
+	case log.QuizType == grammarQuizType && log.SenseID != "":
+		correctionID, err := r.ensureGrammarCorrection(ctx, log.SourceNotebookID, log.SenseID)
+		if err != nil {
+			return fmt.Errorf("ensure grammar correction exists: %w", err)
+		}
+		log.CorrectionID = correctionID
+	case log.NoteID == 0 && log.OriginID == 0 && log.Expression != "":
 		noteID, err := r.ensureNoteExists(ctx, log)
 		if err != nil {
 			return fmt.Errorf("ensure note exists: %w", err)
@@ -112,14 +135,40 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 		log.NoteID = noteID
 	}
 
-	query := `INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
+	if log.NoteID == 0 && log.OriginID == 0 && log.CorrectionID == 0 {
+		return fmt.Errorf("learning log requires NoteID, OriginID or CorrectionID")
+	}
+
+	// NULLIF turns a zero ID into SQL NULL so exactly one of
+	// (note_id, origin_id, correction_id) is set: vocab logs carry note_id,
+	// etymology origin logs carry origin_id, grammar logs carry correction_id.
+	query := `INSERT INTO learning_logs (note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
+		VALUES (NULLIF($1, 0::bigint), NULLIF($2, 0::bigint), NULLIF($3, 0::bigint), $4, $5, $6, $7, $8, $9, $10, $11)`
 	_, err := r.db.ExecContext(ctx, query,
-		log.NoteID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
+		log.NoteID, log.OriginID, log.CorrectionID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
 	if err != nil {
 		return fmt.Errorf("insert learning log: %w", err)
 	}
 	return nil
+}
+
+// grammarQuizType is the quiz_type string that routes a learning log to a
+// grammar_corrections row instead of a note/origin. Kept as a local literal so
+// the learning package needn't depend on notebook just for the constant.
+const grammarQuizType = "grammar"
+
+// ensureGrammarCorrection upserts the grammar_corrections row for
+// (notebookID, senseID) and returns its id, so a runtime grammar attempt keys
+// its log on correction_id. Mirrors ensureNoteExists' race-free upsert idiom.
+func (r *DBLearningRepository) ensureGrammarCorrection(ctx context.Context, notebookID, senseID string) (int64, error) {
+	var correctionID int64
+	if err := r.db.GetContext(ctx, &correctionID, `
+		INSERT INTO grammar_corrections (notebook_id, sense_id) VALUES ($1, $2)
+		ON CONFLICT (notebook_id, sense_id) DO UPDATE SET sense_id = EXCLUDED.sense_id
+		RETURNING id`, notebookID, senseID); err != nil {
+		return 0, fmt.Errorf("insert grammar_correction: %w", err)
+	}
+	return correctionID, nil
 }
 
 // ensureNoteExists finds an existing note by usage/entry or creates one.
@@ -159,11 +208,15 @@ func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *Learni
 		return noteID, nil
 	}
 
-	// Legacy id-less card: keep the (usage, entry) upsert.
+	// Legacy id-less card: upsert by (usage, entry). Since migration 022 the
+	// (usage, entry) uniqueness is a PARTIAL index scoped to id-less rows
+	// (WHERE sense_id = ''), so the conflict target must carry that same
+	// predicate for Postgres to infer the index. The inserted row has the ''
+	// sense_id default, so it falls under the partial index.
 	var noteID int64
 	if err := r.db.GetContext(ctx, &noteID, `
 		INSERT INTO notes ("usage", entry, meaning) VALUES ($1, $2, $3)
-		ON CONFLICT ("usage", entry) DO UPDATE SET "usage" = EXCLUDED."usage"
+		ON CONFLICT ("usage", entry) WHERE sense_id = '' DO UPDATE SET "usage" = EXCLUDED."usage"
 		RETURNING id`, usage, entry, ""); err != nil {
 		return 0, fmt.Errorf("insert note: %w", err)
 	}
@@ -177,8 +230,18 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 		return nil
 	}
 
-	columns := []string{"note_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
-	const chunkSize = 5000 // 5000 * 9 columns = 45000 placeholders, well under 65535
+	columns := []string{"note_id", "origin_id", "correction_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
+	const chunkSize = 5000 // 5000 * 11 columns = 55000 placeholders, under 65535
+
+	// Multi-row VALUES can't use NULLIF per-cell, so overwrite a zero ID
+	// with a nil interface so the driver passes SQL NULL. Exactly one of
+	// note_id / origin_id / correction_id ends up set per row.
+	nullableID := func(id int64) interface{} {
+		if id == 0 {
+			return nil
+		}
+		return id
+	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		for i := 0; i < len(logs); i += chunkSize {
@@ -191,7 +254,7 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 			query := database.BuildMultiRowInsert("learning_logs", columns, len(chunk))
 			var args []interface{}
 			for _, l := range chunk {
-				args = append(args, l.NoteID, l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
+				args = append(args, nullableID(l.NoteID), nullableID(l.OriginID), nullableID(l.CorrectionID), l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return fmt.Errorf("insert learning logs: %w", err)

@@ -62,3 +62,14 @@
               highlight: confection
           origin_parts:
             - { origin: con, language: Latin }
+        # Multi-notebook dedup case: the SAME sense_id (migrate-shared) also
+        # lives in examples/definitions/homographs-demo. On import the two
+        # notebook references must fold into ONE note with two notebook_notes,
+        # never two parallel copies (learning-history invariant L1/L4).
+        - expression: migrate
+          id: migrate-shared
+          meaning: "to move from one region or habitat to another"
+          part_of_speech: verb
+          examples:
+            - text: "Herds migrate across the plain when the dry season comes."
+              highlight: migrate

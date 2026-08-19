@@ -112,9 +112,16 @@ jobs:
       # patterns but can't verify actual Postgres constraint
       # semantics; import-db CI exercises a different code path
       # (BatchCreate, not Create+ensureNoteExists) than quiz answers.
+      #
+      # -p 1 serializes the three package test binaries: they share ONE
+      # Postgres and both the quiz-answer path (ensureNoteExists) and the
+      # note repo (insertNoteReturningID) now find-or-create via ON CONFLICT,
+      # which takes index locks that can DEADLOCK (40P01) if two packages
+      # write the notes table concurrently. Same isolation the drift/pipeline
+      # step below uses.
       - name: Integration tests — quiz RPCs + repository against live Postgres
         working-directory: backend
-        run: go test -count=1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/
+        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/ ./internal/notebook/
         env:
           LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
 
@@ -140,3 +147,27 @@ jobs:
         run: ./langner migrate sync-db --config config.example.yml
         env:
           DB_PASSWORD: password
+
+      # Realistic-dataset coverage for the import-db path that the fresh
+      # example schema never exercised: the FULL import pipeline built from
+      # config.example.yml (cmd/langner) importing HOMOGRAPHS (bank-finance
+      # vs bank-river — the duplicate-key crash on the user's real DB) and a
+      # MULTI-NOTEBOOK word (dedup to one note), plus the import-db pre-flight
+      # schema-drift check (internal/database) that turns a renumbered /
+      # older migration chain into a clear, actionable error instead of a
+      # cryptic deep column-scan crash.
+      #
+      # These tests DROP + recreate the public schema each subtest, so they
+      # must NOT share a `go test` invocation with the row-scoped live-PG
+      # tests above. Its own step, freshly recreated schema, and -p 1 so the
+      # two destructive packages never run concurrently against the one
+      # shared Postgres (see the shared-DB isolation note in
+      # verify-data-features-with-example-notebooks.md).
+      - name: Recreate empty schema for drift + import-pipeline tests
+        run: PGPASSWORD=password psql -h localhost -U user -d local -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
+
+      - name: Integration tests — import-db schema drift + homograph/multi-notebook pipeline
+        working-directory: backend
+        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/database/ ./cmd/langner/
+        env:
+          LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable

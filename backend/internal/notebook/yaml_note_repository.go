@@ -9,6 +9,31 @@ import (
 	"strings"
 )
 
+// CanonicalNoteKey returns the identity components a note is deduplicated and
+// uniqueness-checked by, matching the DB's partial-unique model:
+//
+//   - an id-bearing note (senseID != "") is unique by sense_id ALONE — index
+//     notes_sense_id_key ON notes(sense_id) WHERE sense_id <> ” — so usage
+//     and entry are dropped from the key;
+//   - an id-less note is unique by (usage, entry) — index
+//     notes_usage_entry_legacy_key ON notes("usage", entry) WHERE sense_id =
+//     ” — so those two carry the key (each caller applies its own casing).
+//
+// Both the YAML reader dedup and the importer classify/cache MUST key notes
+// through this ONE function (learning-history invariants L1/L2). A word the
+// same sense_id claims from two notebooks — even when its surface usage/entry
+// differs per notebook (an inflected form in a story vs the base form in a
+// definitions book, or with vs without a `definition:` field) — then collapses
+// to a single canonical note on every side. Keying by (sense_id, usage, entry)
+// instead let two such records reach BatchCreate, which tripped
+// `duplicate key value violates unique constraint notes_sense_id_key` (23505).
+func CanonicalNoteKey(senseID, usage, entry string) (string, string, string) {
+	if senseID != "" {
+		return senseID, "", ""
+	}
+	return "", usage, entry
+}
+
 // notebookKey groups notes by (NotebookType, NotebookID).
 type notebookKey struct {
 	notebookType string
@@ -27,6 +52,21 @@ type YAMLNoteRepository struct {
 	reader    *Reader
 	outputDir string
 	defsDir   string
+
+	// conflicts holds the id-less content conflicts detected by the last
+	// FindAll (same spelling, no id, different meanings). FindAll itself does
+	// NOT error on these — the reader still collapses duplicates so read-only
+	// callers (assign-ids, the roundtrip diff) keep working; only import gates
+	// on them via DuplicateWordConflicts.
+	conflicts []DuplicateWord
+}
+
+// DuplicateWordConflicts returns the id-less content conflicts found by the
+// most recent FindAll. The importer calls this after FindAll and aborts with a
+// DuplicateWordsError when any are present, so the user fixes them by adding
+// distinct `id:`s. Read-only callers ignore it.
+func (r *YAMLNoteRepository) DuplicateWordConflicts() []DuplicateWord {
+	return r.conflicts
 }
 
 // NewYAMLNoteRepository creates a new YAMLNoteRepository for reading.
@@ -67,20 +107,31 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		return nil, fmt.Errorf("read all flashcard notebooks: %w", err)
 	}
 
-	// Dedup key includes the sense id: a note with a non-empty id dedups by
-	// that id, so two ids sharing an (usage, entry) spelling produce two
-	// records. Id-less legacy notes keep deduping by (usage, entry) because
-	// their id component is "".
+	// Dedup key comes from CanonicalNoteKey: an id-bearing note dedups by its
+	// sense_id ALONE (so the same sense claimed by two notebooks collapses to
+	// one record even if its surface usage/entry differs per notebook — the DB
+	// is unique on sense_id alone); id-less legacy notes keep deduping by
+	// (usage, entry).
 	type noteKey struct{ id, usage, entry string }
 	type nnKey struct{ notebookType, notebookID, group, subgroup string }
 	noteMap := make(map[noteKey]*NoteRecord)
 	nnSeen := make(map[noteKey]map[nnKey]bool)
 	var order []noteKey
 
+	// Track id-less words declared in multiple places so the importer can
+	// reject a genuine homograph the author forgot to disambiguate (same
+	// spelling, no id, different meanings). Identical-meaning duplicates are
+	// left to collapse silently — a plain word listed in two notebooks.
+	conflicts := newIdlessConflictTracker()
+
 	addNote := func(note Note, notebookType, notebookID, group, subgroup, conceptKey string) {
 		rec := convertNoteToRecord(note, notebookType, notebookID, group, subgroup)
 		rec.ConceptKey = conceptKey
-		key := noteKey{rec.SenseID, rec.Usage, rec.Entry}
+		id, u, e := CanonicalNoteKey(rec.SenseID, rec.Usage, rec.Entry)
+		key := noteKey{id, u, e}
+		if rec.SenseID == "" {
+			conflicts.record(rec.Usage, notebookID, rec.Meaning)
+		}
 
 		existing, ok := noteMap[key]
 		if !ok {
@@ -203,6 +254,8 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 			}
 		}
 	}
+
+	r.conflicts = conflicts.conflicts()
 
 	result := make([]NoteRecord, 0, len(order))
 	for _, key := range order {

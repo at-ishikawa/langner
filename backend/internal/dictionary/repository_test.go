@@ -30,14 +30,14 @@ func TestDBDictionaryRepository_FindAll(t *testing.T) {
 				}).
 					AddRow("hello", "rapidapi", "https://api.example.com", json.RawMessage(`{"word":"hello"}`), now, now).
 					AddRow("world", "rapidapi", "https://api.example.com", json.RawMessage(`{"word":"world"}`), now, now)
-				mock.ExpectQuery("SELECT \\* FROM dictionary_entries ORDER BY word").WillReturnRows(rows)
+				mock.ExpectQuery("SELECT .* FROM dictionary_entries ORDER BY word").WillReturnRows(rows)
 			},
 			wantLen: 2,
 		},
 		{
 			name: "db error",
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT \\* FROM dictionary_entries ORDER BY word").
+				mock.ExpectQuery("SELECT .* FROM dictionary_entries ORDER BY word").
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
 			wantErr: true,

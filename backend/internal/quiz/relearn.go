@@ -169,7 +169,7 @@ type relearnCandidate struct {
 // (per-quiz-type skipped_at set via SkipWord) never enters the pool, matching the
 // normal card loaders (quiz-ui-invariants U1).
 func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) {
-	histories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	histories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
@@ -192,7 +192,21 @@ func (s *Service) LoadRelearnPool(windowStart time.Time) ([]RelearnCard, error) 
 			if expr.SkippedAt.IsSkipped(sp.format) {
 				continue
 			}
-			latest := sp.logs[0] // newest-first
+			// The most recent attempt decides relearn eligibility. The YAML
+			// reader stores logs newest-first (prepend on write), but the
+			// DB-backed store reconstructs them in id order, and a miss written
+			// at RUNTIME (via the live server) gets the HIGHEST id — so it lands
+			// LAST, not at [0]. Taking logs[0] as "newest" there silently drops a
+			// word just missed in a Standard/Reverse quiz from the pool. Pick the
+			// newest by LearnedAt so the check is order-independent across both
+			// sources (first-seen wins ties, preserving the YAML newest-first
+			// tiebreak).
+			latest := sp.logs[0]
+			for _, l := range sp.logs[1:] {
+				if l.LearnedAt.After(latest.LearnedAt.Time) {
+					latest = l
+				}
+			}
 			if latest.Status != notebook.LearnedStatusMisunderstood {
 				continue
 			}

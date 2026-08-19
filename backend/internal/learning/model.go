@@ -4,8 +4,16 @@ import "time"
 
 // LearningLog represents a learning history entry for a note.
 type LearningLog struct {
-	ID             int64     `db:"id"`
-	NoteID         int64     `db:"note_id"`
+	ID     int64 `db:"id"`
+	NoteID int64 `db:"note_id"`
+	// OriginID targets an etymology_origins row instead of a note, and
+	// CorrectionID targets a grammar_corrections row. Exactly one of
+	// NoteID / OriginID / CorrectionID is non-zero: vocab logs set NoteID,
+	// etymology-origin logs set OriginID, grammar logs set CorrectionID.
+	// Migration 020 made note_id nullable + added origin_id; migration 021
+	// added correction_id so all three quiz kinds share one logs table.
+	OriginID       int64     `db:"origin_id"`
+	CorrectionID   int64     `db:"correction_id"`
 	Status         string    `db:"status"`
 	LearnedAt      time.Time `db:"learned_at"`
 	Quality        int       `db:"quality"`

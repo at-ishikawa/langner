@@ -1,0 +1,25 @@
+# INTENTIONALLY BROKEN fixture for the id-less duplicate policy. NOT wired into
+# config.example.yml (it would make every read fail); loaded only by the
+# duplicate-word regression tests.
+#
+# "bank" and "spring" here are id-LESS (no `id:`) and are ALSO declared in
+# geography-book with DIFFERENT meanings — genuine homographs the author forgot
+# to disambiguate. import-db must fail and name both. "delta" is id-less too but
+# has the SAME meaning in both books, so it must NOT be flagged (it simply
+# dedups). Generic public words, invented neutral prose.
+- metadata:
+    title: "Finance"
+  scenes:
+    - metadata:
+        index: 0
+        title: "money words"
+      expressions:
+        - expression: bank
+          meaning: "a business that keeps and lends money"
+          part_of_speech: noun
+        - expression: spring
+          meaning: "a sudden upward jump in a price"
+          part_of_speech: noun
+        - expression: delta
+          meaning: "the amount by which a value changes"
+          part_of_speech: noun

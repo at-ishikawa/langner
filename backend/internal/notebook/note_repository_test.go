@@ -29,20 +29,20 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 				}).
 					AddRow(1, "idiom", "break the ice", "to initiate conversation", "B2", 1, now, now).
 					AddRow(2, "phrasal_verb", "give up", "to stop trying", "A2", 2, now, now)
-				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").WillReturnRows(noteRows)
+				mock.ExpectQuery("SELECT .* FROM notes ORDER BY id").WillReturnRows(noteRows)
 
 				imageRows := sqlmock.NewRows([]string{
 					"id", "note_id", "url", "sort_order", "created_at", "updated_at",
 				}).
 					AddRow(1, 1, "https://example.com/img1.png", 0, now, now)
-				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1,\s*\$2\) ORDER BY sort_order`).
+				mock.ExpectQuery(`SELECT .* FROM note_images WHERE note_id IN \(\$1,\s*\$2\) ORDER BY sort_order`).
 					WithArgs(int64(1), int64(2)).
 					WillReturnRows(imageRows)
 
 				refRows := sqlmock.NewRows([]string{
 					"id", "note_id", "link", "description", "sort_order", "created_at", "updated_at",
 				})
-				mock.ExpectQuery(`SELECT \* FROM note_references WHERE note_id IN \(\$1,\s*\$2\) ORDER BY sort_order`).
+				mock.ExpectQuery(`SELECT .* FROM note_references WHERE note_id IN \(\$1,\s*\$2\) ORDER BY sort_order`).
 					WithArgs(int64(1), int64(2)).
 					WillReturnRows(refRows)
 
@@ -50,7 +50,7 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					"id", "note_id", "notebook_type", "notebook_id", "group", "subgroup", "created_at", "updated_at",
 				}).
 					AddRow(1, 1, "story", "book-1", "chapter-1", "", now, now)
-				mock.ExpectQuery(`SELECT \* FROM notebook_notes WHERE note_id IN \(\$1,\s*\$2\) ORDER BY id`).
+				mock.ExpectQuery(`SELECT .* FROM notebook_notes WHERE note_id IN \(\$1,\s*\$2\) ORDER BY id`).
 					WithArgs(int64(1), int64(2)).
 					WillReturnRows(nnRows)
 			},
@@ -59,7 +59,7 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 		{
 			name: "select notes db error",
 			setupMock: func(mock sqlmock.Sqlmock) {
-				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").
+				mock.ExpectQuery("SELECT .* FROM notes ORDER BY id").
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
 			wantErr: true,
@@ -71,9 +71,9 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					"id", "usage", "entry", "meaning", "level", "dictionary_number", "created_at", "updated_at",
 				}).
 					AddRow(1, "idiom", "break the ice", "to initiate conversation", "B2", 1, now, now)
-				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").WillReturnRows(noteRows)
+				mock.ExpectQuery("SELECT .* FROM notes ORDER BY id").WillReturnRows(noteRows)
 
-				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
+				mock.ExpectQuery(`SELECT .* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
@@ -86,15 +86,15 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					"id", "usage", "entry", "meaning", "level", "dictionary_number", "created_at", "updated_at",
 				}).
 					AddRow(1, "idiom", "break the ice", "to initiate conversation", "B2", 1, now, now)
-				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").WillReturnRows(noteRows)
+				mock.ExpectQuery("SELECT .* FROM notes ORDER BY id").WillReturnRows(noteRows)
 
-				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
+				mock.ExpectQuery(`SELECT .* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnRows(sqlmock.NewRows([]string{
 						"id", "note_id", "url", "sort_order", "created_at", "updated_at",
 					}))
 
-				mock.ExpectQuery(`SELECT \* FROM note_references WHERE note_id IN \(\$1\) ORDER BY sort_order`).
+				mock.ExpectQuery(`SELECT .* FROM note_references WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
@@ -107,21 +107,21 @@ func TestDBNoteRepository_FindAll(t *testing.T) {
 					"id", "usage", "entry", "meaning", "level", "dictionary_number", "created_at", "updated_at",
 				}).
 					AddRow(1, "idiom", "break the ice", "to initiate conversation", "B2", 1, now, now)
-				mock.ExpectQuery("SELECT \\* FROM notes ORDER BY id").WillReturnRows(noteRows)
+				mock.ExpectQuery("SELECT .* FROM notes ORDER BY id").WillReturnRows(noteRows)
 
-				mock.ExpectQuery(`SELECT \* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
+				mock.ExpectQuery(`SELECT .* FROM note_images WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnRows(sqlmock.NewRows([]string{
 						"id", "note_id", "url", "sort_order", "created_at", "updated_at",
 					}))
 
-				mock.ExpectQuery(`SELECT \* FROM note_references WHERE note_id IN \(\$1\) ORDER BY sort_order`).
+				mock.ExpectQuery(`SELECT .* FROM note_references WHERE note_id IN \(\$1\) ORDER BY sort_order`).
 					WithArgs(int64(1)).
 					WillReturnRows(sqlmock.NewRows([]string{
 						"id", "note_id", "link", "description", "sort_order", "created_at", "updated_at",
 					}))
 
-				mock.ExpectQuery(`SELECT \* FROM notebook_notes WHERE note_id IN \(\$1\) ORDER BY id`).
+				mock.ExpectQuery(`SELECT .* FROM notebook_notes WHERE note_id IN \(\$1\) ORDER BY id`).
 					WithArgs(int64(1)).
 					WillReturnError(fmt.Errorf("connection refused"))
 			},
@@ -391,10 +391,10 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 			},
 			setupMock: func(mock sqlmock.Sqlmock) {
 				mock.ExpectBegin()
-				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning, level, dictionary_number, concept_key, sense_id\) VALUES \(\$1, \$2, \$3, \$4, \$5, \$6, \$7\) RETURNING id`).
+				mock.ExpectQuery(`(?s)INSERT INTO notes \("usage", entry, meaning, level, dictionary_number, concept_key, sense_id\).*ON CONFLICT \("usage", entry\) WHERE sense_id = ''.*RETURNING id`).
 					WithArgs("idiom", "break the ice", "to initiate conversation", "B2", 1, "", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(10)))
-				mock.ExpectQuery(`INSERT INTO notes \("usage", entry, meaning, level, dictionary_number, concept_key, sense_id\) VALUES \(\$1, \$2, \$3, \$4, \$5, \$6, \$7\) RETURNING id`).
+				mock.ExpectQuery(`(?s)INSERT INTO notes \("usage", entry, meaning, level, dictionary_number, concept_key, sense_id\).*ON CONFLICT \("usage", entry\) WHERE sense_id = ''.*RETURNING id`).
 					WithArgs("phrasal_verb", "give up", "to stop trying", "A2", 2, "", "").
 					WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(11)))
 				mock.ExpectExec(`INSERT INTO note_images \(note_id, url, sort_order\) VALUES \(\$1, \$2, \$3\)`).
@@ -403,7 +403,7 @@ func TestDBNoteRepository_BatchCreate(t *testing.T) {
 				mock.ExpectExec(`INSERT INTO note_references \(note_id, link, description, sort_order\) VALUES \(\$1, \$2, \$3, \$4\)`).
 					WithArgs(int64(10), "https://example.com/ref", "reference", 0).
 					WillReturnResult(sqlmock.NewResult(1, 1))
-				mock.ExpectExec(`INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\)`).
+				mock.ExpectExec(`(?s)INSERT INTO notebook_notes \(note_id, notebook_type, notebook_id, "group", subgroup\) VALUES \(\$1, \$2, \$3, \$4, \$5\), \(\$6, \$7, \$8, \$9, \$10\).*ON CONFLICT \(note_id, notebook_type, notebook_id, "group", subgroup\) DO NOTHING`).
 					WithArgs(int64(10), "story", "book-1", "ch1", "scene1",
 						int64(11), "flashcard", "vocab-1", "unit1", "").
 					WillReturnResult(sqlmock.NewResult(1, 2))

@@ -3,6 +3,10 @@
   date: 2026-01-01T00:00:00Z
   cards:
     - expression: "break the ice"
+      # Shared id with the same idiom in stories/short-tales so the two id-less
+      # entries collapse to ONE canonical note (membership in both notebooks)
+      # instead of tripping the import-db undisambiguated-duplicate gate.
+      id: break-the-ice
       meaning: "a way to start a conversation in a social setting"
       part_of_speech: "phrase"
       examples:

@@ -1,0 +1,36 @@
+# Cross-notebook SAME sense_id reproduction (the notes_sense_id_key 23505 bug).
+#
+# "hypersensitive" carries id: hypersensitive-shared here AND in
+# examples/definitions/shared-sense-b — the SAME sense_id, so the DB (unique on
+# sense_id alone via notes_sense_id_key) stores exactly ONE note for it. But the
+# two notebooks give it a DIFFERENT surface `entry`: here the entry is the
+# expression itself ("hypersensitive"); in shared-sense-b a `definition:` field
+# normalizes the entry to "hyper-sensitive".
+#
+# The old dedup keyed notes by (sense_id, usage, entry), so the differing entry
+# made these look like two distinct notes — both reached BatchCreate and the
+# second insert tripped `duplicate key value violates unique constraint
+# notes_sense_id_key`. The fix keys id-bearing notes by sense_id ALONE
+# (CanonicalNoteKey), so they collapse to one note carrying a notebook_note for
+# BOTH books (learning-history invariants L1/L2). Invented neutral prose.
+- metadata:
+    title: "Shared sense (variant A)"
+  scenes:
+    - metadata:
+        index: 0
+        title: "hyper- family"
+      expressions:
+        - expression: hypersensitive
+          id: hypersensitive-shared
+          meaning: "excessively responsive to a stimulus"
+          part_of_speech: adjective
+          examples:
+            - text: "The new microphone is hypersensitive and picks up the faintest sound."
+              highlight: hypersensitive
+        # Id-LESS word (no `id:`) also listed in shared-sense-b with the SAME
+        # meaning: a plain word in two notebooks. It must DEDUP to one note
+        # (two notebook_notes), never be flagged as a duplicate — only id-less
+        # words with DIFFERING meanings are rejected.
+        - expression: estuary
+          meaning: "the tidal mouth of a large river where it meets the sea"
+          part_of_speech: noun

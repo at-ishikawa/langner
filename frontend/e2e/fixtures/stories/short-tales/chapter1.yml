@@ -11,4 +11,7 @@
           quote: "Talking about the rain is one way to {{ break the ice }}."
       definitions:
         - expression: break the ice
+          # Shared id with the same idiom in flashcards/idioms so the two id-less
+          # entries collapse to ONE canonical note (membership in both notebooks).
+          id: break-the-ice
           meaning: To initiate conversation or relieve tension in a social situation

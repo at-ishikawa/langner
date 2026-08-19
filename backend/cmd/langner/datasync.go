@@ -50,6 +50,18 @@ func newMigrateImportDBCommand() *cobra.Command {
 				}
 			}
 
+			// Pre-flight: fail LOUDLY and CLEARLY on schema/version drift
+			// before touching any data. golang-migrate trusts the integer
+			// version in schema_migrations and never verifies the actual
+			// columns, so a DB built by an older/renumbered migration chain
+			// slips past Migrate and then crashes deep in a column scan with
+			// a cryptic error (`missing destination name part_of_speech`,
+			// `column sense_id does not exist`). VerifySchema turns that into
+			// one actionable message naming the offending table/column.
+			if err := database.VerifySchema(db, schemas.Migrations, "migrations"); err != nil {
+				return err
+			}
+
 			importer := newImporterFromConfig(cfg, db, os.Stdout)
 			opts := datasync.ImportOptions{
 				DryRun:         dryRun,
@@ -72,6 +84,28 @@ func newMigrateImportDBCommand() *cobra.Command {
 			if result.Etymology != nil {
 				fmt.Printf("  Etymology origins:  %d new, %d skipped\n", result.Etymology.OriginsNew, result.Etymology.OriginsSkipped)
 				fmt.Printf("  Note origin parts:  %d new, %d skipped\n", result.Etymology.PartsNew, result.Etymology.PartsSkipped)
+			}
+
+			// Seed the DB-only state tables (definitions sessions/scenes,
+			// flashcard decks, per-quiz-type skip flags, etymology origin
+			// logs) from the same YAML the importer just consumed. The
+			// seeder is idempotent so re-runs only insert what's missing.
+			if !opts.DryRun {
+				if seeder := newStateSeederFromConfig(cfg, db, os.Stdout); seeder != nil {
+					stateResult, serr := seeder.SeedAll(ctx)
+					if serr != nil {
+						return fmt.Errorf("seed db-only state: %w", serr)
+					}
+					fmt.Println("\nState Seed Summary:")
+					fmt.Printf("  Definitions sessions: %d new\n", stateResult.DefinitionsSessionsCreated)
+					fmt.Printf("  Definitions scenes:   %d new\n", stateResult.DefinitionsScenesCreated)
+					fmt.Printf("  Flashcard decks:      %d new\n", stateResult.FlashcardDecksCreated)
+					fmt.Printf("  Note skip flags:      %d new\n", stateResult.NoteSkipFlagsCreated)
+					fmt.Printf("  Origin skip flags:    %d new\n", stateResult.OriginSkipFlagsCreated)
+					fmt.Printf("  Etymology logs:       %d new\n", stateResult.EtymologyLogsCreated)
+					fmt.Printf("  Grammar corrections:  %d new\n", stateResult.GrammarCorrectionsCreated)
+					fmt.Printf("  Grammar logs:         %d new\n", stateResult.GrammarLogsCreated)
+				}
 			}
 
 			return nil
@@ -172,6 +206,46 @@ needed. Idempotent: a no-op when the schema is already up to date.`,
 	return cmd
 }
 
+// newMigrateResetDBCommand rebuilds the database to the seeded baseline in
+// one shot: apply migrations, CLEAR every persisted-data table, re-import the
+// source YAML, and re-seed the DB-only state tables. Unlike sync-db it skips
+// the export/roundtrip diff — it is meant for the e2e harness to restore
+// per-scenario isolation quickly (the diff would add latency and can be
+// sensitive to fixtures the app has just mutated). It is the DB half of a
+// reset; the harness restores the mutated learning_notes YAML separately.
+func newMigrateResetDBCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "reset-db",
+		Short: "Reset the database to the seeded baseline (clear + import + seed, no roundtrip diff)",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx := cmd.Context()
+
+			cfg, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
+				return fmt.Errorf("apply schema migrations: %w", err)
+			}
+			if err := clearAllDataTables(ctx, db); err != nil {
+				return err
+			}
+			importer := newImporterFromConfig(cfg, db, io.Discard)
+			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
+				return fmt.Errorf("import source yaml: %w", err)
+			}
+			if seeder := newStateSeederFromConfig(cfg, db, io.Discard); seeder != nil {
+				if _, err := seeder.SeedAll(ctx); err != nil {
+					return fmt.Errorf("seed db-only state: %w", err)
+				}
+			}
+			return nil
+		},
+	}
+}
+
 func newSyncDBCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync-db",
@@ -223,7 +297,15 @@ modifying the database, use "migrate validate-db" instead.`,
 			}
 			fmt.Println("  Import complete.")
 
-			fmt.Println("Step 3: Verifying the roundtrip is lossless...")
+			if seeder := newStateSeederFromConfig(cfg, db, io.Discard); seeder != nil {
+				fmt.Println("Step 3: Seeding DB-only state tables from YAML...")
+				if _, err := seeder.SeedAll(ctx); err != nil {
+					return fmt.Errorf("seed db-only state: %w", err)
+				}
+				fmt.Println("  Seed complete.")
+			}
+
+			fmt.Println("Step 4: Verifying the roundtrip is lossless...")
 			return runRoundTripDiff(ctx, cfg, db, os.Stdout)
 		},
 	}
@@ -355,9 +437,40 @@ func newExporterFromConfig(cfg *config.Config, db *sqlx.DB, outputDir string, wr
 	dictSink := rapidapi.NewJSONDictionaryRepositoryWriter(outputDir)
 
 	exp := datasync.NewExporter(noteRepo, learningRepo, dictRepo, noteSink, learningSink, dictSink, writer)
+	exp = exp.WithEtymologyOrigins(notebook.NewDBEtymologyOriginRepository(db))
 	return exp.WithDefinitionConcepts(
 		notebook.NewDBDefinitionConceptRepository(db),
 		notebook.NewYAMLDefinitionsBookSink(outputDir),
+	)
+}
+
+// newStateSeederFromConfig wires the datasync.StateSeeder used by
+// import-db and sync-db to populate the DB-only state tables from YAML.
+// Returns nil when the notebook reader can't be constructed.
+func newStateSeederFromConfig(cfg *config.Config, db *sqlx.DB, writer io.Writer) *datasync.StateSeeder {
+	reader, err := notebook.NewReader(
+		cfg.Notebooks.StoriesDirectories,
+		cfg.Notebooks.FlashcardsDirectories,
+		cfg.Notebooks.BooksDirectories,
+		cfg.Notebooks.DefinitionsDirectories,
+		cfg.Notebooks.EtymologyDirectories,
+		nil,
+	)
+	if err != nil {
+		return nil
+	}
+	return datasync.NewStateSeeder(
+		reader,
+		notebook.NewDBNoteRepository(db),
+		notebook.NewDBEtymologyOriginRepository(db),
+		notebook.NewDBDefinitionsRepository(db),
+		notebook.NewDBFlashcardDeckRepository(db),
+		notebook.NewDBSkipFlagRepository(db),
+		notebook.NewDBGrammarCorrectionRepository(db),
+		learning.NewDBLearningRepository(db),
+		learning.NewYAMLLearningRepository(cfg.Notebooks.LearningNotesDirectory, nil),
+		cfg.Notebooks.LearningNotesDirectory,
+		writer,
 	)
 }
 
@@ -435,11 +548,20 @@ func extractNotebookIDs(notes []notebook.NoteRecord) []string {
 //   - notes, etymology_origins, semantic_concepts, definition_concepts, dictionary_entries are leaf parents
 func dataTablesInDeletionOrder() []string {
 	return []string{
+		// DB-only-state tables (migration 017). Skip-flag tables FK to
+		// notes / etymology_origins and the definitions_scenes table FKs
+		// to definitions_sessions, so clear children before parents.
+		"note_skip_flags",
+		"origin_skip_flags",
+		"definitions_scenes",
+		"definitions_sessions",
+		"flashcard_decks",
 		"note_origin_parts",
 		"notebook_notes",
 		"note_images",
 		"note_references",
 		"learning_logs",
+		"grammar_corrections",
 		"etymology_origin_forms",
 		"semantic_concept_members",
 		"concept_relations",
