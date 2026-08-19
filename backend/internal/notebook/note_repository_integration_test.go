@@ -158,13 +158,21 @@ func TestDBNoteRepository_BatchCreate_Homographs_LivePostgres_Integration(t *tes
 	assert.Equal(t, "a financial institution", banks["bank-finance"].Meaning)
 	assert.Equal(t, "the land beside a river", banks["bank-river"].Meaning)
 
-	// The legacy (id-less) uniqueness is PRESERVED: two id-less rows with the
-	// same spelling still collide on the partial index — they have no sense_id
-	// to distinguish them.
+	// Legacy (id-less) rows are find-or-created by (usage, entry): two id-less
+	// rows with the same spelling have no sense_id to tell them apart, so
+	// BatchCreate is idempotent — the second returns the first's id rather than
+	// crashing on notes_usage_entry_legacy_key. This mirrors ensureNoteExists
+	// and makes re-import / cross-pass inserts safe. The DB constraint itself
+	// is unchanged; the repository just no longer trips it.
 	idless := []*NoteRecord{
 		{Usage: "seal", Entry: "seal", Meaning: "an animal"},
 		{Usage: "seal", Entry: "seal", Meaning: "to close"},
 	}
-	err = repo.BatchCreate(ctx, idless)
-	require.Error(t, err, "two id-less rows sharing a spelling must still be rejected (legacy uniqueness kept)")
+	require.NoError(t, repo.BatchCreate(ctx, idless),
+		"id-less rows sharing a spelling must collapse (find-or-create), not crash")
+	assert.Equal(t, idless[0].ID, idless[1].ID, "both id-less rows resolve to the SAME note id")
+	var sealCount int
+	require.NoError(t, db.GetContext(ctx, &sealCount,
+		`SELECT COUNT(*) FROM notes WHERE "usage" = 'seal' AND sense_id = ''`))
+	assert.Equal(t, 1, sealCount, "exactly one id-less 'seal' row persists")
 }

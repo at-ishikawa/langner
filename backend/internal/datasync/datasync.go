@@ -18,14 +18,18 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// noteKey identifies a note for import dedup/reconcile. It includes the
-// stable sense id so two ids that share an (usage, entry) spelling map to two
-// distinct rows instead of collapsing into one. Legacy id-less notes carry an
-// empty senseID and keep keying by (usage, entry) exactly as before.
+// noteKey identifies a note for import dedup/reconcile. It comes from
+// notebook.CanonicalNoteKey (the SAME rule the YAML reader dedups by — L2): an
+// id-bearing note keys by its sense_id ALONE (matching the DB's partial unique
+// notes_sense_id_key), so two source records sharing a sense_id but differing
+// in usage/entry collapse to ONE canonical note instead of both reaching
+// BatchCreate and tripping `duplicate key ... notes_sense_id_key` (23505).
+// Id-less legacy notes keep keying by lowercased (usage, entry).
 type noteKey struct{ senseID, usage, entry string }
 
 func newNoteKey(senseID, usage, entry string) noteKey {
-	return noteKey{senseID, strings.ToLower(usage), strings.ToLower(entry)}
+	id, u, e := notebook.CanonicalNoteKey(senseID, usage, entry)
+	return noteKey{id, strings.ToLower(u), strings.ToLower(e)}
 }
 
 type logKey struct {
@@ -94,9 +98,9 @@ type classifyState struct {
 	// matchedNoteIDs and matchedNNIDs track which DB rows the source
 	// claimed. Anything left unmatched is a row the YAML no longer has,
 	// and the reconcile pass deletes it.
-	nnIDByKey       map[nnKey]int64
-	matchedNoteIDs  map[int64]bool
-	matchedNNIDs    map[int64]bool
+	nnIDByKey      map[nnKey]int64
+	matchedNoteIDs map[int64]bool
+	matchedNNIDs   map[int64]bool
 }
 
 // NoteSource provides source note records for import.
@@ -190,21 +194,21 @@ type ImportEtymologyResult struct {
 	// Concept and relation counts populated by ImportSemanticConcepts /
 	// ImportConceptRelations. Skipped covers members whose origin couldn't be
 	// resolved in the same session.
-	ConceptsNew         int
-	ConceptsUpdated     int
-	ConceptsDeleted     int
-	ConceptMembersNew   int
+	ConceptsNew           int
+	ConceptsUpdated       int
+	ConceptsDeleted       int
+	ConceptMembersNew     int
 	ConceptMembersSkipped int
 	ConceptMembersDeleted int
-	RelationsNew     int
-	RelationsDeleted int
+	RelationsNew          int
+	RelationsDeleted      int
 	// Definition concept counts populated by ImportDefinitionConcepts.
 	// Mirrors the semantic-side fields but tracks the definitions-book
 	// concept tables (definition_concepts / definition_concept_members).
-	DefinitionConceptsNew         int
-	DefinitionConceptsUpdated     int
-	DefinitionConceptsDeleted     int
-	DefinitionConceptMembersNew   int
+	DefinitionConceptsNew           int
+	DefinitionConceptsUpdated       int
+	DefinitionConceptsDeleted       int
+	DefinitionConceptMembersNew     int
 	DefinitionConceptMembersDeleted int
 }
 
@@ -216,12 +220,12 @@ type ImportOptions struct {
 
 // Importer reads YAML notebook data and writes to DB.
 type Importer struct {
-	noteRepo            notebook.NoteRepository
-	learningRepo        learning.LearningRepository
-	noteSource          NoteSource
-	learningSource      LearningSource
-	dictionarySource    DictionarySource
-	dictionaryRepo      dictionary.DictionaryRepository
+	noteRepo                notebook.NoteRepository
+	learningRepo            learning.LearningRepository
+	noteSource              NoteSource
+	learningSource          LearningSource
+	dictionarySource        DictionarySource
+	dictionaryRepo          dictionary.DictionaryRepository
 	etymologyOriginRepo     notebook.EtymologyOriginRepository
 	noteOriginPartRepo      notebook.NoteOriginPartRepository
 	etymologyOriginSrc      EtymologyOriginSource
@@ -234,7 +238,7 @@ type Importer struct {
 	conceptRelationSrc      ConceptRelationSource
 	definitionConceptRepo   notebook.DefinitionConceptRepository
 	definitionConceptSrc    DefinitionConceptSource
-	writer              io.Writer
+	writer                  io.Writer
 
 	// touchedNoteIDs collects every DB note ID that ImportNotes or
 	// ImportLearningLogs claimed during this Import* run. The final

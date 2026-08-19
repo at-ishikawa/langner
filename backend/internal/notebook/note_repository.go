@@ -80,11 +80,14 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
 		// Insert notes one at a time so each auto-generated ID can be returned
-		// via RETURNING id.
+		// via RETURNING id. Idempotent against the DB's partial uniques so a
+		// sense_id (or id-less spelling) that another import pass already
+		// inserted returns the EXISTING row's id instead of a duplicate-key
+		// crash — the same find-or-create idiom as ensureNoteExists. DO UPDATE
+		// (not DO NOTHING) is required: DO NOTHING returns no row, breaking the
+		// RETURNING-id capture.
 		for _, n := range notes {
-			if err := tx.GetContext(ctx, &n.ID,
-				`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID); err != nil {
+			if err := insertNoteReturningID(ctx, tx, n); err != nil {
 				return fmt.Errorf("insert note: %w", err)
 			}
 		}
@@ -135,7 +138,8 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 		if nnCount > 0 {
-			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, nnCount)
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, nnCount) +
+				` ON CONFLICT (note_id, notebook_type, notebook_id, "group", subgroup) DO NOTHING`
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
@@ -145,18 +149,41 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	})
 }
 
+// insertNoteReturningID find-or-creates a note keyed by the DB's partial
+// uniques and returns its id. An id-bearing note upserts on sense_id
+// (notes_sense_id_key WHERE sense_id <> ”); an id-less note upserts on
+// (usage, entry) (notes_usage_entry_legacy_key WHERE sense_id = ”). The
+// conflict predicate must repeat the index's WHERE clause so Postgres can
+// infer the partial index. DO UPDATE (a no-op self-assignment) always returns
+// the row, whether inserted or pre-existing. Mirrors ensureNoteExists.
+func insertNoteReturningID(ctx context.Context, tx *sqlx.Tx, n *NoteRecord) error {
+	if n.SenseID != "" {
+		return tx.GetContext(ctx, &n.ID,
+			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT (sense_id) WHERE sense_id <> '' DO UPDATE SET sense_id = EXCLUDED.sense_id
+			 RETURNING id`,
+			n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID)
+	}
+	return tx.GetContext(ctx, &n.ID,
+		`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 ON CONFLICT ("usage", entry) WHERE sense_id = '' DO UPDATE SET "usage" = EXCLUDED."usage"
+		 RETURNING id`,
+		n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID)
+}
+
 // Create inserts a single note with its notebook_notes in a transaction.
 func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		if err := tx.GetContext(ctx, &note.ID,
-			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ConceptKey, note.SenseID); err != nil {
+		if err := insertNoteReturningID(ctx, tx, note); err != nil {
 			return fmt.Errorf("insert note: %w", err)
 		}
 
 		for _, nn := range note.NotebookNotes {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup) VALUES ($1, $2, $3, $4, $5)`,
+				`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup) VALUES ($1, $2, $3, $4, $5)
+				 ON CONFLICT (note_id, notebook_type, notebook_id, "group", subgroup) DO NOTHING`,
 				note.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup); err != nil {
 				return fmt.Errorf("insert notebook note: %w", err)
 			}

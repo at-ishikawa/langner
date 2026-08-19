@@ -1,0 +1,22 @@
+# The second half of the cross-notebook same-sense_id reproduction (see
+# examples/definitions/shared-sense-a). Same word, SAME id (hypersensitive-shared),
+# but a `definition:` field normalizes the entry to "hyper-sensitive" — so this
+# record's (usage, entry) differs from shared-sense-a's while the sense_id is
+# identical. Under the old (sense_id, usage, entry) dedup the two never
+# collapsed, so import-db inserted two rows with one sense_id and Postgres
+# rejected the second (notes_sense_id_key, SQLSTATE 23505). Invented neutral prose.
+- metadata:
+    title: "Shared sense (variant B)"
+  scenes:
+    - metadata:
+        index: 0
+        title: "hyper- family"
+      expressions:
+        - expression: hypersensitive
+          definition: hyper-sensitive
+          id: hypersensitive-shared
+          meaning: "excessively responsive to a stimulus"
+          part_of_speech: adjective
+          examples:
+            - text: "A hypersensitive alarm rings whenever a door merely creaks."
+              highlight: hypersensitive

@@ -118,3 +118,68 @@ func TestImportDB_HomographsAndMultiNotebook_LivePostgres_Integration(t *testing
 	assert.Equal(t, []string{"homographs-demo", "roots-demo"}, nbIDs,
 		"the one note must carry a notebook_note for EACH notebook that referenced it, never a parallel copy")
 }
+
+// TestImportDB_SharedSenseAcrossNotebooks_LivePostgres_Integration reproduces
+// the SECOND real-DB import-db crash: a word claimed by two notebooks under one
+// sense_id but with a DIFFERENT surface entry per notebook. The example books
+// shared-sense-a and shared-sense-b both declare "hypersensitive" with id
+// hypersensitive-shared; shared-sense-b's `definition:` normalizes the entry to
+// "hyper-sensitive". The old (sense_id, usage, entry) dedup treated them as two
+// notes, so ImportNotes' BatchCreate inserted two rows with one sense_id and
+// Postgres rejected the second with `duplicate key value violates unique
+// constraint notes_sense_id_key` (SQLSTATE 23505) — the user's
+// `import notes: batch create notes: insert note: ...` error.
+//
+// Post-fix (CanonicalNoteKey folds id-bearing notes by sense_id on BOTH the
+// reader and importer, and BatchCreate upserts idempotently on sense_id) the
+// import succeeds and the word is ONE note carrying both notebook_notes.
+//
+// Requires LANGNER_INTEGRATION_DB_URL (CI's postgres:16); skipped otherwise.
+// DROPs and recreates the public schema, so it must run isolated (own workflow
+// step, or -p 1). Reproduces the 23505 on the pre-fix code; passes after.
+func TestImportDB_SharedSenseAcrossNotebooks_LivePostgres_Integration(t *testing.T) {
+	dsn := os.Getenv("LANGNER_INTEGRATION_DB_URL")
+	if dsn == "" {
+		t.Skip("LANGNER_INTEGRATION_DB_URL not set")
+	}
+
+	root := findRepoRoot(t)
+	oldWD, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(oldWD) })
+
+	db, err := sqlx.Open("pgx", dsn)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = db.Close() })
+	require.NoError(t, db.Ping())
+
+	_, err = db.Exec(`DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public`)
+	require.NoError(t, err)
+	require.NoError(t, database.Migrate(db, schemas.Migrations, "migrations"))
+
+	loader, err := config.NewConfigLoader("config.example.yml")
+	require.NoError(t, err)
+	cfg, err := loader.Load()
+	require.NoError(t, err)
+
+	importer := newImporterFromConfig(cfg, db, io.Discard)
+	_, err = importer.ImportAll(context.Background(), datasync.ImportOptions{})
+	require.NoError(t, err,
+		"import-db must not crash with notes_sense_id_key (23505) when one sense_id is claimed by two notebooks with different surface entries")
+
+	ctx := context.Background()
+
+	// Exactly ONE note for the shared sense_id.
+	var noteID int64
+	require.NoError(t, db.GetContext(ctx, &noteID,
+		`SELECT id FROM notes WHERE sense_id = 'hypersensitive-shared'`),
+		"the shared sense must be one note (GetContext errors on 0 or >1 rows)")
+
+	// It carries a notebook_note for BOTH books that declared it.
+	var nbIDs []string
+	require.NoError(t, db.SelectContext(ctx, &nbIDs,
+		`SELECT notebook_id FROM notebook_notes WHERE note_id = $1 ORDER BY notebook_id`, noteID))
+	assert.Equal(t, []string{"shared-sense-a", "shared-sense-b"}, nbIDs,
+		"the one note must carry both notebooks' memberships, not split into two rows")
+}
