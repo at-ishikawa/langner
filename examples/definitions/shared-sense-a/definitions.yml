@@ -27,3 +27,10 @@
           examples:
             - text: "The new microphone is hypersensitive and picks up the faintest sound."
               highlight: hypersensitive
+        # Id-LESS word (no `id:`) also listed in shared-sense-b with the SAME
+        # meaning: a plain word in two notebooks. It must DEDUP to one note
+        # (two notebook_notes), never be flagged as a duplicate — only id-less
+        # words with DIFFERING meanings are rejected.
+        - expression: estuary
+          meaning: "the tidal mouth of a large river where it meets the sea"
+          part_of_speech: noun

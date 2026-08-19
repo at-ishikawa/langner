@@ -339,6 +339,23 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 		return nil, fmt.Errorf("read source notes: %w", err)
 	}
 
+	// Gate the import on undisambiguated id-less duplicates: the same spelling
+	// with no `id:` but DIFFERENT meanings in two places is a homograph the
+	// author must disambiguate with distinct `id:`s. The DB is unique on
+	// (usage, entry) for id-less rows, so these would otherwise fail deep in an
+	// insert; catch them here and report ALL of them at once with their
+	// notebook + meaning so the user fixes them in one pass. Identical-meaning
+	// duplicates are NOT flagged — they legitimately collapse to one note.
+	// (The reader still collapses duplicates for read-only callers; only import
+	// reads the conflicts it recorded.)
+	if cd, ok := imp.noteSource.(interface {
+		DuplicateWordConflicts() []notebook.DuplicateWord
+	}); ok {
+		if dupes := cd.DuplicateWordConflicts(); len(dupes) > 0 {
+			return nil, &notebook.DuplicateWordsError{Words: dupes}
+		}
+	}
+
 	allNotes, err := imp.noteRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load existing notes: %w", err)

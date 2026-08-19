@@ -20,3 +20,8 @@
           examples:
             - text: "A hypersensitive alarm rings whenever a door merely creaks."
               highlight: hypersensitive
+        # Same id-less "estuary" as in shared-sense-a with the SAME meaning:
+        # must dedup to one note (case 2), never flagged.
+        - expression: estuary
+          meaning: "the tidal mouth of a large river where it meets the sea"
+          part_of_speech: noun

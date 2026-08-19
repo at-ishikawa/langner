@@ -182,4 +182,17 @@ func TestImportDB_SharedSenseAcrossNotebooks_LivePostgres_Integration(t *testing
 		`SELECT notebook_id FROM notebook_notes WHERE note_id = $1 ORDER BY notebook_id`, noteID))
 	assert.Equal(t, []string{"shared-sense-a", "shared-sense-b"}, nbIDs,
 		"the one note must carry both notebooks' memberships, not split into two rows")
+
+	// Case 2: an id-LESS word ("estuary") declared in both shared-sense books
+	// with the SAME meaning must DEDUP to one note (two notebook_notes), never
+	// be rejected — only id-less words with DIFFERING meanings are rejected.
+	var estuaryID int64
+	require.NoError(t, db.GetContext(ctx, &estuaryID,
+		`SELECT id FROM notes WHERE "usage" = 'estuary' AND sense_id = ''`),
+		"the id-less word must dedup to exactly one note")
+	var estuaryNBs []string
+	require.NoError(t, db.SelectContext(ctx, &estuaryNBs,
+		`SELECT notebook_id FROM notebook_notes WHERE note_id = $1 ORDER BY notebook_id`, estuaryID))
+	assert.Equal(t, []string{"shared-sense-a", "shared-sense-b"}, estuaryNBs,
+		"the identical id-less word dedups to one note carrying both memberships")
 }

@@ -158,21 +158,22 @@ func TestDBNoteRepository_BatchCreate_Homographs_LivePostgres_Integration(t *tes
 	assert.Equal(t, "a financial institution", banks["bank-finance"].Meaning)
 	assert.Equal(t, "the land beside a river", banks["bank-river"].Meaning)
 
-	// Legacy (id-less) rows are find-or-created by (usage, entry): two id-less
-	// rows with the same spelling have no sense_id to tell them apart, so
-	// BatchCreate is idempotent — the second returns the first's id rather than
-	// crashing on notes_usage_entry_legacy_key. This mirrors ensureNoteExists
-	// and makes re-import / cross-pass inserts safe. The DB constraint itself
-	// is unchanged; the repository just no longer trips it.
+	// Legacy (id-less) rows with the SAME spelling and SAME content are
+	// find-or-created by (usage, entry): the second returns the first's id
+	// rather than crashing on notes_usage_entry_legacy_key. This is the plain
+	// "same word listed in two notebooks" case — it dedups. (An id-less pair
+	// with DIFFERING meanings is a homograph the importer rejects BEFORE the DB
+	// with a DuplicateWordsError — see TestImportNotes_IdlessConflicts_HardError;
+	// this repository primitive is the last-resort backstop and simply dedups.)
 	idless := []*NoteRecord{
-		{Usage: "seal", Entry: "seal", Meaning: "an animal"},
-		{Usage: "seal", Entry: "seal", Meaning: "to close"},
+		{Usage: "hurdle", Entry: "hurdle", Meaning: "an obstacle to overcome"},
+		{Usage: "hurdle", Entry: "hurdle", Meaning: "an obstacle to overcome"},
 	}
 	require.NoError(t, repo.BatchCreate(ctx, idless),
 		"id-less rows sharing a spelling must collapse (find-or-create), not crash")
 	assert.Equal(t, idless[0].ID, idless[1].ID, "both id-less rows resolve to the SAME note id")
-	var sealCount int
-	require.NoError(t, db.GetContext(ctx, &sealCount,
-		`SELECT COUNT(*) FROM notes WHERE "usage" = 'seal' AND sense_id = ''`))
-	assert.Equal(t, 1, sealCount, "exactly one id-less 'seal' row persists")
+	var hurdleCount int
+	require.NoError(t, db.GetContext(ctx, &hurdleCount,
+		`SELECT COUNT(*) FROM notes WHERE "usage" = 'hurdle' AND sense_id = ''`))
+	assert.Equal(t, 1, hurdleCount, "exactly one id-less 'hurdle' row persists")
 }

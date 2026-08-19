@@ -52,6 +52,21 @@ type YAMLNoteRepository struct {
 	reader    *Reader
 	outputDir string
 	defsDir   string
+
+	// conflicts holds the id-less content conflicts detected by the last
+	// FindAll (same spelling, no id, different meanings). FindAll itself does
+	// NOT error on these — the reader still collapses duplicates so read-only
+	// callers (assign-ids, the roundtrip diff) keep working; only import gates
+	// on them via DuplicateWordConflicts.
+	conflicts []DuplicateWord
+}
+
+// DuplicateWordConflicts returns the id-less content conflicts found by the
+// most recent FindAll. The importer calls this after FindAll and aborts with a
+// DuplicateWordsError when any are present, so the user fixes them by adding
+// distinct `id:`s. Read-only callers ignore it.
+func (r *YAMLNoteRepository) DuplicateWordConflicts() []DuplicateWord {
+	return r.conflicts
 }
 
 // NewYAMLNoteRepository creates a new YAMLNoteRepository for reading.
@@ -103,11 +118,20 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 	nnSeen := make(map[noteKey]map[nnKey]bool)
 	var order []noteKey
 
+	// Track id-less words declared in multiple places so the importer can
+	// reject a genuine homograph the author forgot to disambiguate (same
+	// spelling, no id, different meanings). Identical-meaning duplicates are
+	// left to collapse silently — a plain word listed in two notebooks.
+	conflicts := newIdlessConflictTracker()
+
 	addNote := func(note Note, notebookType, notebookID, group, subgroup, conceptKey string) {
 		rec := convertNoteToRecord(note, notebookType, notebookID, group, subgroup)
 		rec.ConceptKey = conceptKey
 		id, u, e := CanonicalNoteKey(rec.SenseID, rec.Usage, rec.Entry)
 		key := noteKey{id, u, e}
+		if rec.SenseID == "" {
+			conflicts.record(rec.Usage, notebookID, rec.Meaning)
+		}
 
 		existing, ok := noteMap[key]
 		if !ok {
@@ -230,6 +254,8 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 			}
 		}
 	}
+
+	r.conflicts = conflicts.conflicts()
 
 	result := make([]NoteRecord, 0, len(order))
 	for _, key := range order {

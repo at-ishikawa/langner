@@ -1,0 +1,21 @@
+# Second half of the id-less duplicate fixture (see finance-book). "bank" and
+# "spring" here mean something DIFFERENT than in finance-book, with no `id:` to
+# tell the two senses apart — so import-db must reject both and name each
+# location + meaning. "delta" has the SAME meaning as in finance-book, so it
+# must dedup silently and NOT be reported. Invented neutral prose.
+- metadata:
+    title: "Geography"
+  scenes:
+    - metadata:
+        index: 0
+        title: "land and water"
+      expressions:
+        - expression: bank
+          meaning: "the sloping land along the edge of a river"
+          part_of_speech: noun
+        - expression: spring
+          meaning: "a place where water flows up from the ground"
+          part_of_speech: noun
+        - expression: delta
+          meaning: "the amount by which a value changes"
+          part_of_speech: noun
