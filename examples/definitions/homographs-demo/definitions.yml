@@ -1,0 +1,53 @@
+# Homograph + multi-notebook coverage for the DB import path.
+#
+# HOMOGRAPHS: "bank" appears twice with the SAME spelling but DISTINCT `id`s
+# (bank-finance / bank-river). Each `id` becomes a note's stable sense_id, so
+# the two must import as TWO separate notes — the case that crashed the user's
+# real import with `duplicate key value violates unique constraint
+# notes_usage_entry_key` before migration 022 relaxed the uniqueness to id-less
+# rows only. The example config had no homographs, so CI never exercised this
+# through the full import pipeline.
+#
+# MULTI-NOTEBOOK: "migrate" (id migrate-shared) is ALSO declared in
+# examples/definitions/roots-demo with the SAME id. Two notebooks referencing
+# one sense_id must DEDUP to a single note carrying two notebook_notes — the
+# L1/L4 learning-history invariant (one note per sense, notebook membership is
+# metadata that selects it, never a parallel copy).
+#
+# All prose is invented and neutral; no origin_parts are needed for these plain
+# entries (see `factory` in roots-demo, which also omits them).
+- metadata:
+    title: "Homographs"
+  scenes:
+    - metadata:
+        index: 0
+        title: "same spelling, different sense"
+      expressions:
+        - expression: bank
+          id: bank-finance
+          meaning: "a business that keeps and lends money"
+          part_of_speech: noun
+          examples:
+            - text: "She deposited her first paycheck at the bank downtown."
+              highlight: bank
+        - expression: bank
+          id: bank-river
+          meaning: "the sloping land along the edge of a river"
+          part_of_speech: noun
+          examples:
+            - text: "They picnicked on the grassy bank of the slow river."
+              highlight: bank
+- metadata:
+    title: "Shared across notebooks"
+  scenes:
+    - metadata:
+        index: 0
+        title: "one sense, two notebooks"
+      expressions:
+        - expression: migrate
+          id: migrate-shared
+          meaning: "to move from one region or habitat to another"
+          part_of_speech: verb
+          examples:
+            - text: "Many birds migrate south before the first frost."
+              highlight: migrate

@@ -2169,6 +2169,14 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 	// independently. The first head-or-member encountered for a concept
 	// triggers shouldIncludeDefinition; subsequent ones are skipped.
 	seenConcept := make(map[string]bool)
+	// Dedupe by surface entry too: the card loaders fold homographs (two
+	// senses sharing a spelling, e.g. financial "bank" vs river "bank")
+	// into one card via deduplicateCards (keyed by lowercased Entry). The
+	// badge must match what is served — "display = reality" — so an entry
+	// counted once here mirrors the single card the loader emits. Without
+	// this, a notebook with homographs shows a badge larger than the cards
+	// it serves (count=2, loaded=1), breaking the count==loaded invariant.
+	seenEntry := make(map[string]bool)
 	for storyTitle, sceneDefs := range defs {
 		for sceneTitle, notes := range sceneDefs {
 			for i := range notes {
@@ -2185,6 +2193,11 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 					seenConcept[conceptKey] = true
 				}
 				if shouldIncludeDefinition(histories, storyTitle, sceneTitle, note, includeUnstudied, quizType, conceptHeads) {
+					entryKey := strings.ToLower(note.Expression)
+					if seenEntry[entryKey] {
+						continue
+					}
+					seenEntry[entryKey] = true
 					count++
 				}
 			}
