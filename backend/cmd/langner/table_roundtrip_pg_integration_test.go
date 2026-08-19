@@ -207,20 +207,9 @@ func countByTable(ctx context.Context, t *testing.T, db *sqlx.DB) map[string]int
 	return out
 }
 
-// findRepoRoot walks up from the test working directory to the directory that
+// findRepoRoot is shared with import_db_pipeline_integration_test.go (same
+// package): it walks up from the test working directory to the directory that
 // contains config.example.yml.
-func findRepoRoot(t *testing.T) string {
-	t.Helper()
-	wd, err := os.Getwd()
-	require.NoError(t, err)
-	for path := wd; path != "/" && path != "."; path = filepath.Dir(path) {
-		if _, err := os.Stat(filepath.Join(path, "config.example.yml")); err == nil {
-			return path
-		}
-	}
-	t.Fatalf("config.example.yml not found above %s", wd)
-	return ""
-}
 
 func chdir(t *testing.T, dir string) func() {
 	t.Helper()
