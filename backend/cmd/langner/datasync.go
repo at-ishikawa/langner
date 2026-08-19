@@ -50,6 +50,18 @@ func newMigrateImportDBCommand() *cobra.Command {
 				}
 			}
 
+			// Pre-flight: fail LOUDLY and CLEARLY on schema/version drift
+			// before touching any data. golang-migrate trusts the integer
+			// version in schema_migrations and never verifies the actual
+			// columns, so a DB built by an older/renumbered migration chain
+			// slips past Migrate and then crashes deep in a column scan with
+			// a cryptic error (`missing destination name part_of_speech`,
+			// `column sense_id does not exist`). VerifySchema turns that into
+			// one actionable message naming the offending table/column.
+			if err := database.VerifySchema(db, schemas.Migrations, "migrations"); err != nil {
+				return err
+			}
+
 			importer := newImporterFromConfig(cfg, db, os.Stdout)
 			opts := datasync.ImportOptions{
 				DryRun:         dryRun,
