@@ -106,18 +106,18 @@ func VerifySchema(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 		return fmt.Errorf("schema drift: the target database has no schema_migrations table, "+
 			"so no migrations have ever run against it. import-db requires a schema created by the "+
 			"current migrations (expected version %d). Run the migrations first, or import into a "+
-			"fresh empty database (createdb + import-db).", expected)
+			"fresh empty database (createdb + import-db)", expected)
 	}
 	if dirty {
 		return fmt.Errorf("schema drift: schema_migrations is marked DIRTY at version %d — a previous "+
 			"migration failed partway. import-db will not run against a dirty schema. Fix the failed "+
-			"migration (or rebuild into a fresh empty database) before importing.", current)
+			"migration (or rebuild into a fresh empty database) before importing", current)
 	}
 	if current != expected {
 		return fmt.Errorf("schema drift: the target database is at migration version %d but this binary "+
 			"expects version %d. The DB was created by a different (older or renumbered) migration chain. "+
 			"import-db requires a schema created by the current migrations. Import into a fresh empty "+
-			"database (createdb + import-db), or migrate/rebuild this one.", current, expected)
+			"database (createdb + import-db), or migrate/rebuild this one", current, expected)
 	}
 
 	// The version can match while the columns don't: a renumbered migration
@@ -132,7 +132,7 @@ func VerifySchema(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 		return fmt.Errorf("schema drift: the notes table is missing column sense_id — this DB was created "+
 			"by an older migration chain (schema_migrations reports version %d but the sense_id migration "+
 			"never actually ran). import-db requires a schema created by the current migrations. Import "+
-			"into a fresh empty database (createdb + import-db), or migrate/rebuild this one.", current)
+			"into a fresh empty database (createdb + import-db), or migrate/rebuild this one", current)
 	}
 	hasPartOfSpeech, err := columnExists(db, "notes", "part_of_speech")
 	if err != nil {
@@ -142,7 +142,7 @@ func VerifySchema(db *sqlx.DB, migrationsFS fs.FS, dir string) error {
 		return fmt.Errorf("schema drift: the notes table has a legacy part_of_speech column that no current " +
 			"migration creates (it is left over from an abandoned approach). import-db reads explicit " +
 			"columns so it will not crash on it, but its presence means this DB predates the current " +
-			"schema. Import into a fresh empty database (createdb + import-db) to be safe.")
+			"schema. Import into a fresh empty database (createdb + import-db) to be safe")
 	}
 	return nil
 }
