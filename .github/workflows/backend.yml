@@ -112,9 +112,16 @@ jobs:
       # patterns but can't verify actual Postgres constraint
       # semantics; import-db CI exercises a different code path
       # (BatchCreate, not Create+ensureNoteExists) than quiz answers.
+      #
+      # -p 1 serializes the three package test binaries: they share ONE
+      # Postgres and both the quiz-answer path (ensureNoteExists) and the
+      # note repo (insertNoteReturningID) now find-or-create via ON CONFLICT,
+      # which takes index locks that can DEADLOCK (40P01) if two packages
+      # write the notes table concurrently. Same isolation the drift/pipeline
+      # step below uses.
       - name: Integration tests — quiz RPCs + repository against live Postgres
         working-directory: backend
-        run: go test -count=1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/ ./internal/notebook/
+        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/ ./internal/notebook/
         env:
           LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
 

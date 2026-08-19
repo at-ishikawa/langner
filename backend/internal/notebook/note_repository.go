@@ -2,6 +2,8 @@ package notebook
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -79,13 +81,11 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Insert notes one at a time so each auto-generated ID can be returned
-		// via RETURNING id. Idempotent against the DB's partial uniques so a
-		// sense_id (or id-less spelling) that another import pass already
-		// inserted returns the EXISTING row's id instead of a duplicate-key
-		// crash — the same find-or-create idiom as ensureNoteExists. DO UPDATE
-		// (not DO NOTHING) is required: DO NOTHING returns no row, breaking the
-		// RETURNING-id capture.
+		// Insert notes one at a time so each auto-generated ID can be captured.
+		// insertNoteReturningID is idempotent against the DB's partial uniques
+		// (find-or-create), so a sense_id (or id-less spelling) that another
+		// import pass already inserted resolves to the EXISTING row's id instead
+		// of a duplicate-key crash.
 		for _, n := range notes {
 			if err := insertNoteReturningID(ctx, tx, n); err != nil {
 				return fmt.Errorf("insert note: %w", err)
@@ -150,27 +150,43 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 }
 
 // insertNoteReturningID find-or-creates a note keyed by the DB's partial
-// uniques and returns its id. An id-bearing note upserts on sense_id
-// (notes_sense_id_key WHERE sense_id <> ”); an id-less note upserts on
+// uniques and returns its id. An id-bearing note conflicts on sense_id
+// (notes_sense_id_key WHERE sense_id <> ”); an id-less note conflicts on
 // (usage, entry) (notes_usage_entry_legacy_key WHERE sense_id = ”). The
-// conflict predicate must repeat the index's WHERE clause so Postgres can
-// infer the partial index. DO UPDATE (a no-op self-assignment) always returns
-// the row, whether inserted or pre-existing. Mirrors ensureNoteExists.
+// conflict predicate repeats the index's WHERE clause so Postgres infers the
+// partial index.
+//
+// It uses ON CONFLICT DO NOTHING (not DO UPDATE): a note-identity insert must
+// never mutate an existing note's columns, and -- critically -- DO UPDATE takes
+// a row-level WRITE lock even on a no-op self-assignment, which deadlocks
+// (40P01) when two transactions touch the notes unique indexes concurrently
+// (e.g. cross-package integration tests sharing one Postgres). DO NOTHING takes
+// no such lock, and returns no row on conflict, so on sql.ErrNoRows we SELECT
+// the pre-existing row's id. Mirrors the intent of ensureNoteExists.
 func insertNoteReturningID(ctx context.Context, tx *sqlx.Tx, n *NoteRecord) error {
 	if n.SenseID != "" {
-		return tx.GetContext(ctx, &n.ID,
+		err := tx.GetContext(ctx, &n.ID,
 			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7)
-			 ON CONFLICT (sense_id) WHERE sense_id <> '' DO UPDATE SET sense_id = EXCLUDED.sense_id
+			 ON CONFLICT (sense_id) WHERE sense_id <> '' DO NOTHING
 			 RETURNING id`,
 			n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return tx.GetContext(ctx, &n.ID, `SELECT id FROM notes WHERE sense_id = $1`, n.SenseID)
+		}
+		return err
 	}
-	return tx.GetContext(ctx, &n.ID,
+	err := tx.GetContext(ctx, &n.ID,
 		`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)
-		 ON CONFLICT ("usage", entry) WHERE sense_id = '' DO UPDATE SET "usage" = EXCLUDED."usage"
+		 ON CONFLICT ("usage", entry) WHERE sense_id = '' DO NOTHING
 		 RETURNING id`,
 		n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tx.GetContext(ctx, &n.ID,
+			`SELECT id FROM notes WHERE "usage" = $1 AND entry = $2 AND sense_id = ''`, n.Usage, n.Entry)
+	}
+	return err
 }
 
 // Create inserts a single note with its notebook_notes in a transaction.
