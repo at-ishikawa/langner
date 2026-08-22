@@ -16,7 +16,9 @@ func TestNewExportDBCommand(t *testing.T) {
 	cmd := newExportDBCommand()
 
 	assert.Equal(t, "export-db", cmd.Use)
-	assert.Equal(t, "Export database to YAML files", cmd.Short)
+	assert.Contains(t, cmd.Short, "Export database to YAML files")
+	assert.Contains(t, cmd.Short, "per-table snapshot",
+		"export-db must advertise the complete per-table snapshot — it is the lossless backup taken before the DB-only migration")
 	assert.NotNil(t, cmd.RunE)
 
 	// Verify required flag
