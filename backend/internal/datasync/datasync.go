@@ -18,14 +18,18 @@ import (
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
-// noteKey identifies a note for import dedup/reconcile. It includes the
-// stable sense id so two ids that share an (usage, entry) spelling map to two
-// distinct rows instead of collapsing into one. Legacy id-less notes carry an
-// empty senseID and keep keying by (usage, entry) exactly as before.
+// noteKey identifies a note for import dedup/reconcile. It comes from
+// notebook.CanonicalNoteKey (the SAME rule the YAML reader dedups by — L2): an
+// id-bearing note keys by its sense_id ALONE (matching the DB's partial unique
+// notes_sense_id_key), so two source records sharing a sense_id but differing
+// in usage/entry collapse to ONE canonical note instead of both reaching
+// BatchCreate and tripping `duplicate key ... notes_sense_id_key` (23505).
+// Id-less legacy notes keep keying by lowercased (usage, entry).
 type noteKey struct{ senseID, usage, entry string }
 
 func newNoteKey(senseID, usage, entry string) noteKey {
-	return noteKey{senseID, strings.ToLower(usage), strings.ToLower(entry)}
+	id, u, e := notebook.CanonicalNoteKey(senseID, usage, entry)
+	return noteKey{id, strings.ToLower(u), strings.ToLower(e)}
 }
 
 type logKey struct {
@@ -94,9 +98,9 @@ type classifyState struct {
 	// matchedNoteIDs and matchedNNIDs track which DB rows the source
 	// claimed. Anything left unmatched is a row the YAML no longer has,
 	// and the reconcile pass deletes it.
-	nnIDByKey       map[nnKey]int64
-	matchedNoteIDs  map[int64]bool
-	matchedNNIDs    map[int64]bool
+	nnIDByKey      map[nnKey]int64
+	matchedNoteIDs map[int64]bool
+	matchedNNIDs   map[int64]bool
 }
 
 // NoteSource provides source note records for import.
@@ -190,21 +194,21 @@ type ImportEtymologyResult struct {
 	// Concept and relation counts populated by ImportSemanticConcepts /
 	// ImportConceptRelations. Skipped covers members whose origin couldn't be
 	// resolved in the same session.
-	ConceptsNew         int
-	ConceptsUpdated     int
-	ConceptsDeleted     int
-	ConceptMembersNew   int
+	ConceptsNew           int
+	ConceptsUpdated       int
+	ConceptsDeleted       int
+	ConceptMembersNew     int
 	ConceptMembersSkipped int
 	ConceptMembersDeleted int
-	RelationsNew     int
-	RelationsDeleted int
+	RelationsNew          int
+	RelationsDeleted      int
 	// Definition concept counts populated by ImportDefinitionConcepts.
 	// Mirrors the semantic-side fields but tracks the definitions-book
 	// concept tables (definition_concepts / definition_concept_members).
-	DefinitionConceptsNew         int
-	DefinitionConceptsUpdated     int
-	DefinitionConceptsDeleted     int
-	DefinitionConceptMembersNew   int
+	DefinitionConceptsNew           int
+	DefinitionConceptsUpdated       int
+	DefinitionConceptsDeleted       int
+	DefinitionConceptMembersNew     int
 	DefinitionConceptMembersDeleted int
 }
 
@@ -216,12 +220,12 @@ type ImportOptions struct {
 
 // Importer reads YAML notebook data and writes to DB.
 type Importer struct {
-	noteRepo            notebook.NoteRepository
-	learningRepo        learning.LearningRepository
-	noteSource          NoteSource
-	learningSource      LearningSource
-	dictionarySource    DictionarySource
-	dictionaryRepo      dictionary.DictionaryRepository
+	noteRepo                notebook.NoteRepository
+	learningRepo            learning.LearningRepository
+	noteSource              NoteSource
+	learningSource          LearningSource
+	dictionarySource        DictionarySource
+	dictionaryRepo          dictionary.DictionaryRepository
 	etymologyOriginRepo     notebook.EtymologyOriginRepository
 	noteOriginPartRepo      notebook.NoteOriginPartRepository
 	etymologyOriginSrc      EtymologyOriginSource
@@ -234,7 +238,7 @@ type Importer struct {
 	conceptRelationSrc      ConceptRelationSource
 	definitionConceptRepo   notebook.DefinitionConceptRepository
 	definitionConceptSrc    DefinitionConceptSource
-	writer              io.Writer
+	writer                  io.Writer
 
 	// touchedNoteIDs collects every DB note ID that ImportNotes or
 	// ImportLearningLogs claimed during this Import* run. The final
@@ -333,6 +337,31 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 	sourceNotes, err := imp.noteSource.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("read source notes: %w", err)
+	}
+
+	// Gate the import on undisambiguated id-less duplicates: the same spelling
+	// with no `id:` but DIFFERENT meanings in two places is a homograph the
+	// author must disambiguate with distinct `id:`s. The DB is unique on
+	// (usage, entry) for id-less rows, so these would otherwise fail deep in an
+	// insert; catch them here and report ALL of them at once with their
+	// notebook + meaning so the user fixes them in one pass. Identical-meaning
+	// duplicates are NOT flagged — they legitimately collapse to one note.
+	// (The reader still collapses duplicates for read-only callers; only import
+	// reads the conflicts it recorded.)
+	if cd, ok := imp.noteSource.(interface {
+		DuplicateWordConflicts() []notebook.DuplicateWord
+		OversizedSenseIDs() []notebook.OversizedSenseID
+	}); ok {
+		if dupes := cd.DuplicateWordConflicts(); len(dupes) > 0 {
+			return nil, &notebook.DuplicateWordsError{Words: dupes}
+		}
+		// An id longer than the notes.sense_id column would otherwise fail deep
+		// in the insert with a cryptic `value too long for type character
+		// varying(380)` (22001). Reject it here, naming every offending word so
+		// the user can shorten the ids in one pass.
+		if big := cd.OversizedSenseIDs(); len(big) > 0 {
+			return nil, &notebook.OversizedSenseIDError{Notes: big}
+		}
 	}
 
 	allNotes, err := imp.noteRepo.FindAll(ctx)
@@ -594,13 +623,51 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 	}
 
-	// First pass: batch-create auto notes for unknown expressions. The dedup
-	// key includes the sense id so two ids sharing an expression each get
-	// their own auto note; id-less legacy expressions dedup by expression.
+	// Build a (notebookID, lowercase origin name) set so any expression
+	// matching a known etymology origin is routed to the StateSeeder
+	// (origin_id logs) instead of being auto-noted here. The user's YAML
+	// frequently omits the `type: origin` marker on roots like "ambi" /
+	// "ascetic" / "epi", so name-matching against etymology_origins is
+	// the reliable signal. Attaching their logs to a NotebookNotes-less
+	// phantom note would drop them on export.
+	originNamesByNotebook := map[string]map[string]bool{}
+	if imp.etymologyOriginRepo != nil {
+		existingOrigins, oerr := imp.etymologyOriginRepo.FindAll(ctx)
+		if oerr != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", oerr)
+		}
+		for _, o := range existingOrigins {
+			byNB := originNamesByNotebook[o.NotebookID]
+			if byNB == nil {
+				byNB = map[string]bool{}
+				originNamesByNotebook[o.NotebookID] = byNB
+			}
+			byNB[strings.ToLower(strings.TrimSpace(o.Origin))] = true
+		}
+	}
+	isKnownOrigin := func(expr exprWithNotebook) bool {
+		if expr.Type == notebook.LearningExpressionTypeOrigin {
+			return true
+		}
+		byNB, ok := originNamesByNotebook[expr.notebookID]
+		if !ok {
+			return false
+		}
+		return byNB[strings.ToLower(strings.TrimSpace(expr.Expression))]
+	}
+
+	// First pass: batch-create auto notes for unknown vocab expressions.
+	// Origin expressions are excluded — the StateSeeder writes their logs
+	// against origin_id. The dedup key includes the sense id so two ids
+	// sharing an expression each get their own auto note; id-less legacy
+	// expressions dedup by expression.
 	type newNoteKey struct{ senseID, expr string }
 	newNoteEntries := make(map[newNoteKey]bool)
 	var newNotes []*notebook.NoteRecord
 	for _, expr := range allExpressions {
+		if isKnownOrigin(expr) {
+			continue
+		}
 		nk := newNoteKey{expr.ID, expr.Expression}
 		if noteMap.lookupByID(expr.ID, expr.Expression, expr.notebookID) == nil && !newNoteEntries[nk] {
 			newNoteEntries[nk] = true
@@ -631,9 +698,14 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		imp.touchedNoteIDs = make(map[int64]bool)
 	}
 
-	// Second pass: collect learning logs with correct note IDs
+	// Second pass: collect learning logs with correct note IDs. Origin
+	// expressions are owned by the StateSeeder (origin_id logs) and
+	// skipped here so their logs don't attach to phantom notes.
 	var newLogs []*learning.LearningLog
 	for _, expr := range allExpressions {
+		if isKnownOrigin(expr) {
+			continue
+		}
 		n := noteMap.lookupByID(expr.ID, expr.Expression, expr.notebookID)
 		if n == nil {
 			continue
@@ -665,7 +737,14 @@ func (imp *Importer) ImportLearningLogs(ctx context.Context, opts ImportOptions)
 		}
 
 		for _, rec := range expr.ReverseLogs {
-			quizType := "reverse"
+			// Preserve the record's own quiz_type — older YAML parks
+			// freeform records inside the reverse_logs slot. Defaulting
+			// to "reverse" only when unspecified keeps the round-trip
+			// lossless (hardcoding it silently reclassifies those).
+			quizType := rec.QuizType
+			if quizType == "" {
+				quizType = "reverse"
+			}
 			key := logKey{n.ID, quizType, rec.LearnedAt.UTC(), expr.notebookID, string(rec.Status)}
 			if existingLogs.matchSource(key) {
 				result.LearningSkipped++
@@ -799,8 +878,19 @@ type NoteSink interface {
 }
 
 // LearningSink writes exported learning logs.
+//
+// origins carries every etymology_origins row so origin-typed logs
+// (NoteID == 0, OriginID != 0) round-trip back into the YAML as
+// `type: origin` expressions. Without it, origin logs survive import
+// (StateSeeder writes them with origin_id) but vanish from the
+// round-trip, and validate-db reports every origin as source=N,
+// exported=0.
 type LearningSink interface {
-	WriteAll(notes []notebook.NoteRecord, logs []learning.LearningLog) error
+	WriteAll(
+		notes []notebook.NoteRecord,
+		logs []learning.LearningLog,
+		origins []notebook.EtymologyOriginRecord,
+	) error
 }
 
 // DictionarySink writes exported dictionary entries.
@@ -846,6 +936,10 @@ type Exporter struct {
 	noteSink       NoteSink
 	learningSink   LearningSink
 	dictionarySink DictionarySink
+	// originRepo is consulted by ExportLearningLogs so origin-typed
+	// LearningHistoryExpression rows round-trip through YAML. Nil means
+	// "no etymology data": origin logs skip the sink.
+	originRepo notebook.EtymologyOriginRepository
 	// Optional definition-concept side. When either is nil,
 	// ExportAll skips the definition-concept phase.
 	definitionConceptRepo notebook.DefinitionConceptRepository
@@ -864,6 +958,14 @@ func NewExporter(noteRepo notebook.NoteRepository, learningRepo learning.Learnin
 		dictionarySink: dictionarySink,
 		writer:         writer,
 	}
+}
+
+// WithEtymologyOrigins wires the etymology_origins repository so
+// ExportLearningLogs hands every origin to the LearningSink. Without
+// this call origin-typed expressions silently drop on round-trip.
+func (exp *Exporter) WithEtymologyOrigins(originRepo notebook.EtymologyOriginRepository) *Exporter {
+	exp.originRepo = originRepo
+	return exp
 }
 
 // WithDefinitionConcepts configures the definitions-concept export
@@ -907,7 +1009,15 @@ func (exp *Exporter) ExportLearningLogs(ctx context.Context) (*ExportLearningLog
 		return nil, fmt.Errorf("load learning logs: %w", err)
 	}
 
-	if err := exp.learningSink.WriteAll(notes, logs); err != nil {
+	var origins []notebook.EtymologyOriginRecord
+	if exp.originRepo != nil {
+		origins, err = exp.originRepo.FindAll(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("load etymology origins: %w", err)
+		}
+	}
+
+	if err := exp.learningSink.WriteAll(notes, logs, origins); err != nil {
 		return nil, fmt.Errorf("write learning logs: %w", err)
 	}
 

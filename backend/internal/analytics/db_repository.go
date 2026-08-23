@@ -92,15 +92,19 @@ func (r *DBRepository) DailySummaries(ctx context.Context, rangeDays int, filter
 }
 
 // wrongRow is the projection used for one wrong attempt on the requested day.
+// note_id / origin_id are nullable since migration 017 — exactly one is
+// set per row (vocab logs carry note_id, etymology-origin logs carry
+// origin_id).
 type wrongRow struct {
-	NoteID        int64     `db:"note_id"`
-	Expression    string    `db:"expression"`
-	NotebookID    string    `db:"notebook_id"`
-	NotebookTitle string    `db:"notebook_title"`
-	SceneTitle    string    `db:"scene_title"`
-	QuizType      string    `db:"quiz_type"`
-	LearnedAt     time.Time `db:"learned_at"`
-	Status        string    `db:"status"`
+	NoteID        sql.NullInt64 `db:"note_id"`
+	OriginID      sql.NullInt64 `db:"origin_id"`
+	Expression    string        `db:"expression"`
+	NotebookID    string        `db:"notebook_id"`
+	NotebookTitle string        `db:"notebook_title"`
+	SceneTitle    string        `db:"scene_title"`
+	QuizType      string        `db:"quiz_type"`
+	LearnedAt     time.Time     `db:"learned_at"`
+	Status        string        `db:"status"`
 }
 
 // DayDetail returns the wrong words for the day plus adjacent-day pointers.
@@ -122,12 +126,18 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 		return DayDetail{}, err
 	}
 
-	// Wrong attempts on the day. The scene title is fetched via a correlated
-	// subquery rather than a LEFT JOIN so a note belonging to multiple
-	// notebook rows doesn't fan out into duplicate cards.
+	// Wrong attempts on the day. Vocab logs (note_id set) join `notes`
+	// for the usage; etymology-origin logs (origin_id set) join
+	// `etymology_origins` for the origin string. The two are UNIONed so
+	// the Day Detail surfaces both kinds of wrong words. The whereDay
+	// clause is referenced in both halves; PostgreSQL binds each $N
+	// placeholder once and reuses it, so pb.args is passed a single
+	// time. The scene title is a correlated subquery (not a LEFT JOIN)
+	// so a note in multiple notebook rows doesn't fan out.
 	wrongQuery := `
 		SELECT
 			ll.note_id,
+			NULL::bigint AS origin_id,
 			n."usage" AS expression,
 			COALESCE(ll.source_notebook_id, '') AS notebook_id,
 			COALESCE(ll.source_notebook_id, '') AS notebook_title,
@@ -144,7 +154,24 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 		JOIN notes n ON n.id = ll.note_id
 		` + whereDay + `
 			AND ll.status = 'misunderstood'
-		ORDER BY n."usage"
+			AND ll.note_id IS NOT NULL
+		UNION ALL
+		SELECT
+			NULL::bigint AS note_id,
+			ll.origin_id,
+			eo.origin AS expression,
+			COALESCE(ll.source_notebook_id, '') AS notebook_id,
+			COALESCE(ll.source_notebook_id, '') AS notebook_title,
+			'' AS scene_title,
+			ll.quiz_type,
+			ll.learned_at,
+			ll.status
+		FROM learning_logs ll
+		JOIN etymology_origins eo ON eo.id = ll.origin_id
+		` + whereDay + `
+			AND ll.status = 'misunderstood'
+			AND ll.origin_id IS NOT NULL
+		ORDER BY expression
 	`
 	var wrongs []wrongRow
 	if err := r.db.SelectContext(ctx, &wrongs, wrongQuery, pb.args...); err != nil {
@@ -155,12 +182,12 @@ func (r *DBRepository) DayDetail(ctx context.Context, day time.Time, filters Fil
 	// helpers can compute the pattern and the streaks around the day's attempt.
 	words := make([]WrongWord, 0, len(wrongs))
 	for _, w := range wrongs {
-		attempts, err := r.recentAttempts(ctx, w.NoteID, w.QuizType, w.LearnedAt)
+		attempts, err := r.recentAttempts(ctx, w.NoteID, w.OriginID, w.QuizType, w.LearnedAt)
 		if err != nil {
 			return DayDetail{}, err
 		}
 		words = append(words, WrongWord{
-			NoteID:                w.NoteID,
+			NoteID:                w.NoteID.Int64,
 			Expression:            w.Expression,
 			NotebookID:            w.NotebookID,
 			NotebookTitle:         w.NotebookTitle,
@@ -229,11 +256,19 @@ func (r *DBRepository) daySummary(ctx context.Context, dayStr string, filters Fi
 
 // recentAttempts returns up to RecentPatternLength most recent attempts for the
 // given (note, quiz_type) on or before upTo (inclusive of upTo).
-func (r *DBRepository) recentAttempts(ctx context.Context, noteID int64, quizType string, upTo time.Time) ([]Attempt, error) {
+func (r *DBRepository) recentAttempts(ctx context.Context, noteID, originID sql.NullInt64, quizType string, upTo time.Time) ([]Attempt, error) {
+	// Key by whichever ID identifies this log: etymology-origin logs by
+	// origin_id, vocab logs by note_id.
+	idCol := "note_id"
+	idVal := noteID.Int64
+	if originID.Valid {
+		idCol = "origin_id"
+		idVal = originID.Int64
+	}
 	query := `
 		SELECT status, learned_at, quality, quiz_type
 		FROM learning_logs
-		WHERE note_id = $1 AND quiz_type = $2 AND learned_at <= $3
+		WHERE ` + idCol + ` = $1 AND quiz_type = $2 AND learned_at <= $3
 		ORDER BY learned_at DESC
 		LIMIT $4
 	`
@@ -243,7 +278,7 @@ func (r *DBRepository) recentAttempts(ctx context.Context, noteID int64, quizTyp
 		Quality   int       `db:"quality"`
 		QuizType  string    `db:"quiz_type"`
 	}
-	if err := r.db.SelectContext(ctx, &rows, query, noteID, quizType, upTo, RecentPatternLength); err != nil {
+	if err := r.db.SelectContext(ctx, &rows, query, idVal, quizType, upTo, RecentPatternLength); err != nil {
 		return nil, fmt.Errorf("recent attempts: %w", err)
 	}
 	out := make([]Attempt, len(rows))

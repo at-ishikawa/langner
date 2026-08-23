@@ -1,0 +1,17 @@
+-- Widen notes.sense_id from VARCHAR(128) to VARCHAR(380).
+--
+-- Migration 019 added sense_id as VARCHAR(128), but a note's sense_id is the
+-- slug `langner migrate assign-ids` derives from its usage/entry — and those
+-- were already widened 255 -> 380 in migration 013 because real phrases are
+-- long. A long idiom / phrase entry can therefore produce an id over 128 chars,
+-- which failed import with `value too long for type character varying(128)`
+-- (SQLSTATE 22001). Widen sense_id to match usage/entry.
+--
+-- 380 is mirrored by notebook.MaxSenseIDLen, which the importer uses to reject
+-- an over-long id with a readable error before the DB ever sees it.
+--
+-- Widening a varchar is non-destructive (no existing value can fail to fit) and
+-- the partial unique index notes_sense_id_key (WHERE sense_id <> '') keeps
+-- working — a 380-char text btree entry is far under Postgres's ~2704-byte
+-- index-row limit, and the index is not tied to the column's declared length.
+ALTER TABLE notes ALTER COLUMN sense_id TYPE VARCHAR(380);

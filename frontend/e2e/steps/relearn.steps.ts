@@ -47,7 +47,48 @@ When("I clear every remaining relearn card", async ({ page }) => {
   const answers = new Map<string, string>();
   const submit = page.getByRole("button", { name: "Submit", exact: true });
   const next = page.getByRole("button", { name: "Next", exact: true });
+  const grammarPost = page.getByTestId("relearn-grammar-post");
+  const grammarNext = page.getByTestId("relearn-grammar-next");
+  const seeAnswers = page.getByRole("button", { name: /See answers/ });
+  const closeDetails = page.getByRole("button", { name: "Close details" });
   for (let i = 0; i < 200 && !page.url().includes("/quiz/relearn/complete"); i++) {
+    // Settle on the next screen — a single-item Submit card, a grammar post, or
+    // the complete page — before acting. A grammar relearn post has NO Submit
+    // and is not a single textbox (it's a fill-the-blanks post graded via "See
+    // answers" → "Next"), so blindly waiting for Submit hangs when a grammar
+    // post is the remaining card (or during the transition frame after the
+    // previous post is dropped and the session navigates to complete).
+    await page.waitForFunction(
+      () =>
+        location.pathname.includes("/quiz/relearn/complete") ||
+        !!document.querySelector('[data-testid="relearn-grammar-post"]') ||
+        !!document.querySelector('[data-testid="relearn-prompt"]'),
+      undefined,
+      { timeout: 15000 },
+    );
+    if (page.url().includes("/quiz/relearn/complete")) break;
+
+    if (await grammarPost.isVisible().catch(() => false)) {
+      // Reveal every still-open blank (unanswered → incorrect, persisting
+      // nothing) then advance past the post, exactly how the grammar Relearn
+      // post is driven — no Submit, no single textbox.
+      if (await seeAnswers.isVisible().catch(() => false)) await seeAnswers.click();
+      await grammarNext.waitFor({ state: "visible" });
+      // The pinned feedback sheet can overlap Next; close it so the click lands.
+      if (await closeDetails.isVisible().catch(() => false)) await closeDetails.click();
+      await grammarNext.click();
+      await page.waitForFunction(
+        () =>
+          location.pathname.includes("/quiz/relearn/complete") ||
+          !!document.querySelector('[data-testid="relearn-grammar-post"]') ||
+          !!document.querySelector("input"),
+        undefined,
+        { timeout: 15000 },
+      );
+      continue;
+    }
+
+    // Single-item card (recognition / reverse / etymology) — Submit flow.
     await submit.waitFor({ state: "visible" });
     const prompt = ((await page.getByTestId("relearn-prompt").textContent()) ?? "").trim();
     await page.getByRole("textbox").first().fill(answers.get(prompt) ?? "an attempt");

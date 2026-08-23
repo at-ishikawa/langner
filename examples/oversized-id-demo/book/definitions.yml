@@ -1,0 +1,19 @@
+# INTENTIONALLY BROKEN fixture: this word's `id:` is 400 chars, over the
+# notes.sense_id VARCHAR(380) limit (notebook.MaxSenseIDLen). NOT wired into
+# config.example.yml (it would break every read); loaded only by the
+# oversized-id regression tests, which assert import-db aborts with a clear,
+# named error instead of a raw 22001. Generic public word, invented sentence.
+- metadata:
+    title: "Oversized id"
+  scenes:
+    - metadata:
+        index: 0
+        title: "too long"
+      expressions:
+        - expression: cartography
+          id: overlong-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier-segment-way-too-long-derived-identifier
+          meaning: "the science of drawing maps"
+          part_of_speech: noun
+          examples:
+            - text: "Her cartography turned rough surveys into elegant maps."
+              highlight: cartography

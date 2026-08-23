@@ -1,7 +1,19 @@
 import { expect, test } from "@playwright/test";
 import { createBdd } from "playwright-bdd";
+import { resetState } from "../support/reset";
 
 const { Given, When, Then, BeforeScenario } = createBdd();
+
+// Restore the seeded learning-history baseline (DB + learning_notes YAML)
+// before every scenario. The stack shares one seeded DB with no reset between
+// scenarios, and DB-mode reads now reflect earlier scenarios' quiz writes, so
+// without this a word answered in an earlier scenario is no longer due in a
+// later one. Each scenario sets up its own words/misses, so a full reset is
+// safe. Runs before the scenario's steps navigate, so the first page load
+// already sees baseline data.
+BeforeScenario(async () => {
+  resetState();
+});
 
 // Layer 3 coverage relies on TestStep.params?.url, which Playwright only
 // populates for explicit page.goto calls. Click-driven router.push navigations

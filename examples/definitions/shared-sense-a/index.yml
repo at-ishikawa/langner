@@ -1,0 +1,4 @@
+id: shared-sense-a
+name: "Shared Sense Demo A (same sense_id across notebooks)"
+notebooks:
+  - ./definitions.yml

@@ -6,6 +6,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
 
@@ -20,12 +21,30 @@ import (
 type YAMLRepository struct {
 	directory string
 	resolver  MetadataResolver
+	// store, when set, is the DB-backed READ side: analytics reads every
+	// attempt from the database through it instead of re-parsing the YAML
+	// learning_notes files. It returns the identical
+	// map[notebookID][]LearningHistory shape NewLearningHistories produced,
+	// so allAttempts flattens it the same way regardless of source. Nil in
+	// YAML-only mode. Reading through the same store the quiz service uses
+	// keeps analytics symmetric with how logs are written and looked up
+	// (learning-history invariant L2).
+	store learning.HistoryStore
 }
 
 // NewYAMLRepository returns an analytics Repository backed by the YAML
 // learning history files under directory.
 func NewYAMLRepository(directory string) *YAMLRepository {
 	return &YAMLRepository{directory: directory, resolver: NoMetadataResolver()}
+}
+
+// WithHistoryStore returns a copy of the repository that reads attempts from
+// the given DB-backed history store instead of the YAML files. Pass nil to
+// keep reading YAML. Used by bootstrap once the database is connected.
+func (r *YAMLRepository) WithHistoryStore(store learning.HistoryStore) *YAMLRepository {
+	cp := *r
+	cp.store = store
+	return &cp
 }
 
 // WithMetadataResolver returns a copy of the repository that consults
@@ -74,9 +93,11 @@ type yamlAttempt struct {
 }
 
 // allAttempts loads every record from every history file, flattens them,
-// and applies notebook/quiz-type filters. The result is unsorted.
-func (r *YAMLRepository) allAttempts(filters Filters) ([]yamlAttempt, error) {
-	histories, err := notebook.NewLearningHistories(r.directory)
+// and applies notebook/quiz-type filters. The result is unsorted. Source is
+// the DB store when one is installed, otherwise the on-disk YAML files; both
+// yield the same map shape so the flattening below is source-agnostic.
+func (r *YAMLRepository) allAttempts(ctx context.Context, filters Filters) ([]yamlAttempt, error) {
+	histories, err := r.loadHistories(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
@@ -108,6 +129,16 @@ func (r *YAMLRepository) allAttempts(filters Filters) ([]yamlAttempt, error) {
 		out[i].Seq = i
 	}
 	return out, nil
+}
+
+// loadHistories is the single READ entry point: DB store when installed,
+// otherwise the YAML learning_notes files. Both return the identical
+// map[notebookID][]LearningHistory shape.
+func (r *YAMLRepository) loadHistories(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+	if r.store != nil {
+		return r.store.LoadAll(ctx)
+	}
+	return notebook.NewLearningHistories(r.directory)
 }
 
 func collectExpressions(
@@ -238,8 +269,8 @@ func seriesDiscriminator(id, expression string) string {
 
 // DailySummaries aggregates per-day rollups. rangeDays == 0 means
 // "all time"; otherwise records older than now-rangeDays are dropped.
-func (r *YAMLRepository) DailySummaries(_ context.Context, rangeDays int, filters Filters) ([]DailySummary, error) {
-	attempts, err := r.allAttempts(filters)
+func (r *YAMLRepository) DailySummaries(ctx context.Context, rangeDays int, filters Filters) ([]DailySummary, error) {
+	attempts, err := r.allAttempts(ctx, filters)
 	if err != nil {
 		return nil, err
 	}
@@ -290,7 +321,7 @@ func (r *YAMLRepository) DailySummaries(_ context.Context, rangeDays int, filter
 
 // DayDetail returns the wrong words on day plus prev/next day pointers.
 func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters Filters) (DayDetail, error) {
-	attempts, err := r.allAttempts(filters)
+	attempts, err := r.allAttempts(ctx, filters)
 	if err != nil {
 		return DayDetail{}, err
 	}
@@ -414,8 +445,8 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 }
 
 // WordHistory returns every attempt for a single (notebook, expression, quiz_type) triple.
-func (r *YAMLRepository) WordHistory(_ context.Context, ref WordRef) (WordHistory, error) {
-	attempts, err := r.allAttempts(Filters{NotebookID: ref.NotebookID, QuizType: ref.QuizType})
+func (r *YAMLRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistory, error) {
+	attempts, err := r.allAttempts(ctx, Filters{NotebookID: ref.NotebookID, QuizType: ref.QuizType})
 	if err != nil {
 		return WordHistory{}, err
 	}
@@ -475,8 +506,8 @@ func (r *YAMLRepository) WordHistory(_ context.Context, ref WordRef) (WordHistor
 // delegates to ComputeTrends. Attempts are intentionally NOT date-filtered
 // here: the aggregation needs each series' full history to know its state
 // before the range start.
-func (r *YAMLRepository) Trends(_ context.Context, q TrendsQuery) (TrendsResult, error) {
-	attempts, err := r.allAttempts(q.Filters)
+func (r *YAMLRepository) Trends(ctx context.Context, q TrendsQuery) (TrendsResult, error) {
+	attempts, err := r.allAttempts(ctx, q.Filters)
 	if err != nil {
 		return TrendsResult{}, err
 	}

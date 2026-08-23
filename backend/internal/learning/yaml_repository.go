@@ -46,10 +46,17 @@ func (r *YAMLLearningRepository) FindByNotebookID(notebookID string) ([]notebook
 			if h.Metadata.NotebookID != notebookID {
 				continue
 			}
-			if h.Metadata.Type == "flashcard" {
-				result = append(result, h.Expressions...)
-				continue
-			}
+			// Flat blocks (flashcard, and etymology/grammar blocks whose
+			// origins/corrections sit at the top level with no scene layer)
+			// carry their expressions directly on h.Expressions. Etymology
+			// blocks in particular mark the KIND on each expression
+			// (`type: origin`) rather than on the metadata, so a
+			// `Metadata.Type == "flashcard"`-only check dropped every
+			// etymology-origin and grammar log — the importer/state-seeder
+			// then never wrote them to the DB. Emit top-level expressions
+			// for every notebook (harmless for stories, whose expressions
+			// live under scenes and whose h.Expressions is empty).
+			result = append(result, h.Expressions...)
 			for _, scene := range h.Scenes {
 				result = append(result, scene.Expressions...)
 			}
@@ -60,19 +67,27 @@ func (r *YAMLLearningRepository) FindByNotebookID(notebookID string) ([]notebook
 }
 
 // WriteAll converts learning logs to LearningHistory YAML files grouped by notebook.
-func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []LearningLog) error {
+func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []LearningLog, origins []notebook.EtymologyOriginRecord) error {
 	noteByID := make(map[int64]*notebook.NoteRecord, len(notes))
 	for i := range notes {
 		noteByID[notes[i].ID] = &notes[i]
 	}
 
-	// Group logs by (noteID, sourceNotebookID)
+	// Group logs by (noteID, sourceNotebookID). Origin-typed logs
+	// (OriginID != 0) are split out and grouped by origin_id so they
+	// re-emerge as `type: origin` expressions rather than being
+	// attributed to a phantom note.
 	type noteNotebook struct {
 		noteID     int64
 		notebookID string
 	}
 	logsByNoteNotebook := make(map[noteNotebook][]LearningLog)
+	originLogsByID := make(map[int64][]LearningLog)
 	for _, log := range logs {
+		if log.OriginID > 0 {
+			originLogsByID[log.OriginID] = append(originLogsByID[log.OriginID], log)
+			continue
+		}
 		key := noteNotebook{log.NoteID, log.SourceNotebookID}
 		logsByNoteNotebook[key] = append(logsByNoteNotebook[key], log)
 	}
@@ -97,6 +112,17 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 			if nn.NotebookType == "flashcard" {
 				info.isFlashcard = true
 			}
+		}
+	}
+
+	// Ensure every notebook that owns an origin is in the loop even if
+	// no vocab note in it touched a log.
+	originsByNotebook := make(map[string][]notebook.EtymologyOriginRecord)
+	for _, o := range origins {
+		originsByNotebook[o.NotebookID] = append(originsByNotebook[o.NotebookID], o)
+		if _, ok := notebookMap[o.NotebookID]; !ok {
+			notebookMap[o.NotebookID] = &notebookInfo{}
+			notebookIDs = append(notebookIDs, o.NotebookID)
 		}
 	}
 
@@ -129,6 +155,8 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 		} else {
 			histories = r.buildStoryHistories(nbID, uniqueNoteIDs, noteByID, filteredLogs)
 		}
+
+		histories = appendOriginHistories(histories, nbID, originsByNotebook[nbID], originLogsByID)
 
 		if len(histories) == 0 {
 			continue
@@ -339,14 +367,13 @@ func buildExpression(
 	entry string,
 	logs []LearningLog,
 ) notebook.LearningHistoryExpression {
-	// Route each log into the matching slot on LearningHistoryExpression.
-	// The original implementation lumped everything that wasn't reverse
-	// into learned_logs, which destroyed quiz_type information on
-	// round-trip: a word with etymology_breakdown_logs / etymology_
-	// assembly_logs in the source YAML came back with all of them merged
-	// into learned_logs (e.g. gauche with 1 source learned log + 7
-	// etymology logs exported as 8 learned logs). Match each YAML slot
-	// to the quiz_type values that get stored there at import time.
+	// Route each log into the matching slot on LearningHistoryExpression,
+	// mirroring GetLogsForQuizType/SetLogsForQuizType (learning-history
+	// invariant L2). The original implementation lumped everything that
+	// wasn't reverse into learned_logs, which destroyed quiz_type
+	// information on round-trip: a word's etymology_origin_logs came back
+	// merged into learned_logs. Match each YAML slot to the quiz_type
+	// values that get stored there at import time.
 	var learnedLogs, reverseLogs, originLogs []LearningLog
 	for _, log := range logs {
 		switch log.QuizType {
@@ -555,4 +582,77 @@ func (r *YAMLLearningRepository) BatchCreate(_ context.Context, _ []*LearningLog
 // targets the DB; YAML is the source of truth.
 func (r *YAMLLearningRepository) BatchDelete(_ context.Context, _ []int64) error {
 	return fmt.Errorf("BatchDelete is not supported for YAML learning repository")
+}
+
+// appendOriginHistories adds origin-typed LearningHistoryExpression
+// rows into the existing per-notebook histories. Each origin lands
+// under a LearningHistory block whose Title matches the origin's
+// session_title, mirroring the DBHistoryStore reconstructor so the
+// round-trip stays symmetric. Validate counts logs per expression
+// name regardless of scene structure.
+func appendOriginHistories(
+	histories []notebook.LearningHistory,
+	nbID string,
+	origins []notebook.EtymologyOriginRecord,
+	originLogsByID map[int64][]LearningLog,
+) []notebook.LearningHistory {
+	if len(origins) == 0 {
+		return histories
+	}
+
+	// Sort origins for deterministic output: by session_title, origin, sense.
+	sort.Slice(origins, func(i, j int) bool {
+		if origins[i].SessionTitle != origins[j].SessionTitle {
+			return origins[i].SessionTitle < origins[j].SessionTitle
+		}
+		if origins[i].Origin != origins[j].Origin {
+			return origins[i].Origin < origins[j].Origin
+		}
+		return origins[i].Sense < origins[j].Sense
+	})
+
+	historyIdxByTitle := make(map[string]int, len(histories))
+	for i := range histories {
+		historyIdxByTitle[histories[i].Metadata.Title] = i
+	}
+
+	for _, o := range origins {
+		expr := buildOriginExpression(o.Origin, originLogsByID[o.ID])
+		title := o.SessionTitle
+		idx, ok := historyIdxByTitle[title]
+		if !ok {
+			histories = append(histories, notebook.LearningHistory{
+				Metadata: notebook.LearningHistoryMetadata{NotebookID: nbID, Title: title},
+				Scenes: []notebook.LearningScene{{
+					Metadata:    notebook.LearningSceneMetadata{Title: title},
+					Expressions: []notebook.LearningHistoryExpression{expr},
+				}},
+			})
+			historyIdxByTitle[title] = len(histories) - 1
+			continue
+		}
+		sceneFound := false
+		for j := range histories[idx].Scenes {
+			if histories[idx].Scenes[j].Metadata.Title == title {
+				histories[idx].Scenes[j].Expressions = append(histories[idx].Scenes[j].Expressions, expr)
+				sceneFound = true
+				break
+			}
+		}
+		if !sceneFound {
+			histories[idx].Scenes = append(histories[idx].Scenes, notebook.LearningScene{
+				Metadata:    notebook.LearningSceneMetadata{Title: title},
+				Expressions: []notebook.LearningHistoryExpression{expr},
+			})
+		}
+	}
+	return histories
+}
+
+// buildOriginExpression mirrors buildExpression but tags the result as
+// type: origin. Logs flow into the same slots based on quiz_type.
+func buildOriginExpression(origin string, logs []LearningLog) notebook.LearningHistoryExpression {
+	expr := buildExpression(origin, logs)
+	expr.Type = notebook.LearningExpressionTypeOrigin
+	return expr
 }

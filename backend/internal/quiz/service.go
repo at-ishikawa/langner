@@ -23,8 +23,19 @@ type Service struct {
 	openaiClient       inference.Client
 	dictionaryMap      map[string]rapidapi.Response
 	learningRepository learning.LearningRepository
-	calculator         notebook.IntervalCalculator
-	disableShuffle     bool
+	// historyStore, when set, is the READ side for learning history: the
+	// runtime reads every word's success/failure log from the database
+	// through this seam instead of re-parsing the YAML files under
+	// learning_notes/. It returns the SAME map[notebookID][]LearningHistory
+	// shape notebook.NewLearningHistories produced, so every downstream
+	// filter/validator is unchanged. Nil in YAML-only mode (no DB
+	// configured), in which case loadHistories falls back to the YAML
+	// reader. Both the write repos (learningRepository) and this read store
+	// resolve a log's canonical storage key with the same rule, keeping the
+	// read symmetric with the write (learning-history invariant L2).
+	historyStore   learning.HistoryStore
+	calculator     notebook.IntervalCalculator
+	disableShuffle bool
 }
 
 // NewService creates a new Service.
@@ -38,6 +49,26 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 		calculator:         notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals),
 		disableShuffle:     quizCfg.DisableShuffle,
 	}
+}
+
+// SetHistoryStore installs the DB-backed learning-history read store.
+// Called from bootstrap once the database is connected; when it is nil
+// (YAML-only mode) loadHistories reads the on-disk learning_notes YAML.
+func (s *Service) SetHistoryStore(store learning.HistoryStore) {
+	s.historyStore = store
+}
+
+// loadHistories returns every notebook's learning history keyed by notebook
+// ID. It is the single READ entry point every quiz-service method uses so a
+// change of source is a one-line swap: when a historyStore is installed the
+// data comes from the database, otherwise from the YAML learning_notes files.
+// The two sources return the identical map shape, so callers never branch on
+// which one served the read.
+func (s *Service) loadHistories() (map[string][]notebook.LearningHistory, error) {
+	if s.historyStore != nil {
+		return s.historyStore.LoadAll(context.Background())
+	}
+	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 }
 
 func (s *Service) newReader() (*notebook.Reader, error) {
@@ -84,7 +115,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -323,7 +354,7 @@ func (s *Service) LoadCards(notebookIDs []string, includeUnstudied bool, section
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -937,7 +968,7 @@ func (s *Service) LoadReverseCards(notebookIDs []string, listMissingContext, inc
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1534,7 +1565,7 @@ func (s *Service) LoadAllWords() ([]FreeformCard, error) {
 	}
 
 	// Also load from definitions-only books
-	learningHistories, _ := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, _ := s.loadHistories()
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
 		if _, isStory := storyIndexes[nbID]; isStory {
 			continue
@@ -1680,7 +1711,7 @@ func (s *Service) loadStoryWords(reader *notebook.Reader, notebookID string, ori
 		return nil, err
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1727,7 +1758,7 @@ func (s *Service) loadFlashcardWords(reader *notebook.Reader, notebookID string,
 		return nil, err
 	}
 
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -1910,7 +1941,7 @@ func (s *Service) GetFreeformNextReviewDates(cards []FreeformCard) (map[string]s
 	if s.disableShuffle {
 		return map[string]string{}, nil
 	}
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
@@ -2002,7 +2033,7 @@ func findMatchingCards(cards []FreeformCard, word string) []FreeformCard {
 // GetLatestLearnedInfo returns the learned_at and next_review_date for the latest log
 // of a given expression in a specific notebook.
 func (s *Service) GetLatestLearnedInfo(notebookName, id, expression string, quizType notebook.QuizType) (learnedAt string, nextReviewDate string) {
-	learningHistories, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	learningHistories, err := s.loadHistories()
 	if err != nil {
 		return "", ""
 	}
@@ -2018,7 +2049,20 @@ func (s *Service) GetLatestLearnedInfo(notebookName, id, expression string, quiz
 		return "", ""
 	}
 
+	// Pick the newest attempt by date. The YAML reader stores logs
+	// newest-first (prepend on write), but the DB-backed store reconstructs
+	// them in id order — so a log written at RUNTIME (highest id) lands LAST,
+	// not at [0]. Returning logs[0] there yields an OLD baseline date, which
+	// the override RPCs then use to resolve the wrong learning_logs row (the
+	// stale baseline instead of the just-answered one), so Mark/Undo operate
+	// on the wrong attempt. Selecting by LearnedAt is order-independent across
+	// both sources (first-seen wins ties, matching YAML newest-first).
 	latest := logs[0]
+	for _, l := range logs[1:] {
+		if l.LearnedAt.After(latest.LearnedAt.Time) {
+			latest = l
+		}
+	}
 	learnedAt = latest.LearnedAt.Format("2006-01-02")
 	if latest.IntervalDays > 0 {
 		nextReviewDate = latest.LearnedAt.AddDate(0, 0, latest.IntervalDays).Format("2006-01-02")
@@ -2125,6 +2169,14 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 	// independently. The first head-or-member encountered for a concept
 	// triggers shouldIncludeDefinition; subsequent ones are skipped.
 	seenConcept := make(map[string]bool)
+	// Dedupe by surface entry too: the card loaders fold homographs (two
+	// senses sharing a spelling, e.g. financial "bank" vs river "bank")
+	// into one card via deduplicateCards (keyed by lowercased Entry). The
+	// badge must match what is served — "display = reality" — so an entry
+	// counted once here mirrors the single card the loader emits. Without
+	// this, a notebook with homographs shows a badge larger than the cards
+	// it serves (count=2, loaded=1), breaking the count==loaded invariant.
+	seenEntry := make(map[string]bool)
 	for storyTitle, sceneDefs := range defs {
 		for sceneTitle, notes := range sceneDefs {
 			for i := range notes {
@@ -2141,6 +2193,11 @@ func countDefinitionNotes(defs map[string]map[string][]notebook.Note, histories 
 					seenConcept[conceptKey] = true
 				}
 				if shouldIncludeDefinition(histories, storyTitle, sceneTitle, note, includeUnstudied, quizType, conceptHeads) {
+					entryKey := strings.ToLower(note.Expression)
+					if seenEntry[entryKey] {
+						continue
+					}
+					seenEntry[entryKey] = true
 					count++
 				}
 			}

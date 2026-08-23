@@ -1,0 +1,4 @@
+id: geography-book
+name: "Conflicts Demo — Geography (id-less homographs, intentionally broken)"
+notebooks:
+  - ./definitions.yml

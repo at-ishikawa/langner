@@ -1,0 +1,4 @@
+id: homographs-demo
+name: "Homographs Demo (distinct senses, same spelling)"
+notebooks:
+  - ./definitions.yml

@@ -23,10 +23,13 @@ func NewDBDictionaryRepository(db *sqlx.DB) *DBDictionaryRepository {
 	return &DBDictionaryRepository{db: db}
 }
 
-// FindAll returns all dictionary entries.
+// FindAll returns all dictionary entries. Columns are listed explicitly (not
+// SELECT *) so a drifted DB with an extra/unknown column doesn't crash the
+// strict sqlx scan — the same drift-resilience the notes reads need.
 func (r *DBDictionaryRepository) FindAll(ctx context.Context) ([]DictionaryEntry, error) {
 	var entries []DictionaryEntry
-	if err := r.db.SelectContext(ctx, &entries, "SELECT * FROM dictionary_entries ORDER BY word"); err != nil {
+	if err := r.db.SelectContext(ctx, &entries,
+		"SELECT word, source_type, source_url, response, created_at, updated_at FROM dictionary_entries ORDER BY word"); err != nil {
 		return nil, fmt.Errorf("load all dictionary entries: %w", err)
 	}
 	return entries, nil

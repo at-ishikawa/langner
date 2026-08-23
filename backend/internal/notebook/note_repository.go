@@ -2,6 +2,8 @@ package notebook
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jmoiron/sqlx"
@@ -25,6 +27,18 @@ type NoteRepository interface {
 	BatchDeleteNotebookNotes(ctx context.Context, ids []int64) error
 }
 
+// Explicit column lists for every user-data read scan, matching each
+// struct's db-tagged fields. A plain SELECT * is NOT resilient to real-DB
+// schema drift: sqlx is strict, so a column with no destination field (e.g.
+// a leftover part_of_speech from the abandoned homograph approach on a user's
+// notes table) crashes the scan. Naming the columns means unknown/extra
+// columns are simply not fetched — the user's data is untouched. "usage" and
+// "group" are reserved words, so they are quoted.
+const noteColumns = `id, sense_id, "usage", entry, meaning, level, dictionary_number, concept_key, created_at, updated_at, skipped_at`
+const noteImageColumns = `id, note_id, url, sort_order, created_at, updated_at`
+const noteReferenceColumns = `id, note_id, link, description, sort_order, created_at, updated_at`
+const notebookNoteColumns = `id, note_id, notebook_type, notebook_id, "group", subgroup, created_at, updated_at`
+
 // DBNoteRepository implements NoteRepository using PostgreSQL.
 type DBNoteRepository struct {
 	db *sqlx.DB
@@ -38,7 +52,7 @@ func NewDBNoteRepository(db *sqlx.DB) *DBNoteRepository {
 // FindAll returns all notes with their images, references, and notebook notes.
 func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 	var notes []NoteRecord
-	if err := r.db.SelectContext(ctx, &notes, "SELECT * FROM notes ORDER BY id"); err != nil {
+	if err := r.db.SelectContext(ctx, &notes, "SELECT "+noteColumns+" FROM notes ORDER BY id"); err != nil {
 		return nil, fmt.Errorf("load all notes: %w", err)
 	}
 	if err := r.loadRelations(ctx, notes); err != nil {
@@ -50,7 +64,7 @@ func (r *DBNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) {
 // FindByID returns a single note by ID with its notebook notes.
 func (r *DBNoteRepository) FindByID(ctx context.Context, id int64) (*NoteRecord, error) {
 	var note NoteRecord
-	if err := r.db.GetContext(ctx, &note, `SELECT * FROM notes WHERE id = $1`, id); err != nil {
+	if err := r.db.GetContext(ctx, &note, `SELECT `+noteColumns+` FROM notes WHERE id = $1`, id); err != nil {
 		return nil, fmt.Errorf("find note by id %d: %w", id, err)
 	}
 	notes := []NoteRecord{note}
@@ -67,12 +81,13 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	}
 
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Insert notes one at a time so each auto-generated ID can be returned
-		// via RETURNING id.
+		// Insert notes one at a time so each auto-generated ID can be captured.
+		// insertNoteReturningID is idempotent against the DB's partial uniques
+		// (find-or-create), so a sense_id (or id-less spelling) that another
+		// import pass already inserted resolves to the EXISTING row's id instead
+		// of a duplicate-key crash.
 		for _, n := range notes {
-			if err := tx.GetContext(ctx, &n.ID,
-				`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-				n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID); err != nil {
+			if err := insertNoteReturningID(ctx, tx, n); err != nil {
 				return fmt.Errorf("insert note: %w", err)
 			}
 		}
@@ -123,7 +138,8 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 			}
 		}
 		if nnCount > 0 {
-			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, nnCount)
+			q := database.BuildMultiRowInsert("notebook_notes", []string{"note_id", "notebook_type", "notebook_id", `"group"`, "subgroup"}, nnCount) +
+				` ON CONFLICT (note_id, notebook_type, notebook_id, "group", subgroup) DO NOTHING`
 			if _, err := tx.ExecContext(ctx, q, nnArgs...); err != nil {
 				return fmt.Errorf("insert notebook notes: %w", err)
 			}
@@ -133,18 +149,57 @@ func (r *DBNoteRepository) BatchCreate(ctx context.Context, notes []*NoteRecord)
 	})
 }
 
+// insertNoteReturningID find-or-creates a note keyed by the DB's partial
+// uniques and returns its id. An id-bearing note conflicts on sense_id
+// (notes_sense_id_key WHERE sense_id <> ”); an id-less note conflicts on
+// (usage, entry) (notes_usage_entry_legacy_key WHERE sense_id = ”). The
+// conflict predicate repeats the index's WHERE clause so Postgres infers the
+// partial index.
+//
+// It uses ON CONFLICT DO NOTHING (not DO UPDATE): a note-identity insert must
+// never mutate an existing note's columns, and -- critically -- DO UPDATE takes
+// a row-level WRITE lock even on a no-op self-assignment, which deadlocks
+// (40P01) when two transactions touch the notes unique indexes concurrently
+// (e.g. cross-package integration tests sharing one Postgres). DO NOTHING takes
+// no such lock, and returns no row on conflict, so on sql.ErrNoRows we SELECT
+// the pre-existing row's id. Mirrors the intent of ensureNoteExists.
+func insertNoteReturningID(ctx context.Context, tx *sqlx.Tx, n *NoteRecord) error {
+	if n.SenseID != "" {
+		err := tx.GetContext(ctx, &n.ID,
+			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			 ON CONFLICT (sense_id) WHERE sense_id <> '' DO NOTHING
+			 RETURNING id`,
+			n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return tx.GetContext(ctx, &n.ID, `SELECT id FROM notes WHERE sense_id = $1`, n.SenseID)
+		}
+		return err
+	}
+	err := tx.GetContext(ctx, &n.ID,
+		`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+		 ON CONFLICT ("usage", entry) WHERE sense_id = '' DO NOTHING
+		 RETURNING id`,
+		n.Usage, n.Entry, n.Meaning, n.Level, n.DictionaryNumber, n.ConceptKey, n.SenseID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return tx.GetContext(ctx, &n.ID,
+			`SELECT id FROM notes WHERE "usage" = $1 AND entry = $2 AND sense_id = ''`, n.Usage, n.Entry)
+	}
+	return err
+}
+
 // Create inserts a single note with its notebook_notes in a transaction.
 func (r *DBNoteRepository) Create(ctx context.Context, note *NoteRecord) error {
 	return database.RunInTx(ctx, r.db, func(ctx context.Context, tx *sqlx.Tx) error {
-		if err := tx.GetContext(ctx, &note.ID,
-			`INSERT INTO notes ("usage", entry, meaning, level, dictionary_number, concept_key, sense_id) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id`,
-			note.Usage, note.Entry, note.Meaning, note.Level, note.DictionaryNumber, note.ConceptKey, note.SenseID); err != nil {
+		if err := insertNoteReturningID(ctx, tx, note); err != nil {
 			return fmt.Errorf("insert note: %w", err)
 		}
 
 		for _, nn := range note.NotebookNotes {
 			if _, err := tx.ExecContext(ctx,
-				`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup) VALUES ($1, $2, $3, $4, $5)`,
+				`INSERT INTO notebook_notes (note_id, notebook_type, notebook_id, "group", subgroup) VALUES ($1, $2, $3, $4, $5)
+				 ON CONFLICT (note_id, notebook_type, notebook_id, "group", subgroup) DO NOTHING`,
 				note.ID, nn.NotebookType, nn.NotebookID, nn.Group, nn.Subgroup); err != nil {
 				return fmt.Errorf("insert notebook note: %w", err)
 			}
@@ -246,7 +301,7 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 		noteMap[notes[i].ID] = &notes[i]
 	}
 
-	query, args, err := sqlx.In("SELECT * FROM note_images WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
+	query, args, err := sqlx.In("SELECT "+noteImageColumns+" FROM note_images WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
 	if err != nil {
 		return fmt.Errorf("build note images query: %w", err)
 	}
@@ -259,7 +314,7 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 		n.Images = append(n.Images, img)
 	}
 
-	query, args, err = sqlx.In("SELECT * FROM note_references WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
+	query, args, err = sqlx.In("SELECT "+noteReferenceColumns+" FROM note_references WHERE note_id IN (?) ORDER BY sort_order", noteIDs)
 	if err != nil {
 		return fmt.Errorf("build note references query: %w", err)
 	}
@@ -272,7 +327,7 @@ func (r *DBNoteRepository) loadRelations(ctx context.Context, notes []NoteRecord
 		n.References = append(n.References, ref)
 	}
 
-	query, args, err = sqlx.In("SELECT * FROM notebook_notes WHERE note_id IN (?) ORDER BY id", noteIDs)
+	query, args, err = sqlx.In("SELECT "+notebookNoteColumns+" FROM notebook_notes WHERE note_id IN (?) ORDER BY id", noteIDs)
 	if err != nil {
 		return fmt.Errorf("build notebook notes query: %w", err)
 	}

@@ -1,0 +1,4 @@
+id: oversized-id-book
+name: "Oversized Id Demo (id over the 380 limit, intentionally broken)"
+notebooks:
+  - ./definitions.yml
