@@ -124,7 +124,7 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load cards: %w", err))
 	}
 	localStore := make(map[int64]quiz.Card)
-	var nextID int64 = sessionIDBase + 1
+	nextID := sessionIDBase + 1
 	var flashcards []*apiv1.Flashcard
 	for _, card := range cards {
 		noteID := nextID
@@ -258,7 +258,7 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load reverse cards: %w", err))
 	}
 	localStore := make(map[int64]quiz.ReverseCard)
-	var nextID int64 = sessionIDBase + 1
+	nextID := sessionIDBase + 1
 	var flashcards []*apiv1.ReverseFlashcard
 	for _, card := range cards {
 		noteID := nextID
