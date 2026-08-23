@@ -238,6 +238,84 @@ func TestServerDBOnlyWrites_FreezesLearningNotesYAML_LivePostgres_Integration(t 
 	assert.Equal(t, notebook.LearnedStatusUnderstood, expr.GetLatestStatus(),
 		"the DB read-back must reflect the correct attempt just written")
 
+	// ---- Exclude/Resume (SkipWord/ResumeWord): freeze YAML, write DB skip flags. ----
+	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
+	require.NotNil(t, repos.SkipFlags, "DB configured -> Exclude writes DB skip flags")
+
+	beforeSkip := snapshotDir(t, frozenDir)
+	skipInfo := quiz.CardInfo{NotebookName: target.NotebookID, Expression: target.Usage, NoteID: target.ID}
+	require.NoError(t, svc.SkipWord(skipInfo, "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+
+	// (a) learning_notes still byte-for-byte unchanged.
+	assert.Equal(t, beforeSkip, snapshotDir(t, frozenDir),
+		"Exclude MUST NOT write learning_notes YAML in DB mode (the reported 'reputation' bug)")
+	// (b) the DB skip-flag row was created.
+	var skipCount int
+	require.NoError(t, db.GetContext(ctx, &skipCount,
+		`SELECT COUNT(*) FROM note_skip_flags WHERE note_id = $1 AND quiz_type = 'notebook'`, target.ID))
+	assert.Equal(t, 1, skipCount, "Exclude must UPSERT a note_skip_flags row")
+	// (c) the loaders' read side now sees the word excluded (L2 symmetry).
+	histAfterSkip, err := repos.HistoryStore.LoadAll(ctx)
+	require.NoError(t, err)
+	exprSkip, ok := findExpressionInHistories(histAfterSkip[target.NotebookID], target.Usage, target.Entry)
+	require.True(t, ok)
+	assert.True(t, exprSkip.SkippedAt.IsSkippedAny(),
+		"the DB read-back must show the word excluded — proving the skip lands where the loaders read it")
+
+	// ResumeWord clears it, still without writing YAML.
+	require.NoError(t, svc.ResumeWord(skipInfo, []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, db.GetContext(ctx, &skipCount,
+		`SELECT COUNT(*) FROM note_skip_flags WHERE note_id = $1 AND quiz_type = 'notebook'`, target.ID))
+	assert.Equal(t, 0, skipCount, "Resume must DELETE the note_skip_flags row")
+	assert.Equal(t, beforeSkip, snapshotDir(t, frozenDir),
+		"Resume MUST NOT write learning_notes YAML in DB mode either")
+
+	// CONTROL for Exclude: the pre-fix path wrote learning_notes YAML directly.
+	// WriteYamlFile(learning_notes/<nb>.yml) is exactly what SkipWord did before
+	// this change; assert that DOES modify the directory.
+	skipCtlDir := copyLearningNotes(t, cfg.Notebooks.LearningNotesDirectory)
+	skipCtlBefore := snapshotDir(t, skipCtlDir)
+	require.NoError(t, notebook.WriteYamlFile(
+		filepath.Join(skipCtlDir, target.NotebookID+".yml"),
+		[]notebook.LearningHistory{{Metadata: notebook.LearningHistoryMetadata{NotebookID: target.NotebookID}}}))
+	assert.NotEqual(t, skipCtlBefore, snapshotDir(t, skipCtlDir),
+		"the pre-change SkipWord wrote learning_notes YAML — proving Exclude failed the freeze before this PR")
+
+	// ---- RegisterDefinition (note write): freeze definitions YAML, write DB note. ----
+	defsDir := ""
+	if len(cfg.Notebooks.DefinitionsDirectories) > 0 {
+		defsDir = cfg.Notebooks.DefinitionsDirectories[0]
+	}
+	require.NotEmpty(t, defsDir, "config.example.yml must declare a definitions directory")
+	const newWord = "quixotic-dbonly-frozen"
+	beforeDefs := snapshotDir(t, defsDir)
+	require.NoError(t, repos.Note.Create(ctx, &notebook.NoteRecord{
+		Usage: newWord, Entry: newWord, Meaning: "idealistic and impractical",
+		DefinitionsDir: defsDir, NotebookFile: "roots-demo",
+		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: "roots-demo"}},
+	}))
+	assert.Equal(t, beforeDefs, snapshotDir(t, defsDir),
+		"RegisterDefinition (noteRepository.Create) MUST NOT write definitions YAML in DB mode")
+	var defCount int
+	require.NoError(t, db.GetContext(ctx, &defCount, `SELECT COUNT(*) FROM notes WHERE "usage" = $1`, newWord))
+	assert.Equal(t, 1, defCount, "the new definition must persist as a DB note row")
+
+	// CONTROL for RegisterDefinition: the pre-change dual-write note wiring
+	// (MultiNoteRepository = YAML + DB) writes definitions YAML.
+	defCtlDir := t.TempDir()
+	defCtl := notebook.NewMultiNoteRepository(
+		notebook.NewYAMLNoteRepositoryWithDefsDir(defCtlDir),
+		notebook.NewDBNoteRepository(db),
+	)
+	defCtlBefore := snapshotDir(t, defCtlDir)
+	require.NoError(t, defCtl.Create(ctx, &notebook.NoteRecord{
+		Usage: "serendipitous-dbonly-ctl", Entry: "serendipitous-dbonly-ctl", Meaning: "x",
+		DefinitionsDir: defCtlDir, NotebookFile: "roots-demo",
+		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: "roots-demo"}},
+	}))
+	assert.NotEqual(t, defCtlBefore, snapshotDir(t, defCtlDir),
+		"the pre-change dual-write note wiring MUST write definitions YAML — proving RegisterDefinition failed the freeze before this PR")
+
 	// ---- CONTROL: the pre-change dual-write wiring rewrites YAML. ----
 	controlDir := copyLearningNotes(t, cfg.Notebooks.LearningNotesDirectory)
 	nbControl := cfg.Notebooks

@@ -157,6 +157,10 @@ func run(ctx context.Context) error {
 	// Swap the quiz service's learning-history reads to the DB store when one
 	// was built above; a nil store keeps the YAML fallback.
 	svc.SetHistoryStore(historyStore)
+	// Route the deliberate Exclude action (SkipWord/ResumeWord) to the DB
+	// skip-flag tables in DB mode instead of the on-disk learning_notes YAML;
+	// nil skip-flag repo keeps the YAML skip path.
+	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,

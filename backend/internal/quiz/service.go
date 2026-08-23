@@ -36,6 +36,16 @@ type Service struct {
 	historyStore   learning.HistoryStore
 	calculator     notebook.IntervalCalculator
 	disableShuffle bool
+	// skipFlagRepo, when set (DB mode), routes the deliberate Exclude action
+	// (SkipWord/ResumeWord) to the DB skip-flag tables instead of writing the
+	// on-disk learning_notes YAML — completing the DB-only-writes cutover for
+	// the exclude marker. noteRepo/originRepo resolve an expression to the
+	// note_id/origin_id the read side keys skip flags under (learning-history
+	// invariant L2). All three are nil in YAML-only mode, where SkipWord/
+	// ResumeWord keep writing the on-disk YAML.
+	skipFlagRepo notebook.SkipFlagRepository
+	noteRepo     notebook.NoteRepository
+	originRepo   notebook.EtymologyOriginRepository
 }
 
 // NewService creates a new Service.
@@ -56,6 +66,17 @@ func NewService(notebooksConfig config.NotebooksConfig, openaiClient inference.C
 // (YAML-only mode) loadHistories reads the on-disk learning_notes YAML.
 func (s *Service) SetHistoryStore(store learning.HistoryStore) {
 	s.historyStore = store
+}
+
+// SetSkipStores installs the DB skip-flag repository plus the note/origin
+// repositories SkipWord/ResumeWord use to resolve an expression to its DB
+// note_id/origin_id. Called from bootstrap once the database is connected;
+// when skipFlagRepo is nil (YAML-only mode) SkipWord/ResumeWord write the
+// on-disk learning_notes YAML as before.
+func (s *Service) SetSkipStores(skipFlagRepo notebook.SkipFlagRepository, noteRepo notebook.NoteRepository, originRepo notebook.EtymologyOriginRepository) {
+	s.skipFlagRepo = skipFlagRepo
+	s.noteRepo = noteRepo
+	s.originRepo = originRepo
 }
 
 // loadHistories returns every notebook's learning history keyed by notebook

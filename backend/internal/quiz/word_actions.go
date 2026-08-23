@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"log/slog"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/learning"
@@ -134,6 +136,11 @@ func (s *Service) SkipWord(info CardInfo, skipUntil string, quizTypes []notebook
 	if len(quizTypes) == 0 {
 		return fmt.Errorf("at least one quiz type is required to skip a word")
 	}
+	// DB mode: record the exclude marker in the DB skip-flag tables and DO NOT
+	// touch the on-disk learning_notes YAML (DB-only writes).
+	if s.skipFlagRepo != nil {
+		return s.setSkipDB(context.Background(), info, quizTypes, true)
+	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {
 		return fmt.Errorf("failed to load learning history for %q: %w", info.NotebookName, err)
@@ -185,6 +192,136 @@ func (s *Service) conceptMembersOrSelf(notebookName, expression string) []string
 	return append([]string(nil), info.Members...)
 }
 
+// setSkipDB is the DB-only-writes implementation of SkipWord/ResumeWord: it
+// UPSERTs (skip=true) or DELETEs (skip=false) the per-quiz-type exclude marker
+// in the DB skip-flag tables — note_skip_flags for vocabulary notes,
+// origin_skip_flags for etymology origins — instead of writing the on-disk
+// learning_notes YAML. It preserves the YAML path's concept-member propagation
+// (the skip lands on every sibling) and per-quiz-type scoping. The KEY it
+// writes under (note_id/origin_id + quiz_type) is the SAME key the read side
+// (DBHistoryStore) reconstructs skip flags under, keeping the loaders' skip
+// filter symmetric with the write (learning-history invariant L2).
+func (s *Service) setSkipDB(ctx context.Context, info CardInfo, quizTypes []notebook.QuizType, skip bool) error {
+	// Grammar corrections are not notes or origins and have no DB skip-flag
+	// table, so a grammar exclude cannot be persisted in DB mode today (its
+	// read side is reconstructed from grammar_corrections, which carries no
+	// skip). Drop it with a warning rather than fall through to note resolution
+	// (a correction sense_id is not a note) or write frozen YAML.
+	persisted := make([]notebook.QuizType, 0, len(quizTypes))
+	for _, qt := range quizTypes {
+		if qt == notebook.QuizTypeGrammar {
+			slog.Warn("grammar exclude is not persisted in DB mode: no grammar skip-flag table exists",
+				"notebook", info.NotebookName, "expression", info.Expression)
+			continue
+		}
+		persisted = append(persisted, qt)
+	}
+	if len(persisted) == 0 {
+		return nil
+	}
+
+	at := time.Now()
+	for _, expr := range s.conceptMembersOrSelf(info.NotebookName, info.Expression) {
+		noteID, originID, err := s.resolveSkipTarget(ctx, info, expr)
+		if err != nil {
+			return err
+		}
+		for _, qt := range persisted {
+			var applyErr error
+			switch {
+			case noteID > 0 && skip:
+				applyErr = s.skipFlagRepo.SkipNote(ctx, noteID, string(qt), at)
+			case noteID > 0:
+				applyErr = s.skipFlagRepo.ResumeNote(ctx, noteID, string(qt))
+			case skip:
+				applyErr = s.skipFlagRepo.SkipOrigin(ctx, originID, string(qt), at)
+			default:
+				applyErr = s.skipFlagRepo.ResumeOrigin(ctx, originID, string(qt))
+			}
+			if applyErr != nil {
+				return fmt.Errorf("record exclude for %q (%s) in notebook %q: %w", expr, qt, info.NotebookName, applyErr)
+			}
+		}
+	}
+	return nil
+}
+
+// resolveSkipTarget maps a (notebook, expression) to the note_id or origin_id
+// the read side keys skip flags under. It prefers the DB note_id the caller
+// already carries (info.NoteID, set by the Learn-page handler) for the primary
+// expression — homograph-safe — then a sense_id match, then the note's surface
+// (usage/entry) within the notebook, exactly the mapping DBHistoryStore
+// reconstructs. It falls back to an etymology origin. It returns an error
+// (never a silent no-op) when the expression matches neither, or matches more
+// than one note ambiguously (a homograph with no stable id) — naming the word
+// so the failure is actionable rather than skipping the wrong sense.
+func (s *Service) resolveSkipTarget(ctx context.Context, info CardInfo, expression string) (noteID, originID int64, err error) {
+	if expression == info.Expression && info.NoteID > 0 {
+		return info.NoteID, 0, nil
+	}
+
+	target := strings.ToLower(strings.TrimSpace(expression))
+	if s.noteRepo != nil {
+		notes, ferr := s.noteRepo.FindAll(ctx)
+		if ferr != nil {
+			return 0, 0, fmt.Errorf("load notes to resolve exclude target: %w", ferr)
+		}
+		seen := make(map[int64]bool)
+		var matches []int64
+		for i := range notes {
+			n := notes[i]
+			linked := false
+			for _, nn := range n.NotebookNotes {
+				if nn.NotebookID == info.NotebookName {
+					linked = true
+					break
+				}
+			}
+			if !linked {
+				continue
+			}
+			if info.ID != "" && n.SenseID == info.ID {
+				return n.ID, 0, nil
+			}
+			if strings.ToLower(strings.TrimSpace(n.Entry)) == target || strings.ToLower(strings.TrimSpace(n.Usage)) == target {
+				if !seen[n.ID] {
+					seen[n.ID] = true
+					matches = append(matches, n.ID)
+				}
+			}
+		}
+		if len(matches) == 1 {
+			return matches[0], 0, nil
+		}
+		if len(matches) > 1 {
+			return 0, 0, fmt.Errorf("cannot exclude %q in notebook %q: it matches %d notes (homograph), a stable note id is required to disambiguate", expression, info.NotebookName, len(matches))
+		}
+	}
+
+	// Not a vocabulary note — try an etymology origin, bound per sense by the
+	// session title the same way GetEtymologyNotebook keys origins.
+	if s.originRepo != nil {
+		origins, oerr := s.originRepo.FindAll(ctx)
+		if oerr != nil {
+			return 0, 0, fmt.Errorf("load origins to resolve exclude target: %w", oerr)
+		}
+		for _, o := range origins {
+			if o.NotebookID != info.NotebookName {
+				continue
+			}
+			if strings.ToLower(strings.TrimSpace(o.Origin)) != target {
+				continue
+			}
+			if info.StoryTitle != "" && o.SessionTitle != info.StoryTitle {
+				continue
+			}
+			return 0, o.ID, nil
+		}
+	}
+
+	return 0, 0, fmt.Errorf("cannot exclude %q: no matching note or origin in notebook %q", expression, info.NotebookName)
+}
+
 // ResumeWord clears skips for each of the given quiz types so the word
 // reappears in those modes. Other quiz types' skips are left intact, so a
 // word excluded from multiple modes only resumes the ones the caller lists.
@@ -193,6 +330,11 @@ func (s *Service) conceptMembersOrSelf(notebookName, expression string) []string
 func (s *Service) ResumeWord(info CardInfo, quizTypes []notebook.QuizType) error {
 	if len(quizTypes) == 0 {
 		return fmt.Errorf("at least one quiz type is required to resume a word")
+	}
+	// DB mode: clear the exclude marker from the DB skip-flag tables and DO NOT
+	// touch the on-disk learning_notes YAML (DB-only writes).
+	if s.skipFlagRepo != nil {
+		return s.setSkipDB(context.Background(), info, quizTypes, false)
 	}
 	history, err := loadSingleLearningHistory(s.notebooksConfig.LearningNotesDirectory, info.NotebookName)
 	if err != nil {

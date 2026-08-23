@@ -25,6 +25,15 @@ type StateRepositories struct {
 	// service and the notebook handler so learning-history reads come from the
 	// database; nil keeps the on-disk YAML fallback.
 	HistoryStore learning.HistoryStore
+	// SkipFlags is the DB skip-flag repository (note_skip_flags /
+	// origin_skip_flags), non-nil only in DB mode. Installed on the quiz
+	// service so the deliberate Exclude action (SkipWord/ResumeWord) writes the
+	// marker to the DB instead of the on-disk learning_notes YAML. Nil keeps
+	// the YAML skip path.
+	SkipFlags notebook.SkipFlagRepository
+	// Origin is the DB etymology-origin repository, non-nil only in DB mode.
+	// SkipWord uses it to resolve an origin expression to its origin_id.
+	Origin notebook.EtymologyOriginRepository
 }
 
 // BuildStateRepositories wires the user-state repositories the way
@@ -60,20 +69,25 @@ func BuildStateRepositories(notebooksCfg config.NotebooksConfig, quizCfg config.
 
 	dbLearningRepo := learning.NewDBLearningRepository(db)
 	dbNoteRepo := notebook.NewDBNoteRepository(db)
-	// Reads resolve straight from the DB repositories (source of truth). The
-	// canonical storage key a read looks up is the same one the write path
-	// used (note_id / origin_id, quiz_type→slot), keeping reads symmetric with
-	// writes (learning-history invariant L2).
+	dbSkipFlagRepo := notebook.NewDBSkipFlagRepository(db)
+	dbOriginRepo := notebook.NewDBEtymologyOriginRepository(db)
+	// Reads resolve straight from the DB repositories (source of truth), and
+	// the write side (learning logs + skip flags) keys under the SAME
+	// note_id / origin_id + quiz_type, keeping reads symmetric with writes
+	// (learning-history invariant L2). The skip-flag and origin repos are
+	// shared with the quiz service's Exclude write path.
 	historyStore := learning.NewDBHistoryStore(
 		dbNoteRepo,
 		dbLearningRepo,
-		notebook.NewDBEtymologyOriginRepository(db),
-		notebook.NewDBSkipFlagRepository(db),
+		dbOriginRepo,
+		dbSkipFlagRepo,
 		notebook.NewDBGrammarCorrectionRepository(db),
 	)
 	return StateRepositories{
 		Learning:     dbLearningRepo,
 		Note:         dbNoteRepo,
 		HistoryStore: historyStore,
+		SkipFlags:    dbSkipFlagRepo,
+		Origin:       dbOriginRepo,
 	}
 }

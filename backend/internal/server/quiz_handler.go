@@ -455,7 +455,10 @@ func (h *QuizHandler) resolveCardInfo(ctx context.Context, noteID int64) (*quiz.
 	if expression == "" {
 		expression = noteRecord.Usage
 	}
-	info := quiz.CardInfo{NotebookName: notebookName, StoryTitle: group, SceneTitle: subgroup, Expression: expression}
+	// Carry the DB note id so the deliberate Exclude (SkipWord/ResumeWord) can
+	// target this exact note in DB mode — homograph-safe — without re-resolving
+	// by expression.
+	info := quiz.CardInfo{NotebookName: notebookName, StoryTitle: group, SceneTitle: subgroup, Expression: expression, NoteID: noteRecord.ID}
 	return &info, nil
 }
 
