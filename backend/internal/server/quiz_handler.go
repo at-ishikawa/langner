@@ -40,6 +40,17 @@ type QuizHandler struct {
 	nextID       int64
 }
 
+// sessionIDBase offsets every ephemeral per-session card id (the noteStore /
+// reverseStore / freeformStore / grammarStore keys) into a high range that
+// cannot collide with DATABASE note ids. The Learn page and etymology browse
+// pass a real DB note_id to SkipWord/ResumeWord/Override, and resolveCardInfo
+// consults the ephemeral session stores BEFORE the DB; without this offset a
+// small DB note_id could match a stale session card left by an earlier quiz
+// (e.g. a grammar blank whose id happened to equal that note's primary key),
+// resolving the deliberate action to the wrong card. Session ids start well
+// above any realistic DB primary key so the two id spaces stay disjoint.
+const sessionIDBase int64 = 1 << 32
+
 // NewQuizHandler creates a new QuizHandler.
 func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 	return &QuizHandler{
@@ -49,7 +60,7 @@ func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 		freeformStore:        make(map[int64]quiz.FreeformCard),
 		relearnStore:         make(map[int64]quiz.RelearnCard),
 		grammarStore:         make(map[int64]grammarBlankCtx),
-		nextID:               1,
+		nextID:               sessionIDBase + 1,
 	}
 }
 
@@ -113,7 +124,7 @@ func (h *QuizHandler) StartQuiz(ctx context.Context, req *connect.Request[apiv1.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load cards: %w", err))
 	}
 	localStore := make(map[int64]quiz.Card)
-	var nextID int64 = 1
+	var nextID int64 = sessionIDBase + 1
 	var flashcards []*apiv1.Flashcard
 	for _, card := range cards {
 		noteID := nextID
@@ -247,7 +258,7 @@ func (h *QuizHandler) StartReverseQuiz(ctx context.Context, req *connect.Request
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load reverse cards: %w", err))
 	}
 	localStore := make(map[int64]quiz.ReverseCard)
-	var nextID int64 = 1
+	var nextID int64 = sessionIDBase + 1
 	var flashcards []*apiv1.ReverseFlashcard
 	for _, card := range cards {
 		noteID := nextID
