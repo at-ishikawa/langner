@@ -19,6 +19,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/pdf"
 )
@@ -32,6 +33,32 @@ type NotebookHandler struct {
 	dictionaryReader *dictionary.Reader
 	openaiClient     inference.Client
 	noteRepository   notebook.NoteRepository
+	// historyStore, when set, is the DB-backed READ side for learning history.
+	// The Learn page's status / next-review / exclusion badges then resolve
+	// from the database instead of re-parsing the on-disk learning_notes YAML,
+	// which is frozen at runtime once a database is configured. Nil in
+	// YAML-only mode, in which case loadHistories reads the YAML files.
+	historyStore learning.HistoryStore
+}
+
+// SetHistoryStore installs the DB-backed learning-history read store so the
+// Learn page reads from the database. Called from bootstrap once the database
+// is connected; nil keeps the on-disk YAML fallback.
+func (h *NotebookHandler) SetHistoryStore(store learning.HistoryStore) {
+	h.historyStore = store
+}
+
+// loadHistories returns every notebook's learning history keyed by notebook
+// ID, from the DB store when one is installed and otherwise from the on-disk
+// learning_notes YAML. Both sources return the identical map shape (the
+// DBHistoryStore mirrors notebook.NewLearningHistories), so callers never
+// branch on the source — mirroring quiz.Service.loadHistories, which keeps
+// the Learn page's reads symmetric with the quiz service's.
+func (h *NotebookHandler) loadHistories() (map[string][]notebook.LearningHistory, error) {
+	if h.historyStore != nil {
+		return h.historyStore.LoadAll(context.Background())
+	}
+	return notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
 }
 
 // NewNotebookHandler creates a new NotebookHandler.
@@ -69,7 +96,7 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 
 
 func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
-	histories, err := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
+	histories, err := h.loadHistories()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
 	}
@@ -691,7 +718,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 	// notebook-detail page does off NotebookWord). Both are keyed per notebook
 	// because a definition can come from any book. Skip exclusion is read via
 	// the SAME key SkipWord wrote (invariant L2).
-	learningHistories, _ := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
+	learningHistories, _ := h.loadHistories()
 	noteIDCache := make(map[string]map[string]int64)
 	noteIDsFor := func(nbName string) map[string]int64 {
 		if m, ok := noteIDCache[nbName]; ok {
