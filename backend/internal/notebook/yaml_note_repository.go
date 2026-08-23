@@ -59,6 +59,18 @@ type YAMLNoteRepository struct {
 	// callers (assign-ids, the roundtrip diff) keep working; only import gates
 	// on them via DuplicateWordConflicts.
 	conflicts []DuplicateWord
+
+	// oversizedSenseIDs holds notes whose `id:` exceeds MaxSenseIDLen, found by
+	// the last FindAll. Same contract as conflicts: recorded, not errored;
+	// only import gates on them via OversizedSenseIDs.
+	oversizedSenseIDs []OversizedSenseID
+}
+
+// OversizedSenseIDs returns the notes whose `id:` is too long for the
+// notes.sense_id column, found by the most recent FindAll. The importer aborts
+// with an OversizedSenseIDError when any are present, before the DB write.
+func (r *YAMLNoteRepository) OversizedSenseIDs() []OversizedSenseID {
+	return r.oversizedSenseIDs
 }
 
 // DuplicateWordConflicts returns the id-less content conflicts found by the
@@ -123,6 +135,9 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 	// spelling, no id, different meanings). Identical-meaning duplicates are
 	// left to collapse silently — a plain word listed in two notebooks.
 	conflicts := newIdlessConflictTracker()
+	// Track notes whose `id:` is too long for the sense_id column so the
+	// importer can reject them with a readable message instead of a raw 22001.
+	oversized := newOversizedSenseIDTracker()
 
 	addNote := func(note Note, notebookType, notebookID, group, subgroup, conceptKey string) {
 		rec := convertNoteToRecord(note, notebookType, notebookID, group, subgroup)
@@ -131,6 +146,8 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 		key := noteKey{id, u, e}
 		if rec.SenseID == "" {
 			conflicts.record(rec.Usage, notebookID, rec.Meaning)
+		} else {
+			oversized.record(rec.SenseID, rec.Usage, notebookID)
 		}
 
 		existing, ok := noteMap[key]
@@ -256,6 +273,7 @@ func (r *YAMLNoteRepository) FindAll(ctx context.Context) ([]NoteRecord, error) 
 	}
 
 	r.conflicts = conflicts.conflicts()
+	r.oversizedSenseIDs = oversized.oversized()
 
 	result := make([]NoteRecord, 0, len(order))
 	for _, key := range order {

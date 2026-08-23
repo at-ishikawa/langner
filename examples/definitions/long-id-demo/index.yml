@@ -1,0 +1,4 @@
+id: long-id-demo
+name: "Long Id Demo (sense_id wider than the old 128 limit)"
+notebooks:
+  - ./definitions.yml

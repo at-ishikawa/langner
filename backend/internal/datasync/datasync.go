@@ -350,9 +350,17 @@ func (imp *Importer) ImportNotes(ctx context.Context, opts ImportOptions) (*Impo
 	// reads the conflicts it recorded.)
 	if cd, ok := imp.noteSource.(interface {
 		DuplicateWordConflicts() []notebook.DuplicateWord
+		OversizedSenseIDs() []notebook.OversizedSenseID
 	}); ok {
 		if dupes := cd.DuplicateWordConflicts(); len(dupes) > 0 {
 			return nil, &notebook.DuplicateWordsError{Words: dupes}
+		}
+		// An id longer than the notes.sense_id column would otherwise fail deep
+		// in the insert with a cryptic `value too long for type character
+		// varying(380)` (22001). Reject it here, naming every offending word so
+		// the user can shorten the ids in one pass.
+		if big := cd.OversizedSenseIDs(); len(big) > 0 {
+			return nil, &notebook.OversizedSenseIDError{Notes: big}
 		}
 	}
 

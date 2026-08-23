@@ -1,0 +1,19 @@
+# Exercises the widened notes.sense_id column (migration 023, VARCHAR(380)).
+# This word's `id:` is 200 chars — longer than the OLD VARCHAR(128), so on the
+# pre-023 schema it failed import with `value too long for type character
+# varying(128)` (22001); on the widened column it imports cleanly. Generic
+# public word, invented sentence.
+- metadata:
+    title: "Long id"
+  scenes:
+    - metadata:
+        index: 0
+        title: "long ids"
+      expressions:
+        - expression: longevity
+          id: longevity-long-derived-slug-segment-long-derived-slug-segment-long-derived-slug-segment-long-derived-slug-segment-long-derived-slug-segment-long-derived-slug-segment-long-derived-slug-segment-long-der
+          meaning: "long life or duration"
+          part_of_speech: noun
+          examples:
+            - text: "Careful maintenance is the secret to the bridge's longevity."
+              highlight: longevity

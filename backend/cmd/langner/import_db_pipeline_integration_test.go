@@ -195,4 +195,14 @@ func TestImportDB_SharedSenseAcrossNotebooks_LivePostgres_Integration(t *testing
 		`SELECT notebook_id FROM notebook_notes WHERE note_id = $1 ORDER BY notebook_id`, estuaryID))
 	assert.Equal(t, []string{"shared-sense-a", "shared-sense-b"}, estuaryNBs,
 		"the identical id-less word dedups to one note carrying both memberships")
+
+	// Migration 023: a note whose `id:` is 200 chars — longer than the OLD
+	// VARCHAR(128), which raised `value too long for type character
+	// varying(128)` (22001) on the user's real data — must now import cleanly
+	// into the widened VARCHAR(380) sense_id column.
+	var longSenseID string
+	require.NoError(t, db.GetContext(ctx, &longSenseID,
+		`SELECT sense_id FROM notes WHERE "usage" = 'longevity'`),
+		"the 200-char-id note must import into the widened sense_id column")
+	assert.Greater(t, len(longSenseID), 128, "the id is over the old 128 limit and was stored intact")
 }
