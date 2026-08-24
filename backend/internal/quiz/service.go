@@ -620,6 +620,29 @@ func (s *Service) GradeNotebookAnswer(ctx context.Context, card Card, answer str
 	}, nil
 }
 
+// canonicalNoteSurface returns the (usage, entry) identity the reader and
+// importer key a note under — notebook.convertNoteToRecord / CanonicalNoteKey,
+// i.e. usage = the WORD (Note.Expression), entry = the display surface
+// (Note.Definition when the entry has one, else the word). A quiz card carries
+// the display surface (card.Entry / card.Expression) plus the underlying word
+// (card.OriginalEntry / card.AltForm / card.OriginalExpression), the latter
+// empty when it equals the display surface (an entry with no `definition:`).
+//
+// Learning-history invariant L2: the write MUST resolve the note by the SAME
+// identity the read (DBHistoryStore) and the due count use. Saving under the
+// raw display surface instead made an id-LESS definitions word (whose shown
+// Definition differs from its word) resolve to a phantom note in
+// DBLearningRepository.ensureNoteExists — the attempt's log never reached the
+// imported note, so the recognition/reverse due pool never dropped after a
+// correct answer in DB mode. Keying by (word, displaySurface) lands the log on
+// the imported note. Id-bearing words were already fine (resolved by sense_id).
+func canonicalNoteSurface(displaySurface, word string) (usage, entry string) {
+	if word == "" {
+		word = displaySurface
+	}
+	return word, displaySurface
+}
+
 // SaveResult updates learning history via the repository.
 //
 // When the card represents a concept (card.ConceptHead != ""), the log
@@ -633,8 +656,7 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 	if result.Correct {
 		status = "understood"
 	}
-	expression := card.Entry
-	originalExpression := card.OriginalEntry
+	expression, originalExpression := canonicalNoteSurface(card.Entry, card.OriginalEntry)
 	senseID := card.ID
 	if card.ConceptHead != "" {
 		expression = card.ConceptHead
@@ -1506,10 +1528,11 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 	if result.Correct {
 		status = "understood"
 	}
-	expression := card.Expression
+	expression, originalExpression := canonicalNoteSurface(card.Expression, card.AltForm)
 	senseID := card.ID
 	if card.ConceptHead != "" {
 		expression = card.ConceptHead
+		originalExpression = card.ConceptHead
 		senseID = ""
 	}
 	log := &learning.LearningLog{
@@ -1517,7 +1540,7 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeReverse),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: expression, OriginalExpression: expression, SenseID: senseID,
+		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {
@@ -1921,10 +1944,11 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 	if result.Correct {
 		status = "understood"
 	}
-	expression := card.Expression
+	expression, originalExpression := canonicalNoteSurface(card.Expression, card.OriginalExpression)
 	senseID := card.ID
 	if card.ConceptHead != "" {
 		expression = card.ConceptHead
+		originalExpression = card.ConceptHead
 		senseID = ""
 	}
 	log := &learning.LearningLog{
@@ -1932,7 +1956,7 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 		ResponseTimeMs: int(responseTimeMs), QuizType: string(notebook.QuizTypeFreeform),
 		SourceNotebookID: card.NotebookName, NotebookName: card.NotebookName,
 		StoryTitle: card.StoryTitle, SceneTitle: card.SceneTitle,
-		Expression: expression, OriginalExpression: expression, SenseID: senseID,
+		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
 	if err := s.learningRepository.Create(ctx, log); err != nil {

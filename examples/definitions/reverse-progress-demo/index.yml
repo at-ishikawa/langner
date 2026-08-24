@@ -1,0 +1,4 @@
+id: reverse-progress-demo
+name: "Reverse Progress (demo)"
+notebooks:
+  - ./definitions.yml
