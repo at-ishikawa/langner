@@ -468,6 +468,6 @@ func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.
 // DB id order. Every "latest attempt is [0]" consumer depends on this.
 func sortRecordsNewestFirst(records []notebook.LearningRecord) {
 	sort.SliceStable(records, func(i, j int) bool {
-		return records[i].LearnedAt.Time.After(records[j].LearnedAt.Time)
+		return records[i].LearnedAt.After(records[j].LearnedAt.Time)
 	})
 }
