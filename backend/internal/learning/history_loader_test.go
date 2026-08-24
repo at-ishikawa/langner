@@ -293,3 +293,31 @@ func TestDBHistoryStore_LoadAll_ReconstructsGrammarFromDB(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, got["journal"], "no grammar repo → no grammar history")
 }
+
+// TestBuildExpressionFromDBOrder_SortsNewestFirstByDate guards the DB-log-order
+// fix for VOCABULARY logs (the grammar path was already covered above): every
+// consumer reads the latest attempt as slot [0], so each reconstructed bucket
+// must be newest-first by date. DB rows arrive in id order — an imported miss
+// takes a lower id than a later runtime correct answer — so id order would put
+// the stale miss at [0] and a correct answer would never advance the word. This
+// runs without Postgres because the bucket split + sort is a pure transform.
+func TestBuildExpressionFromDBOrder_SortsNewestFirstByDate(t *testing.T) {
+	base := time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)
+	// Ordered as Postgres returns them (ORDER BY id): the older imported MISS
+	// first (lower id), then the newer runtime CORRECT answer (higher id).
+	logs := []LearningLog{
+		{Status: "misunderstood", QuizType: "reverse", LearnedAt: base.AddDate(0, 0, -30)},
+		{Status: "understood", QuizType: "reverse", LearnedAt: base},
+		{Status: "misunderstood", QuizType: "notebook", LearnedAt: base.AddDate(0, 0, -30)},
+		{Status: "understood", QuizType: "notebook", LearnedAt: base},
+	}
+
+	exp := buildExpressionFromDBOrder("cardiovascular", logs)
+
+	require.NotEmpty(t, exp.ReverseLogs)
+	assert.Equal(t, notebook.LearnedStatusUnderstood, exp.ReverseLogs[0].Status,
+		"the newest reverse attempt (the correct answer) must be ReverseLogs[0], not the older miss")
+	require.NotEmpty(t, exp.LearnedLogs)
+	assert.Equal(t, notebook.LearnedStatusUnderstood, exp.LearnedLogs[0].Status,
+		"the newest recognition attempt must be LearnedLogs[0], not the older miss")
+}
