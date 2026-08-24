@@ -17,7 +17,7 @@
     - expression: break the ice
       learned_logs:
         - status: understood
-          learned_at: "2025-01-01T00:00:00Z"
+          learned_at: "2025-01-03T00:00:00Z"
           quality: 4
           quiz_type: freeform
           interval_days: 1
@@ -35,7 +35,7 @@
     - expression: lose one's temper
       learned_logs:
         - status: understood
-          learned_at: "2025-01-01T00:00:00Z"
+          learned_at: "2025-01-03T00:00:00Z"
           quality: 4
           quiz_type: freeform
           interval_days: 1
