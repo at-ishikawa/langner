@@ -1,0 +1,37 @@
+# Seeds prior (imported) history for the reverse-progress scenario: each word
+# carries a stale `misunderstood` reverse log so it is DUE for reverse review at
+# baseline, and a lower DB id than the runtime "understood" answer the scenario
+# writes. This is exactly the DB-log-ordering setup — the correct answer only
+# drops the word when the DB read orders a word's logs newest-first (so the
+# runtime `understood` attempt, not this older miss, is ReverseLogs[0]).
+- metadata:
+    id: reverse-progress
+    title: "Reverse Progress"
+    type: flashcard
+  expressions:
+    - expression: spick and span
+      learned_logs:
+        - status: understood
+          learned_at: "2025-01-01T00:00:00Z"
+          quality: 4
+          quiz_type: freeform
+          interval_days: 1
+      reverse_logs:
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
+          quality: 1
+          quiz_type: reverse
+          interval_days: 1
+    - expression: under the weather
+      learned_logs:
+        - status: understood
+          learned_at: "2025-01-01T00:00:00Z"
+          quality: 4
+          quiz_type: freeform
+          interval_days: 1
+      reverse_logs:
+        - status: misunderstood
+          learned_at: "2025-01-02T00:00:00Z"
+          quality: 1
+          quiz_type: reverse
+          interval_days: 1

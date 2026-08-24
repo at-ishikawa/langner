@@ -14,32 +14,35 @@ Feature: Reverse quiz progress reduces the due pool
   the count for the one word it answers and asserts a RELATIVE drop of exactly
   one.
 
-  # The seeded "Idioms" notebook has two reverse-eligible cards ("break the ice"
-  # and "lose one's temper"), each carrying a stale `misunderstood` reverse log
-  # (2025-01-02, interval 1 day) that leaves both due for reverse review at the
-  # baseline — so the notebook's reverse count is > 0 without the unstudied
-  # toggle. We answer ONLY "break the ice" correctly and leave "lose one's
-  # temper" untouched, so the notebook stays visible (count 1, not 0) and the
-  # drop is attributable to the single word we answered.
+  # This scenario uses its OWN "Reverse Progress" notebook (fixtures/flashcards/
+  # reverse-progress + learning_notes/reverse-progress.yml) whose two words
+  # ("spick and span", "under the weather") are referenced by NO other feature —
+  # so seeding a stale reverse miss and answering one of them cannot perturb
+  # another scenario's learning-status assertions (the shared-DB flake). Both
+  # words carry a stale `misunderstood` reverse log (2025-01-02, interval 1 day)
+  # that leaves both due for reverse review at the baseline (count 2). We answer
+  # ONLY "spick and span" and leave "under the weather" untouched, so the
+  # notebook stays visible (count 1, not 0) and the drop is attributable to the
+  # single word we answered.
   Scenario: Answering a Reverse word correctly reduces the notebook's due count
     Given I am on the Quiz page
     When I choose the "Reverse" quiz mode
     # Feedback interval 1 flushes (persists) the first answer on its own batch,
-    # so "break the ice" is written to the DB while "lose one's temper" — never
+    # so "spick and span" is written to the DB while "under the weather" — never
     # submitted — is left due.
     And I set the feedback interval to 1
-    And I capture the reverse review count for the "Idioms" notebook
-    And I select the "Idioms" notebook
+    And I capture the reverse review count for the "Reverse Progress" notebook
+    And I select the "Reverse Progress" notebook
     And I start the quiz
 
-    Then I see the heading "a way to start a conversation in a social setting"
-    When I type the answer "break the ice"
+    Then I see the heading "clean and tidy"
+    When I type the answer "spick and span"
     And I submit my answer
     # Waits for grading to finish (the persist RPC completes) before we leave;
-    # advancing to "lose one's temper" writes nothing for it.
+    # advancing to "under the weather" writes nothing for it.
     And I continue to the next card
 
     # Back on the start screen the freshly-loaded count must reflect the write.
     Given I am on the Quiz page
     When I choose the "Reverse" quiz mode
-    Then the reverse review count for the "Idioms" notebook dropped by one
+    Then the reverse review count for the "Reverse Progress" notebook dropped by one

@@ -1,0 +1,16 @@
+# Dedicated notebook for the reverse-progress e2e scenario. These two words are
+# referenced by NO other feature/fixture, so seeding a stale reverse miss and
+# answering one of them cannot perturb another scenario's learning-status
+# assertions (the shared-DB-accumulation flake). Both are reverse-eligible
+# (non-empty meaning); "spick and span" is answered, "under the weather" is left
+# untouched so the notebook stays visible (count 1, not 0) after the drop.
+- title: "Reverse Progress"
+  description: "Isolated words for the reverse-progress ordering guard"
+  date: 2026-01-01T00:00:00Z
+  cards:
+    - expression: "spick and span"
+      meaning: "clean and tidy"
+      part_of_speech: "phrase"
+    - expression: "under the weather"
+      meaning: "feeling unwell"
+      part_of_speech: "phrase"
