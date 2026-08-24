@@ -410,13 +410,18 @@ func newExpressionFromOrigin(o notebook.EtymologyOriginRecord, logs []LearningLo
 }
 
 // buildExpressionFromDBOrder is the DB-side companion to
-// learning.buildExpression. The YAML reader keeps records in their YAML
-// array order ("first" is "newest" — new entries are PREPENDED on write).
-// Logs land in the DB during import in YAML order; their primary key is
-// monotonically increasing, so ORDER BY id ASC reproduces the YAML array
-// order. We therefore split logs into the per-quiz-type buckets without
-// re-sorting so callers' GetLatestStatus / GetLatestLogs sees the same
-// [0] entry the YAML loader would have surfaced.
+// learning.buildExpression. Every consumer reads the "latest" attempt as slot
+// [0] (GetLatestStatus / NeedsForwardReview / NeedsReverseReview), and the YAML
+// reader surfaces newest-first. Each per-quiz-type bucket is therefore sorted
+// NEWEST-FIRST by LearnedAt.
+//
+// Why an explicit sort (not id order): imported logs land in YAML order so
+// ORDER BY id ASC happens to be newest-first, but a RUNTIME attempt is INSERTed
+// after import and gets the HIGHEST id, so id order would push it to the END and
+// [0] would keep surfacing the stale imported log — a correct answer would then
+// never advance the word's due date (it stayed due forever in DB mode). Sorting
+// by LearnedAt makes the just-written attempt the latest regardless of insert
+// order, exactly like buildGrammarExpression already does.
 func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.LearningHistoryExpression {
 	var learnedLogs, reverseLogs, originLogs []notebook.LearningRecord
 	convert := func(l LearningLog) notebook.LearningRecord {
@@ -447,10 +452,22 @@ func buildExpressionFromDBOrder(expression string, logs []LearningLog) notebook.
 			learnedLogs = append(learnedLogs, rec)
 		}
 	}
+	sortRecordsNewestFirst(learnedLogs)
+	sortRecordsNewestFirst(reverseLogs)
+	sortRecordsNewestFirst(originLogs)
 	return notebook.LearningHistoryExpression{
 		Expression:          expression,
 		LearnedLogs:         learnedLogs,
 		ReverseLogs:         reverseLogs,
 		EtymologyOriginLogs: originLogs,
 	}
+}
+
+// sortRecordsNewestFirst orders learning records by LearnedAt descending
+// (newest first) with a stable sort, so records sharing a timestamp keep their
+// DB id order. Every "latest attempt is [0]" consumer depends on this.
+func sortRecordsNewestFirst(records []notebook.LearningRecord) {
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].LearnedAt.Time.After(records[j].LearnedAt.Time)
+	})
 }

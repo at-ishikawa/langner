@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/datasync"
+	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/schemas"
 )
@@ -172,4 +174,42 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 
 	_, fwdStillDue := findForward(loadForward(), "renal")
 	assert.False(t, fwdStillDue, "a correctly-answered standard word must drop from the recognition due pool on reload")
+
+	// ---------------------------------------------------------------------
+	// ORDERING: a word with PRIOR imported reverse history must advance too.
+	// pulmonary is id-bearing (resolved by sense_id, no phantom concern), so
+	// this isolates the DB-log-ordering bug: a runtime attempt is INSERTed last
+	// and gets the HIGHEST id, so without sorting the reconstructed ReverseLogs
+	// newest-first the STALE imported miss would remain [0] and NeedsReverseReview
+	// would keep the word due forever despite a correct answer.
+	// ---------------------------------------------------------------------
+	var pulmonaryNoteID int64
+	require.NoError(t, db.GetContext(ctx, &pulmonaryNoteID,
+		`SELECT id FROM notes WHERE sense_id = 'pulmonary-demo'`))
+	// Seed a stale misunderstood reverse attempt (30 days ago) the way a prior
+	// session's import would — it takes a LOWER id than the runtime answer below.
+	_, err = db.ExecContext(ctx,
+		`INSERT INTO learning_logs (note_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id)
+		 VALUES ($1, 'misunderstood', $2, 1, 0, 'reverse', 1, $3)`,
+		pulmonaryNoteID, time.Now().AddDate(0, 0, -30), bookID)
+	require.NoError(t, err)
+
+	pulCard, ok := findReverse(loadReverse(), "pulmonary")
+	require.True(t, ok, "a word whose latest reverse attempt is a miss must be due")
+
+	require.NoError(t, svc.SaveReverseResult(ctx, pulCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+
+	// The reconstructed history must surface the just-written attempt as latest,
+	// not the older imported miss (proves the newest-first ordering).
+	hist, err := repos.HistoryStore.LoadAll(ctx)
+	require.NoError(t, err)
+	pulExpr, found := findExpressionInHistories(hist[bookID], "pulmonary", "relating to the lungs")
+	require.True(t, found)
+	require.NotEmpty(t, pulExpr.ReverseLogs)
+	assert.Equal(t, notebook.LearnedStatusUnderstood, pulExpr.ReverseLogs[0].Status,
+		"the latest reverse attempt (the runtime correct answer) must be ReverseLogs[0], not the older imported miss")
+
+	_, pulmonaryDueAfter := findReverse(loadReverse(), "pulmonary")
+	assert.False(t, pulmonaryDueAfter,
+		"a correct reverse answer must drop the word even when an older imported miss has a lower DB id (DB-log-ordering)")
 }
