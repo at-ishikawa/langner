@@ -15,7 +15,12 @@
 -- duplicate a spelling (they have no sense_id to tell them apart), but
 -- id-bearing homographs are free to coexist — they're already kept distinct by
 -- notes_sense_id_key.
-ALTER TABLE notes DROP CONSTRAINT notes_usage_entry_key;
+-- IF EXISTS so a DRIFTED schema survives: on a database built by an older /
+-- renumbered chain the plain UNIQUE(usage, entry) may be named differently (or
+-- already gone), and a bare DROP CONSTRAINT would hard-fail (SQLSTATE 42704) and
+-- leave schema_migrations dirty. A fresh DB from migration 001 always has this
+-- exact constraint, so the produced schema is unchanged.
+ALTER TABLE notes DROP CONSTRAINT IF EXISTS notes_usage_entry_key;
 
 -- Partial unique for legacy id-less rows only. Named *_legacy_key to make its
 -- scope clear (it is an index now, not a table constraint). The id-less
