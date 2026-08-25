@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"regexp"
 	"strconv"
@@ -205,11 +206,14 @@ func runSyncDBCommand(ctx context.Context, t *testing.T) {
 var upMigrationPrefix = regexp.MustCompile(`^(\d+)_.*\.up\.sql$`)
 
 // expectedLatestMigrationVersion is the highest numeric prefix among *.up.sql —
-// the version a fully-migrated DB reports in schema_migrations.
+// the version a fully-migrated DB reports in schema_migrations. It reads the
+// EMBEDDED migrations FS (schemas.Migrations, the same one database.Migrate
+// uses), so it is independent of the working directory — a filesystem walk for
+// schemas/migrations fails in CI, where the CWD is the repo root but the
+// migrations live under backend/schemas/migrations.
 func expectedLatestMigrationVersion(t *testing.T) int {
 	t.Helper()
-	dir := findMigrationsDir(t)
-	entries, err := os.ReadDir(dir)
+	entries, err := fs.ReadDir(schemas.Migrations, "migrations")
 	require.NoError(t, err)
 	max := 0
 	for _, e := range entries {
