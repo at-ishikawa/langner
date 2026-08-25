@@ -7,7 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
@@ -38,6 +37,14 @@ func newMigrateImportDBCommand() *cobra.Command {
 				return err
 			}
 			defer func() { _ = db.Close() }()
+
+			// Preflight BEFORE Migrate: report the connection target and fail
+			// clearly on an empty search_path (Supabase transaction pooler,
+			// port 6543) rather than letting golang-migrate's pgx init crash
+			// with "converting NULL to string" on current_schema().
+			if err := printPreflightBanner(ctx, cfg, db, os.Stdout); err != nil {
+				return err
+			}
 
 			// Auto-apply schema migrations before import. The embedded
 			// migration files always match the binary version, so we can
@@ -241,16 +248,18 @@ needed. Idempotent: a no-op when the schema is already up to date.`,
 }
 
 // newMigrateResetDBCommand rebuilds the database to the seeded baseline in
-// one shot: apply migrations, CLEAR every persisted-data table, re-import the
-// source YAML, and re-seed the DB-only state tables. Unlike sync-db it skips
-// the export/roundtrip diff — it is meant for the e2e harness to restore
-// per-scenario isolation quickly (the diff would add latency and can be
-// sensitive to fixtures the app has just mutated). It is the DB half of a
-// reset; the harness restores the mutated learning_notes YAML separately.
+// one shot: rebuild langner's managed tables from scratch (scoped drop +
+// migrate), re-import the source YAML, and re-seed the DB-only state tables.
+// Unlike sync-db it skips the export/roundtrip diff — it is meant for the e2e
+// harness to restore per-scenario isolation quickly (the diff would add latency
+// and can be sensitive to fixtures the app has just mutated). It is the DB half
+// of a reset; the harness restores the mutated learning_notes YAML separately.
+// The scoped rebuild (rather than the old in-place TRUNCATE) also makes reset-db
+// drift/dirty-tolerant, so a stale or half-migrated harness DB self-heals.
 func newMigrateResetDBCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "reset-db",
-		Short: "Reset the database to the seeded baseline (clear + import + seed, no roundtrip diff)",
+		Short: "Reset the database to the seeded baseline (scoped drop + migrate + import + seed, no roundtrip diff)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
@@ -260,11 +269,14 @@ func newMigrateResetDBCommand() *cobra.Command {
 			}
 			defer func() { _ = db.Close() }()
 
+			if err := printPreflightBanner(ctx, cfg, db, os.Stdout); err != nil {
+				return err
+			}
+			if err := rebuildManagedSchema(ctx, db, os.Stdout); err != nil {
+				return err
+			}
 			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
 				return fmt.Errorf("apply schema migrations: %w", err)
-			}
-			if err := clearAllDataTables(ctx, db); err != nil {
-				return err
 			}
 			importer := newImporterFromConfig(cfg, db, io.Discard)
 			if _, err := importer.ImportAll(ctx, datasync.ImportOptions{UpdateExisting: true}); err != nil {
@@ -283,22 +295,27 @@ func newMigrateResetDBCommand() *cobra.Command {
 func newSyncDBCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "sync-db",
-		Short: "Rebuild database from source YAML (destructive: clears every persisted-data table first)",
+		Short: "Rebuild database from source YAML (destructive: drops + re-migrates langner's managed tables first)",
 		Long: `Make the database match the source YAML files. This is a destructive
-operation:
+operation, SCOPED to langner's own tables (safe on a shared/Supabase
+database — auth/storage and other apps are never touched):
 
-  1. CLEAR every persisted-data table (notes, learning_logs,
-     note_origin_parts, etymology_origins, semantic_concepts,
-     definition_concepts, …).
+  1. REBUILD langner's managed tables from scratch: drop every managed
+     table (and schema_migrations) with DROP TABLE IF EXISTS ... CASCADE,
+     then re-apply all schema migrations onto the empty set. This resets
+     golang-migrate to a clean version 0, so a database left DIRTY by a
+     half-applied migration, or built by an OLDER/renumbered migration
+     chain (drift), is repaired instead of failing in place.
   2. Import all source YAML notebooks into the now-empty database.
-  3. Export the database back to a temporary directory.
-  4. Diff source YAML against the exported YAML to verify the
-     roundtrip is lossless.
+  3. Seed the DB-only state tables from the same YAML.
+  4. Export the database back to a temporary directory and diff it against
+     the source YAML to verify the roundtrip is lossless.
 
-Use this command when the database has drifted from the YAML and you
-want YAML to win, or when you've migrated the schema and want to
-re-seed from a clean slate. To check current divergence WITHOUT
-modifying the database, use "migrate validate-db" instead.`,
+Because step 1 drops and re-migrates, running sync-db is idempotent — it
+succeeds twice in a row and on a drifted/dirty schema. Use it when the
+database has drifted from the YAML and you want YAML to win, or after a
+schema change to re-seed from a clean slate. To check current divergence
+WITHOUT modifying the database, use "migrate validate-db" instead.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 
@@ -308,21 +325,26 @@ modifying the database, use "migrate validate-db" instead.`,
 			}
 			defer func() { _ = db.Close() }()
 
-			// Auto-apply schema migrations before clearing so the TRUNCATE
-			// has tables to target. Without this, sync-db against a
-			// freshly-created database fails with "relation ... does not
-			// exist" — the user has to run migrations by hand first, which
-			// import-db avoids by running them itself. Same rationale as
-			// import-db's inline migration step.
+			// Preflight BEFORE Migrate so an empty search_path (Supabase
+			// transaction pooler) is reported clearly instead of surfacing as
+			// golang-migrate's cryptic "converting NULL to string" panic.
+			if err := printPreflightBanner(ctx, cfg, db, os.Stdout); err != nil {
+				return err
+			}
+
+			// Rebuild the managed schema from scratch, then migrate. Replaces
+			// the old in-place Migrate + TRUNCATE, which could not self-heal a
+			// drifted or dirty schema (migration 022's DROP CONSTRAINT hit a
+			// constraint the drifted schema names differently and hard-failed,
+			// leaving schema_migrations dirty).
+			fmt.Println("Step 1: Rebuilding langner-managed tables from scratch...")
+			if err := rebuildManagedSchema(ctx, db, os.Stdout); err != nil {
+				return err
+			}
 			if err := database.Migrate(db, schemas.Migrations, "migrations"); err != nil {
 				return fmt.Errorf("apply schema migrations: %w", err)
 			}
-
-			fmt.Println("Step 1: Clearing every persisted-data table...")
-			if err := clearAllDataTables(ctx, db); err != nil {
-				return err
-			}
-			fmt.Println("  Clear complete.")
+			fmt.Println("  Rebuild complete.")
 
 			fmt.Println("Step 2: Importing source YAML into the empty database...")
 			importer := newImporterFromConfig(cfg, db, io.Discard)
@@ -562,30 +584,4 @@ func extractNotebookIDs(notes []notebook.NoteRecord) []string {
 	}
 	sort.Strings(ids)
 	return ids
-}
-
-// dataTablesInDeletionOrder is the persisted-data table list (children
-// before parents, safe for sequential DELETE) used by the validate-db /
-// sync-db clear step. The canonical list now lives in datasync alongside
-// the table-dump exporter that shares it, so a single completeness guard
-// keeps both in sync with schemas/migrations/.
-func dataTablesInDeletionOrder() []string {
-	return datasync.DataTablesInDependencyOrder()
-}
-
-// clearAllDataTables wipes every persisted-data table in one
-// TRUNCATE. CASCADE truncates dependent-referenced rows so the FK
-// graph doesn't have to be walked in a specific order; RESTART
-// IDENTITY resets the BIGSERIAL sequences so re-imported rows get
-// the same IDs a fresh migration would assign. This replaces the
-// MySQL-era FOREIGN_KEY_CHECKS=0 dance — Postgres has no session
-// switch, and TRUNCATE ... CASCADE achieves the same result without
-// the sticky-connection ceremony.
-func clearAllDataTables(ctx context.Context, db *sqlx.DB) error {
-	tables := dataTablesInDeletionOrder()
-	sql := "TRUNCATE " + strings.Join(tables, ", ") + " RESTART IDENTITY CASCADE"
-	if _, err := db.ExecContext(ctx, sql); err != nil {
-		return fmt.Errorf("truncate data tables: %w", err)
-	}
-	return nil
 }
