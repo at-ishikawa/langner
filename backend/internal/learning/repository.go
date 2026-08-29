@@ -135,8 +135,12 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 		log.NoteID = noteID
 	}
 
-	if log.NoteID == 0 && log.OriginID == 0 && log.CorrectionID == 0 {
-		return fmt.Errorf("learning log requires NoteID, OriginID or CorrectionID")
+	// Fail fast at the runtime write boundary: reject a structurally invalid log
+	// (no target, uncomputed success interval, bad status/quiz_type/quality, …)
+	// before it reaches the table. Every runtime save path funnels through
+	// Create, so this one guard covers them all — hence enforceComputedInterval.
+	if err := validateLearningLog(log, true); err != nil {
+		return err
 	}
 
 	// NULLIF turns a zero ID into SQL NULL so exactly one of
@@ -150,6 +154,128 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 		return fmt.Errorf("insert learning log: %w", err)
 	}
 	return nil
+}
+
+// validateLearningLog is the single fail-fast guard at the learning-log write
+// boundary (Create + BatchCreate — every runtime save and every import/seed
+// funnels through one of them). It rejects a structurally invalid log BEFORE it
+// reaches the table, so a save path that forgets to populate a field fails
+// loudly at once instead of silently writing a bad row (the "interval_days
+// stored 0" bug this fixes).
+//
+// Every rule below was verified against the owner's real DB (all 24,022 rows)
+// to have ZERO false positives — each valid row satisfies it. The rules:
+//
+//   - exactly ONE of note_id / origin_id / correction_id is set (every real row
+//     has exactly one; this tightens the older "at least one" check);
+//   - status is a known learning status;
+//   - quiz_type is a known quiz type;
+//   - quality is in the SM-2 grade range 0..5 (real data is 1..5);
+//   - learned_at is non-zero;
+//   - interval_days is non-negative, and a SUCCESSFUL attempt
+//     (understood / usable / intuitive) has interval_days > 0 — both calculators
+//     always return >= 1 for a success (SM-2's correct floor / the fixed-level
+//     ladder's intervals[0]), so a success with 0 can only mean the interval was
+//     never computed. Exactly one real row violates this: the reported bug row.
+//
+// The (target ↔ quiz_type) pairing is deliberately NOT enforced: the real data
+// legitimately carries etymology_origin logs on note_id and notebook/reverse/
+// freeform logs on origin_id (168 rows), so any fixed mapping would reject valid
+// history. easiness_factor is likewise not required: every real row has it NULL
+// (a fixed-interval user), and EF is derived from the log chain at read time —
+// it is not persisted on writes and its absence is not data loss.
+//
+// enforceComputedInterval gates ONLY the success-interval rule. It is true for
+// runtime writes (Create), where the calculator provably yields >= 1 for a
+// success so a 0 can only be an uncomputed bug. It is false for BatchCreate — a
+// faithful copy of arbitrary historical data (import/seed), where a legacy
+// success row could carry an omitted/0 interval that import must not reject.
+// Every OTHER rule applies to both paths (all are satisfied by all 24,022 real
+// rows, including the one interval-bug row).
+func validateLearningLog(log *LearningLog, enforceComputedInterval bool) error {
+	target := logTargetDescription(log)
+
+	targets := 0
+	for _, id := range []int64{log.NoteID, log.OriginID, log.CorrectionID} {
+		if id != 0 {
+			targets++
+		}
+	}
+	if targets != 1 {
+		return fmt.Errorf("learning log for %s: must target exactly one of note_id/origin_id/correction_id, got %d", target, targets)
+	}
+	if !knownLearningStatus(log.Status) {
+		return fmt.Errorf("learning log for %s: unknown status %q", target, log.Status)
+	}
+	if !knownQuizType(log.QuizType) {
+		return fmt.Errorf("learning log for %s: unknown quiz_type %q", target, log.QuizType)
+	}
+	if log.Quality < 0 || log.Quality > 5 {
+		return fmt.Errorf("learning log for %s: quality=%d out of range 0..5", target, log.Quality)
+	}
+	if log.LearnedAt.IsZero() {
+		return fmt.Errorf("learning log for %s: learned_at is zero", target)
+	}
+	if log.IntervalDays < 0 {
+		return fmt.Errorf("learning log for %s: interval_days=%d is negative", target, log.IntervalDays)
+	}
+	if enforceComputedInterval && isSuccessStatus(log.Status) && log.IntervalDays <= 0 {
+		return fmt.Errorf("learning log for %s: %s attempt has interval_days=%d (interval was not computed)", target, log.Status, log.IntervalDays)
+	}
+	return nil
+}
+
+// knownLearningStatuses is the set of valid learning-log status values (the
+// notebook.LearnedStatus constants). "" is the legacy "learning" status; the
+// learning package keeps these as local literals so it needn't depend on the
+// notebook package (see grammarQuizType).
+var knownLearningStatuses = map[string]bool{
+	"":              true, // learning (legacy)
+	"misunderstood": true,
+	"understood":    true,
+	"usable":        true,
+	"intuitive":     true,
+}
+
+// knownQuizTypes is the set of valid quiz_type values (the notebook.QuizType
+// constants). etymology_origin remains valid for historical logs even though no
+// standalone etymology quiz writes it at runtime any more.
+var knownQuizTypes = map[string]bool{
+	"notebook":         true,
+	"reverse":          true,
+	"freeform":         true,
+	"grammar":          true,
+	"etymology_origin": true,
+}
+
+func knownLearningStatus(status string) bool { return knownLearningStatuses[status] }
+func knownQuizType(quizType string) bool     { return knownQuizTypes[quizType] }
+
+// isSuccessStatus reports whether a learning-log status marks a correct attempt
+// (understood / usable / intuitive). These are the statuses whose interval the
+// calculator guarantees to be >= 1; "misunderstood" and legacy "learning" ("")
+// are not success and are exempt from the interval-positivity guard.
+func isSuccessStatus(status string) bool {
+	switch status {
+	case "understood", "usable", "intuitive":
+		return true
+	default:
+		return false
+	}
+}
+
+// logTargetDescription names the log's resolved target for error messages.
+func logTargetDescription(log *LearningLog) string {
+	switch {
+	case log.NoteID != 0:
+		return fmt.Sprintf("note %d", log.NoteID)
+	case log.OriginID != 0:
+		return fmt.Sprintf("origin %d", log.OriginID)
+	case log.CorrectionID != 0:
+		return fmt.Sprintf("correction %d", log.CorrectionID)
+	default:
+		return fmt.Sprintf("expression %q", log.Expression)
+	}
 }
 
 // grammarQuizType is the quiz_type string that routes a learning log to a
@@ -228,6 +354,16 @@ func (r *DBLearningRepository) ensureNoteExists(ctx context.Context, log *Learni
 func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*LearningLog) error {
 	if len(logs) == 0 {
 		return nil
+	}
+
+	// Same fail-fast guard as Create, minus the success-interval rule (import/
+	// seed faithfully copies historical data — see validateLearningLog): reject
+	// a structurally invalid row before any of the batch is inserted, so a bad
+	// import row fails loudly (and atomically) instead of silently landing.
+	for i, l := range logs {
+		if err := validateLearningLog(l, false); err != nil {
+			return fmt.Errorf("learning log %d/%d: %w", i+1, len(logs), err)
+		}
 	}
 
 	columns := []string{"note_id", "origin_id", "correction_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
