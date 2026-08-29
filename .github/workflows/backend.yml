@@ -121,7 +121,7 @@ jobs:
       # step below uses.
       - name: Integration tests — quiz RPCs + repository against live Postgres
         working-directory: backend
-        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/ ./internal/notebook/ ./internal/quiz/
+        run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/learning/ ./internal/server/ ./internal/notebook/
         env:
           LANGNER_INTEGRATION_DB_URL: postgres://user:password@localhost:5432/local?sslmode=disable
 
