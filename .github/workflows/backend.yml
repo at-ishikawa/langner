@@ -173,6 +173,14 @@ jobs:
       # older migration chain into a clear, actionable error instead of a
       # cryptic deep column-scan crash.
       #
+      # It ALSO runs the sync-db DRIFT + DIRTY rebuild regression
+      # (TestSyncDB_DriftedDirtySchema_... / TestMigrate022DropConstraint_...):
+      # they seed the user's obsolete part_of_speech-era schema + a DIRTY
+      # schema_migrations marker and assert the real sync-db command rebuilds
+      # the managed tables from scratch, re-migrates clean, and imports — twice
+      # (idempotent). They match the -run "LivePostgres_Integration" filter and
+      # self-reset their schema, so they share this isolated step.
+      #
       # These tests DROP + recreate the public schema each subtest, so they
       # must NOT share a `go test` invocation with the row-scoped live-PG
       # tests above. Its own step, freshly recreated schema, and -p 1 so the
@@ -182,7 +190,7 @@ jobs:
       - name: Recreate empty schema for drift + import-pipeline tests
         run: PGPASSWORD=password psql -h localhost -U user -d local -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;'
 
-      - name: Integration tests — import-db schema drift + homograph/multi-notebook pipeline
+      - name: Integration tests — import-db + sync-db drift/dirty rebuild + homograph/multi-notebook pipeline
         working-directory: backend
         run: go test -count=1 -p 1 -run "LivePostgres_Integration" ./internal/database/ ./cmd/langner/
         env:

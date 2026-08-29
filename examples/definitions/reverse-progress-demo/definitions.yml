@@ -1,0 +1,52 @@
+# Reproduces the DB-mode "answered but still due" bug: in DB mode a correct
+# forward/reverse answer did not drop the word from the due pool on reload.
+#
+# Root cause it exercises (learning-history invariant L2): the reader/importer
+# key a note by (usage = the WORD `expression`, entry = the `definition` when
+# present). The save path resolved the note from the SHOWN surface instead —
+# for an ID-LESS word whose `definition` differs from its word that surface
+# didn't match the imported note, so the attempt forged a phantom note and the
+# real word's series stayed empty (still due).
+#
+# Three deliberate shapes:
+#   - cardiovascular: ID-LESS with a `definition:` distinct from the word — the
+#     FAILING case (save must resolve to the imported note by (word, definition)).
+#   - pulmonary: ID-BEARING with a `definition:` — a control; resolves by
+#     `id` (sense_id) regardless of surface, so it always advanced.
+#   - hepatic: ID-LESS with NO `definition:` — a control; usage == entry, so it
+#     always advanced.
+- metadata:
+    title: "Progress Words"
+  scenes:
+    - metadata:
+        index: 0
+        title: "body systems"
+      expressions:
+        - expression: cardiovascular
+          definition: "relating to the heart and blood vessels"
+          meaning: "relating to the heart and blood vessels"
+          part_of_speech: adjective
+          examples:
+            - text: "Regular exercise improves cardiovascular health over time."
+              highlight: cardiovascular
+        - expression: pulmonary
+          id: pulmonary-demo
+          definition: "relating to the lungs"
+          meaning: "relating to the lungs"
+          part_of_speech: adjective
+          examples:
+            - text: "The doctor ordered a test of her pulmonary function."
+              highlight: pulmonary
+        - expression: hepatic
+          meaning: "relating to the liver"
+          part_of_speech: adjective
+          examples:
+            - text: "Elevated hepatic enzymes showed up in the blood test."
+              highlight: hepatic
+        - expression: renal
+          definition: "relating to the kidneys"
+          meaning: "relating to the kidneys"
+          part_of_speech: adjective
+          examples:
+            - text: "Chronic renal disease often develops slowly and silently."
+              highlight: renal
