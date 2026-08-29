@@ -643,6 +643,64 @@ func canonicalNoteSurface(displaySurface, word string) (usage, entry string) {
 	return word, displaySurface
 }
 
+// nextIntervalDays computes the spaced-repetition interval_days for a learning
+// log the quiz is about to write, mirroring exactly what the YAML updater's
+// AddRecordWithQuality / AddRecordWithQualityForReverse compute for the same
+// attempt. In DB-only mode learningRepository.Create no longer runs the updater
+// (it inserts the log verbatim), so the interval must be computed here or the
+// row is stored with interval_days=0 — the bug this fixes.
+//
+// Prior logs are resolved through the SAME loadHistories read seam every other
+// surface uses and keyed by the SAME canonical note identity (id preferred,
+// then the display/original surfaces) the read side uses, so read and write
+// never drift (learning-history invariant L2). GetLogsForQuizType selects the
+// same per-quiz-type slot the writer lands in (forward/freeform/grammar →
+// LearnedLogs, reverse → ReverseLogs, etymology → EtymologyOriginLogs). Any
+// OverrideInterval carried by a prior log is honored automatically, because
+// NextIntervalForWrite replays the whole chain through RecalculateAll (which
+// applies overrides) — identical to the YAML path.
+//
+// The tentative status is derived from isCorrect alone (success → understood,
+// else misunderstood). The freeform/reverse "usable" vs "understood"
+// distinction never changes the interval — RecalculateAll's math depends only
+// on misunderstood-vs-not and quality — so this yields the same interval as the
+// YAML path's isKnownWord handling.
+//
+// Returns 0 only when histories cannot be loaded; a first-ever attempt (no
+// priors) legitimately yields the ladder's first step (>=1 for a success).
+func (s *Service) nextIntervalDays(
+	notebookName, id string,
+	quizType notebook.QuizType,
+	isCorrect bool,
+	quality int,
+	responseTimeMs int64,
+	learnedAt time.Time,
+	names ...string,
+) int {
+	status := notebook.LearnedStatusMisunderstood
+	if isCorrect {
+		status = notebook.LearnedStatusUnderstood
+	}
+	tentative := notebook.LearningRecord{
+		Status:         status,
+		LearnedAt:      notebook.NewDate(learnedAt),
+		Quality:        quality,
+		ResponseTimeMs: responseTimeMs,
+		QuizType:       string(quizType),
+	}
+
+	histories, err := s.loadHistories()
+	if err != nil {
+		return 0
+	}
+	var priorLogs []notebook.LearningRecord
+	if expr := notebook.FindExpressionInHistories(histories[notebookName], id, names...); expr != nil {
+		priorLogs = expr.GetLogsForQuizType(quizType)
+	}
+	interval, _ := s.calculator.NextIntervalForWrite(priorLogs, tentative)
+	return interval
+}
+
 // SaveResult updates learning history via the repository.
 //
 // When the card represents a concept (card.ConceptHead != ""), the log
@@ -674,6 +732,7 @@ func (s *Service) SaveResult(ctx context.Context, card Card, result GradeResult,
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
+	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeNotebook, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -1543,6 +1602,7 @@ func (s *Service) SaveReverseResult(ctx context.Context, card ReverseCard, resul
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
+	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeReverse, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
@@ -1959,6 +2019,7 @@ func (s *Service) SaveFreeformResult(ctx context.Context, card FreeformCard, res
 		Expression: expression, OriginalExpression: originalExpression, SenseID: senseID,
 		IsCorrect: result.Correct, LearningNotesDir: s.notebooksConfig.LearningNotesDirectory,
 	}
+	log.IntervalDays = s.nextIntervalDays(card.NotebookName, senseID, notebook.QuizTypeFreeform, result.Correct, result.Quality, responseTimeMs, log.LearnedAt, expression, originalExpression)
 	if err := s.learningRepository.Create(ctx, log); err != nil {
 		return fmt.Errorf("save learning log for %q: %w", card.NotebookName, err)
 	}
