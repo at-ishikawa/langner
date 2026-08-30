@@ -179,6 +179,9 @@ func run(ctx context.Context) error {
 	// skip-flag tables in DB mode instead of the on-disk learning_notes YAML;
 	// nil skip-flag repo keeps the YAML skip path.
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
+	// Enforce notebook public/private visibility on every quiz read path (auth
+	// Phase 3). Nil (no DB) keeps every notebook visible.
+	svc.SetNotebookACL(repos.ACL)
 
 	dictConfig := dictionary.Config{
 		RapidAPIHost: cfg.Dictionaries.RapidAPI.Host,
@@ -190,6 +193,10 @@ func run(ctx context.Context) error {
 	// exclusion badges) from the DB too, so they stay fresh once the on-disk
 	// learning_notes YAML is frozen in DB mode. Nil keeps the YAML fallback.
 	notebookHandler.SetHistoryStore(historyStore)
+	// Hard-reject a private notebook the requesting user can't see on the Learn
+	// page's detail / etymology / PDF paths (auth Phase 3). Nil keeps every
+	// notebook visible (no DB).
+	notebookHandler.SetNotebookACL(repos.ACL)
 
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
