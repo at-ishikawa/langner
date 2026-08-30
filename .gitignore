@@ -17,6 +17,7 @@ frontend/next-env.d.ts
 frontend/.features-gen/
 frontend/playwright-report/
 frontend/test-results/
+frontend/e2e/.auth/
 frontend/tsconfig.tsbuildinfo
 langner-server
 langner-server-test
