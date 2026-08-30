@@ -25,6 +25,9 @@ export default defineConfig({
     baseURL: `http://localhost:${FRONTEND_PORT}`,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // Authenticate every spec with the session cookie minted in global-setup
+    // (auth is enabled in config.e2e.yml, so all RPCs are gated).
+    storageState: "e2e/.auth/storageState.json",
   },
   projects: [
     {

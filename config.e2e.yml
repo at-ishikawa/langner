@@ -2,7 +2,25 @@ server:
   port: 8080
   cors:
     allowed_origins:
-      - "*"
+      - "http://localhost:3100"
+
+# Auth is enabled in e2e with FIXED test keys (not secret — test-only) so the
+# harness can mint a session cookie deterministically via
+# `langner auth issue-test-cookie`. cookie_secure:false because e2e runs over
+# plain http.
+auth:
+  google_client_id: "e2e-test-client-id"
+  redirect_url: "http://localhost:8080/auth/google/callback"
+  frontend_url: "http://localhost:3100"
+  allowed_emails:
+    - "e2e@example.com"
+  initial_admin_email: "e2e@example.com"
+  cookie_secure: false
+  cookie_samesite: lax
+  # Test-only fixed keys. session_signing_key is an arbitrary HMAC key;
+  # credential_encryption_key is 64 hex chars = 32 bytes for AES-256.
+  session_signing_key: "e2e-fixed-session-signing-key-do-not-use-in-prod"
+  credential_encryption_key: "e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2e2"
 
 database:
   host: 127.0.0.1
