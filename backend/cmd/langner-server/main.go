@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 
 	"connectrpc.com/connect"
 	"github.com/jmoiron/sqlx"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/analytics"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/bootstrap"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
@@ -79,7 +82,7 @@ func run(ctx context.Context) error {
 		dictionaryMap = make(map[string]rapidapi.Response)
 	}
 
-	errorLogger := connect.WithInterceptors(connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
+	loggingInterceptor := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 			resp, err := next(ctx, req)
 			if err != nil {
@@ -87,7 +90,7 @@ func run(ctx context.Context) error {
 			}
 			return resp, err
 		}
-	}))
+	})
 
 	// Open the database when one is configured. A nil db means YAML-only dev
 	// mode; a non-nil db switches the server to DB-only user-state storage.
@@ -102,6 +105,21 @@ func run(ctx context.Context) error {
 				return db.Close()
 			})
 		}
+	}
+
+	// Google-OAuth sign-in. Enabled as soon as a session signing key is
+	// configured; then EVERY connect RPC is gated behind a valid session
+	// cookie and the /auth/* endpoints are served plainly. Without a signing
+	// key the server runs ungated (YAML-only dev), exactly as before.
+	var authSetup *authComponents
+	if cfg.Auth.Enabled() {
+		authSetup, err = buildAuth(cfg.Auth, db)
+		if err != nil {
+			return fmt.Errorf("set up auth: %w", err)
+		}
+		slog.Info("google-oauth sign-in enabled; all RPCs require a valid session cookie")
+	} else {
+		slog.Warn("auth disabled (no SESSION_SIGNING_KEY); RPCs are ungated")
 	}
 
 	// User-STATE repositories. When a database is configured, writes go to the
@@ -176,18 +194,44 @@ func run(ctx context.Context) error {
 	handler := server.NewQuizHandler(svc)
 	handler.SetNoteRepository(noteRepo)
 	analyticsHandler := server.NewAnalyticsHandler(analyticsRepo)
-	path, h := apiv1connect.NewQuizServiceHandler(handler, errorLogger)
-	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, errorLogger)
-	analyticsPath, analyticsH := apiv1connect.NewAnalyticsServiceHandler(analyticsHandler, errorLogger)
+
+	// The auth interceptor rejects any RPC lacking a verified session
+	// (populated in request ctx by authCookieMiddleware). It is only added when
+	// auth is enabled so ungated YAML-only dev keeps working.
+	interceptors := []connect.Interceptor{loggingInterceptor}
+	if authSetup != nil {
+		interceptors = append(interceptors, server.NewAuthInterceptor())
+	}
+	handlerOpts := connect.WithInterceptors(interceptors...)
+	path, h := apiv1connect.NewQuizServiceHandler(handler, handlerOpts)
+	notebookPath, notebookH := apiv1connect.NewNotebookServiceHandler(notebookHandler, handlerOpts)
+	analyticsPath, analyticsH := apiv1connect.NewAnalyticsServiceHandler(analyticsHandler, handlerOpts)
 
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
 	mux.Handle(notebookPath, notebookH)
 	mux.Handle(analyticsPath, analyticsH)
 
+	// Auth endpoints are plain HTTP, registered OUTSIDE the connect
+	// interceptor so an unauthenticated user can sign in.
+	if authSetup != nil {
+		mux.HandleFunc("/auth/google/login", authSetup.handler.Login)
+		mux.HandleFunc("/auth/google/callback", authSetup.handler.Callback)
+		mux.HandleFunc("/auth/logout", authSetup.handler.Logout)
+		mux.HandleFunc("/auth/me", authSetup.handler.Me)
+	}
+
+	var rootHandler http.Handler = h2c.NewHandler(mux, &http2.Server{})
+	if authSetup != nil {
+		// Lifts a verified session cookie into the request context for both the
+		// connect interceptor and /auth/me. Does NOT reject — /auth/* and CORS
+		// preflight must pass through unauthenticated.
+		rootHandler = server.AuthCookieMiddleware(rootHandler, authSetup.sessions)
+	}
+
 	srv := &http.Server{
 		Addr:    fmt.Sprintf(":%d", cfg.Server.Port),
-		Handler: corsMiddleware(h2c.NewHandler(mux, &http2.Server{}), cfg.Server.CORS.AllowedOrigins),
+		Handler: corsMiddleware(rootHandler, cfg.Server.CORS.AllowedOrigins),
 	}
 	app.AddShutdownHook(srv.Shutdown)
 
@@ -216,6 +260,65 @@ func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
 	return rapidapi.FromResponsesToMap(responses), nil
 }
 
+// authComponents holds the pieces main wires when auth is enabled.
+type authComponents struct {
+	handler  *server.AuthHandler
+	sessions *auth.SessionSigner
+}
+
+// buildAuth constructs the OAuth handler and session signer. It fails fast when
+// a required secret is missing or the credential key is the wrong length, so a
+// misconfigured auth deployment never starts silently ungated.
+func buildAuth(cfg config.AuthConfig, db *sqlx.DB) (*authComponents, error) {
+	if db == nil {
+		return nil, errors.New("auth is enabled but no database is configured (users are stored in Postgres)")
+	}
+	sessions, err := auth.NewSessionSigner(auth.DecodeKey(cfg.SessionSigningKey))
+	if err != nil {
+		return nil, fmt.Errorf("session signing key: %w", err)
+	}
+	state, err := auth.NewStateSigner(auth.DecodeKey(cfg.SessionSigningKey))
+	if err != nil {
+		return nil, fmt.Errorf("state signing key: %w", err)
+	}
+	if cfg.CredentialEncryptionKey == "" {
+		return nil, errors.New("auth is enabled but CREDENTIAL_ENCRYPTION_KEY is not set")
+	}
+	enc, err := auth.NewEncryptor(auth.DecodeKey(cfg.CredentialEncryptionKey))
+	if err != nil {
+		return nil, fmt.Errorf("credential encryption key: %w", err)
+	}
+	users := auth.NewUserRepository(db, enc)
+	authenticator := auth.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.RedirectURL, nil)
+	handler := server.NewAuthHandler(server.AuthHandlerConfig{
+		Authenticator:  authenticator,
+		Sessions:       sessions,
+		State:          state,
+		Users:          users,
+		AllowedEmails:  cfg.AllowedEmails,
+		FrontendURL:    cfg.FrontendURL,
+		CookieSecure:   cfg.CookieSecure,
+		CookieSameSite: parseSameSite(cfg.CookieSameSite),
+	})
+	return &authComponents{handler: handler, sessions: sessions}, nil
+}
+
+func parseSameSite(s string) http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "strict":
+		return http.SameSiteStrictMode
+	case "none":
+		return http.SameSiteNoneMode
+	default:
+		return http.SameSiteLaxMode
+	}
+}
+
+// corsMiddleware serves explicit, credentialed CORS. It reflects the request
+// Origin (never the literal "*", which is invalid with credentials) when the
+// Origin is configured or when "*" is configured as a wildcard, and always
+// sends Access-Control-Allow-Credentials so the session cookie is accepted
+// cross-origin (frontend 3100 ↔ backend 8080).
 func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 	allowAll := false
 	allowed := make(map[string]bool, len(allowedOrigins))
@@ -230,6 +333,8 @@ func corsMiddleware(next http.Handler, allowedOrigins []string) http.Handler {
 		origin := r.Header.Get("Origin")
 		if origin != "" && (allowAll || allowed[origin]) {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			w.Header().Set("Vary", "Origin")
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Connect-Protocol-Version")
