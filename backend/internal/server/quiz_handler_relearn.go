@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
@@ -84,8 +85,9 @@ func (h *QuizHandler) StartRelearnQuiz(ctx context.Context, req *connect.Request
 		return nil, err
 	}
 	window := clampRelearnWindow(req.Msg.GetWindowHours())
+	userID, _ := auth.UserIDFromContext(ctx)
 
-	cards, err := h.svc.LoadRelearnPool(time.Now().Add(-window))
+	cards, err := h.svc.LoadRelearnPool(userID, time.Now().Add(-window))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load relearn pool: %w", err))
 	}

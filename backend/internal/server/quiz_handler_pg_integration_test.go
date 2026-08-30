@@ -21,6 +21,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/quiz"
+	"github.com/at-ishikawa/langner/internal/testutil"
 	"github.com/at-ishikawa/langner/schemas"
 )
 
@@ -52,7 +53,15 @@ const integrationDBEnv = "LANGNER_INTEGRATION_DB_URL"
 // on a fresh schema. Returns the handler, the fixture directory (so
 // tests can read the learning-history YAML back if needed), and the
 // db handle so tests can assert against learning_logs / notes.
-func pgIntegrationHandler(t *testing.T, mockClient inference.Client) (*QuizHandler, *sqlx.DB, string) {
+// pgUserCtx builds a request context carrying the authenticated user id, the
+// way the auth interceptor injects it at runtime, so a handler's SaveResult
+// attributes its learning-log write (auth Phase 2). context.TODO is used so the
+// harness's own base context is distinct from the per-call context helpers.
+func pgUserCtx(userID int64) context.Context {
+	return testutil.WithTestUser(context.TODO(), userID)
+}
+
+func pgIntegrationHandler(t *testing.T, mockClient inference.Client) (*QuizHandler, *sqlx.DB, string, int64) {
 	t.Helper()
 
 	dsn := os.Getenv(integrationDBEnv)
@@ -155,7 +164,14 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mockClient, make(map[string]rapidapi.Response), multiRepo, config.QuizConfig{})
 
-	return NewQuizHandler(svc), db, learningDir
+	// A runtime learning-log write must be attributed to a user (auth Phase 2);
+	// seed one so the handler's SaveResult can stamp its id via the request ctx.
+	var userID int64
+	require.NoError(t, db.Get(&userID,
+		`INSERT INTO users (google_sub, email_encrypted, email_hash, name_encrypted)
+		 VALUES ('handler-int-user', '\x00'::bytea, 'handler-int-hash', '\x00'::bytea) RETURNING id`))
+
+	return NewQuizHandler(svc), db, learningDir, userID
 }
 
 // assertDBHasQuizAnswers checks that the learning_logs table holds
@@ -190,10 +206,10 @@ func assertDBHasQuizAnswers(t *testing.T, db *sqlx.DB, expression, quizType stri
 func TestQuizHandler_Standard_LivePostgres_Integration(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler, db, _ := pgIntegrationHandler(t, mockClient)
+	handler, db, _, userID := pgIntegrationHandler(t, mockClient)
 
 	answerCard := func(t *testing.T) {
-		startResp, err := handler.StartQuiz(context.Background(),
+		startResp, err := handler.StartQuiz(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.StartQuizRequest{
 				NotebookIds:      []string{"test-vocab"},
 				IncludeUnstudied: true,
@@ -208,7 +224,7 @@ func TestQuizHandler_Standard_LivePostgres_Integration(t *testing.T) {
 				Meaning:    "a fortunate discovery by accident",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
 			}}}, nil)
-		_, err = handler.SubmitAnswer(context.Background(),
+		_, err = handler.SubmitAnswer(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.SubmitAnswerRequest{
 				NoteId: noteID, Answer: "a fortunate discovery by accident", ResponseTimeMs: 1000,
 			}))
@@ -230,10 +246,10 @@ func TestQuizHandler_Standard_LivePostgres_Integration(t *testing.T) {
 func TestQuizHandler_Reverse_LivePostgres_Integration(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler, db, _ := pgIntegrationHandler(t, mockClient)
+	handler, db, _, userID := pgIntegrationHandler(t, mockClient)
 
 	answer := func(t *testing.T) {
-		startResp, err := handler.StartReverseQuiz(context.Background(),
+		startResp, err := handler.StartReverseQuiz(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.StartReverseQuizRequest{
 				NotebookIds: []string{"test-vocab"}, IncludeUnstudied: true,
 			}))
@@ -247,7 +263,7 @@ func TestQuizHandler_Reverse_LivePostgres_Integration(t *testing.T) {
 				Reason:         "exact match",
 				Quality:        4,
 			}, nil)
-		_, err = handler.SubmitReverseAnswer(context.Background(),
+		_, err = handler.SubmitReverseAnswer(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.SubmitReverseAnswerRequest{
 				NoteId: noteID, Answer: "serendipity", ResponseTimeMs: 1000,
 			}))
@@ -269,13 +285,13 @@ func TestQuizHandler_Reverse_LivePostgres_Integration(t *testing.T) {
 func TestQuizHandler_Freeform_LivePostgres_Integration(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler, db, _ := pgIntegrationHandler(t, mockClient)
+	handler, db, _, userID := pgIntegrationHandler(t, mockClient)
 
 	// StartFreeformQuiz populates the handler's freeform card set;
 	// SubmitFreeformAnswer then matches the user's Word/Meaning
 	// against that set. No NoteId is passed — the handler resolves
 	// the card by expression match.
-	_, err := handler.StartFreeformQuiz(context.Background(),
+	_, err := handler.StartFreeformQuiz(pgUserCtx(userID),
 		connect.NewRequest(&apiv1.StartFreeformQuizRequest{}))
 	require.NoError(t, err)
 
@@ -286,7 +302,7 @@ func TestQuizHandler_Freeform_LivePostgres_Integration(t *testing.T) {
 				Meaning:    "contrary to reason or common sense",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: "ok", Quality: 4}},
 			}}}, nil)
-		_, err := handler.SubmitFreeformAnswer(context.Background(),
+		_, err := handler.SubmitFreeformAnswer(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.SubmitFreeformAnswerRequest{
 				Word: "preposterous", Meaning: "contrary to reason or common sense", ResponseTimeMs: 1000,
 			}))
@@ -307,9 +323,9 @@ func TestQuizHandler_Freeform_LivePostgres_Integration(t *testing.T) {
 func TestQuizHandler_BatchSubmit_LivePostgres_Integration(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler, db, _ := pgIntegrationHandler(t, mockClient)
+	handler, db, _, userID := pgIntegrationHandler(t, mockClient)
 
-	startResp, err := handler.StartQuiz(context.Background(),
+	startResp, err := handler.StartQuiz(pgUserCtx(userID),
 		connect.NewRequest(&apiv1.StartQuizRequest{
 			NotebookIds:      []string{"test-vocab"},
 			IncludeUnstudied: true,
@@ -328,7 +344,7 @@ func TestQuizHandler_BatchSubmit_LivePostgres_Integration(t *testing.T) {
 				Meaning:    "a fortunate discovery by accident",
 				AnswersForContext: []inference.AnswersForContext{{Correct: true, Reason: fmt.Sprintf("batch-%d", i), Quality: 4}},
 			}}}, nil)
-		_, err = handler.BatchSubmitAnswers(context.Background(),
+		_, err = handler.BatchSubmitAnswers(pgUserCtx(userID),
 			connect.NewRequest(&apiv1.BatchSubmitAnswersRequest{
 				Answers: []*apiv1.SubmitAnswerRequest{{
 					NoteId: noteID, Answer: "a fortunate discovery by accident", ResponseTimeMs: 1000,
@@ -349,9 +365,9 @@ func TestQuizHandler_BatchSubmit_LivePostgres_Integration(t *testing.T) {
 func TestQuizHandler_Standard_OverrideAnswer_LivePostgres_Integration(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockClient := mock_inference.NewMockClient(ctrl)
-	handler, db, _ := pgIntegrationHandler(t, mockClient)
+	handler, db, _, userID := pgIntegrationHandler(t, mockClient)
 
-	startResp, err := handler.StartQuiz(context.Background(),
+	startResp, err := handler.StartQuiz(pgUserCtx(userID),
 		connect.NewRequest(&apiv1.StartQuizRequest{
 			NotebookIds:      []string{"test-vocab"},
 			IncludeUnstudied: true,
@@ -367,7 +383,7 @@ func TestQuizHandler_Standard_OverrideAnswer_LivePostgres_Integration(t *testing
 			Meaning:    "a fortunate discovery by accident",
 			AnswersForContext: []inference.AnswersForContext{{Correct: false, Reason: "wrong", Quality: 1}},
 		}}}, nil)
-	submitResp, err := handler.SubmitAnswer(context.Background(),
+	submitResp, err := handler.SubmitAnswer(pgUserCtx(userID),
 		connect.NewRequest(&apiv1.SubmitAnswerRequest{
 			NoteId: noteID, Answer: "wrong meaning", ResponseTimeMs: 1000,
 		}))
@@ -387,7 +403,7 @@ func TestQuizHandler_Standard_OverrideAnswer_LivePostgres_Integration(t *testing
 	// Mark it correct — this exercises MultiLearningRepository.UpdateLog,
 	// which was silently no-op'ing on the DB side before the recent fix.
 	markCorrect := true
-	_, err = handler.OverrideAnswer(context.Background(),
+	_, err = handler.OverrideAnswer(pgUserCtx(userID),
 		connect.NewRequest(&apiv1.OverrideAnswerRequest{
 			NoteId:      noteID,
 			QuizType:    apiv1.QuizType_QUIZ_TYPE_STANDARD,

@@ -15,6 +15,7 @@ import (
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/assets"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
@@ -54,9 +55,9 @@ func (h *NotebookHandler) SetHistoryStore(store learning.HistoryStore) {
 // DBHistoryStore mirrors notebook.NewLearningHistories), so callers never
 // branch on the source — mirroring quiz.Service.loadHistories, which keeps
 // the Learn page's reads symmetric with the quiz service's.
-func (h *NotebookHandler) loadHistories() (map[string][]notebook.LearningHistory, error) {
+func (h *NotebookHandler) loadHistories(userID int64) (map[string][]notebook.LearningHistory, error) {
 	if h.historyStore != nil {
-		return h.historyStore.LoadAll(context.Background())
+		return h.historyStore.LoadAll(context.Background(), userID)
 	}
 	return notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
 }
@@ -95,8 +96,8 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 }
 
 
-func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
-	histories, err := h.loadHistories()
+func (h *NotebookHandler) loadLearningHistory(userID int64, notebookID string) ([]notebook.LearningHistory, error) {
+	histories, err := h.loadHistories(userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
 	}
@@ -128,13 +129,14 @@ func (h *NotebookHandler) GetNotebookDetail(
 	}
 
 	notebookID := req.Msg.GetNotebookId()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	reader, err := h.newReader()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create notebook reader: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(userID, notebookID)
 	if err != nil {
 		return nil, err
 	}
@@ -552,6 +554,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 	}
 
 	notebookID := req.Msg.GetNotebookId()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	reader, err := h.newReader()
 	if err != nil {
@@ -566,7 +569,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read story notebooks: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(userID, notebookID)
 	if err != nil {
 		return nil, err
 	}
@@ -698,6 +701,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 	}
 
 	notebookID := req.Msg.GetNotebookId()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	reader, err := h.newReader()
 	if err != nil {
@@ -718,7 +722,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 	// notebook-detail page does off NotebookWord). Both are keyed per notebook
 	// because a definition can come from any book. Skip exclusion is read via
 	// the SAME key SkipWord wrote (invariant L2).
-	learningHistories, _ := h.loadHistories()
+	learningHistories, _ := h.loadHistories(userID)
 	noteIDCache := make(map[string]map[string]int64)
 	noteIDsFor := func(nbName string) map[string]int64 {
 		if m, ok := noteIDCache[nbName]; ok {

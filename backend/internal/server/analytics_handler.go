@@ -9,6 +9,7 @@ import (
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/analytics"
+	"github.com/at-ishikawa/langner/internal/auth"
 )
 
 // AnalyticsHandler exposes the analytics views over Connect RPC.
@@ -27,7 +28,7 @@ func (h *AnalyticsHandler) GetDailySummaries(
 	ctx context.Context,
 	req *connect.Request[apiv1.GetDailySummariesRequest],
 ) (*connect.Response[apiv1.GetDailySummariesResponse], error) {
-	filters := unpackFilters(req.Msg.Filters)
+	filters := unpackFilters(ctx, req.Msg.Filters)
 	days, err := h.repo.DailySummaries(ctx, int(req.Msg.RangeDays), filters)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -48,7 +49,7 @@ func (h *AnalyticsHandler) GetDayDetail(
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("date: %w", err))
 	}
-	detail, err := h.repo.DayDetail(ctx, day, unpackFilters(req.Msg.Filters))
+	detail, err := h.repo.DayDetail(ctx, day, unpackFilters(ctx, req.Msg.Filters))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -70,7 +71,9 @@ func (h *AnalyticsHandler) GetWordHistory(
 	ctx context.Context,
 	req *connect.Request[apiv1.GetWordHistoryRequest],
 ) (*connect.Response[apiv1.GetWordHistoryResponse], error) {
+	userID, _ := auth.UserIDFromContext(ctx)
 	hist, err := h.repo.WordHistory(ctx, analytics.WordRef{
+		UserID:     userID,
 		NoteID:     req.Msg.NoteId,
 		ID:         req.Msg.GetSenseId(),
 		NotebookID: req.Msg.NotebookId,
@@ -110,7 +113,7 @@ func (h *AnalyticsHandler) GetTrends(
 	q := analytics.TrendsQuery{
 		Granularity: granularityFromProto(req.Msg.Granularity),
 		GroupBy:     groupByFromProto(req.Msg.GroupBy),
-		Filters:     unpackFilters(req.Msg.Filters),
+		Filters:     unpackFilters(ctx, req.Msg.Filters),
 	}
 	if req.Msg.StartDate != "" {
 		start, err := time.Parse("2006-01-02", req.Msg.StartDate)
@@ -192,11 +195,12 @@ func groupByFromProto(g apiv1.TrendGroupBy) analytics.TrendGroupBy {
 	}
 }
 
-func unpackFilters(f *apiv1.AnalyticsFilters) analytics.Filters {
+func unpackFilters(ctx context.Context, f *apiv1.AnalyticsFilters) analytics.Filters {
+	userID, _ := auth.UserIDFromContext(ctx)
 	if f == nil {
-		return analytics.Filters{}
+		return analytics.Filters{UserID: userID}
 	}
-	return analytics.Filters{NotebookID: f.NotebookId, QuizType: f.QuizType}
+	return analytics.Filters{NotebookID: f.NotebookId, QuizType: f.QuizType, UserID: userID}
 }
 
 func dailySummaryToProto(d analytics.DailySummary) *apiv1.DailySummary {

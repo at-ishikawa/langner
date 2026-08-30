@@ -85,6 +85,7 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	require.NotNil(t, repos.HistoryStore)
 	svc := quiz.NewService(cfg.Notebooks, nil, nil, repos.Learning, cfg.Quiz)
 	svc.SetHistoryStore(repos.HistoryStore)
+	userID := seedIntegrationUser(t, db, "reverse-progress-user")
 
 	const bookID = "reverse-progress-demo"
 	ctx := context.Background()
@@ -93,7 +94,7 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	// REVERSE: the reported failing case (id-less + a distinct `definition:`).
 	// ---------------------------------------------------------------------
 	loadReverse := func() []quiz.ReverseCard {
-		cards, lerr := svc.LoadReverseCards([]string{bookID}, false, true, nil)
+		cards, lerr := svc.LoadReverseCards(userID, []string{bookID}, false, true, nil)
 		require.NoError(t, lerr)
 		return cards
 	}
@@ -111,7 +112,7 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	revCard, ok := findReverse(loadReverse(), "cardiovascular")
 	require.True(t, ok, "the fresh id-less definition-bearing word must be due for reverse")
 
-	require.NoError(t, svc.SaveReverseResult(ctx, revCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+	require.NoError(t, svc.SaveReverseResult(ctx, userID, revCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
 
 	// Diagnostic: the reverse log must land on the IMPORTED note, not a phantom.
 	var writeNoteID int64
@@ -143,7 +144,7 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	// FORWARD/standard: same shared root cause, a separate id-less word.
 	// ---------------------------------------------------------------------
 	loadForward := func() []quiz.Card {
-		cards, lerr := svc.LoadCards([]string{bookID}, true, nil)
+		cards, lerr := svc.LoadCards(userID, []string{bookID}, true, nil)
 		require.NoError(t, lerr)
 		return cards
 	}
@@ -161,7 +162,7 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	fwdCard, ok := findForward(loadForward(), "renal")
 	require.True(t, ok, "the fresh id-less definition-bearing word must be due for the standard quiz")
 
-	require.NoError(t, svc.SaveResult(ctx, fwdCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+	require.NoError(t, svc.SaveResult(ctx, userID, fwdCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
 
 	var fwdWriteNoteID int64
 	require.NoError(t, db.GetContext(ctx, &fwdWriteNoteID,
@@ -197,11 +198,11 @@ func TestVocabularyProgress_LivePostgres_Integration(t *testing.T) {
 	pulCard, ok := findReverse(loadReverse(), "pulmonary")
 	require.True(t, ok, "a word whose latest reverse attempt is a miss must be due")
 
-	require.NoError(t, svc.SaveReverseResult(ctx, pulCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+	require.NoError(t, svc.SaveReverseResult(ctx, userID, pulCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
 
 	// The reconstructed history must surface the just-written attempt as latest,
 	// not the older imported miss (proves the newest-first ordering).
-	hist, err := repos.HistoryStore.LoadAll(ctx)
+	hist, err := repos.HistoryStore.LoadAll(ctx, userID)
 	require.NoError(t, err)
 	pulExpr, found := findExpressionInHistories(hist[bookID], "pulmonary", "relating to the lungs")
 	require.True(t, found)

@@ -44,7 +44,7 @@ func TestExampleData_EtymologyNotebookWordHasStableNoteID(t *testing.T) {
 	ctx := context.Background()
 
 	svc := newExampleService(t, t.TempDir())
-	all, err := svc.LoadAllWords()
+	all, err := svc.LoadAllWords(0)
 	require.NoError(t, err)
 
 	card := findFreeformCard(all, "artifice")
@@ -59,7 +59,7 @@ func TestExampleData_EtymologyNotebookWordHasStableNoteID(t *testing.T) {
 	// The id must be STABLE across an independent Service construction (a later
 	// session), or a cross-session Mark-as-Correct would target a different key.
 	svc2 := newExampleService(t, t.TempDir())
-	all2, err := svc2.LoadAllWords()
+	all2, err := svc2.LoadAllWords(0)
 	require.NoError(t, err)
 	card2 := findFreeformCard(all2, "artifice")
 	require.NotNil(t, card2)
@@ -78,16 +78,16 @@ func TestExampleData_EtymologyNotebookWordHasStableNoteID(t *testing.T) {
 	// that id persists.
 	learningDir := t.TempDir()
 	svc3 := newExampleService(t, learningDir)
-	all3, err := svc3.LoadAllWords()
+	all3, err := svc3.LoadAllWords(0)
 	require.NoError(t, err)
 	c := findFreeformCard(all3, "artifice")
 	require.NotNil(t, c)
 	require.NotEmpty(t, c.ID)
 
-	require.NoError(t, svc3.SaveFreeformResult(ctx, *c,
+	require.NoError(t, svc3.SaveFreeformResult(ctx, 0, *c,
 		FreeformGradeResult{Correct: false, Quality: 0, MatchedCard: c}, 1000))
 
-	learnedAt, _ := svc3.GetLatestLearnedInfo(c.NotebookName, c.ID, c.Expression, notebook.QuizTypeFreeform)
+	learnedAt, _ := svc3.GetLatestLearnedInfo(0, c.NotebookName, c.ID, c.Expression, notebook.QuizTypeFreeform)
 	require.NotEmpty(t, learnedAt,
 		"GetLatestLearnedInfo must find the just-written log under the same id (write-key == read-key)")
 
@@ -110,7 +110,7 @@ func TestExampleData_EtymologyNotebookWordHasStableNoteID(t *testing.T) {
 	info.LearnedAt = learnedAt
 	mc := true
 	info.MarkCorrect = &mc
-	_, err = svc3.OverrideAnswer(info, notebook.QuizTypeFreeform)
+	_, err = svc3.OverrideAnswer(0, info, notebook.QuizTypeFreeform)
 	require.NoError(t, err)
 
 	after, err := notebook.NewLearningHistories(learningDir)

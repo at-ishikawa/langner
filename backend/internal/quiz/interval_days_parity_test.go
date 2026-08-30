@@ -67,7 +67,7 @@ func TestNextIntervalDays_ParityWithYAMLUpdater(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			// DB save-path helper.
-			got := svc.nextIntervalDays("test-vocab", "", tc.quizType, true, 4, 1200, learnedAt, "break the ice")
+			got := svc.nextIntervalDays(0, "test-vocab", "", tc.quizType, true, 4, 1200, learnedAt, "break the ice")
 
 			// Independent YAML-updater computation on the same seed: clone the
 			// expression, append the same correct attempt, read its interval.
@@ -105,7 +105,7 @@ func TestNextIntervalDays_FirstAttempt(t *testing.T) {
 	}, nil, nil, nil, config.QuizConfig{Algorithm: "fixed", FixedIntervals: fixedLadder})
 
 	learnedAt := time.Date(2026, 8, 29, 9, 39, 0, 0, time.UTC)
-	got := svc.nextIntervalDays("test-vocab", "", notebook.QuizTypeReverse, true, 4, 1000, learnedAt, "lose one's temper")
+	got := svc.nextIntervalDays(0, "test-vocab", "", notebook.QuizTypeReverse, true, 4, 1000, learnedAt, "lose one's temper")
 	// A fresh word sits at level 0; one correct answer (quality 4 → +1 level)
 	// advances to level 1 = ladder[1] = 7. The point is it is a real computed
 	// interval, never the buggy 0.

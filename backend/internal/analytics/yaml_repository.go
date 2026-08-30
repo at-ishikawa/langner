@@ -97,7 +97,7 @@ type yamlAttempt struct {
 // the DB store when one is installed, otherwise the on-disk YAML files; both
 // yield the same map shape so the flattening below is source-agnostic.
 func (r *YAMLRepository) allAttempts(ctx context.Context, filters Filters) ([]yamlAttempt, error) {
-	histories, err := r.loadHistories(ctx)
+	histories, err := r.loadHistories(ctx, filters.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("load learning histories: %w", err)
 	}
@@ -134,9 +134,9 @@ func (r *YAMLRepository) allAttempts(ctx context.Context, filters Filters) ([]ya
 // loadHistories is the single READ entry point: DB store when installed,
 // otherwise the YAML learning_notes files. Both return the identical
 // map[notebookID][]LearningHistory shape.
-func (r *YAMLRepository) loadHistories(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+func (r *YAMLRepository) loadHistories(ctx context.Context, userID int64) (map[string][]notebook.LearningHistory, error) {
 	if r.store != nil {
-		return r.store.LoadAll(ctx)
+		return r.store.LoadAll(ctx, userID)
 	}
 	return notebook.NewLearningHistories(r.directory)
 }
@@ -446,7 +446,7 @@ func (r *YAMLRepository) DayDetail(ctx context.Context, day time.Time, filters F
 
 // WordHistory returns every attempt for a single (notebook, expression, quiz_type) triple.
 func (r *YAMLRepository) WordHistory(ctx context.Context, ref WordRef) (WordHistory, error) {
-	attempts, err := r.allAttempts(ctx, Filters{NotebookID: ref.NotebookID, QuizType: ref.QuizType})
+	attempts, err := r.allAttempts(ctx, Filters{NotebookID: ref.NotebookID, QuizType: ref.QuizType, UserID: ref.UserID})
 	if err != nil {
 		return WordHistory{}, err
 	}

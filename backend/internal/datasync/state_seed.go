@@ -356,7 +356,9 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 			}
 			for quizType, ts := range expr.SkippedAt {
 				at := parseSkippedTimestamp(ts)
-				if err := s.skipFlagRepo.SkipOrigin(ctx, id, quizType, at); err != nil {
+				// user_id 0: seeded before auth backfill; `langner auth
+				// provision` stamps these to the initial admin.
+				if err := s.skipFlagRepo.SkipOrigin(ctx, 0, id, quizType, at); err != nil {
 					return fmt.Errorf("seed origin skip flag: %w", err)
 				}
 				result.OriginSkipFlagsCreated++
@@ -371,7 +373,7 @@ func (s *StateSeeder) persistSkipFlagsForExpression(
 	}
 	for quizType, ts := range expr.SkippedAt {
 		at := parseSkippedTimestamp(ts)
-		if err := s.skipFlagRepo.SkipNote(ctx, noteID, quizType, at); err != nil {
+		if err := s.skipFlagRepo.SkipNote(ctx, 0, noteID, quizType, at); err != nil {
 			return fmt.Errorf("seed note skip flag: %w", err)
 		}
 		result.NoteSkipFlagsCreated++

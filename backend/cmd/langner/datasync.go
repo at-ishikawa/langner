@@ -113,6 +113,17 @@ func newMigrateImportDBCommand() *cobra.Command {
 					fmt.Printf("  Grammar corrections:  %d new\n", stateResult.GrammarCorrectionsCreated)
 					fmt.Printf("  Grammar logs:         %d new\n", stateResult.GrammarLogsCreated)
 				}
+
+				// Provision auth accounts and backfill the just-imported/seeded
+				// (user_id NULL) learning history to the initial admin, so a fresh
+				// import is immediately usable by the admin and the e2e seed needs
+				// no separate provisioning step. No-op when auth is disabled.
+				if err := provisionAuth(ctx, cfg, db); err != nil {
+					return fmt.Errorf("provision auth: %w", err)
+				}
+				if cfg.Auth.Enabled() && cfg.Auth.InitialAdminEmail != "" {
+					fmt.Printf("\nProvisioned auth accounts; backfilled pre-auth history to %q\n", cfg.Auth.InitialAdminEmail)
+				}
 			}
 
 			return nil

@@ -120,7 +120,7 @@ func TestService_LoadNotebookSummaries_Empty(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := newTestService(t, mock_inference.NewMockClient(ctrl))
 
-	summaries, err := svc.LoadNotebookSummaries(false)
+	summaries, err := svc.LoadNotebookSummaries(0, false)
 	require.NoError(t, err)
 	assert.Empty(t, summaries)
 }
@@ -129,7 +129,7 @@ func TestService_LoadNotebookSummaries_WithFixtures(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc, _ := newTestServiceWithFixtures(t, mock_inference.NewMockClient(ctrl))
 
-	summaries, err := svc.LoadNotebookSummaries(false)
+	summaries, err := svc.LoadNotebookSummaries(0, false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 2)
 
@@ -201,7 +201,7 @@ origins:
 	}, mock_inference.NewMockClient(gomock.NewController(t)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries(false)
+	summaries, err := svc.LoadNotebookSummaries(0, false)
 	require.NoError(t, err)
 
 	var etym *NotebookSummary
@@ -304,7 +304,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries(false)
+	summaries, err := svc.LoadNotebookSummaries(0, false)
 	require.NoError(t, err)
 
 	summaryMap := make(map[string]NotebookSummary)
@@ -333,7 +333,7 @@ func TestService_LoadNotebookSummaries_LearningHistoryError(t *testing.T) {
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	_, err := svc.LoadNotebookSummaries(false)
+	_, err := svc.LoadNotebookSummaries(0, false)
 	require.Error(t, err)
 }
 
@@ -350,7 +350,7 @@ func TestService_LoadCards_StoryNotebook(t *testing.T) {
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"test-story"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"test-story"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "preposterous", cards[0].Entry)
@@ -372,7 +372,7 @@ func TestService_LoadCards_FlashcardNotebook(t *testing.T) {
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"test-vocab"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"test-vocab"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "serendipity", cards[0].Entry)
@@ -415,7 +415,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"irregulars"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"irregulars"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	require.Len(t, cards[0].Examples, 1)
@@ -468,12 +468,12 @@ notebooks:
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	// includeUnstudied=false: must NOT appear.
-	cards, err := svc.LoadCards([]string{"fail-vocab"}, false, nil)
+	cards, err := svc.LoadCards(0, []string{"fail-vocab"}, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "flashcard with only freeform-failed history must not appear when includeUnstudied=false")
 
 	// includeUnstudied=true: appears as expected.
-	cards, err = svc.LoadCards([]string{"fail-vocab"}, true, nil)
+	cards, err = svc.LoadCards(0, []string{"fail-vocab"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "serendipity", cards[0].Entry)
@@ -524,7 +524,7 @@ notebooks:
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"fail-defs"}, false, nil)
+	cards, err := svc.LoadCards(0, []string{"fail-defs"}, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "definitions-only word with only freeform-failed history must not appear when includeUnstudied=false")
 }
@@ -588,15 +588,15 @@ notebooks:
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"studied-defs"}, false, nil)
+	cards, err := svc.LoadCards(0, []string{"studied-defs"}, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "studied word inside its SR interval must not appear with includeUnstudied=false")
 
-	cards, err = svc.LoadCards([]string{"studied-defs"}, true, nil)
+	cards, err = svc.LoadCards(0, []string{"studied-defs"}, true, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "includeUnstudied=true must NOT override SR for studied words — only pristine words are gated by the toggle")
 
-	reverseCards, err := svc.LoadReverseCards([]string{"studied-defs"}, false, true, nil)
+	reverseCards, err := svc.LoadReverseCards(0, []string{"studied-defs"}, false, true, nil)
 	require.NoError(t, err)
 	// Reverse quiz: ReverseLogs is empty, so the word IS due in reverse
 	// (NeedsReverseReview returns true on empty logs). Studied path
@@ -659,20 +659,20 @@ notebooks:
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	// Without the toggle: neither word is eligible.
-	due, err := svc.LoadCards([]string{"mixed-defs"}, false, nil)
+	due, err := svc.LoadCards(0, []string{"mixed-defs"}, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, due, "no word is eligible without includeUnstudied")
 
 	// With the toggle: both the never-studied and freeform-failed word
 	// must load.
-	all, err := svc.LoadCards([]string{"mixed-defs"}, true, nil)
+	all, err := svc.LoadCards(0, []string{"mixed-defs"}, true, nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 2,
 		"includeUnstudied must load both the never-seen and the freeform-failed word")
 
 	// The summary count must agree with the loaded card count so the
 	// quiz start page badge isn't misleading.
-	summaries, err := svc.LoadNotebookSummaries(true)
+	summaries, err := svc.LoadNotebookSummaries(0, true)
 	require.NoError(t, err)
 	var book *NotebookSummary
 	for i := range summaries {
@@ -761,7 +761,7 @@ func TestService_LoadCards_DefinitionsBook_RespectsNotebookSkip(t *testing.T) {
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"skip-defs"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"skip-defs"}, true, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "definitions-only word with notebook skip must not appear in LoadCards")
 }
@@ -781,7 +781,7 @@ func TestService_LoadReverseCards_DefinitionsBook_RespectsReverseSkip(t *testing
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, false, nil)
+	cards, err := svc.LoadReverseCards(0, []string{"skip-defs"}, false, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, cards, "definitions-only word with reverse skip must not appear in LoadReverseCards")
 }
@@ -824,17 +824,17 @@ notebooks:
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	due, err := svc.LoadReverseCards([]string{"mixed-rev"}, false, false, nil)
+	due, err := svc.LoadReverseCards(0, []string{"mixed-rev"}, false, false, nil)
 	require.NoError(t, err)
 	assert.Empty(t, due, "no reverse card is eligible without includeUnstudied")
 
-	all, err := svc.LoadReverseCards([]string{"mixed-rev"}, false, true, nil)
+	all, err := svc.LoadReverseCards(0, []string{"mixed-rev"}, false, true, nil)
 	require.NoError(t, err)
 	assert.Len(t, all, 2,
 		"includeUnstudied must load both never-studied words into the reverse quiz")
 
 	// Summary reverse count must agree with the loaded reverse-card count.
-	summaries, err := svc.LoadNotebookSummaries(true)
+	summaries, err := svc.LoadNotebookSummaries(0, true)
 	require.NoError(t, err)
 	var book *NotebookSummary
 	for i := range summaries {
@@ -888,7 +888,7 @@ notebooks:
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	// Forward: the standard quiz Card must carry the example sentence.
-	cards, err := svc.LoadCards([]string{"examples-defs"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"examples-defs"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	require.Len(t, cards[0].Examples, 1,
@@ -897,7 +897,7 @@ notebooks:
 
 	// Reverse: the reverse Card must carry a masked context built from the
 	// same example, with the expression masked out.
-	reverse, err := svc.LoadReverseCards([]string{"examples-defs"}, false, true, nil)
+	reverse, err := svc.LoadReverseCards(0, []string{"examples-defs"}, false, true, nil)
 	require.NoError(t, err)
 	require.Len(t, reverse, 1)
 	require.Len(t, reverse[0].Contexts, 1,
@@ -929,7 +929,7 @@ func TestService_LoadCards_MultipleNotebooks(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc, _ := newTestServiceWithFixtures(t, mock_inference.NewMockClient(ctrl))
 
-	cards, err := svc.LoadCards([]string{"test-story", "test-vocab"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"test-story", "test-vocab"}, true, nil)
 	require.NoError(t, err)
 	assert.Len(t, cards, 2)
 }
@@ -938,7 +938,7 @@ func TestService_LoadCards_NotFoundError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	svc := newTestService(t, mock_inference.NewMockClient(ctrl))
 
-	_, err := svc.LoadCards([]string{"non-existent"}, true, nil)
+	_, err := svc.LoadCards(0, []string{"non-existent"}, true, nil)
 	require.Error(t, err)
 	var notFoundErr *NotFoundError
 	require.ErrorAs(t, err, &notFoundErr)
@@ -989,7 +989,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"test-story"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"test-story"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1)
 	assert.Equal(t, "ran", cards[0].Entry)
@@ -1070,7 +1070,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries(false)
+	summaries, err := svc.LoadNotebookSummaries(0, false)
 	require.NoError(t, err)
 	require.Len(t, summaries, 1)
 	require.Len(t, summaries[0].Sections, 2)
@@ -1157,11 +1157,11 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	all, err := svc.LoadCards([]string{"two-chapters"}, true, nil)
+	all, err := svc.LoadCards(0, []string{"two-chapters"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, all, 2, "no filter returns both chapters")
 
-	filtered, err := svc.LoadCards([]string{"two-chapters"}, true, map[string][]string{
+	filtered, err := svc.LoadCards(0, []string{"two-chapters"}, true, map[string][]string{
 		"two-chapters": {"Chapter Two"},
 	})
 	require.NoError(t, err)
@@ -1235,7 +1235,7 @@ notebooks:
 		LearningNotesDirectory: learningDir,
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	filtered, err := svc.LoadReverseCards([]string{"rev-chapters"}, false, false, map[string][]string{
+	filtered, err := svc.LoadReverseCards(0, []string{"rev-chapters"}, false, false, map[string][]string{
 		"rev-chapters": {"Chapter A"},
 	})
 	require.NoError(t, err)
@@ -1395,7 +1395,7 @@ func TestService_SaveResult_WritesFile(t *testing.T) {
 		Meaning:      "a fortunate discovery by accident",
 	}
 
-	err := svc.SaveResult(context.Background(), card, GradeResult{Correct: true, Quality: 4}, 1000)
+	err := svc.SaveResult(context.Background(), 0, card, GradeResult{Correct: true, Quality: 4}, 1000)
 	require.NoError(t, err)
 
 	historyPath := filepath.Join(learningDir, "test-vocab.yml")
@@ -1418,7 +1418,7 @@ func TestService_SaveResult_MalformedYAMLError(t *testing.T) {
 		Entry:        "preposterous",
 	}
 
-	err := svc.SaveResult(context.Background(), card, GradeResult{Correct: true, Quality: 4}, 1000)
+	err := svc.SaveResult(context.Background(), 0, card, GradeResult{Correct: true, Quality: 4}, 1000)
 	require.Error(t, err)
 }
 
@@ -1503,7 +1503,7 @@ func TestService_LoadNotebookSummaries_ConceptMembersFollowHead(t *testing.T) {
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	summaries, err := svc.LoadNotebookSummaries(true)
+	summaries, err := svc.LoadNotebookSummaries(0, true)
 	require.NoError(t, err)
 	var book *NotebookSummary
 	for i := range summaries {
@@ -1564,7 +1564,7 @@ notebooks:
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"concept-book"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"concept-book"}, true, nil)
 	require.NoError(t, err)
 	require.Len(t, cards, 1, "family concept must collapse to one card at load time")
 	assert.Equal(t, "break the ice", cards[0].Entry,
@@ -1574,7 +1574,7 @@ notebooks:
 	assert.Equal(t, "to start a conversation in a social setting", cards[0].Meaning,
 		"Meaning must come from the head's own note row, not whichever member iterated first")
 
-	reverse, err := svc.LoadReverseCards([]string{"concept-book"}, false, true, nil)
+	reverse, err := svc.LoadReverseCards(0, []string{"concept-book"}, false, true, nil)
 	require.NoError(t, err)
 	require.Len(t, reverse, 1, "family concept reverse quiz must also surface one card")
 	assert.Equal(t, "break the ice", reverse[0].Expression,
@@ -1629,7 +1629,7 @@ notebooks:
 	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadCards([]string{"synonym-book"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"synonym-book"}, true, nil)
 	require.NoError(t, err)
 	assert.Len(t, cards, 3, "synonym kind must keep one card per member, not collapse")
 	gotByEntry := map[string]Card{}
@@ -1670,7 +1670,7 @@ func TestService_SaveResult_SynonymMemberWritesUnderMember(t *testing.T) {
 		// concepts emit cards without it.
 		Meaning: "expressing great happiness",
 	}
-	require.NoError(t, svc.SaveResult(context.Background(), card,
+	require.NoError(t, svc.SaveResult(context.Background(), 0, card,
 		GradeResult{Correct: true, Quality: 4}, 1000))
 
 	yamlBytes, err := os.ReadFile(filepath.Join(learningDir, "synonym-book.yml"))
@@ -1704,7 +1704,7 @@ func TestService_SaveResult_ConceptHeadRedirectsLog(t *testing.T) {
 		ConceptHead:  "break the ice",
 		Meaning:      "to start social interaction",
 	}
-	require.NoError(t, svc.SaveResult(context.Background(), card,
+	require.NoError(t, svc.SaveResult(context.Background(), 0, card,
 		GradeResult{Correct: true, Quality: 4}, 1000))
 
 	yamlBytes, err := os.ReadFile(filepath.Join(learningDir, "concept-book.yml"))
@@ -2413,7 +2413,7 @@ func TestService_DefinitionsBookSummaryMatchesLoad(t *testing.T) {
 			}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
 				learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-			summaries, err := svc.LoadNotebookSummaries(true)
+			summaries, err := svc.LoadNotebookSummaries(0, true)
 			require.NoError(t, err)
 			var book *NotebookSummary
 			for i := range summaries {
@@ -2425,14 +2425,14 @@ func TestService_DefinitionsBookSummaryMatchesLoad(t *testing.T) {
 			require.NotNil(t, book, "skip-defs must appear in summaries")
 			require.Len(t, book.Sections, 1, "fixture has exactly one session")
 
-			cards, err := svc.LoadCards([]string{"skip-defs"}, true, nil)
+			cards, err := svc.LoadCards(0, []string{"skip-defs"}, true, nil)
 			require.NoError(t, err)
 			assert.Equal(t, len(cards), book.ReviewCount,
 				"notebook ReviewCount must equal len(LoadCards)")
 			assert.Equal(t, len(cards), book.Sections[0].ReviewCount,
 				"section ReviewCount must equal len(LoadCards)")
 
-			reverseCards, err := svc.LoadReverseCards([]string{"skip-defs"}, false, true, nil)
+			reverseCards, err := svc.LoadReverseCards(0, []string{"skip-defs"}, false, true, nil)
 			require.NoError(t, err)
 			assert.Equal(t, len(reverseCards), book.ReverseReviewCount,
 				"notebook ReverseReviewCount must equal len(LoadReverseCards)")

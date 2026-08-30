@@ -163,7 +163,7 @@ func TestLoadRelearnPool_OriginBearingMissGroupsByOrigin(t *testing.T) {
 				svc := originGroupFixture(t, placement, direction)
 
 				// Exactly one canonical card for the word (L1/L4: one series).
-				words, err := svc.LoadAllWords()
+				words, err := svc.LoadAllWords(0)
 				require.NoError(t, err)
 				count := 0
 				for _, w := range words {
@@ -173,7 +173,7 @@ func TestLoadRelearnPool_OriginBearingMissGroupsByOrigin(t *testing.T) {
 				}
 				require.Equal(t, 1, count, "the word must have exactly one canonical card (one log series)")
 
-				pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+				pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 				require.NoError(t, err)
 
 				var card *RelearnCard
