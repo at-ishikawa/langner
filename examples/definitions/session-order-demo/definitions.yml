@@ -1,0 +1,89 @@
+# A definitions-only book whose sessions are declared in a NON-lexical,
+# NON-numeric order. Each `metadata.title` is a spelled-out unit name (no
+# trailing digit), so the old start-page sort (trailing-integer, then
+# alphabetical) reordered them to: Appendix, Intro, UNIT FOUR, UNIT ONE,
+# UNIT THREE, UNIT TWO — visibly wrong. The correct order is the one declared
+# below (and in index.yml): Intro, UNIT ONE, UNIT TWO, UNIT THREE, UNIT FOUR,
+# Appendix.
+#
+# "Appendix" is deliberately declared LAST while sorting alphabetically FIRST,
+# so the divergence is unmistakable. All words are common English vocabulary and
+# all sentences are invented (no personal data).
+- metadata:
+    title: "Intro"
+  scenes:
+    - metadata:
+        index: 0
+        title: "getting started"
+      expressions:
+        - expression: outset
+          meaning: "the start or beginning of something"
+          part_of_speech: noun
+          examples:
+            - text: "From the outset, the plan was clear to everyone in the room."
+              highlight: outset
+- metadata:
+    title: "UNIT ONE"
+  scenes:
+    - metadata:
+        index: 0
+        title: "working habits"
+      expressions:
+        - expression: diligent
+          meaning: "showing careful and persistent effort"
+          part_of_speech: adjective
+          examples:
+            - text: "She was diligent about checking every figure twice before sending it."
+              highlight: diligent
+- metadata:
+    title: "UNIT TWO"
+  scenes:
+    - metadata:
+        index: 0
+        title: "speaking plainly"
+      expressions:
+        - expression: candid
+          meaning: "honest and straightforward in speech"
+          part_of_speech: adjective
+          examples:
+            - text: "He gave a candid answer even though it was not what they hoped to hear."
+              highlight: candid
+- metadata:
+    title: "UNIT THREE"
+  scenes:
+    - metadata:
+        index: 0
+        title: "thinking ahead"
+      expressions:
+        - expression: prudent
+          meaning: "acting with care and good judgment about the future"
+          part_of_speech: adjective
+          examples:
+            - text: "It seemed prudent to save a little each month for unexpected repairs."
+              highlight: prudent
+- metadata:
+    title: "UNIT FOUR"
+  scenes:
+    - metadata:
+        index: 0
+        title: "bouncing back"
+      expressions:
+        - expression: resilient
+          meaning: "able to recover quickly from difficulty"
+          part_of_speech: adjective
+          examples:
+            - text: "The team proved resilient, regrouping after a rough start to the season."
+              highlight: resilient
+- metadata:
+    title: "Appendix"
+  scenes:
+    - metadata:
+        index: 0
+        title: "extra words"
+      expressions:
+        - expression: concise
+          meaning: "giving much information in few words"
+          part_of_speech: adjective
+          examples:
+            - text: "Her report was concise, fitting the whole summary onto a single page."
+              highlight: concise

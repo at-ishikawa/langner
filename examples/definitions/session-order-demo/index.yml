@@ -1,0 +1,9 @@
+id: session-order-demo
+name: "Session Order Demo (index-declared order, non-numeric titles)"
+# Sessions are listed here in DOCUMENT order. Their titles carry NO trailing
+# integer, so any numeric/lexical sort scrambles them (e.g. UNIT FOUR, UNIT ONE,
+# UNIT THREE, UNIT TWO) and moves the last-declared "Appendix" to the front
+# because it sorts alphabetically first. The quiz start page must instead show
+# them in THIS declared order. See definitions.yml for the words.
+notebooks:
+  - ./definitions.yml

@@ -241,6 +241,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			continue
 		}
 		conceptHeads := definitionConceptHeads(reader, nbID)
+		order := reader.GetDefinitionsSessionOrder(nbID)
 		reviewCount := countDefinitionNotes(defs, learningHistories[nbID], false, includeUnstudied, conceptHeads)
 		reverseCount := countDefinitionNotes(defs, learningHistories[nbID], true, includeUnstudied, conceptHeads)
 		if reviewCount == 0 && reverseCount == 0 {
@@ -254,7 +255,7 @@ func (s *Service) LoadNotebookSummaries(includeUnstudied bool) ([]NotebookSummar
 			VocabularyCount:    countDefinitionEntries(defs, conceptHeads),
 			Kind:               "Books",
 			LatestDate:         reader.GetDefinitionsLatestDate(nbID),
-			Sections:           definitionsSectionSummaries(defs, learningHistories[nbID], includeUnstudied, conceptHeads),
+			Sections:           definitionsSectionSummaries(defs, order, learningHistories[nbID], includeUnstudied, conceptHeads),
 		})
 	}
 
@@ -2189,15 +2190,22 @@ func isExpressionSkippedInHistory(histories []notebook.LearningHistory, event, s
 }
 
 // definitionsSectionSummaries returns per-session counts for a
-// definitions-only book (e.g. Word Power Made Easy). Without this, the
+// definitions-only book (e.g. a multi-unit vocabulary book). Without this, the
 // vocabulary quiz options page showed the book as a single un-expandable
 // row even though etymology mode listed every session of the same book.
-// Sessions are ordered by the trailing integer in their title
-// ("Session 1", "Session 10", "Session 2" → 1, 2, 10) so users see them
-// in document order; titles without a trailing integer fall back to
-// alphabetical ordering after numbered ones.
+//
+// Sessions are ordered by `order` — the session keys in the sequence their
+// notebooks are declared in the book's index.yml (see
+// notebook.Reader.GetDefinitionsSessionOrder) — so users see them in document
+// order. This is the authoritative order: titles like "UNIT ONE .. UNIT
+// FIFTEEN" carry no trailing integer, so sorting them any other way scrambles
+// them (UNIT EIGHT, UNIT ELEVEN, UNIT FIFTEEN, UNIT FIVE, ...). Any title in
+// `defs` NOT covered by `order` (e.g. a standalone definition file loaded
+// without an index.yml) is appended afterwards via the trailing-integer /
+// lexical fallback ("Session 2" before "Session 10", then alphabetical).
 func definitionsSectionSummaries(
 	defs map[string]map[string][]notebook.Note,
+	order []string,
 	histories []notebook.LearningHistory,
 	includeUnstudied bool,
 	conceptHeads map[string]string,
@@ -2206,12 +2214,30 @@ func definitionsSectionSummaries(
 		return nil
 	}
 	titles := make([]string, 0, len(defs))
-	for title := range defs {
+	seen := make(map[string]bool)
+	// Index-declared order first (deduped), keeping only titles present in defs.
+	for _, title := range order {
+		if _, ok := defs[title]; !ok {
+			continue
+		}
+		if seen[title] {
+			continue
+		}
+		seen[title] = true
 		titles = append(titles, title)
 	}
-	sort.Slice(titles, func(i, j int) bool {
-		ni, oki := trailingInt(titles[i])
-		nj, okj := trailingInt(titles[j])
+	// Leftover titles not covered by the index order fall back to the
+	// numeric-then-lexical sort.
+	leftover := make([]string, 0, len(defs))
+	for title := range defs {
+		if seen[title] {
+			continue
+		}
+		leftover = append(leftover, title)
+	}
+	sort.Slice(leftover, func(i, j int) bool {
+		ni, oki := trailingInt(leftover[i])
+		nj, okj := trailingInt(leftover[j])
 		if oki && okj {
 			if ni != nj {
 				return ni < nj
@@ -2219,8 +2245,9 @@ func definitionsSectionSummaries(
 		} else if oki != okj {
 			return oki
 		}
-		return titles[i] < titles[j]
+		return leftover[i] < leftover[j]
 	})
+	titles = append(titles, leftover...)
 	var sections []NotebookSectionSummary
 	for _, title := range titles {
 		one := map[string]map[string][]notebook.Note{title: defs[title]}
