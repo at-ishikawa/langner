@@ -4,7 +4,13 @@ import "time"
 
 // LearningLog represents a learning history entry for a note.
 type LearningLog struct {
-	ID     int64 `db:"id"`
+	ID int64 `db:"id"`
+	// UserID owns this log (auth Phase 2). Every runtime attempt is stamped
+	// with the answering user's id so a word has one log series PER (user,
+	// note, quiz mode) — the per-user extension of learning-history invariant
+	// L4. Nullable in the DB: rows imported/seeded before auth carry 0 (NULL)
+	// until `langner auth provision` backfills them to the initial admin.
+	UserID int64 `db:"user_id"`
 	NoteID int64 `db:"note_id"`
 	// OriginID targets an etymology_origins row instead of a note, and
 	// CorrectionID targets a grammar_corrections row. Exactly one of

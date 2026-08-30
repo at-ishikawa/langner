@@ -64,10 +64,12 @@ func (fakeSkipRepoRepro) FindNoteFlags(context.Context, []int64) ([]notebook.Not
 func (fakeSkipRepoRepro) FindOriginFlags(context.Context, []int64) ([]notebook.OriginSkipFlagRecord, error) {
 	return nil, nil
 }
-func (fakeSkipRepoRepro) SkipNote(context.Context, int64, string, time.Time) error   { return nil }
-func (fakeSkipRepoRepro) ResumeNote(context.Context, int64, string) error            { return nil }
-func (fakeSkipRepoRepro) SkipOrigin(context.Context, int64, string, time.Time) error { return nil }
-func (fakeSkipRepoRepro) ResumeOrigin(context.Context, int64, string) error          { return nil }
+func (fakeSkipRepoRepro) SkipNote(context.Context, int64, int64, string, time.Time) error { return nil }
+func (fakeSkipRepoRepro) ResumeNote(context.Context, int64, int64, string) error          { return nil }
+func (fakeSkipRepoRepro) SkipOrigin(context.Context, int64, int64, string, time.Time) error {
+	return nil
+}
+func (fakeSkipRepoRepro) ResumeOrigin(context.Context, int64, int64, string) error { return nil }
 
 // TestReproSeeder_EtymologyLogsFromE2EFixtures drives the StateSeeder's
 // etymology-log seeding against the real e2e fixtures (etymology notebooks +

@@ -37,6 +37,10 @@ type Attempt struct {
 type Filters struct {
 	NotebookID string
 	QuizType   string
+	// UserID scopes every analytics query to one account's learning history
+	// (auth Phase 2), threaded from the request context by the handler. 0
+	// disables user scoping (single-tenant dev / unauthenticated tooling).
+	UserID int64
 }
 
 // DailySummary is one row on the Day List page.
@@ -52,6 +56,9 @@ type DailySummary struct {
 // repository to look up. NoteID is used when available; the fallback path
 // uses NotebookID + Expression instead.
 type WordRef struct {
+	// UserID scopes the word-history lookup to the caller's own logs (auth
+	// Phase 2). 0 disables scoping (dev).
+	UserID int64
 	NoteID int64
 	// ID is the stable source-entry identity of the word (see
 	// notebook.Note.ID / LearningHistoryExpression.ID). When set, the YAML

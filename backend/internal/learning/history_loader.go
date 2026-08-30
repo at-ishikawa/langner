@@ -29,10 +29,14 @@ type noteNotebook struct {
 // instance — the result map shape is identical so downstream consumers
 // (filters, validators, handlers) don't have to change.
 type HistoryStore interface {
-	// LoadAll returns every notebook's histories keyed by notebook ID.
-	// Mirrors notebook.NewLearningHistories return shape so the swap is
+	// LoadAll returns every notebook's histories keyed by notebook ID, scoped
+	// to the given user (auth Phase 2): only that user's learning logs and
+	// exclude markers are reconstructed, so a word carries one series PER
+	// (user, note, quiz mode) — the per-user extension of invariant L4. The
+	// DB store filters by user_id; the YAML store (single-tenant dev) ignores
+	// userID. Mirrors notebook.NewLearningHistories return shape so the swap is
 	// drop-in.
-	LoadAll(ctx context.Context) (map[string][]notebook.LearningHistory, error)
+	LoadAll(ctx context.Context, userID int64) (map[string][]notebook.LearningHistory, error)
 }
 
 // DBHistoryStore composes the DB repositories needed to reconstruct the
@@ -67,15 +71,27 @@ func NewDBHistoryStore(noteRepo notebook.NoteRepository, learningRepo LearningRe
 // Story notebooks land in the .Scenes shape (one LearningScene per
 // notebook_notes.subgroup); flashcard notebooks land in the flat
 // .Expressions shape with Metadata.Type = "flashcard".
-func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.LearningHistory, error) {
+func (s *DBHistoryStore) LoadAll(ctx context.Context, userID int64) (map[string][]notebook.LearningHistory, error) {
 	notes, err := s.noteRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load notes: %w", err)
 	}
 
-	logs, err := s.learningRepo.FindAll(ctx)
+	allLogs, err := s.learningRepo.FindAll(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load learning logs: %w", err)
+	}
+	// Scope to this user's logs (auth Phase 2). FindAll returns every user's
+	// rows (it also feeds the unscoped import/export/validate CLI); the
+	// per-user read keeps only user_id == userID, so the noteNotebook keying
+	// below runs over an already user-filtered set — invariant L4 intact, plus
+	// the user dimension. userID 0 (single-tenant dev / tests) matches the
+	// unattributed rows those paths create.
+	logs := make([]LearningLog, 0, len(allLogs))
+	for _, l := range allLogs {
+		if l.UserID == userID {
+			logs = append(logs, l)
+		}
 	}
 
 	noteByID := make(map[int64]*notebook.NoteRecord, len(notes))
@@ -141,6 +157,10 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 	}
 	skipFlagsByNote := make(map[int64]notebook.SkippedAtMap, len(noteSkipFlags))
 	for _, f := range noteSkipFlags {
+		// Apply only this user's exclude markers (auth Phase 2).
+		if f.UserID != userID {
+			continue
+		}
 		m := skipFlagsByNote[f.NoteID]
 		if m == nil {
 			m = make(notebook.SkippedAtMap)
@@ -167,6 +187,9 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 		}
 		skipFlagsByOrigin := make(map[int64]notebook.SkippedAtMap, len(originSkipFlags))
 		for _, f := range originSkipFlags {
+			if f.UserID != userID {
+				continue
+			}
 			m := skipFlagsByOrigin[f.OriginID]
 			if m == nil {
 				m = make(notebook.SkippedAtMap)

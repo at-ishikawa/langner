@@ -2,15 +2,25 @@
 package testutil
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/stretchr/testify/require"
 )
+
+// WithTestUser returns a context carrying the given authenticated user id, the
+// same way the auth interceptor injects it at runtime. Tests that drive a
+// per-user code path (SaveResult, LoadAll, analytics) use it to stamp/scope a
+// deterministic user without a real session.
+func WithTestUser(ctx context.Context, id int64) context.Context {
+	return auth.WithUserID(ctx, id)
+}
 
 // SetupTestConfig creates a minimal config file and all required directories for testing.
 // Returns the path to the generated config file.

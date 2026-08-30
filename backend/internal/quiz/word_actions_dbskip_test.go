@@ -31,19 +31,19 @@ func (f *fakeSkipFlags) FindNoteFlags(context.Context, []int64) ([]notebook.Note
 func (f *fakeSkipFlags) FindOriginFlags(context.Context, []int64) ([]notebook.OriginSkipFlagRecord, error) {
 	return nil, nil
 }
-func (f *fakeSkipFlags) SkipNote(_ context.Context, noteID int64, quizType string, _ time.Time) error {
+func (f *fakeSkipFlags) SkipNote(_ context.Context, _ int64, noteID int64, quizType string, _ time.Time) error {
 	f.skippedNotes = append(f.skippedNotes, key(noteID, quizType))
 	return nil
 }
-func (f *fakeSkipFlags) ResumeNote(_ context.Context, noteID int64, quizType string) error {
+func (f *fakeSkipFlags) ResumeNote(_ context.Context, _ int64, noteID int64, quizType string) error {
 	f.resumedNotes = append(f.resumedNotes, key(noteID, quizType))
 	return nil
 }
-func (f *fakeSkipFlags) SkipOrigin(_ context.Context, originID int64, quizType string, _ time.Time) error {
+func (f *fakeSkipFlags) SkipOrigin(_ context.Context, _ int64, originID int64, quizType string, _ time.Time) error {
 	f.skippedOrigin = append(f.skippedOrigin, key(originID, quizType))
 	return nil
 }
-func (f *fakeSkipFlags) ResumeOrigin(_ context.Context, originID int64, quizType string) error {
+func (f *fakeSkipFlags) ResumeOrigin(_ context.Context, _ int64, originID int64, quizType string) error {
 	f.resumedOrigin = append(f.resumedOrigin, key(originID, quizType))
 	return nil
 }
@@ -109,13 +109,13 @@ func TestSkipWord_DBMode_WritesSkipFlagsNotYAML(t *testing.T) {
 	// Learn-page Exclude carries the DB note id directly (homograph-safe).
 	info := CardInfo{NotebookName: "roots-book", Expression: "reputation", NoteID: 7}
 
-	require.NoError(t, svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.SkipWord(0, info, "", []notebook.QuizType{notebook.QuizTypeNotebook}))
 	assert.Equal(t, before, snapshotDir(t, dir),
 		"SkipWord in DB mode MUST NOT create or modify any learning_notes YAML file")
 	assert.Equal(t, []string{key(7, "notebook")}, skipRepo.skippedNotes,
 		"SkipWord must UPSERT note_skip_flags(note_id, quiz_type)")
 
-	require.NoError(t, svc.ResumeWord(info, []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.ResumeWord(0, info, []notebook.QuizType{notebook.QuizTypeNotebook}))
 	assert.Equal(t, before, snapshotDir(t, dir),
 		"ResumeWord in DB mode MUST NOT write learning_notes YAML either")
 	assert.Equal(t, []string{key(7, "notebook")}, skipRepo.resumedNotes,
@@ -138,7 +138,7 @@ func TestSkipWord_DBMode_ResolvesNoteByExpression(t *testing.T) {
 	svc.SetSkipStores(skipRepo, &fakeNoteRepo{notes: notes}, nil)
 
 	info := CardInfo{NotebookName: "roots-book", Expression: "reputation"} // no NoteID
-	require.NoError(t, svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeReverse}))
+	require.NoError(t, svc.SkipWord(0, info, "", []notebook.QuizType{notebook.QuizTypeReverse}))
 	assert.Equal(t, []string{key(3, "reverse")}, skipRepo.skippedNotes,
 		"resolve the note by (notebook, surface) exactly as the loaders reconstruct it")
 
@@ -150,7 +150,7 @@ func TestSkipWord_DBMode_ResolvesNoteByExpression(t *testing.T) {
 			NotebookNotes: []notebook.NotebookNote{{NotebookID: "roots-book"}}},
 	}
 	svc.SetSkipStores(skipRepo, &fakeNoteRepo{notes: homographs}, nil)
-	err := svc.SkipWord(CardInfo{NotebookName: "roots-book", Expression: "bank"}, "",
+	err := svc.SkipWord(0, CardInfo{NotebookName: "roots-book", Expression: "bank"}, "",
 		[]notebook.QuizType{notebook.QuizTypeNotebook})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bank")
@@ -168,7 +168,7 @@ func TestSkipWord_DBMode_GrammarIsNotPersisted(t *testing.T) {
 	svc.SetSkipStores(skipRepo, &fakeNoteRepo{}, nil)
 
 	info := CardInfo{NotebookName: "journal-nb", StoryTitle: notebook.JournalStoryTitle, Expression: "corr-1", ID: "corr-1"}
-	require.NoError(t, svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeGrammar}))
+	require.NoError(t, svc.SkipWord(0, info, "", []notebook.QuizType{notebook.QuizTypeGrammar}))
 
 	assert.Equal(t, before, snapshotDir(t, dir), "grammar exclude must not write YAML in DB mode")
 	assert.Empty(t, skipRepo.skippedNotes, "grammar exclude must not write note_skip_flags")

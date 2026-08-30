@@ -31,12 +31,12 @@ func TestExampleData_ExcludedWordAbsentFromRelearn(t *testing.T) {
 	svc := newExampleService(t, learningDir)
 
 	// Miss deficient AND transact in the reverse quiz through the real path.
-	reverse, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+	reverse, err := svc.LoadReverseCards(0, []string{"roots-demo"}, false, true, nil)
 	require.NoError(t, err)
 	missReverse := func(word string) {
 		for i := range reverse {
 			if reverse[i].Expression == word {
-				require.NoError(t, svc.SaveReverseResult(ctx, reverse[i], GradeResult{Correct: false, Quality: 0}, 1000))
+				require.NoError(t, svc.SaveReverseResult(ctx, 0, reverse[i], GradeResult{Correct: false, Quality: 0}, 1000))
 				return
 			}
 		}
@@ -46,18 +46,18 @@ func TestExampleData_ExcludedWordAbsentFromRelearn(t *testing.T) {
 	missReverse("transact")
 
 	// Baseline: both missed words are in the pool before any exclusion.
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
 	require.NotNil(t, relearnCardFor(pool, "deficient"), "precondition: reverse-missed deficient is in the pool")
 	require.NotNil(t, relearnCardFor(pool, "transact"), "precondition: reverse-missed transact is in the pool")
 
 	// Exclude deficient from the reverse quiz via the real SkipWord path
 	// (the ONLY thing that writes skipped_at). transact stays as the control.
-	require.NoError(t, svc.SkipWord(
+	require.NoError(t, svc.SkipWord(0, 
 		CardInfo{NotebookName: "roots-demo", Expression: "deficient"},
 		"", []notebook.QuizType{notebook.QuizTypeReverse}))
 
-	pool, err = svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	pool, err = svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
 	assert.Nil(t, relearnCardFor(pool, "deficient"),
 		"an excluded word (skipped_at set) must never enter the Relearn pool")
@@ -75,7 +75,7 @@ func TestExampleData_EtymologyNotebookExampleShownInRelearn(t *testing.T) {
 	ctx := context.Background()
 	svc := newExampleService(t, t.TempDir())
 
-	all, err := svc.LoadAllWords()
+	all, err := svc.LoadAllWords(0)
 	require.NoError(t, err)
 	var card *FreeformCard
 	for i := range all {
@@ -86,9 +86,9 @@ func TestExampleData_EtymologyNotebookExampleShownInRelearn(t *testing.T) {
 	require.NotNil(t, card, "benefactor (etymology-notebook only) must be loaded as a vocabulary card")
 	require.NotEmpty(t, card.Examples, "the etymology-notebook example must survive onto the loaded card")
 
-	require.NoError(t, svc.SaveFreeformResult(ctx, *card, FreeformGradeResult{Correct: false, Quality: 0}, 1000))
+	require.NoError(t, svc.SaveFreeformResult(ctx, 0, *card, FreeformGradeResult{Correct: false, Quality: 0}, 1000))
 
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
 	rc := relearnCardFor(pool, "benefactor")
 	require.NotNil(t, rc, "the missed etymology word must be in the Relearn pool")
@@ -197,22 +197,22 @@ func TestExampleData_GrammarMissRespectsRecencyWindow(t *testing.T) {
 
 	// Miss the RECENT grammar correction through the real grammar path (now).
 	// Create() merges into the existing journal.yml alongside the seeded entry.
-	require.NoError(t, svc.SaveGrammarBlank(ctx, "journal", recentSenseID, GradeResult{Correct: false, Quality: 0}, 1000))
+	require.NoError(t, svc.SaveGrammarBlank(ctx, 0, "journal", recentSenseID, GradeResult{Correct: false, Quality: 0}, 1000))
 
 	// Recent vocabulary control through the real reverse path (now).
-	reverse, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+	reverse, err := svc.LoadReverseCards(0, []string{"roots-demo"}, false, true, nil)
 	require.NoError(t, err)
 	missed := false
 	for i := range reverse {
 		if reverse[i].Expression == "deficient" {
-			require.NoError(t, svc.SaveReverseResult(ctx, reverse[i], GradeResult{Correct: false, Quality: 0}, 1000))
+			require.NoError(t, svc.SaveReverseResult(ctx, 0, reverse[i], GradeResult{Correct: false, Quality: 0}, 1000))
 			missed = true
 		}
 	}
 	require.True(t, missed, "reverse quiz must serve deficient")
 
 	// 24h window: the old grammar correction ages out; the recent one stays.
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
 	assert.Nil(t, grammarCardByIncorrect(pool, oldIncorrect),
 		"an OLD grammar correction (outside the window) must NOT be re-drilled after the fix")
@@ -224,7 +224,7 @@ func TestExampleData_GrammarMissRespectsRecencyWindow(t *testing.T) {
 	// Wide 7-day window: proves the seed is valid and it is ONLY the window
 	// filtering — with a wide-enough window BOTH corrections appear (this is the
 	// pre-fix behavior the fix removes for the narrow window).
-	wide, err := svc.LoadRelearnPool(time.Now().Add(-7 * 24 * time.Hour))
+	wide, err := svc.LoadRelearnPool(0, time.Now().Add(-7 * 24 * time.Hour))
 	require.NoError(t, err)
 	assert.NotNil(t, grammarCardByIncorrect(wide, oldIncorrect),
 		"the old correction IS in the pool when the window is wide enough (seed is valid)")
@@ -251,7 +251,7 @@ func TestExampleData_ReverseHintNeverRevealsAnswer(t *testing.T) {
 	reverseCardFor := func(t *testing.T, word string) *RelearnCard {
 		t.Helper()
 		svc := newExampleService(t, t.TempDir())
-		all, err := svc.LoadAllWords()
+		all, err := svc.LoadAllWords(0)
 		require.NoError(t, err)
 		var card *FreeformCard
 		for i := range all {
@@ -260,8 +260,8 @@ func TestExampleData_ReverseHintNeverRevealsAnswer(t *testing.T) {
 			}
 		}
 		require.NotNilf(t, card, "%q must load", word)
-		require.NoError(t, svc.SaveFreeformResult(ctx, *card, FreeformGradeResult{Correct: false, Quality: 1}, 1000))
-		pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+		require.NoError(t, svc.SaveFreeformResult(ctx, 0, *card, FreeformGradeResult{Correct: false, Quality: 1}, 1000))
+		pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 		require.NoError(t, err)
 		rc := relearnCardFor(pool, word)
 		require.NotNilf(t, rc, "%q must be in the pool", word)
@@ -336,37 +336,37 @@ func TestExampleData_OriginCardShowsRelatedFamily(t *testing.T) {
 			svc := newExampleService(t, t.TempDir())
 
 			// Exclude a facere sibling from quizzes via the real SkipWord path.
-			require.NoError(t, svc.SkipWord(
+			require.NoError(t, svc.SkipWord(0, 
 				CardInfo{NotebookName: "roots-demo", Expression: "factory", ID: "factory-demo"},
 				"", []notebook.QuizType{notebook.QuizTypeNotebook}))
 
 			// Miss deficient in the given direction through the real quiz path.
 			switch tc.direction {
 			case notebook.QuizTypeReverse:
-				cards, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+				cards, err := svc.LoadReverseCards(0, []string{"roots-demo"}, false, true, nil)
 				require.NoError(t, err)
 				missed := false
 				for i := range cards {
 					if cards[i].Expression == "deficient" {
-						require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						require.NoError(t, svc.SaveReverseResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 						missed = true
 					}
 				}
 				require.True(t, missed, "reverse quiz must serve deficient")
 			default:
-				cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+				cards, err := svc.LoadCards(0, []string{"roots-demo"}, true, nil)
 				require.NoError(t, err)
 				missed := false
 				for i := range cards {
 					if cards[i].Entry == "deficient" {
-						require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						require.NoError(t, svc.SaveResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 						missed = true
 					}
 				}
 				require.True(t, missed, "standard quiz must serve deficient")
 			}
 
-			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 			require.NoError(t, err)
 			card := relearnCardFor(pool, "deficient")
 			require.NotNil(t, card, "the missed word must be in the pool")
@@ -402,18 +402,18 @@ func TestExampleData_RelatedFamilyResolvesOriginUniformly(t *testing.T) {
 	ctx := context.Background()
 	svc := newExampleService(t, t.TempDir())
 
-	cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"roots-demo"}, true, nil)
 	require.NoError(t, err)
 	missed := false
 	for i := range cards {
 		if cards[i].Entry == "deficient" {
-			require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+			require.NoError(t, svc.SaveResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 			missed = true
 		}
 	}
 	require.True(t, missed, "standard quiz must serve deficient")
 
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
 	card := relearnCardFor(pool, "deficient")
 	require.NotNil(t, card)
@@ -437,18 +437,18 @@ func TestExampleData_RelatedFamilyRealRootsBook(t *testing.T) {
 	ctx := context.Background()
 	svc := newExampleService(t, t.TempDir())
 
-	cards, err := svc.LoadCards([]string{"latin-roots-book"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"latin-roots-book"}, true, nil)
 	require.NoError(t, err)
 	missed := false
 	for i := range cards {
 		if cards[i].Entry == "recipient" {
-			require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+			require.NoError(t, svc.SaveResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 			missed = true
 		}
 	}
 	require.True(t, missed, "standard quiz must serve recipient")
 
-	pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 	require.NoError(t, err)
 	card := relearnCardFor(pool, "recipient")
 	require.NotNil(t, card)
@@ -486,30 +486,30 @@ func TestExampleData_RelatedFamilyUntypedRootLast(t *testing.T) {
 
 			switch tc.direction {
 			case notebook.QuizTypeReverse:
-				cards, err := svc.LoadReverseCards([]string{"roots-untyped"}, false, true, nil)
+				cards, err := svc.LoadReverseCards(0, []string{"roots-untyped"}, false, true, nil)
 				require.NoError(t, err)
 				missed := false
 				for i := range cards {
 					if cards[i].Expression == "abduct" {
-						require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						require.NoError(t, svc.SaveReverseResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 						missed = true
 					}
 				}
 				require.True(t, missed, "reverse quiz must serve abduct")
 			default:
-				cards, err := svc.LoadCards([]string{"roots-untyped"}, true, nil)
+				cards, err := svc.LoadCards(0, []string{"roots-untyped"}, true, nil)
 				require.NoError(t, err)
 				missed := false
 				for i := range cards {
 					if cards[i].Entry == "abduct" {
-						require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						require.NoError(t, svc.SaveResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 						missed = true
 					}
 				}
 				require.True(t, missed, "standard quiz must serve abduct")
 			}
 
-			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 			require.NoError(t, err)
 			card := relearnCardFor(pool, "abduct")
 			require.NotNil(t, card, "the missed word must be in the pool")
@@ -558,7 +558,7 @@ func TestExampleData_RelatedFamilyIncludesQuizExcludedSiblings(t *testing.T) {
 
 			// Seed the leftover state: exclude the facere siblings from quizzes.
 			for _, w := range excluded {
-				require.NoError(t, svc.SkipWord(
+				require.NoError(t, svc.SkipWord(0, 
 					CardInfo{NotebookName: "roots-demo", Expression: w.expr, ID: w.id},
 					"", []notebook.QuizType{notebook.QuizTypeNotebook, notebook.QuizTypeReverse}))
 			}
@@ -573,30 +573,30 @@ func TestExampleData_RelatedFamilyIncludesQuizExcludedSiblings(t *testing.T) {
 			// Miss the un-excluded sibling in the given direction.
 			switch tc.direction {
 			case notebook.QuizTypeReverse:
-				cards, err := svc.LoadReverseCards([]string{"roots-demo"}, false, true, nil)
+				cards, err := svc.LoadReverseCards(0, []string{"roots-demo"}, false, true, nil)
 				require.NoError(t, err)
 				missed := false
 				for i := range cards {
 					if cards[i].Expression == "deficient" {
-						require.NoError(t, svc.SaveReverseResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						require.NoError(t, svc.SaveReverseResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 						missed = true
 					}
 				}
 				require.True(t, missed, "reverse quiz must serve deficient")
 			default:
-				cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+				cards, err := svc.LoadCards(0, []string{"roots-demo"}, true, nil)
 				require.NoError(t, err)
 				missed := false
 				for i := range cards {
 					if cards[i].Entry == "deficient" {
-						require.NoError(t, svc.SaveResult(ctx, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
+						require.NoError(t, svc.SaveResult(ctx, 0, cards[i], GradeResult{Correct: false, Quality: 0}, 1000))
 						missed = true
 					}
 				}
 				require.True(t, missed, "standard quiz must serve deficient")
 			}
 
-			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 			require.NoError(t, err)
 			card := relearnCardFor(pool, "deficient")
 			require.NotNil(t, card)

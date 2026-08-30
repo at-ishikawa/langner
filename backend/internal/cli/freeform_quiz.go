@@ -36,7 +36,7 @@ func NewFreeformQuizCLI(
 	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
 	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
-	cards, err := svc.LoadAllWords()
+	cards, err := svc.LoadAllWords(0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load all words: %w", err)
 	}
@@ -90,7 +90,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 	r.displayFreeformResult(grade)
 
 	if grade.MatchedCard != nil {
-		if err := r.svc.SaveFreeformResult(ctx, *grade.MatchedCard, grade, responseTimeMs); err != nil {
+		if err := r.svc.SaveFreeformResult(ctx, 0, *grade.MatchedCard, grade, responseTimeMs); err != nil {
 			return err
 		}
 	}

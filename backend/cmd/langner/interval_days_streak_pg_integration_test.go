@@ -80,6 +80,7 @@ func TestIntervalDaysStreak_LivePostgres_Integration(t *testing.T) {
 	svc := quiz.NewService(cfg.Notebooks, nil, nil, repos.Learning,
 		config.QuizConfig{Algorithm: "fixed", FixedIntervals: fixedLadder})
 	svc.SetHistoryStore(repos.HistoryStore)
+	userID := seedIntegrationUser(t, db, "interval-streak-user")
 
 	const bookID = "reverse-progress-demo"
 	ctx := context.Background()
@@ -109,7 +110,7 @@ func TestIntervalDaysStreak_LivePostgres_Integration(t *testing.T) {
 	}
 
 	// ---- Reverse streak (cardiovascular): first correct -> 7, then -> 30. ----
-	revCards, err := svc.LoadReverseCards([]string{bookID}, false, true, nil)
+	revCards, err := svc.LoadReverseCards(userID, []string{bookID}, false, true, nil)
 	require.NoError(t, err)
 	var revCard quiz.ReverseCard
 	for _, c := range revCards {
@@ -121,17 +122,17 @@ func TestIntervalDaysStreak_LivePostgres_Integration(t *testing.T) {
 	require.Equal(t, "cardiovascular", revCard.AltForm, "reverse demo word must be due")
 
 	cvID := noteID("cardiovascular")
-	require.NoError(t, svc.SaveReverseResult(ctx, revCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+	require.NoError(t, svc.SaveReverseResult(ctx, userID, revCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
 	assert.Equal(t, 7, latestInterval(cvID, "reverse"),
 		"first correct reverse answer must store ladder[1]=7, not the buggy 0")
 
 	backdate(cvID, "reverse")
-	require.NoError(t, svc.SaveReverseResult(ctx, revCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+	require.NoError(t, svc.SaveReverseResult(ctx, userID, revCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
 	assert.Equal(t, 30, latestInterval(cvID, "reverse"),
 		"second correct reverse answer must read the backdated prior from the DB and advance to ladder[2]=30")
 
 	// ---- Forward streak (renal): first correct -> 7, then -> 30. ----
-	fwdCards, err := svc.LoadCards([]string{bookID}, true, nil)
+	fwdCards, err := svc.LoadCards(userID, []string{bookID}, true, nil)
 	require.NoError(t, err)
 	var fwdCard quiz.Card
 	for _, c := range fwdCards {
@@ -143,12 +144,12 @@ func TestIntervalDaysStreak_LivePostgres_Integration(t *testing.T) {
 	require.Equal(t, "renal", fwdCard.OriginalEntry, "forward demo word must be due")
 
 	renalID := noteID("renal")
-	require.NoError(t, svc.SaveResult(ctx, fwdCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+	require.NoError(t, svc.SaveResult(ctx, userID, fwdCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
 	assert.Equal(t, 7, latestInterval(renalID, "notebook"),
 		"first correct forward answer must store ladder[1]=7, not the buggy 0")
 
 	backdate(renalID, "notebook")
-	require.NoError(t, svc.SaveResult(ctx, fwdCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
+	require.NoError(t, svc.SaveResult(ctx, userID, fwdCard, quiz.GradeResult{Correct: true, Quality: 4}, 1000))
 	assert.Equal(t, 30, latestInterval(renalID, "notebook"),
 		"second correct forward answer must read the backdated prior from the DB and advance to ladder[2]=30")
 }

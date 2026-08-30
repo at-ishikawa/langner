@@ -8,6 +8,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 )
@@ -26,7 +27,7 @@ type grammarBlankCtx struct {
 // ephemeral note_id (the same id scheme as the vocabulary quiz) so Override /
 // Skip reuse the existing RPCs.
 func (h *QuizHandler) StartGrammarQuiz(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[apiv1.StartGrammarQuizRequest],
 ) (*connect.Response[apiv1.StartGrammarQuizResponse], error) {
 	// Narrow to specific entries (e.g. w16, w17) when notebook_sections is set;
@@ -35,9 +36,10 @@ func (h *QuizHandler) StartGrammarQuiz(
 	if err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	var posts []quiz.GrammarPost
 	for _, notebookID := range notebookIDs {
-		loaded, err := h.svc.LoadGrammarPosts(notebookID, entryTitlesByID[notebookID])
+		loaded, err := h.svc.LoadGrammarPosts(userID, notebookID, entryTitlesByID[notebookID])
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load grammar posts for %q: %w", notebookID, err))
 		}
@@ -98,6 +100,7 @@ func (h *QuizHandler) SubmitGrammarPost(
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	// Resolve every blank's context up front (guarded map read).
 	ctxs := make([]grammarBlankCtx, len(answers))
@@ -140,10 +143,10 @@ func (h *QuizHandler) SubmitGrammarPost(
 	results := make([]*apiv1.GrammarBlankResult, len(answers))
 	for i, a := range answers {
 		bc := ctxs[i]
-		if err := h.svc.SaveGrammarBlank(ctx, bc.notebookID, bc.blank.SenseID, grades[i], a.GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveGrammarBlank(ctx, userID, bc.notebookID, bc.blank.SenseID, grades[i], a.GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save grammar result: %w", err))
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(bc.notebookID, bc.blank.SenseID, bc.blank.SenseID, notebook.QuizTypeGrammar)
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(userID, bc.notebookID, bc.blank.SenseID, bc.blank.SenseID, notebook.QuizTypeGrammar)
 		// For a wrong answer, surface the grader's critique of THIS answer as the
 		// assessment; the authored note stays in reason. Correct/skipped answers
 		// carry no assessment.
@@ -170,13 +173,14 @@ func (h *QuizHandler) SubmitGrammarPost(
 // ListGrammarMistakes lists a journal's grammar mistakes — both due and already
 // excluded — for the standalone mistake review page (no live quiz session).
 func (h *QuizHandler) ListGrammarMistakes(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[apiv1.ListGrammarMistakesRequest],
 ) (*connect.Response[apiv1.ListGrammarMistakesResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
-	mistakes, err := h.svc.LoadGrammarMistakes(req.Msg.GetNotebookId(), req.Msg.GetSectionTitles())
+	userID, _ := auth.UserIDFromContext(ctx)
+	mistakes, err := h.svc.LoadGrammarMistakes(userID, req.Msg.GetNotebookId(), req.Msg.GetSectionTitles())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load grammar mistakes: %w", err))
 	}
@@ -217,14 +221,15 @@ func grammarMistakeCardInfo(notebookID, senseID string) quiz.CardInfo {
 // SkipWord / SetSkippedAt path (and EnsureExpressionStubForSkip when the
 // correction has no log yet) every other card's Exclude uses.
 func (h *QuizHandler) ExcludeGrammarMistake(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[apiv1.ExcludeGrammarMistakeRequest],
 ) (*connect.Response[apiv1.ExcludeGrammarMistakeResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	info := grammarMistakeCardInfo(req.Msg.GetNotebookId(), req.Msg.GetSenseId())
-	if err := h.svc.SkipWord(info, "", []notebook.QuizType{notebook.QuizTypeGrammar}); err != nil {
+	if err := h.svc.SkipWord(userID, info, "", []notebook.QuizType{notebook.QuizTypeGrammar}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("exclude grammar mistake: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ExcludeGrammarMistakeResponse{}), nil
@@ -233,14 +238,15 @@ func (h *QuizHandler) ExcludeGrammarMistake(
 // ResumeGrammarMistake clears the grammar skipped_at marker for one correction,
 // making it due again in the live quiz and the Relearn pool.
 func (h *QuizHandler) ResumeGrammarMistake(
-	_ context.Context,
+	ctx context.Context,
 	req *connect.Request[apiv1.ResumeGrammarMistakeRequest],
 ) (*connect.Response[apiv1.ResumeGrammarMistakeResponse], error) {
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	info := grammarMistakeCardInfo(req.Msg.GetNotebookId(), req.Msg.GetSenseId())
-	if err := h.svc.ResumeWord(info, []notebook.QuizType{notebook.QuizTypeGrammar}); err != nil {
+	if err := h.svc.ResumeWord(userID, info, []notebook.QuizType{notebook.QuizTypeGrammar}); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("resume grammar mistake: %w", err))
 	}
 	return connect.NewResponse(&apiv1.ResumeGrammarMistakeResponse{}), nil

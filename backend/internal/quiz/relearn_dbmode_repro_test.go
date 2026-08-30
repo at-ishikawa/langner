@@ -58,10 +58,10 @@ func (rlSkipRepo) FindNoteFlags(context.Context, []int64) ([]notebook.NoteSkipFl
 func (rlSkipRepo) FindOriginFlags(context.Context, []int64) ([]notebook.OriginSkipFlagRecord, error) {
 	return nil, nil
 }
-func (rlSkipRepo) SkipNote(context.Context, int64, string, time.Time) error   { return nil }
-func (rlSkipRepo) ResumeNote(context.Context, int64, string) error            { return nil }
-func (rlSkipRepo) SkipOrigin(context.Context, int64, string, time.Time) error { return nil }
-func (rlSkipRepo) ResumeOrigin(context.Context, int64, string) error          { return nil }
+func (rlSkipRepo) SkipNote(context.Context, int64, int64, string, time.Time) error   { return nil }
+func (rlSkipRepo) ResumeNote(context.Context, int64, int64, string) error            { return nil }
+func (rlSkipRepo) SkipOrigin(context.Context, int64, int64, string, time.Time) error { return nil }
+func (rlSkipRepo) ResumeOrigin(context.Context, int64, int64, string) error          { return nil }
 
 func TestRepro_RelearnPool_DBOrderDropsRuntimeMiss(t *testing.T) {
 	repoRoot, _ := filepath.Abs("../../..")
@@ -98,7 +98,7 @@ func TestRepro_RelearnPool_DBOrderDropsRuntimeMiss(t *testing.T) {
 	svc := NewService(cfg, nil, nil, nil, config.QuizConfig{DisableShuffle: true})
 	svc.SetHistoryStore(store)
 
-	cards, err := svc.LoadRelearnPool(now.Add(-24 * time.Hour))
+	cards, err := svc.LoadRelearnPool(0, now.Add(-24 * time.Hour))
 	if err != nil {
 		t.Fatalf("LoadRelearnPool: %v", err)
 	}
@@ -144,7 +144,7 @@ func TestRepro_GetLatestLearnedInfo_NewestByDate(t *testing.T) {
 	svc := NewService(cfg, nil, nil, nil, config.QuizConfig{})
 	svc.SetHistoryStore(store)
 
-	learnedAt, _ := svc.GetLatestLearnedInfo("idioms", "", "break the ice", notebook.QuizTypeNotebook)
+	learnedAt, _ := svc.GetLatestLearnedInfo(0, "idioms", "", "break the ice", notebook.QuizTypeNotebook)
 	if learnedAt != today.Format("2006-01-02") {
 		t.Fatalf("GetLatestLearnedInfo learnedAt = %q, want today %q (must pick the newest attempt by date, not logs[0])",
 			learnedAt, today.Format("2006-01-02"))
@@ -203,7 +203,7 @@ func TestRepro_RelearnPool_SharedNoteScopesLogsPerNotebook(t *testing.T) {
 	svc := NewService(sharedNoteConfig(), nil, nil, nil, config.QuizConfig{DisableShuffle: true})
 	svc.SetHistoryStore(sharedNoteStore(now))
 
-	cards, err := svc.LoadRelearnPool(now.Add(-24 * time.Hour))
+	cards, err := svc.LoadRelearnPool(0, now.Add(-24 * time.Hour))
 	if err != nil {
 		t.Fatalf("LoadRelearnPool: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestRepro_RelearnPool_SharedNoteCardCarriesSourceMeaning(t *testing.T) {
 	svc := NewService(sharedNoteConfig(), nil, nil, nil, config.QuizConfig{DisableShuffle: true})
 	svc.SetHistoryStore(sharedNoteStore(now))
 
-	cards, err := svc.LoadRelearnPool(now.Add(-24 * time.Hour))
+	cards, err := svc.LoadRelearnPool(0, now.Add(-24 * time.Hour))
 	if err != nil {
 		t.Fatalf("LoadRelearnPool: %v", err)
 	}

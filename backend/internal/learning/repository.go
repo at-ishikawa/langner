@@ -24,6 +24,11 @@ import (
 // inside — used by MultiLearningRepository so the secondary store
 // applies the same bytes the primary just wrote.
 type UpdateLogInput struct {
+	// UserID scopes the override to the caller's own logs (auth Phase 2): the
+	// DB UPDATE only matches a learning_logs row whose user_id equals this, so a
+	// user can never mutate another user's attempt. Zero disables the filter
+	// (YAML/single-tenant dev, where user_id is not tracked).
+	UserID int64
 	NoteID int64
 	// ID is the stable source-entry identity of the target card. When set,
 	// the YAML repository resolves the entry by id (falling back to
@@ -96,7 +101,7 @@ func NewDBLearningRepository(db *sqlx.DB) *DBLearningRepository {
 // and origin_id are both nullable since migration 017 — COALESCE both
 // to zero so the int64 fields scan cleanly (a plain SELECT * would fail
 // to scan a NULL into int64).
-const selectLearningLogColumns = `SELECT id, COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0) AS origin_id, COALESCE(correction_id, 0) AS correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, concept_key, easiness_factor, source_notebook_id, created_at, updated_at FROM learning_logs`
+const selectLearningLogColumns = `SELECT id, COALESCE(user_id, 0) AS user_id, COALESCE(note_id, 0) AS note_id, COALESCE(origin_id, 0) AS origin_id, COALESCE(correction_id, 0) AS correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, concept_key, easiness_factor, source_notebook_id, created_at, updated_at FROM learning_logs`
 
 // FindAll returns all learning logs.
 func (r *DBLearningRepository) FindAll(ctx context.Context) ([]LearningLog, error) {
@@ -146,10 +151,12 @@ func (r *DBLearningRepository) Create(ctx context.Context, log *LearningLog) err
 	// NULLIF turns a zero ID into SQL NULL so exactly one of
 	// (note_id, origin_id, correction_id) is set: vocab logs carry note_id,
 	// etymology origin logs carry origin_id, grammar logs carry correction_id.
-	query := `INSERT INTO learning_logs (note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
-		VALUES (NULLIF($1, 0::bigint), NULLIF($2, 0::bigint), NULLIF($3, 0::bigint), $4, $5, $6, $7, $8, $9, $10, $11)`
+	// user_id is likewise NULLIF'd — runtime writes always carry it (validated
+	// above), but keeping NULLIF makes the column shape identical to BatchCreate.
+	query := `INSERT INTO learning_logs (user_id, note_id, origin_id, correction_id, status, learned_at, quality, response_time_ms, quiz_type, interval_days, source_notebook_id, concept_key)
+		VALUES (NULLIF($1, 0::bigint), NULLIF($2, 0::bigint), NULLIF($3, 0::bigint), NULLIF($4, 0::bigint), $5, $6, $7, $8, $9, $10, $11, $12)`
 	_, err := r.db.ExecContext(ctx, query,
-		log.NoteID, log.OriginID, log.CorrectionID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
+		log.UserID, log.NoteID, log.OriginID, log.CorrectionID, log.Status, log.LearnedAt, log.Quality, log.ResponseTimeMs, log.QuizType, log.IntervalDays, log.SourceNotebookID, log.ConceptKey)
 	if err != nil {
 		return fmt.Errorf("insert learning log: %w", err)
 	}
@@ -221,6 +228,15 @@ func validateLearningLog(log *LearningLog, enforceComputedInterval bool) error {
 	}
 	if enforceComputedInterval && isSuccessStatus(log.Status) && log.IntervalDays <= 0 {
 		return fmt.Errorf("learning log for %s: %s attempt has interval_days=%d (interval was not computed)", target, log.Status, log.IntervalDays)
+	}
+	// Runtime writes (Create, enforceComputedInterval=true) MUST carry the
+	// answering user's id — a per-user attempt with user_id=0 would be
+	// unattributable and invisible to every user-scoped read (auth Phase 2).
+	// Import/seed (BatchCreate, enforceComputedInterval=false) stays lenient:
+	// pre-auth rows land with user_id=0 (NULL) and are backfilled by
+	// `langner auth provision`.
+	if enforceComputedInterval && log.UserID == 0 {
+		return fmt.Errorf("learning log for %s: user_id is zero (runtime write must be attributed to a user)", target)
 	}
 	return nil
 }
@@ -366,8 +382,8 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 		}
 	}
 
-	columns := []string{"note_id", "origin_id", "correction_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
-	const chunkSize = 5000 // 5000 * 11 columns = 55000 placeholders, under 65535
+	columns := []string{"user_id", "note_id", "origin_id", "correction_id", "status", "learned_at", "quality", "response_time_ms", "quiz_type", "interval_days", "source_notebook_id", "concept_key"}
+	const chunkSize = 5000 // 5000 * 12 columns = 60000 placeholders, under 65535
 
 	// Multi-row VALUES can't use NULLIF per-cell, so overwrite a zero ID
 	// with a nil interface so the driver passes SQL NULL. Exactly one of
@@ -390,7 +406,7 @@ func (r *DBLearningRepository) BatchCreate(ctx context.Context, logs []*Learning
 			query := database.BuildMultiRowInsert("learning_logs", columns, len(chunk))
 			var args []interface{}
 			for _, l := range chunk {
-				args = append(args, nullableID(l.NoteID), nullableID(l.OriginID), nullableID(l.CorrectionID), l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
+				args = append(args, nullableID(l.UserID), nullableID(l.NoteID), nullableID(l.OriginID), nullableID(l.CorrectionID), l.Status, l.LearnedAt, l.Quality, l.ResponseTimeMs, l.QuizType, l.IntervalDays, l.SourceNotebookID, l.ConceptKey)
 			}
 			if _, err := tx.ExecContext(ctx, query, args...); err != nil {
 				return fmt.Errorf("insert learning logs: %w", err)
@@ -462,13 +478,17 @@ func (r *DBLearningRepository) UpdateLog(ctx context.Context, in UpdateLogInput)
 		IntervalDays int       `db:"interval_days"`
 		LearnedAt    time.Time `db:"learned_at"`
 	}
+	// Scope by user_id so a user only overrides their OWN attempt (auth Phase
+	// 2). in.UserID == 0 (YAML/single-tenant dev) leaves the filter off via the
+	// "$4 = 0 OR user_id = $4" guard, matching every row as before.
 	var cur currentRow
 	err := r.db.GetContext(ctx, &cur, `
 		SELECT id, status, quality, interval_days, learned_at
 		FROM learning_logs
 		WHERE note_id = $1 AND quiz_type = $2 AND DATE(learned_at) = $3::date
+		  AND ($4 = 0 OR user_id = $4)
 		ORDER BY learned_at DESC LIMIT 1`,
-		noteID, in.QuizType, in.LearnedAt.Format("2006-01-02"))
+		noteID, in.QuizType, in.LearnedAt.Format("2006-01-02"), in.UserID)
 	if err != nil {
 		// No row matches — treat as soft no-op so callers in
 		// MultiLearningRepository don't fail the whole override when

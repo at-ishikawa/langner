@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -38,6 +39,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.Card, len(answers))
 	h.mu.Lock()
@@ -63,10 +65,10 @@ func (h *QuizHandler) BatchSubmitAnswers(
 
 	responses := make([]*apiv1.SubmitAnswerResponse, len(answers))
 	for i := range answers {
-		if err := h.svc.SaveResult(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
+		if err := h.svc.SaveResult(ctx, userID, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Entry, notebook.QuizTypeNotebook)
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(userID, cards[i].NotebookName, cards[i].ID, cards[i].Entry, notebook.QuizTypeNotebook)
 		responses[i] = &apiv1.SubmitAnswerResponse{
 			Correct:        grades[i].Correct,
 			Meaning:        cards[i].Meaning,
@@ -97,6 +99,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.ReverseCard, len(answers))
 	h.mu.Lock()
@@ -130,7 +133,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		}
 		shouldSave := !isSynonym || answers[i].GetAcceptSynonymAsCorrect()
 		if shouldSave {
-			if err := h.svc.SaveReverseResult(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
+			if err := h.svc.SaveReverseResult(ctx, userID, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 			}
 		}
@@ -138,7 +141,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		for _, c := range cards[i].Contexts {
 			contexts = append(contexts, c.Context)
 		}
-		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Expression, notebook.QuizTypeReverse)
+		learnedAt, nextReviewDate := h.svc.GetLatestLearnedInfo(userID, cards[i].NotebookName, cards[i].ID, cards[i].Expression, notebook.QuizTypeReverse)
 		responses[i] = &apiv1.SubmitReverseAnswerResponse{
 			Correct:        grades[i].Correct,
 			Expression:     cards[i].Expression,
