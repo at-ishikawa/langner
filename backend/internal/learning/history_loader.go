@@ -3,12 +3,24 @@ package learning
 import (
 	"context"
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/notebook"
 )
+
+// noteNotebook keys a learning log by the note it targets AND the source
+// notebook it was recorded under. The DBHistoryStore reconstruction and the
+// YAML WriteAll path both bucket vocab logs by this tuple so a note shared
+// across several notebooks (one notes row, many notebook_notes links) gets
+// each notebook ONLY its own-sourced logs — a miss recorded while studying
+// book A must not replay into book B (learning-history invariant L4).
+type noteNotebook struct {
+	noteID     int64
+	notebookID string
+}
 
 // HistoryStore returns the LearningHistory shape handlers and quiz code
 // expect, but from the database instead of the YAML files in
@@ -66,18 +78,31 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 		return nil, fmt.Errorf("load learning logs: %w", err)
 	}
 
-	// Bucket logs by their target. Vocab logs key on note_id; etymology
-	// logs key on origin_id. ImportLearningLogs (legacy path) routed every
-	// expression — vocab AND origin — through note_id with a synthetic
-	// note when no notebook_notes link existed; mergeOriginHistories below
-	// re-attaches those orphan etymology logs to the matching origin so
-	// the reconstructed shape matches what the YAML reader produced.
+	noteByID := make(map[int64]*notebook.NoteRecord, len(notes))
+	for i := range notes {
+		noteByID[notes[i].ID] = &notes[i]
+	}
+
+	// Bucket logs by their target. Vocab logs key on (note_id,
+	// source_notebook_id) — mirroring YAMLLearningRepository.WriteAll — so a
+	// note shared across notebooks reconstructs each notebook's OWN history and
+	// a miss recorded under book A never bleeds into book B (invariant L4).
+	// Etymology logs key on origin_id, grammar logs on correction_id.
+	// logsByNote (whole-note, source-agnostic) is kept ONLY to feed the
+	// orphan-origin fallback below: ImportLearningLogs (legacy path) routed some
+	// origin logs through a synthetic note with no notebook_notes link, and
+	// mergeOriginHistories re-attaches those to the matching origin.
 	logsByNote := make(map[int64][]LearningLog, len(logs))
+	logsByNoteNotebook := make(map[noteNotebook][]LearningLog)
 	logsByOrigin := make(map[int64][]LearningLog)
 	logsByCorrection := make(map[int64][]LearningLog)
 	for _, l := range logs {
 		if l.NoteID != 0 {
 			logsByNote[l.NoteID] = append(logsByNote[l.NoteID], l)
+			if nbID := attributeLogNotebook(noteByID[l.NoteID], l.SourceNotebookID); nbID != "" {
+				key := noteNotebook{l.NoteID, nbID}
+				logsByNoteNotebook[key] = append(logsByNoteNotebook[key], l)
+			}
 			continue
 		}
 		if l.OriginID != 0 {
@@ -125,7 +150,7 @@ func (s *DBHistoryStore) LoadAll(ctx context.Context) (map[string][]notebook.Lea
 	}
 
 	histories := make(map[string][]notebook.LearningHistory)
-	buildVocabHistories(notes, logsByNote, skipFlagsByNote, histories)
+	buildVocabHistories(notes, logsByNoteNotebook, skipFlagsByNote, histories)
 
 	if s.originRepo != nil {
 		origins, oerr := s.originRepo.FindAll(ctx)
@@ -235,13 +260,57 @@ func buildGrammarExpression(senseID string, logs []LearningLog) notebook.Learnin
 	}
 }
 
+// attributeLogNotebook decides which of a note's linked notebooks a vocab log
+// belongs to. A log carrying a concrete source_notebook_id that matches one of
+// the note's notebook_notes links lands ONLY in that notebook (the invariant:
+// own-sourced logs never bleed across books). Source-less or unmatched-source
+// logs are legacy — the state seeder always stamps a concrete source, so these
+// come only from pre-source imports. To avoid silently dropping their learning
+// history: attribute them to the note's sole notebook when it has exactly one
+// link, otherwise to its first-declared notebook (with a warning). Returns ""
+// when the note has no links (a synthetic orphan note), so the caller routes
+// those through the orphan-origin fallback instead.
+func attributeLogNotebook(n *notebook.NoteRecord, source string) string {
+	if n == nil || len(n.NotebookNotes) == 0 {
+		return ""
+	}
+	var first string
+	var distinct int
+	seen := make(map[string]bool, len(n.NotebookNotes))
+	for _, nn := range n.NotebookNotes {
+		if seen[nn.NotebookID] {
+			continue
+		}
+		seen[nn.NotebookID] = true
+		if distinct == 0 {
+			first = nn.NotebookID
+		}
+		distinct++
+		if source != "" && nn.NotebookID == source {
+			return source
+		}
+	}
+	if distinct == 1 {
+		return first
+	}
+	if source == "" {
+		log.Printf("learning: note %d spans %d notebooks but a source-less log; attributing to first-declared notebook %q", n.ID, distinct, first)
+	} else {
+		log.Printf("learning: note %d spans %d notebooks and a log's source_notebook_id %q matches none; attributing to first-declared notebook %q", n.ID, distinct, source, first)
+	}
+	return first
+}
+
 // buildVocabHistories walks notes + their notebook_notes links and
 // materialises a LearningHistory per (notebook, event) — scenes hang off
 // notebook_notes.subgroup. Flashcard notebooks collapse all expressions
-// into the flat .Expressions slice with Metadata.Type = "flashcard".
+// into the flat .Expressions slice with Metadata.Type = "flashcard". Each
+// linked notebook's expression is built from ONLY that notebook's own-sourced
+// logs (logsByNoteNotebook), so a word shared across notebooks still APPEARS in
+// every notebook it belongs to but carries per-notebook due/missed state.
 func buildVocabHistories(
 	notes []notebook.NoteRecord,
-	logsByNote map[int64][]LearningLog,
+	logsByNoteNotebook map[noteNotebook][]LearningLog,
 	skipFlagsByNote map[int64]notebook.SkippedAtMap,
 	out map[string][]notebook.LearningHistory,
 ) {
@@ -267,8 +336,15 @@ func buildVocabHistories(
 	flashcardExprByTitle := make(map[historyKey][]notebook.LearningHistoryExpression)
 
 	for _, n := range notes {
-		expr := newExpressionFromNote(n, logsByNote[n.ID], skipFlagsByNote[n.ID])
+		// One expression per linked notebook, built from that notebook's
+		// own-sourced logs and reused across its scenes.
+		exprByNotebook := make(map[string]notebook.LearningHistoryExpression)
 		for _, nn := range n.NotebookNotes {
+			expr, ok := exprByNotebook[nn.NotebookID]
+			if !ok {
+				expr = newExpressionFromNote(n, logsByNoteNotebook[noteNotebook{n.ID, nn.NotebookID}], skipFlagsByNote[n.ID])
+				exprByNotebook[nn.NotebookID] = expr
+			}
 			hk := historyKey{nn.NotebookID, nn.Group}
 			if !seenTitles[hk] {
 				seenTitles[hk] = true

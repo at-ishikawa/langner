@@ -150,3 +150,98 @@ func TestRepro_GetLatestLearnedInfo_NewestByDate(t *testing.T) {
 			learnedAt, today.Format("2006-01-02"))
 	}
 }
+
+// sharedNoteConfig points the Service at the real fixture notebooks that BOTH
+// contain "break the ice" (id break-the-ice): the "idioms" flashcard book and
+// the "short-tales" story book, with DIFFERENT meanings. Driving LoadRelearnPool
+// through this real construction is what exercises the true reader/originMap the
+// server builds (per verify-data-features-with-example-notebooks).
+func sharedNoteConfig() config.NotebooksConfig {
+	repoRoot, _ := filepath.Abs("../../..")
+	fx := filepath.Join(repoRoot, "frontend", "e2e", "fixtures")
+	return config.NotebooksConfig{
+		StoriesDirectories:     []string{filepath.Join(fx, "stories")},
+		JournalsDirectories:    []string{filepath.Join(fx, "journals")},
+		FlashcardsDirectories:  []string{filepath.Join(fx, "flashcards")},
+		DefinitionsDirectories: []string{filepath.Join(fx, "definitions")},
+		EtymologyDirectories:   []string{filepath.Join(fx, "etymology")},
+		GrammarsDirectories:    []string{filepath.Join(fx, "grammars")},
+		LearningNotesDirectory: filepath.Join(fx, "learning_notes"),
+	}
+}
+
+// sharedNoteStore builds a DBHistoryStore for ONE note (break-the-ice) linked to
+// BOTH the idioms flashcard notebook and the short-tales story notebook, with all
+// logs sourced to "idioms" only and the latest a fresh in-window miss. This is the
+// DB-mode shape of a single notes row shared across notebooks (notebook_notes),
+// which is where the log-bleed bug lived.
+func sharedNoteStore(now time.Time) *learning.DBHistoryStore {
+	ts := func(s string) time.Time { tm, _ := time.Parse(time.RFC3339, s); return tm }
+	notes := []notebook.NoteRecord{{
+		ID: 1, SenseID: "break-the-ice", Entry: "break the ice", Usage: "break the ice",
+		NotebookNotes: []notebook.NotebookNote{
+			{NoteID: 1, NotebookType: "flashcard", NotebookID: "idioms", Group: "Common Idioms"},
+			{NoteID: 1, NotebookType: "story", NotebookID: "short-tales", Group: "Chapter 1 - First Meeting", Subgroup: "An awkward introduction"},
+		},
+	}}
+	logs := []learning.LearningLog{
+		{ID: 1, NoteID: 1, Status: "understood", LearnedAt: ts("2025-01-01T00:00:00Z"), QuizType: "notebook", SourceNotebookID: "idioms"},
+		{ID: 2, NoteID: 1, Status: "misunderstood", LearnedAt: now.Add(-1 * time.Minute), QuizType: "notebook", SourceNotebookID: "idioms"},
+	}
+	return learning.NewDBHistoryStore(&rlNoteRepo{notes: notes}, &rlLearnRepo{logs: logs}, rlOriginRepo{}, rlSkipRepo{}, nil)
+}
+
+// TestRepro_RelearnPool_SharedNoteScopesLogsPerNotebook is the regression for the
+// DB-mode shared-note log-bleed bug. The single note "break the ice" is missed
+// while studying the idioms book (source_notebook_id=idioms only). The Relearn
+// pool MUST surface EXACTLY ONE card, for the idioms book — NOT a second, phantom
+// card for short-tales, which shares the note but was never missed there.
+//
+// Pre-fix (DBHistoryStore bucketed by note_id alone) this returned TWO cards.
+func TestRepro_RelearnPool_SharedNoteScopesLogsPerNotebook(t *testing.T) {
+	now := time.Now().UTC()
+	svc := NewService(sharedNoteConfig(), nil, nil, nil, config.QuizConfig{DisableShuffle: true})
+	svc.SetHistoryStore(sharedNoteStore(now))
+
+	cards, err := svc.LoadRelearnPool(now.Add(-24 * time.Hour))
+	if err != nil {
+		t.Fatalf("LoadRelearnPool: %v", err)
+	}
+	if len(cards) != 1 {
+		names := make([]string, len(cards))
+		for i, c := range cards {
+			names[i] = c.NotebookName
+		}
+		t.Fatalf("relearn pool has %d cards %v, want 1 (a miss in idioms must NOT replay into short-tales)", len(cards), names)
+	}
+	if cards[0].NotebookName != "idioms" {
+		t.Fatalf("pooled card NotebookName = %q, want \"idioms\" (the notebook the miss was sourced to)", cards[0].NotebookName)
+	}
+	if cards[0].Entry != "break the ice" {
+		t.Fatalf("pooled card entry = %q, want \"break the ice\"", cards[0].Entry)
+	}
+}
+
+// TestRepro_RelearnPool_SharedNoteCardCarriesSourceMeaning pins that the single
+// scoped card carries the meaning of the notebook the miss was sourced to. The
+// two fixture books gloss "break the ice" differently; because only the idioms
+// miss survives scoping, the card must show the idioms gloss, not short-tales'.
+func TestRepro_RelearnPool_SharedNoteCardCarriesSourceMeaning(t *testing.T) {
+	now := time.Now().UTC()
+	svc := NewService(sharedNoteConfig(), nil, nil, nil, config.QuizConfig{DisableShuffle: true})
+	svc.SetHistoryStore(sharedNoteStore(now))
+
+	cards, err := svc.LoadRelearnPool(now.Add(-24 * time.Hour))
+	if err != nil {
+		t.Fatalf("LoadRelearnPool: %v", err)
+	}
+	if len(cards) != 1 {
+		t.Fatalf("relearn pool has %d cards, want 1", len(cards))
+	}
+	const idiomsMeaning = "a way to start a conversation in a social setting"
+	const storyMeaning = "To initiate conversation or relieve tension in a social situation"
+	if cards[0].Meaning != idiomsMeaning {
+		t.Fatalf("card meaning = %q, want the idioms gloss %q (not the short-tales gloss %q)",
+			cards[0].Meaning, idiomsMeaning, storyMeaning)
+	}
+}

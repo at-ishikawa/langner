@@ -73,14 +73,12 @@ func (r *YAMLLearningRepository) WriteAll(notes []notebook.NoteRecord, logs []Le
 		noteByID[notes[i].ID] = &notes[i]
 	}
 
-	// Group logs by (noteID, sourceNotebookID). Origin-typed logs
-	// (OriginID != 0) are split out and grouped by origin_id so they
-	// re-emerge as `type: origin` expressions rather than being
-	// attributed to a phantom note.
-	type noteNotebook struct {
-		noteID     int64
-		notebookID string
-	}
+	// Group logs by (noteID, sourceNotebookID) — the shared noteNotebook key,
+	// mirrored by the DBHistoryStore reconstructor so both paths scope a shared
+	// note's logs to their source notebook identically. Origin-typed logs
+	// (OriginID != 0) are split out and grouped by origin_id so they re-emerge
+	// as `type: origin` expressions rather than being attributed to a phantom
+	// note.
 	logsByNoteNotebook := make(map[noteNotebook][]LearningLog)
 	originLogsByID := make(map[int64][]LearningLog)
 	for _, log := range logs {
