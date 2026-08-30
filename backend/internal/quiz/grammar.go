@@ -48,6 +48,16 @@ func (s *Service) LoadGrammarPosts(userID int64, notebookID string, entryTitles 
 			entryFilter[t] = struct{}{}
 		}
 	}
+	// A grammar notebook the user can't see yields no posts (auth Phase 3).
+	// Gating here covers both the direct grammar-quiz call and the Relearn
+	// enumeration in relearnGrammarIndex, so neither leaks a private notebook.
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+	if !visible(notebookID) {
+		return []GrammarPost{}, nil
+	}
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
@@ -153,6 +163,14 @@ func (s *Service) LoadGrammarMistakes(userID int64, notebookID string, entryTitl
 			entryFilter[t] = struct{}{}
 		}
 	}
+	// A grammar notebook the user can't see yields no mistakes (auth Phase 3).
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+	if !visible(notebookID) {
+		return []GrammarMistake{}, nil
+	}
 	reader, err := s.newReader()
 	if err != nil {
 		return nil, fmt.Errorf("newReader() > %w", err)
@@ -244,10 +262,17 @@ func (s *Service) LoadGrammarStorySummaries(userID int64) ([]NotebookSummary, er
 	if err != nil {
 		return nil, fmt.Errorf("loadHistories() > %w", err)
 	}
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
 	storyIndexes := reader.GetStoryIndexes()
 
 	var summaries []NotebookSummary
 	for _, id := range reader.GrammarStoryIDs() {
+		if !visible(id) {
+			continue
+		}
 		stories, err := reader.ReadStoryNotebooks(id)
 		if err != nil {
 			// A single malformed notebook must not take down the whole
