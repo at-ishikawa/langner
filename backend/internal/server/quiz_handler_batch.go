@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -48,6 +49,7 @@ func gradeError(msg string, err error) error {
 // context carrying them, so the per-card SaveResultInfo calls in a batch reuse
 // one scoped read per notebook instead of issuing one per graded card.
 func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []string) context.Context {
+	userID, _ := auth.UserIDFromContext(ctx)
 	seen := make(map[string]struct{}, len(notebookNames))
 	ids := make([]string, 0, len(notebookNames))
 	for _, n := range notebookNames {
@@ -57,7 +59,7 @@ func (h *QuizHandler) preloadHistories(ctx context.Context, notebookNames []stri
 		seen[n] = struct{}{}
 		ids = append(ids, n)
 	}
-	return quiz.WithPreloadedHistories(ctx, h.svc.PreloadHistoriesForNotebooks(ids...))
+	return quiz.WithPreloadedHistories(ctx, h.svc.PreloadHistoriesForNotebooks(userID, ids...))
 }
 
 // BatchSubmitAnswers grades a batch of standard quiz answers.
@@ -71,6 +73,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.Card, len(answers))
 	h.mu.Lock()
@@ -118,7 +121,7 @@ func (h *QuizHandler) BatchSubmitAnswers(
 		// SaveResultInfo returns the learnedAt/nextReviewDate it just wrote, so
 		// we don't re-read the learning history once per card (the batch's
 		// dominant DB egress before this change).
-		learnedAt, nextReviewDate, err := h.svc.SaveResultInfo(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs())
+		learnedAt, nextReviewDate, err := h.svc.SaveResultInfo(ctx, userID, cards[i], grades[i], answers[i].GetResponseTimeMs())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 		}
@@ -152,6 +155,7 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.ReverseCard, len(answers))
 	h.mu.Lock()
@@ -206,13 +210,13 @@ func (h *QuizHandler) BatchSubmitReverseAnswers(
 		if shouldSave {
 			// The write returns the learnedAt/nextReviewDate directly (no re-read).
 			var err error
-			if learnedAt, nextReviewDate, err = h.svc.SaveReverseResultInfo(ctx, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
+			if learnedAt, nextReviewDate, err = h.svc.SaveReverseResultInfo(ctx, userID, cards[i], grades[i], answers[i].GetResponseTimeMs()); err != nil {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("save result: %w", err))
 			}
 		} else {
 			// Nothing written (a synonym awaiting the user's retry decision) — read
 			// the existing latest, scoped to this one notebook.
-			learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(cards[i].NotebookName, cards[i].ID, cards[i].Expression, notebook.QuizTypeReverse)
+			learnedAt, nextReviewDate = h.svc.GetLatestLearnedInfo(userID, cards[i].NotebookName, cards[i].ID, cards[i].Expression, notebook.QuizTypeReverse)
 		}
 		var contexts []string
 		for _, c := range cards[i].Contexts {

@@ -948,7 +948,7 @@ func TestReverseQuizCLI_FullFlow(t *testing.T) {
 		Reason:  "exact match",
 		Quality: int(notebook.QualityCorrect),
 	}
-	err = cli1.svc.SaveReverseResult(context.Background(), card, gradeResult, 5000)
+	err = cli1.svc.SaveReverseResult(context.Background(), 0, card, gradeResult, 5000)
 	require.NoError(t, err)
 
 	writtenHistories, err := notebook.NewLearningHistories(learningNotesDir)

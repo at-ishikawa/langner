@@ -41,7 +41,7 @@ func TestExampleData_NestedShapeOriginGroupsInRelearn(t *testing.T) {
 	} {
 		t.Run(tc.word+"/reverse", func(t *testing.T) {
 			svc := newExampleService(t, t.TempDir())
-			reverse, err := svc.LoadReverseCards([]string{"latin-roots-book"}, false, true, nil)
+			reverse, err := svc.LoadReverseCards(0, []string{"latin-roots-book"}, false, true, nil)
 			require.NoError(t, err)
 			var rc *ReverseCard
 			for i := range reverse {
@@ -54,8 +54,8 @@ func TestExampleData_NestedShapeOriginGroupsInRelearn(t *testing.T) {
 			require.NotEmptyf(t, rc.WordDetail.OriginParts,
 				"normal reverse quiz must resolve origin for %q", tc.word)
 
-			require.NoError(t, svc.SaveReverseResult(ctx, *rc, GradeResult{Correct: false, Quality: 0}, 1000))
-			pool, err := svc.LoadRelearnPool(time.Now().Add(-24 * time.Hour))
+			require.NoError(t, svc.SaveReverseResult(ctx, 0, *rc, GradeResult{Correct: false, Quality: 0}, 1000))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
 			require.NoError(t, err)
 
 			card := relearnCardFor(pool, tc.word)

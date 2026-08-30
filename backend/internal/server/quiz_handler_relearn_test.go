@@ -173,12 +173,12 @@ func TestRelearn_OriginCardEmptyAnswerIsIncorrect(t *testing.T) {
 	// Record a recognition miss of deficient through the real service path so it
 	// surfaces as an origin family card in the pool.
 	svc := h.svc
-	cards, err := svc.LoadCards([]string{"roots-demo"}, true, nil)
+	cards, err := svc.LoadCards(0, []string{"roots-demo"}, true, nil)
 	require.NoError(t, err)
 	missed := false
 	for i := range cards {
 		if cards[i].Entry == "deficient" {
-			require.NoError(t, svc.SaveResult(ctx, cards[i], quiz.GradeResult{Correct: false, Quality: 1}, 1000))
+			require.NoError(t, svc.SaveResult(ctx, 0, cards[i], quiz.GradeResult{Correct: false, Quality: 1}, 1000))
 			missed = true
 		}
 	}

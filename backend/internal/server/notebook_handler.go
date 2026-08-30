@@ -15,6 +15,7 @@ import (
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/gen-protos/api/v1/apiv1connect"
 	"github.com/at-ishikawa/langner/internal/assets"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
@@ -51,10 +52,12 @@ func (h *NotebookHandler) SetHistoryStore(store learning.HistoryStore) {
 // loadHistoriesForNotebooks returns histories for ONLY the given notebooks —
 // the scoped read the per-notebook Learn page uses so viewing one notebook
 // doesn't pull the whole learning history over the wire (mirrors
-// quiz.Service.loadHistoriesForNotebooks).
-func (h *NotebookHandler) loadHistoriesForNotebooks(notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
+// quiz.Service.loadHistoriesForNotebooks). userID scopes the read to one
+// account's learning history (auth Phase 2), threaded from the request context
+// by the handler via auth.UserIDFromContext.
+func (h *NotebookHandler) loadHistoriesForNotebooks(userID int64, notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
 	if h.historyStore != nil {
-		return h.historyStore.LoadForNotebooks(context.Background(), notebookIDs)
+		return h.historyStore.LoadForNotebooks(context.Background(), notebookIDs, userID)
 	}
 	all, err := notebook.NewLearningHistories(h.notebooksConfig.LearningNotesDirectory)
 	if err != nil {
@@ -102,9 +105,8 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 	return reader, nil
 }
 
-
-func (h *NotebookHandler) loadLearningHistory(notebookID string) ([]notebook.LearningHistory, error) {
-	histories, err := h.loadHistoriesForNotebooks(notebookID)
+func (h *NotebookHandler) loadLearningHistory(userID int64, notebookID string) ([]notebook.LearningHistory, error) {
+	histories, err := h.loadHistoriesForNotebooks(userID, notebookID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load learning histories: %w", err))
 	}
@@ -136,13 +138,14 @@ func (h *NotebookHandler) GetNotebookDetail(
 	}
 
 	notebookID := req.Msg.GetNotebookId()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	reader, err := h.newReader()
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create notebook reader: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(userID, notebookID)
 	if err != nil {
 		return nil, err
 	}
@@ -189,24 +192,24 @@ func (h *NotebookHandler) GetNotebookDetail(
 				conceptHead, conceptMembers, conceptMeaning := lookupConceptForWord(def, conceptByExpression, conceptByHead)
 
 				definitions = append(definitions, &apiv1.NotebookWord{
-					Expression:     def.Expression,
-					Definition:     def.Definition,
-					Meaning:        def.Meaning,
-					PartOfSpeech:   def.PartOfSpeech,
-					Pronunciation:  def.Pronunciation,
-					Examples:       def.Examples.Texts(),
-					Synonyms:       def.Synonyms,
-					Antonyms:       def.Antonyms,
-					LearningStatus: string(info.status),
-					LearnedLogs:    convertLogsToProto(logs),
-					NextReviewDate: info.nextReviewDate,
-					Origin:         def.Origin,
+					Expression:       def.Expression,
+					Definition:       def.Definition,
+					Meaning:          def.Meaning,
+					PartOfSpeech:     def.PartOfSpeech,
+					Pronunciation:    def.Pronunciation,
+					Examples:         def.Examples.Texts(),
+					Synonyms:         def.Synonyms,
+					Antonyms:         def.Antonyms,
+					LearningStatus:   string(info.status),
+					LearnedLogs:      convertLogsToProto(logs),
+					NextReviewDate:   info.nextReviewDate,
+					Origin:           def.Origin,
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
 					NoteId:           info.noteID,
-					ConceptHead:    conceptHead,
-					ConceptMembers: conceptMembers,
-					ConceptMeaning: conceptMeaning,
+					ConceptHead:      conceptHead,
+					ConceptMembers:   conceptMembers,
+					ConceptMeaning:   conceptMeaning,
 				})
 				totalWordCount++
 			}
@@ -372,24 +375,24 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 				conceptHead, conceptMembers, conceptMeaning := lookupConceptForWord(note, conceptByExpression, conceptByHead)
 
 				definitions = append(definitions, &apiv1.NotebookWord{
-					Expression:     note.Expression,
-					Definition:     note.Definition,
-					Meaning:        note.Meaning,
-					PartOfSpeech:   note.PartOfSpeech,
-					Pronunciation:  note.Pronunciation,
-					Examples:       note.Examples.Texts(),
-					Synonyms:       note.Synonyms,
-					Antonyms:       note.Antonyms,
-					LearningStatus: string(info.status),
-					LearnedLogs:    convertLogsToProto(logs),
-					NextReviewDate: info.nextReviewDate,
-					Origin:         note.Origin,
+					Expression:       note.Expression,
+					Definition:       note.Definition,
+					Meaning:          note.Meaning,
+					PartOfSpeech:     note.PartOfSpeech,
+					Pronunciation:    note.Pronunciation,
+					Examples:         note.Examples.Texts(),
+					Synonyms:         note.Synonyms,
+					Antonyms:         note.Antonyms,
+					LearningStatus:   string(info.status),
+					LearnedLogs:      convertLogsToProto(logs),
+					NextReviewDate:   info.nextReviewDate,
+					Origin:           note.Origin,
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
 					NoteId:           info.noteID,
-					ConceptHead:    conceptHead,
-					ConceptMembers: conceptMembers,
-					ConceptMeaning: conceptMeaning,
+					ConceptHead:      conceptHead,
+					ConceptMembers:   conceptMembers,
+					ConceptMeaning:   conceptMeaning,
 				})
 				totalWordCount++
 			}
@@ -560,6 +563,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 	}
 
 	notebookID := req.Msg.GetNotebookId()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	reader, err := h.newReader()
 	if err != nil {
@@ -574,7 +578,7 @@ func (h *NotebookHandler) ExportNotebookPDF(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("read story notebooks: %w", err))
 	}
 
-	learningHistory, err := h.loadLearningHistory(notebookID)
+	learningHistory, err := h.loadLearningHistory(userID, notebookID)
 	if err != nil {
 		return nil, err
 	}
@@ -706,6 +710,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 	}
 
 	notebookID := req.Msg.GetNotebookId()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	reader, err := h.newReader()
 	if err != nil {
@@ -735,7 +740,7 @@ func (h *NotebookHandler) GetEtymologyNotebook(
 		if hs, ok := historyCache[nbName]; ok {
 			return hs
 		}
-		scoped, _ := h.loadHistoriesForNotebooks(nbName)
+		scoped, _ := h.loadHistoriesForNotebooks(userID, nbName)
 		hs := scoped[nbName]
 		historyCache[nbName] = hs
 		return hs
@@ -1114,23 +1119,31 @@ func (h *NotebookHandler) RegisterDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.RegisterDefinitionRequest],
 ) (*connect.Response[apiv1.RegisterDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	defsDir := "notebooks/definitions"
-	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" { defsDir = h.notebooksConfig.DefinitionsDirectories[0] }
+	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
+		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
+	}
 	notebookIDRaw := req.Msg.GetNotebookId()
 	checkPath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
 	rel, err := filepath.Rel(defsDir, checkPath)
-	if err != nil || strings.HasPrefix(rel, "..") { return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id")) }
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	}
 	expression := req.Msg.GetExpression()
 	meaning := req.Msg.GetMeaning()
 	note := &notebook.NoteRecord{
 		Usage: expression, Entry: expression, Meaning: meaning,
 		DefinitionsDir: defsDir, NotebookFile: req.Msg.GetNotebookFile(),
-		SceneIndex: int(req.Msg.GetSceneIndex()),
+		SceneIndex:   int(req.Msg.GetSceneIndex()),
 		PartOfSpeech: req.Msg.GetPartOfSpeech(), Examples: req.Msg.GetExamples(),
 		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: notebookIDRaw, Group: req.Msg.GetNotebookFile()}},
 	}
-	if err := h.noteRepository.Create(ctx, note); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err)) }
+	if err := h.noteRepository.Create(ctx, note); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err))
+	}
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
 
@@ -1139,7 +1152,11 @@ func (h *NotebookHandler) DeleteDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.DeleteDefinitionRequest],
 ) (*connect.Response[apiv1.DeleteDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
-	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err)) }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
+	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err))
+	}
 	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
 }

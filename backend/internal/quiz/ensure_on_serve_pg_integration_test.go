@@ -152,7 +152,7 @@ func findRepoRootForEnsure(t *testing.T) string {
 // fresh DB (no SRS history) still yields the words.
 func loadFirstCard(t *testing.T, svc *quiz.Service) quiz.Card {
 	t.Helper()
-	cards, err := svc.LoadCards([]string{ensureBookID}, true, nil)
+	cards, err := svc.LoadCards(0, []string{ensureBookID}, true, nil)
 	require.NoError(t, err)
 	require.NotEmpty(t, cards, "the example definitions book must yield cards from YAML")
 	return cards[0]
@@ -173,7 +173,7 @@ func TestEnsureOnServe_ReproducesAndFixesExcludeDrift(t *testing.T) {
 		card := loadFirstCard(t, svc) // loads from YAML; no ensure runs
 		require.Equal(t, 0, f.countNotebookNotes(t, ensureBookID), "no hook: still no DB notes")
 
-		err := svc.SkipWord(quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook})
+		err := svc.SkipWord(0, quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook})
 		require.Error(t, err, "Exclude must fail on the drift state (the reported bug)")
 		assert.Contains(t, err.Error(), "no matching note or origin")
 	})
@@ -185,11 +185,11 @@ func TestEnsureOnServe_ReproducesAndFixesExcludeDrift(t *testing.T) {
 		got := f.countNotebookNotes(t, ensureBookID)
 		assert.Greater(t, got, 0, "ensure-on-serve must create the book's notes")
 
-		require.NoError(t, svc.SkipWord(quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook}),
+		require.NoError(t, svc.SkipWord(0, quiz.CardInfoFromCard(card), "", []notebook.QuizType{notebook.QuizTypeNotebook}),
 			"Exclude must succeed once the note exists")
 		assert.Equal(t, 1, f.countSkipFlags(t, ensureBookID), "the skip flag landed on the freshly-created note")
 
-		require.NoError(t, svc.ResumeWord(quiz.CardInfoFromCard(card), []notebook.QuizType{notebook.QuizTypeNotebook}),
+		require.NoError(t, svc.ResumeWord(0, quiz.CardInfoFromCard(card), []notebook.QuizType{notebook.QuizTypeNotebook}),
 			"Resume must clear it")
 		assert.Equal(t, 0, f.countSkipFlags(t, ensureBookID), "resume cleared the skip flag")
 	})
@@ -221,11 +221,11 @@ func TestEnsureNotesForNotebook_AdditiveNoClobber(t *testing.T) {
 
 	// Seed DB-only STATE on a note we will KEEP: a skip flag via the real path.
 	svc := f.newService(t, false)
-	cards, err := svc.LoadCards([]string{ensureBookID}, true, nil)
+	cards, err := svc.LoadCards(0, []string{ensureBookID}, true, nil)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, len(cards), 2)
 	keep, drop := cards[0], cards[1]
-	require.NoError(t, svc.SkipWord(quiz.CardInfoFromCard(keep), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.SkipWord(0, quiz.CardInfoFromCard(keep), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
 	require.Equal(t, 1, f.countSkipFlags(t, ensureBookID))
 
 	// Simulate drift: delete a DIFFERENT note's row (as if that unit was added
@@ -251,7 +251,7 @@ func TestEnsureNotesForNotebook_AdditiveNoClobber(t *testing.T) {
 	assert.Equal(t, 1, f.countSkipFlags(t, ensureBookID), "existing skip flag survived the ensure")
 
 	// The recreated word is now excludable end-to-end.
-	require.NoError(t, svc.SkipWord(quiz.CardInfoFromCard(drop), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
+	require.NoError(t, svc.SkipWord(0, quiz.CardInfoFromCard(drop), "", []notebook.QuizType{notebook.QuizTypeNotebook}))
 	assert.Equal(t, 2, f.countSkipFlags(t, ensureBookID))
 }
 

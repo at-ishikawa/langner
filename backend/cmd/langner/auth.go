@@ -1,12 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	"github.com/spf13/cobra"
 
 	"github.com/at-ishikawa/langner/internal/auth"
+	"github.com/at-ishikawa/langner/internal/config"
 )
 
 func newAuthCommand() *cobra.Command {
@@ -15,7 +18,109 @@ func newAuthCommand() *cobra.Command {
 		Short: "Authentication utilities",
 	}
 	authCmd.AddCommand(newAuthIssueTestCookieCommand())
+	authCmd.AddCommand(newAuthProvisionCommand())
 	return authCmd
+}
+
+// syntheticSub derives the deterministic, PII-free google_sub for an account
+// created by tooling (auth provision / issue-test-cookie) rather than a real
+// Google sign-in. provision and issue-test-cookie derive it identically, so a
+// provisioned account and the e2e cookie for the same email resolve to the SAME
+// user row — the pre-auth history provision backfills therefore belongs to the
+// cookie'd user. The email only seeds a stable, opaque subject; nothing PII is
+// stored (migration 024 keeps only google_sub + username).
+//
+// (An account created here does NOT unify with a later REAL Google sign-in for
+// the same person — that yields a distinct row keyed by Google's own sub — since
+// the no-PII schema stores no email to match on. This matters only to the e2e
+// harness, which authenticates via issue-test-cookie, not a real round-trip.)
+func syntheticSub(email string) string {
+	return "e2e-test|" + auth.NormalizeEmail(email)
+}
+
+// ensureUser find-or-creates the tooling account for email and returns its id.
+// Upsert is idempotent on google_sub, so re-running reuses the existing row
+// (preserving its auto-generated username) instead of creating a duplicate. No
+// email or name is stored (no PII).
+func ensureUser(ctx context.Context, users *auth.UserRepository, email string) (int64, error) {
+	u, err := users.Upsert(ctx, syntheticSub(email))
+	if err != nil {
+		return 0, fmt.Errorf("provision user %q: %w", email, err)
+	}
+	return u.ID, nil
+}
+
+// provisionAuth upserts the configured allowlist + initial-admin accounts and
+// backfills every pre-auth (user_id IS NULL) learning-history row — learning
+// logs and both skip-flag tables — to the initial admin's id, so history
+// imported/seeded before auth existed becomes the admin's own (auth Phase 2).
+// It is a no-op (returns nil) when auth is disabled or no initial_admin_email is
+// configured, so a DB-less / auth-less dev import is unaffected. Idempotent:
+// re-running only backfills rows still NULL and reuses existing user rows.
+func provisionAuth(ctx context.Context, cfg *config.Config, db *sqlx.DB) error {
+	if !cfg.Auth.Enabled() || cfg.Auth.InitialAdminEmail == "" {
+		return nil
+	}
+	users := auth.NewUserRepository(db)
+
+	// Upsert every allowlisted account plus the initial admin, so a learner can
+	// sign in and (below) so the admin id is resolvable for the backfill.
+	emails := append([]string{}, cfg.Auth.AllowedEmails...)
+	emails = append(emails, cfg.Auth.InitialAdminEmail)
+	for _, email := range emails {
+		if email == "" {
+			continue
+		}
+		if _, err := ensureUser(ctx, users, email); err != nil {
+			return err
+		}
+	}
+
+	adminID, err := ensureUser(ctx, users, cfg.Auth.InitialAdminEmail)
+	if err != nil {
+		return err
+	}
+
+	// Backfill pre-auth rows to the admin. Each table is scoped to user_id IS
+	// NULL so an already-attributed row (a real user's runtime attempt) is never
+	// reassigned.
+	for _, table := range []string{"learning_logs", "note_skip_flags", "origin_skip_flags"} {
+		if _, err := db.ExecContext(ctx,
+			fmt.Sprintf("UPDATE %s SET user_id = $1 WHERE user_id IS NULL", table), adminID); err != nil {
+			return fmt.Errorf("backfill %s.user_id: %w", table, err)
+		}
+	}
+	return nil
+}
+
+// newAuthProvisionCommand provisions the allowlist/admin accounts and backfills
+// pre-auth learning history to the initial admin. It runs standalone and is also
+// invoked automatically by `migrate import-db` so the e2e seed provisions
+// without a separate step.
+func newAuthProvisionCommand() *cobra.Command {
+	return &cobra.Command{
+		Use:   "provision",
+		Short: "Upsert allowlist/admin users and backfill pre-auth learning history to the admin",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			if !cfg.Auth.Enabled() {
+				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
+			}
+			if cfg.Auth.InitialAdminEmail == "" {
+				return fmt.Errorf("auth.initial_admin_email is required to provision")
+			}
+			if err := provisionAuth(cmd.Context(), cfg, db); err != nil {
+				return err
+			}
+			fmt.Printf("Provisioned auth accounts and backfilled pre-auth history to %q\n", cfg.Auth.InitialAdminEmail)
+			return nil
+		},
+	}
 }
 
 // newAuthIssueTestCookieCommand mints a signed session cookie for an
@@ -43,9 +148,12 @@ func newAuthIssueTestCookieCommand() *cobra.Command {
 				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
 			}
 			users := auth.NewUserRepository(db)
-			// Stable synthetic google_sub per allowlisted email so re-running is
-			// idempotent (same user row, same username preserved).
-			user, err := users.Upsert(cmd.Context(), "e2e-test|"+auth.NormalizeEmail(email))
+			// Reuse the SAME row `auth provision`/import-db created for this email
+			// (find-or-create by the deterministic synthetic sub), so a cookie
+			// issued after provisioning resolves to the account that owns the
+			// backfilled pre-auth history. No email is stored (migration 024 keeps
+			// only google_sub + username — no PII).
+			userID, err := ensureUser(cmd.Context(), users, email)
 			if err != nil {
 				return fmt.Errorf("upsert test user: %w", err)
 			}
@@ -55,7 +163,7 @@ func newAuthIssueTestCookieCommand() *cobra.Command {
 				return fmt.Errorf("session signing key: %w", err)
 			}
 			value, err := sessions.Sign(auth.Session{
-				UserID:    user.ID,
+				UserID:    userID,
 				ExpiresAt: time.Now().Add(30 * 24 * time.Hour),
 			})
 			if err != nil {
