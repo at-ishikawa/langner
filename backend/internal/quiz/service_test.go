@@ -2315,7 +2315,10 @@ func TestDefinitionsSectionSummaries_NaturalSessionOrdering(t *testing.T) {
 		"Intro":      {"__index_0": {{Expression: "warm up", Meaning: "to ease in"}}},
 	}
 
-	got := definitionsSectionSummaries(defs, nil, false, nil)
+	// Fallback case: no index order (nil), as for a standalone definitions
+	// file loaded without an index.yml. Ordering falls back to
+	// numeric-then-lexical.
+	got := definitionsSectionSummaries(defs, nil, nil, false, nil)
 
 	require.Len(t, got, 3)
 	// Numbered sessions sort numerically before non-numbered ones; among
@@ -2323,6 +2326,48 @@ func TestDefinitionsSectionSummaries_NaturalSessionOrdering(t *testing.T) {
 	assert.Equal(t, "Session 2", got[0].Title)
 	assert.Equal(t, "Session 10", got[1].Title)
 	assert.Equal(t, "Intro", got[2].Title)
+}
+
+// TestDefinitionsSectionSummaries_IndexOrderPrimary pins the fix: when an
+// index.yml order is supplied, sections come back in that declared order even
+// when the titles carry no trailing integer (so the old numeric/lexical sort
+// would scramble them). Titles NOT covered by the order fall back to the
+// numeric/lexical sort and are appended after the index-ordered ones.
+func TestDefinitionsSectionSummaries_IndexOrderPrimary(t *testing.T) {
+	numberWords := []string{
+		"ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT",
+		"NINE", "TEN", "ELEVEN", "TWELVE", "THIRTEEN", "FOURTEEN", "FIFTEEN",
+	}
+	defs := map[string]map[string][]notebook.Note{}
+	order := make([]string, 0, len(numberWords))
+	for i, w := range numberWords {
+		title := "UNIT " + w
+		order = append(order, title)
+		defs[title] = map[string][]notebook.Note{
+			"__index_0": {{Expression: "word" + strconv.Itoa(i), Meaning: "m" + strconv.Itoa(i)}},
+		}
+	}
+
+	got := definitionsSectionSummaries(defs, order, nil, false, nil)
+
+	require.Len(t, got, len(order))
+	for i, title := range order {
+		assert.Equalf(t, title, got[i].Title, "section %d must follow index order", i)
+	}
+
+	// Leftover titles not in the order are appended via the numeric/lexical
+	// fallback, after every index-ordered section.
+	defs["Appendix 10"] = map[string][]notebook.Note{"__index_0": {{Expression: "x", Meaning: "m"}}}
+	defs["Appendix 2"] = map[string][]notebook.Note{"__index_0": {{Expression: "y", Meaning: "m"}}}
+
+	got = definitionsSectionSummaries(defs, order, nil, false, nil)
+	require.Len(t, got, len(order)+2)
+	for i, title := range order {
+		assert.Equal(t, title, got[i].Title)
+	}
+	// "Appendix 2" before "Appendix 10" (numeric), both after the index sections.
+	assert.Equal(t, "Appendix 2", got[len(order)].Title)
+	assert.Equal(t, "Appendix 10", got[len(order)+1].Title)
 }
 
 // TestService_DefinitionsBookSummaryMatchesLoad pins the contract that

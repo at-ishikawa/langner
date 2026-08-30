@@ -380,6 +380,38 @@ func (r Reader) GetDefinitionsNotesByTitle(bookID string) (map[string]map[string
 	return result, true
 }
 
+// GetDefinitionsSessionOrder returns the session keys of a definitions book
+// in the order their notebooks are declared in the book's index.yml, deduped
+// by first appearance. The session key uses the EXACT same rule as
+// GetDefinitionsNotesByTitle (def.Metadata.Notebook, falling back to
+// def.Metadata.Title; empty keys are skipped) so the quiz start page can list
+// sessions in document order instead of scrambling them alphabetically.
+// Returns nil when the book has no raw definitions (e.g. a standalone file
+// loaded without an index.yml).
+func (r Reader) GetDefinitionsSessionOrder(bookID string) []string {
+	defs, ok := r.definitionsRaw[bookID]
+	if !ok || len(defs) == 0 {
+		return nil
+	}
+	var order []string
+	seen := make(map[string]bool)
+	for _, def := range defs {
+		session := def.Metadata.Notebook
+		if session == "" {
+			session = def.Metadata.Title
+		}
+		if session == "" {
+			continue
+		}
+		if seen[session] {
+			continue
+		}
+		seen[session] = true
+		order = append(order, session)
+	}
+	return order
+}
+
 // GetDefinitionsBookIDs returns all book IDs that have definitions in the definitions map.
 func (r Reader) GetDefinitionsBookIDs() []string {
 	var ids []string
