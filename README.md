@@ -134,6 +134,28 @@ Edit `config.yml` to set your directories for notebooks, dictionaries, templates
 | `OPENAI_MODEL` | Quizzes (optional) | Model to use, defaults to `gpt-4o-mini` |
 | `RAPID_API_HOST` | Dictionary lookup | Set to `wordsapiv1.p.rapidapi.com` |
 | `RAPID_API_KEY` | Dictionary lookup | Get at [RapidAPI](https://rapidapi.com/dpventures/api/wordsapi) |
+| `GOOGLE_CLIENT_SECRET` | Sign in with Google | OAuth client secret from Google Cloud Console |
+| `SESSION_SIGNING_KEY` | Sign in with Google | Secret key that signs the login session cookie |
+| `CREDENTIAL_ENCRYPTION_KEY` | Sign in with Google | 32-byte key (hex or base64) that encrypts stored emails/names — must differ from `SESSION_SIGNING_KEY` |
+
+### Sign in with Google
+
+The web app can require every user to sign in with a Google account. Sign-in is
+enabled as soon as `SESSION_SIGNING_KEY` is set; leave it unset to run the app
+without login (single-user local development).
+
+To enable it:
+
+1. Create an OAuth 2.0 Client ID (type "Web application") in the Google Cloud
+   Console. Add `http://localhost:8080/auth/google/callback` as an authorized
+   redirect URI (use your real backend URL in production).
+2. In the `auth:` block of `config.yml`, set `google_client_id`, `redirect_url`,
+   `frontend_url`, and the `allowed_emails` list — only those Google accounts may
+   sign in. The first successful sign-in creates the account automatically.
+3. Provide the three secrets above via environment variables (never in
+   `config.yml`).
+
+Emails and names are encrypted before they are stored in the database.
 
 ## License
 

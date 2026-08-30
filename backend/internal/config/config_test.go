@@ -112,6 +112,11 @@ func TestConfigLoader_Load(t *testing.T) {
 					Algorithm:      "modified_sm2",
 					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
+				Auth: AuthConfig{
+					RedirectURL:    "http://localhost:8080/auth/google/callback",
+					FrontendURL:    "http://localhost:3100",
+					CookieSameSite: "lax",
+				},
 			},
 		},
 		{
@@ -171,6 +176,11 @@ outputs:
 					Algorithm:      "modified_sm2",
 					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
 				},
+				Auth: AuthConfig{
+					RedirectURL:    "http://localhost:8080/auth/google/callback",
+					FrontendURL:    "http://localhost:3100",
+					CookieSameSite: "lax",
+				},
 			},
 		},
 		{
@@ -223,6 +233,11 @@ outputs:
 				Quiz: QuizConfig{
 					Algorithm:      "modified_sm2",
 					FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825},
+				},
+				Auth: AuthConfig{
+					RedirectURL:    "http://localhost:8080/auth/google/callback",
+					FrontendURL:    "http://localhost:3100",
+					CookieSameSite: "lax",
 				},
 			},
 		},
