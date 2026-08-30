@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/at-ishikawa/langner/internal/analytics"
+	"github.com/at-ishikawa/langner/internal/auth"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quizreview"
@@ -269,5 +270,59 @@ The date argument defaults to today in your local timezone.`,
 	quizReviewCmd.Flags().BoolVar(&quizReviewGeneratePDF, "pdf", false, "Generate PDF output in addition to markdown")
 	notebookCommands.AddCommand(quizReviewCmd)
 
+	notebookCommands.AddCommand(newNotebooksSetOwnerCommand())
+
 	return notebookCommands
+}
+
+// newNotebooksSetOwnerCommand assigns a notebook's owner + public/private
+// visibility ad hoc (the same overlay `notebook_ownership:` config provisions at
+// import time). Auth must be enabled (owners are user accounts in Postgres). An
+// empty --owner-email leaves the notebook unowned (valid only for public).
+func newNotebooksSetOwnerCommand() *cobra.Command {
+	var notebookID, ownerEmail, visibility string
+	cmd := &cobra.Command{
+		Use:   "set-owner",
+		Short: "Assign a notebook's owner and public/private visibility",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if notebookID == "" {
+				return fmt.Errorf("--notebook-id is required")
+			}
+			if visibility != notebook.VisibilityPublic && visibility != notebook.VisibilityPrivate {
+				return fmt.Errorf("--visibility must be %q or %q", notebook.VisibilityPublic, notebook.VisibilityPrivate)
+			}
+			cfg, db, err := openConfigAndDB()
+			if err != nil {
+				return err
+			}
+			defer func() { _ = db.Close() }()
+
+			if !cfg.Auth.Enabled() {
+				return fmt.Errorf("auth is not enabled in config (session_signing_key is unset)")
+			}
+			ctx := cmd.Context()
+			var ownerID *int64
+			if ownerEmail != "" {
+				enc, err := auth.NewEncryptor(auth.DecodeKey(cfg.Auth.CredentialEncryptionKey))
+				if err != nil {
+					return fmt.Errorf("credential encryption key: %w", err)
+				}
+				users := auth.NewUserRepository(db, enc)
+				id, err := ensureUser(ctx, users, ownerEmail, ownerEmail)
+				if err != nil {
+					return err
+				}
+				ownerID = &id
+			}
+			if err := notebook.NewNotebookACLRepository(db).UpsertOwnership(ctx, notebookID, ownerID, visibility); err != nil {
+				return err
+			}
+			fmt.Printf("Set notebook %q visibility=%s owner=%q\n", notebookID, visibility, ownerEmail)
+			return nil
+		},
+	}
+	cmd.Flags().StringVar(&notebookID, "notebook-id", "", "notebook id to assign")
+	cmd.Flags().StringVar(&ownerEmail, "owner-email", "", "owner account email (empty = unowned)")
+	cmd.Flags().StringVar(&visibility, "visibility", notebook.VisibilityPublic, "public or private")
+	return cmd
 }

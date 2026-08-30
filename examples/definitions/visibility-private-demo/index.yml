@@ -1,0 +1,4 @@
+id: visibility-private-demo
+name: "Private Demo Book (visibility)"
+notebooks:
+  - ./definitions.yml
