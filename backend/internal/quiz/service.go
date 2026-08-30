@@ -53,6 +53,15 @@ type Service struct {
 	// `migrate import-db` still has the notes rows every DB-state write
 	// (exclude/SkipWord, SRS logs, overrides) needs. Nil in YAML-only mode.
 	noteEnsurer NoteEnsurer
+	// aclRepo, when set (DB mode), resolves notebook public/private visibility
+	// (auth Phase 3). Every read path that lists or loads a notebook consults
+	// its predicate so a private notebook never leaks to a non-owner: the
+	// scoped history reads are filtered by visibility, and the reader-driven
+	// listing loaders (LoadNotebookSummaries / LoadAllWords / grammar summaries)
+	// and the by-id loaders (LoadCards / LoadReverseCards / grammar posts) gate
+	// each notebook id. Nil in YAML-only / no-DB dev, where every notebook is
+	// visible.
+	aclRepo notebook.NotebookVisibility
 }
 
 // NoteEnsurer additively creates any notes a notebook's YAML declares but the
@@ -117,33 +126,66 @@ func (s *Service) ensureNotes(notebookIDs []string) {
 	}
 }
 
+// SetNotebookACL installs the notebook visibility resolver (auth Phase 3).
+// Called from bootstrap once the database is connected; nil (YAML-only / no-DB
+// dev) means every notebook is visible.
+func (s *Service) SetNotebookACL(aclRepo notebook.NotebookVisibility) {
+	s.aclRepo = aclRepo
+}
+
+// visibleNotebooks returns a predicate reporting whether a notebook is visible
+// to userID. When no ACL repository is installed (YAML-only / no-DB dev) every
+// notebook is visible. It is the ONE place the read paths obtain the filter, so
+// listing loaders and by-id loaders enforce visibility identically.
+func (s *Service) visibleNotebooks(userID int64) (notebook.VisibilityPredicate, error) {
+	if s.aclRepo == nil {
+		return notebook.AllVisible, nil
+	}
+	return s.aclRepo.VisibleNotebookIDs(context.Background(), userID)
+}
+
 // loadHistoriesForNotebooks returns histories for ONLY the given notebooks. It
 // is the scoped read the quiz load / submit paths use so a single-notebook quiz
 // (or a per-card grade) doesn't ship the entire learning history over the wire
-// every request — the fix for the DB egress blowout. The result is identical to
-// loadHistories() filtered to notebookIDs. In DB mode it pushes the scope into
-// SQL (HistoryStore.LoadForNotebooks); in YAML mode it loads then filters (the
-// YAML reader is local, so there's no egress there to save).
+// every request — the fix for the DB egress blowout. In DB mode it pushes the
+// scope into SQL (HistoryStore.LoadForNotebooks); in YAML mode it loads then
+// filters (the YAML reader is local, so there's no egress there to save).
+//
+// The result is also filtered by notebook VISIBILITY (auth Phase 3): a notebook
+// the user may not see is dropped, so every count/status/relearn read that keys
+// off the history map inherits the enforcement. The listing/by-id loaders gate
+// each id with visibleNotebooks too (a private notebook has on-disk content
+// regardless of history).
 // userID scopes the read to one account's learning history (auth Phase 2). It
 // is threaded as a PARAMETER from the connect handler (which reads it from the
 // request context via auth.UserIDFromContext), never stored on the shared
 // Service. In YAML-only mode the on-disk reader is single-tenant and ignores
 // userID.
 func (s *Service) loadHistoriesForNotebooks(userID int64, notebookIDs ...string) (map[string][]notebook.LearningHistory, error) {
+	var histories map[string][]notebook.LearningHistory
+	var err error
 	if s.historyStore != nil {
-		return s.historyStore.LoadForNotebooks(context.Background(), notebookIDs, userID)
-	}
-	all, err := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string][]notebook.LearningHistory, len(notebookIDs))
-	for _, id := range notebookIDs {
-		if h, ok := all[id]; ok {
-			out[id] = h
+		histories, err = s.historyStore.LoadForNotebooks(context.Background(), notebookIDs, userID)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		all, aerr := notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+		if aerr != nil {
+			return nil, aerr
+		}
+		histories = make(map[string][]notebook.LearningHistory, len(notebookIDs))
+		for _, id := range notebookIDs {
+			if h, ok := all[id]; ok {
+				histories[id] = h
+			}
 		}
 	}
-	return out, nil
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+	return notebook.FilterHistoriesByVisibility(histories, visible), nil
 }
 
 // loadHistoriesForDateRange returns histories built from ONLY the logs whose
@@ -154,16 +196,28 @@ func (s *Service) loadHistoriesForNotebooks(userID int64, notebookIDs ...string)
 // unbounded on that end. In DB mode it pushes the window into SQL
 // (HistoryStore.LoadForDateRange); in YAML mode it loads the local files then
 // filters by date, so the map shape is identical either way.
-// userID scopes the read to one account's learning history (auth Phase 2), see
+// userID scopes the read to one account's learning history (auth Phase 2), and
+// the result is filtered by notebook VISIBILITY (auth Phase 3), see
 // loadHistoriesForNotebooks.
 func (s *Service) loadHistoriesForDateRange(userID int64, from, to time.Time) (map[string][]notebook.LearningHistory, error) {
+	var histories map[string][]notebook.LearningHistory
+	var err error
 	if s.historyStore != nil {
-		return s.historyStore.LoadForDateRange(context.Background(), from, to, userID)
+		histories, err = s.historyStore.LoadForDateRange(context.Background(), from, to, userID)
+	} else {
+		// YAML mode is local (no egress to save), and the sole caller re-filters
+		// by its window, so return the on-disk histories unchanged — same as the
+		// YAML branch of loadHistoriesForNotebooks.
+		histories, err = notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
 	}
-	// YAML mode is local (no egress to save), and the sole caller re-filters by
-	// its window, so return the on-disk histories unchanged — same as the YAML
-	// branch of loadHistoriesForNotebooks.
-	return notebook.NewLearningHistories(s.notebooksConfig.LearningNotesDirectory)
+	if err != nil {
+		return nil, err
+	}
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+	return notebook.FilterHistoriesByVisibility(histories, visible), nil
 }
 
 // preloadHistoriesKey types the context value carrying a batch's pre-loaded
@@ -267,9 +321,20 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
+	// Notebook visibility (auth Phase 3): the reader enumerates every notebook
+	// on disk, so a private notebook the user doesn't own must be skipped here
+	// or it would appear in the quiz options list with empty (filtered) counts.
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+
 	var summaries []NotebookSummary
 
 	for id, index := range reader.GetStoryIndexes() {
+		if !visible(id) {
+			continue
+		}
 		stories, err := reader.ReadStoryNotebooks(id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read story notebook %q: %w", id, err)
@@ -315,6 +380,9 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 	}
 
 	for id, index := range reader.GetFlashcardIndexes() {
+		if !visible(id) {
+			continue
+		}
 		notebooks, err := reader.ReadFlashcardNotebooks(id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read flashcard notebook %q: %w", id, err)
@@ -356,6 +424,9 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		if !visible(nbID) {
+			continue
+		}
 		if _, isStory := storyIndexes[nbID]; isStory {
 			continue
 		}
@@ -391,6 +462,9 @@ func (s *Service) LoadNotebookSummaries(userID int64, includeUnstudied bool) ([]
 	// schedule to compute here — the summary just lists each etymology notebook
 	// with its origin count so a learner can still open and read it.
 	for id, index := range reader.GetEtymologyIndexes() {
+		if !visible(id) {
+			continue
+		}
 		origins, err := reader.ReadEtymologyNotebook(id)
 		if err != nil {
 			continue
@@ -513,6 +587,11 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
 	originMap := buildOriginMap(reader)
@@ -520,6 +599,12 @@ func (s *Service) LoadCards(userID int64, notebookIDs []string, includeUnstudied
 	var cards []Card
 
 	for _, notebookID := range notebookIDs {
+		// A private notebook the user doesn't own is treated exactly like a
+		// non-existent one (NotFound) so quizzing it by id can't leak its words
+		// and existence isn't disclosed (auth Phase 3).
+		if !visible(notebookID) {
+			return nil, &NotFoundError{NotebookID: notebookID}
+		}
 		_, isStory := storyIndexes[notebookID]
 		_, isFlashcard := flashcardIndexes[notebookID]
 		sectionFilter := sectionTitlesByID[notebookID]
@@ -1246,6 +1331,11 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 		return nil, fmt.Errorf("failed to load learning histories: %w", err)
 	}
 
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
 	originMap := buildOriginMap(reader)
@@ -1253,6 +1343,10 @@ func (s *Service) LoadReverseCards(userID int64, notebookIDs []string, listMissi
 	var cards []ReverseCard
 
 	for _, notebookID := range notebookIDs {
+		// See LoadCards: a private notebook the user doesn't own is NotFound.
+		if !visible(notebookID) {
+			return nil, &NotFoundError{NotebookID: notebookID}
+		}
 		_, isStory := storyIndexes[notebookID]
 		_, isFlashcard := flashcardIndexes[notebookID]
 		sectionFilter := sectionTitlesByID[notebookID]
@@ -1986,6 +2080,16 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 		return nil, fmt.Errorf("failed to initialize notebook reader: %w", err)
 	}
 
+	// LoadAllWords reads notebooks straight from the on-disk reader (not only
+	// via the history map), so it must apply the visibility predicate itself or
+	// a private notebook's words would enter the "all notebooks" freeform pool —
+	// and, since LoadRelearnPool builds its origin families from LoadAllWords,
+	// the Relearn pool too (auth Phase 3).
+	visible, err := s.visibleNotebooks(userID)
+	if err != nil {
+		return nil, fmt.Errorf("resolve notebook visibility: %w", err)
+	}
+
 	storyIndexes := reader.GetStoryIndexes()
 	flashcardIndexes := reader.GetFlashcardIndexes()
 	originMap := buildOriginMap(reader)
@@ -1993,6 +2097,9 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 	var cards []FreeformCard
 
 	for notebookID := range storyIndexes {
+		if !visible(notebookID) {
+			continue
+		}
 		words, err := s.loadStoryWords(userID, reader, notebookID, originMap)
 		if err != nil {
 			continue
@@ -2001,6 +2108,9 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 	}
 
 	for notebookID := range flashcardIndexes {
+		if !visible(notebookID) {
+			continue
+		}
 		words, err := s.loadFlashcardWords(userID, reader, notebookID, originMap)
 		if err != nil {
 			continue
@@ -2014,6 +2124,9 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 	// notebook's history — the definitions books are the only keys it indexes.
 	learningHistories, _ := s.loadHistoriesForNotebooks(userID, reader.GetDefinitionsBookIDs()...)
 	for _, nbID := range reader.GetDefinitionsBookIDs() {
+		if !visible(nbID) {
+			continue
+		}
 		if _, isStory := storyIndexes[nbID]; isStory {
 			continue
 		}
@@ -2040,7 +2153,7 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 	// expression. So a word embedded in an etymology notebook AND present in a
 	// definitions/story/flashcard book keeps a single canonical card, and
 	// therefore a single learning-log series.
-	cards = appendEtymologyNotebookWords(reader, cards, originMap)
+	cards = appendEtymologyNotebookWords(reader, cards, originMap, visible)
 
 	return cards, nil
 }
@@ -2059,7 +2172,11 @@ func (s *Service) LoadAllWords(userID int64) ([]FreeformCard, error) {
 // branch in LoadRelearnPool. Without this, the canonical card stays origin-less,
 // primaryOriginPart is false, and the word shows as a plain (recognition OR
 // reverse) card instead of folding into its origin family card.
-func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard, originMap map[string]notebook.EtymologyOrigin) []FreeformCard {
+// visible gates each etymology-notebook def by its source notebook id (auth
+// Phase 3): an embedded word from a private etymology notebook the user doesn't
+// own must not enter the freeform/relearn pool. A hidden def is also NOT merged
+// onto an existing card, so it can neither add words nor enrich origins.
+func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard, originMap map[string]notebook.EtymologyOrigin, visible notebook.VisibilityPredicate) []FreeformCard {
 	// byExpr maps each canonical/original expression to the indices of the
 	// existing cards that carry it, so a duplicate etymology def can enrich them.
 	byExpr := make(map[string][]int, len(cards))
@@ -2072,6 +2189,12 @@ func appendEtymologyNotebookWords(reader *notebook.Reader, cards []FreeformCard,
 	}
 
 	for _, def := range reader.ReadEtymologyNotebookDefinitions() {
+		// Skip words from a private etymology notebook the user can't see
+		// (def.NotebookName is the source notebook id). Gate BEFORE any dedup/
+		// merge so a hidden def cannot enrich a visible card's origin either.
+		if visible != nil && !visible(def.NotebookName) {
+			continue
+		}
 		// Canonicalize with Definition precedence — the same rule the
 		// definitions-book loader uses — so a word present in both a
 		// definitions book and an etymology notebook deduplicates.
