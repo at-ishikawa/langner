@@ -17,6 +17,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/database"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
@@ -118,7 +119,7 @@ func TestNotebookVisibility_GetNotebookDetail_HardRejects(t *testing.T) {
 		EtymologyDirectories:   []string{filepath.Join(ex, "etymology")},
 		LearningNotesDirectory: t.TempDir(),
 	}
-	h := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, mock.NewClient(), nil)
+	h := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), nil)
 	h.SetNotebookACL(fakeVisibility{privateNotebook: visPrivateNotebook, ownerID: ownerID})
 
 	detail := func(userID int64, nbID string) error {
@@ -205,12 +206,12 @@ func newVisibilityFixture(t *testing.T) visibilityFixture {
 
 	// The exact wiring cmd/langner-server/main.go performs in DB mode.
 	repos := bootstrap.BuildStateRepositories(nbCfg, quizCfg, db)
-	svc := quiz.NewService(nbCfg, mock.NewClient(), make(map[string]rapidapi.Response), repos.Learning, quizCfg)
+	svc := quiz.NewService(nbCfg, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), repos.Learning, quizCfg)
 	svc.SetHistoryStore(repos.HistoryStore)
 	svc.SetSkipStores(repos.SkipFlags, repos.Note, repos.Origin)
 	svc.SetNotebookACL(repos.ACL)
 
-	notebookHandler := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, mock.NewClient(), repos.Note)
+	notebookHandler := NewNotebookHandler(nbCfg, config.TemplatesConfig{}, make(map[string]rapidapi.Response), nil, inference.StaticResolver(mock.NewClient()), repos.Note)
 	notebookHandler.SetHistoryStore(repos.HistoryStore)
 	notebookHandler.SetNotebookACL(repos.ACL)
 

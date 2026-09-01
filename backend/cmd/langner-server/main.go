@@ -22,8 +22,8 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/inference/factory"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
-	"github.com/at-ishikawa/langner/internal/inference/openai"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/at-ishikawa/langner/internal/quiz"
 	"github.com/at-ishikawa/langner/internal/server"
@@ -57,23 +57,6 @@ func run(ctx context.Context) error {
 	cfg, err := loadConfig()
 	if err != nil {
 		return fmt.Errorf("loadConfig() > %w", err)
-	}
-
-	var inferenceClient inference.Client
-	switch cfg.Inference.Mode {
-	case "mock":
-		inferenceClient = mock.NewClient()
-		slog.Info("using mock inference client (substring grader)")
-	default:
-		if cfg.OpenAI.APIKey != "" {
-			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
-			defer func() {
-				_ = openaiClient.Close()
-			}()
-			inferenceClient = openaiClient
-		} else {
-			slog.Warn("OPENAI_API_KEY is not set; quiz grading features will be unavailable")
-		}
 	}
 
 	dictionaryMap, err := loadDictionaryMap(cfg.Dictionaries.RapidAPI.CacheDirectory)
@@ -120,6 +103,25 @@ func run(ctx context.Context) error {
 		slog.Info("google-oauth sign-in enabled; all RPCs require a valid session cookie")
 	} else {
 		slog.Warn("auth disabled (no SESSION_SIGNING_KEY); RPCs are ungated")
+	}
+
+	// Resolve the LLM client PER REQUEST from the signed-in user's credential —
+	// there is NO system-wide server key. In mock mode (e2e) a single static
+	// mock grader backs every request (no per-user key needed). In user mode the
+	// factory resolver looks up each user's stored provider + key; without auth
+	// (YAML-only dev) there are no per-user credentials, so grading reports
+	// "no API key configured" (a clear FailedPrecondition) instead of crashing.
+	var clientResolver inference.ClientResolver
+	switch {
+	case cfg.Inference.Mode == "mock":
+		clientResolver = inference.StaticResolver(mock.NewClient())
+		slog.Info("using mock inference client (substring grader)")
+	case authSetup != nil:
+		clientResolver = factory.NewResolver(authSetup.credentials)
+		slog.Info("using per-user LLM credentials for quiz grading")
+	default:
+		clientResolver = inference.StaticResolver(nil)
+		slog.Warn("no per-user LLM credentials available (auth disabled); quiz grading will report 'no API key configured'")
 	}
 
 	// User-STATE repositories. When a database is configured, writes go to the
@@ -171,7 +173,7 @@ func run(ctx context.Context) error {
 	}
 	analyticsRepo := analytics.Repository(yamlAnalyticsRepo)
 
-	svc := quiz.NewService(cfg.Notebooks, inferenceClient, dictionaryMap, learningRepo, cfg.Quiz)
+	svc := quiz.NewService(cfg.Notebooks, clientResolver, dictionaryMap, learningRepo, cfg.Quiz)
 	// Swap the quiz service's learning-history reads to the DB store when one
 	// was built above; a nil store keeps the YAML fallback.
 	svc.SetHistoryStore(historyStore)
@@ -188,7 +190,7 @@ func run(ctx context.Context) error {
 		RapidAPIKey:  cfg.Dictionaries.RapidAPI.Key,
 	}
 	dictReader := dictionary.NewReader(cfg.Dictionaries.RapidAPI.CacheDirectory, dictConfig)
-	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, inferenceClient, noteRepo)
+	notebookHandler := server.NewNotebookHandler(cfg.Notebooks, cfg.Templates, dictionaryMap, dictReader, clientResolver, noteRepo)
 	// Serve the Learn page's learning-history reads (status / next-review /
 	// exclusion badges) from the DB too, so they stay fresh once the on-disk
 	// learning_notes YAML is frozen in DB mode. Nil keeps the YAML fallback.
@@ -226,6 +228,7 @@ func run(ctx context.Context) error {
 		mux.HandleFunc("/auth/google/callback", authSetup.handler.Callback)
 		mux.HandleFunc("/auth/logout", authSetup.handler.Logout)
 		mux.HandleFunc("/auth/me", authSetup.handler.Me)
+		mux.HandleFunc("/auth/llm-credential", authSetup.handler.LLMCredential)
 	}
 
 	var rootHandler http.Handler = h2c.NewHandler(mux, &http2.Server{})
@@ -269,8 +272,9 @@ func loadDictionaryMap(cacheDir string) (map[string]rapidapi.Response, error) {
 
 // authComponents holds the pieces main wires when auth is enabled.
 type authComponents struct {
-	handler  *server.AuthHandler
-	sessions *auth.SessionSigner
+	handler     *server.AuthHandler
+	sessions    *auth.SessionSigner
+	credentials *auth.CredentialsRepository
 }
 
 // buildAuth constructs the OAuth handler and session signer. It fails fast when
@@ -296,18 +300,20 @@ func buildAuth(cfg config.AuthConfig, db *sqlx.DB) (*authComponents, error) {
 		return nil, fmt.Errorf("credential encryption key: %w", err)
 	}
 	users := auth.NewUserRepository(db, enc)
+	credentials := auth.NewCredentialsRepository(db, enc)
 	authenticator := auth.NewOAuthClient(cfg.GoogleClientID, cfg.GoogleClientSecret, cfg.RedirectURL, nil)
 	handler := server.NewAuthHandler(server.AuthHandlerConfig{
 		Authenticator:  authenticator,
 		Sessions:       sessions,
 		State:          state,
 		Users:          users,
+		Credentials:    credentials,
 		AllowedEmails:  cfg.AllowedEmails,
 		FrontendURL:    cfg.FrontendURL,
 		CookieSecure:   cfg.CookieSecure,
 		CookieSameSite: parseSameSite(cfg.CookieSameSite),
 	})
-	return &authComponents{handler: handler, sessions: sessions}, nil
+	return &authComponents{handler: handler, sessions: sessions, credentials: credentials}, nil
 }
 
 func parseSameSite(s string) http.SameSite {

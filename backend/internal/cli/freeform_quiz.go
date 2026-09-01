@@ -34,7 +34,7 @@ func NewFreeformQuizCLI(
 	}
 
 	calculator := notebook.NewIntervalCalculator(quizCfg.Algorithm, quizCfg.FixedIntervals)
-	svc := quiz.NewService(notebooksConfig, openaiClient, baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
+	svc := quiz.NewService(notebooksConfig, inference.StaticResolver(openaiClient), baseCLI.dictionaryMap, learning.NewYAMLLearningRepository(notebooksConfig.LearningNotesDirectory, calculator), quizCfg)
 
 	cards, err := svc.LoadAllWords(0)
 	if err != nil {
@@ -82,7 +82,7 @@ func (r *FreeformQuizCLI) Session(ctx context.Context) error {
 
 	responseTimeMs := time.Since(startTime).Milliseconds()
 
-	grade, err := r.svc.GradeFreeformAnswer(ctx, word, meaning, responseTimeMs, r.freeformCards)
+	grade, err := r.svc.GradeFreeformAnswer(ctx, 0, word, meaning, responseTimeMs, r.freeformCards)
 	if err != nil {
 		return fmt.Errorf("grade answer: %w", err)
 	}

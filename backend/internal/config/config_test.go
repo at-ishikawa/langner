@@ -97,6 +97,7 @@ func TestConfigLoader_Load(t *testing.T) {
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Inference: InferenceConfig{Mode: "user"},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -161,6 +162,7 @@ outputs:
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Inference: InferenceConfig{Mode: "user"},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -219,6 +221,7 @@ outputs:
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Inference: InferenceConfig{Mode: "user"},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",

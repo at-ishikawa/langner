@@ -160,6 +160,7 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx context.Context, req *connect.Requ
 	if err := validateRequest(req.Msg); err != nil {
 		return nil, err
 	}
+	userID, _ := auth.UserIDFromContext(ctx)
 	noteID := req.Msg.GetNoteId()
 	h.mu.Lock()
 	card, ok := h.relearnStore[noteID]
@@ -168,9 +169,9 @@ func (h *QuizHandler) SubmitRelearnAnswer(ctx context.Context, req *connect.Requ
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("relearn card %d not found", noteID))
 	}
 
-	grade, err := h.gradeRelearn(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs(), req.Msg.GetIsSkipped())
+	grade, err := h.gradeRelearn(ctx, userID, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs(), req.Msg.GetIsSkipped())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade relearn answer: %w", err))
+		return nil, mapGradeError(err)
 	}
 
 	return connect.NewResponse(h.buildRelearnResponse(ctx, card, grade)), nil
@@ -183,6 +184,7 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 		return nil, err
 	}
 	answers := req.Msg.GetAnswers()
+	userID, _ := auth.UserIDFromContext(ctx)
 
 	cards := make([]quiz.RelearnCard, len(answers))
 	h.mu.Lock()
@@ -197,10 +199,10 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 	h.mu.Unlock()
 
 	grades, err := parallelGrade(ctx, answers, func(i int) (quiz.GradeResult, error) {
-		return h.gradeRelearn(ctx, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs(), answers[i].GetIsSkipped())
+		return h.gradeRelearn(ctx, userID, cards[i], answers[i].GetAnswer(), answers[i].GetResponseTimeMs(), answers[i].GetIsSkipped())
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade relearn answers: %w", err))
+		return nil, mapGradeError(err)
 	}
 
 	responses := make([]*apiv1.SubmitRelearnAnswerResponse, len(answers))
@@ -212,28 +214,29 @@ func (h *QuizHandler) BatchSubmitRelearnAnswers(ctx context.Context, req *connec
 
 // gradeRelearn dispatches to the pure grader that matches the card's Format, so
 // each word is graded in the direction it was failed in. A skip is graded as
-// wrong without calling the grader (same as the other quizzes).
-func (h *QuizHandler) gradeRelearn(ctx context.Context, card quiz.RelearnCard, answer string, responseTimeMs int64, skipped bool) (quiz.GradeResult, error) {
+// wrong without calling the grader (same as the other quizzes). userID selects
+// whose LLM credential backs the grade (resolved per call).
+func (h *QuizHandler) gradeRelearn(ctx context.Context, userID int64, card quiz.RelearnCard, answer string, responseTimeMs int64, skipped bool) (quiz.GradeResult, error) {
 	if skipped {
 		return skippedGradeResult(), nil
 	}
 	switch card.Format {
 	case notebook.QuizTypeReverse:
-		return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
+		return h.svc.GradeReverseAnswer(ctx, userID, card.ReverseCard(), answer, responseTimeMs)
 	case notebook.QuizTypeGrammar:
-		return h.svc.GradeGrammarBlank(ctx, card.Content, card.GrammarCard(), answer, responseTimeMs)
+		return h.svc.GradeGrammarBlank(ctx, userID, card.Content, card.GrammarCard(), answer, responseTimeMs)
 	case notebook.QuizTypeEtymologyOrigin:
 		// An origin family word is graded in the direction it was missed: a
 		// reverse word produces the word (reverseCard), a recognition word types
 		// the meaning (vocabCard). Grouping is presentation only — the grader is
 		// the same one that quiz uses, so there is no second log series (L4).
 		if card.Direction == notebook.QuizTypeReverse {
-			return h.svc.GradeReverseAnswer(ctx, card.ReverseCard(), answer, responseTimeMs)
+			return h.svc.GradeReverseAnswer(ctx, userID, card.ReverseCard(), answer, responseTimeMs)
 		}
-		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
+		return h.svc.GradeNotebookAnswer(ctx, userID, card.VocabCard(), answer, responseTimeMs)
 	default:
 		// Recognition cards grade the typed meaning against the word's own gloss.
-		return h.svc.GradeNotebookAnswer(ctx, card.VocabCard(), answer, responseTimeMs)
+		return h.svc.GradeNotebookAnswer(ctx, userID, card.VocabCard(), answer, responseTimeMs)
 	}
 }
 

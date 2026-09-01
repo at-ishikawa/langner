@@ -126,16 +126,16 @@ func (h *QuizHandler) SubmitGrammarPost(
 			continue
 		}
 		group.Go(func() error {
-			g, err := h.svc.GradeGrammarBlank(groupCtx, ctxs[i].content, ctxs[i].blank, a.GetAnswer(), a.GetResponseTimeMs())
+			g, err := h.svc.GradeGrammarBlank(groupCtx, userID, ctxs[i].content, ctxs[i].blank, a.GetAnswer(), a.GetResponseTimeMs())
 			if err != nil {
-				return fmt.Errorf("grade grammar blank: %w", err)
+				return err
 			}
 			grades[i] = g
 			return nil
 		})
 	}
 	if err := group.Wait(); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, mapGradeError(err)
 	}
 
 	// Save sequentially — writes go through the learning repository, so keep

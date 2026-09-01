@@ -26,14 +26,14 @@ import (
 type QuizHandler struct {
 	apiv1connect.UnimplementedQuizServiceHandler
 
-	svc                  *quiz.Service
-	noteRepository       notebook.NoteRepository
-	mu                   sync.Mutex
-	noteStore            map[int64]quiz.Card
-	reverseStore         map[int64]quiz.ReverseCard
-	freeformCards        []quiz.FreeformCard
-	freeformStore        map[int64]quiz.FreeformCard
-	relearnStore         map[int64]quiz.RelearnCard
+	svc            *quiz.Service
+	noteRepository notebook.NoteRepository
+	mu             sync.Mutex
+	noteStore      map[int64]quiz.Card
+	reverseStore   map[int64]quiz.ReverseCard
+	freeformCards  []quiz.FreeformCard
+	freeformStore  map[int64]quiz.FreeformCard
+	relearnStore   map[int64]quiz.RelearnCard
 	// grammarStore holds the in-flight grammar blanks for the current session,
 	// keyed by the ephemeral note_id (same id scheme as noteStore) so Submit,
 	// Override, and Skip all resolve a blank the same way vocab cards do.
@@ -55,13 +55,13 @@ const sessionIDBase int64 = 1 << 32
 // NewQuizHandler creates a new QuizHandler.
 func NewQuizHandler(svc *quiz.Service) *QuizHandler {
 	return &QuizHandler{
-		svc:                  svc,
-		noteStore:            make(map[int64]quiz.Card),
-		reverseStore:         make(map[int64]quiz.ReverseCard),
-		freeformStore:        make(map[int64]quiz.FreeformCard),
-		relearnStore:         make(map[int64]quiz.RelearnCard),
-		grammarStore:         make(map[int64]grammarBlankCtx),
-		nextID:               sessionIDBase + 1,
+		svc:           svc,
+		noteStore:     make(map[int64]quiz.Card),
+		reverseStore:  make(map[int64]quiz.ReverseCard),
+		freeformStore: make(map[int64]quiz.FreeformCard),
+		relearnStore:  make(map[int64]quiz.RelearnCard),
+		grammarStore:  make(map[int64]grammarBlankCtx),
+		nextID:        sessionIDBase + 1,
 	}
 }
 
@@ -166,9 +166,9 @@ func (h *QuizHandler) SubmitAnswer(ctx context.Context, req *connect.Request[api
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
-		grade, err = h.svc.GradeNotebookAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		grade, err = h.svc.GradeNotebookAnswer(ctx, userID, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+			return nil, mapGradeError(err)
 		}
 	}
 	if err := h.svc.SaveResult(ctx, userID, card, grade, req.Msg.GetResponseTimeMs()); err != nil {
@@ -303,9 +303,9 @@ func (h *QuizHandler) SubmitReverseAnswer(ctx context.Context, req *connect.Requ
 	if req.Msg.GetIsSkipped() {
 		grade = skippedGradeResult()
 	} else {
-		grade, err = h.svc.GradeReverseAnswer(ctx, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
+		grade, err = h.svc.GradeReverseAnswer(ctx, userID, card, req.Msg.GetAnswer(), req.Msg.GetResponseTimeMs())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+			return nil, mapGradeError(err)
 		}
 	}
 	if grade.Classification != string(inference.ClassificationSynonym) {
@@ -364,9 +364,9 @@ func (h *QuizHandler) SubmitFreeformAnswer(ctx context.Context, req *connect.Req
 	h.mu.Lock()
 	cards := h.freeformCards
 	h.mu.Unlock()
-	grade, err := h.svc.GradeFreeformAnswer(ctx, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
+	grade, err := h.svc.GradeFreeformAnswer(ctx, userID, req.Msg.GetWord(), req.Msg.GetMeaning(), req.Msg.GetResponseTimeMs(), cards)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("grade answer: %w", err))
+		return nil, mapGradeError(err)
 	}
 	if grade.MatchedCard != nil {
 		if err := h.svc.SaveFreeformResult(ctx, userID, *grade.MatchedCard, grade, req.Msg.GetResponseTimeMs()); err != nil {

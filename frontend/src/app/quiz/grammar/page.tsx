@@ -13,7 +13,7 @@ import {
   Text,
   VStack,
 } from "@chakra-ui/react";
-import { quizClient, type GrammarPostCard, type GrammarBlank } from "@/lib/client";
+import { quizClient, messageForRpcError, type GrammarPostCard, type GrammarBlank } from "@/lib/client";
 import { useGrammarStore, type GrammarResultState } from "@/store/grammarStore";
 import { GrammarFeedbackCard } from "@/components/GrammarFeedbackCard";
 import { useGrammarResultActions } from "@/lib/useGrammarResultActions";
@@ -176,8 +176,14 @@ export default function GrammarQuizPage() {
           recordResults(res.results.map((r) => toResult(currentPostIndex, value, r)));
           setError(null);
           break;
-        } catch {
-          if (attempt === 1) setError("A correction couldn't be graded. Re-type it to retry.");
+        } catch (err) {
+          if (attempt === 1)
+            setError(
+              messageForRpcError(
+                err,
+                "A correction couldn't be graded. Re-type it to retry.",
+              ),
+            );
         }
       }
       removeGrading(key);
@@ -198,8 +204,8 @@ export default function GrammarQuizPage() {
           answers: remaining.map((b) => ({ noteId: b.noteId, answer: "", responseTimeMs: BigInt(0), isSkipped: true })),
         });
         recordResults(res.results.map((r) => toResult(currentPostIndex, "", r)));
-      } catch {
-        setError("Couldn't reveal the answers. Try again.");
+      } catch (err) {
+        setError(messageForRpcError(err, "Couldn't reveal the answers. Try again."));
         return;
       }
     }

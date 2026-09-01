@@ -52,8 +52,9 @@ func DataTablesInDependencyOrder() []string {
 		"semantic_concepts",
 		"definition_concepts",
 		"dictionary_entries",
-		"notebooks", // -> users (migration 027 notebook ownership); child of users
-		"users",     // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
+		"user_llm_credentials", // -> users (migration 028 per-user LLM keys); child of users
+		"notebooks",            // -> users (migration 027 notebook ownership); child of users
+		"users",                // leaf parent (migration 024); notebooks + learning_logs.user_id reference it
 	}
 }
 

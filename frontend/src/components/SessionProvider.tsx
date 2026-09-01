@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useState,
@@ -13,15 +14,19 @@ import { getMe, type AuthUser } from "@/lib/auth";
 interface SessionState {
   user: AuthUser | null;
   loading: boolean;
+  // refresh re-probes /auth/me so callers (e.g. the Settings page) can pick up
+  // a changed LLM-credential status without a full reload.
+  refresh: () => Promise<void>;
 }
 
 const SessionContext = createContext<SessionState>({
   user: null,
   loading: true,
+  refresh: async () => {},
 });
 
-// useSession exposes the current authenticated user (or null) and whether the
-// initial /auth/me probe is still in flight.
+// useSession exposes the current authenticated user (or null), whether the
+// initial /auth/me probe is still in flight, and a refresh() to re-probe.
 export function useSession(): SessionState {
   return useContext(SessionContext);
 }
@@ -34,6 +39,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
+
+  const refresh = useCallback(async () => {
+    const u = await getMe();
+    setUser(u);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -55,7 +65,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [loading, user, pathname, router]);
 
   return (
-    <SessionContext.Provider value={{ user, loading }}>
+    <SessionContext.Provider value={{ user, loading, refresh }}>
       {children}
     </SessionContext.Provider>
   );
