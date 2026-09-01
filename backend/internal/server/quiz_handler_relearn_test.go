@@ -15,6 +15,7 @@ import (
 	apiv1 "github.com/at-ishikawa/langner/gen-protos/api/v1"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/learning"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -104,7 +105,7 @@ notebooks:
 	svc := quiz.NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	return NewQuizHandler(svc), learningDir
 }
@@ -149,7 +150,7 @@ func newExampleRelearnHandler(t *testing.T, learningDir string) *QuizHandler {
 		EtymologyDirectories:   []string{filepath.Join(ex, "etymology")},
 		GrammarsDirectories:    []string{filepath.Join(ex, "grammars")},
 		LearningNotesDirectory: learningDir,
-	}, mock.NewClient(), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
 	return NewQuizHandler(svc)
@@ -625,7 +626,7 @@ func writeGrammarTwoBlanksFixture(t *testing.T) *QuizHandler {
 		StoriesDirectories:     []string{storiesDir},
 		GrammarsDirectories:    []string{grammarsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	return NewQuizHandler(svc)
 }
 
@@ -682,7 +683,7 @@ func writeGrammarRelearnFixture(t *testing.T) (*QuizHandler, string) {
 		StoriesDirectories:     []string{storiesDir},
 		GrammarsDirectories:    []string{grammarsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	return NewQuizHandler(svc), learningDir
 }
 
@@ -855,7 +856,7 @@ origins:
 		FlashcardsDirectories:  []string{flashcardsDir},
 		EtymologyDirectories:   []string{etymDir},
 		LearningNotesDirectory: learningDir,
-	}, mock.NewClient(), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock.NewClient()), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	return NewQuizHandler(svc)
 }
 

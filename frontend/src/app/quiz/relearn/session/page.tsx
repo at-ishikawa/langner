@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Box, Heading, Spinner, Text } from "@chakra-ui/react";
-import { quizClient, QuizType, type SubmitRelearnAnswerResponse } from "@/lib/client";
+import { quizClient, QuizType, messageForRpcError, type SubmitRelearnAnswerResponse } from "@/lib/client";
 import { AnswerInput } from "@/components/AnswerInput";
 import { FeedbackActions } from "@/components/FeedbackActions";
 import { RelearnGrammarPost } from "@/components/RelearnGrammarPost";
@@ -141,8 +141,8 @@ export default function RelearnSessionPage() {
         responseTimeMs: BigInt(Date.now() - startRef.current),
       });
       setFeedback(res);
-    } catch {
-      setError("Grading failed. Please try again.");
+    } catch (err) {
+      setError(messageForRpcError(err, "Grading failed. Please try again."));
       setPhase("answering");
     } finally {
       setSubmitting(false);

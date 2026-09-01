@@ -118,7 +118,7 @@ func TestLoadRelearnPool_ResolvesHomographByID(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{})
 
@@ -195,10 +195,10 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
-	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 
 	var found bool
@@ -241,7 +241,7 @@ func TestLoadRelearnPool_GrammarMiss(t *testing.T) {
 
 	svc := newGrammarService(t, storiesDir, grammarsDir, learningDir)
 
-	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 	require.Len(t, cards, 1, "the missed correction must yield exactly one relearn card")
 
@@ -255,7 +255,7 @@ func TestLoadRelearnPool_GrammarMiss(t *testing.T) {
 
 	// The card must grade like the live quiz: GradeGrammarBlank against the
 	// card's own grading inputs (GrammarCard(), never sent to the client).
-	result, err := svc.GradeGrammarBlank(context.Background(), card.Content, card.GrammarCard(), "John", 1200)
+	result, err := svc.GradeGrammarBlank(context.Background(), 0, card.Content, card.GrammarCard(), "John", 1200)
 	require.NoError(t, err)
 	assert.True(t, result.Correct)
 }
@@ -338,7 +338,7 @@ func TestLoadRelearnPool_GrammarSamePostMultipleBlanks(t *testing.T) {
 
 	svc := newGrammarService(t, filepath.Join(base, "stories"), filepath.Join(base, "grammars"), learningDir)
 
-	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 
 	var grammar []RelearnCard
@@ -361,7 +361,7 @@ func TestLoadRelearnPool_GrammarSamePostMultipleBlanks(t *testing.T) {
 		if c.Incorrect == "go" {
 			want = "went"
 		}
-		result, err := svc.GradeGrammarBlank(context.Background(), c.Content, c.GrammarCard(), want, 1200)
+		result, err := svc.GradeGrammarBlank(context.Background(), 0, c.Content, c.GrammarCard(), want, 1200)
 		require.NoError(t, err)
 		assert.True(t, result.Correct, "blank %q must grade against its own reference", c.Incorrect)
 	}
@@ -437,7 +437,7 @@ func TestLoadRelearnPool_GrammarTwoBlanksKeepsBothBlanks(t *testing.T) {
 
 	svc := newGrammarService(t, filepath.Join(base, "stories"), filepath.Join(base, "grammars"), learningDir)
 
-	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	cards, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 
 	var grammar []RelearnCard
@@ -458,7 +458,7 @@ func TestLoadRelearnPool_GrammarTwoBlanksKeepsBothBlanks(t *testing.T) {
 		}
 		// Each blank grades against its OWN correction — grading one never
 		// resolves the other.
-		result, err := svc.GradeGrammarBlank(context.Background(), c.Content, c.GrammarCard(), want, 1200)
+		result, err := svc.GradeGrammarBlank(context.Background(), 0, c.Content, c.GrammarCard(), want, 1200)
 		require.NoError(t, err)
 		assert.True(t, result.Correct, "blank %q must grade against its own reference", c.Incorrect)
 	}
@@ -535,7 +535,7 @@ origins:
 		EtymologyDirectories:   []string{etymDir},
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
 }
@@ -558,7 +558,7 @@ func etymRelearnByEntry(cards []RelearnCard) map[string]RelearnCard {
 func TestLoadRelearnPool_EtymologyOriginFamilyCard(t *testing.T) {
 	svc := etymologyRelearnFixture(t, "describe", "inscribe")
 
-	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 	got := etymRelearnByEntry(pool)
 	require.Contains(t, got, "describe", "a missed origin-bearing word must enter the pool as a family card")
@@ -574,11 +574,11 @@ func TestLoadRelearnPool_EtymologyOriginFamilyCard(t *testing.T) {
 	// write; nothing sets or clears it post-#41) must be IGNORED: grouping depends
 	// only on the word carrying a resolvable origin. "describe" stays folded into
 	// its origin family card, exactly like the untouched "inscribe".
-	require.NoError(t, svc.SkipWord(0, 
+	require.NoError(t, svc.SkipWord(0,
 		CardInfo{NotebookName: "roots", Expression: "describe"},
 		"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin},
 	))
-	pool, err = svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err = svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 	got = etymRelearnByEntry(pool)
 	assert.Contains(t, got, "describe",
@@ -595,7 +595,7 @@ func TestLoadRelearnPool_EtymologyOriginFamilyCard(t *testing.T) {
 func TestLoadRelearnPool_EtymologyCardCarriesOriginDetails(t *testing.T) {
 	svc := etymologyRelearnFixture(t, "describe")
 
-	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 
 	var describe *RelearnCard
@@ -620,7 +620,7 @@ func TestLoadRelearnPool_EtymologyCardCarriesOriginDetails(t *testing.T) {
 func TestLoadRelearnPool_EtymologyCardCarriesEnglishForms(t *testing.T) {
 	svc := etymologyRelearnFixture(t, "describe")
 
-	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 
 	got := etymRelearnByEntry(pool)
@@ -708,7 +708,7 @@ definitions:
 		EtymologyDirectories:   []string{etymDir},
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true})
 }
@@ -769,7 +769,7 @@ func TestLoadAllWords_DedupEtymologyVsDefinitions(t *testing.T) {
 func TestLoadRelearnPool_EtymologyNotebookWordGroups(t *testing.T) {
 	svc := etymologyEmbeddedFixture(t, "", "dictate", "predict")
 
-	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 	got := etymRelearnByEntry(pool)
 
@@ -862,7 +862,7 @@ origins:
 		FlashcardsDirectories:  []string{flashcardsDir},
 		EtymologyDirectories:   []string{etymDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 }
 
@@ -874,7 +874,7 @@ origins:
 func TestLoadRelearnPool_ReverseOriginMissCarriesReverseDirection(t *testing.T) {
 	svc := originDirectionFixture(t, []string{"obstinate"}, []string{"constant"})
 
-	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 	got := etymRelearnByEntry(pool)
 
@@ -906,7 +906,7 @@ func TestLoadRelearnPool_ReverseOriginMissCarriesReverseDirection(t *testing.T) 
 func TestLoadRelearnPool_OriginMissBothDirectionsDedup(t *testing.T) {
 	svc := originDirectionFixture(t, []string{"constant"}, []string{"constant"})
 
-	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+	pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 	require.NoError(t, err)
 
 	var count int

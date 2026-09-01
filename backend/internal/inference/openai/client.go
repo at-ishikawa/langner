@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -115,10 +116,56 @@ type Usage struct {
 	TotalTokens      int `json:"total_tokens"`
 }
 
+// errorResponse is the shape OpenAI returns on a non-2xx response. The code /
+// type fields identify permanent failures (insufficient_quota, invalid_api_key)
+// so they can be surfaced as actionable errors and NOT retried.
+type errorResponse struct {
+	Error struct {
+		Message string `json:"message"`
+		Type    string `json:"type"`
+		Code    string `json:"code"`
+	} `json:"error"`
+}
+
+// providerError builds a typed *inference.ProviderError from a non-2xx
+// response, parsing OpenAI's JSON error.code/type when present. The typed error
+// lets grade handlers map quota / invalid-key failures to actionable messages
+// instead of an opaque internal error, and lets isRetryableError skip retrying
+// permanent failures.
+func providerError(statusCode int, body string) *inference.ProviderError {
+	pe := &inference.ProviderError{Provider: "openai", StatusCode: statusCode, Message: body}
+	var parsed errorResponse
+	if err := json.Unmarshal([]byte(body), &parsed); err == nil {
+		if parsed.Error.Code != "" {
+			pe.Code = parsed.Error.Code
+		} else if parsed.Error.Type != "" {
+			pe.Code = parsed.Error.Type
+		}
+		if parsed.Error.Message != "" {
+			pe.Message = parsed.Error.Message
+		}
+	}
+	return pe
+}
+
 // isRetryableError determines if an error should trigger a retry
 func isRetryableError(err error) bool {
 	if err == nil {
 		return false
+	}
+
+	// Permanent provider failures must NOT be retried: an out-of-credits quota
+	// error or an invalid API key will fail identically on every attempt, so
+	// retrying only delays the actionable error the user needs to see.
+	var pe *inference.ProviderError
+	if errors.As(err, &pe) {
+		if pe.IsQuota() || pe.IsInvalidKey() {
+			return false
+		}
+		// Retry transient provider failures: 5xx server errors and 429 rate
+		// limits (a 429 that is NOT insufficient_quota is a transient rate
+		// limit, worth a retry with backoff).
+		return pe.StatusCode >= 500 || pe.StatusCode == 429
 	}
 
 	// Retry on JSON parsing errors as they might be due to incomplete responses
@@ -129,16 +176,6 @@ func isRetryableError(err error) bool {
 
 	// Retry on network-related errors
 	if strings.Contains(errStr, "connection refused") || strings.Contains(errStr, "i/o timeout") {
-		return true
-	}
-
-	// Retry on 5xx errors (server errors)
-	if strings.Contains(errStr, "response error 5") {
-		return true
-	}
-
-	// Retry on rate limiting (429)
-	if strings.Contains(errStr, "response error 429") {
 		return true
 	}
 
@@ -168,6 +205,7 @@ func (client *Client) AnswerMeanings(
 		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
 			return retry.BackOffDelay(n, err, config)
 		}),
+		retry.LastErrorOnly(true),
 	); err != nil {
 		return inference.AnswerMeaningsResponse{}, err
 	}
@@ -809,7 +847,7 @@ func (client *Client) answerMeanings(
 		return inference.AnswerMeaningsResponse{}, fmt.Errorf("httpClient.Post > %w", err)
 	}
 	if response.IsError() {
-		return inference.AnswerMeaningsResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+		return inference.AnswerMeaningsResponse{}, providerError(response.StatusCode(), response.String())
 	}
 
 	responseBody := response.Result().(*ChatCompletionResponse)
@@ -860,6 +898,7 @@ func (client *Client) LookupWord(
 		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
 			return retry.BackOffDelay(n, err, config)
 		}),
+		retry.LastErrorOnly(true),
 	); err != nil {
 		return inference.LookupWordResponse{}, err
 	}
@@ -894,7 +933,7 @@ func (client *Client) lookupWord(
 		return inference.LookupWordResponse{}, fmt.Errorf("httpClient.Post > %w", err)
 	}
 	if response.IsError() {
-		return inference.LookupWordResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+		return inference.LookupWordResponse{}, providerError(response.StatusCode(), response.String())
 	}
 
 	responseBody := response.Result().(*ChatCompletionResponse)
@@ -939,6 +978,7 @@ func (client *Client) ValidateWordForm(
 		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
 			return retry.BackOffDelay(n, err, config)
 		}),
+		retry.LastErrorOnly(true),
 	); err != nil {
 		return inference.ValidateWordFormResponse{}, err
 	}
@@ -1037,7 +1077,7 @@ Classify this answer.`, params.Expected, params.Meaning, contextInfo, responseTi
 		return inference.ValidateWordFormResponse{}, fmt.Errorf("httpClient.Post > %w", err)
 	}
 	if response.IsError() {
-		return inference.ValidateWordFormResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+		return inference.ValidateWordFormResponse{}, providerError(response.StatusCode(), response.String())
 	}
 
 	responseBody := response.Result().(*ChatCompletionResponse)
@@ -1085,6 +1125,7 @@ func (client *Client) GradeCorrection(
 		retry.DelayType(func(n uint, err error, config *retry.Config) time.Duration {
 			return retry.BackOffDelay(n, err, config)
 		}),
+		retry.LastErrorOnly(true),
 	); err != nil {
 		return inference.GradeCorrectionResponse{}, err
 	}
@@ -1166,7 +1207,7 @@ Grade this correction.`, params.Sentence, params.Incorrect, params.Correct, note
 		return inference.GradeCorrectionResponse{}, fmt.Errorf("httpClient.Post > %w", err)
 	}
 	if response.IsError() {
-		return inference.GradeCorrectionResponse{}, fmt.Errorf("response error %d: %s", response.StatusCode(), response.String())
+		return inference.GradeCorrectionResponse{}, providerError(response.StatusCode(), response.String())
 	}
 
 	responseBody := response.Result().(*ChatCompletionResponse)

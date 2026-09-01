@@ -128,7 +128,7 @@ origins:
 		StoriesDirectories:     []string{storiesDir},
 		EtymologyDirectories:   []string{etymDir},
 		LearningNotesDirectory: learningDir,
-	}, mockClient, make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mockClient), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{})
 

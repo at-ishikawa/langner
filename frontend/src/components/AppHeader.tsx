@@ -1,6 +1,7 @@
 "use client";
 
 import { Box, Button, Text } from "@chakra-ui/react";
+import NextLink from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
 import { useSession } from "./SessionProvider";
 import { logout } from "@/lib/auth";
@@ -25,6 +26,9 @@ export function AppHeader() {
             <Text fontSize="sm" color="fg.muted" truncate maxW="12rem">
               {user.email}
             </Text>
+            <Button size="xs" variant="outline" asChild>
+              <NextLink href="/settings">Settings</NextLink>
+            </Button>
             <Button size="xs" variant="outline" onClick={() => logout()}>
               Log out
             </Button>

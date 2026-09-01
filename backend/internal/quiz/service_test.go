@@ -96,7 +96,7 @@ func newTestService(t *testing.T, openaiClient inference.Client) *Service {
 	return NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{t.TempDir()},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(openaiClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 }
 
 func newTestServiceWithFixtures(t *testing.T, openaiClient inference.Client) (*Service, string) {
@@ -110,7 +110,7 @@ func newTestServiceWithFixtures(t *testing.T, openaiClient inference.Client) (*S
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, openaiClient, make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(openaiClient), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 	return svc, learningDir
 }
 
@@ -198,7 +198,7 @@ origins:
 	svc := NewService(config.NotebooksConfig{
 		EtymologyDirectories:   []string{etymDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(gomock.NewController(t)), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(gomock.NewController(t))), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	summaries, err := svc.LoadNotebookSummaries(0, false)
@@ -302,7 +302,7 @@ notebooks:
 		StoriesDirectories:     []string{storiesDir},
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	summaries, err := svc.LoadNotebookSummaries(0, false)
 	require.NoError(t, err)
@@ -331,7 +331,7 @@ func TestService_LoadNotebookSummaries_LearningHistoryError(t *testing.T) {
 
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	_, err := svc.LoadNotebookSummaries(0, false)
 	require.Error(t, err)
@@ -348,7 +348,7 @@ func TestService_LoadCards_StoryNotebook(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"test-story"}, true, nil)
 	require.NoError(t, err)
@@ -370,7 +370,7 @@ func TestService_LoadCards_FlashcardNotebook(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"test-vocab"}, true, nil)
 	require.NoError(t, err)
@@ -413,7 +413,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"irregulars"}, true, nil)
 	require.NoError(t, err)
@@ -464,7 +464,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		FlashcardsDirectories:  []string{flashcardsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	// includeUnstudied=false: must NOT appear.
@@ -521,7 +521,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"fail-defs"}, false, nil)
@@ -585,7 +585,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"studied-defs"}, false, nil)
@@ -655,7 +655,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	// Without the toggle: neither word is eligible.
@@ -758,7 +758,7 @@ func TestService_LoadCards_DefinitionsBook_RespectsNotebookSkip(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"skip-defs"}, true, nil)
@@ -778,7 +778,7 @@ func TestService_LoadReverseCards_DefinitionsBook_RespectsReverseSkip(t *testing
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadReverseCards(0, []string{"skip-defs"}, false, false, nil)
@@ -821,7 +821,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	due, err := svc.LoadReverseCards(0, []string{"mixed-rev"}, false, false, nil)
@@ -884,7 +884,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	// Forward: the standard quiz Card must carry the example sentence.
@@ -987,7 +987,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"test-story"}, true, nil)
 	require.NoError(t, err)
@@ -1068,7 +1068,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	summaries, err := svc.LoadNotebookSummaries(0, false)
 	require.NoError(t, err)
@@ -1155,7 +1155,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	all, err := svc.LoadCards(0, []string{"two-chapters"}, true, nil)
 	require.NoError(t, err)
@@ -1233,7 +1233,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		StoriesDirectories:     []string{storiesDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	filtered, err := svc.LoadReverseCards(0, []string{"rev-chapters"}, false, false, map[string][]string{
 		"rev-chapters": {"Chapter A"},
@@ -1270,7 +1270,7 @@ func TestService_GradeNotebookAnswer_Correct(t *testing.T) {
 		}, nil,
 	)
 
-	result, err := svc.GradeNotebookAnswer(context.Background(), card, "contrary to reason", 1000)
+	result, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "contrary to reason", 1000)
 	require.NoError(t, err)
 	assert.True(t, result.Correct)
 	assert.Equal(t, "Good answer", result.Reason)
@@ -1301,7 +1301,7 @@ func TestService_GradeNotebookAnswer_Incorrect(t *testing.T) {
 		}, nil,
 	)
 
-	result, err := svc.GradeNotebookAnswer(context.Background(), card, "wrong answer", 1000)
+	result, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "wrong answer", 1000)
 	require.NoError(t, err)
 	assert.False(t, result.Correct)
 	assert.Equal(t, "Wrong meaning", result.Reason)
@@ -1319,7 +1319,7 @@ func TestService_GradeNotebookAnswer_InferenceError(t *testing.T) {
 		inference.AnswerMeaningsResponse{}, assert.AnError,
 	)
 
-	_, err := svc.GradeNotebookAnswer(context.Background(), card, "some answer", 1000)
+	_, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "some answer", 1000)
 	require.Error(t, err)
 }
 
@@ -1334,7 +1334,7 @@ func TestService_GradeNotebookAnswer_NoResults(t *testing.T) {
 		inference.AnswerMeaningsResponse{Answers: nil}, nil,
 	)
 
-	_, err := svc.GradeNotebookAnswer(context.Background(), card, "some answer", 1000)
+	_, err := svc.GradeNotebookAnswer(context.Background(), 0, card, "some answer", 1000)
 	require.Error(t, err)
 }
 
@@ -1352,7 +1352,7 @@ func TestService_GradeNotebookAnswer_EmptyIsWrongWithoutLLM(t *testing.T) {
 
 			mockClient.EXPECT().AnswerMeanings(gomock.Any(), gomock.Any()).Times(0)
 
-			got, err := svc.GradeNotebookAnswer(context.Background(), Card{Entry: "preposterous"}, answer, 1000)
+			got, err := svc.GradeNotebookAnswer(context.Background(), 0, Card{Entry: "preposterous"}, answer, 1000)
 			require.NoError(t, err)
 			assert.False(t, got.Correct, "an empty recognition answer must be wrong")
 		})
@@ -1371,7 +1371,7 @@ func TestService_GradeReverseAnswer_EmptyIsWrongWithoutLLM(t *testing.T) {
 
 			mockClient.EXPECT().ValidateWordForm(gomock.Any(), gomock.Any()).Times(0)
 
-			got, err := svc.GradeReverseAnswer(context.Background(), ReverseCard{Expression: "liberty", Meaning: "freedom"}, answer, 1000)
+			got, err := svc.GradeReverseAnswer(context.Background(), 0, ReverseCard{Expression: "liberty", Meaning: "freedom"}, answer, 1000)
 			require.NoError(t, err)
 			assert.False(t, got.Correct, "an empty reverse answer must be wrong")
 		})
@@ -1385,7 +1385,7 @@ func TestService_SaveResult_WritesFile(t *testing.T) {
 	learningDir := t.TempDir()
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	card := Card{
 		NotebookName: "test-vocab",
@@ -1410,7 +1410,7 @@ func TestService_SaveResult_MalformedYAMLError(t *testing.T) {
 
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response), learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	card := Card{
 		NotebookName: "test-notebook",
@@ -1500,7 +1500,7 @@ func TestService_LoadNotebookSummaries_ConceptMembersFollowHead(t *testing.T) {
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	summaries, err := svc.LoadNotebookSummaries(0, true)
@@ -1561,7 +1561,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"concept-book"}, true, nil)
@@ -1626,7 +1626,7 @@ notebooks:
 	svc := NewService(config.NotebooksConfig{
 		DefinitionsDirectories: []string{defsDir},
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	cards, err := svc.LoadCards(0, []string{"synonym-book"}, true, nil)
@@ -1658,7 +1658,7 @@ func TestService_SaveResult_SynonymMemberWritesUnderMember(t *testing.T) {
 
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	card := Card{
@@ -1693,7 +1693,7 @@ func TestService_SaveResult_ConceptHeadRedirectsLog(t *testing.T) {
 
 	svc := NewService(config.NotebooksConfig{
 		LearningNotesDirectory: learningDir,
-	}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+	}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 	card := Card{
@@ -2410,7 +2410,7 @@ func TestService_DefinitionsBookSummaryMatchesLoad(t *testing.T) {
 			svc := NewService(config.NotebooksConfig{
 				DefinitionsDirectories: []string{defsDir},
 				LearningNotesDirectory: learningDir,
-			}, mock_inference.NewMockClient(ctrl), make(map[string]rapidapi.Response),
+			}, inference.StaticResolver(mock_inference.NewMockClient(ctrl)), make(map[string]rapidapi.Response),
 				learning.NewYAMLLearningRepository(learningDir, nil), config.QuizConfig{})
 
 			summaries, err := svc.LoadNotebookSummaries(0, true)

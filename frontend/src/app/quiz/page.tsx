@@ -21,6 +21,7 @@ import {
 import { useQuizStore } from "@/store/quizStore";
 import RelearnStart from "@/components/RelearnStart";
 import GrammarStart from "@/components/GrammarStart";
+import { useSession } from "@/components/SessionProvider";
 
 type Tab = "vocabulary" | "relearn" | "grammar";
 type VocabMode = "standard" | "reverse" | "freeform";
@@ -33,6 +34,7 @@ const vocabularyModes: { key: VocabMode; title: string; description: string }[] 
 
 export default function QuizHubPage() {
   const router = useRouter();
+  const { user } = useSession();
   const [tab, setTab] = useState<Tab>("vocabulary");
   const [selectedVocabMode, setSelectedVocabMode] = useState<VocabMode | null>(null);
 
@@ -367,6 +369,32 @@ export default function QuizHubPage() {
           <Heading size="md">Quiz</Heading>
         </Box>
       </Box>
+
+      {/* No API key yet: grading will fail until the user registers one, so
+          prompt them to Settings before they start a quiz. */}
+      {user && !user.hasApiKey && (
+        <Box
+          role="alert"
+          mx={4}
+          mt={3}
+          borderWidth="1px"
+          borderColor="orange.emphasized"
+          bg="orange.subtle"
+          color="orange.fg"
+          borderRadius="md"
+          px={4}
+          py={3}
+          fontSize="sm"
+        >
+          You haven&apos;t added an LLM API key yet, so grading won&apos;t work.{" "}
+          <Link href="/settings">
+            <Text as="span" textDecoration="underline" fontWeight="semibold">
+              Add one in Settings
+            </Text>
+          </Link>
+          .
+        </Box>
+      )}
 
       {/* Tabs — Vocabulary switches mode cards in place; Relearn and Grammar are
           cross-quiz-type flows whose tabs navigate to their own start screens. */}

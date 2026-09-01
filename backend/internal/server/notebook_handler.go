@@ -32,7 +32,7 @@ type NotebookHandler struct {
 	templatesConfig  config.TemplatesConfig
 	dictionaryMap    map[string]rapidapi.Response
 	dictionaryReader *dictionary.Reader
-	openaiClient     inference.Client
+	clientResolver   inference.ClientResolver
 	noteRepository   notebook.NoteRepository
 	// historyStore, when set, is the DB-backed READ side for learning history.
 	// The Learn page's status / next-review / exclusion badges then resolve
@@ -96,13 +96,13 @@ func (h *NotebookHandler) loadHistories(userID int64) (map[string][]notebook.Lea
 
 // NewNotebookHandler creates a new NotebookHandler.
 // noteRepo is optional; pass nil when DB is not configured.
-func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, openaiClient inference.Client, noteRepo notebook.NoteRepository) *NotebookHandler {
+func NewNotebookHandler(notebooksConfig config.NotebooksConfig, templatesConfig config.TemplatesConfig, dictionaryMap map[string]rapidapi.Response, dictionaryReader *dictionary.Reader, clientResolver inference.ClientResolver, noteRepo notebook.NoteRepository) *NotebookHandler {
 	return &NotebookHandler{
 		notebooksConfig:  notebooksConfig,
 		templatesConfig:  templatesConfig,
 		dictionaryMap:    dictionaryMap,
 		dictionaryReader: dictionaryReader,
-		openaiClient:     openaiClient,
+		clientResolver:   clientResolver,
 		noteRepository:   noteRepo,
 	}
 }
@@ -126,7 +126,6 @@ func (h *NotebookHandler) newReader() (*notebook.Reader, error) {
 	}
 	return reader, nil
 }
-
 
 func (h *NotebookHandler) loadLearningHistory(userID int64, notebookID string) ([]notebook.LearningHistory, error) {
 	histories, err := h.loadHistories(userID)
@@ -219,24 +218,24 @@ func (h *NotebookHandler) GetNotebookDetail(
 				conceptHead, conceptMembers, conceptMeaning := lookupConceptForWord(def, conceptByExpression, conceptByHead)
 
 				definitions = append(definitions, &apiv1.NotebookWord{
-					Expression:     def.Expression,
-					Definition:     def.Definition,
-					Meaning:        def.Meaning,
-					PartOfSpeech:   def.PartOfSpeech,
-					Pronunciation:  def.Pronunciation,
-					Examples:       def.Examples.Texts(),
-					Synonyms:       def.Synonyms,
-					Antonyms:       def.Antonyms,
-					LearningStatus: string(info.status),
-					LearnedLogs:    convertLogsToProto(logs),
-					NextReviewDate: info.nextReviewDate,
-					Origin:         def.Origin,
+					Expression:       def.Expression,
+					Definition:       def.Definition,
+					Meaning:          def.Meaning,
+					PartOfSpeech:     def.PartOfSpeech,
+					Pronunciation:    def.Pronunciation,
+					Examples:         def.Examples.Texts(),
+					Synonyms:         def.Synonyms,
+					Antonyms:         def.Antonyms,
+					LearningStatus:   string(info.status),
+					LearnedLogs:      convertLogsToProto(logs),
+					NextReviewDate:   info.nextReviewDate,
+					Origin:           def.Origin,
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
 					NoteId:           info.noteID,
-					ConceptHead:    conceptHead,
-					ConceptMembers: conceptMembers,
-					ConceptMeaning: conceptMeaning,
+					ConceptHead:      conceptHead,
+					ConceptMembers:   conceptMembers,
+					ConceptMeaning:   conceptMeaning,
 				})
 				totalWordCount++
 			}
@@ -402,24 +401,24 @@ func (h *NotebookHandler) getDefinitionsBookDetail(
 				conceptHead, conceptMembers, conceptMeaning := lookupConceptForWord(note, conceptByExpression, conceptByHead)
 
 				definitions = append(definitions, &apiv1.NotebookWord{
-					Expression:     note.Expression,
-					Definition:     note.Definition,
-					Meaning:        note.Meaning,
-					PartOfSpeech:   note.PartOfSpeech,
-					Pronunciation:  note.Pronunciation,
-					Examples:       note.Examples.Texts(),
-					Synonyms:       note.Synonyms,
-					Antonyms:       note.Antonyms,
-					LearningStatus: string(info.status),
-					LearnedLogs:    convertLogsToProto(logs),
-					NextReviewDate: info.nextReviewDate,
-					Origin:         note.Origin,
+					Expression:       note.Expression,
+					Definition:       note.Definition,
+					Meaning:          note.Meaning,
+					PartOfSpeech:     note.PartOfSpeech,
+					Pronunciation:    note.Pronunciation,
+					Examples:         note.Examples.Texts(),
+					Synonyms:         note.Synonyms,
+					Antonyms:         note.Antonyms,
+					LearningStatus:   string(info.status),
+					LearnedLogs:      convertLogsToProto(logs),
+					NextReviewDate:   info.nextReviewDate,
+					Origin:           note.Origin,
 					IsSkipped:        info.isSkipped,
 					SkippedQuizTypes: info.skippedTypes,
 					NoteId:           info.noteID,
-					ConceptHead:    conceptHead,
-					ConceptMembers: conceptMembers,
-					ConceptMeaning: conceptMeaning,
+					ConceptHead:      conceptHead,
+					ConceptMembers:   conceptMembers,
+					ConceptMeaning:   conceptMeaning,
 				})
 				totalWordCount++
 			}
@@ -681,12 +680,18 @@ func (h *NotebookHandler) LookupWord(
 		}
 	}
 
-	if h.openaiClient != nil {
-		aiResp, err := h.openaiClient.LookupWord(ctx, inference.LookupWordRequest{
+	if h.clientResolver != nil {
+		userID, _ := auth.UserIDFromContext(ctx)
+		// Resolve the AI client from the user's credential. Word lookup is a
+		// convenience, not a graded action, so a missing/invalid key degrades
+		// gracefully to the dictionary-only response instead of erroring.
+		client, resolveErr := h.clientResolver.ResolveClient(ctx, userID)
+		if resolveErr != nil {
+			slog.Warn("openai word lookup skipped — client unavailable", "word", word, "error", resolveErr)
+		} else if aiResp, err := client.LookupWord(ctx, inference.LookupWordRequest{
 			Word:    word,
 			Context: req.Msg.GetContext(),
-		})
-		if err != nil {
+		}); err != nil {
 			slog.Warn("openai word lookup failed", "word", word, "error", err)
 		} else if len(aiResp.Definitions) > 0 {
 			var defs []*apiv1.WordDefinition
@@ -1141,25 +1146,35 @@ func (h *NotebookHandler) RegisterDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.RegisterDefinitionRequest],
 ) (*connect.Response[apiv1.RegisterDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	userID, _ := auth.UserIDFromContext(ctx)
-	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil { return nil, err }
+	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil {
+		return nil, err
+	}
 	defsDir := "notebooks/definitions"
-	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" { defsDir = h.notebooksConfig.DefinitionsDirectories[0] }
+	if len(h.notebooksConfig.DefinitionsDirectories) > 0 && h.notebooksConfig.DefinitionsDirectories[0] != "" {
+		defsDir = h.notebooksConfig.DefinitionsDirectories[0]
+	}
 	notebookIDRaw := req.Msg.GetNotebookId()
 	checkPath := filepath.Join(defsDir, filepath.FromSlash(notebookIDRaw)+".yml")
 	rel, err := filepath.Rel(defsDir, checkPath)
-	if err != nil || strings.HasPrefix(rel, "..") { return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id")) }
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid notebook_id"))
+	}
 	expression := req.Msg.GetExpression()
 	meaning := req.Msg.GetMeaning()
 	note := &notebook.NoteRecord{
 		Usage: expression, Entry: expression, Meaning: meaning,
 		DefinitionsDir: defsDir, NotebookFile: req.Msg.GetNotebookFile(),
-		SceneIndex: int(req.Msg.GetSceneIndex()),
+		SceneIndex:   int(req.Msg.GetSceneIndex()),
 		PartOfSpeech: req.Msg.GetPartOfSpeech(), Examples: req.Msg.GetExamples(),
 		NotebookNotes: []notebook.NotebookNote{{NotebookType: "book", NotebookID: notebookIDRaw, Group: req.Msg.GetNotebookFile()}},
 	}
-	if err := h.noteRepository.Create(ctx, note); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err)) }
+	if err := h.noteRepository.Create(ctx, note); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("create note: %w", err))
+	}
 	return connect.NewResponse(&apiv1.RegisterDefinitionResponse{}), nil
 }
 
@@ -1168,9 +1183,15 @@ func (h *NotebookHandler) DeleteDefinition(
 	ctx context.Context,
 	req *connect.Request[apiv1.DeleteDefinitionRequest],
 ) (*connect.Response[apiv1.DeleteDefinitionResponse], error) {
-	if err := validateRequest(req.Msg); err != nil { return nil, err }
+	if err := validateRequest(req.Msg); err != nil {
+		return nil, err
+	}
 	userID, _ := auth.UserIDFromContext(ctx)
-	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil { return nil, err }
-	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil { return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err)) }
+	if err := h.ensureNotebookVisible(ctx, userID, req.Msg.GetNotebookId()); err != nil {
+		return nil, err
+	}
+	if err := h.noteRepository.Delete(ctx, req.Msg.GetNotebookId(), req.Msg.GetExpression()); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("delete note: %w", err))
+	}
 	return connect.NewResponse(&apiv1.DeleteDefinitionResponse{}), nil
 }

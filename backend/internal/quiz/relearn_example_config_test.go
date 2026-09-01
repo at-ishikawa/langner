@@ -13,6 +13,7 @@ import (
 
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
+	"github.com/at-ishikawa/langner/internal/inference"
 	"github.com/at-ishikawa/langner/internal/learning"
 	mock_inference "github.com/at-ishikawa/langner/internal/mocks/inference"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -56,7 +57,7 @@ func newExampleService(t *testing.T, learningDir string) *Service {
 	ctrl := gomock.NewController(t)
 	return NewService(
 		exampleNotebooksConfig(t, learningDir),
-		mock_inference.NewMockClient(ctrl),
+		inference.StaticResolver(mock_inference.NewMockClient(ctrl)),
 		make(map[string]rapidapi.Response),
 		learning.NewYAMLLearningRepository(learningDir, nil),
 		config.QuizConfig{Algorithm: "modified_sm2", FixedIntervals: []int{1, 7, 30, 90, 365, 1095, 1825}, DisableShuffle: true},
@@ -110,7 +111,7 @@ func TestExampleData_OriginGroupsInRelearn(t *testing.T) {
 				"normal reverse quiz must resolve origin for %q", tc.word)
 
 			require.NoError(t, svc.SaveReverseResult(ctx, 0, *rc, GradeResult{Correct: false, Quality: 0}, 1000))
-			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 			require.NoError(t, err)
 
 			card := relearnCardFor(pool, tc.word)
@@ -256,7 +257,7 @@ func TestExampleData_OriginGroupingIndependentOfEtymologyOriginSkip(t *testing.T
 
 			// Set the vestigial etymology_origin skip marker on "deficient" via the
 			// real write path, and confirm it landed on disk.
-			require.NoError(t, svc.SkipWord(0, 
+			require.NoError(t, svc.SkipWord(0,
 				CardInfo{NotebookName: "roots-demo", Expression: "deficient"},
 				"", []notebook.QuizType{notebook.QuizTypeEtymologyOrigin}))
 			histories, err := notebook.NewLearningHistories(learningDir)
@@ -268,7 +269,7 @@ func TestExampleData_OriginGroupingIndependentOfEtymologyOriginSkip(t *testing.T
 			recordMiss(t, svc, tc.direction, "deficient") // marked word
 			recordMiss(t, svc, tc.direction, "transact")  // unmarked control
 
-			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24 * time.Hour))
+			pool, err := svc.LoadRelearnPool(0, time.Now().Add(-24*time.Hour))
 			require.NoError(t, err)
 
 			// The marked word groups under its root DESPITE the vestigial marker,
