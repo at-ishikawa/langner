@@ -97,6 +97,9 @@ func TestConfigLoader_Load(t *testing.T) {
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Gemini: GeminiConfig{
+					Model: "gemini-2.0-flash",
+				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -156,6 +159,9 @@ outputs:
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Gemini: GeminiConfig{
+					Model: "gemini-2.0-flash",
+				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -208,6 +214,9 @@ outputs:
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
+				},
+				Gemini: GeminiConfig{
+					Model: "gemini-2.0-flash",
 				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",

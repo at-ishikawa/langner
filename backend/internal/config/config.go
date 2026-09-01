@@ -27,6 +27,7 @@ type Config struct {
 	Templates    TemplatesConfig    `mapstructure:"templates"`
 	Outputs      OutputsConfig      `mapstructure:"outputs"`
 	OpenAI       OpenAIConfig       `mapstructure:"openai"`
+	Gemini       GeminiConfig       `mapstructure:"gemini"`
 	Inference    InferenceConfig    `mapstructure:"inference"`
 	Books        BooksConfig        `mapstructure:"books"`
 	Database     DatabaseConfig     `mapstructure:"database"`
@@ -146,8 +147,18 @@ type OpenAIConfig struct {
 	Model  string `mapstructure:"model"`
 }
 
+// GeminiConfig holds credentials for the Google Gemini provider. Like OpenAI,
+// the API key and model are bound from environment variables only
+// (GEMINI_API_KEY / GEMINI_MODEL), never read from the config file. The model
+// defaults to a free-tier Gemini model.
+type GeminiConfig struct {
+	APIKey string `mapstructure:"api_key"`
+	Model  string `mapstructure:"model"`
+}
+
 // InferenceConfig selects which inference client backs quiz grading.
 // Mode "openai" (default) uses the live OpenAI client.
+// Mode "gemini" uses the Google Gemini client (OpenAI-compatible endpoint).
 // Mode "mock" uses a deterministic substring-match grader, used by e2e tests.
 type InferenceConfig struct {
 	Mode string `mapstructure:"mode"`
@@ -204,6 +215,8 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("outputs.flashcard_directory", filepath.Join("outputs", "flashcard"))
 	v.SetDefault("outputs.etymology_directory", filepath.Join("outputs", "etymology"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
+	// Gemini model defaults to a free-tier flash model; override with GEMINI_MODEL.
+	v.SetDefault("gemini.model", "gemini-2.0-flash")
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")
@@ -229,6 +242,14 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	}
 	if err := v.BindEnv("openai.model", "OPENAI_MODEL"); err != nil {
 		return nil, fmt.Errorf("failed to bind OPENAI_MODEL environment variable: %w", err)
+	}
+
+	// Bind Gemini config to environment variables only (not from config file)
+	if err := v.BindEnv("gemini.api_key", "GEMINI_API_KEY"); err != nil {
+		return nil, fmt.Errorf("failed to bind GEMINI_API_KEY environment variable: %w", err)
+	}
+	if err := v.BindEnv("gemini.model", "GEMINI_MODEL"); err != nil {
+		return nil, fmt.Errorf("failed to bind GEMINI_MODEL environment variable: %w", err)
 	}
 
 	// Bind database password to environment variable

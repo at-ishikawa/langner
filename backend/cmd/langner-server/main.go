@@ -19,6 +19,7 @@ import (
 	"github.com/at-ishikawa/langner/internal/dictionary"
 	"github.com/at-ishikawa/langner/internal/dictionary/rapidapi"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/inference/gemini"
 	"github.com/at-ishikawa/langner/internal/inference/mock"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
 	"github.com/at-ishikawa/langner/internal/notebook"
@@ -61,6 +62,17 @@ func run(ctx context.Context) error {
 	case "mock":
 		inferenceClient = mock.NewClient()
 		slog.Info("using mock inference client (substring grader)")
+	case "gemini":
+		if cfg.Gemini.APIKey != "" {
+			geminiClient := gemini.NewClient(cfg.Gemini.APIKey, cfg.Gemini.Model, inference.DefaultMaxRetryAttempts)
+			defer func() {
+				_ = geminiClient.Close()
+			}()
+			inferenceClient = geminiClient
+			slog.Info("using Gemini inference provider", "model", cfg.Gemini.Model)
+		} else {
+			slog.Warn("GEMINI_API_KEY is not set; quiz grading features will be unavailable")
+		}
 	default:
 		if cfg.OpenAI.APIKey != "" {
 			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)

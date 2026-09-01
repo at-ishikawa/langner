@@ -130,10 +130,14 @@ Edit `config.yml` to set your directories for notebooks, dictionaries, templates
 
 | Variable | Required For | Description |
 |----------|-------------|-------------|
-| `OPENAI_API_KEY` | Quizzes | OpenAI API key for quiz answer evaluation |
-| `OPENAI_MODEL` | Quizzes (optional) | Model to use, defaults to `gpt-4o-mini` |
+| `OPENAI_API_KEY` | Quizzes (OpenAI) | OpenAI API key for quiz answer evaluation |
+| `OPENAI_MODEL` | Quizzes (optional) | OpenAI model, defaults to `gpt-4o-mini` |
+| `GEMINI_API_KEY` | Quizzes (Gemini) | Google Gemini API key, used when `inference.mode: gemini` |
+| `GEMINI_MODEL` | Quizzes (optional) | Gemini model, defaults to the free-tier `gemini-2.0-flash` |
 | `RAPID_API_HOST` | Dictionary lookup | Set to `wordsapiv1.p.rapidapi.com` |
 | `RAPID_API_KEY` | Dictionary lookup | Get at [RapidAPI](https://rapidapi.com/dpventures/api/wordsapi) |
+
+Quiz grading uses OpenAI by default. To use Google Gemini instead, set `inference.mode: gemini` in `config.yml` and export `GEMINI_API_KEY` (see `config.example.yml`).
 
 ## License
 

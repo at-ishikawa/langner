@@ -22,6 +22,24 @@ database:
   # max_idle_conns: 5
   # conn_max_lifetime_seconds: 300
 
+# Which inference provider grades quiz answers.
+inference:
+  # mode selects the provider:
+  #   openai (default) — OpenAI Chat Completions (needs OPENAI_API_KEY)
+  #   gemini           — Google Gemini via its OpenAI-compatible endpoint
+  #                      (needs GEMINI_API_KEY)
+  #   mock             — deterministic substring grader (used by e2e tests)
+  mode: openai
+
+# OpenAI provider. The API key and model are read from environment variables
+# ONLY (never from this file): OPENAI_API_KEY and OPENAI_MODEL. OPENAI_MODEL
+# defaults to gpt-4o-mini.
+
+# Google Gemini provider. Like OpenAI, credentials come from environment
+# variables ONLY: GEMINI_API_KEY and GEMINI_MODEL. GEMINI_MODEL defaults to the
+# free-tier model gemini-2.0-flash. Select this provider with inference.mode:
+# gemini above.
+
 notebooks:
   # Single base directory: every notebook dir below derives from it
   # (<base>/stories, <base>/journal, <base>/journal-corrections, …). An
