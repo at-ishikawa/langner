@@ -39,7 +39,7 @@ inference:
 
 # Google Gemini provider. Like OpenAI, credentials come from environment
 # variables ONLY: GEMINI_API_KEY and GEMINI_MODEL. GEMINI_MODEL defaults to the
-# free-tier model gemini-3.6-flash. Select this provider with inference.mode:
+# free-tier model gemini-3.5-flash-lite. Select this provider with inference.mode:
 # gemini above.
 
 notebooks:

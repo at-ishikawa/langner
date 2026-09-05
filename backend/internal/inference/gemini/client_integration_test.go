@@ -34,7 +34,7 @@ func TestClient_LiveGemini_ValidateWordForm(t *testing.T) {
 
 	model := os.Getenv("GEMINI_MODEL")
 	if model == "" {
-		model = "gemini-3.6-flash"
+		model = "gemini-3.5-flash-lite"
 	}
 
 	client := gemini.NewClient(apiKey, model, inference.DefaultMaxRetryAttempts)
