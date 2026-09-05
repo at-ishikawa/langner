@@ -29,6 +29,8 @@ inference:
   #   gemini           — Google Gemini via its OpenAI-compatible endpoint
   #                      (needs GEMINI_API_KEY)
   #   mock             — deterministic substring grader (used by e2e tests)
+  # The INFERENCE_MODE environment variable overrides this value, e.g.
+  # `INFERENCE_MODE=gemini make dev`.
   mode: openai
 
 # OpenAI provider. The API key and model are read from environment variables

@@ -244,6 +244,13 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 		return nil, fmt.Errorf("failed to bind OPENAI_MODEL environment variable: %w", err)
 	}
 
+	// Bind inference mode to an environment variable so `INFERENCE_MODE`
+	// overrides `inference.mode` from the config file. Unset leaves the mode
+	// empty, which main.go treats as the default OpenAI provider.
+	if err := v.BindEnv("inference.mode", "INFERENCE_MODE"); err != nil {
+		return nil, fmt.Errorf("failed to bind INFERENCE_MODE environment variable: %w", err)
+	}
+
 	// Bind Gemini config to environment variables only (not from config file)
 	if err := v.BindEnv("gemini.api_key", "GEMINI_API_KEY"); err != nil {
 		return nil, fmt.Errorf("failed to bind GEMINI_API_KEY environment variable: %w", err)

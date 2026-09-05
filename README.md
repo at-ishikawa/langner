@@ -38,6 +38,17 @@ export OPENAI_API_KEY="your-api-key-here"
 make dev
 ```
 
+To grade quizzes with Google Gemini instead of OpenAI:
+
+```bash
+INFERENCE_MODE=gemini GEMINI_API_KEY="your-gemini-key-here" make dev
+```
+
+`INFERENCE_MODE` overrides `inference.mode` from `config.yml` and accepts
+`openai` (default), `gemini`, or `mock`. `make dev` requires the API key for the
+selected mode (`OPENAI_API_KEY` for openai, `GEMINI_API_KEY` for gemini, none for
+mock).
+
 - **Frontend**: http://localhost:3000
 - **Backend**: http://localhost:8080
 
@@ -130,6 +141,7 @@ Edit `config.yml` to set your directories for notebooks, dictionaries, templates
 
 | Variable | Required For | Description |
 |----------|-------------|-------------|
+| `INFERENCE_MODE` | Quizzes (optional) | Overrides `inference.mode`; one of `openai` (default), `gemini`, `mock` |
 | `OPENAI_API_KEY` | Quizzes (OpenAI) | OpenAI API key for quiz answer evaluation |
 | `OPENAI_MODEL` | Quizzes (optional) | OpenAI model, defaults to `gpt-4o-mini` |
 | `GEMINI_API_KEY` | Quizzes (Gemini) | Google Gemini API key, used when `inference.mode: gemini` |
@@ -137,7 +149,7 @@ Edit `config.yml` to set your directories for notebooks, dictionaries, templates
 | `RAPID_API_HOST` | Dictionary lookup | Set to `wordsapiv1.p.rapidapi.com` |
 | `RAPID_API_KEY` | Dictionary lookup | Get at [RapidAPI](https://rapidapi.com/dpventures/api/wordsapi) |
 
-Quiz grading uses OpenAI by default. To use Google Gemini instead, set `inference.mode: gemini` in `config.yml` and export `GEMINI_API_KEY` (see `config.example.yml`).
+Quiz grading uses OpenAI by default. To use Google Gemini instead, set `inference.mode: gemini` in `config.yml` (or `INFERENCE_MODE=gemini` in the environment) and export `GEMINI_API_KEY` (see `config.example.yml`).
 
 ## License
 
