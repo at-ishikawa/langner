@@ -43,6 +43,25 @@ jobs:
       - name: Run tests with coverage check
         run: make test-coverage
 
+  gemini-integration:
+    name: Gemini live integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'backend/go.mod'
+      # Live call to Google Gemini's OpenAI-compatible endpoint. Uses the
+      # GEMINI_API_KEY repository secret; the test self-skips when the secret is
+      # absent (e.g. fork PRs), so this job stays green without it.
+      - name: Run live Gemini integration test
+        working-directory: backend
+        run: go test -tags integration -run LiveGemini -v ./internal/inference/gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
   validate-examples:
     name: Validate example configurations
     runs-on: ubuntu-latest
