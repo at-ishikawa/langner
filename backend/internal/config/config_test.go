@@ -98,7 +98,7 @@ func TestConfigLoader_Load(t *testing.T) {
 					Model: "gpt-4o-mini",
 				},
 				Gemini: GeminiConfig{
-					Model: "gemini-2.0-flash",
+					Model: "gemini-3.6-flash",
 				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
@@ -160,7 +160,7 @@ outputs:
 					Model: "gpt-4o-mini",
 				},
 				Gemini: GeminiConfig{
-					Model: "gemini-2.0-flash",
+					Model: "gemini-3.6-flash",
 				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
@@ -216,7 +216,7 @@ outputs:
 					Model: "gpt-4o-mini",
 				},
 				Gemini: GeminiConfig{
-					Model: "gemini-2.0-flash",
+					Model: "gemini-3.6-flash",
 				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",

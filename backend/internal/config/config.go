@@ -216,7 +216,7 @@ func (loader *ConfigLoader) Load() (*Config, error) {
 	v.SetDefault("outputs.etymology_directory", filepath.Join("outputs", "etymology"))
 	v.SetDefault("openai.model", "gpt-4o-mini")
 	// Gemini model defaults to a free-tier flash model; override with GEMINI_MODEL.
-	v.SetDefault("gemini.model", "gemini-2.0-flash")
+	v.SetDefault("gemini.model", "gemini-3.6-flash")
 	v.SetDefault("books.repo_directory", "ebooks")
 	v.SetDefault("books.repositories_file", "books.yml")
 	v.SetDefault("database.host", "localhost")

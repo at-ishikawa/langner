@@ -145,7 +145,7 @@ Edit `config.yml` to set your directories for notebooks, dictionaries, templates
 | `OPENAI_API_KEY` | Quizzes (OpenAI) | OpenAI API key for quiz answer evaluation |
 | `OPENAI_MODEL` | Quizzes (optional) | OpenAI model, defaults to `gpt-4o-mini` |
 | `GEMINI_API_KEY` | Quizzes (Gemini) | Google Gemini API key, used when `inference.mode: gemini` |
-| `GEMINI_MODEL` | Quizzes (optional) | Gemini model, defaults to the free-tier `gemini-2.0-flash` |
+| `GEMINI_MODEL` | Quizzes (optional) | Gemini model, defaults to the free-tier `gemini-3.6-flash` |
 | `RAPID_API_HOST` | Dictionary lookup | Set to `wordsapiv1.p.rapidapi.com` |
 | `RAPID_API_KEY` | Dictionary lookup | Get at [RapidAPI](https://rapidapi.com/dpventures/api/wordsapi) |
 
