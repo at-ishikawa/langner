@@ -14,15 +14,43 @@ import (
 	"resty.dev/v3"
 )
 
+// DefaultBaseURL is the OpenAI Chat Completions base URL. Requests POST to
+// "<baseURL>/chat/completions".
+const DefaultBaseURL = "https://api.openai.com/v1"
+
 type Client struct {
 	httpClient       *resty.Client
 	model            string
 	maxRetryAttempts uint
 }
 
-func NewClient(apiKey, model string, retryAttempts uint) *Client {
+// Option customizes a Client at construction time.
+type Option func(*options)
+
+type options struct {
+	baseURL string
+}
+
+// WithBaseURL overrides the Chat Completions base URL. This lets the same
+// client target any OpenAI-compatible endpoint (e.g. Gemini's
+// OpenAI-compatibility layer) while reusing the identical request/response
+// schema, prompts, and parsing. Defaults to DefaultBaseURL when unset.
+func WithBaseURL(baseURL string) Option {
+	return func(o *options) {
+		if baseURL != "" {
+			o.baseURL = baseURL
+		}
+	}
+}
+
+func NewClient(apiKey, model string, retryAttempts uint, opts ...Option) *Client {
+	cfg := options{baseURL: DefaultBaseURL}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+
 	client := resty.New()
-	client.SetBaseURL("https://api.openai.com/v1")
+	client.SetBaseURL(cfg.baseURL)
 	client.SetHeader("Authorization", "Bearer "+apiKey)
 	client.SetHeader("Content-Type", "application/json")
 
@@ -40,6 +68,11 @@ func (client Client) Close() error {
 // GetModel returns the model name configured for this client
 func (client Client) GetModel() string {
 	return client.model
+}
+
+// BaseURL returns the Chat Completions base URL the client is configured with.
+func (client Client) BaseURL() string {
+	return client.httpClient.BaseURL()
 }
 
 type ChatCompletionRequest struct {
