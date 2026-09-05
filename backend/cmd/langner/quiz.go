@@ -7,10 +7,34 @@ import (
 	"github.com/at-ishikawa/langner/internal/cli"
 	"github.com/at-ishikawa/langner/internal/config"
 	"github.com/at-ishikawa/langner/internal/inference"
+	"github.com/at-ishikawa/langner/internal/inference/gemini"
 	"github.com/at-ishikawa/langner/internal/inference/openai"
 	"github.com/at-ishikawa/langner/internal/notebook"
 	"github.com/spf13/cobra"
 )
+
+// newQuizInferenceClient builds the inference client the interactive quiz CLIs
+// use, honoring inference.mode. Mode "gemini" uses the Gemini provider; any
+// other value (default) uses OpenAI. It returns a close function to release the
+// underlying HTTP client.
+func newQuizInferenceClient(cfg *config.Config) (inference.Client, func() error, error) {
+	switch cfg.Inference.Mode {
+	case "gemini":
+		if cfg.Gemini.APIKey == "" {
+			return nil, nil, fmt.Errorf("GEMINI_API_KEY environment variable is required")
+		}
+		fmt.Printf("Using Gemini provider (model: %s)\n", cfg.Gemini.Model)
+		client := gemini.NewClient(cfg.Gemini.APIKey, cfg.Gemini.Model, inference.DefaultMaxRetryAttempts)
+		return client, client.Close, nil
+	default:
+		if cfg.OpenAI.APIKey == "" {
+			return nil, nil, fmt.Errorf("OPENAI_API_KEY environment variable is required")
+		}
+		fmt.Printf("Using OpenAI provider (model: %s)\n", cfg.OpenAI.Model)
+		client := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
+		return client, client.Close, nil
+	}
+}
 
 func newQuizCommand() *cobra.Command {
 	quizCommand := &cobra.Command{
@@ -35,21 +59,20 @@ func newQuizFreeformCommand() *cobra.Command {
 				return err
 			}
 
-			// Create OpenAI client
-			if cfg.OpenAI.APIKey == "" {
-				return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+			// Create the inference client (OpenAI or Gemini per inference.mode)
+			inferenceClient, closeClient, err := newQuizInferenceClient(cfg)
+			if err != nil {
+				return err
 			}
-			fmt.Printf("Using OpenAI provider (model: %s)\n", cfg.OpenAI.Model)
-			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
 			defer func() {
-				_ = openaiClient.Close()
+				_ = closeClient()
 			}()
 
 			// Create interactive CLI
 			freeformCLI, err := cli.NewFreeformQuizCLI(
 				cfg.Notebooks,
 				cfg.Dictionaries.RapidAPI.CacheDirectory,
-				openaiClient,
+				inferenceClient,
 				cfg.Quiz,
 			)
 			if err != nil {
@@ -90,23 +113,22 @@ Examples:
 				return err
 			}
 
-			// Create OpenAI client
-			if cfg.OpenAI.APIKey == "" {
-				return fmt.Errorf("OPENAI_API_KEY environment variable is required")
+			// Create the inference client (OpenAI or Gemini per inference.mode)
+			inferenceClient, closeClient, err := newQuizInferenceClient(cfg)
+			if err != nil {
+				return err
 			}
-			fmt.Printf("Using OpenAI provider (model: %s)\n", cfg.OpenAI.Model)
-			openaiClient := openai.NewClient(cfg.OpenAI.APIKey, cfg.OpenAI.Model, inference.DefaultMaxRetryAttempts)
 			defer func() {
-				_ = openaiClient.Close()
+				_ = closeClient()
 			}()
 
 			// Handle reverse quiz mode
 			if quizMode == "reverse" {
-				return runReverseQuiz(cfg, openaiClient, notebookName, listMissingContext)
+				return runReverseQuiz(cfg, inferenceClient, notebookName, listMissingContext)
 			}
 
 			// Default: recognition quiz
-			return runRecognitionQuiz(cfg, openaiClient, notebookName, includeNoCorrectAnswers)
+			return runRecognitionQuiz(cfg, inferenceClient, notebookName, includeNoCorrectAnswers)
 		},
 	}
 
@@ -221,4 +243,3 @@ func runReverseQuiz(cfg *config.Config, openaiClient inference.Client, notebookN
 
 	return reverseCLI.Run(context.Background(), reverseCLI)
 }
-

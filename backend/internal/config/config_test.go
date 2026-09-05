@@ -97,6 +97,9 @@ func TestConfigLoader_Load(t *testing.T) {
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Gemini: GeminiConfig{
+					Model: "gemini-3.5-flash-lite",
+				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -156,6 +159,9 @@ outputs:
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
 				},
+				Gemini: GeminiConfig{
+					Model: "gemini-3.5-flash-lite",
+				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
 					RepositoriesFile: "books.yml",
@@ -208,6 +214,9 @@ outputs:
 				},
 				OpenAI: OpenAIConfig{
 					Model: "gpt-4o-mini",
+				},
+				Gemini: GeminiConfig{
+					Model: "gemini-3.5-flash-lite",
 				},
 				Books: BooksConfig{
 					RepoDirectory:    "ebooks",
@@ -275,6 +284,34 @@ outputs:
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestConfigLoader_Load_InferenceModeEnvOverride(t *testing.T) {
+	tempDir := t.TempDir()
+	configPath := filepath.Join(tempDir, "config.yaml")
+
+	t.Run("unset leaves inference mode empty (default openai path)", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("# Empty config\n"), 0644))
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.Equal(t, "", cfg.Inference.Mode)
+	})
+
+	t.Run("INFERENCE_MODE env overrides inference.mode from config file", func(t *testing.T) {
+		require.NoError(t, os.WriteFile(configPath, []byte("inference:\n  mode: openai\n"), 0644))
+		t.Setenv("INFERENCE_MODE", "gemini")
+
+		loader, err := NewConfigLoader(configPath)
+		require.NoError(t, err)
+
+		cfg, err := loader.Load()
+		require.NoError(t, err)
+		assert.Equal(t, "gemini", cfg.Inference.Mode)
+	})
 }
 
 func TestConfigLoader_Load_ValidTemplateFile(t *testing.T) {

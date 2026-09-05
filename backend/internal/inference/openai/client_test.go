@@ -137,9 +137,9 @@ func TestClient_getRequestBody(t *testing.T) {
 			args: inference.AnswerMeaningsRequest{
 				Expressions: []inference.Expression{
 					{
-						Expression:    "runing",
-						Meaning:       "to move quickly on foot",
-						Contexts:      []inference.Context{{Context: "I was runing in the park."}},
+						Expression:        "runing",
+						Meaning:           "to move quickly on foot",
+						Contexts:          []inference.Context{{Context: "I was runing in the park."}},
 						IsExpressionInput: true,
 					},
 				},
@@ -758,6 +758,38 @@ func TestNewClient(t *testing.T) {
 func TestClient_GetModel(t *testing.T) {
 	client := &Client{model: "gpt-4o-mini"}
 	assert.Equal(t, "gpt-4o-mini", client.GetModel())
+}
+
+func TestNewClient_BaseURL(t *testing.T) {
+	tests := []struct {
+		name string
+		opts []Option
+		want string
+	}{
+		{
+			name: "defaults to the OpenAI endpoint",
+			opts: nil,
+			want: DefaultBaseURL,
+		},
+		{
+			name: "WithBaseURL overrides the endpoint",
+			opts: []Option{WithBaseURL("https://generativelanguage.googleapis.com/v1beta/openai")},
+			want: "https://generativelanguage.googleapis.com/v1beta/openai",
+		},
+		{
+			name: "empty WithBaseURL keeps the default",
+			opts: []Option{WithBaseURL("")},
+			want: DefaultBaseURL,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient("test-key", "gpt-4", 0, tt.opts...)
+			defer func() { _ = client.Close() }()
+			assert.Equal(t, tt.want, client.BaseURL())
+		})
+	}
 }
 
 func TestClient_Close(t *testing.T) {
