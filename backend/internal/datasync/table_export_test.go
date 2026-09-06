@@ -114,6 +114,57 @@ func TestTableDumpSerializationRoundTrip(t *testing.T) {
 	assert.Equal(t, int64(7), toInt64(row["interval_days"]))
 }
 
+// TestTableDumpBinaryByteaRoundTrip proves BINARY bytea columns survive the
+// dump/restore losslessly WITHOUT a database. AES-GCM ciphertext (auth's
+// users.email_encrypted / user_llm_credentials.api_key_encrypted) is not valid
+// UTF-8: string()-ing it and re-inserting produced `invalid byte sequence for
+// encoding "UTF8": 0x00`. This drives a byte slice with 0x00 and high bytes
+// through the real serialize -> yaml.Marshal(writeTableFile) ->
+// yaml.Unmarshal(readTableFile) -> denormalizeValue and asserts the bytes come
+// back byte-for-byte identical (and re-serialise stably, matching the live
+// round-trip's A==B proof).
+func TestTableDumpBinaryByteaRoundTrip(t *testing.T) {
+	binary := []byte{0x00, 0x01, 0xDE, 0xAD, 0xBE, 0xEF, 0xFF}
+	original := map[string]any{
+		"id":              int64(1),
+		"email_encrypted": binary,
+	}
+
+	normalized := normalizeRow(original)
+	// Binary bytea normalises to a tagged base64 STRING (yaml-safe), never a raw
+	// []byte (which yaml.v3 would render as a lossy sequence of ints).
+	encoded, ok := normalized["email_encrypted"].(string)
+	require.True(t, ok, "binary bytea must normalise to a string, got %T", normalized["email_encrypted"])
+	assert.True(t, strings.HasPrefix(encoded, binaryValuePrefix),
+		"binary bytea must be tagged with the binary prefix; got %q", encoded)
+
+	dir := t.TempDir()
+	tablesDir := filepath.Join(dir, "tables")
+	require.NoError(t, os.MkdirAll(tablesDir, 0o755))
+	path := filepath.Join(tablesDir, "users.yml")
+	require.NoError(t, writeTableFile(path, []map[string]any{normalized}))
+
+	readBack, err := readTableFile(path)
+	require.NoError(t, err)
+	require.Len(t, readBack, 1)
+
+	// email_encrypted is NOT a timestamp column -> isTimestamp=false. It must
+	// decode back to the exact original bytes so pgx re-inserts it as bytea.
+	got, ok := denormalizeValue(readBack[0]["email_encrypted"], false).([]byte)
+	require.True(t, ok, "binary bytea must denormalise back to []byte, got %T", denormalizeValue(readBack[0]["email_encrypted"], false))
+	assert.Equal(t, binary, got, "binary bytea round-trip must be byte-for-byte identical")
+
+	// Re-serialising the read-back row yields the identical file (the live
+	// round-trip's byte-for-byte A==B losslessness proof holds for binary too).
+	path2 := filepath.Join(tablesDir, "users2.yml")
+	require.NoError(t, writeTableFile(path2, []map[string]any{normalizeRow(readBack[0])}))
+	a, err := os.ReadFile(path)
+	require.NoError(t, err)
+	b, err := os.ReadFile(path2)
+	require.NoError(t, err)
+	assert.Equal(t, string(a), string(b), "binary bytea must re-serialise stably")
+}
+
 // --- migration-schema parsing helpers (self-contained; mirrors the guard in
 // cmd/langner/datasync_test.go so this package needs no cross-package deps) ---
 
