@@ -77,6 +77,8 @@ Gate every such affordance to the **revealed** state only, reusing the reverse-h
 
 **Consequence:** a per-word feature is NOT "done" when `QuizResultCard` shows it. Cover each surface, and add a test that the affordance is **absent while a reverse word is still hidden** and **present once feedback reveals it** (e.g. the `PronounceButton` regression test in `quiz/relearn/session/page.test.tsx`).
 
+**SSR trap:** such affordances are client-only (they read `window` / `speechSynthesis`). Do NOT branch on `typeof window` **during render** — the server renders nothing and the client renders the control, a hydration mismatch that leaves it **missing on the live SSR'd app** even though jsdom tests (which never SSR) show it. Resolve the client-only capability with `useSyncExternalStore(subscribe, clientSnapshot, () => false)` (server snapshot `false`) so the server and first client render agree and the control reveals after hydration. A green jsdom test is not proof the control appears in the running app.
+
 ---
 
 *The historical PR-by-PR worked examples (the #37/#38/#41 iterations that removed the standalone etymology-origin quiz, removed skip/Exclude from Relearn, moved feedback into a pinned sheet, fixed horizontal overflow, and added in-session re-drill of wrong grammar blanks) previously lived here. They have been dropped as changelog — that narrative belongs in git history. U1–U3 above are the current contract; when they change, update them here rather than appending another PR note.*
