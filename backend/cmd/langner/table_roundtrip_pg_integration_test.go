@@ -110,6 +110,17 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	// Seed FK-safe: parents before children.
 	_, err = db.ExecContext(ctx, `UPDATE notes SET skipped_at = CURRENT_TIMESTAMP WHERE id = (SELECT MIN(id) FROM notes)`)
 	require.NoError(t, err)
+	// users: no rows exist on the example config (auth accounts are created on
+	// first sign-in, which never happens in a data-only import). PII columns are
+	// AES-GCM ciphertext at rest; the round trip dumps/restores raw bytes with no
+	// decryption, so seeding placeholder bytes is sufficient.
+	seedIfEmpty(ctx, t, db, "users",
+		`INSERT INTO users (google_sub, email_encrypted, email_hash, name_encrypted) VALUES ('roundtrip-seed-sub', '\x00', 'roundtrip-seed-hash', '\x00')`)
+	// notebooks: an ownership OVERLAY that stays empty on the example config
+	// (a notebook_id absent from it is treated as public+unowned), so nothing
+	// populates it on a data-only import — seed one unowned public row.
+	seedIfEmpty(ctx, t, db, "notebooks",
+		`INSERT INTO notebooks (notebook_id, visibility) VALUES ('roundtrip-seed', 'public')`)
 	seedIfEmpty(ctx, t, db, "note_images",
 		`INSERT INTO note_images (note_id, url, sort_order) SELECT MIN(id), 'https://example.com/ice.png', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "note_references",
