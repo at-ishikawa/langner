@@ -1,6 +1,7 @@
 package datasync
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -250,10 +251,16 @@ func normalizeRow(raw map[string]any) map[string]any {
 
 // normalizeValue renders one DB value as a YAML-serialisable scalar without
 // losing information:
-//   - time.Time      -> RFC3339 with nanoseconds, in UTC (stable, comparable)
-//   - []byte (UTF-8) -> string (covers JSONB text and text-shaped bytea)
-//   - []byte (binary)-> binaryValuePrefix + base64 (lossless for ciphertext)
+//   - time.Time            -> RFC3339 with nanoseconds, in UTC (stable, comparable)
+//   - []byte text-shaped    -> string (covers JSONB text and text-shaped bytea)
+//   - []byte binary/NUL     -> binaryValuePrefix + base64 (lossless for ciphertext)
 //   - everything else (int64, float64, bool, string, nil) passes through.
+//
+// A []byte is kept as a plain string ONLY when it is valid UTF-8 AND contains
+// no NUL. A lone 0x00 is technically valid UTF-8 (U+0000) but Postgres
+// text/varchar rejects it (`invalid byte sequence for encoding "UTF8": 0x00`),
+// so any NUL-bearing value MUST be base64-tagged and restored as raw []byte
+// (bytea) — never bound as a text string.
 func normalizeValue(v any) any {
 	switch t := v.(type) {
 	case nil:
@@ -261,7 +268,7 @@ func normalizeValue(v any) any {
 	case time.Time:
 		return t.UTC().Format(time.RFC3339Nano)
 	case []byte:
-		if utf8.Valid(t) {
+		if utf8.Valid(t) && bytes.IndexByte(t, 0) < 0 {
 			return string(t)
 		}
 		return binaryValuePrefix + base64.StdEncoding.EncodeToString(t)
