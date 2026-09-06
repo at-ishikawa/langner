@@ -20,18 +20,43 @@ const COOKIE_PATH = join(__dirname, ".auth", "cookie.txt");
 // `use.storageState` in playwright.config.ts.
 export const STORAGE_STATE_PATH = join(__dirname, ".auth", "storageState.json");
 
+// Give the backend command time to build, recreate the DB, import and seed
+// before it writes the cookie. Matches the backend webServer timeout headroom.
+const COOKIE_WAIT_MS = 180_000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// readCookie returns the minted session cookie value, or "" if the file is not
+// present/complete yet. The backend command writes only the cookie to stdout,
+// but tolerate any stray leading log line: take the last non-empty line.
+function readCookie(): string {
+  try {
+    return (
+      readFileSync(COOKIE_PATH, "utf8")
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line !== "")
+        .pop() ?? ""
+    );
+  } catch {
+    return "";
+  }
+}
+
 export default async function globalSetup() {
-  // The backend command writes only the cookie to stdout, but tolerate any
-  // stray leading log line: take the last non-empty line.
-  const cookieValue = readFileSync(COOKIE_PATH, "utf8")
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => line !== "")
-    .pop();
+  // The order between globalSetup and the webServer is version-dependent, so
+  // poll for the cookie file the backend command writes rather than assume it
+  // already exists.
+  let cookieValue = readCookie();
+  const deadline = Date.now() + COOKIE_WAIT_MS;
+  while (!cookieValue && Date.now() < deadline) {
+    await sleep(500);
+    cookieValue = readCookie();
+  }
 
   if (!cookieValue) {
     throw new Error(
-      `no e2e session cookie in ${COOKIE_PATH}; the backend webServer seed step must run before globalSetup`,
+      `no e2e session cookie in ${COOKIE_PATH} after ${COOKIE_WAIT_MS}ms; the backend webServer seed step did not write it`,
     );
   }
 
