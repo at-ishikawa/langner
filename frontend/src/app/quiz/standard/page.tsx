@@ -15,6 +15,7 @@ import { quizClient } from "@/lib/client";
 import { useQuizStore, type Flashcard } from "@/store/quizStore";
 import { AnswerInput } from "@/components/AnswerInput";
 import { BatchFeedback } from "@/components/BatchFeedback";
+import { PronounceButton } from "@/components/PronounceButton";
 import { standardResultToItem } from "@/lib/quizResultItems";
 import { useQuizResultActions } from "@/lib/useQuizResultActions";
 import { responseTimeSince } from "@/lib/responseTime";
@@ -211,9 +212,14 @@ export default function QuizCardPage() {
         </Box>
       ) : (
         <VStack align="stretch" gap={4}>
-          <Heading size="xl" textAlign="center">
-            {card.entry}
-          </Heading>
+          {/* Standard is a recognition quiz: the word is the prompt, so hearing
+              it leaks nothing (unlike a reverse quiz, where the word is hidden). */}
+          <Box display="flex" alignItems="center" justifyContent="center" gap={2}>
+            <Heading size="xl" textAlign="center">
+              {card.entry}
+            </Heading>
+            <PronounceButton text={card.entry} size="sm" />
+          </Box>
 
           {card.conceptHead && card.conceptMembers && card.conceptMembers.length > 1 && (
             <Text

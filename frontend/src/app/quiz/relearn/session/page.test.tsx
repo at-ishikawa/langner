@@ -217,8 +217,9 @@ describe("RelearnSessionPage", () => {
       fireEvent.click(screen.getByRole("button", { name: "Don't Know" }));
       await screen.findByText("✗ Incorrect");
 
-      // Feedback phase: the word is revealed, so it can be pronounced.
-      expect(screen.getByLabelText("Play pronunciation of nimble")).toBeInTheDocument();
+      // Feedback phase: the word is revealed, so it can be pronounced. The
+      // button mounts after its support-check effect, so await it.
+      expect(await screen.findByLabelText("Play pronunciation of nimble")).toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();
     }

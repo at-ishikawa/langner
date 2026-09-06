@@ -1,7 +1,14 @@
 "use client";
 
+import { useSyncExternalStore } from "react";
 import { IconButton, type IconButtonProps } from "@chakra-ui/react";
 import { useUSVoice } from "@/lib/useUSVoice";
+
+// speechSynthesis support never changes at runtime, so there is nothing to
+// subscribe to — the store is read once per mount.
+const noopSubscribe = () => () => {};
+const clientSupported = () => typeof window !== "undefined" && !!window.speechSynthesis;
+const serverSupported = () => false;
 
 interface PronounceButtonProps {
   /** The word or phrase to speak. Also used in the accessible label. */
@@ -10,19 +17,23 @@ interface PronounceButtonProps {
   size?: IconButtonProps["size"];
 }
 
-function speechSupported(): boolean {
-  return typeof window !== "undefined" && !!window.speechSynthesis;
-}
-
 // PronounceButton plays the US-English pronunciation of `text` via the browser
 // Web Speech API. It renders nothing when speech synthesis is unsupported and
 // never throws. Presentation-only: it reads/writes no learning history and
 // makes no network call. Only render it where `text` is already revealed — see
 // quiz-ui-invariants (never in a reverse quiz's question state).
-export function PronounceButton({ text, label, size = "2xs" }: PronounceButtonProps) {
+export function PronounceButton({ text, label, size = "xs" }: PronounceButtonProps) {
   const usVoice = useUSVoice();
 
-  if (!speechSupported()) return null;
+  // Read support SSR-safely: the server snapshot is false and the client
+  // snapshot is the real value, so the server and the first client (hydration)
+  // render agree (both null) and React reveals the button after hydration
+  // WITHOUT a mismatch. Reading `window` directly during render instead left
+  // the button missing on the live SSR'd app (jsdom tests, which never SSR,
+  // could not catch it).
+  const supported = useSyncExternalStore(noopSubscribe, clientSupported, serverSupported);
+
+  if (!supported) return null;
 
   const speak = () => {
     window.speechSynthesis.cancel();
