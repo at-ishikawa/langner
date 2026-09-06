@@ -9,6 +9,7 @@ import {
   type SubmitRelearnAnswerResponse,
 } from "@/lib/client";
 import { OriginBreakdown } from "@/components/OriginBreakdown";
+import { PronounceButton } from "@/components/PronounceButton";
 import RelearnContext from "@/components/RelearnContext";
 import { responseTimeSince } from "@/lib/responseTime";
 
@@ -328,10 +329,13 @@ export function RelearnOriginPost({
 
             return (
               <Box key={key} display="flex" flexDirection="column" gap={1} maxW="100%">
-                <Box display="inline-flex" flexWrap="wrap" alignItems="baseline" gap={2} maxW="100%">
+                <Box display="inline-flex" flexWrap="wrap" alignItems="center" gap={2} maxW="100%">
                   <Text as="span" fontWeight="bold" color="blue.600" _dark={{ color: "blue.300" }} overflowWrap="anywhere">
                     {word.entry}
                   </Text>
+                  {/* Recognition shows the word as the prompt, so hearing it is
+                      safe (reverse words hide it — the branch above). */}
+                  <PronounceButton text={word.entry} />
                   {input}
                 </Box>
                 {/* Full example as usage context while asking — the same hint the
@@ -373,12 +377,17 @@ export function RelearnOriginPost({
           </Text>
           <Box display="flex" flexDirection="column" gap={1}>
             {relatedWords.map((m) => (
-              <Text key={m.word} fontSize="sm" overflowWrap="anywhere">
-                <Text as="span" fontWeight="semibold">{m.word}</Text>
-                {m.meaning ? (
-                  <Text as="span" color="gray.600" _dark={{ color: "gray.300" }}> — {m.meaning}</Text>
-                ) : null}
-              </Text>
+              <Box key={m.word} display="flex" alignItems="center" gap={1} maxW="100%">
+                <Text fontSize="sm" overflowWrap="anywhere">
+                  <Text as="span" fontWeight="semibold">{m.word}</Text>
+                  {m.meaning ? (
+                    <Text as="span" color="gray.600" _dark={{ color: "gray.300" }}> — {m.meaning}</Text>
+                  ) : null}
+                </Text>
+                {/* Reference words are revealed (shown only after the card is
+                    answered), so pronouncing them leaks nothing. */}
+                <PronounceButton text={m.word} size="2xs" />
+              </Box>
             ))}
           </Box>
         </Box>
@@ -507,7 +516,12 @@ export function RelearnOriginPost({
             )
           )}
 
-          <Text fontWeight="bold">{selectedWord.entry}</Text>
+          {/* The word is revealed in this review panel (opened after answering),
+              so pronouncing it leaks nothing. */}
+          <Box display="flex" alignItems="center" gap={2}>
+            <Text fontWeight="bold">{selectedWord.entry}</Text>
+            <PronounceButton text={selectedWord.entry} />
+          </Box>
           <Text fontSize="sm" mb={1}>
             <Text as="span" fontWeight="semibold">Meaning: </Text>
             <Text as="span" data-testid="relearn-answer">
