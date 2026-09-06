@@ -121,6 +121,12 @@ func TestTableDumpRoundTrip_LivePostgres_Integration(t *testing.T) {
 	// populates it on a data-only import — seed one unowned public row.
 	seedIfEmpty(ctx, t, db, "notebooks",
 		`INSERT INTO notebooks (notebook_id, visibility) VALUES ('roundtrip-seed', 'public')`)
+	// user_llm_credentials: per-user provider key, created only when a user saves
+	// one in Settings — never on a data-only import. FK to users(id), so seed it
+	// after the users row above. api_key_encrypted is AES-GCM ciphertext dumped
+	// as raw bytes, so a placeholder byte is enough for the round trip.
+	seedIfEmpty(ctx, t, db, "user_llm_credentials",
+		`INSERT INTO user_llm_credentials (user_id, provider, api_key_encrypted, model) SELECT MIN(id), 'openai', '\x00', 'gpt-4o-mini' FROM users`)
 	seedIfEmpty(ctx, t, db, "note_images",
 		`INSERT INTO note_images (note_id, url, sort_order) SELECT MIN(id), 'https://example.com/ice.png', 0 FROM notes`)
 	seedIfEmpty(ctx, t, db, "note_references",

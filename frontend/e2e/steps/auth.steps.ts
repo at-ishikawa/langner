@@ -10,6 +10,12 @@ Given("I am on the login page", async ({ page }) => {
   await page.goto("/login");
 });
 
+// covers route: /settings — the per-user LLM API-key form. The injected session
+// cookie authenticates the request, so the form renders (no redirect to /login).
+Given("I am on the settings page", async ({ page }) => {
+  await page.goto("/settings");
+});
+
 Then("I see the {string} button", async ({ page }, name: string) => {
   await expect(page.getByRole("button", { name })).toBeVisible();
 });
